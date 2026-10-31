@@ -1,9 +1,19 @@
+# Graphify snapshots are immutable and content-addressed. Two branches either
+# add distinct paths or add byte-identical content at the same path. If a hash
+# invariant is ever violated, fail closed instead of text-merging JSON.
+graphify-out/snapshots/** -merge
+graphify-out/cache/semantic-cas/** -merge
 graphify-out/graph.json merge=graphify
-# graph.json + manifest.json must come from the same graphify run: manifest.json
-# records which files are already analyzed, so letting git line-merge it into a
-# union while graph.json resolves to one side marks the discarded side's files
-# as analyzed forever ("stale graph that update won't fix"). -merge forces a
-# conflict in clones without the graphify merge driver, so both files get taken
-# from the same side and healed by `graphify update .` (see AGENTS.md graphify rules).
-graphify-out/manifest.json -merge
-graphify-out/GRAPH_REPORT.md -merge
+
+# Snapshots are machine-generated and never read as a textual diff. A promotion
+# that prunes superseded snapshots deletes millions of generated JSON lines at
+# once, which is large enough that GitHub stops computing the pull request diff
+# (the REST API reports 0 changed files) and the code scanning pull request
+# check times out waiting on it. Treating them as generated binary keeps the
+# same commits and the same change detection while bounding diff cost.
+# Safe for the control plane: its promotion patches exclude graphify-out/** and
+# are generated with `git diff --binary --full-index`, which is unaffected here.
+graphify-out/snapshots/** -diff linguist-generated
+
+# Preserve the upstream third-party notice byte-for-byte, including whitespace.
+remix/public/platform/magick-wasm-NOTICE.txt -whitespace

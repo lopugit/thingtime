@@ -1,4 +1,5 @@
 import { PublicError, safeErrorText } from '../errors/safeError';
+import { getPersistedBranchStatus, isVercelWebhookConfigured, persistedStatusIsForDeployment } from './webhookStore';
 
 export { isVercelStatusEnabled } from './environment';
 
@@ -44,9 +45,17 @@ export type VercelDeploymentSummary = {
   url: string;
 };
 
+export type VercelDeploymentGroup = {
+  branch?: string;
+  deployments: VercelDeploymentSummary[];
+  id: string;
+};
+
 export type VercelDeploymentsOverview = {
   branchLimit: number | null;
   configured: boolean;
+  deploymentGroups: VercelDeploymentGroup[];
+  deploymentHistoryLimit: number;
   deployments: VercelDeploymentSummary[];
   deploymentPageCount: number;
   deploymentScanCount: number;
@@ -66,6 +75,8 @@ const DEFAULT_VERCEL_PROJECT_ID = 'prj_ZAX9FhGC2alHMXMwTHX96ql3EQ8v';
 const DEFAULT_VERCEL_TEAM_ID = 'team_JsKhM6fVg9uo701feA0fLh9V';
 export const MAX_DEPLOYMENT_BRANCH_LIMIT = 100;
 export const DEFAULT_DEPLOYMENT_BRANCH_LIMIT: number | null = null;
+export const MAX_DEPLOYMENT_HISTORY_LIMIT = 20;
+export const DEFAULT_DEPLOYMENT_HISTORY_LIMIT = 1;
 const DEFAULT_DEPLOYMENT_API_PAGE_SIZE = 20;
 const DEFAULT_DEPLOYMENT_MAX_PAGES = 10;
 const VERCEL_DEPLOYMENTS_CACHE_MS = 30000;
@@ -110,6 +121,33 @@ export const normaliseDeploymentBranchLimit = (value?: number | string | null): 
   }
 
   return Math.max(1, Math.min(MAX_DEPLOYMENT_BRANCH_LIMIT, Math.floor(parsed)));
+};
+
+export const normaliseDeploymentHistoryLimit = (value?: number | string | null): number => {
+  if (value === undefined || value === null) {
+    return DEFAULT_DEPLOYMENT_HISTORY_LIMIT;
+  }
+
+  const text = typeof value === 'string' ? value.trim().toLowerCase() : String(value);
+
+  if (text === 'all' || text === 'infinite' || text === 'infinity' || text === 'unlimited') {
+    return MAX_DEPLOYMENT_HISTORY_LIMIT;
+  }
+
+  if (!text) {
+    return DEFAULT_DEPLOYMENT_HISTORY_LIMIT;
+  }
+
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : Number.parseInt(text, 10);
+
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_DEPLOYMENT_HISTORY_LIMIT;
+  }
+
+  return Math.max(1, Math.min(MAX_DEPLOYMENT_HISTORY_LIMIT, Math.floor(parsed)));
 };
 
 const setCachedJson = (
@@ -645,6 +683,57 @@ const getBranchDeploymentKey = (deployment: VercelDeploymentSummary) => {
   return branch || `url:${deployment.url}`;
 };
 
+export const groupVercelDeployments = ({
+  deployments,
+  branchLimit = DEFAULT_DEPLOYMENT_BRANCH_LIMIT,
+  historyLimit = DEFAULT_DEPLOYMENT_HISTORY_LIMIT
+}: {
+  deployments: VercelDeploymentSummary[];
+  branchLimit?: number | string | null;
+  historyLimit?: number | string | null;
+}): VercelDeploymentGroup[] => {
+  const resolvedBranchLimit = normaliseDeploymentBranchLimit(branchLimit);
+  const resolvedHistoryLimit = normaliseDeploymentHistoryLimit(historyLimit);
+  const groups: VercelDeploymentGroup[] = [];
+  const groupsByID = new Map<string, VercelDeploymentGroup>();
+  const seenDeployments = new Set<string>();
+  const sortedDeployments = [...deployments]
+    .sort((left, right) => getDeploymentSummaryTimestamp(right) - getDeploymentSummaryTimestamp(left));
+
+  for (const deployment of sortedDeployments) {
+    const deploymentKey = deployment.id?.trim() || deployment.url;
+
+    if (seenDeployments.has(deploymentKey)) {
+      continue;
+    }
+
+    seenDeployments.add(deploymentKey);
+
+    const groupID = getBranchDeploymentKey(deployment);
+    let group = groupsByID.get(groupID);
+
+    if (!group) {
+      if (resolvedBranchLimit !== null && groups.length >= resolvedBranchLimit) {
+        continue;
+      }
+
+      group = {
+        branch: deployment.branch,
+        deployments: [],
+        id: groupID
+      };
+      groupsByID.set(groupID, group);
+      groups.push(group);
+    }
+
+    if (group.deployments.length < resolvedHistoryLimit) {
+      group.deployments.push(deployment);
+    }
+  }
+
+  return groups;
+};
+
 const getBuildProgressFromChecks = (checks: unknown): { progress?: number; phase?: string } => {
   if (!Array.isArray(checks)) {
     return {};
@@ -807,6 +896,49 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       deploymentUrl
     });
 
+    // Webhook-fed fast path (TODO item 5): once Vercel pushes deployment
+    // events to /api/v1/vercel/webhook, terminal states are served from the
+    // persisted doc without spending Vercel API calls — a ready deployment
+    // stays ready until the next webhook event says otherwise. Mid-build
+    // states still fall through to the live poll for phase/progress detail.
+    //
+    // A failure is only served from the store when the entry provably belongs
+    // to THIS deployment. One branch can have concurrent sibling deployments
+    // sharing the single stored slot, and a sibling's `ready` is harmless while
+    // a sibling's `error`/`canceled` would paint a healthy instance red — and
+    // this feeds /api/v1/health/vercel, so it would also report the deployment
+    // as failed — until the next event for that branch arrives. Unproven
+    // failures fall through to the live poll: exactly the pre-webhook path.
+    if (isVercelWebhookConfigured()) {
+      const persisted = await getPersistedBranchStatus(branch);
+      const isFailureState = persisted?.state === 'error' || persisted?.state === 'canceled';
+      const servable =
+        persisted?.state === 'ready' ||
+        (isFailureState && persistedStatusIsForDeployment(persisted, { commitSha, deploymentUrl }));
+      if (persisted && servable) {
+        const lastReadyAtMs = persisted.lastReadyAt ? Date.parse(persisted.lastReadyAt) : undefined;
+        return {
+          ...fallback,
+          buildId: persisted.deploymentId,
+          buildPageUrl: persisted.inspectorUrl || fallback.buildPageUrl,
+          buildPhase: undefined,
+          buildProgress: persisted.state === 'ready' ? 100 : 0,
+          configured: true,
+          environment: persisted.environment || environment,
+          // Mongo persists undefined as null — normalise so ready states don't
+          // serialise an error:null field
+          error: persisted.error || undefined,
+          hasError: persisted.state === 'error',
+          lastReadyAt: persisted.lastReadyAt,
+          lastReadyLabel: formatRelativeTime(Number.isFinite(lastReadyAtMs) ? lastReadyAtMs : undefined),
+          lastReadyUrl: persisted.lastReadyUrl || persisted.deploymentUrl,
+          latestDeploymentUrl: persisted.deploymentUrl || fallback.latestDeploymentUrl,
+          label: `Vercel: ${persisted.state}`,
+          state: persisted.state
+        };
+      }
+    }
+
     if (!token) {
       return fallback;
     }
@@ -949,15 +1081,18 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
 };
 
 export const getVercelDeploymentsOverview = async ({
+  historyLimit = DEFAULT_DEPLOYMENT_HISTORY_LIMIT,
   limit = DEFAULT_DEPLOYMENT_BRANCH_LIMIT,
   maxPages = DEFAULT_DEPLOYMENT_MAX_PAGES,
   pageSize = DEFAULT_DEPLOYMENT_API_PAGE_SIZE
 }: {
+  historyLimit?: number | string | null;
   limit?: number | string | null;
   maxPages?: number;
   pageSize?: number;
 } = {}): Promise<VercelDeploymentsOverview> => {
   const branchLimit = normaliseDeploymentBranchLimit(limit);
+  const deploymentHistoryLimit = normaliseDeploymentHistoryLimit(historyLimit);
   const fetchedAt = new Date().toISOString();
   const token = process.env.VERCEL_API_TOKEN;
   const deploymentUrl = normaliseUrl(process.env.VERCEL_URL);
@@ -981,9 +1116,17 @@ export const getVercelDeploymentsOverview = async ({
     : [];
 
   if (!token) {
+    const deploymentGroups = groupVercelDeployments({
+      branchLimit,
+      deployments: fallbackDeployments,
+      historyLimit: deploymentHistoryLimit
+    });
+
     return {
       branchLimit,
       configured: false,
+      deploymentGroups,
+      deploymentHistoryLimit,
       deployments: fallbackDeployments,
       deploymentPageCount: 0,
       deploymentScanCount: fallbackDeployments.length,
@@ -1019,9 +1162,6 @@ export const getVercelDeploymentsOverview = async ({
     const dashboardOwnerSlug = getDashboardOwnerSlug(projectData);
     const dashboardProjectSlug = getDashboardProjectSlug(projectData, projectName);
     const deployments = data.deployments;
-    const seenBranches = new Set<string>();
-    const seenUrls = new Set<string>();
-
     const allDeploymentSummaries = deployments.reduce<VercelDeploymentSummary[]>((items, deployment) => {
       const url = normaliseUrl(getStringValue(deployment, 'url'));
 
@@ -1066,27 +1206,28 @@ export const getVercelDeploymentsOverview = async ({
     }, [])
       .sort((left, right) => getDeploymentSummaryTimestamp(right) - getDeploymentSummaryTimestamp(left));
 
-    const allBranchDeploymentSummaries = allDeploymentSummaries.reduce<VercelDeploymentSummary[]>((items, deployment) => {
-      const branchKey = getBranchDeploymentKey(deployment);
-
-      if (seenBranches.has(branchKey)) {
-        return items;
-      }
-
-      seenBranches.add(branchKey);
-      seenUrls.add(deployment.url);
-      items.push(deployment);
-
-      return items;
-    }, []);
-    const deploymentSummaries = branchLimit === null
-      ? allBranchDeploymentSummaries
-      : allBranchDeploymentSummaries.slice(0, branchLimit);
-    const totalBranchCount = allBranchDeploymentSummaries.length;
+    const allDeploymentGroups = groupVercelDeployments({
+      deployments: allDeploymentSummaries,
+      historyLimit: deploymentHistoryLimit
+    });
+    const deploymentGroups = branchLimit === null
+      ? allDeploymentGroups
+      : allDeploymentGroups.slice(0, branchLimit);
+    const deploymentSummaries = deploymentGroups
+      .map((group) => group.deployments[0])
+      .filter((deployment): deployment is VercelDeploymentSummary => Boolean(deployment));
+    const totalBranchCount = allDeploymentGroups.length;
+    const uniqueUrlCount = new Set(
+      allDeploymentGroups
+        .map((group) => group.deployments[0]?.url)
+        .filter((url): url is string => Boolean(url))
+    ).size;
 
     return {
       branchLimit,
       configured: true,
+      deploymentGroups,
+      deploymentHistoryLimit,
       deployments: deploymentSummaries,
       deploymentPageCount: data.pageCount,
       deploymentScanCount: deployments.length,
@@ -1098,12 +1239,20 @@ export const getVercelDeploymentsOverview = async ({
       source: 'api',
       totalBranchCount,
       uniqueBranchCount: totalBranchCount,
-      uniqueUrlCount: seenUrls.size
+      uniqueUrlCount
     };
   } catch (err: any) {
+    const deploymentGroups = groupVercelDeployments({
+      branchLimit,
+      deployments: fallbackDeployments,
+      historyLimit: deploymentHistoryLimit
+    });
+
     return {
       branchLimit,
       configured: true,
+      deploymentGroups,
+      deploymentHistoryLimit,
       deployments: fallbackDeployments,
       deploymentPageCount: 0,
       deploymentScanCount: fallbackDeployments.length,

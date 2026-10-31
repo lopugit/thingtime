@@ -3,10 +3,16 @@ import test from 'node:test';
 
 // @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
 import {
+	attachmentFilesFromClipboard,
 	attachmentContentUrl,
+	attachmentDisplayName,
+	attachmentPlaybackContentType,
+	attachmentThingUrl,
 	attachmentCleanupAction,
 	attachmentCompleteRetryPhase,
 	attachmentSnapshot,
+	attachmentTypeLabel,
+	attachmentUploadScopeForPurpose,
 	attachmentUploadError,
 	attachmentUploadFailurePhase,
 	canonicalPostTags,
@@ -20,14 +26,52 @@ import {
 	shouldFreezeAmbiguousPostSubmission
 } from './attachmentUiCore.ts';
 
-test('only vetted raster image and video types render inline', () => {
+test('clipboard files prefer the canonical file list without double-queuing item fallbacks', () => {
+	const screenshot = { name: 'Screenshot.png', size: 42 } as File;
+	const duplicatedItem = { kind: 'file', getAsFile: () => screenshot };
+	assert.deepEqual(attachmentFilesFromClipboard({ files: [screenshot], items: [duplicatedItem] }), [screenshot]);
+});
+
+test('clipboard files fall back to file-kind items when the browser file list is empty', () => {
+	const copiedImage = { name: 'pasted-image.png', size: 7 } as File;
+	assert.deepEqual(
+		attachmentFilesFromClipboard({
+			files: [],
+			items: [
+				{ kind: 'string', getAsFile: () => null },
+				{ kind: 'file', getAsFile: () => copiedImage },
+				{ kind: 'file', getAsFile: () => null }
+			]
+		}),
+		[copiedImage]
+	);
+});
+
+test('upload purposes map to exactly one canonical approval scope', () => {
+	for (const purpose of ['post', 'comment', 'custom-emoji'] as const) {
+		assert.equal(attachmentUploadScopeForPurpose(purpose), 'public');
+	}
+	for (const purpose of ['message', 'profile-avatar', 'profile-banner'] as const) {
+		assert.equal(attachmentUploadScopeForPurpose(purpose), 'private');
+	}
+});
+
+test('only safe image, video, and audio types render inline', () => {
 	assert.equal(safeAttachmentMediaKind('image/jpeg', 'image'), 'image');
 	assert.equal(safeAttachmentMediaKind('video/mp4', 'video'), 'video');
 	assert.equal(safeAttachmentMediaKind('image/svg+xml', 'image'), 'file');
 	assert.equal(safeAttachmentMediaKind('text/html', 'image'), 'file');
 	assert.equal(safeAttachmentMediaKind('application/javascript', 'video'), 'file');
-	assert.equal(safeAttachmentMediaKind('video/quicktime', 'video'), 'file');
-	assert.equal(safeAttachmentMediaKind('video/ogg', 'video'), 'file');
+	assert.equal(safeAttachmentMediaKind('video/quicktime', 'video'), 'video');
+	assert.equal(safeAttachmentMediaKind('video/ogg', 'video'), 'video');
+	assert.equal(safeAttachmentMediaKind('video/x-m4v', 'video'), 'video');
+	assert.equal(safeAttachmentMediaKind('video/x-matroska', 'video'), 'video');
+	assert.equal(safeAttachmentMediaKind('video/3gpp', 'video'), 'video');
+	assert.equal(safeAttachmentMediaKind('audio/mpeg', 'audio'), 'audio');
+	assert.equal(safeAttachmentMediaKind('audio/x-m4a', 'audio'), 'audio');
+	assert.equal(safeAttachmentMediaKind('audio/flac', 'file'), 'audio');
+	assert.equal(safeAttachmentMediaKind('text/html', 'audio'), 'file');
+	assert.equal(safeAttachmentMediaKind('video/x-msvideo', 'video'), 'file');
 	assert.equal(safeAttachmentMediaKind('image/png', 'file'), 'file');
 });
 
@@ -46,20 +90,84 @@ test('normalises only canonical stable attachment metadata', () => {
 		contentType: 'text/html',
 		mediaKind: 'file'
 	});
-	assert.deepEqual(normalizePublicAttachment({ id: 'audio', name: 'voice.mp3', size: 8, contentType: 'audio/mpeg', mediaKind: 'audio' }), {
+	assert.deepEqual(normalizePublicAttachment({ id: 'audio', name: 'voice.mp3', size: 8, contentType: 'audio/mpeg', mediaKind: 'file' }), {
 		id: 'audio',
 		name: 'voice.mp3',
 		size: 8,
 		contentType: 'audio/mpeg',
-		mediaKind: 'file'
+		mediaKind: 'audio'
 	});
 	assert.equal(normalizePublicAttachment({ id: 'legacy', name: 'photo.jpg', sizeBytes: 42, contentType: 'image/jpeg', previewKind: 'image' }), null);
-	assert.equal(MAX_POST_ATTACHMENTS, 25);
+	assert.deepEqual(
+		normalizePublicAttachment({
+			id: 'att-3',
+			name: 'clip.avi',
+			size: 9,
+			contentType: 'application/octet-stream',
+			mediaKind: 'file',
+			detectedContentType: 'VIDEO/X-MSVIDEO'
+		}),
+		{
+			id: 'att-3',
+			name: 'clip.avi',
+			size: 9,
+			contentType: 'application/octet-stream',
+			detectedContentType: 'video/x-msvideo',
+			mediaKind: 'file'
+		}
+	);
+	assert.deepEqual(
+		normalizePublicAttachment({
+			id: 'att-4',
+			name: 'blob.bin',
+			size: 1,
+			contentType: 'application/octet-stream',
+			mediaKind: 'file',
+			detectedContentType: 'application/octet-stream'
+		}),
+		{ id: 'att-4', name: 'blob.bin', size: 1, contentType: 'application/octet-stream', mediaKind: 'file' }
+	);
+	assert.equal(MAX_POST_ATTACHMENTS, Number.POSITIVE_INFINITY);
+});
+
+test('audio playback prefers a legacy row’s server-sniffed MIME', () => {
+	assert.equal(attachmentPlaybackContentType({ contentType: 'audio/mpeg' }), 'audio/mpeg');
+	assert.equal(
+		attachmentPlaybackContentType({ contentType: 'application/octet-stream', detectedContentType: 'audio/x-m4a' }),
+		'audio/x-m4a'
+	);
+});
+
+test('filename preview overrides display text without replacing the immutable filename', () => {
+	const attachment = normalizePublicAttachment({
+		id: 'att-display',
+		name: '7627.jpg',
+		filenamePreview: 'Replacement blades.jpg',
+		size: 42,
+		contentType: 'image/jpeg',
+		mediaKind: 'image'
+	});
+	assert.ok(attachment);
+	assert.equal(attachmentDisplayName(attachment), 'Replacement blades.jpg');
+	assert.equal(attachment.name, '7627.jpg');
+});
+
+test('download rows label the sniffed container instead of application/octet-stream', () => {
+	assert.equal(attachmentTypeLabel({ contentType: 'application/octet-stream', detectedContentType: 'video/x-msvideo' }), 'AVI video');
+	assert.equal(attachmentTypeLabel({ contentType: 'application/octet-stream', detectedContentType: 'video/quicktime' }), 'QuickTime video');
+	assert.equal(
+		attachmentTypeLabel({ contentType: 'application/octet-stream', detectedContentType: 'application/x-iso9660-image' }),
+		'application/x-iso9660-image'
+	);
+	assert.equal(attachmentTypeLabel({ contentType: 'application/octet-stream' }), 'File');
+	assert.equal(attachmentTypeLabel({ contentType: 'audio/mpeg' }), 'MP3 audio');
+	assert.equal(attachmentTypeLabel({ contentType: 'text/plain' }), 'text/plain');
 });
 
 test('content links are stable same-origin routes derived only from attachment ids', () => {
 	assert.equal(attachmentContentUrl('a/b ?'), '/api/v1/attachments/content?id=a%2Fb+%3F');
 	assert.equal(attachmentContentUrl('a/b ?', true), '/api/v1/attachments/content?id=a%2Fb+%3F&download=1');
+	assert.equal(attachmentThingUrl('a/b ?'), '/thing/a%2Fb%20%3F');
 });
 
 test('upload errors are fixed client-authored messages', () => {
@@ -86,6 +194,8 @@ test('upload errors are fixed client-authored messages', () => {
 		/verifying this account’s storage balance/i
 	);
 	assert.match(attachmentUploadError({ status: 500, error: 'proxy stack' }, 'upload'), /could not reach storage/i);
+	assert.match(attachmentUploadError({ status: 403, code: 'public_uploads_not_approved' }, 'prepare'), /public media uploads need admin approval/i);
+	assert.match(attachmentUploadError({ status: 403, code: 'private_uploads_not_approved' }, 'prepare'), /private media uploads need admin approval/i);
 	assert.match(
 		attachmentUploadError({ status: 409, code: 'upload_parts_retryable', retryable: true, error: 'private server detail' }, 'complete'),
 		/parts need uploading again/i
@@ -178,6 +288,10 @@ test('ambiguous post creation reconciles only an exact committed snapshot', () =
 		}
 	};
 	assert.equal(matchesCommittedPostCreate(response, expected), true);
+	// Every normal composer payload included mediaLayout:null, but the real
+	// sanitizer omitted it. A lost response then froze an already-saved post.
+	assert.equal(matchesCommittedPostCreate(response, { ...expected, crystal: { ...expected.crystal, mediaLayout: null } }), true);
+	assert.equal(matchesCommittedPostCreate(response, { ...expected, crystal: { ...expected.crystal, mediaLayout: { mode: 'grid', columns: 2 } } }), false);
 	assert.equal(matchesCommittedPostCreate({ ...response, post: { ...response.post, attachments: [{ id: 'attachment-a' }] } }, expected), false);
 	assert.equal(matchesCommittedPostCreate({ ...response, thing: { ...response.thing, author: { id: 'another-owner' } } }, expected), false);
 	assert.equal(

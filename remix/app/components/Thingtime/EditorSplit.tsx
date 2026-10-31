@@ -1,3 +1,4 @@
+import { ThingDraftPicker } from '~/drafts/ThingDrafts';
 import React from 'react';
 import { Box, Flex, Input } from '@chakra-ui/react';
 import { ArrowDown, ArrowUp, Columns2, Ellipsis, Eye, Grip, Paintbrush, PictureInPicture, PictureInPicture2, Rows2 } from 'lucide-react';
@@ -1217,8 +1218,10 @@ export const EditorSplit = (props: EditorSplitProps) => {
 			applyLayout(config);
 		}
 
-		// always clear the flag — a stale name must not re-fire on the next mount
-		setThingtimeRef.current('settings.editor.openConfig', null, { namespace: 'editor', ignoreUndoRedo: true });
+		// always clear the flag — a stale name must not re-fire on the next mount.
+		// Tab-local for the same reason the write is: consuming this tab's intent
+		// must not erase an intent another tab set and has not navigated to yet.
+		setThingtimeRef.current('settings.editor.openConfig', null, { namespace: 'editor', ignoreUndoRedo: true, tabLocal: true });
 	}, [pendingConfigName, applyLayout]);
 
 	// mirror the live layout into settings for the drawer: first write lands
@@ -1258,7 +1261,18 @@ export const EditorSplit = (props: EditorSplitProps) => {
 			}
 
 			lastMirrorRef.current = serialized;
-			setThingtimeRef.current('settings.editor.live', payload, { namespace: 'editor', ignoreUndoRedo: true });
+			// tabLocal: `live` IS this viewport — the windows open in THIS editor,
+			// keyed by ids this mount generated. EditorDrawerSection renders it as
+			// that tab's own window list, so broadcasting swaps a peer's list for
+			// this tab's: its real windows vanish from its drawer (nothing there
+			// can close or minimise a row it can no longer see) and the foreign
+			// rows it does show act on ids absent from its tree, so they do
+			// nothing. A peer cannot correct it either — this effect depends on
+			// tree/floating/minimised, which a remote write does not touch, and
+			// lastMirrorRef still holds that peer's own payload, so its list stays
+			// wrong until its layout happens to change. Persisted as before, and
+			// the first mirror after mount rewrites it from the local layout.
+			setThingtimeRef.current('settings.editor.live', payload, { namespace: 'editor', ignoreUndoRedo: true, tabLocal: true });
 		};
 
 		if (firstMirrorRef.current) {
@@ -1915,12 +1929,13 @@ export const EditorSplit = (props: EditorSplitProps) => {
 	const draggingDocked = windowDrag?.kind === 'docked' && windowDrag.active;
 
 	return (
-		<>
+		<Flex direction="column" width="100%" minWidth={0} height={props.embedded ? props.height || "100%" : undefined}>
+      {!props.embedded && <ThingDraftPicker />}
 			<Box
 				ref={rootRef}
 				className="editor-split-root"
 				width="100%"
-				height={props.height || 'calc(100vh - 92px)'}
+				height={props.height || 'calc(100vh - 132px)'}
 				minHeight={props.embedded ? undefined : '440px'}
 				border="1px solid var(--tt-border, #ececef)"
 				borderRadius="var(--tt-radius-md, 12px)"
@@ -2041,6 +2056,6 @@ export const EditorSplit = (props: EditorSplitProps) => {
 					)}
 				</Flex>
 			)}
-		</>
+		</Flex>
 	);
 };

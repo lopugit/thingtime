@@ -36,6 +36,51 @@ export const renderEmailOtpTemplate = ({
   html: `<p>Your Thingtime security code is <strong>${htmlEscape(code)}</strong>.</p><p>It expires in ${expiresMinutes} minutes.</p>`
 });
 
+// Internal ops mail: a new account finished email verification and is waiting
+// for an admin to grant public file/media uploads. Sent to the admin inbox
+// (THINGTIME_ADMIN_NOTIFICATION_EMAIL, default admin@thingtime.com), never to
+// the user, so it carries the account details an admin needs to decide.
+export const renderNewUserAdminNotificationTemplate = ({
+  username,
+  email,
+  displayName,
+  userId,
+  createdAt,
+  adminUrl
+}: {
+  username: string;
+  email: string;
+  displayName?: string | null;
+  userId: string;
+  createdAt?: string | null;
+  adminUrl: string;
+}) => {
+  const rows: Array<[string, string]> = [
+    ['Username', `@${username}`],
+    ['Display name', displayName || '—'],
+    ['Email', email],
+    ['User id', userId],
+    ['Signed up', createdAt || '—'],
+    ['Email verified', 'yes']
+  ];
+  return {
+    subject: `New Thingtime user: @${username}`,
+    text: [
+      `A new user verified their email and is awaiting file/media upload approval (public and private uploads are both withheld).`,
+      '',
+      ...rows.map(([label, value]) => `${label}: ${value}`),
+      '',
+      `Approve public, private, or all uploads in the admin Users tab: ${adminUrl}`
+    ].join('\n'),
+    html:
+      `<p>A new user verified their email and is awaiting <strong>file/media upload approval</strong> (public and private uploads are both withheld).</p>` +
+      `<table cellpadding="4" style="border-collapse:collapse">${rows
+        .map(([label, value]) => `<tr><td><strong>${htmlEscape(label)}</strong></td><td>${htmlEscape(value)}</td></tr>`)
+        .join('')}</table>` +
+      `<p><a href="${htmlEscape(adminUrl)}">Open the admin Users tab</a> to enable their public, private, or all file and media uploads.</p>`
+  };
+};
+
 // Activity notification emails (friend requests, reactions, comments, …).
 // Subjects/bodies stay per-type so the inbox line reads like the bell row;
 // every email carries a manage link and a one-click unsubscribe-all link.
@@ -43,6 +88,8 @@ export const renderEmailOtpTemplate = ({
 export type NotificationEmailInput = {
   type: string;
   actorName: string | null;
+  // system notes: the headline IS the subject + first line
+  headline?: string | null;
   preview?: string | null;
   // click-through target (the post, or the actor's profile)
   ctaUrl: string;
@@ -88,9 +135,44 @@ const NOTIFICATION_EMAIL_COPY: Record<string, { subject: (actor: string) => stri
     subject: (actor) => `${actor} shared your post 🔁`,
     line: (actor) => `${actor} shared your post.`
   },
+  mention: {
+    subject: (actor) => `${actor} mentioned you on Thingtime 📣`,
+    line: (actor) => `${actor} mentioned you in a post.`
+  },
   groups: {
     subject: (actor) => `${actor} — group activity on Thingtime 👥`,
     line: (actor) => `${actor} did something in a group you're in.`
+  },
+  // subspace moderation (api/utils/subspaces) — the preview line carries the
+  // specifics ("s/<slug> · you are now a moderator"), these stay generic
+  'subspace-join-request': {
+    subject: (actor) => `${actor} asked to join your subspace 🙋`,
+    line: (actor) => `${actor} sent a request in a subspace you moderate.`
+  },
+  'subspace-join-accepted': {
+    subject: (actor) => `${actor} accepted you into a subspace 🎉`,
+    line: (actor) => `${actor} accepted your request — you're in.`
+  },
+  'subspace-post-removed': {
+    subject: (actor) => `A moderator removed your post 🧹`,
+    line: (actor) => `${actor} removed one of your posts from a subspace.`
+  },
+  'subspace-report': {
+    subject: (actor) => `${actor} reported a post in your subspace 🚩`,
+    line: (actor) => `${actor} reported a post to the moderators.`
+  },
+  'subspace-role': {
+    subject: (actor) => `${actor} changed your role in a subspace 🎩`,
+    line: (actor) => `${actor} updated your role in a subspace.`
+  },
+  'subspace-ban': {
+    subject: (actor) => `${actor} changed your access to a subspace 🚫`,
+    line: (actor) => `${actor} changed your access to a subspace.`
+  },
+  // system note — normally overridden by the emit's headline
+  'action-run': {
+    subject: () => 'An action you ran has finished ⚡',
+    line: () => 'An action you ran on Thingtime has finished.'
   }
 };
 
@@ -109,6 +191,7 @@ const emailFooter = ({ settingsUrl, unsubscribeUrl }: { settingsUrl: string; uns
 export const renderNotificationEmailTemplate = ({
   type,
   actorName,
+  headline,
   preview,
   ctaUrl,
   ctaLabel,
@@ -120,14 +203,16 @@ export const renderNotificationEmailTemplate = ({
     subject: (name: string) => `${name} — new activity on Thingtime 🔔`,
     line: (name: string) => `${name} did something that landed in your notifications.`
   };
+  const subject = headline || copy.subject(actor);
+  const line = headline || copy.line(actor);
   const footer = emailFooter({ settingsUrl, unsubscribeUrl });
   return {
-    subject: copy.subject(actor),
-    text: [copy.line(actor), preview ? `“${preview}”` : undefined, `${ctaLabel}: ${ctaUrl}`, '', footer.text]
-      .filter((line) => line !== undefined)
+    subject,
+    text: [line, preview ? `“${preview}”` : undefined, `${ctaLabel}: ${ctaUrl}`, '', footer.text]
+      .filter((entry) => entry !== undefined)
       .join('\n'),
     html: [
-      `<p>${htmlEscape(copy.line(actor))}</p>`,
+      `<p>${htmlEscape(line)}</p>`,
       preview
         ? `<blockquote style="margin:8px 0;padding:8px 12px;border-left:3px solid #ececef;color:#5a5a66">${htmlEscape(preview)}</blockquote>`
         : '',

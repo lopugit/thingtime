@@ -1,15 +1,23 @@
+import { ThingDraftsProvider } from './drafts/ThingDrafts';
+import { NativeSyncBootstrap } from './fileSync/NativeSyncBootstrap';
+import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
+import { LOPU_WINDOW_Z } from './components/Nav/Drawer/useDrawer';
+import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
 import { Outlet, ScrollRestoration, useLoaderData, useLocation, useRevalidator } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
 import React from 'react';
+import { pageTitle } from './utils/pageTitle';
 
 import type { RootLoaderData } from './root-data.server';
 import { GlobalStyles } from './globals/GlobalStyles';
 import { Main } from './components/Layout/Main';
 import { Nav } from './components/Nav/Nav';
 import { DrawerSystem } from './components/Nav/Drawer/DrawerSystem';
-import { useIcons } from './hooks/useIcons';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
+import { TimelineHost } from './components/Timeline/TimelineHost';
+import { TimelineProvider } from './timeline/TimelineProvider';
+import { BUILDER_OVERLAY_CHROME_CSS } from './components/Builder/BuilderOverlayHost';
 import { DevKit } from './components/DevKit/DevKit';
 import { ElectronBridgeHost } from './components/Electron/ElectronBridgeHost';
 import { NativeBridgeHost } from './components/NativeBridge/NativeBridgeHost';
@@ -17,8 +25,17 @@ import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHo
 import { ThemeHost } from './components/ThemeSettings/ThemeHost';
 import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
 import { EasterEggs } from './components/EasterEggs/EasterEggs';
+import { LopuPositionSync } from './components/Lopu/useLopuPosition';
 import { MessengerNotifications } from './components/Messenger/MessengerNotifications';
+import { AutoLoginPopup } from './components/Account/AutoLoginPopup';
+import { WatchPendingApprovals } from './components/Watch/WatchPendingApprovals';
+import { SiteBlocksHost } from './components/Builder/SiteBlocksHost';
+import { LopuPageTracker } from './components/Lopu/useLopuPages';
+import { LopuHost } from './components/Lopu/LopuHost';
 import { rememberAuthReturnTo } from './utils/authReturn';
+import { bindTransferIdentity } from './utils/thingTransfer/intent';
+import { rootIdentity } from './utils/rootIdentity';
+import { RootRecovery } from './components/Layout/RootRecovery';
 
 const setThingtime = (glob: any) => {
   try {
@@ -47,12 +64,18 @@ try {
 }
 
 export default function App() {
-  const rootData = useLoaderData() as RootLoaderData;
+  const rootData = useLoaderData() as RootLoaderData & { clientIdentityGeneration: number };
+  const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
+  React.useLayoutEffect(() => { rootIdentity.confirm(rootData.clientIdentityGeneration); }, [rootData.clientIdentityGeneration]);
   const { envFromCookie, titlePrefix } = rootData;
   const { pathname, search, hash } = useLocation();
-  const isAuthorizePopup = pathname === '/authorize';
+  const isStandalonePage = pathname.startsWith('/t/');
+  const isPasswordSurface = pathname === '/passwords' || pathname === '/settings/passwords';
+  const isAuthorizePopup = isStandalonePage || pathname === '/invite' || pathname === '/authorize' || pathname === '/passwords/provider' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
+  React.useLayoutEffect(() => bindTransferIdentity(rootIdentity, rootData.user?.id, rootData.clientIdentityGeneration),
+    [rootData.user?.id, rootData.clientIdentityGeneration]);
 
   React.useEffect(() => {
     setMounted(true);
@@ -72,31 +95,21 @@ export default function App() {
   }, [envFromCookie]);
 
   React.useEffect(() => {
+    // Invite fragments are bearer credentials, never persist them as return-to hints.
+    if (pathname === '/invite') return;
     rememberAuthReturnTo(`${pathname}${search}${hash}`);
   }, [hash, pathname, search]);
 
   React.useEffect(() => {
     if (typeof document !== 'undefined') {
-      const baseTitle = titlePrefix ? `${titlePrefix} Thingtime` : 'Thingtime';
-      const routeTitle = pathname.startsWith('/docs/design')
-        ? `${baseTitle} docs - Design mockups`
-        : pathname === '/docs'
-          ? `${baseTitle} docs`
-          : pathname === '/feed'
-            ? `${baseTitle} - Feed`
-            : pathname === '/messages'
-              ? `${baseTitle} - Messages`
-              : pathname.startsWith('/profile')
-              ? `${baseTitle} - Profile`
-              : pathname === '/settings'
-                ? `${baseTitle} - Settings`
-                : pathname === '/admin'
-                  ? `${baseTitle} - Admin`
-                  : pathname === '/things'
-                    ? `${baseTitle} - Things`
-                    : baseTitle;
-
-      document.title = routeTitle;
+      // the generated marketing pages set their own title + meta description
+      // (components/Marketing/MarketingShell.tsx useMarketingSeo). Match the
+      // four registered routes exactly: a bare startsWith('/marketing') also
+      // swallows /marketingfoo, which the '*' catch-all renders as the tree
+      // viewer — nothing would then set its title and the tab would keep the
+      // previous page's one.
+      if (pathname === '/marketing' || pathname.startsWith('/marketing/')) return;
+      document.title = pageTitle(pathname, titlePrefix);
     }
   }, [pathname, titlePrefix]);
 
@@ -109,34 +122,69 @@ export default function App() {
     return () => window.removeEventListener('thingtime:root-data-refresh', refreshRootData);
   }, [revalidator]);
 
-  useIcons();
+  useBackgroundRefresh('root-data', () => revalidator.state === 'idle' ? revalidator.revalidate() : undefined, 60_000, false);
+
+  if (identity.pending && rootData.clientIdentityGeneration !== identity.generation) return <RootRecovery refreshing />;
 
   return (
     <ChakraWrapper>
       <GlobalStyles />
-      <ThingtimeProvider>
+      <style>{`
+        ${PAGE_VIEWPORT_CSS}
+        ${BUILDER_OVERLAY_CHROME_CSS}
+        html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [data-testid="site-edit-pill"],
+        html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [class~="tt.devKit"],
+        html[data-lopu-sheet="open"] [data-testid="site-edit-pill"] { z-index: ${LOPU_WINDOW_Z - 1} !important; }
+      `}</style>
+      <ThingtimeProvider key={rootData.user?.id || 'guest'} accountId={rootData.user?.id} storageKey={rootData.user?.id ? `thingtime:account:${rootData.user.id}` : 'thingtime'}>
+        <ThingDraftsProvider>
+         <TimelineProvider>
+         {mounted && !isAuthorizePopup ? <TimelineHost /> : null}
         <VisualSettingsHost />
+        <LopuPageTracker />
         <ThemeHost />
+        {/* Mirrors settings.lopu.position into the cache useLopu reads at fire time. */}
+        <LopuPositionSync />
         {mounted ? <ElectronBridgeHost /> : null}
+        {mounted && !identity.pending && rootData.dataPlane === 'home' && rootData.user?.id &&
+          rootData.user.accountKind === 'user' && !rootData.user.temporary ?
+          <NativeSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} /> : null}
         {mounted ? <NativeBridgeHost /> : null}
-        {/* /authorize is the "Login with Thingtime" popup — a focused embed
-            surface with its own chrome, so the app shell (nav, drawer trigger,
+        {/* Invite signup and authorization/pairing use a focused auth
+            surface with their own chrome, so the app shell (nav, drawer trigger,
             DevKit bubble, Main's footer + its 900px spacer) stays out of it. */}
-        {isAuthorizePopup ? null : <DevKit />}
+        <div id="lopuPageViewport">
+        {isAuthorizePopup || isPasswordSurface ? null : <DevKit />}
         {isAuthorizePopup ? null : <Nav />}
+        <div id="lopuPageScroll">
         {isAuthorizePopup ? (
           <Outlet />
         ) : (
           <Main>
-            <Outlet />
+            {/* every page is a block-based site: per-route + global blocks
+                render around the native screen; the ✏️ pill enters edit mode */}
+            <SiteBlocksHost>
+              <Outlet />
+            </SiteBlocksHost>
           </Main>
         )}
+        </div>
         {isAuthorizePopup ? null : <DrawerSystem />}
+        </div>
+        {/* 🦄 Lopu: global floating launcher + draggable chat window (hidden on /lopu). */}
+        {mounted && !isAuthorizePopup && !isPasswordSurface ? <LopuHost /> : null}
+        {/* ⌘K quick switcher — global palette; renders nothing until opened. */}
         {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
         {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}
+        {mounted && !isAuthorizePopup ? <WatchPendingApprovals /> : null}
+        {/* Signed out here but signed in on another Thingtime deployment →
+            "continue as" suggestions (cross-deployment auto-login). */}
+        {mounted && !isAuthorizePopup ? <AutoLoginPopup /> : null}
         {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
-        <ConfettiCanvas />
-        {mounted ? <EasterEggs /> : null}
+        {!isStandalonePage ? <ConfettiCanvas /> : null}
+        {mounted && !isStandalonePage ? <EasterEggs /> : null}
+         </TimelineProvider>
+        </ThingDraftsProvider>
       </ThingtimeProvider>
       <ScrollRestoration />
       {mounted ? <Analytics /> : null}

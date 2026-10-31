@@ -1,3 +1,4 @@
+import { thingBuilderHref } from '../Things/thingsCore';
 import React from 'react';
 import {
   Badge,
@@ -17,7 +18,7 @@ import {
   Textarea
 } from '@chakra-ui/react';
 import { BookOpen, Braces, Columns3, LayoutGrid, Library, Plus, Rows3, Save, Search, SlidersHorizontal, Sparkles } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { ChakraThingRenderer, HtmlThingRenderer, isChakraThingNode } from '~/components/Kinds';
@@ -28,13 +29,15 @@ import { useOutsideTapClose } from '~/hooks/useOutsideTapClose';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
 import { timeAgo } from '~/components/Feed/feedTypes';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { ACL_OWNER, getThingtimeSchema } from '~/schemas/registry';
+import { getThingtimeSchema } from '~/schemas/registry';
 import type { SchemaThingField } from '~/schemas/registry';
 import { describeSchemaField } from '~/schemas/tools';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
+import { CatalogImporter } from './CatalogImporter';
 
 import {
   COMPONENT_LIBRARY_LABELS,
@@ -56,9 +59,14 @@ import {
 } from './componentTemplate';
 
 // /components — the UI-first sibling of /schemas. Cards render their
-// component LIVE from the stored template, args are editable in place, the
+// component from the stored template, args are editable in place, the
 // underlying schema hides behind a quiet expander, and "Save version" stores
 // the current tester state as a standalone component thing in your Things.
+//
+// Browse cards stay INERT (claude-todo/20: the grid never arms a control):
+// the preview is a plain render with no click wrapper, and the card is a
+// LINK — title and preview open the component's dedicated page
+// (/components/:key), where the live pane runs under the trust ladder.
 
 const cacheKeyFor = (userId: string | null | undefined) => (userId ? `tt-components-${userId}` : null);
 const PAGE_SIZE = 20;
@@ -125,8 +133,9 @@ const ShapeChip = ({ children, dim }: { children: React.ReactNode; dim?: boolean
 );
 
 // ---------------------------------------------------------------------------
-// Live preview: template resolved against the tester args, drawn only through
-// the sanitising allowlist renderers.
+// Card preview: template resolved against the tester args, drawn only through
+// the sanitising allowlist renderers. NOT armed — no onClickCapture, ever: a
+// browse card is not a trusted surface, the dedicated page is.
 
 const ComponentPreview = ({ source, values }: { source: ComponentCardSource; values: ComponentArgValues }) => {
   const resolved = React.useMemo(() => resolveTemplate(source.render, values), [source.render, values]);
@@ -234,12 +243,16 @@ type ComponentCardProps = {
   source: ComponentCardSource;
   onReact: (source: ComponentCardSource, token: string) => void;
   onSave: (source: ComponentCardSource) => void;
-  onSaveVersion: (source: ComponentCardSource, values: ComponentArgValues, name: string, isPublic: boolean) => Promise<boolean>;
-  onOpenDocs: (source: ComponentCardSource) => void;
+  onSaveVersion: (source: ComponentCardSource, values: ComponentArgValues, name: string, acl: string[]) => Promise<boolean>;
   loadFamily: (key: string) => Promise<BrowseComponentEntry[]>;
 };
 
-const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersion, onOpenDocs, loadFamily }: ComponentCardProps) => {
+// in-card buttons keep working in place: a click on one never reaches the
+// card's link targets
+const stop = (event: React.SyntheticEvent) => event.stopPropagation();
+
+const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersion, loadFamily }: ComponentCardProps) => {
+  const user = useCurrentUser();
   // `active` is the design currently on the card — the family's representative
   // until the designs click-through swaps in a sibling rendition. The rest of
   // the card body reads it through the `source` alias.
@@ -278,7 +291,7 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
   const [schemaOpen, setSchemaOpen] = React.useState(false);
   const [versionOpen, setVersionOpen] = React.useState(false);
   const [versionName, setVersionName] = React.useState('');
-  const [versionPublic, setVersionPublic] = React.useState(false);
+  const [versionAcl, setVersionAcl] = React.useState<string[]>(['tt:user']);
   const [savingVersion, setSavingVersion] = React.useState(false);
   const { recent } = useRecentReactions();
   const [pickerOpen, setPickerOpen] = React.useState(false);
@@ -294,14 +307,28 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
   const reactionEntries = Object.entries(entry?.reactionCounts || {}).filter(([, count]) => count > 0);
   const libraryLabel = COMPONENT_LIBRARY_LABELS[source.library] || source.library;
 
+  // The card's dedicated page: the family's deep-link key, plus ?design=
+  // when the click-through swapped in a sibling rendition (by library, or by
+  // id when the family holds two renditions of one library — the same rule
+  // the page's own design switcher writes).
+  const pageHref = (suffix = '') => {
+    const editor = !suffix && thingBuilderHref(source.entry, user?.id);
+    if (editor) return editor;
+    const base = `/components/${encodeURIComponent(deepLinkKeyFor(family))}${suffix}`;
+    if (active.id === family.id) return base;
+    const sameLibrary = family.designs.filter((design) => design.library === active.library).length;
+    return `${base}?design=${encodeURIComponent(sameLibrary > 1 ? active.id : active.library)}`;
+  };
+
   const openVersionPanel = () => {
     setVersionName(`${source.name} v${(entry?.usageCount || 0) + 2}`);
+    setVersionAcl(['tt:user']);
     setVersionOpen((open) => !open);
   };
 
   const submitVersion = async () => {
     setSavingVersion(true);
-    const ok = await onSaveVersion(source, values, versionName, versionPublic);
+    const ok = await onSaveVersion(source, values, versionName, versionAcl);
     setSavingVersion(false);
     if (ok) setVersionOpen(false);
   };
@@ -317,7 +344,16 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
       sx={{ breakInside: 'avoid' }}
     >
       <Flex align="center" gap={2} wrap="wrap">
-        <Text color="var(--tt-ink, #16161a)" fontSize="md" fontWeight={700}>
+        {/* a real link: middle-click, keyboard, and "open in new tab" all work */}
+        <Text
+          as={Link}
+          color="var(--tt-ink, #16161a)"
+          fontSize="md"
+          fontWeight={700}
+          to={pageHref()}
+          _hover={{ textDecoration: 'underline' }}
+          data-testid="component-card-title"
+        >
           {source.name}
         </Text>
         <Badge
@@ -376,7 +412,10 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
                 height="22px"
                 key={design.id}
                 minWidth={0}
-                onClick={() => switchDesign(design)}
+                onClick={(event) => {
+                  stop(event);
+                  switchDesign(design);
+                }}
                 paddingX={2}
                 size="xs"
                 variant="unstyled"
@@ -389,7 +428,24 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
         </Flex>
       )}
 
-      <ComponentPreview source={source} values={values} />
+      {/* the preview stays an inert render; a real anchor stretched over it
+          is the click/keyboard target that opens the dedicated page */}
+      <Box position="relative" data-testid="component-card-preview">
+        <ComponentPreview source={source} values={values} />
+        <Box
+          aria-label={`Open ${source.name}`}
+          as={Link}
+          borderRadius="var(--tt-radius-md, 12px)"
+          bottom={0}
+          left={0}
+          position="absolute"
+          right={0}
+          to={pageHref()}
+          top={0}
+          _focusVisible={{ boxShadow: '0 0 0 2px var(--tt-link, #4c7dff)', outline: 'none' }}
+          data-testid="component-card-open"
+        />
+      </Box>
 
       {source.args.length > 0 && (
         <Flex direction="column" gap={2}>
@@ -398,7 +454,10 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
             color="var(--tt-muted, #9a9aa6)"
             fontSize="12px"
             leftIcon={<SlidersHorizontal size={13} />}
-            onClick={() => setArgsOpen((open) => !open)}
+            onClick={(event) => {
+              stop(event);
+              setArgsOpen((open) => !open);
+            }}
             size="xs"
             variant="ghost"
           >
@@ -438,7 +497,10 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
           color="var(--tt-faint, #b6b6c0)"
           fontSize="12px"
           leftIcon={<Braces size={13} />}
-          onClick={() => setSchemaOpen((open) => !open)}
+          onClick={(event) => {
+            stop(event);
+            setSchemaOpen((open) => !open);
+          }}
           size="xs"
           variant="ghost"
         >
@@ -573,7 +635,10 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
                 height="26px"
                 key={token}
                 minWidth={0}
-                onClick={() => onReact(source, token)}
+                onClick={(event) => {
+                  stop(event);
+                  onReact(source, token);
+                }}
                 paddingX={2}
                 size="xs"
                 variant="unstyled"
@@ -594,7 +659,10 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
                 borderRadius="full"
                 color="var(--tt-muted, #9a9aa6)"
                 height="26px"
-                onClick={() => setPickerOpen((open) => !open)}
+                onClick={(event) => {
+                  stop(event);
+                  setPickerOpen((open) => !open);
+                }}
                 paddingX={2}
                 size="xs"
                 variant="unstyled"
@@ -651,17 +719,29 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
         {entry && (
           <Button
             leftIcon={<Library size={14} />}
-            onClick={() => onSave(source)}
+            onClick={(event) => {
+              stop(event);
+              onSave(source);
+            }}
             size="xs"
             variant={entry.saved ? 'solid' : 'outline'}
           >
             {entry.saved ? 'In my library' : 'Add to library'}
           </Button>
         )}
-        <Button leftIcon={<Save size={14} />} onClick={openVersionPanel} size="xs" variant="outline">
+        <Button
+          leftIcon={<Save size={14} />}
+          onClick={(event) => {
+            stop(event);
+            openVersionPanel();
+          }}
+          size="xs"
+          variant="outline"
+        >
           Save version
         </Button>
-        <Button leftIcon={<BookOpen size={14} />} onClick={() => onOpenDocs(active)} size="xs" variant="ghost">
+        {/* the dedicated page, landing on its docs section — a real link */}
+        <Button as={Link} leftIcon={<BookOpen size={14} />} onClick={stop} size="xs" to={pageHref('/docs')} variant="ghost" data-testid="component-card-docs">
           Docs
         </Button>
       </Flex>
@@ -687,12 +767,14 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
             size="sm"
             value={versionName}
           />
-          <Flex align="center" gap={1.5}>
-            <Switch isChecked={versionPublic} onChange={(event) => setVersionPublic(event.target.checked)} size="sm" />
-            <Text color="var(--tt-muted, #9a9aa6)" fontSize="12px">
-              public
-            </Text>
-          </Flex>
+          <Box flex="1 1 260px" minWidth="220px">
+            <ThingAudienceControl
+              acl={versionAcl}
+              label="Who can use this version?"
+              onChange={setVersionAcl}
+              testId={`component-version-audience-${source.id}`}
+            />
+          </Box>
           <Button colorScheme="pink" isLoading={savingVersion} onClick={submitVersion} size="sm">
             Save to my Things
           </Button>
@@ -842,15 +924,6 @@ export const ComponentsBrowsePage = () => {
     }
   }, []);
 
-  const handleOpenDocs = React.useCallback(
-    (source: ComponentCardSource) => {
-      const key = deepLinkKeyFor(source);
-      const design = source.familyKey ? `?design=${encodeURIComponent(source.library)}` : '';
-      navigate(`/components/${encodeURIComponent(key)}/docs${design}`);
-    },
-    [navigate]
-  );
-
   // ---- actions ------------------------------------------------------------
 
   const patchEntry = React.useCallback(
@@ -926,7 +999,7 @@ export const ComponentsBrowsePage = () => {
   );
 
   const handleSaveVersion = React.useCallback(
-    async (source: ComponentCardSource, values: ComponentArgValues, name: string, isPublic: boolean): Promise<boolean> => {
+    async (source: ComponentCardSource, values: ComponentArgValues, name: string, acl: string[]): Promise<boolean> => {
       if (!user) {
         lopuRef.current({ title: 'Sign in to save component versions ✨', status: 'info', duration: 6000 });
         return false;
@@ -957,8 +1030,7 @@ export const ComponentsBrowsePage = () => {
             ...(source.previewBg ? { previewBg: source.previewBg } : {}),
             forkOf: source.id
           },
-          // private by default — flip the toggle to publish into the catalog
-          ...(isPublic ? {} : { acl: [ACL_OWNER] })
+          acl
         });
         if (!resp?.ok) throw resp;
         patchEntry(source.id, (entry) => ({ ...entry, usageCount: (entry.usageCount || 0) + 1 }));
@@ -1005,7 +1077,6 @@ export const ComponentsBrowsePage = () => {
     <ComponentCard
       key={source.key}
       loadFamily={loadFamily}
-      onOpenDocs={handleOpenDocs}
       onReact={handleReact}
       onSave={handleSave}
       onSaveVersion={handleSaveVersion}
@@ -1017,7 +1088,7 @@ export const ComponentsBrowsePage = () => {
 
   return (
     <Flex background="var(--tt-surface, #fafafb)" justifyContent="center" minHeight="100vh" width="100%">
-      <Flex direction="column" gap={5} maxWidth={view === 'feed' ? '760px' : '1180px'} pb={24} pt="90px" px={4} width="100%">
+      <Flex direction="column" gap={5} maxWidth={view === 'feed' ? '760px' : '1180px'} pb={24} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 36px)" px={4} width="100%">
         <Flex align="baseline" gap={3} wrap="wrap">
           <Text color="var(--tt-ink, #16161a)" fontSize="2xl" fontWeight={800}>
             Components
@@ -1036,6 +1107,8 @@ export const ComponentsBrowsePage = () => {
             💎 Schemas
           </Button>
         </Flex>
+
+        {user?.isAdmin && <CatalogImporter key={user.id} onPublished={() => { familyCacheRef.current.clear(); void runBrowse(); }} />}
 
         {/* same rainbow-ringed input as /search and /schemas */}
         <form onSubmit={submit}>

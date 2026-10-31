@@ -5,20 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const scriptPath = fileURLToPath(import.meta.url);
 
-export function getVercelIgnoreDecision(environment = process.env) {
-	const branch = environment.VERCEL_GIT_COMMIT_REF?.trim();
-	const commitSha = environment.VERCEL_GIT_COMMIT_SHA?.trim();
-	const previousSha = environment.VERCEL_GIT_PREVIOUS_SHA?.trim();
-
-	if (branch === 'github-actions') {
-		return { skip: true, reason: 'the github-actions control plane does not deploy' };
-	}
-
-	if (commitSha && previousSha && commitSha === previousSha) {
-		return { skip: true, reason: 'the selected commit was already considered' };
-	}
-
-	return { skip: false, reason: 'this product commit requires a build' };
+export function getVercelIgnoreDecision() {
+	return { skip: true, reason: 'GitHub Actions builds every deployment; Vercel accepts prebuilt output only' };
 }
 
 export function runVercelIgnoreCommand(environment = process.env) {

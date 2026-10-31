@@ -280,8 +280,8 @@ const browseFamilies = async (
     .toArray()) as any[];
 
   const page = groups.slice(0, limit);
-  const designsByFamily = new Map<string, ComponentDesignRef[]>();
-  const representativeIds: string[] = [];
+  const candidatesByFamily = new Map<string, ComponentDesignRef[]>();
+  const candidateIds: string[] = [];
   for (const group of page) {
     const designs = (Array.isArray(group.designs) ? group.designs : [])
       .filter((design: any) => typeof design?.id === 'string')
@@ -289,17 +289,34 @@ const browseFamilies = async (
       .sort((a: ComponentDesignRef, b: ComponentDesignRef) => designRank(a.library) - designRank(b.library) || (a.id < b.id ? -1 : 1))
       .slice(0, MAX_FAMILY_DESIGNS);
     if (!designs.length) continue;
-    designsByFamily.set(String(group._id), designs);
-    representativeIds.push(designs[0].id);
+    candidatesByFamily.set(String(group._id), designs);
+    for (const design of designs) candidateIds.push(design.id);
   }
 
-  const fetched = representativeIds.length
-    ? ((await collection.find({ shareId: { $in: representativeIds } } as any).toArray()) as any as ThingDoc[])
+  // Exact acl check EVERY design, not just each family's representative. The
+  // aggregation above matched the visibility SUPERSET, which still contains
+  // moderation-blocked docs and ones a `-tt:user/<name>` entry excludes this
+  // viewer from — so checking only the representative would ship those ids in
+  // designs[], and would drop a whole family off the page whenever its
+  // top-ranked design is hidden instead of falling back to a visible sibling.
+  // Components never carry tt:inherit, so the chain walk adds no extra query.
+  const fetched = candidateIds.length
+    ? ((await collection.find({ shareId: { $in: candidateIds } } as any).toArray()) as any as ThingDoc[])
     : [];
   const byId = new Map(fetched.map((doc) => [doc.shareId, doc]));
-  const ordered = representativeIds.map((id) => byId.get(id)).filter(Boolean) as ThingDoc[];
-  const visibleFlags = await Promise.all(ordered.map((doc) => canViewInherited(doc, viewer)));
-  const visible = ordered.filter((_, index) => visibleFlags[index]);
+  const visibleFlags = await Promise.all(fetched.map((doc) => canViewInherited(doc, viewer)));
+  const viewable = new Set(fetched.filter((_, index) => visibleFlags[index]).map((doc) => doc.shareId));
+
+  const designsByFamily = new Map<string, ComponentDesignRef[]>();
+  const visible: ThingDoc[] = [];
+  // Map iteration keeps page order (latest desc, _id asc) from the aggregation.
+  for (const [familyKey, designs] of candidatesByFamily) {
+    const allowed = designs.filter((design) => viewable.has(design.id));
+    const representative = allowed.length ? byId.get(allowed[0].id) : null;
+    if (!representative) continue;
+    designsByFamily.set(familyKey, allowed);
+    visible.push(representative);
+  }
 
   // total = family count (capped), first page only — cheap distinct-ish count
   let total: number | null = null;
