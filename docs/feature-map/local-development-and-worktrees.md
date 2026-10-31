@@ -1,5 +1,22 @@
 # Local development and worktrees
 
+## Offline native VM testing
+
+`apple/OfflineNativeVM` owns the host CLI, exact local manifest, fresh task-owned
+RAW disk/auxiliary/identity preparation, separate progress-cancel installer and bounded lifecycle scaffold. See
+[offline-native-vm.md](../offline-native-vm.md) and the root `TESTING.md` checklist.
+`apple/OfflineNativeVM/scripts/build_media.py` exports exact committed native source
+and hash-bound credential-free toolchain bytes into fresh RAW UDF media without
+mounting or starting a guest. Its fixed guest recipe checks vendor/toolchain and
+license prerequisites before unsigned Mac/iOS test-target compilation. Run
+`test_build_media.py` inert fixtures; actual attachment/setup/build/output
+acceptance remains separate. Feature `native.offline-vm` 1.1 adds explicit `attach-media` registration under
+the latest stopped checkpoint and exclusive lease, binding a fourth read-only
+USB image without changing the installed five-file pair or persistent format1.0.
+Viewer attempts/worker readback/checkpoints freeze and verify that binding;
+candidate admission remains closed. Its SwiftPM tests do not boot a guest. Real installer acceptance and guest setup/toolchain admission are
+an explicit remaining gate; there is no network/shared-directory enable option.
+
 ## Agent browser runtime
 
 `electron/lib/agent-browsers/` owns device installations, exclusive leases,
@@ -147,40 +164,4 @@ a macOS OS network sandbox, including direct-IP and redirect denial. Fixture
 requests accept only a literal loopback HTTP origin and same-origin uploads.
 Keep backend/browser network isolation and dedicated test credentials in place.
 
-## Gateway runtime and Mongo admission
-
-`app/api/utils/deployment/environmentGateway.ts` guards driver and cached-collection
-access; configured followers skip `server/plugins/mongo-warmup.ts`. Owner streams
-and detached work retain their admission during promotion, then drain pools and
-readiness caches. `mongodb/indexLifecycle.ts` coordinates the canonical index plan
-with a durable fingerprint and renewable lease; normal writes require readiness,
-while authenticated admin migrations use the scoped recovery path.
-`test:collections` covers lifecycle/admission/recovery; `test:environment-gateway`
-covers forwarding and ownership. The built acceptance runner creates isolated
-synthetic API identities under a verified OS network boundary. See
-[the gateway runbook](../environment-api-gateway.md).
-
-## Password AutoFill release tooling
-
-`electron/scripts/build-native-passwords.mjs --prepare-signing` exports a reviewed
-native Git closure and builds the canonical Xcode/local-package graph under
-network denial. `password-provider-release.mjs` owns private state, artifact and
-manual-profile/entitlement binding, bounded cleanup and the release contract;
-`sign-native-passwords.mjs` consumes an independently reviewed manifest digest
-and stages timestamped Developer ID signatures without installation or candidate
-execution. It reuses `verify-password-provider.mjs` with a sanitized command
-environment and explicit fixed bundle IDs; legacy callers retain their defaults.
-See README "Prepare and sign the standalone Password AutoFill companion" and
-TESTING.md's split companion checklist. Safe checks:
-`node --test electron/scripts/password-provider-release.test.mjs`.
-
-
-Standalone companion recovery uses `WebConnection.swift`,
-`PasskeyRegistration.swift`, `SessionStore.swift` and `PasswordClient.swift` under
-`apple/Passwords/Sources/ThingtimePasswordCore/`, with the private native connection
-view in `macos/ThingtimePasswords/PasswordSetupEditor.swift`. Explicit companion
-links are independently owned; Electron's automatic host lifecycle cannot adopt
-or delete them. `NativeRecoveryTests.swift` covers synthetic failure/retry and
-ownership boundaries. Signed installed-device passkey creation/assertion and
-Keychain/AutoFill acceptance remain separate gates. Provider prerequisites and
-vault labels are in [provider-access-setup.md](../provider-access-setup.md).
+- Offline native VM first boot: `apple/OfflineNativeVM` `view` admits only the own installed final identity pair, with bounded AppKit framebuffer/input and stopped/reaped host checkpoints. Candidate run remains closed. See [runbook](../offline-native-vm.md) and `ViewerTests.swift`; real viewer acceptance requires separate authorization.

@@ -106,28 +106,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-28: Add standalone Password AutoFill connection and scoped recovery,
-  retain the same pending passkey on retries, and protect independent companion
-  links from automatic Electron lifecycle changes. Restore complete saved-provider
-  responses and opaque pagination bodies without arbitrary size ceilings
-  (`api.connections-request` 2.0.1). Correct provider setup to the encrypted Admin
-  Integrations vault; signed installed-device and real-provider acceptance remain
-  pending. [Details](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**
+- 2026-10-27: Add explicit leased registration of task-owned supplemental read-only VM media, preserving the original installed pair and format while advertising native.offline-vm1.1. Viewer attempts bind media provenance and require read-only stop/checkpoint evidence. Focused21/full68 tests and actual host-only stopped-task registration passed with original pair/manifest unchanged; fourth-device/guest acceptance remains open and no candidate execution is admitted. [Runbook](../docs/offline-native-vm.md). **Codex (AI)**
 
-- 2026-10-27: Add opt-in canonical Password AutoFill preparation under unchanged network denial and a separate manifest-bound Developer ID signing stage; preserve the default build, require fixed artifacts/manual profiles/secure timestamps, and reject mutation or extension-signing failure before host signing. Reviewed source preparation and staged Developer ID/secure-timestamp verification passed; the new requirements are stable across two rebuilds and satisfy the installed old requirements despite different text. Verified standalone installation/launch and updated-extension AutoFill registration passed; authenticated fill/passkey and main-app bridge acceptance remain pending. [PR #1240 notes](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**
+- 2026-10-27: Add exact-commit native build-media staging with hash-bound vendor/toolchain inputs, archive and relocatability audits, and a fixed guest-only unsigned Mac/iOS compile recipe. No guest setup, license acceptance, VM launch, readiness or output acceptance is implied. [Runbook](../docs/offline-native-vm.md). **Codex (AI)**
 
-- 2026-10-27: Restore macOS-only Git-oracle guards and the explicit iOS skip in shared FileSync tests, preserving three portable cases; declare the test target's direct AppleFileSync package dependency. The real macOS suite passes 4/4 and the full unsigned iOS snapshot-adapter build-for-testing passes; signed installed-provider acceptance remains separate. [Details](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**
+- 2026-10-27: Add exclusive task-cache `.app` packaging and inert validation for the reviewed offline VM viewer, with distinct stable task identity and no autostart or host environment/preferences copying. Signed CUA discovery remains a separate check. [Runbook](../docs/offline-native-vm.md); [bounded evidence](../PRs/1249-codex-oauth-offline-native-vm-add-offline-native-vm-harness.md). **Codex (AI)**
 
-- 2026-10-27: Correct proxy-preview capability discovery to advertise only whole contracts executable through the current gateway; unavailable ownership fails closed, while local/owner discovery remains intact. Share the feature/path/method gate with request admission and advertise `api.environment-gateway`1.2. Connections2 backend rollout and live feature acceptance remain separate. [PR1240](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**
+- 2026-10-27: Add the source-tested offline VM first-boot viewer: final installed-pair admission, bounded native framebuffer/input and stopped/reaped checkpoint fencing. Real viewer/Setup Assistant and candidate readiness remain gated. [Runbook](../docs/offline-native-vm.md); [bounded evidence](../PRs/1249-codex-oauth-offline-native-vm-add-offline-native-vm-harness.md). **Codex (AI)**
 
-- 2026-10-27: Distinguish native Password AutoFill account linkage from OS suggestion-index synchronization, retain disabled-provider links with explicit retry feedback, and fence stale account/index completion. Installed-device acceptance remains pending. [Contract](../docs/password-manager.md#connection-and-suggestion-index-status). **Codex (AI)**
+- 2026-10-27: Add the offline native VM host harness preparation milestone: private task manifests, fresh Apple VM identity/disks, fixed no-NIC configuration, read-only restore diagnostics, a distinct bounded progress-cancel installer and mocked deadline/cleanup tests. Real installation, toolchain readiness and native acceptance remain gated. [Runbook](../docs/offline-native-vm.md). **Codex (AI)**
 
-- 2026-10-27: Integrate Connections2 service accounts and editable password-manager
-  fields onto current main while retaining password 1.3 icons/generation/passkey
-  tools, explicit render components, drawer customization and the zero-error
-  TypeScript gate. Preserve private transient controls, exact-origin vault binding
-  and all six Connections2 gateway requirements. Provider, scanner and installed
-  device acceptance remain separate release gates. [Integration and verification](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**
 - 2026-10-27: Admit the reviewed Darwin kernel-group verification fix and bounded trusted failure diagnostics for the native compile runner. Preserve default inert preflight, immutable pinning, network denial, and separate hosted/native acceptance gates. **Codex (AI)**
 
 - 2026-10-26: Add an explicit isolated installed-sync fixture bootstrap: canonical admin registration, one supervised API restart preserving its private database/session, and private-only upload approval for an exact UI-registered non-admin account. Ordinary launches retain existing behavior; real installed transfer acceptance remains separate. **Codex (AI)**

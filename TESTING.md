@@ -3,7 +3,26 @@
 
 # TESTING.md — per-area manual test checklists
 
-## Local workspaces and account sync (in-progress rollout)
+## Offline native VM harness
+
+- [ ] After actual host-only `attach-media`, read back the one-shot binding and compare exact manifest/receipt hashes and original five-file identities before/after; require normal exit/reap and attachmentConfigured/guestStarted/readiness=false. Registration does not prove a fourth device or guest build. 2026-10-27: focused21/full68 mock/file tests and actual stopped-task registration passed; actual VZ attachment remains open.
+- [ ] Exercise feature `native.offline-vm` 1.1 read-only supplement registration while persistent format remains 1.0: latest normal stopped/reaped checkpoint and exclusive lease required; original five-file pair/manifest unchanged. Reject pending/quarantined attempts, foreign paths, aliases, unaligned media, mismatched source/header/hash and same-byte inode replacement. Freeze binding per viewer attempt, require exact fourth USB read-only URL and worker hash/count evidence, revalidate after stop; old three-device receipts remain compatible. No actual VZ launch or readiness is proved by mocks.
+
+- [ ] Run `test_build_media.py` fixtures: exact-commit source export, no mutable checkout/credentials, vendor tar aliases/traversal/hardlinks/special files/private metadata refused, system-only xcodegen loads (including weak/re-export/upward), dormant runpaths preserved, bounded own-tool timeout/reap and hash-bound RAW staging without mount/start. Shell syntax alone is not guest execution. In the separately authorized guest verify signatures, exact toolchain/SDK and license/first-launch prerequisites; missing iOS test artifacts are an unavailable failing gate, not success. No guest credentials, ready receipt or host output acceptance is supplied by staging.
+
+- [ ] Run safe `test_package_viewer.py` fixtures: fixed APPL/plist/task identity, source digest/layout/alias/FIFO rejection, private cache stages, no environment/autostart and no execution. Separately verify signed existing bundle/CUA discovery without a duplicate VM start; packaging success alone is not a visible viewer.
+
+- [ ] Mock viewer installed-final identity admission (including auxiliary growth), original inode/hash pairing, lease exclusion, pending/mismatched checkpoint refusal and resumable stopped/reaped checkpoints. Stale stopped receipts plus hardkill/nonzero/missing exit never permit reuse.
+- [ ] After separate authorization, verify signed task-labelled viewer focus/resize/input, system hotkeys remaining on host, visible host Stop, window close/Quit and bounded deadline/parent-loss stop. Worker stop budget15s, parent grace25s plus exact reap5s; no NIC/share/socket/clipboard, no candidate readiness or secret transport claim.
+
+- [ ] Run the isolated SwiftPM host tests in `apple/OfflineNativeVM`; verify symlink/hardlink/shared ownership rejection, source mutation detection, exact manifest keys, raw block alignment, one-shot fresh preparation and bounded mock cancellation/kill/reap. No VM boots in this suite.
+- [ ] Follow [offline-native-vm.md](docs/offline-native-vm.md): independently review local restore metadata, fresh task identity/auxiliary/disk provenance and actual no-NIC configuration readback before any installation preflight. Imported VMs and caller readiness assertions never admit a start.
+- [ ] Mock `inspect-restore`: refuse aliases, detect mutation, create no files/VM, and retain only bounded fixed-domain/numeric Apple error chains. Exercise actual entitled read-only metadata separately; cached-image ZIP metadata or an older support receipt is not current VZ acceptance.
+- [ ] Mock installer cancellation before/after begin, missing/late completion, post-callback stop failure, hard kill/reap, private preparation identity checks and permanent one-shot attempt markers. Never stop/pause during active installation or cancel progress before begin; timeout/unknown artifacts stay quarantined, never ready.
+- [ ] Keep real installation acceptance, Setup Assistant, guest toolchain and run admission closed until independently verified. Neither `prepared-empty` nor `installed-not-ready` establishes a usable guest. Preserve consumed/attempt markers and artifacts on failure.
+- [ ] Before native acceptance, prove real cancellation/deadline VZ stop plus exact worker reap. Missing stop evidence/hardkill means teardown unknown; never mount/execute guest output or invent a disposal receipt.
+
+## Hosted native compilation boundary
 
 - [x] Existing account-file retention: open an owned standalone original through
       the normal media route. Inject truncated bytes: show a retention warning
