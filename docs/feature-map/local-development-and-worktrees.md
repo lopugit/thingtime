@@ -77,6 +77,16 @@ process can run a second foreground stack: `TT_WEB_PORT=… npm --prefix remix r
 
 ## Tests and checks
 
+Recovery's native AI Apps manager is in `macos/ThingtimeRecovery/Services/AIIntegration*.swift`
+with its SwiftUI store/view and bundled `ThingtimeIntegrationManager` helper.
+Adapters preserve unrelated client configuration and maintain private ownership
+receipts; discovery never executes found binaries. The canonical skill/MCP package
+is `integrations/ChatGPT/plugin/thingtime-chatgpt`, staged before app signing.
+Use `script/dev.sh` for an isolated unsigned debug app; run the Recovery Swift
+suite and the AI Apps checklist in `TESTING.md` before the signed installed build.
+The update source reuses the existing Recovery release-verification pipeline.
+See README's AI app integrations section for adapters, schedule and storage.
+
 | What | Command |
 | --- | --- |
 | Unit suites (node --test via tsx) | `npm --prefix remix run test:<suite>` — `test:attachments`, `test:things`, `test:feed`, `test:api-capabilities`, `test:acl`, … (`test:unit` runs them all) |

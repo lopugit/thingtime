@@ -4744,6 +4744,45 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ### Recovery cards, build IDs and app selection
 
+- [ ] In **AI Apps**, compare discovery with known app bundles and CLI locations,
+      including app copies, nested Applications folders and a separate Codex home.
+      Unsupported hosts must remain visible without invented automatic support.
+      In an isolated home, install each supported adapter, verify exact MCP keys
+      and canonical skill hashes, reopen the client and complete its normal
+      Thingtime login. Configuration presence alone is not authenticated MCP use.
+- [ ] Verify Windsurf/Cascade and Devin Desktop/Cascade use `mcpServers` with
+      `serverUrl`, their respective skill directories, and no duplicate target
+      from the other app's name alone. Verify OpenCode V1 flat `mcp` and V2
+      `mcp.servers` fixtures preserve unrelated servers/settings through install,
+      update and uninstall. A V1 server named `servers` must remain V1. Unknown
+      formats, duplicate JSON keys, JSONC and custom OpenCode config overrides
+      must remain untouched with explicit setup guidance.
+- [ ] Verify the installed GitHub Copilot CLI receives an HTTP `mcpServers`
+      entry with the canonical URL and enabled tools, plus its own Thingtime
+      skill. Preserve other MCP entries and keep `COPILOT_HOME` destinations
+      separate; never read or modify Copilot authentication/secret storage.
+      Verify VS Code Stable and Insiders have separate user MCP targets and
+      that discovering Insiders alone does not create a Stable installation.
+- [ ] Enable automatic setup; discover a new supported target; verify one install.
+      An empty or whitespace-only JSON settings file initializes safely; uninstall
+      restores its original bytes unless unrelated settings were added later.
+      Publish a newer fixture bundle, check update, pin, restart, rollback, and
+      uninstall. Uninstall must not auto-reinstall. Preserve unrelated settings;
+      changed owned entries/files, duplicate JSON keys, malformed/unsupported TOML,
+      symlinks and concurrent operations must fail without overwriting data.
+- [ ] Verify scheduled maintenance with Recovery closed, then disable it and
+      confirm only its owned job stops. Refuse foreign same-label jobs. A failed
+      schedule reload restores the prior job. Downloaded integration payloads
+      require stable same-team Developer ID signing and notarization; refuse
+      unsigned, prerelease, withdrawn, wrong-team and malformed payloads. Offline
+      checks retain the last verified integration; bundled-version equality must
+      not conceal changed bytes or a newer Codex timestamp revision.
+- [ ] Exercise AI Apps at minimum and wider window sizes, scroll the entire list,
+      expand long paths, version pins, conflict messages and uninstall confirmation.
+      Check keyboard focus, readable wrapping, in-progress disabling, retained
+      rows on failure, and explicit background/source status. Verify the installed
+      signed copy and helper after stopping/removing the isolated development app.
+
 - [ ] Select Electron, Commander, Widgets and Thingtime Recovery in the App picker.
       Each sidebar/cache page must contain only that app's builds and counts;
       Recovery appears only in its own section. Relaunch with Recovery selected.
