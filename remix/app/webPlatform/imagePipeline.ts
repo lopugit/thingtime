@@ -135,6 +135,30 @@ export function pngAnimationFrames(bytes: Uint8Array): number | undefined {
 	}
 }
 
+// A comment group nested inside an outer quantifier backtracks exponentially on
+// untrusted bytes that keep opening comments and never reach a root element, so
+// scan the XML prologue in one linear pass instead of matching it with a regex.
+export function startsSvgDocument(text: string): boolean {
+	let at = 0;
+	const skipSpace = () => {
+		while (at < text.length && /\s/.test(text[at])) at += 1;
+	};
+	skipSpace();
+	if (text.startsWith('<?xml', at)) {
+		const close = text.indexOf('>', at);
+		if (close < 0) return false;
+		at = close + 1;
+		skipSpace();
+	}
+	while (text.startsWith('<!--', at)) {
+		const close = text.indexOf('-->', at + 4);
+		if (close < 0) return false;
+		at = close + 3;
+		skipSpace();
+	}
+	return /^<svg[\s>]/i.test(text.slice(at, at + 5));
+}
+
 /** Runs only inside the task-owned, network-disabled, terminable media worker. */
 export async function compressImage(file: Blob, settings: ImageSettings, wasm: ImageWasmAssets | Uint8Array, fileName?: string) {
 	const maximum = validateMaxOutputBytes(settings.maxOutputBytes);
@@ -158,13 +182,7 @@ export async function compressImage(file: Blob, settings: ImageSettings, wasm: I
 	// libpng can expose only APNG's default still image. Never silently discard
 	// its animation when the bundled decoder lacks a native animation delegate.
 	if (pngAnimationFrames(bytes)) throw new Error('Animated PNG decoding is unavailable locally; use animated GIF or WebP to preserve every frame');
-	// The comment body spells out "anything that is not the `-->` terminator"
-	// rather than a lazy `[\s\S]*?`: a lazy body can also swallow `-->`, so an
-	// uploaded `<!--` followed by many `--><!--` made the leading-comment loop
-	// backtrack exponentially over this 4 KB window.
-	const svg =
-		file.type === 'image/svg+xml' ||
-		SVG_DOCUMENT_HEAD.test(new TextDecoder().decode(bytes.subarray(0, 4096)));
+	const svg = file.type === 'image/svg+xml' || startsSvgDocument(new TextDecoder().decode(bytes.subarray(0, 4096)));
 	if (svg) bytes = await rasterizeSvg(bytes, settings, assets);
 	await initialize(assets);
 	const extension = (fileName ?? (file as Blob & { name?: string }).name ?? '').split('.').pop()?.toLowerCase();

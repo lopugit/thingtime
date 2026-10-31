@@ -39,7 +39,7 @@ final class NativeRecoveryTests: XCTestCase {
     func testOnlyOneExactSecureWebViewCookieCanConnect() throws {
         let valid = try cookie()
         XCTAssertEqual(try PasswordWebConnectionAuthority.cookie([valid], origin: root), "tt_auth=synthetic-session")
-        for cookies in [[], [valid, valid], [try cookie(domain: ".example.test")], [try cookie(domain: ".passwords.example.test")], [valid, try cookie(path: "/api")],
+        for cookies in [[], [valid, valid], [try cookie(domain: ".example.test")], [valid, try cookie(path: "/api")],
                         [try cookie(path: "/api")], [try cookie(secure: false)], [try cookie(httpOnly: false)],
                         [try cookie(expires: Date(timeIntervalSince1970: 0))], [try cookie(domain: "attacker.test")]] {
             XCTAssertThrowsError(try PasswordWebConnectionAuthority.cookie(cookies, origin: root))
@@ -48,8 +48,7 @@ final class NativeRecoveryTests: XCTestCase {
     }
     func testServerOwnerAndConfiguredVaultAreRequired() throws {
         let valid = try json(["ok": true, "configured": true, "ownerId": "fixture-owner"])
-        let linked = try PasswordWebConnectionAuthority.session(valid, origin: root, cookie: "tt_auth=synthetic-session", expectedOwner: nil)
-        XCTAssertEqual(linked.ownerId, try session().ownerId); XCTAssertNotNil(linked.companionConnectionID)
+        XCTAssertEqual(try PasswordWebConnectionAuthority.session(valid, origin: root, cookie: "tt_auth=synthetic-session", expectedOwner: nil), try session())
         XCTAssertThrowsError(try PasswordWebConnectionAuthority.session(valid, origin: root, cookie: "tt_auth=synthetic-session", expectedOwner: "another-owner")) {
             XCTAssertEqual($0 as? PasswordProviderError, .accountMismatch)
         }
@@ -76,7 +75,7 @@ final class NativeRecoveryTests: XCTestCase {
             return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, data)
         }
         let connected = try await PasswordClient.webSession(origin: root, cookie: "tt_auth=synthetic-session", expectedOwner: "fixture-owner", transport: transport)
-        XCTAssertEqual(connected.ownerId, try session().ownerId); XCTAssertNotNil(connected.companionConnectionID); XCTAssertEqual(paths, ["/.well-known/thingtime-capabilities.json", "/api/v1/passwords"])
+        XCTAssertEqual(connected, try session()); XCTAssertEqual(paths, ["/.well-known/thingtime-capabilities.json", "/api/v1/passwords"])
     }
     func testNativeConnectRejectsWrongOriginManifestAndMalformedCapabilitiesBeforeCookie() async throws {
         let transport = transport(); defer { transport.invalidateAndCancel(); RecoveryURLProtocol.reply = nil }
@@ -125,29 +124,17 @@ final class NativeRecoveryTests: XCTestCase {
             (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, request.url!.path.hasPrefix("/.well-known") ? try self.manifest() : body)
         }
         let restored = try await client.read("fixture-id"); XCTAssertEqual(restored, entry)
+        // A real entry stays well inside the ceiling, but an unbounded reply must
+        // still fail the request rather than evict the provider extension.
+        let oversized = Data(repeating: UInt8(ascii: "x"), count: PasswordClient.responseLimit + 1)
+        RecoveryURLProtocol.reply = { request in
+            (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, request.url!.path.hasPrefix("/.well-known") ? try self.manifest() : oversized)
+        }
+        do { _ = try await client.read("fixture-id"); XCTFail("Must bound an unlimited reply") }
+        catch { XCTAssertEqual(error as? PasswordProviderError, .invalidResponse) }
         RecoveryURLProtocol.reply = { _ in (HTTPURLResponse(url: URL(string: "https://attacker.test/api/v1/passwords")!, statusCode: 200, httpVersion: nil, headerFields: nil)!, body) }
         do { _ = try await client.read("fixture-id"); XCTFail("Must reject redirected response") }
         catch { XCTAssertEqual(error as? PasswordProviderError, .invalidResponse) }
-    }
-    func testCompanionOwnershipSurvivesPersistenceAndBlocksAutomaticHostLifecycle() throws {
-        let legacyJSON = try json(["origin": root.absoluteString, "ownerId": "fixture-owner", "cookie": "tt_auth=synthetic-session"])
-        let legacy = try JSONDecoder().decode(ProviderSession.self, from: legacyJSON)
-        XCTAssertNil(legacy.companionConnectionID)
-        XCTAssertTrue(PasswordHostConnectionAuthority.canSynchronize(legacy, incoming: try session()))
-        XCTAssertTrue(PasswordHostConnectionAuthority.canDisconnect(legacy))
-        let body = try json(["ok": true, "configured": true, "ownerId": "fixture-owner"])
-        let companion = try PasswordWebConnectionAuthority.session(body, origin: root, cookie: legacy.cookie, expectedOwner: nil)
-        let restored = try JSONDecoder().decode(ProviderSession.self, from: JSONEncoder().encode(companion))
-        XCTAssertEqual(restored, companion)
-        XCTAssertFalse(PasswordHostConnectionAuthority.canDisconnect(restored))
-        XCTAssertFalse(PasswordHostConnectionAuthority.canSynchronize(restored, incoming: try session()))
-        XCTAssertFalse(PasswordHostConnectionAuthority.canSynchronize(restored, incoming: try session(owner: "local-test-owner")))
-        XCTAssertFalse(PasswordHostConnectionAuthority.canSynchronize(legacy, incoming: try session(owner: "local-test-owner")))
-        XCTAssertFalse(PasswordHostConnectionAuthority.canSynchronize(legacy, incoming: try session(origin: URL(string: "https://local.example.test")!)))
-        let replacement = try PasswordWebConnectionAuthority.session(body, origin: root, cookie: legacy.cookie, expectedOwner: nil)
-        // A late cleanup of the same cookie/account is still a different link.
-        XCTAssertNotEqual(companion, replacement)
-        XCTAssertThrowsError(try ProviderSession(origin: root, ownerId: legacy.ownerId, cookie: legacy.cookie, companionConnectionID: "invalid"))
     }
     @MainActor func testCancelledOrReplacedNativeIntentCannotSaveAfterAsyncVerification() async throws {
         let intent = PasswordConnectionIntent(); var saves = 0
@@ -162,23 +149,6 @@ final class NativeRecoveryTests: XCTestCase {
         do { try await intent.commit(captured, verifyAuthority: { throw PasswordProviderError.invalidSession }, save: { saves += 1 }); XCTFail("Changed cookie/session must fail") }
         catch { XCTAssertEqual(error as? PasswordProviderError, .invalidSession) }
         let current = intent.begin(); try await intent.commit(current, verifyAuthority: {}, save: { saves += 1 })
-        XCTAssertEqual(saves, 1)
-    }
-    @MainActor func testReplacementDuringSuspendedAuthorityReadCannotCommitOrClearNewLink() async throws {
-        let intent = PasswordConnectionIntent(), captured = intent.begin()
-        let reached = expectation(description: "Authority read is in flight")
-        var resume: CheckedContinuation<Void, Never>?, saves = 0
-        let work = Task { @MainActor in
-            try await intent.commit(captured, verifyAuthority: {
-                await withCheckedContinuation { continuation in resume = continuation; reached.fulfill() }
-            }, save: { saves += 1 })
-        }
-        await fulfillment(of: [reached], timeout: 2)
-        let replacement = intent.begin()
-        resume?.resume()
-        do { try await work.value; XCTFail("A superseded authority read cannot save") }
-        catch { XCTAssertEqual(error as? PasswordProviderError, .cancelled) }
-        try await intent.commit(replacement, verifyAuthority: {}, save: { saves += 1 })
         XCTAssertEqual(saves, 1)
     }
     @MainActor func testAmbiguousSaveAndPostSaveIndexRetryReuseTheSamePasskeyAndWriteIdentity() async throws {

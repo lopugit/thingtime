@@ -69,6 +69,11 @@ public final class PasswordClient: @unchecked Sendable {
         guard reply.ownerId == account.ownerId else { throw PasswordProviderError.accountMismatch }
         return reply
     }
+    /// A credential-provider extension runs under a hard system memory limit, so
+    /// every reply stays bounded. This ceiling is deliberately far above a real
+    /// entry or catalog page; it only stops an unbounded body from evicting the
+    /// extension instead of failing the request.
+    static let responseLimit = 16 * 1024 * 1024
     static func response(_ request: URLRequest, transport: URLSession) async throws -> Data {
         let data: Data, response: URLResponse
         do { (data, response) = try await transport.data(for: request) }
@@ -80,6 +85,7 @@ public final class PasswordClient: @unchecked Sendable {
         if response.statusCode == 401 { throw PasswordProviderError.invalidSession }
         if response.statusCode == 403 { throw PasswordProviderError.accountMismatch }
         guard response.statusCode == 200 else { throw PasswordProviderError.unavailable }
+        guard data.count <= responseLimit else { throw PasswordProviderError.invalidResponse }
         return data
     }
     /// A native Connect button may adopt only its own WebView session. The API

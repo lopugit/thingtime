@@ -36,10 +36,8 @@ import ThingtimePasswordCore
     }
     @objc private func openSettings() { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Passwords-Settings.extension")!) }
     @objc private func cancelConnection() {
-        let wasConnecting = !connectButton.isEnabled
-        connectionIntent.cancel(); connectionTask?.cancel(); connectionTask = nil
+        connectionIntent.cancel(); connectionTask?.cancel()
         connectButton.isEnabled = true; cancelConnectionButton.isHidden = true
-        if wasConnecting { status.stringValue = "Connection cancelled. Choose Connect Password AutoFill to try again." }
     }
     @objc private func disconnectAutoFill() {
         cancelConnection(); linkedWebSession = nil
@@ -67,7 +65,7 @@ import ThingtimePasswordCore
                 guard baseline?.origin == nil || baseline?.origin == root,
                       baseline?.ownerId == expectedOwner else { throw PasswordProviderError.accountMismatch }
                 let cookie = try PasswordWebConnectionAuthority.cookie(await web.configuration.websiteDataStore.httpCookieStore.allCookies(), origin: root)
-                @MainActor func verify(_ stored: ProviderSession?) async throws {
+                func verify(_ stored: ProviderSession?) async throws {
                     try self.connectionIntent.verify(captured)
                     guard self.browser === web, self.origin == root, self.owner == expectedOwner,
                           let url = web.url, AuthenticatorSetupBridge.sameOrigin(url, root), url.path == "/passwords",

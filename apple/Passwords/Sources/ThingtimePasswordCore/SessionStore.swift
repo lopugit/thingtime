@@ -26,7 +26,7 @@ public enum PasswordSessionStore {
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = item as? Data else { throw PasswordProviderError.storageUnavailable }
         guard let decoded = try? JSONDecoder().decode(ProviderSession.self, from: data) else { throw PasswordProviderError.invalidSession }
-        return try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie, companionConnectionID: decoded.companionConnectionID)
+        return try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie)
     }
     /// Configuration metadata only. Never seed a separate web session with
     /// the provider's stored credential (which may become device-scoped).
