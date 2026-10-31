@@ -29,6 +29,35 @@ masking, closing, changing account/data plane or entering Builder invalidates
 pending work and feedback. A clipboard write already submitted to the browser
 cannot be revoked; its late completion cannot restore stale feedback.
 
+## Optional host integration and release boundary
+
+The web editor accepts the separately versioned `authenticatorSetupVersion`
+1.0.0 bridge only when available and bound to the current origin/document/owner.
+Older installed hosts do not gain this bridge from a web release. Missing or
+incompatible setup support remains unavailable; codes are never persisted or
+passed through a navigation URL as a fallback. Web create/edit/QR paths remain
+independent of this optional host integration.
+
+All Apple/Electron/iOS/macOS implementation, setup URL registration, native
+session/indexing changes and signing/provisioning work remain in PR #1240.
+Their source assertions stay with that deferred implementation. Signed installed
+menu, AutoFill, Google credential and physical iOS acceptance remain pending.
+
+## Copy field values
+
+Each ordinary field has an individually editable **Copy** button. Concealed
+values stay masked while copying. TOTP fields use **Copy verification code**
+to copy the current code only, without its countdown or setup seed. Passkey
+entries do not expose Copy controls for signing fields.
+
+The transient `field.copy` binding contains only the field ID; its adapter reads
+the current value from component memory and writes directly to the clipboard.
+Values never enter Builder scope, saved layouts or Action history. Success and
+failure use fixed, non-secret status text. Editing a value, changing entries,
+masking, closing, changing account/data plane or entering Builder invalidates
+pending work and feedback. A clipboard write already submitted to the browser
+cannot be revoked; its late completion cannot restore stale feedback.
+
 Verification on 26 October 2026: the focused password suite passed 56 tests with
 zero skips. All 11 isolated Chromium acceptance groups passed, covering masked
 copying, TOTP codes, clipboard rejection, stale feedback, independent Copy-label
@@ -185,8 +214,8 @@ and keeps prior matches visible while a new search is pending. POST requires a f
 temporary accounts and internal Action identities are not vault sessions.
 `catalog` returns names, usernames, exact HTTPS domains and public passkey
 identifiers for native selection; passwords, TOTP seeds and signing keys are
-excluded. Responses are private/no-store. The native picker checks the same
-account again before filling and requires device-owner verification.
+excluded. Responses are private/no-store. Native picker acceptance is separate
+from this web/backend release.
 
 Field contents are AES-256-GCM encrypted with a random account data key, using
 owner, key ID, record ID and purpose as authenticated data. The key is wrapped
@@ -421,22 +450,9 @@ web clients require that exact value. New clients accept major-1 bridges but
 require coherent explicit status fields before reporting synchronized; missing
 fields remain unknown. No HTTP API operation or capability version changes.
 
-New Electron opts into `--connection-status-v1`; the macOS helper then uses
-fixed exit codes 20/21/22 for the three explicit states. Without that flag the
-new helper preserves legacy exit 0 for older consumers. An older helper ignores
-the flag; its exit 0 on connect/sync is unknown to new Electron, not synchronized. No usernames, catalog
-entries, raw system errors or session values are returned. Both native platforms
-serialize replacement and stale-index cleanup, rechecking current session (and
-iOS document/generation) before and after the OS callback. Failed/stale replace
-attempts clear suggestions best-effort before a newer queued replacement; a
-failed clear never becomes a successful synchronization claim. The provider
-still reauthorizes the selected record against the current owner before fill.
-The Electron bridge rejects a changed account session after helper completion
-and clears old native authority before a later queued connection.
-
-Actual disabled/enabled OS indexing and account switching still require signed
-installed acceptance; source/mocked statuses are not proof that Chrome requests
-or fills a matching Google credential.
+Older installed `passwordsVersion` 1.0.0 bridges remain accepted, but generic
+legacy success is unknown rather than proof that OS suggestions synchronized.
+New native explicit-status reporting and its installed acceptance are deferred.
 
 ## Validation and setup
 

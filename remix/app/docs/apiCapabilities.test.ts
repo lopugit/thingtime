@@ -593,7 +593,7 @@ test('subspace rename requires the post-media additive contract', () => {
 test('background AI requires compatible operation and task contracts on both manifests', () => {
  const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
  const discovery = thingtimeCapabilityManifest('https://background.test');
- for (const [feature, required] of Object.entries({ 'api.lopu-background-tasks': '1.3.2', 'api.lopu-chats-reply': '1.21.1', 'api.lopu-voice-reply': '1.5.0', 'api.lopu-musing': '1.1.0', 'api.ai-complete': '1.2.0' })) {
+ for (const [feature, required] of Object.entries({ 'api.lopu-background-tasks': '1.4.0', 'api.lopu-chats-reply': '1.21.1', 'api.lopu-voice-reply': '1.5.0', 'api.lopu-musing': '1.1.0', 'api.ai-complete': '1.2.0' })) {
   assert.equal(legacy.features[feature], required);
   assert.equal(discovery.features[feature].version, required);
   assert.equal(capabilitySatisfies(required, required), true);
@@ -829,11 +829,11 @@ test('gateway discovery and every Connections major2 operation retain their exac
   const discovery = thingtimeCapabilityManifest('https://gateway-contract.test');
   for (const [feature, version] of [
     ['api.environment-gateway', '1.2.0'], ['api.social-card', '1.0.1'],
-    ...['connections', 'connections-providers', 'connections-feed', 'connections-oauth-begin', 'connections-oauth-callback', 'connections-request'].map(id => [`api.${id}`, id === 'connections-request' ? '2.0.1' : '2.0.0'])
+    ...['connections', 'connections-providers', 'connections-feed', 'connections-oauth-begin', 'connections-oauth-callback', 'connections-request'].map(id => [`api.${id}`, '2.0.0'])
   ]) {
     assert.equal(legacy.features[feature], version);
     assert.equal(discovery.features[feature].version, version);
-    if (version.startsWith('2.')) for (const old of [undefined, '1.0.0', '3.0.0']) assert.equal(capabilitySatisfies(old, version), false);
+    if (version === '2.0.0') for (const old of [undefined, '1.0.0', '3.0.0']) assert.equal(capabilitySatisfies(old, version), false);
   }
   assert.equal(discovery.gateway, null);
   for (const [feature, path, methods] of [

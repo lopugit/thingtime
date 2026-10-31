@@ -7,14 +7,12 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { networkSandbox, verifyNativePasswordPasskey } from './verify-native-password-passkey.mjs';
 
-test('canonical password checks and native builds retain the interoperability gate', async () => {
+test('canonical password checks retain the public interoperability gate', async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
   const manifest = JSON.parse(await readFile(path.join(root, 'remix/package.json'), 'utf8'));
   assert.ok(manifest.scripts['test:passwords'].endsWith('&& node scripts/verify-native-password-passkey.mjs'));
   assert.ok(manifest.scripts['test:passwords'].includes('scripts/native-password-passkey.test.mjs'));
-  const build = await readFile(path.join(root, 'electron/scripts/build-native-passwords.mjs'), 'utf8');
-  const gate = build.indexOf('await verifyNativePasswordPasskey();');
-  assert.ok(gate >= 0 && gate < build.indexOf("let identity = process.env.THINGTIME_PASSWORD_SIGNING_IDENTITY"));
+
 });
 
 async function withTemporaryRoot(work) {

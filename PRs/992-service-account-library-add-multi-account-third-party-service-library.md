@@ -1,3 +1,7 @@
+> Web/backend split (27 October 2026): this note retains feature context.
+> Native implementation, signing/install and provider/device acceptance remain
+> deferred in PR #1240. Results from other heads do not attest this split head.
+
 # Multi-account third-party service library
 
 Status: open implementation checkpoint. Earlier local Google identity/refresh results are historical evidence. Current two-account provider acceptance, device acceptance, and production delivery remain pending.

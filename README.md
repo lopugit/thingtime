@@ -56,80 +56,12 @@ wrappers unreadable; do not generate a new key on each deploy. The server-assist
 recovery model is documented above. No provider developer accounts are required
 for storing passwords or importing TOTP setup codes.
 
-Native verification-code setup uses the `otpauth` scheme declared in the iOS and
-macOS password-host XcodeGen specs. Regenerate each project after changing the
-spec; keep the generated Info.plist scheme declarations with that change. Forks
-must configure `ThingtimeWebURL` to their own canonical HTTPS origin, provision
-the host's Keychain group and deploy the matching web editor. The companion
-opens `/passwords` in a nonpersistent WKWebView and requires normal sign-in. It
-reads only the existing native connection's destination/owner metadata; it never
-imports that connection's credential into the browser. A locked or malformed
-native destination fails closed rather than switching to the build's default.
-When there is no native connection, the explicit build origin is used.
-
-The web editor and host negotiate a separate `authenticatorSetupVersion` 1.0.0
-contract and existing `api.passwords` 1.2.0 or later in major 1. Setup is restricted
-to the home data plane. No new server endpoints, developer-service credentials
-or additional device-token grants are required. Incoming codes stay in memory
-for up to ten minutes, including during normal login, and require a deliberate
-entry choice and Save. Only TOTP `otpauth` links are registered; HOTP, authenticator
-migration and passkey pairing QR payloads are unsupported. Real OS menu/QR and
-signed-device acceptance must be checked after installing a verified release.
-
-For native AutoFill, register your app and credential-provider extension bundle
-identifiers in your Apple Developer team, enable **AutoFill Credential Provider**
-for the containing app and extension, and provision the same Keychain access
-group on both. iOS uses `iOS/project.yml`, `THINGTIME_IOS_BUNDLE_IDENTIFIER` and
-`<your-ios-bundle-id>.password-provider`; macOS uses
-`macos/ThingtimePasswords/project.yml` and `com.thingtime.passwords{,.provider}`
-(change those identifiers for your fork). Both use
-`$(AppIdentifierPrefix)com.thingtime.passwords` by default; change the suffix
-consistently when forking. Accept pending Apple Developer agreements before
-requesting profiles. Keep all real signing values out of git.
-The shared session uses the data-protection Keychain on both platforms, with
-device-only accessibility and synchronization disabled. A missing or unresolved
-Keychain group fails closed; it must not fall back to the macOS legacy Keychain.
-
-`npm --prefix electron run build:resources` embeds the macOS provider. The build
-requires `THINGTIME_PASSWORD_SIGNING_IDENTITY=<Apple signing identity>` (or the
-existing `THINGTIME_NODE_SIGNING_IDENTITY`) and `APPLE_TEAM_ID=<team>`; local
-Apple Development signing can request profiles through the signed-in Xcode
-account. With a Developer ID Application identity and no profile overrides,
-the build creates an intermediate development archive and exports it through
-Xcode's Developer ID workflow; the final host and extension must match the
-requested distribution identity, timestamp, team and bundle-specific profiles.
-If Xcode reports an unregistered development Mac, deliberately opt into device
-registration with `THINGTIME_PASSWORD_REGISTER_DEVICE=1` for that build.
-For manual distribution signing, set both
-`THINGTIME_PASSWORD_HOST_PROFILE=<host profile>` and
-`THINGTIME_PASSWORD_PROVIDER_PROFILE=<extension profile>`; a partial pair fails
-before building. Unsigned builds
-compile the feature but cannot provide the system's signed credential-provider
-access. iOS Fastlane syncs a separate provider profile; its override is
-`PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER=<profile name>`. Follow
-`iOS/AGENTS.md` for API-key-based TestFlight setup, use `xcodegen generate`
-before native builds, and pass preview URLs explicitly as the
-`THINGTIME_WEB_URL=https://<your-deployment>` Xcode build setting.
-
-The standalone macOS Thingtime Passwords companion offers **Connect Password
-AutoFill**: select the intended API origin, sign in through its private connection
-view, and explicitly connect the verified account. Main-app login and system
-provider enablement remain separate. Connection errors distinguish an absent link,
-expired authentication, unavailable server configuration, and locked or inaccessible
-Keychain storage. Correct that prerequisite and retry; no failure silently changes
-accounts, origins or credentials. The companion's explicit link is independently
-owned: automatic Electron synchronization and disconnect cannot replace or remove
-it. Use its own Disconnect control to remove that link.
-
-A pending passkey registration keeps the same credential and server write identity
-through save, readback and index retries. A retry after uncertain completion must
-not create a second key. Account/origin changes invalidate the ceremony. Verify
-signed installed-provider creation and a subsequent assertion before claiming live
-passkey support; unsigned builds and synthetic tests do not establish acceptance.
-
-Users connect their current native session from Passwords and enable Thingtime
-in **Settings → General → AutoFill & Passwords**. New passkeys are created through
-that system picker; uploaded passkey handoff QR images are not imported as keys.
+This web/backend release does not change Apple or Electron host binaries. Existing
+password bridges remain usable with conservative unknown suggestion-index status.
+The optional authenticator-setup bridge is unavailable on older hosts; no setup
+URI is persisted or passed through a URL fallback. New native setup handling,
+signing/provisioning changes, AutoFill indexing and installed-device acceptance
+remain deferred in PR #1240.
 
 Password attachments also require the existing private, versioned S3 setup
 (`THINGTIME_PRIVATE_S3_BUCKET=<bucket>`, `THINGTIME_PRIVATE_S3_REGION=<region>`,
@@ -1805,17 +1737,13 @@ stopped copy, create a fresh replica set, and recreate fixtures through the
 normal API. Reconnect real test OAuth accounts afterward. Do not apply this
 replacement procedure to a production database.
 
-See the [provider access and setup guide](docs/provider-access-setup.md) for the
-provider registrations, vault labels, consent scopes and separate acceptance gates.
-
 Google Cloud setup:
 
 1. Create or select your own project, configure its OAuth consent branding and
    audience, and add your test Google accounts while it is in Testing mode.
 2. Create an OAuth client of type **Web application**, register the exact
    callback below (and your local callback separately), then store its client
-   ID/secret in the `connections-google-oauth` server-vault record above.
-   Do not use a service-account key.
+   ID/secret in the env variables above. Do not use a service-account key.
 3. Enable the APIs you plan to use: Drive, Gmail, Calendar, Docs, Sheets,
    People (Contacts), and YouTube Data. Identity uses `openid profile email`;
    each service adds only its documented readonly scope. Gmail and other
@@ -1826,17 +1754,16 @@ Google Cloud setup:
    authorization requests use PKCE, offline access, and explicit account choice.
 
 Meta setup: select your own app in Meta for Developers, configure Facebook
-Login and its valid OAuth redirect URI, save `clientId` and `clientSecret` in
-the `connections-facebook-oauth` server-vault record, and add test users/app roles while the app is in
+Login and its valid OAuth redirect URI, set `FACEBOOK_APP_ID` and
+`FACEBOOK_APP_SECRET`, and add test users/app roles while the app is in
 Development mode. The Facebook account card requests only `public_profile`;
 the separate Facebook posts card requests `user_posts`, which needs the applicable Meta approval for public
 use. Do not assume app-admin testing proves public availability.
 
 The **ChatGPT identity** card implements the [hosted OpenAI identity flow](https://developers.openai.com/siwc/website)
-for approved partner clients. Save `clientId`, `authMethod` (`client_secret_basic`
-or the explicitly registered `none` method), and `clientSecret` in the
-`connections-chatgpt-oauth` server-vault record. Confidential clients require a
-nonempty secret; registered public clients use an empty secret.
+for approved partner clients. Set `CHATGPT_OAUTH_CLIENT_ID`,
+`CHATGPT_OAUTH_AUTH_METHOD` (`client_secret_basic` or the explicitly registered
+`none` method), and `CHATGPT_OAUTH_CLIENT_SECRET` for confidential clients.
 Register the same exact callback below. PKCE, one-use session-bound state, and
 signature/issuer/audience/expiry/nonce checks protect the callback. The saved
 ID token is encrypted and is never sent as an API bearer token. Identity sign-in

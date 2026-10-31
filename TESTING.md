@@ -1,3 +1,26 @@
+## Web/backend OAuth release boundary — 2026-10-27
+
+This split ships no Apple, Electron, iOS or macOS source changes. Native-specific
+setup/build assertions remain with PR #1240; historical native checklists below
+are pending follow-up requirements, not delivered behavior or current results.
+
+- [ ] Run `test:connections`, including `legacyClientContract.test.mts`, under
+  denied external network. The old installed client sends `{ provider, fields }`,
+  `{ provider }` and `{ id }` without an owner/capability guard. Verify unchanged
+  successful response fields, authenticated-owner authority, optional owner
+  mismatch rejection, unauthorized/service refusal and ordinary error shapes.
+- [ ] Run envelope/key/rotation/account-library regressions: old owner-bound
+  envelopes remain readable, shared legacy grants require reconnect, wrong-owner
+  data cannot decrypt, private responses contain metadata only, and failed
+  replacement/relink leaves valid credentials intact.
+- [ ] Verify web/password bridge major-1 compatibility: legacy success stays
+  unknown, and missing optional setup bridge stays unavailable.
+- [ ] Parent acceptance: exact split-head built server/API and origin manifest,
+  deployed desktop/mobile real action/readback/reload, independent security
+  review, and provider/configuration ceremonies. No prior PR head proves this
+  artifact. Keep overall OAuth/password-manager goal open until native and real
+  provider requirements also pass.
+
 <!-- Effective proxy capability discovery regression added2026-10-27. -->
 - [ ] Pair a newer proxy frontend registry with an older gateway: its well-known manifest must omit whole incompatible/missing features and all their operations, never downgrade to a version refused by local admission. For each remaining forwarded operation require matching feature/path/method in the owner; test missing path/method/feature, malformed/breaking version, wrong origin/environment, unavailable owner, selection/owner changes and no stale-on-error. Actual handler GET/HEAD failures must be fixed no-store503 without config/secrets. Canonical alias discovery must not recurse; standalone/dedicated/verified immutable-owner registries remain unchanged. Public runtime capabilities/docs must agree; backend rollout and authenticated acceptance remain separate.
 
@@ -1500,6 +1523,18 @@ persisted; every check is client-side.
   new themes through the dedicated theme delete writer, never generic CRUD.
 
 ## Background AI execution and recovery
+
+- [ ] Expand Diagnostics on an expired and an active task at desktop and 390px;
+  compare exact root/run/deployment IDs and recorded worker/finalizer timestamps
+  with the owned task source. Missing receipts remain unknown. Refresh/close,
+  keyboard activation, long IDs, and full-page scrolling must work. Switch
+  account/data scope during fetch and JSON parsing: old evidence must disappear.
+  `?id=...&diagnostics=1` must perform no writes or output fetch; reject foreign
+  owner/origin/data scope, missing conversations and foreign root/child links.
+  This non-atomic view cannot itself certify scope drain or worker termination.
+  Synthetic regression: backgroundTasks/aiTasks.client tests and
+  `scripts/check-lopu-task-diagnostics-browser.mjs` (OS deny-network, only
+  127.0.0.1:13964 allowed); deployed/source comparison remains separate.
 
 - [ ] With disposable data and `LOPU_CHAT_PROVIDER=test`, send a reply, navigate
   away, close its tab with another origin tab open, then repeat with all origin
@@ -3125,6 +3160,12 @@ is fixed, and cite the checklist you ran in the PR description.
       200 with a session cookie.
 
 ## Persisted-state codec (`remix/app/Providers/thingtimeSerialization.ts`)
+
+- [ ] After develop integration, use a verified free ten-port acceptance range
+  (`THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE`). Cover proxy followers, the canonical
+  owner, explicit dedicated handlers with an independent replica, and synthetic
+  Connections2 OAuth in the same enforced network boundary. Keep the branch
+  default proxy; no runtime-mode change may stand in for rollout compatibility.
 
 - [ ] After develop integration, use a verified free ten-port acceptance range
   (`THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE`). Cover proxy followers, the canonical
@@ -7212,46 +7253,6 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
-### Split companion preparation/signing (2026-10-27)
-
-Parent-verified source `00383d7` passed two canonical preparations and secure-
-timestamped signing runs with stable new requirements. Both new bundles satisfy
-the respective old requirements through `codesign -R`, despite different old/new
-text. The verified v2 standalone companion was backed up, installed and launched
-from `~/Applications/Thingtime Passwords.app`; strict host/provider checks pass.
-Its settings action opens the correct AutoFill panel, already enabled, and
-`pluginkit` selects the updated installed extension. This does not prove real
-credential fill, authenticated connection, passkey ceremony or the untouched
-main app's nested bridge.
-
-- [ ] Run `node --test electron/scripts/password-provider-release.test.mjs`:
-  reject changed binaries/profiles/entitlements, foreign bundle/team/certificate,
-  expired/debug profiles, unresolved substitutions, symlinks/hardlinks/traversal,
-  extra authority/files and changed trusted tools. A wrong reviewed manifest
-  digest or unavailable valid identity must stop before any signing output.
-- [ ] In a fresh preparation directory, export the exact reviewed native Git
-  closure; retain canonical local-package references, production team/group
-  build settings, private sanitized environment and unchanged outer network
-  denial. Verify pre/post IPv4/IPv6 controls, source hashes, successful package
-  build, bounded owned-process cleanup and no compiled Info.plist rewrites.
-  Send SIGINT and SIGTERM to a harmless synthetic supervisor whose owned child
-  ignores TERM: require bounded TERM/KILL/reap, closed listeners/logs, a failure
-  result, and no leaked signal handlers; never use Xcode or signing in this test.
-- [ ] Review the manifest bytes/digest independently. Only the release signer may
-  timestamp-sign the fixed staged artifacts: extension signing/verification must
-  finish before host signing. Inject either extension failure and ensure no host
-  signing, success receipt, fallback identity, app launch or install occurs. Also
-  mutate the host during extension signing: its fresh pre-sign digest must refuse
-  before host codesign. Non-executable payload remains checked afterward; do not
-  claim normalized Mach-O equality or arbitrary same-account writer isolation.
-- [ ] Verify the final signed host/provider with the canonical verifier, including
-  secure timestamps, expected authority/team/group/profiles. Preserve any real
-  Keychain prompt; metadata discovery is not signing authorization evidence.
-  Record the old standalone bundle backup and designated requirement before a
-  separately authorized install. Leave an occupied main app/session untouched.
-
-
-
 - [ ] Browser fixture `password-manager.browser.tsx` / `check-password-manager-browser.cjs`: exercise linked-pending, unknown legacy and synchronized replies through manager + passkey-guide notices. Pending/unknown must not display generic Connected or append the create-passkey next step; existing editable role=status feedback/retry remains intact. Real signed OS acceptance is separate.
 - [ ] Native index status: disabled/failing OS index retains the linked account but reports `linked-index-pending`, offers Connect retry, and never reports synchronized. Verify both macOS/iOS, then enable indexing and require an actual successful replacement before `index-synchronized`. Legacy/missing helper states stay unknown. No secret/identity/error payload appears in status.
 - [ ] Change account/origin or disconnect during a delayed index replacement. Reject the old result, finish stale-index cleanup before a new queued replacement, and verify current-account suggestions/fill only. Failed best-effort clearing must not claim synchronization; provider read authorization remains owner-bound.
@@ -7338,17 +7339,6 @@ main app's nested bridge.
   Watch and widget targets. Shared tests must not compile macOS-only `Process`
   APIs on iOS. The live Git oracle remains exercised on macOS (4/4 ignore-rule
   tests pass); its unsupported iOS case explicitly skips while fixture tests remain.
-- [x] PR1240 ignore-rule portability recheck (2026-10-27): restore the existing
-  macOS Git helper/body guards and explicit iOS skip; all three portable methods
-  remain byte-identical. The real macOS suite passed 4/4, including the live Git
-  oracle and shared tracked fixture, in a private snapshot with network denied.
-- [x] PR1240 full unsigned iOS `build-for-testing` (2026-10-27): declare the
-  test target's direct AppleFileSync package dependency so shared tests link
-  symbols unused by the host. A fresh snapshot-adapter build passed all seven
-  targets for arm64/x86_64 with the outer network denial intact; no simulator or
-  tests were launched. Generated-graph comparison permits only the added test
-  dependency/link. Canonical Xcode package integration, signing and installed
-  provider/device acceptance remain unverified.
 
 - [ ] Search regression: create a title match older than 50 nonmatching entries.
   Search must find it without Load more; case and literal regex punctuation work.
@@ -10380,38 +10370,3 @@ Automated: `npm --prefix remix run test:connections`, `test:api-capabilities`, `
 - Load an older saved password layout, enter Builder, edit and discard: required
   private-property and list-icon migrations remain active while authored labels
   and order are preserved. No decrypted input enters saved layouts.
-
-
-### Standalone AutoFill recovery and provider-size regressions (28 October 2026)
-
-- In the signed installed Thingtime Passwords companion, select the intended
-  origin, sign in, choose **Connect Password AutoFill**, and verify the account
-  and synchronized catalog. Cancel/navigation/logout/origin changes during a
-  pending connection must prevent stale credentials from being saved.
-- Separately exercise missing session, expired authentication, unconfigured API,
-  and locked/denied Keychain failures. Preserve existing entries and offer a
-  useful retry; never treat a linked session alone as system-provider acceptance.
-- Keep an independent companion connection active while Electron synchronizes,
-  changes account and disconnects. Its origin/account/link must remain intact;
-  only the companion's explicit Disconnect removes its own link.
-- In one OS passkey-registration ceremony, inject an uncertain save and an index
-  failure, then retry. Assert the same credential ID, immutable payload and write
-  ID, exact readback, one stored key, and scope fencing on owner/origin change.
-  Complete a real relying-party assertion using the signed installed provider.
-- Run the focused Connections outbound-target, requestRoute and accountLibrary
-  suites. Complete saved-operation JSON larger than 25 MB and an HTTP pagination
-  body larger than 4 KiB must survive intact. Keep opaque tokens on fixed provider
-  endpoints, preserve same-origin credentials, refuse cross-origin redirects,
-  propagate cancellation and refuse unauthorized/service/rate-limited callers.
-  Public capability manifests must report api.connections-request 2.0.1; compatible
-  major-2 client requirements remain valid. Fixtures do not prove real Google
-  consent or provider data access.
-
-- Release gate: rebuilding/installing only the standalone companion is insufficient.
-  The signed Electron app resolves its bundled `Helpers/Thingtime Passwords.app`
-  executable. Rebuild and reinstall the full affected Electron bundle with the new
-  helper after canonical verification and a safe quit, preserving the working
-  production app until replacement is verified. Exercise synthetic independent-link
-  ownership through that exact installed nested helper: automatic disconnect and
-  mismatched synchronization must preserve the companion link. An older nested
-  helper can erase it despite an updated standalone companion.

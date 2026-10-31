@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mock, test, beforeEach } from 'node:test';
+const readProjections: any[] = [];
 const rows: any[] = [],
 	pending: Promise<unknown>[] = [];
 let beforeUpdate: ((update:any)=>Promise<void>) | null = null;
@@ -26,7 +27,7 @@ const patch = (row: any, update: any) => {
 	for (const key of Object.keys(update.$unset || {})) delete row[key];
 };
 const collection: any = {
-	findOne: async (filter: any) => rows.find((row) => match(row, filter)) || null,
+	findOne: async (filter: any, options?: any) => { readProjections.push(options?.projection); return rows.find((row) => match(row, filter)) || null; },
 	find: (filter: any) => ({ sort: () => ({ limit: () => ({ toArray: async () => rows.filter((row) => match(row, filter)) }) }) }),
 	insertOne: async (row: any) => {
 		if (
@@ -495,4 +496,57 @@ for (const claimed of [false, true]) test(`gateway promotion reconciles expired 
     if (claimed) { assert.ok(row.uniqueKeys); assert.equal(row.workflowFinalizedAt, undefined); }
     else { assert.equal(row.crystal.workflowStatus, 'needs-attention'); assert.equal(row.uniqueKeys, undefined); }
   } finally { keys.forEach((key, i) => { if (before[i] === undefined) delete process.env[key]; else process.env[key] = before[i]; }); }
+});
+
+const diagnostics = (id: string, headers: Record<string, string> = {}, origin = 'https://example.test') =>
+  readBackgroundTasks(new Request(`${origin}/api/v1/lopu/tasks?id=${id}&diagnostics=1`, { headers: { 'X-Thingtime-Task-Owner': 'owner', ...headers } }));
+test('diagnostics read expired evidence without output, reconciliation, finalization or mutation', async () => {
+  await startBackgroundTask(request('diagnostic'), async () => new Response('PRIVATE-OUTPUT')); await Promise.all(pending);
+  const root = rows[0], stamp = new Date('2026-10-01T00:00:00Z');
+  Object.assign(root, { outputExpiresAt: new Date(0), deadlineAt: new Date(0), workerStarted: true,
+    activeWorkerRequestId: 'child-request', workflowRunId: 'wrun_example', workflowGatewayDeploymentId: 'dpl_example',
+    workflowFinalStatus: 'stopped', workflowInput: { sessionId: 'SECRET-GRANT', prompt: 'SECRET-PROMPT' }, uniqueKeys: ['SECRET-CLAIM'], endpoint: 'SECRET-ENDPOINT' });
+  delete root.workerFinishedAt;
+  root.crystal.workflowStatus = 'needs-attention'; root.crystal.stage = 'Waiting for worker to stop';
+  const child = { ...root, shareId: 'child-task', rootTaskId: root.shareId, workerFinishedAt: stamp, crystal: { ...root.crystal, requestId: 'child-request' } }; rows.push(child);
+  readProjections.length = 0;
+  const before = JSON.stringify(rows), response = await diagnostics(child.shareId), result = await response.json(), evidence = result.diagnostics;
+  assert.ok(readProjections.length >= 4);
+  for (const projection of readProjections) {
+    assert.ok(projection, 'every diagnostic DB read has an explicit inclusion projection');
+    assert.equal(projection._id, 0);
+    assert.ok(Object.entries(projection).filter(([key]) => key !== '_id').every(([, value]) => value === 1));
+    assert.doesNotMatch(Object.keys(projection).join(','), /secure|workflowInput|endpoint|session|prompt|uniqueKeys/);
+  }
+  assert.equal(response.status, 200); assert.match(response.headers.get('cache-control')!, /private, no-store/);
+  assert.equal(JSON.stringify(rows), before);
+  assert.equal(evidence.rootTaskId, root.shareId); assert.equal(evidence.workflowRunId, 'wrun_example');
+  assert.equal(evidence.workflowGatewayDeploymentId, 'dpl_example'); assert.equal(evidence.reservedWorker.id, child.shareId);
+  assert.equal(evidence.reservedWorker.workerFinishedAt, stamp.toISOString()); assert.equal(evidence.unacknowledgedWorker.id, root.shareId);
+  assert.equal(evidence.workflowFinalizedAt, null); assert.equal(evidence.rootWorker.workerFinishedAt, null);
+  assert.equal(evidence.conversationClaimRecorded, true); assert.equal(evidence.consistency, 'non-atomic-read');
+  assert.doesNotMatch(JSON.stringify(result), /SECRET|PRIVATE-OUTPUT|secure|workflowInput|prompt|endpoint/);
+  assert.deepEqual(Object.keys(evidence).sort(), ['activeWorkerRequestId', 'consistency', 'conversationClaimRecorded', 'observedAt', 'reservedWorker', 'rootTaskId', 'rootWorker', 'taskId', 'unacknowledgedWorker', 'workflowFinalStatus', 'workflowFinalizedAt', 'workflowGatewayDeploymentId', 'workflowRunId'].sort());
+});
+test('diagnostics repeat owner, origin, selected data, chat and root/child membership fences', async () => {
+  await startBackgroundTask(request('scoped-diagnostic'), async () => new Response('ok')); await Promise.all(pending); const root = rows[0];
+  for (const headers of [{ Origin: 'https://foreign.test' }, { 'Sec-Fetch-Site': 'cross-site' }, { 'X-Thingtime-Task-Owner': 'other' }]) assert.equal((await diagnostics(root.shareId, headers)).status, 401);
+  assert.equal((await diagnostics(root.shareId, { 'x-test-endpoint': 'other-db' })).status, 404);
+  assert.equal((await diagnostics(root.shareId, {}, 'https://other.test')).status, 404);
+  user = { id: 'other', accountKind: 'user' }; assert.equal((await diagnostics(root.shareId, { 'X-Thingtime-Task-Owner': 'other' })).status, 404); user = { id: 'owner', accountKind: 'user' };
+  root.targetId = 'chat'; chatAccessible = false; assert.equal((await diagnostics(root.shareId)).status, 404); chatAccessible = true;
+  root.activeWorkerRequestId = 'foreign-worker';
+  for (const extra of [{ ownerId: 'other', shareId: 'foreign-child', rootTaskId: root.shareId }, { shareId: 'unrelated-child', rootTaskId: 'other-root' }, { taskScope: 'other-scope', shareId: 'scope-child', rootTaskId: root.shareId }]) rows.push({ ...root, ...extra, crystal: { ...root.crystal, requestId: 'foreign-worker' } });
+  assert.equal((await (await diagnostics(root.shareId)).json()).diagnostics.reservedWorker, null);
+  rows.push({ ...root, shareId: 'owned-child', rootTaskId: 'foreign-child' }); assert.equal((await diagnostics('owned-child')).status, 404);
+  assert.equal((await readBackgroundTasks(new Request('https://example.test/api/v1/lopu/tasks?diagnostics=1'))).status, 400);
+});
+test('historical status and age cannot create worker or finalizer acknowledgment', async () => {
+  await startBackgroundTask(request('legacy-diagnostic'), async () => new Response('ok')); await Promise.all(pending); const root = rows[0];
+  delete root.workerStarted; delete root.workerFinishedAt; Object.assign(root, { deadlineAt: new Date(0), providerStatus: 'completed' });
+  let evidence = (await (await diagnostics(root.shareId)).json()).diagnostics;
+  assert.equal(evidence.rootWorker.workerStarted, null); assert.equal(evidence.rootWorker.workerFinishedAt, null); assert.equal(evidence.workflowFinalizedAt, null); assert.equal(evidence.workflowRunId, null);
+  root.workerStarted = true; root.workerFinishedAt = new Date(); root.workflowFinalizedAt = new Date();
+  evidence = (await (await diagnostics(root.shareId)).json()).diagnostics;
+  assert.equal(evidence.rootWorker.workerFinishedAt, root.workerFinishedAt.toISOString()); assert.equal(evidence.workflowFinalizedAt, root.workflowFinalizedAt.toISOString());
 });

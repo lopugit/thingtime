@@ -164,4 +164,15 @@ a macOS OS network sandbox, including direct-IP and redirect denial. Fixture
 requests accept only a literal loopback HTTP origin and same-origin uploads.
 Keep backend/browser network isolation and dedicated test credentials in place.
 
-- Offline native VM first boot: `apple/OfflineNativeVM` `view` admits only the own installed final identity pair, with bounded AppKit framebuffer/input and stopped/reaped host checkpoints. Candidate run remains closed. See [runbook](../offline-native-vm.md) and `ViewerTests.swift`; real viewer acceptance requires separate authorization.
+## Gateway runtime and Mongo admission
+
+`app/api/utils/deployment/environmentGateway.ts` guards driver and cached-collection
+access; configured followers skip `server/plugins/mongo-warmup.ts`. Owner streams
+and detached work retain their admission during promotion, then drain pools and
+readiness caches. `mongodb/indexLifecycle.ts` coordinates the canonical index plan
+with a durable fingerprint and renewable lease; normal writes require readiness,
+while authenticated admin migrations use the scoped recovery path.
+`test:collections` covers lifecycle/admission/recovery; `test:environment-gateway`
+covers forwarding and ownership. The built acceptance runner creates isolated
+synthetic API identities under a verified OS network boundary. See
+[the gateway runbook](../environment-api-gateway.md).

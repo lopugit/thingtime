@@ -1,3 +1,7 @@
+> Web/backend split (27 October 2026): this note retains feature context.
+> Native implementation, signing/install and provider/device acceptance remain
+> deferred in PR #1240. Results from other heads do not attest this split head.
+
 # PR #996 — Encrypted password manager and Apple credential providers
 
 PR: https://github.com/lopugit/thingtime/pull/996

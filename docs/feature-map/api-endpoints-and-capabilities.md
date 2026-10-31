@@ -614,9 +614,15 @@ capability they use. Bundled desktop fallback validates the actual selected
 origin before forwarding every password operation (1.3.0) and all six
 Connections operations (2.0.0), in both ordinary and forwarded-origin paths.
 
-Saved service requests (`connections/request`) advertise `api.connections-request`
-2.0.1 in both manifest generators. Complete fixed-operation results and opaque
-pagination bodies preserve valid data without arbitrary byte ceilings; owner/rate,
-scope, DNS/redirect and cancellation checks remain required. Focused regressions:
-`connections/outboundTarget.test.ts`, `accountLibrary.test.mts` and
-`requestRoute.test.mts`, plus both capability-generator suites.
+
+Background task diagnostics use `api.lopu-background-tasks` 1.4.0 on the existing
+GET route: `id` plus `diagnostics=1` bypasses stale reconciliation and output
+retention writes. `backgroundTaskDiagnostics.ts` projects only existing root/run/
+deployment, claim, reservation, worker receipt and finalizer evidence. Every
+linked read repeats owner/data scope/chain membership and conversation access.
+Missing receipts remain unknown; reads are non-atomic and cannot certify drain.
+The Tasks Diagnostics disclosure reuses the read-only Thingtime fields inspector;
+`aiTasks.client.ts` negotiates 1.4.0 and discards late owner/source responses.
+Run the background task/client tests, both capability manifest tests, and the
+synthetic `check-lopu-task-diagnostics-browser.mjs` under OS deny-network with
+only fixture loopback port13964 allowed. No new route or index is introduced.
