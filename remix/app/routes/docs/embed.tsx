@@ -18,6 +18,19 @@ import {
 import { Link as RouterLink } from 'react-router';
 
 import { CodeWindow, WindowTrafficLights } from './docsCode';
+import { embedGuideSection, type EmbedGuideSection } from './embedSections';
+import { useDocsAnchorScroll } from './useDocsAnchorScroll';
+
+// Section headings render from the shared spine (embedSections.ts) so anchors,
+// titles, and the docs search index stay in lockstep; the bodies below each
+// heading stay hand-crafted.
+function GuideHeading({ section }: { section: EmbedGuideSection }) {
+  return (
+    <Heading id={section.id} scrollMarginTop="112px" size="md">
+      {section.title}
+    </Heading>
+  );
+}
 
 // /docs/embed — the "Login with Thingtime" integration guide for platforms:
 // SDK quick start, themed button config, permission scopes, token usage
@@ -68,7 +81,7 @@ const SHARED_THINGS_CODE = `Thingtime.shared(session.token).then(function (thing
 });`;
 
 const APP_STORAGE_CODE = `var data = Thingtime.data(session.token);
-data.set('preferences', { theme: 'rainbow' });   // any JSON ≤ 32KB, ≤ 200 keys/user
+data.set('preferences', { theme: 'rainbow' });   // any JSON value ≤ 32 KiB
 data.get('preferences').then(function (value) { … });
 data.list();                                     // [{ key, value, visibility, updatedAt }, …]
 data.remove('preferences');
@@ -97,8 +110,13 @@ const SCOPE_ROWS = [
   },
   {
     id: 'profile',
-    shares: 'The whole public profile (covers every profile.* leaf)',
+    shares: 'The whole public profile (covers every non-exact profile.* leaf)',
     notes: 'Ancestors cover descendants — new leaves join automatically.'
+  },
+  {
+    id: 'profile.birthday',
+    shares: 'The birth date (YYYY-MM-DD) on the account',
+    notes: 'EXACT consent — private data, so even a full profile grant does NOT imply it; request it explicitly.'
   },
   {
     id: 'email',
@@ -347,6 +365,9 @@ function LoginButtonPreview() {
 }
 
 export default function DocsEmbed() {
+  // docs search deep-links sections here (/docs/embed#permissions-scopes …)
+  useDocsAnchorScroll();
+
   return (
     <Stack spacing={8} maxW="860px" minW={0}>
       <Box borderBottom="1px solid" borderColor="var(--tt-border, #ececef)" pb={6}>
@@ -385,7 +406,7 @@ export default function DocsEmbed() {
       </Box>
 
       <Stack spacing={3}>
-        <Heading size="md">1 · Register your app</Heading>
+        <GuideHeading section={embedGuideSection.registerYourApp} />
         <Text>
           While logged in to Thingtime, register an app with a name and the exact origins your site runs
           on. The server mints your public <code>clientId</code>. Origins must be bare https origins
@@ -407,7 +428,7 @@ export default function DocsEmbed() {
       </Stack>
 
       <Stack spacing={3}>
-        <Heading size="md">2 · Drop in the button</Heading>
+        <GuideHeading section={embedGuideSection.dropInTheButton} />
         <Text>
           Load the SDK from Thingtime and render the styled button. Clicking it opens the Thingtime
           login popup (or new tab on mobile browsers that force it); the user logs in or registers,
@@ -446,7 +467,7 @@ export default function DocsEmbed() {
       </Stack>
 
       <Stack spacing={3}>
-        <Heading size="md">Live preview</Heading>
+        <GuideHeading section={embedGuideSection.livePreview} />
         <Text>
           The snippet above, rendered for real — pick a theme and size, then click the button to open
           the sandbox login popup and walk the whole consent flow.
@@ -455,7 +476,7 @@ export default function DocsEmbed() {
       </Stack>
 
       <Stack spacing={3}>
-        <Heading size="md">3 · Permissions (scopes)</Heading>
+        <GuideHeading section={embedGuideSection.permissionsScopes} />
         <Text>
           Scopes are <strong>hierarchical dot paths</strong> over the user’s data — ask for exactly
           the granularity you need (<code>profile.avatar</code>, not the whole profile). You declare a{' '}
@@ -492,7 +513,7 @@ export default function DocsEmbed() {
       </Stack>
 
       <Stack spacing={3}>
-        <Heading size="md">4 · Use the token</Heading>
+        <GuideHeading section={embedGuideSection.useTheToken} />
         <Text>
           <strong>Identity (SSO):</strong> resolve who the token belongs to — call it any time to sync
           the account on your side. Works from your site’s JS (CORS is bound to your origin) or your
@@ -510,7 +531,13 @@ export default function DocsEmbed() {
         </CodeWindow>
         <Text>
           <strong>App storage:</strong> keep your per-user data (settings, saves, progress…) in the
-          user’s Thingtime account — your app can only ever see its own keys.
+          user’s Thingtime account — your app can only ever see its own namespace. Free starts at 5 GiB
+          across all users and 50 MiB per app user. Owners and co-managers can upgrade the aggregate
+          plan, change the default user cap, and assign individual user sub-tiers in{' '}
+          <ChakraLink href="/apps/manage" color="var(--tt-docs-accent-ink, #0f5132)">
+            the app manager
+          </ChakraLink>
+          ; read both live ledgers via <code>/api/v1/app-data/usage</code>.
         </Text>
         <CodeWindow language="javascript" title="app-storage.js">
           {APP_STORAGE_CODE}
@@ -518,7 +545,7 @@ export default function DocsEmbed() {
       </Stack>
 
       <Stack spacing={3}>
-        <Heading size="md">Security model</Heading>
+        <GuideHeading section={embedGuideSection.securityModel} />
         <Stack spacing={2} fontSize="sm" color="var(--tt-muted, #9a9aa6)">
           <Text>
             🔑 App tokens are revocable Thingtime sessions scoped to your app — they are rejected by
@@ -545,7 +572,7 @@ export default function DocsEmbed() {
       </Stack>
 
       <Stack spacing={3} pb={8}>
-        <Heading size="md">Try it</Heading>
+        <GuideHeading section={embedGuideSection.tryIt} />
         <Text>
           A live playground ships at{' '}
           <ChakraLink href="/sdk/demo.html" color="var(--tt-docs-accent-ink, #0f5132)" isExternal>
