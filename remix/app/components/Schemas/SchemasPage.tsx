@@ -21,8 +21,6 @@ import {
 import { ArrowRight, Check, Code2, Link2 } from 'lucide-react';
 import { Link as RouterLink, useLocation } from 'react-router';
 
-import { MigrationsPanel } from '~/components/Schemas/MigrationsPanel';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CodeBlock, copyToClipboard } from '~/routes/docs/docsCode';
 import {
   thingtimeSchemas,
@@ -254,7 +252,6 @@ function SchemaCard({ copyHref, schema }: { copyHref: string; schema: ThingtimeS
 
 export function SchemasPage() {
   const { hash } = useLocation();
-  const user = useCurrentUser();
   const origin = typeof window === 'undefined' ? 'https://thingtime.com' : window.location.origin;
 
   const sections = React.useMemo(
@@ -374,7 +371,6 @@ export function SchemasPage() {
           </Button>
         </Box>
 
-        {user?.isAdmin ? <MigrationsPanel /> : null}
       </Stack>
 
       <Box
@@ -426,11 +422,6 @@ export function SchemasPage() {
             <ChakraLink color="var(--tt-text, #5a5a66)" href="#schemas-json-api">
               <Text fontWeight="650">JSON API</Text>
             </ChakraLink>
-            {user?.isAdmin ? (
-              <ChakraLink color="var(--tt-text, #5a5a66)" href="#database-migrations">
-                <Text fontWeight="650">Database migrations</Text>
-              </ChakraLink>
-            ) : null}
           </Stack>
         </Box>
       </Box>

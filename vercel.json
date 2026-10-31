@@ -1,0 +1,45 @@
+{
+	"$schema": "https://openapi.vercel.sh/vercel.json",
+	"framework": null,
+	"installCommand": "corepack pnpm --dir remix install --frozen-lockfile",
+	"buildCommand": "node scripts/vercel-build.mjs",
+	"outputDirectory": null,
+	"ignoreCommand": "node scripts/vercel-ignore-build.mjs",
+	"git": {
+		"deploymentEnabled": false
+	},
+	"regions": [
+		"syd1"
+	],
+	"fluid": true,
+	"crons": [
+		{
+			"path": "/api/v1/auth/invites/expire",
+			"schedule": "11 * * * *"
+		},
+		{
+			"path": "/api/v1/lopu/recordings/run",
+			"schedule": "*/5 * * * *"
+		},
+		{
+			"path": "/api/v1/attachments/cleanup",
+			"schedule": "17 * * * *"
+		},
+		{
+			"path": "/api/v1/moderation/sweep",
+			"schedule": "29 * * * *"
+		},
+		{
+			"path": "/api/v1/peers/sync",
+			"schedule": "*/5 * * * *"
+		},
+		{
+			"path": "/api/v1/notifications/email/weekly-summary",
+			"schedule": "37 21 * * 0"
+		},
+		{
+			"path": "/api/v1/ai/models/sync",
+			"schedule": "23 3 * * *"
+		}
+	]
+}

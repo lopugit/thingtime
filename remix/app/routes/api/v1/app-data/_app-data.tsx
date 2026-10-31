@@ -14,7 +14,9 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 // screen and still log in with just their identity.
 
 // GET /api/v1/app-data?key=… — one entry (200 with { entry: null } when the
-// key is unset) — or without ?key: every entry for this (user, app).
+// key is unset) — or a listing of this (user, app)'s entries: no params lists
+// everything (paged), key=post:* or prefix= filters by prefix, limit= +
+// cursor= page through (same grammar as /app-data/shared).
 export const loader = async ({ request }: { request: Request }) => {
   const resolved = await resolveAppRequest(request, 'app-data');
   if (resolved instanceof Response) return resolved;
@@ -32,13 +34,24 @@ export const loader = async ({ request }: { request: Request }) => {
   const url = new URL(request.url);
   const key = url.searchParams.get('key');
 
-  if (key !== null) {
+  // A bare key (no trailing *) is the single-entry read; a wildcard key is a
+  // prefix listing.
+  if (key !== null && !key.trim().endsWith('*')) {
     const entry = await getAppData(ctx.user.id, ctx.clientId, key.trim());
     return json({ ok: true, entry }, { headers: cors });
   }
 
-  const entries = await listAppData(ctx.user.id, ctx.clientId);
-  return json({ ok: true, entries }, { headers: cors });
+  const rawLimit = url.searchParams.get('limit');
+  const result = await listAppData(ctx.user.id, ctx.clientId, {
+    key,
+    prefix: url.searchParams.get('prefix'),
+    limit: rawLimit === null ? null : Number(rawLimit),
+    cursor: url.searchParams.get('cursor')
+  });
+  if (result.ok === false) {
+    return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
+  }
+  return json({ ok: true, entries: result.entries, nextCursor: result.nextCursor }, { headers: cors });
 };
 
 // POST /api/v1/app-data — { key, value, visibility?, acl? } — insert-or-update

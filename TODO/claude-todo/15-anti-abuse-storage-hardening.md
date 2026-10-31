@@ -11,6 +11,19 @@ protection worth doing alongside.
 
 ## 1. Global sandbox storage budget (~0.5GB/hour app-wide)
 
+> **SHIPPED 2026-07-29** (full-power app namespaces —
+> `claude-todo/16-full-power-app-namespaces.md`): the global brake exists as
+> rate-limit rule `sandbox.storage.global` (limit = MEGABYTES per window,
+> default 512MB/hour, admin-tunable via the existing rate-limits panel,
+> FAIL-CLOSED, refunds the charge when the per-namespace budget then refuses
+> the write — `api/utils/rateLimit/byteBudget.ts`), layered on the
+> per-namespace budget as designed. The per-token byte cap also shipped,
+> stronger than proposed: `SANDBOX_STORAGE_BYTES` = 5MB per sandbox namespace
+> REPLACES the 50-key cap outright (real grants: 50MB per (user, app)).
+> Still open from this section: burn-rate alerting (~50%), degrade-before-
+> block, and the dedicated sandbox kill-switch flag (disabling the rule still
+> means unlimited, not blocked).
+
 Current state (PR #151): per-IP mint 10/min, 50 keys/token, 32KB/value, 1h
 TTL → ~0.9GB/hr worst case PER IP. A botnet multiplies that per node; the
 global ceiling is unbounded.
@@ -65,6 +78,14 @@ Design notes for the investigation:
   account's app-data is only bounded by 200 keys × 32KB per app, PER APP,
   and anyone can register unlimited apps. Charge app-data bytes against the
   owner's storage allowance like every other thing.
+  > **PARTIALLY SHIPPED 2026-07-29** (`claude-todo/16`): every app write —
+  > KV and generic things alike — now charges a per-(user, app) byte budget
+  > (50MB default, fail-closed service-quota-style ledger, `sizeBytes`
+  > stamped on every doc, delta-charged updates, refunds on delete), so the
+  > "unlimited apps × 200 keys" shape is bounded per app. STILL OPEN: a
+  > per-user global ledger across ALL first-party things (`storageUsedBytes`
+  > on the user doc is still dead) — unlimited registered apps still
+  > multiply the per-app budget.
 - **Rate limiter fails open**: when ensureIndexes breaks (seen locally with
   dup fixture docs), ALL limits silently no-op (`[rate-limit] enforcement
   unavailable` in logs). Anonymous endpoints (register, waitlist, sandbox
@@ -86,11 +107,19 @@ Design notes for the investigation:
 
 ## Definition of done
 
-- Global byte-budget mechanism exists (settings-tunable, alerting, layered
-  with per-IP), applied to sandbox writes at ~0.5GB/hr default.
-- Sandbox kill-switch flag exists and is documented.
+- ~~Global byte-budget mechanism exists (settings-tunable, layered with
+  per-IP), applied to sandbox writes at ~0.5GB/hr default.~~ **SHIPPED
+  2026-07-29** (`claude-todo/16`; alerting still missing).
+- Sandbox kill-switch flag exists and is documented. **(open)**
 - Verification-gate decision made (mobile-within-1-day vs progressive
-  trust), implemented for NEW accounts, service grace shrunk.
-- app-data charges the owner's storage quota.
-- Rate limiter fail-closed on anonymous endpoints.
-- TESTING.md rows for each shipped protection.
+  trust), implemented for NEW accounts, service grace shrunk. **(open —
+  progressive trust not decided or built)**
+- app-data charges the owner's storage quota. **Partially shipped
+  2026-07-29:** per-(user, app) byte budget yes; the owner's GLOBAL
+  storage allowance across all things is still uncharged. **(open)**
+- Rate limiter fail-closed on anonymous endpoints. **(open in general —
+  the storage byte budgets and sandbox byte brake shipped fail-closed;
+  request-count limits still fail open.)**
+- ~~TESTING.md rows for each shipped protection.~~ **Done for the shipped
+  byte budgets (TESTING.md Shared app-data + Sandbox tokens sections,
+  2026-07-29); monitoring/alerting rows still to come with monitoring.**

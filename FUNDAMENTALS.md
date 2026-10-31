@@ -1,7 +1,8 @@
 # 🏛️ Thingtime Fundamentals
 
 Core engineering principles for this codebase. These are deliberately short and
-non-negotiable — read before adding features. (Roadmap lives in `claude-todo/`.)
+non-negotiable — read before adding features. (Roadmap lives in
+`TODO/claude-todo/`.)
 
 ## 1. The API is the only gateway to data
 
@@ -33,9 +34,9 @@ Single Mongo database `thingtime`. **Everything that can be a thing IS a
 thing**: users, themes, feed algorithms, waitlist entries, schemas, posts,
 comments, reactions, shares, and free-form data all live in `things`, each
 kind declared through the `thingtime` schema-id array (see
-`app/schemas/registry.ts` and `claude-todo/12-everything-is-a-thing-collections.md`).
+`app/schemas/registry.ts` and `TODO/claude-todo/22-everything-is-a-thing-collections.md`).
 
-**Physical collections are versioned.** The names below are *logical* — the
+**Physical collections are versioned.** The names below are _logical_ — the
 vocabulary of code, docs, and the admin query API. On the MongoDB server each
 collection physically lives at `<name>_v<N>`, where `N` is that collection's
 entry in `COLLECTION_SCHEMA_VERSIONS` (`app/schemas/registry.ts`): logical
@@ -50,40 +51,130 @@ stays behind as a frozen snapshot until the admin runs the destructive
 then everything below the current version can safely be deleted. Runbook and
 edge cases live in `api/utils/migrations/migrations.ts`.
 
-| Collection | Holds |
-| ---------- | ----- |
-| `things`   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data`. Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
-| `sessions` | server-side sessions / JWT records (revocation; `userId` = the user thing's `shareId`) |
-| `rosters`  | account-switcher rosters (TTL-reaped) |
-| `emailVerifications` | pending email-verification tokens |
-| `passwordResets` | single-use password-reset tokens (1h TTL; consuming one revokes every live session) |
-| `authOtps` | email-2FA login challenges (gated by user `meta.twoFactorEmailEnabled`; sha256 code hashes only, 10-min TTL, attempt-capped) |
-| `email_messages` + `email_events`/`email_suppression_list`/`email_unsubscribes`/`email_templates`/`email_subscriptions`/`email_identities` | the owned email layer — outbox rows for every send plus deliverability satellites (see `api/utils/email/`) |
-| `lopuMusingRateLimits` / `rateLimits` | rate-limit windows |
-| `settings` | admin-editable app settings singletons |
-| `users` / `themes` / `feedAlgorithms` / `waitlist` | LEGACY — new records are always written as things; a legacy doc is only ever *updated in place* (dual-era fallback) until the admin migrations (`/api/v1/admin/migrations`) convert it into a thing and delete it. No NEW records land here. |
+| Collection                                                                                                                                 | Holds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `things`                                                                                                                                   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `attachment`, `data`, `embed` (cross-site embedded things — see `docs/THINGTIME_EMBED.md`), `component` (a UI component: arg-templated render tree + arg descriptors, browsed on /components; the platform library is seeded system-owned from the repo `components-db/` via `POST /api/v1/admin/components/seed`, shareId `component-<slug>`, and user "Save version" instances ride the same kind), `action` (a declarative capability-bounded program: typed inputs, a closed step vocabulary — things.create/get/search/update, actions.invoke, return — author-declared capabilities that only NARROW the invoker's own access, and a limits envelope; inspected and run on /actions via `POST /api/v1/actions/run`), `webpage` (a block-based page from the /builder: a bounded ordered block tree — component references with per-block arg overrides, containers, text, and native app-screen slots — resolved with its referenced components via `GET /api/v1/webpages/resolve`; standalone pages publish at `/p/<shareId>`, and the seeded site docs `webpage-route-<key>`/`webpage-site-global` make every built-in route a block site that viewers personalise with an owned twin); messenger kinds (dedicated endpoints only, membership-gated, invisible to generic reads: see `api/utils/messenger/`): `chat`, `chat-member`, `chat-message`, `chat-section`, `community`, `community-member`, `community-invite`, `custom-emoji`, `follow`; subspace kinds (Reddit-style communities, dedicated endpoints only — see `api/utils/subspaces/`): `subspace` (slug via root `uniqueKeys` `subspaceSlug:`, branding/rules/flairs/access; acl `tt:all`), `subspace-member` (one relational doc per (subspace, user) with role/approval/ban state, `uniqueKeys` `subspaceMemberKey:`), `subspace-modlog` (append-only moderator audit rows), `subspace-tombstone` (a deleted subspace's slug hold), `subspace-report` (one viewer's report of a post to the mods — one row per (post, reporter), `uniqueKeys` `subspaceReportKey:`, grouped by post on read for the Reports queue); posts join a subspace through `crystal.subspaceId` (+ `title`, `flairId`) and carry the server-owned root `subspaceMod` state + `subspacePrivate` fence; `updown` (the up/down vote — a SEPARATE focused reaction kind beside `reaction`: one of up/down per (user, post-or-comment), `uniqueKeys` `updownKey:`, aggregated on read as `votes`); control-plane kinds: `app` (registered client identity, origin allowlist, and aggregate app-byte ledger), `subscription-tier` (immutable versioned catalog revisions with live/draft/archived lifecycle, pricing, inclusions, and quota defaults), `subscription` (an exact tier-revision/quota snapshot plus the authoritative account-byte ledger per user — app plans live atomically on app Things), `app-storage` (protected per-app-user usage + optional sub-tier), `service-quota` (protected operational admission state), `account-link` (owned accounts + app co-managers, many-to-many), `migration-diagnostic` (short-lived, private admin migration error reports), `moderationFlag` (system-owned NSFW/TOS review records keyed `modflag-<attachmentId>`, `targetId` = the flagged attachment; paired with the protected `moderation` root stamp on attachment things written only by `api/utils/moderation/`), the protected CI family (`ci-*` — see the `ciControl` satellite row below: those kinds are NOT stored in `things`), `action-run` (protected, executor-minted run records — `targetId` = the action, owner-private, `storageClass: "control"`, size-capped inputs/result echo + per-step trace, listed via `GET /api/v1/actions/runs`), `ai-model` (protected, system-owned Lopu model catalog: one `storageClass: "control"` doc per base model in `AI_WORKFLOW_BASE_MODELS`, `shareId` `ai-model-<modelId>`, root `uniqueKeys` `aiModel:<modelId>`, public `acl: ["tt:all"]`, seeded idempotently by `api/utils/ai/models.ts` on the first catalog read or `POST /api/v1/admin/ai/models { seed: true }` — catalog fields are code and re-stamped on every seed, `crystal.enabled` is the single admin-owned toggle, read through `GET /api/v1/ai/models`; the matching `Thingtime.LopuChatDefaults` singleton lives in `settings`), the protected third-party connections family (`api/utils/connections/`): `external-account` (one per provider identity, shared many-to-many across Thingtime accounts, future OAuth tokens in its secure blob, home-pinned), `external-account-link` (user ↔ external account join, home-pinned), `external-post` (synced feed item, deterministic reserved `ext-` shareId, data-plane so comments/reactions/permalinks work natively; acl is CONSTANT — `tt:all` for public providers, `tt:extsourced` for personal ones), `external-post-source` (relational (post, sourcing account) membership row — canonical root `targetId` child of the post, `uniqueKeys`-deduped on `sourceKey`, `createdAt` denormalized from the post so the feed pages membership directly; it is BOTH the feed index and the live authorization behind `tt:extsourced`), `feed-filter` (AI feed-filter rule, home-pinned) and `feed-filter-verdict` (cached per-filter-revision classification), and the Lopu accounting family `lopu-account` / `lopu-usage` / `lopu-credit` (protected, owner-private `storageClass: "control"` rows written only by `api/utils/lopu/accounting.ts`, no new indexes: one `lopu-account` per user keyed by root `uniqueKeys` `lopuAccount:<userId>` carrying the credit balance plus lifetime and monthly counters — created lazily on the first gated turn or `GET /api/v1/lopu/account`, starter credits granted once; one `lopu-usage` row per Lopu turn (chat / voice / voice-session) with tokens, list price from `api/utils/ai/pricing.ts`, billing `thingtime` \| `byo` \| `free` and what was debited; and the `lopu-credit` ledger — `starter` / `grant` / `topup` / `debit` / `adjust` / `refund` rows with `balanceAfterMicros`, plus top-up `request` rows whose pending state is the `lopuTopupPending:<userId>` unique key, so an account has one open request at a time — read through `GET /api/v1/lopu/account` + `/history` and the admin `/api/v1/admin/lopu/accounts` + `/credits` routes; the gate `api/utils/lopu/access.ts` refuses unverified accounts (`meta.lopuVerified`, 403 `LOPU_UNVERIFIED`), exhausted balances (402 `LOPU_NO_CREDITS`) and more than `LOPU_MAX_CONCURRENT_TURNS` billed turns in flight for one account (429 `LOPU_TURN_IN_FLIGHT`, the `crystal.inflight` slot the reply route releases in a finally) before any provider call; every idempotency key is minted by the server, never taken from the client's `requestId`, and each `$inc` on a balance is guarded by that key in `crystal.appliedIds`; and the `Thingtime.LopuAccess` singleton lives in `settings`). Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
+| `ciControl`                                                                                                                                | The CI control plane (`api/utils/ciControl/`): EVERY protected `ci-*` Thing — current-state projections (`ci-repository`, `ci-automation`, `ci-feature`, `ci-feature-stack`, `ci-feature-stack-entry`, `ci-branch`, `ci-pull-request`, `ci-workflow-run`, `ci-deployment`, `ci-preview`, `ci-preview-policy`, `ci-dispatch`) and the append-only `ci-event` history plus relational admin-only `ci-stack-chat-message` questions/replies (parentId binds a dispatch; bounded 2000-character question, 8000-character answer, 90-day expiresAt; no generic access). Same Thing envelope, same deterministic shareIds, but its own home-pinned physical collection (`ciControl_v1`) with a six-index plan and a TTL on root `expiresAt` (`ciControl/retentionCore.ts`: events 14d, `job:` workflow rows 30d, runs/deployments/previews 90d, entities never). Why a satellite: this is machine-written webhook telemetry at ~200k events + ~70k job rows per day (measured 2026-09-02, when it was 99.75% of `things_v2` and paid an entry in each of its 64 indexes — 3.1 GB of index for ~4.5k content docs). Written only by signed webhooks, admin reconcile/dispatch, and the relocation migration; never searched, never billable. Legacy rows still in `things` move via the `relocate-ci-control-telemetry` migration. |
+| `sessions`                                                                                                                                 | server-side sessions / JWT records (revocation; `userId` = the user thing's `shareId`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `rosters`                                                                                                                                  | account-switcher rosters (TTL-reaped)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `emailVerifications`                                                                                                                       | pending email-verification tokens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `passwordResets`                                                                                                                           | single-use password-reset tokens (1h TTL; consuming one revokes every live session)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `authOtps`                                                                                                                                 | email-2FA login challenges (gated by user `meta.twoFactorEmailEnabled`; sha256 code hashes only, 10-min TTL, attempt-capped)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `email_messages` + `email_events`/`email_suppression_list`/`email_unsubscribes`/`email_templates`/`email_subscriptions`/`email_identities` | the owned email layer — outbox rows for every send plus deliverability satellites (see `api/utils/email/`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `lopuMusingRateLimits` / `rateLimits`                                                                                                      | rate-limit windows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `settings`                                                                                                                                 | admin-editable app settings singletons (rate limits, the AI model waterfall, moderation settings, `marketing-publications` — which parts of the generated `/marketing` suite are published, see `docs/marketing-suite.md`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `users` / `themes` / `feedAlgorithms` / `waitlist`                                                                                         | LEGACY — new records are always written as things; a legacy doc is only ever _updated in place_ (dual-era fallback) until the admin migrations (`/api/v1/admin/migrations`) convert it into a thing and delete it. No NEW records land here.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 System-kind rules (never bypass):
-- **Protected** kinds — `user`, `theme`, `feed-algorithm`, `waitlist` — are
+
+- `agent-reporting-binding` and `agent-reporting-operation` are protected,
+  home-pinned `storageClass: "control"` Things. The reporting gateway alone
+  writes their task bindings and relational retry receipts, using existing
+  root `uniqueKeys` indexes. Generic CRUD, search and inherited reads refuse
+  them; the gateway returns only its authorized task projection. The
+  `agent-reporting-*` shareId namespace is reserved for this control state.
+
+- **Protected** kinds — `user`, `theme`, `feed-algorithm`, `waitlist`, `app`,
+  `subscription-tier`, `subscription`, `app-storage`, `service-quota`,
+  `account-link`, `migration-diagnostic`, `attachment`, `ai-model`,
+  `lopu-account`, `lopu-usage`, `lopu-credit`, every
+  `ci-*` control-plane kind, and the connections family (`external-account`,
+  `external-account-link`, `external-post`, `external-post-source`,
+  `feed-filter`, `feed-filter-verdict` — a forged link would grant another
+  user's personal feed and a forged account could carry attacker tokens) — are
   refused by the generic `/api/v1/things` CRUD; only their dedicated utils
-  write them (register, profile, themes, algorithms, waitlist). The `schema`
-  kind is NOT protected: anyone may publish a schema thing (the builtins are
-  seeded system-owned ones, user schemas are community-published).
+  write them (register, profile, themes, algorithms, waitlist, apps, and the
+  admin-gated tier/subscription/link endpoints — forging a client identity or
+  origin allowlist, publishing a tier,
+  self-assigning one, or creating an ownership link would be privilege
+  escalation). The deterministic `subscription-*` shareId namespace is also
+  reserved so ordinary Things cannot squat future tier revisions or assignment
+  records. The deterministic `quota-*` namespace is reserved for protected
+  service-quota records for the same reason. The
+  `migration-diagnostic-*` namespace is likewise reserved; those records are
+  written after a failed real migration releases its lease, expire after 30
+  days, and are readable only through the exact-owner current-admin endpoint.
+  A v2 diagnostic may advertise value-free references for a bounded set of
+  MongoDB ObjectIds supplied through an explicitly authored server-side error
+  context. Error prose alone never grants reveal access. Resolving one reference
+  repeats current-password verification through the closed
+  `/api/v1/things/reveal` codec; there is no generic `secure` field/path/blob
+  decoder and no reusable confirmation token.
+  CI current-state Things have deterministic shareIds; webhook/reconciliation
+  updates replace the bounded current projection only when their provider
+  timestamp is not older. Every status transition is a separate relational
+  `ci-event` Thing attached by `parentId`, idempotent by provider delivery id.
+  History is never an embedded array, and all CI Things carry
+  `storageClass: "control"` so operational telemetry is not customer content.
+  `scheduled-task-run` is quota-billed content, linked to its task by `targetId`
+  and owner-private at creation. It is an editable run note, not a protected
+  audit record. Task deletion cascades these notes, without deleting their
+  destination conversations. Discussion uses the existing `comment` child kind:
+  fetching by target ID never embeds comments in the target crystal.
+  The `schema` kind is NOT protected: anyone may publish a schema thing. Builtin
+  schemas are reserved system-owned seeds with root `storageClass: "control"`;
+  community/user schemas remain ordinary billable content. The `component` kind
+  follows the same posture: user "Save version" components are ordinary content,
+  while the seeded platform library (`component-<slug>` shareIds — the prefix is
+  reserved in `sanitizeShareId`) is system-owned `storageClass: "control"`. The
+  `action` kind is likewise user-creatable through the unified things path
+  (save-time validation requires every step to be covered by a declared
+  capability), while `action-run` records are PROTECTED: only the executor
+  (`api/utils/actions/execute.ts`) mints them, so the audit trail cannot be
+  forged. The `action-` shareId prefix is reserved. The `webpage` kind follows
+  the schema/component posture: user pages are ordinary billable content
+  written through the unified things path (the crystal sanitizer bounds the
+  embedded block tree — 120 blocks / depth 8 / 48KB, the component precedent
+  for bounded replace-on-write documents, NOT an accumulating list), while the
+  seeded site pages (`webpage-route-<key>` + `webpage-site-global`, prefix
+  `webpage-` reserved in `sanitizeShareId`) are system-owned
+  `storageClass: "control"` docs upserted by `POST /api/v1/admin/webpages/seed`.
+  Blocks never carry raw markup: component blocks reference `component` things
+  and draw client-side through the sanitising allowlist renderers with one
+  render budget per block.
+- `lopu-background-task` is protected owner-private home control state, minted
+  only around canonical AI handlers. Owner, origin/data-source scope and request
+  ID derive the reserved `lopu-background-` shareId; an immutable body digest
+  rejects changed replay. Existing root `uniqueKeys` serialize replies to a known
+  conversation. Output is bounded secure BinData (2 MiB), never generic content
+  or search data. Output access lasts seven days, with lazy byte removal and a
+  retained small operation marker. Reads recheck chat access. The 260-second
+  execution deadline exposes stale work without replay. A verified continuation
+  may reuse up to eight completed tool results (64 KiB) from that exact private
+  transcript after owner, conversation, deployment, retention and terminal-boundary
+  checks. This restores historical evidence, never calls, grants or live authority.
+  No new collection/index.
+
+- First-party Lopu assistant messages may carry up to 16 read locators in
+  root `secure` BinData (20 KiB decode bound, 24-hour restore window). They contain
+  only Thing ID, crystal pointer, offset and revision, never results or grants.
+  The protected messenger writer accounts for these bytes; ordinary message
+  projections omit them. Restore requires current membership and fresh Thing
+  authorization/revision checks. No new collection or index.
+
 - Private state lives under root `secure` as a single **BinData blob** (the
-  search wildcard text index tokenizes string *fields* only, so a binary blob
+  search wildcard text index tokenizes string _fields_ only, so a binary blob
   is entirely unsearchable — no field inside it can ever leak via `q=<value>`),
-  never in `crystal`; the one queryable flag (`admin`) is a root boolean.
+  never in `crystal`; the one queryable flag (`admin`) is a root boolean. BinData
+  is an indexing/access boundary, not application-level encryption: dedicated
+  readers must still authenticate, authorize, bound, and project every value.
   `uniqueKeys` elements are BinData for the same reason, PII keys additionally
   sha256-hashed. New writers use the shared builders/helpers in `auth/users.ts`
   so nothing hand-rolls the binary encoding.
+  Migration diagnostics use the same binary root boundary for their bounded,
+  redacted error detail; only safe run metadata and value-free reveal descriptors
+  leave it. Credentials, tokens, authorization values, connection strings,
+  private keys, URL query identifiers, and ambiguous 24-hex strings are always
+  irreversibly redacted rather than retained for reveal.
 
 ### Appended/child data is relational — never an unbounded embedded array
 
 Data that accumulates on a parent (post **reactions**, post **comments**, and
-anything similar in future) is stored as its OWN atomic `things` doc
-(`kind: 'reaction'`, `kind: 'comment'`, …) linked to the parent by `parentId`
-(the parent's `shareId`) and aggregated back on read. NEVER append it as an
-ever-growing array/map field on the parent doc.
+protected **attachments**) is stored as its OWN atomic `things` doc
+(`thingtime: ['reaction']`, `thingtime: ['comment']`, …) and aggregated back on
+read. The canonical v2 child relation is root `targetId`, containing the
+parent's stable `shareId`; `parentId` is legacy compatibility only. NEVER append
+accumulating data as an ever-growing array/map field on the parent doc.
 
 Why: an embedded array/map has no natural bound — one actor can grow a single
 doc toward Mongo's 16 MB cap (bricking it) and bloat every reader's
@@ -92,14 +183,259 @@ the parent bounded, make each write per-item + concurrency-safe (a partial-uniqu
 index enforces invariants like one-reaction-per-user), and give natural paging.
 
 How (see `api/utils/things/things.ts`):
-- Child docs carry `kind` + `parentId` + `ownerId` (+ payload), no `shareId`.
+
+- Canonical child records are full Things with a stable `shareId`, `ownerId`,
+  their `thingtime` discriminator, server-validated root `targetId`, and payload.
+  Protected attachment binding sets `targetId` server-side. Post attachments
+  carry server-owned purpose `post` and inherit the exact post ACL; comment and
+  reply attachments carry purpose `comment` and walk the complete parent chain
+  to that root ACL. Message/thread attachments carry purpose `message` and
+  authorize against the exact live message plus current chat membership.
+  Custom emoji images carry purpose `emoji` and bind to the exact owner/scope.
+  Profile attachments carry server-owned purpose `profile` plus exact `avatar`
+  or `banner` slot; the user root stores the current attachment id and content
+  authorization rechecks that exact slot reference. Subspace branding attachments carry dedicated `subspace-icon` or
+  `subspace-banner` purpose and bind to the exact current root slot; branding
+  remains public directory identity even for private subspaces. Bytes are billed
+  to the uploading moderator, with replacement expiry and deletion through the
+  canonical attachment lifecycle. No purpose can be replayed
+  into another surface. A child without a
+  `shareId`, or any child using `kind`/`parentId` instead of
+  `thingtime`/`targetId`, is legacy compatibility data, not the shape for new
+  writers.
 - Reads **batch-aggregate** children for the whole page in ONE query per kind
-  (`{ kind, parentId: { $in: postIds } }`) — never N+1 — and project the same
-  shape the client already consumes, so the UI is unchanged.
+  (canonical filter: `{ thingtime: <kind>, targetId: { $in: postIds } }`) —
+  never N+1 — while folding legacy `kind`/`parentId` rows through the explicit
+  compatibility path. Project the same shape the client already consumes, so
+  the UI is unchanged.
 - Writes create/delete one child doc; per-parent/per-user caps become soft
   product limits, not structural safety rails.
 - Legacy embedded data folds in on read and migrates to children on first write.
-- Deleting a parent cascades: delete its children by `parentId`.
+- Deleting a parent drains the complete transitive attachment graph
+  (`targetId` plus legacy `parentId`) child-first in bounded transactions. Each
+  protected attachment's exact S3 version is permanently deleted before its
+  Mongo row and quota reservation can disappear; the parent remains a retry
+  anchor until no comments/replies/reactions/saves/attachment bytes can survive
+  it.
+
+### Stable file identities and retained byte versions
+
+The protected `file` kind lives in `things` alongside its separately accounted
+`attachment` Things. `api/utils/files/files.ts` is the canonical writer: a
+revision-fenced transaction binds an owned durable `file` upload, updates the
+current metadata and storage delta, and appends a `file-content` revision to
+Timeline. Attachments retain immutable bytes; `targetId` and `parentId` identify
+the owning file. No version array or alternate history collection is created.
+The current attachment reference is bounded metadata in `file.crystal.content`.
+Trash retains every version and its storage charge. Direct generic deletion of
+file Things or deletion of their bound attachments is refused; retention/purge
+must eventually use the canonical external-object cleanup before refunding.
+Current access is owner-only on the home data plane. See
+[mobile file sync](docs/mobile-file-sync.md) for remaining sharing/UI/workers.
+
+### Account storage is one exact, transactional ledger
+
+Timeline uses protected relational `timeline-event` Things in the owner's
+private managed **Timeline** folder, with `targetId` pointing to the affected
+Thing. `timeline-link` Things store each event-to-Thing, branch, operation,
+parent and dependency-version relationship as its own atomic record. Many-to-many
+relationships never accumulate in an embedded history/membership list. Event and
+link secure envelopes contain the exact canonical JSON records stored locally
+by the browser; bounded API aggregates join them on read. Root `timelineHeadId` is the live Thing's
+server-maintained version fence; event `timelineNode`, `timelineEntryBytes` and `timelineLinkBytes`
+are bounded derived read headers, and folder `timelinePosition` serializes the
+server cursor. These fields cannot be written through ordinary Thing APIs.
+No additional physical collection or accumulating embedded event list is used.
+Link `targetId` identifies its event Thing; hashed `crystal.targetId` and
+`crystal.linkKind` provide reverse lookup through existing shared indexes.
+Event/link writes commit together. Link Things are bounded platform metadata
+with protected `storageClass: 'control'`; arbitrary user content stays in the
+metered event snapshot. Stored event counts are immutable completeness checks,
+not arrays of relationships.
+
+Large Timeline snapshots use independent protected `timeline-snapshot-part`
+Things, with the shared canonical part record in secure BinData. Scalar event,
+side and ordinal fields link each part; parentId/targetId reference the event.
+The event's scalar reference retains count, byte size and integrity hash, never a
+part-id list. Content, event and parts commit together. The event meters retained
+customer bytes once; part envelopes use the platform control storage class.
+
+Named `timeline-branch` Things carry one immutable branch record. Each
+`timeline-branch-head` Thing joins that branch to one Thing and its current
+event id, guarded by a scalar revision. A branch can contain many Things and a
+Thing can belong to many branches without either collecting membership arrays.
+IndexedDB uses the same branch/head JSON; pending commands occupy separate local
+records. A transaction appends the branch-operation event and moves its head
+together. Branch creation/push never silently changes the live Thing. Protected
+branch kinds cannot be read or edited through generic Thing routes.
+
+The reserved `main` / `Published` branch uses those same canonical records.
+Trusted committed main revisions advance one per-Thing head in the content
+transaction, including deletions. The pointer survives the Thing; browser drafts
+and branch effects cannot advance it. Named-branch commands exclude `main`.
+Recovery needs a trusted deletion and unoccupied ID, creates a new private version,
+and preserves all prior events. It never restores credentials or external effects.
+
+Every billable Thing has a server-owned `storageClass: "content"`, a versioned
+`storageAccountingVersion`, and `sizeBytes` equal to the UTF-8 byte length of
+exactly `JSON.stringify({ crystal, extended, tags })` after the API has
+normalized those three stored payload fields. This is the stable logical
+customer-content measure. It deliberately excludes platform envelope fields,
+Mongo indexes, compression, replication, and other physical database overhead
+that cannot be deterministically assigned to one account.
+
+Timeline envelope v2/v3 meters retained ordinary revision content with the same
+`{ crystal, extended, tags }` projection, once for each present before/after
+snapshot. Authored client drafts and nonstandard adapters meter their entire
+snapshot payload. Event ids, receipts and managed labels are platform overhead;
+arbitrary client fields cannot opt data out of accounting. Legacy v1 envelopes
+retain their original exact binary-byte definition. Deletion moves the removed
+payload into history at the same logical size, so cleanup stays possible at or
+above quota; it does not free retained history. Unknown pre-delete ledgers stay
+fenced for reconciliation. This special retention credit is only used after the
+canonical delete refund in the same transaction, with an equality assertion
+against the removed payload size. See [Unified Timeline](docs/unified-timeline.md).
+
+Protected `attachment` Things extend that same canonical measure by their
+server-verified root `objectSizeBytes`. Pending, finalizing, ready, and deleting
+attachments all remain billable; a malformed attachment envelope fails closed.
+Uploads reserve the complete logical allocation transactionally before S3
+accepts data, and deletion refunds it only after the private object is confirmed
+inaccessible. Ordinary user-authored Things cannot supply the protected root
+envelope or opt themselves into or out of object-byte accounting.
+
+User Things remain non-billable identity/control-plane records. Managed avatar
+and banner objects are still ordinary billable protected attachment Things:
+their server-owned root references do not move object bytes into the user
+crystal or hide them from the account ledger. An external profile image URL is
+only bounded metadata and never causes Thingtime to fetch or store the remote
+image bytes.
+
+All user-owned product content is billable, regardless of which dedicated API
+writes it. That includes posts, comments, reactions, shares, Messenger chats,
+messages, communities, memberships, sections, invites, custom emoji, follows,
+AI connection records, and every project/chat/message imported from a desktop
+AI source. Relational plumbing is still content: each row is charged to its
+root `ownerId`, so a membership or follow consumes the account that owns that
+edge. Replaying an idempotent import updates the same stamped rows and must not
+charge the bytes twice. A message or emoji row bills its bounded JSON payload;
+any uploaded object remains separately and exactly billed by its protected
+`attachment` Thing, so object bytes are neither omitted nor duplicated.
+
+`currentContentStorageSizeBytes()` is the shared proof used by every
+incremental writer: current schema + array `thingtime` + current content stamp
+
+- a fresh canonical payload re-measurement. An old, missing, fractional,
+  unsafe, or stale stamp is never used for delta arithmetic. Updates fail with a
+  migration-required response; deletes remain available but fence affected
+  ledgers for exact source reconciliation instead of guessing a refund.
+
+The protected user `subscription` Thing is the authoritative account ledger:
+its tier snapshot/override resolves `userStorageBytes`, while
+`storageUsedBytes` is the one enforced and displayed total. Every customer
+content create/update/delete changes that counter in the **same Mongo
+transaction** as the content. Unknown future user-content kinds default to
+billable. Only protected control-plane kinds or a server-written root
+`storageClass: "control"` are excluded; user-authored `crystal` values can never
+opt a Thing out.
+
+App data contributes to the account ledger exactly once. The app aggregate and
+per-(app,user) ledgers are overlapping sub-limits used for app-plan admission,
+not extra bytes added to the account total. In one 100-byte app write, account,
+app, and app-user counters each move by 100, while the account total remains 100. Public/admin UI and API projections read this canonical ledger; legacy
+flat user fields are compatibility aliases derived from the same nested
+`storage` value, never independent counters. Used/remaining compatibility
+aliases are null while the ledger is not ready, so cached or malformed values
+cannot masquerade as exact usage.
+
+Growth fails closed until the versioned ledger is `ready`, and finite
+allowances are checked atomically with the increment. A detected underflow
+marks `needs-reconcile`; the next growth attempt repairs from canonical content
+stamps inside its transaction before applying the new delta exactly once. The
+idempotent admin migration stamps all legacy content, ignores the old
+never-maintained usage values, preserves explicit legacy allowances as real
+subscription overrides, reconciles the ledger, and only then marks it ready.
+That migration first fences account, app, and app-user ledgers, runs every
+storage-affecting prerequisite to convergence, stamps content with compare-and-
+swap writes, and reconciles every overlapping ledger before publishing ready.
+Running a source-changing prerequisite by itself is refused while ledgers are
+live; the orchestrating storage migration is the safe entry point.
+Any new content writer must use these shared storage/transaction primitives;
+directly updating `things` is a quota bypass and violates §1.
+
+Operational boundaries are explicit rather than silent. Reconciliation and
+the whole-corpus migration fail closed: interruption leaves affected ledgers
+fenced and the idempotent migration must be rerun before growth resumes. A
+single very high-cardinality app may eventually need a batched, fenced
+background reconciliation instead of the current one-transaction repair.
+Admin account totals and app-data subtotals are separate read projections and
+can briefly reflect adjacent committed snapshots during active writes; quota
+admission itself remains transactional. The exact legacy compare-and-swap
+uses the complete bounded source Thing, so a malformed historical document at
+Mongo's BSON ceiling requires operator repair. These are logical content bytes,
+not physical BSON/WiredTiger/index/replication billing bytes.
+
+### App namespaces ("Login with Thingtime")
+
+Things written through an app-scoped token carry a server-stamped scalar root
+`appId` — the NAMESPACE marker. It is deliberately not the acl (users can
+hand-write `tt:app/<x>` acl entries, so acl membership would be spoofable);
+`acl` stays what it always was — the AUDIENCE: `tt:user` private, plus
+`tt:app/<clientId>` for that app's user base. Every app-token read and write is
+fenced to the namespace (`api/utils/apps/namespace.ts`), and storage is bounded
+by TWO standing BYTE allowances — the app Thing's aggregate subscription
+ceiling (Free 5 GiB, Plus 25 GiB, Pro 100 GiB, PAYG metered/unbounded) and one
+effective per-(user, app) ceiling (the app-owner default, 50 MiB initially,
+optionally replaced by a relational `app-storage` sub-tier and always clamped
+to the aggregate). Root `sizeBytes` is charged against the account, app, and
+app-user ledgers — never doc counts — in the same transaction as registered
+app content, so partial commits cannot drift them. Plan + aggregate counter are
+one app document, so entitlement and admission cannot drift; recoverable
+underflow fences reconcile from stamped app content before admitting growth.
+Sandboxes instead get a 5 MiB
+ephemeral namespace plus the global windowed brake. The end user owns
+every namespace doc and can browse (`GET /api/v1/things?appId=`,
+`/api/v1/apps/data-summary`) and delete
+(`POST /api/v1/apps/data/delete-all`) everything an app stores. Full model in
+`TODO/claude-todo/16-full-power-app-namespaces.md`.
+
+### Server error Things
+
+`post-discovery` is a protected, non-billable authorization relationship in home
+`things_v2`, one deterministic record per account/browser and visited secret post.
+`targetId` links the post and `ownerId` identifies its collector. Its crystal holds
+an author ID, one-way link-generation digest, optional one-way anonymous browser
+ID and private visit IP. No bearer key is persisted. It has no generic read/write
+or export surface, uses existing owner/target indexes, and cascades with its post.
+Every grant is revalidated against the current hidden ACL and link generation.
+IP metadata is never itself a grant. Full first-party reads may record discoveries;
+scoped credentials and custom data planes cannot. Anonymous localStorage holds the
+random browser credential, mirrored to a host-only SameSite cookie for media.
+
+`error-log` is a server-minted, non-billable control kind in home `things_v2`. It uses the reserved `error-log-` ID namespace, no public ACL and no generic read/write path. Only the current-admin error-log endpoint projects bounded, irreversibly redacted detail from its binary envelope and safe searchable metadata. Seven-day TTL and bounded best-effort capture prevent indefinite retention; no account data or request payload is intentionally captured. `/things?logs=1` is its read-only admin browser.
+
+### Private account drafts
+
+`draft` is a protected home `things` kind. Each editor draft/template is an
+atomic, owner-private, quota-accounted record; files are relational attachment
+children. Only `/api/v1/drafts` may read/write its editing snapshot. Generic
+Thing CRUD, exports, feeds and search must not expose or publish it. Revision
+checks fence concurrent writes; discarded drafts retain empty tombstones to
+reject late saves. Templates clone their media through the canonical storage
+service, and only working drafts can donate media to a published target. See
+[the draft feature map](docs/feature-map/account-drafts-and-templates.md).
+
+### Private password entries
+
+`password-manager-entry` records use the existing versioned home `things`
+collection, one account-owned document per credential. The dedicated password
+API uses canonical storage accounting and excludes this protected kind from
+generic Things and Timeline. Only title/type metadata is plaintext; ordered
+fields and secrets are authenticated ciphertext. The existing
+thingtime/ownerId/createdAt/shareId index serves bounded vault pages; immutable
+creation time and shareId form the cursor. No additional index is needed.
+Password resets preserve the per-user data key through the approved recovery
+wrapper. [Contract and limits](docs/password-manager.md).
 
 ## 4. One MongoDB connection source
 
@@ -110,6 +446,21 @@ No alternate env vars, no fallbacks. Every helper resolves through it.
 
 For **local dev**: set `MONGODB_CONNECTION_STRING=mongodb://localhost:27017/thingtime`
 (no placeholder → `MONGO_PASS` unused).
+
+**Data-endpoint override (thin-frontend mode):** a browser session — logged in
+or not — may point the open DATA PLANE at a custom MongoDB via
+`/api/v1/mongodb/endpoint` (httpOnly `tt_mongo` session cookie; API clients
+send `x-tt-mongo-url` per request). The API dispatcher establishes a
+request-scoped context (`mongodb/endpoint.ts`, AsyncLocalStorage) and
+`collections.ts` splits resolution: `getThingsCollection()` (posts, comments,
+reactions, shares, data, schemas, app-data) follows the active endpoint, while
+identity/auth and every control-plane collection (users, sessions, rosters,
+the protected kinds user/theme/feed-algorithm/waitlist via
+`getHomeThingsCollection()`, email/token satellites, settings, rate limits)
+ALWAYS resolve the home deployment DB. Admin routes always run home. Logged-in
+users can persist saved endpoints (inside their `secure` blob — URLs embed
+credentials); raw endpoint URLs never reach a client — responses carry the
+sanitised host + db name only, and activation probes the endpoint first.
 
 ## 5. Auth = httpOnly cookie + revocable JWT + Mongo session
 
@@ -125,7 +476,7 @@ One auth model used everywhere (see `claude-todo/03-auth-login-register.md`):
   live in `sessions` (not revoked). Logout / revoke = flip the session in Mongo →
   the JWT stops working immediately, before `exp`.
 
-So the JWT lives in the cookie for the website *and* works as a Bearer token for
+So the JWT lives in the cookie for the website _and_ works as a Bearer token for
 API clients — and either way Mongo is the source of truth for revocation.
 
 Multi-account: a second httpOnly cookie, **`tt_accounts`**, holds an opaque id
@@ -135,7 +486,7 @@ JWTs stored anywhere). `tt_auth` stays the single ACTIVE credential; switching
 mints a fresh JWT from the chosen live session. Every roster account is
 independently revocable and validated by the same session→user path as
 `tt_auth`, and raw tokens never reach the client (the switcher API returns
-public users only). See `claude-todo/11-account-switcher.md`.
+public users only). See `TODO/claude-todo/11-account-switcher.md`.
 
 ## 6. Never leak secrets
 
@@ -158,8 +509,34 @@ Two hooks, same look:
   `status` is `'success' | 'error' | 'info'`; default `duration` is 15s.
 - `useLopuStream()` → a streaming toast that pops instantly ("Lopu is thinking…")
   and types an NDJSON response in live (used by the DevKit musing). The read-timer
-  starts when the stream *finishes*.
+  starts when the stream _finishes_.
 
 Don't pass Chakra-native toast props (e.g. `isClosable`, `render`) to `lopu()` —
 the component owns presentation. `console.error`/logging is for developers and is
 not a user notification; surface anything the user should see through Lopu.
+
+Notification history is durable account-owned data, separate from delivery.
+`emitNotification` always saves a record before checking push/email settings;
+the shared Lopu hooks record signed-in messages through the authenticated,
+idempotent `/api/v1/notifications/record` API. Completed streams save their
+final text (cancellation saves the partial text), not one row per token.
+`history=1` reads all retained records; ordinary bell reads still honor delivery
+preferences and exclude quiet records. Never prune history by notification count
+or suppress repeated events just to silence delivery. Client messages remain
+`system-message`, never client-forged login/action audit records. Credential-like
+content is redacted before storage; messages without an authenticated owner are
+not attributed to an account. Password/passkey/SSO login, registration and logout
+record their successful outcome server-side across the session boundary.
+
+
+Passkey challenge replay protection uses the existing home `authOtps` satellite:
+server-only `webauthn:<ceremony>:<challenge SHA-256>` spent markers, unique by
+`challenge`, expire after ten minutes. They contain no private key, credential
+response, account data or browser cookie. Only a cryptographically verified
+ceremony can consume a marker, before any session is issued.
+
+### Saved AI waterfall data
+
+Personal waterfall library entries are owner-only `data` Things with `crystal.systemType: ai-waterfall-v1`; each config is its own bounded record, not an array embedded on the user. Generic Thing create/update supplies storage accounting and optimistic revision checks. No new physical collection is introduced.
+
+Incoming mail uses protected `mail-account`, `mail-folder`, `mail-message`, `mail-inbox` and `mail-operation` Things in the existing `things` collection. Message, folder and operation receipt rows are relational children of the account (`parentId`). Operation receipts fence duplicate provider mutations without storing message bodies or grants. Credentials/content use account-vault encryption; home-plane writes use the shared transactional storage ledger. See [incoming mail](docs/feature-map/incoming-mail.md).
