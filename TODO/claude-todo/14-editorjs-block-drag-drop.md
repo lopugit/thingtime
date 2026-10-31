@@ -1,6 +1,15 @@
-# 14 — Editor.js block drag/drop reordering 🔴
+# 14 — Editor.js block drag/drop reordering 🟢
 
-**Status:** Not started.
+**Status:** Built 2026-07-21 (phase 1). `editorJsBlockReorder.ts` (pure planning
+logic, unit-tested) + `editorJsBlockDragDrop.ts` (DOM adapter) wired into
+`LongTextEditor`: pointer drag from the six-dot grip with a drop indicator and
+viewport autoscroll, touch long-press (short tap still opens settings, early
+movement yields to native scroll), Alt+↑/↓ keyboard moves with caret-follow and
+aria-live announcements, Escape/pointercancel cancellation, read-only guard.
+One `blocks.move()` per completed gesture (one history event); block
+ids/type/data verified preserved. Live-verified in the feed composer (desktop +
+mobile viewports). Still open from the full spec: long-document autoscroll QA,
+deep undo/redo + stale-save interplay QA, nested list tools.
 
 ## Goal
 

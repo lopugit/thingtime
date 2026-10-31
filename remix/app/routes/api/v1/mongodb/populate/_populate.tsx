@@ -4,7 +4,7 @@ import { Submit } from '~/components/API/Submit';
 import { json } from '~/api/http';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
-import setup from '~/scripts/mongodb/setup';
+import setup, { SETUP_STAGES } from '~/scripts/mongodb/setup';
 
 export default function Index() {
   const { pathname } = useLocation();
@@ -42,8 +42,26 @@ const actionExport = async ({ request }: { request: Request }) => {
     );
   }
 
-  // literally just run the setup.ts script
-  const ret = await setup();
+  // Run the setup.ts seeder, time-boxed: serverless functions get a hard
+  // platform budget, so each invocation seeds what fits (default 8s) and
+  // reports complete: false when it ran out — every write is idempotent, so
+  // repeated calls converge. Optional JSON body:
+  //   { stages?: ["schemas", …], budgetMs?: number }
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    body = {};
+  }
+  const budgetMs = Math.min(Math.max(Number(body?.budgetMs) || 8000, 1000), 300_000);
+  const requested = Array.isArray(body?.stages)
+    ? body.stages.filter((stage) => (SETUP_STAGES as readonly string[]).includes(String(stage)))
+    : [];
+
+  const ret = await setup({
+    deadlineAt: Date.now() + budgetMs,
+    stages: requested.length ? requested : undefined
+  });
 
   if (!ret) {
     return json({ ok: false, error: 'failed to setup mongodb' }, { status: 500 });

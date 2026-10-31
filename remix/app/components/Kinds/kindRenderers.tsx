@@ -1,11 +1,16 @@
 import React from 'react';
 import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
+import { ChakraThingRenderer, isChakraThingNode } from './ChakraThingRenderer';
+import type { ChakraThingNode } from './ChakraThingRenderer';
 import { HtmlThingRenderer } from './HtmlThingRenderer';
 import type { HtmlThingNode } from './HtmlThingRenderer';
 import { registerKindRenderer } from './kindRegistry';
 import type { KindRenderContext } from './kindRegistry';
 import { Avatar, KindBadge, KindCard, MutedMono, Sparkline, formatPrice, maybeTimeAgo, toArray, toNumberOr, toStringOr } from './kindPrimitives';
+import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '~/components/ComponentsLibrary/componentTemplate';
+import { useTtActionClicks } from '~/components/Actions/useTtActionClicks';
+import { safeCssUrl, safeUrl } from './safeUrl';
 
 // The original core kind renderers: the templates a feed/search/page can use
 // to render things by kind. Category files (kindRenderersMedia/Social/
@@ -83,15 +88,22 @@ type VideoValue = {
 	views: string;
 };
 
-const VideoRenderer = ({ value }: { value: VideoValue; context: KindRenderContext }) => (
+const VideoRenderer = ({ value }: { value: VideoValue; context: KindRenderContext }) => {
+	// scheme-guard every URL sink so untrusted video data can't reach a
+	// javascript: link, an unsafe media src/poster, or a CSS url() breakout
+	const src = safeUrl(value.src);
+	const poster = safeUrl(value.poster);
+	const posterBg = safeCssUrl(value.poster);
+	const url = safeUrl(value.url);
+	return (
 	<KindCard padding={0}>
 		<Box position="relative" width="100%" paddingTop="56.25%" background="var(--tt-ink, #16161a)">
-			{value.src ? (
+			{src ? (
 				<Box
 					as="video"
 					controls
-					poster={value.poster || undefined}
-					src={value.src}
+					poster={poster || undefined}
+					src={src}
 					position="absolute"
 					inset={0}
 					width="100%"
@@ -99,17 +111,13 @@ const VideoRenderer = ({ value }: { value: VideoValue; context: KindRenderContex
 				/>
 			) : (
 				<Flex
-					as={value.url ? 'a' : 'div'}
-					{...(value.url ? { href: value.url, target: '_blank', rel: 'noopener noreferrer' } : {})}
+					as={url ? 'a' : 'div'}
+					{...(url ? { href: url, target: '_blank', rel: 'noopener noreferrer' } : {})}
 					alignItems="center"
 					justifyContent="center"
 					position="absolute"
 					inset={0}
-					backgroundImage={
-						value.poster
-							? `url(${value.poster})`
-							: 'linear-gradient(135deg, #2b2540 0%, #4a2d55 55%, #1c2a42 100%)'
-					}
+					backgroundImage={posterBg || 'linear-gradient(135deg, #2b2540 0%, #4a2d55 55%, #1c2a42 100%)'}
 					backgroundSize="cover"
 					backgroundPosition="center"
 				>
@@ -155,7 +163,8 @@ const VideoRenderer = ({ value }: { value: VideoValue; context: KindRenderContex
 			</Flex>
 		</Box>
 	</KindCard>
-);
+	);
+};
 
 // ————— 🏪 marketplace listing —————
 
@@ -171,23 +180,25 @@ type ListingValue = {
 	seller: string;
 };
 
-const ListingRenderer = ({ value }: { value: ListingValue; context: KindRenderContext }) => (
+const ListingRenderer = ({ value }: { value: ListingValue; context: KindRenderContext }) => {
+	const imageBg = safeCssUrl(value.image);
+	return (
 	<KindCard padding={0}>
 		<Flex flexWrap="wrap">
 			<Box
 				background={
-					value.image
+					imageBg
 						? undefined
 						: 'linear-gradient(135deg, var(--tt-accent-tint, #fff5fa) 0%, var(--tt-surface-alt, #f5f5f7) 100%)'
 				}
-				backgroundImage={value.image ? `url(${value.image})` : undefined}
+				backgroundImage={imageBg}
 				backgroundPosition="center"
 				backgroundSize="cover"
 				flex="1 1 180px"
 				minHeight="150px"
 				position="relative"
 			>
-				{!value.image ? (
+				{!imageBg ? (
 					<Flex alignItems="center" height="100%" justifyContent="center" fontSize="42px" opacity={0.85}>
 						🏪
 					</Flex>
@@ -220,7 +231,8 @@ const ListingRenderer = ({ value }: { value: ListingValue; context: KindRenderCo
 			</Box>
 		</Flex>
 	</KindCard>
-);
+	);
+};
 
 // ————— 📊 dashboard —————
 
@@ -481,7 +493,7 @@ const ComparisonRenderer = ({ value, context }: { value: ComparisonValue; contex
 				) : null}
 				<Flex flexDirection="column" rowGap={3}>
 					{value.names.map((name, itemIdx) => (
-						<Box key={name} background="var(--tt-surface, #fafafb)" border="1px solid var(--tt-border-light, #f0f0f2)" borderRadius="var(--tt-radius-md, 12px)" padding={3}>
+						<Box key={`${name}-${itemIdx}`} background="var(--tt-surface, #fafafb)" border="1px solid var(--tt-border-light, #f0f0f2)" borderRadius="var(--tt-radius-md, 12px)" padding={3}>
 							<Text fontSize="sm" fontWeight={800} color="var(--tt-ink, #16161a)">
 								{name}
 							</Text>
@@ -516,8 +528,8 @@ const ComparisonRenderer = ({ value, context }: { value: ComparisonValue; contex
 							<Box as="th" padding={3} textAlign="left">
 								<MutedMono>Criteria</MutedMono>
 							</Box>
-							{value.names.map((name) => (
-								<Box as="th" key={name} padding={3} textAlign="left">
+							{value.names.map((name, itemIdx) => (
+								<Box as="th" key={`${name}-${itemIdx}`} padding={3} textAlign="left">
 									<Text fontSize="sm" fontWeight={800} color="var(--tt-ink, #16161a)" whiteSpace="nowrap">
 										{name}
 									</Text>
@@ -624,16 +636,18 @@ type ProfileValue = {
 	stats: Array<{ label: string; value: string }>;
 };
 
-const ProfileRenderer = ({ value }: { value: ProfileValue; context: KindRenderContext }) => (
+const ProfileRenderer = ({ value }: { value: ProfileValue; context: KindRenderContext }) => {
+	const bannerBg = safeCssUrl(value.bannerUrl);
+	return (
 	<KindCard padding={0}>
 		<Box
 			height="72px"
 			background={
-				value.bannerUrl
+				bannerBg
 					? undefined
 					: 'linear-gradient(90deg, #ffd1e8 0%, #ffe9c7 30%, #d5f6dd 60%, #cfe4ff 100%)'
 			}
-			backgroundImage={value.bannerUrl ? `url(${value.bannerUrl})` : undefined}
+			backgroundImage={bannerBg}
 			backgroundPosition="center"
 			backgroundSize="cover"
 		/>
@@ -666,7 +680,8 @@ const ProfileRenderer = ({ value }: { value: ProfileValue; context: KindRenderCo
 			) : null}
 		</Box>
 	</KindCard>
-);
+	);
+};
 
 // ————— 🍳 recipe —————
 
@@ -729,6 +744,149 @@ const ElementRenderer = ({ value }: { value: HtmlThingNode; context: KindRenderC
 		<HtmlThingRenderer node={value} />
 	</Box>
 );
+
+// ————— 🎛 chakra (JSON → Chakra components) —————
+
+const ChakraKindRenderer = ({ value }: { value: ChakraThingNode; context: KindRenderContext }) => (
+	<Box width="100%">
+		<ChakraThingRenderer node={value} />
+	</Box>
+);
+
+// ————— 🧩 component (arg-templated element/chakra tree) —————
+
+type ComponentKindValue = { render: unknown; values: Record<string, string | number | boolean | undefined> };
+
+const ComponentKindRenderer = ({ value, context }: { value: ComponentKindValue; context: KindRenderContext }) => {
+	// Memoised like the /components preview: resolution walks the whole template
+	// under the MAX_RESOLVED_NODES/_CHARS budgets, so a feed or search page listing
+	// several component things would redo that work on every parent render.
+	// adapt() rebuilds `values` on every RenderThing pass, so the memo keys on
+	// its content — a bounded scalar map (≤ MAX_COMPONENT_SAVED_ARGS entries) —
+	// rather than its identity, which would never hit.
+	const valuesKey = JSON.stringify(value.values);
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is the serialised form of value.values
+	const resolved = React.useMemo(() => resolveTemplate(value.render, value.values), [value.render, valuesKey]);
+	// ttAction controls fire only on the trusted /things render surface — a
+	// component-kind thing rendered through the kind registry in your own app,
+	// where context.untrusted is false. Untrusted feed/search renders pass
+	// context.untrusted and get no handler. NOTE the /components catalog and
+	// its args tester draw the same template DIRECTLY through the sanitising
+	// renderers (ComponentPreview / ComponentDetailPage), bypassing this
+	// wrapper — so authoring and browsing a component never fire a
+	// side-effectful action run; explicit execution lives on the /actions run
+	// panel. Keep those preview paths off this wrapper deliberately.
+	const onTtAction = useTtActionClicks();
+	return (
+		<Box onClickCapture={context.untrusted ? undefined : onTtAction} width="100%">
+			{isChakraThingNode(resolved) ? (
+				<ChakraThingRenderer node={resolved as ChakraThingNode} />
+			) : (
+				<HtmlThingRenderer node={resolved as HtmlThingNode} />
+			)}
+		</Box>
+	);
+};
+
+// ————— 🧱 webpage (block-based page from the /builder) —————
+
+type WebpageKindValue = {
+	name: string;
+	siteRoute: string | null;
+	blockCount: number;
+	types: string[];
+};
+
+const WEBPAGE_TYPE_EMOJI: Record<string, string> = {
+	component: '🧩',
+	container: '📐',
+	text: '📝',
+	native: '🖥'
+};
+
+// Quiet card preview — a full page never draws inside a grid tile; the real
+// render surface is /p/<id> (or the builder canvas).
+const WebpageKindRenderer = ({ value, context }: { value: WebpageKindValue; context: KindRenderContext }) => (
+	<Flex
+		alignItems="center"
+		columnGap="10px"
+		width="100%"
+		padding={context.size === 'compact' ? '6px 8px' : '10px 12px'}
+		border="1px solid var(--tt-border, #ececef)"
+		borderRadius="var(--tt-radius-md, 12px)"
+		background="var(--tt-card, #ffffff)"
+	>
+		<Text fontSize={context.size === 'compact' ? '16px' : '20px'}>🧱</Text>
+		<Box minWidth={0} flex={1}>
+			<Text color="var(--tt-ink, #16161a)" fontSize={context.size === 'compact' ? 'xs' : 'sm'} fontWeight={700} noOfLines={1}>
+				{value.name}
+			</Text>
+			<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, ui-monospace, monospace)" fontSize="10px" noOfLines={1}>
+				{value.siteRoute ? `site page · ${value.siteRoute}` : `${value.blockCount} block${value.blockCount === 1 ? '' : 's'}`}
+				{value.types.length ? ` · ${value.types.map((type) => WEBPAGE_TYPE_EMOJI[type] || type).join(' ')}` : ''}
+			</Text>
+		</Box>
+	</Flex>
+);
+
+// ————— ⚡ action (declarative capability-bounded program) —————
+
+type ActionKindValue = {
+	name: string;
+	actionKey: string | null;
+	description: string | null;
+	ops: string[];
+	stepCount: number;
+	capabilityCount: number;
+};
+
+// Minimalist, Apple-like: quiet tinted dots per op tone instead of loud
+// badges, hairline chip borders, tokens throughout. Sizes ride the existing
+// context scale (compact → sm row, card → md, full → lg with description).
+const ACTION_OP_DOTS: Record<string, string> = {
+	'things.create': 'var(--tt-warning, #e8a33d)',
+	'things.update': 'var(--tt-warning, #e8a33d)',
+	'things.get': 'var(--tt-link, #4c7dff)',
+	'things.search': 'var(--tt-link, #4c7dff)',
+	'actions.invoke': 'var(--tt-accent, #7c6cff)',
+	return: 'var(--tt-muted, #9a9aa6)'
+};
+
+const ActionKindRenderer = ({ value, context }: { value: ActionKindValue; context: KindRenderContext }) => {
+	const size = context.size === 'compact' ? 'sm' : context.size === 'full' ? 'lg' : 'md';
+	const nameSize = size === 'sm' ? '13px' : size === 'lg' ? '16px' : '14px';
+	return (
+		<Box width="100%">
+			<Flex align="center" gap={2} minW={0}>
+				<Text fontSize={nameSize} lineHeight="1.2">
+					⚡
+				</Text>
+				<Text color="var(--tt-ink, #16161a)" fontSize={nameSize} fontWeight="600" isTruncated>
+					{value.name}
+				</Text>
+				<Flex align="center" gap="5px" ml="auto">
+					{value.ops.map((op) => (
+						<Box background={ACTION_OP_DOTS[op] || 'var(--tt-muted, #9a9aa6)'} borderRadius="full" height="6px" key={op} title={op} width="6px" />
+					))}
+				</Flex>
+			</Flex>
+			{size !== 'sm' ? (
+				<Flex align="center" gap={2} mt={1.5} wrap="wrap">
+					{value.actionKey ? <MutedMono>{value.actionKey}</MutedMono> : null}
+					<MutedMono>
+						{value.stepCount} step{value.stepCount === 1 ? '' : 's'} · {value.capabilityCount}{' '}
+						{value.capabilityCount === 1 ? 'capability' : 'capabilities'}
+					</MutedMono>
+				</Flex>
+			) : null}
+			{size === 'lg' && value.description ? (
+				<Text color="var(--tt-text, #33333c)" fontSize="13px" mt={2}>
+					{value.description}
+				</Text>
+			) : null}
+		</Box>
+	);
+};
 
 // ————— registration —————
 // Wrapped in an exported function (called lazily by kindRegistry) instead of running
@@ -1048,6 +1206,117 @@ registerKindRenderer({
 		return thing as HtmlThingNode;
 	},
 	render: ElementRenderer
+});
+
+registerKindRenderer({
+	kind: 'chakra',
+	title: 'Chakra (components as data)',
+	emoji: '🎛',
+	category: 'Builder',
+	description:
+		'Serialised Chakra UI component trees — chakra, props, children as pure JSON — rendered through a sanitising allowlist gate.',
+	aliases: ['chakra-component'],
+	match: (thing) => isChakraThingNode(thing),
+	adapt: (thing): ChakraThingNode | null => (isChakraThingNode(thing) ? (thing as ChakraThingNode) : null),
+	render: ChakraKindRenderer
+});
+
+registerKindRenderer({
+	kind: 'component',
+	title: 'UI component',
+	emoji: '🧩',
+	category: 'Builder',
+	description:
+		'A component thing from /components — its render template resolved against savedArgs (or arg defaults), drawn through the sanitising gates.',
+	aliases: ['ui-component'],
+	match: (thing) => {
+		const crystal = thing.crystal as Record<string, unknown> | undefined;
+		return !!crystal && typeof crystal === 'object' && 'render' in crystal && ('args' in crystal || 'componentKey' in crystal || 'library' in crystal);
+	},
+	adapt: (thing): ComponentKindValue | null => {
+		// accepts both a full component thing ({ crystal }) and a bare crystal
+		const crystal = ((thing.crystal as Record<string, unknown> | undefined) ?? thing) as Record<string, unknown>;
+		if (!crystal.render || typeof crystal.render !== 'object') return null;
+		const args = sanitizeArgSpecs(crystal.args);
+		const savedArgs =
+			crystal.savedArgs && typeof crystal.savedArgs === 'object' && !Array.isArray(crystal.savedArgs)
+				? (crystal.savedArgs as Record<string, string | number | boolean>)
+				: {};
+		return { render: crystal.render, values: { ...defaultsFromArgs(args), ...savedArgs } };
+	},
+	render: ComponentKindRenderer
+});
+
+registerKindRenderer({
+	kind: 'action',
+	title: 'Action',
+	emoji: '⚡',
+	category: 'Builder',
+	description:
+		'A declarative capability-bounded program — typed inputs, a closed step vocabulary, explicit capabilities, and a shared execution budget. Inspect and run it on /actions.',
+	aliases: ['action-thing'],
+	match: (thing) => {
+		const crystal = thing.crystal as Record<string, unknown> | undefined;
+		return !!crystal && typeof crystal === 'object' && Array.isArray(crystal.steps) && ('capabilities' in crystal || 'actionKey' in crystal);
+	},
+	adapt: (thing): ActionKindValue | null => {
+		const crystal = ((thing.crystal as Record<string, unknown> | undefined) ?? thing) as Record<string, unknown>;
+		if (!Array.isArray(crystal.steps)) return null;
+		const ops = [
+			...new Set(
+				crystal.steps
+					.map((step) => (step && typeof step === 'object' ? String((step as Record<string, unknown>).op || '') : ''))
+					.filter(Boolean)
+			)
+		];
+		return {
+			name: typeof crystal.name === 'string' ? crystal.name : 'Action',
+			actionKey: typeof crystal.actionKey === 'string' ? crystal.actionKey : null,
+			description: typeof crystal.description === 'string' ? crystal.description : null,
+			ops,
+			stepCount: crystal.steps.length,
+			capabilityCount: Array.isArray(crystal.capabilities) ? crystal.capabilities.length : 0
+		};
+	},
+	render: ActionKindRenderer
+});
+
+registerKindRenderer({
+	kind: 'webpage',
+	title: 'Webpage',
+	emoji: '🧱',
+	category: 'Builder',
+	description:
+		'A block-based webpage built in the /builder — an ordered tree of component/container/text/native blocks. Standalone pages publish at /p/<id>; site pages personalise a built-in route.',
+	aliases: ['webpage-thing'],
+	match: (thing) => {
+		const crystal = thing.crystal as Record<string, unknown> | undefined;
+		return !!crystal && typeof crystal === 'object' && Array.isArray(crystal.blocks) && ('pageKey' in crystal || 'siteRoute' in crystal || 'name' in crystal);
+	},
+	adapt: (thing): WebpageKindValue | null => {
+		const crystal = ((thing.crystal as Record<string, unknown> | undefined) ?? thing) as Record<string, unknown>;
+		if (!Array.isArray(crystal.blocks)) return null;
+		const countTree = (blocks: unknown[]): number =>
+			blocks.reduce<number>((sum, block) => {
+				if (!block || typeof block !== 'object') return sum;
+				const children = (block as Record<string, unknown>).children;
+				return sum + 1 + (Array.isArray(children) ? countTree(children) : 0);
+			}, 0);
+		const types = [
+			...new Set(
+				crystal.blocks
+					.map((block) => (block && typeof block === 'object' ? String((block as Record<string, unknown>).type || '') : ''))
+					.filter(Boolean)
+			)
+		];
+		return {
+			name: typeof crystal.name === 'string' ? crystal.name : 'Webpage',
+			siteRoute: typeof crystal.siteRoute === 'string' ? crystal.siteRoute : null,
+			blockCount: countTree(crystal.blocks),
+			types
+		};
+	},
+	render: WebpageKindRenderer
 });
 
 };

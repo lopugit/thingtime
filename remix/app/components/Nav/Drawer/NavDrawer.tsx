@@ -2,7 +2,7 @@ import React from 'react';
 import { Box } from '@chakra-ui/react';
 
 import { DrawerContent } from './DrawerContent';
-import { DRAWER_VIEWPORT_GUTTER, DRAWER_Z, clampDrawerWidth, dispatchDrawerLiveWidth, drawerWidthCss, useDrawer } from './useDrawer';
+import { DRAWER_HOVER_Z, DRAWER_VIEWPORT_GUTTER, DRAWER_Z, clampDrawerWidth, dispatchDrawerLiveWidth, drawerWidthCss, useDrawer } from './useDrawer';
 
 // The pinned drawer panel: flush with the top/bottom/opening edge of the
 // viewport (top 0, bottom 0, left or right 0 per settings.drawer.opens.direction),
@@ -136,13 +136,19 @@ export const NavDrawer = (props: NavDrawerProps) => {
 
 	const resizing = liveWidth !== null;
 
+	// floating editor windows default to layering ABOVE the drawer; while the
+	// pointer is over the drawer it takes the front, and hands it back on leave
+	const [hovered, setHovered] = React.useState(false);
+
 	const closedTransform = direction === 'left' ? 'translateX(-102%)' : 'translateX(102%)';
 
 	return (
 		<Box
 			className="navDrawer"
 			position="fixed"
-			zIndex={DRAWER_Z}
+			zIndex={hovered ? DRAWER_HOVER_Z : DRAWER_Z}
+			onMouseEnter={() => setHovered(true)}
+			onMouseLeave={() => setHovered(false)}
 			top={0}
 			bottom={0}
 			left={direction === 'left' ? 0 : undefined}

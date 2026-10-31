@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Flex, Text } from '@chakra-ui/react';
 
+import { safeCssUrl, safeUrl } from './safeUrl';
 import { timeAgo } from '~/components/Feed/feedTypes';
 
 // Shared primitives + coercion helpers for every kind renderer file.
@@ -71,13 +72,14 @@ export const BodyText = (props: { children: React.ReactNode; lines?: number }) =
 
 export const Avatar = (props: { name: string; src?: string | null; size?: number }) => {
 	const size = props.size ?? 36;
+	const src = safeUrl(props.src);
 
-	if (props.src) {
+	if (src) {
 		return (
 			<Box
 				as="img"
 				alt={props.name}
-				src={props.src}
+				src={src}
 				borderRadius="999px"
 				flexShrink={0}
 				height={`${size}px`}
@@ -112,23 +114,26 @@ export const CoverArea = (props: {
 	height?: string;
 	gradient?: string;
 	children?: React.ReactNode;
-}) => (
+}) => {
+	const imageBg = safeCssUrl(props.image);
+	return (
 	<Box
 		position="relative"
 		height={props.height || '120px'}
-		background={props.image ? undefined : props.gradient || 'linear-gradient(135deg, var(--tt-accent-tint, #fff5fa) 0%, var(--tt-surface-alt, #f5f5f7) 100%)'}
-		backgroundImage={props.image ? `url(${props.image})` : undefined}
+		background={imageBg ? undefined : props.gradient || 'linear-gradient(135deg, var(--tt-accent-tint, #fff5fa) 0%, var(--tt-surface-alt, #f5f5f7) 100%)'}
+		backgroundImage={imageBg}
 		backgroundPosition="center"
 		backgroundSize="cover"
 	>
-		{!props.image ? (
+		{!imageBg ? (
 			<Flex alignItems="center" height="100%" justifyContent="center" fontSize="38px" opacity={0.85}>
 				{props.emoji}
 			</Flex>
 		) : null}
 		{props.children}
 	</Box>
-);
+	);
+};
 
 // ————— small data displays —————
 
