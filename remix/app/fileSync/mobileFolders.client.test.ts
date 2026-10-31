@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	parseMobileFolderResult,
+	supportsNativeSourcePaths,
+	validNativeSourcePath,
 	supportsNativePartPayloadBytes,
 	mobileFolderSource,
 	requestMobileFolders,
@@ -478,4 +480,19 @@ test('only negotiated Mac sources propagate exact accepted payload measurements'
     { sha256: 'a'.repeat(64), ...(known && payloadBytes === 3 ? { payloadBytes: 3 } : {}) });
   }
  }
+});
+
+
+test('Mac source paths remain exact owner-bound metadata, separate from relative IO paths', () => {
+ const sourcePath = '/Volumes/External/Projects/Music library';
+ assert.equal(supportsNativeSourcePaths({ platform: 'macos', fileAccessVersion: '1.15.0' }), true);
+ for (const bridge of [{ platform: 'macos', fileAccessVersion: '1.14.0' }, { platform: 'macos', fileAccessVersion: '2.15.0' }, { platform: 'ios', fileAccessVersion: '1.15.0' }] as const) assert.equal(supportsNativeSourcePaths(bridge), false);
+ assert.equal(parseMobileFolderResult(response({ roots: [{ ...root, sourcePath }] }), expected, { action: 'list' })?.roots[0].sourcePath, sourcePath);
+ assert.equal(parseMobileFolderResult(response({ ownerId: 'other', roots: [{ ...root, sourcePath }] }), expected, { action: 'list' }), null);
+ for (const path of ['relative/folder', '//remote/share', '/a/../b', '/a/./b', '/a//b', '/a\0b']) {
+  assert.equal(validNativeSourcePath(path), false);
+  assert.throws(() => parseMobileFolderResult(response({ roots: [{ ...root, sourcePath: path }] }), expected, { action: 'list' }), /Invalid native/);
+ }
+ assert.throws(() => parseMobileFolderResult(response({ roots: [{ ...root, sourcePath, sourceKind: 'photos', photoAccess: 'full' }] }), expected, { action: 'list' }), /Invalid native/);
+ assert.equal(validNativeSourcePath('/'), true);
 });

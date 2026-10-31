@@ -13,6 +13,23 @@ final class MobileFolderTests: XCTestCase {
         var data: Data?
         return (root, scope, MobileFolderStore(load: { _ in data }, save: { _, next in data = next }))
     }
+    func testSourceLocationIsExactOwnerScopedMetadataAndNeverRelativeAuthority() throws {
+        let (root, owner, store) = try fixture()
+        let selected = root.appendingPathComponent("nested/Music library")
+        try FileManager.default.createDirectory(at: selected, withIntermediateDirectories: true)
+        let grant = try store.add(owner, selected: selected)
+        XCTAssertEqual(grant.name, "Music library")
+        let location = try XCTUnwrap(store.sourcePath(owner, id: grant.id))
+        XCTAssertTrue(location.hasSuffix("/" + root.lastPathComponent + "/nested/Music library"))
+        XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: location)[.systemFileNumber] as? NSNumber,
+                       try FileManager.default.attributesOfItem(atPath: selected.path)[.systemFileNumber] as? NSNumber)
+        let other = try FileSyncOwnerScope(ownerId: "other", url: owner.origin)
+        XCTAssertThrowsError(try store.sourcePath(other, id: grant.id))
+        XCTAssertThrowsError(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: selected.path))
+        XCTAssertThrowsError(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "../sibling"))
+        try FileManager.default.removeItem(at: selected)
+        XCTAssertNil(try store.sourcePath(owner, id: grant.id))
+    }
     func testWriteApprovalIsSeparateBoundedAndClearedByReselection() throws {
         let (root, owner, store) = try fixture(), grant = try store.add(owner, selected: root)
         let scope = MobileSyncStaging.Scope(origin: owner.origin.absoluteString, ownerId: owner.ownerId, dataPlane: "home", rootId: "connection", deviceId: "device")

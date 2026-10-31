@@ -39,6 +39,8 @@ import {
 export type MobileFolder = {
 	id: string;
 	name: string;
+	/** Owner-private location metadata; never pass to relative file operations. */
+	sourcePath?: string;
 	publicationVersion?: string;
 	sourceKind?: 'photos';
 	photoAccess?: 'full' | 'limited' | 'unavailable';
@@ -130,6 +132,12 @@ export type FolderCapabilities = Pick<
 	| 'fileTrashVersion'
 	| 'fileVersionsVersion'
 >;
+/** Display metadata from the exact Mac grant; no parent-directory authority. */
+export const validNativeSourcePath = (value: unknown): value is string =>
+ typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') &&
+ !/[\p{Cc}\p{Cf}]/u.test(value) && (value === '/' || value.split('/').slice(1).every(part => part !== '' && part !== '.' && part !== '..'));
+export const supportsNativeSourcePaths = (bridge: FolderCapabilities | undefined) =>
+ bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 15;
 export const supportsNativeResourceLimits = (bridge: FolderCapabilities | undefined) => /^1\.\d+\.\d+$/.test(bridge?.fileResourceLimitsVersion ?? '');
 export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	(bridge?.platform === 'ios' || bridge?.platform === 'android' || bridge?.platform === 'macos') && /^1\.\d+\.\d+$/.test(bridge.fileUploadVersion ?? '');
@@ -315,6 +323,7 @@ export function parseMobileFolderResult(
 				!r.name ||
 				r.name.length > 1024 ||
 				(r.sourceKind !== undefined && r.sourceKind !== 'photos') ||
+				(r.sourcePath !== undefined && (!validNativeSourcePath(r.sourcePath) || r.sourceKind === 'photos')) ||
 				(r.sourceKind === 'photos'
 					? !['full', 'limited', 'unavailable'].includes(r.photoAccess) || r.publicationVersion !== undefined
 					: r.photoAccess !== undefined) ||
@@ -327,6 +336,7 @@ export function parseMobileFolderResult(
 		roots: payload.roots.map((r: any) => ({
 			id: r.id,
 			name: r.name,
+			...(r.sourcePath !== undefined ? { sourcePath: r.sourcePath } : {}),
 			...(r.publicationVersion !== undefined ? { publicationVersion: r.publicationVersion } : {}),
 			...(r.sourceKind === 'photos' ? { sourceKind: r.sourceKind, photoAccess: r.photoAccess } : {})
 		}))

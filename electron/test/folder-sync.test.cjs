@@ -293,6 +293,36 @@ test('server capability negotiation is anonymous, bounded, origin-bound and proj
     mode = 'bad-version'; assert.deepEqual((await readCapabilities(context, new AbortController().signal)).features, {});
 });
 
+test('native context projects remote sync capability without trusting malformed versions or foreign origins', async () => {
+    const f = fixture();
+    let origin = f.context.apiOrigin, version = '1.0.0';
+    f.context.window.webContents.session = { fetch: async (url, init) => {
+        assert.equal(url, `${f.context.apiOrigin}/.well-known/thingtime-capabilities.json`);
+        assert.equal(init.credentials, 'omit');
+        assert.equal(init.redirect, 'error');
+        return Response.json({ schemaVersion: 1, origin, features: {
+            'api.devices-node-identity': { version: '1.0.0' },
+            'api.devices-sync-control': { version, private: 'excluded' },
+            unrelated: { version: '1.0.0' }
+        } });
+    } };
+    f.host.capabilities = readCapabilities;
+    f.run(async (_method, request) => ({ ...request, roots: [] }));
+    const context = () => f.host.request(f.event, f.input({ action: 'context', origin: undefined }));
+    assert.deepEqual((await context()).apiCapabilities, { schemaVersion: 1, origin, features: {
+        'api.devices-node-identity': { version: '1.0.0' },
+        'api.devices-sync-control': { version: '1.0.0' }
+    } });
+    for (version of [undefined, '1.bad.0', '1.01.0', '1.0.0-beta', '1.0.0+private', 1]) {
+        f.host.invalidate();
+        assert.equal(Object.hasOwn((await context()).apiCapabilities.features, 'api.devices-sync-control'), false);
+    }
+    origin = 'https://other.test'; version = '1.0.0'; f.host.invalidate();
+    const dispatched = f.calls.length;
+    await assert.rejects(context());
+    assert.equal(f.calls.length, dispatched);
+});
+
 test('streamed bytes require final browser-account verification and exact range binding', async () => {
     const f = fixture(), bytes = new Uint8Array(2 * 1024 * 1024),
         input = f.input({ action: 'read-range', rootId: 'root', path: 'file', version: 'v1', offset: 0, length: bytes.length });

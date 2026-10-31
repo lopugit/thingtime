@@ -67,13 +67,11 @@ always through `getThingsCollection()` / `getHomeThingsCollection()`, never a
 raw name). Folders are `folder` Things; containment is the child's `folderId`
 pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 
-Known account read refusals invalidate retained export closures through
-`local-workspace/accountReadRevocation.ts`. `accountExport.ts` supplies an
-in-process availability fence used by the canonical transfer browser/archive
-helpers before returning bytes. `AccountFileSync.assertFileReadable` shares the
-live file metadata check with byte reads. Regressions: `accountReadRefusal.test.ts`,
-`accountExport.test.ts`, `accountFileExport.test.ts`, and opt-in
-`accountExportRefusal.browser.test.ts` (existing local file-export fixture env).
+Private `file-sync` configurations can be managed from any signed-in browser.
+The device sync screen keeps saved connection editing available offline and
+uses a protected, leased control channel for live device operations. Native
+grants and transfer journals stay on the target device. See
+[browser device sync](../browser-device-sync.md) for code paths and checks.
 
 ## Where the code lives
 
@@ -657,48 +655,21 @@ visible folders on scoped local changes. `accountDelete.test.ts` and its browser
 counterpart cover failure/retry, scope and real offline UI behavior. Protected
 kinds retain their dedicated adapters; see the outstanding acceptance matrix.
 
-
-`utils/thingTransfer/importContent.ts` contains the shared account import ordering
-and independent-copy crystal preparation. `importTransfer.ts` reuses it on the
-server; `LocalThings.import` uses it for account copies and calls the existing
-mutation hook in the same transaction. `accountApi.client.ts` routes ordinary
-JSON imports into that queue, with managed/file imports retaining their dedicated
-adapters. `accountImport.test.ts` covers rollback, frozen retries and references;
-`accountImport.browser.test.ts` covers the normal dialog offline and a real server
-export/import round-trip. Offline account export completeness remains a separate gate.
+Coverage is the user's accessible owner library plus viewable direct ancestors.
+Other accounts' reverse references, arbitrary text, unknown reference kinds and
+private managed content excluded by the ordinary library API are not covered.
+Incomplete scan/traversal status remains explicit. No new API contract or
+background indexing service is introduced. Unfiled files independently loads
+one page at a time and requires Load more for each subsequent page.
 
 
-Account Download uses `local-workspace/accountExport.ts` and the shared
-`exportLocalThingSnapshot` collector. `AccountThingSync.exportSnapshot` captures
-content and queue/tombstones together. Complete canonical online plans supply
-scoped export-only dependency snapshots; partial library pages never establish
-completeness. The existing account transport now also serves export preparation
-with actor/data-plane headers and capability negotiation. `accountExport.test.ts`
-covers missing coverage, stale copies, pending edits, alias ownership, quota,
-cancellation and identity fencing. `accountImport.browser.test.ts` exercises
-real offline normal-dialog downloads and round-trips the downloaded file.
-Saved standalone account files and locally held linked-gallery metadata now participate in this collector (see the file-transfer checkpoint below). URL metadata remains an external reference; managed kinds outside these dedicated adapters retain their existing export contracts.
-
-
-Account catalogue discovery uses `accountThingTransport.browse` and bounded
-`AccountThingSync.rememberMany` to retain only owned Component/Schema definitions.
-Online projections retain shared entries without giving them local ownership.
-`useWorkspaceRefresh` coalesces scope-only invalidations for device catalogues
-and Component detail; family rosters clear before re-reading. See the
-[account catalogue checkpoint](../local-workspaces.md#account-catalogue-discovery-and-cross-tab-refresh--2026-10-16).
-
-
-Anonymous bundled Component bookmarks/reactions use `LocalInteractions` with an
-exact code-shipped resolver supplied by `anonymousApi`. Only relational children
-are stored; bundled targets remain read-only and outside Mine/ordinary export.
-`browseLocalDefinitions` includes bookmarked bundled entries and sorts Library by
-save time without changing projected definition timestamps. Existing scoped
-refresh handles changes from other tabs. Account interaction sync remains a
-separate gate; see the [bundled Library checkpoint](../local-workspaces.md#anonymous-bundled-bookmarks-and-reactions--2026-10-16).
-
-
-Account ordinary exports now include new or retained standalone device files via
-`AccountFileSync.library/readFile`, with canonical media rewriting and immutable
-scoped readers. `accountFileExport.test.ts` covers repeat export, aliases, bytes,
-deletions and scope; its production-client browser fixture covers normal Download
-and anonymous round-trip Import. See [remaining file-transfer work](../local-workspaces.md#account-file-transfer-exports--2026-10-17).
+Mac folder-grant location metadata uses `MacFolderSync` `fileAccessVersion`
+1.15.0 and `MobileFolderStore.sourcePath`. The owner-verified native response
+adds optional `roots[].sourcePath`, preserving the exact selected absolute POSIX
+location without granting ancestor access. `mobileFolders.client` validates it
+separately from root-relative file paths and exposes `supportsNativeSourcePaths`.
+Stale/unavailable bookmarks and Photos omit it. `MobileFolderTests` and
+`MacFolderSyncTests` cover owner isolation and continued rejection of absolute
+paths by file operations; `mobileFolders.client.test.ts` covers negotiation,
+correlation and malformed location metadata. This field does not change signed
+sync policy, existing cloud destination identities, or public manifests.

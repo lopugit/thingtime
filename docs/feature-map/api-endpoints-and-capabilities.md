@@ -1,13 +1,21 @@
 # API endpoints and capabilities
 
-Conditional file sync prerequisites reuse `attachmentStore.annotateOwnedAttachment`
-and `managedPlacement.moveManagedContent`. Annotation 1.2.0 accepts optional
-`expectedUpdatedAt` and returns the committed timestamp; bulk 1.6.0 accepts it
-only for single-item moves and reports stale per-item status 409. Both manifests
-must carry these versions. `accountTransport.client.ts` negotiates them;
-`accountFiles.browser.test.ts` covers real concurrent edits, moves, private bytes
-and canonical attachment cleanup. The durable local metadata queue now consumes these contracts; deletion
-reconciliation and ordinary account file UI wiring remain pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+`api.devices-sync-control` 1.1.0 adds `/api/v1/devices/sync-control` for the
+account browser and installed sync worker. `deviceSyncControl.ts` authenticates
+the owner and current device pairing, delivers an immutable request once, and
+accepts a result only from its claiming lease. Protected `device-sync-control`
+Things reuse the device queue/unique-key indexes, secure BinData payloads and
+shared control TTL; no new collection or index is introduced. File bytes and
+native grants remain on the device. Optional owner-private `roots[].sourcePath`
+location metadata survives the encrypted status result; it grants no ancestor
+access and never appears in a public manifest. Run `test:devices`, `test:api-capabilities`
+and `test:schemas`; see [browser device sync](../browser-device-sync.md).
+
+Mobile device descriptors use `app/devices/platform.ts` across validation,
+projection, schemas and client types. `api.devices` 1.10.0 and
+`api.devices-pairing-claim` 1.1.0 add iOS/Android to the existing signed pairing
+protocol. Run `test:devices`, `test:schemas` and `test:api-capabilities`.
+See [mobile sync acceptance](../mobile-file-sync.md) for pending native clients.
 
 `api.things-interactions` 1.0.0 adds the first-party private GET/POST
 `/api/v1/things/interactions` capability: bounded membership snapshots and
@@ -570,32 +578,6 @@ the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
 
-## Mapbox provider integration
-
-`POST /api/v1/maps` negotiates `api.maps` 1.0.0. `api/utils/maps/route.ts`
-uses full-account authorization, owner-scoped Vault references and operation
-rate limits; `mapbox.ts` fixes provider destinations and redacts responses.
-Register `_maps.tsx` in Nitro and the canonical docs registry. Run `test:maps`
-and `test:api-capabilities`; see [maps](../maps.md) for provider storage constraints.
-The saved Builder `tt-mapbox` viewport loads the official `mapbox-gl` npm
-distribution JavaScript and CSS staged as Vite's same-origin public assets
-(`components/Builder/Maps/mapboxSdk.ts`).
-The application CSP permits only the Mapbox service and events origins in
-`connect-src`, with its existing `blob:` worker allowance; it does not permit a
-remote Mapbox script or eval. The separate Library SDK demo keeps its own
-opaque-origin policy and CDN loader.
-
-## Storage readiness and recovery
-
-`api.storage-accounting` 1.0.0 publishes shared deferred-accounting semantics
-from the canonical shared-feature registry to both manifests.
-`api.health-nitro` 1.3.0 adds honest recovering state and source-stamp checks;
-`api.lopu-recordings-run` 1.6.0 adds aggregate storageRecovery outcomes on the
-existing protected scheduler. Both manifests derive versions from apiDocs.ts.
-The dispatcher records allowlisted storage failure codes without logging response
-bodies. See [storage recovery](../storage-recovery.md) for transactional queue,
-worker, controller gates and the scheduled production monitor.
-
 ## Environment gateway and index readiness
 
 The negotiated ingress contract and connection-mode policy are summarized at the
@@ -613,15 +595,3 @@ Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
 the built `test:environment-gateway:acceptance` runner. See
 [the gateway runbook](../environment-api-gateway.md) for server settings,
 environment partitioning and outstanding live rollout acceptance.
-
-
-Owned theme/algorithm pagination uses the existing GET routes, shared
-`api/utils/ownedListPage.ts`, and `hooks/ownedListClient.ts`. Negotiate themes
-1.3.0 / algorithms 1.2.0; follow non-null cursors even after empty pages. Live
-pages do not authorize deletion. Canonical creation removes the old count
-ceilings while retaining byte quotas; sync 1.8.0 / 1.6.0 and things-import
-1.14.0 publish that change. Theme focus-token History uses optional v2 snapshots
-under timeline 1.23.0, preserving the frozen v1 reader. Run
-`test:owned-profiles`, `test:theme-sync`, `test:local-workspace`,
-`test:api-capabilities`, then built `test:environment-gateway:acceptance` in
-its disposable replica-set sandbox. See the local-workspace capacity checkpoint.

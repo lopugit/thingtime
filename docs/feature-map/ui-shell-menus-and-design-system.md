@@ -4,6 +4,12 @@ The web app is Vite + React Router (non-framework mode) + Nitro; `entry.client.t
 mounts with `createRoot`. Chakra UI primitives are wrapped by Thingtime's own
 components; reuse them instead of adding parallel versions.
 
+Device sync management is available to the signed-in device owner in browsers
+through `DeviceSyncPanel` and `RemoteDeviceSync`, independently of local pairing.
+The installed app retains direct controls for its own device. Remote controls use
+editable settings blocks and the existing configuration form; see
+[browser device sync](../browser-device-sync.md) and its browser/installed checks.
+
 ## Where the code lives
 
 | Concern | Path |

@@ -107,6 +107,30 @@ test('a failed durable write prevents every network request; pinned destinations
  const changed = structuredClone(run); changed.cloudWrites[0].folderId = 'other-folder';
  await assert.rejects(journal.persist(changed), /cannot change/); journal.close();
 });
+test('403 policy diagnostics identify upload approval without exposing response data or automatically retrying', async () => {
+ const f = await fixture();
+ for (const [value, diagnostic] of [
+  [{ ok: false, code: 'private_uploads_not_approved', error: 'private-account-details' }, 'private_uploads_not_approved'],
+  [{ ok: false, code: 'public_uploads_not_approved' }, 'public_uploads_not_approved'],
+  [{ ok: false, error: 'Cross-origin attachment requests are not allowed' }, 'attachment_origin_refused'],
+  [{ ok: false, error: 'Use the same Thingtime origin.' }, 'desktop_origin_refused'],
+  [{ ok: false, error: 'Attachments require a user account' }, 'user_account_required'],
+  [{ ok: false, error: 'Apple Watch credentials can only start post-purpose uploads' }, 'credential_purpose_refused'],
+  [{ ok: false, code: 'secret-code', error: 'private-account-details' }, 'forbidden_unknown'],
+  [{ ok: false, code: 'private_uploads_not_approved', oversized: 'x'.repeat(4096) }, 'forbidden_unknown'],
+  [{ ok: true, code: 'private_uploads_not_approved' }, 'forbidden_unknown']
+ ] as const) {
+  f.runtime.fetch = async () => Response.json(value, { status: 403 });
+  await assert.rejects(cloudRequests(f.runtime, scope).json('/api/v1/attachments/uploads?private-id=never-retain', {}), error => {
+   assert.ok(error instanceof Error); assert.equal(error instanceof SyncConnectionWait, false);
+   assert.match(error.message, new RegExp(`403; upload-start; ${diagnostic}`));
+   assert.doesNotMatch(error.message, /secret-code|private-account-details|private-id|never-retain/); return true;
+  });
+ }
+ const controller = new AbortController();
+ f.runtime.fetch = async () => { controller.abort(); return Response.json({ ok: false, code: 'private_uploads_not_approved' }, { status: 403 }); };
+ await assert.rejects(cloudRequests(f.runtime, scope, controller.signal).json('/api/v1/attachments/uploads', {}), error => (error as Error).name === 'AbortError');
+});
 test('completed upload is reused after interruption before file publication', async () => {
  const f = await fixture(), run = f.make(); let fail = true;
  f.hook((path, body) => { if (path === '/api/v1/files' && body && fail) { fail = false; throw Error('before commit'); } return null; });

@@ -5,6 +5,7 @@
 !install.mjs
 !runtime.cjs
 !application.cjs
+!renderer-server.cjs
 !browser-driver.cjs
 !prepare-native.cjs
 !app/

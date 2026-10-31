@@ -1,13 +1,16 @@
 # Attachments and media
 
-Conditional file sync prerequisites reuse `attachmentStore.annotateOwnedAttachment`
-and `managedPlacement.moveManagedContent`. Annotation 1.2.0 accepts optional
-`expectedUpdatedAt` and returns the committed timestamp; bulk 1.6.0 accepts it
-only for single-item moves and reports stale per-item status 409. Both manifests
-must carry these versions. `accountTransport.client.ts` negotiates them;
-`accountFiles.browser.test.ts` covers real concurrent edits, moves, private bytes
-and canonical attachment cleanup. Durable metadata reconciliation now lives in `accountFileMetadata.ts`;
-completed-file deletion now uses the durable queue described below; ordinary standalone file UI now uses the adapter below; existing owned-file byte retention now uses the checkpoint below; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+Cloud sync HTTP 403 diagnostics retain only the operation and a closed policy
+reason (upload approval, origin, account or credential-purpose refusal).
+`cloudTransport.test.ts` verifies redaction and terminal refusal behavior; a
+refusal never bypasses the ordinary attachment upload-approval gate.
+
+Cloud JSON sync requests classify HTTP 408/429/5xx as temporary transport waits.
+`syncJobJournal.ts` persists an optional, revision-guarded `retryAt`; automatic
+discovery respects it across restart and repeated wake events. Retry-After is
+bounded to 30 seconds through five minutes. The next attempt retains its
+operation ID and checks receipts before publishing; explicit Retry can clear
+the delay, while Stop, authority and integrity failures retain their safeguards.
 
 Local post/comment linked galleries and normal Attach-by-URL selections now use
 `local-workspace/attachments.ts` metadata markers and the ordinary importer,

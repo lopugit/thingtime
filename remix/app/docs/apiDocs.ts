@@ -53,6 +53,621 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint'>): ApiEndpointDoc => 
   docsEndpoint: `${doc.endpoint}-docs`
 });
 
+const deviceEndpointDocs: ApiEndpointDoc[] = [
+	endpoint({
+		id: 'devices',
+		contractVersion: '1.13.0',
+		featureVersion: '1.13.0',
+		group: 'devices',
+		title: 'Paired devices',
+		endpoint: '/api/v1/devices',
+		summary: 'Lists safe paired-device summaries or one detailed device mirror, including iOS and Android.',
+		detail:
+			'Version 1.13 adds iOS and Android platform summaries; platform labels grant no capabilities. Version 1.12 adds optional iconDataUrl (64px PNG thumbnail) and iconSource (menu-bar or application fallback) on each menu item. Returns protected dedicated projections for the caller’s computers and Apple Watches. Watch summaries include bounded last-sync health, the number of Things created by that Watch, and up to ten recent created Things. Version 1.11 preserves up to 128 device capability identifiers in owner projections. Version 1.10 includes optional owner-only state.menuBar inventory: status, collection time, permission coverage, items, owning app/executable paths, PID, bundle ID, geometry, resident memory bytes and cumulative process CPU seconds. Memory and CPU belong to the whole process, not an individual icon. Generic /things never exposes protected device state or credentials. Responses are private/no-store.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+		methods: ['GET'],
+		steps: ['GET to list devices.', 'Pass id to retrieve one device detail.'],
+		requestExamples: [{ name: 'One device', description: 'Load one safe device projection.', method: 'GET', query: { id: 'device-id' } }],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Device mirror.',
+				body: { ok: true, devices: [{ id: 'device-id', name: 'MacBook Pro', online: true, locked: false, connectors: [] }] }
+			}
+		]
+	}),
+	endpoint({
+		id: 'watch-pairing',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
+		group: 'devices',
+		title: 'Pair Apple Watch directly',
+		endpoint: '/api/v1/watch/pairing',
+		summary: 'Starts, approves, inspects, and claims a short-lived direct Apple Watch pairing.',
+		detail:
+			'The Watch starts with optional codeFormat numeric-4 (legacy default: eight characters) and optional targetUsername. Four-digit PINs are uniquely reserved for five minutes. A separate high-entropy approvalToken lets the paired phone offer the request to its signed-in account WITHOUT approving it. GET op=pending lists only that account’s requests, with the PIN prefilled for explicit approval in any same-origin session. Username targets never grant access by themselves. Secret values are stored only as domain-separated hashes; offered human codes are retained for owner-only display. Claim requires the separate Watch-held device secret and credential. Polling allows 60/minute per IP. Lookup allows five/account and ten/IP per five minutes; start/offer/approve have separate ceilings and username targets accept five requests per five minutes. The short /pair/:code page supports manual approval; old full links remain valid.',
+		auth: { mode: 'none', description: 'Start/inspect/claim are code-bound and fail-closed rate limited. Pending requires a full user session. Lookup/offer/approve also require same-origin. Offered requests are bound to their recipient account.' },
+		methods: ['GET', 'POST'],
+		steps: [
+			'POST { op: "start", device, codeFormat: "numeric-4", targetUsername? } from the Watch.',
+			'Optionally relay pairingId, userCode and approvalToken to the paired phone; its signed-in session POSTs op: "offer". Never relay deviceCode or credential.',
+			'Any signed-in session can GET ?op=pending, show the Watch/account/code, and explicitly approve. No automatic approval occurs.',
+			'On a phone or computer open verificationEntryPath, sign in, and POST { op: "lookup", userCode } to retrieve the pairingId and safe device details.',
+			'Open verificationPath on a signed-in browser and POST { op: "approve", pairingId, userCode }.',
+			'Poll POST { op: "claim", pairingId, deviceCode, credential } until approved, then store the credential in Watch Keychain.'
+		],
+		requestExamples: [
+			{ name: 'Find a Watch by code', description: 'Authenticated, rate-limited lookup; never returns a device credential or device code.', method: 'POST', body: { op: 'lookup', userCode: '1234' } },
+			{ name: 'Pending Watch approvals', description: 'At most five unexpired, unapproved requests addressed to the current account.', method: 'GET', query: { op: 'pending' } },
+			{ name: 'Offer from paired phone', description: 'Attach to this account without approving.', method: 'POST', body: { op: 'offer', pairingId: 'pairing-jti', userCode: '1234', approvalToken: 'ttapprove_…' } },
+			{
+				name: 'Start Watch pairing',
+				description: 'Create a five-minute direct pairing request.',
+				method: 'POST',
+				body: { op: 'start', codeFormat: 'numeric-4', device: { name: 'Lopu’s Apple Watch', platform: 'watchos', model: 'Watch', osVersion: 'watchOS 26', appVersion: '24' } }
+			},
+			{
+				name: 'Claim approved Watch',
+				description: 'The secret values are generated and retained by the Watch.',
+				method: 'POST',
+				body: { op: 'claim', pairingId: 'pairing-jti', deviceCode: 'ttwatch_…', credential: 'ttnode_…' }
+			}
+		],
+		responseExamples: [
+			{
+				status: 201,
+				description: 'Pairing started.',
+				body: { ok: true, pairing: { pairingId: 'pairing-jti', userCode: '1234', deviceCode: 'ttwatch_…', approvalToken: 'ttapprove_…', verificationEntryPath: '/watch/pair', verificationPath: '/watch/pair?pairing=…&code=1234', expiresAt: '2026-09-05T01:00:00.000Z' } }
+			},
+			{ status: 428, description: 'Awaiting user approval.', body: { ok: false, code: 'authorization_pending', error: 'Approve this Watch in Thingtime first' } }
+		]
+	}),
+	endpoint({
+		id: 'watch-sync',
+		featureVersion: '1.1.0', contractVersion: '1.1.0',
+		group: 'devices',
+		title: 'Sync Apple Watch directly',
+		endpoint: '/api/v1/watch/sync',
+		summary: 'Refreshes account identity and notifications directly from a paired Apple Watch.',
+		detail:
+			'Returns the paired account username, display name, avatar URL, paginated notifications, unread count, server time, and Watch device id. A successful call stamps live last-seen, last-sync, status, battery, and low-power health on the server-visible device.',
+		auth: { mode: 'session-or-bearer', description: 'Requires the paired Watch ttnode_ Bearer credential and watch.notifications.read capability.' },
+		methods: ['POST'],
+		steps: ['POST current battery and low-power state.', 'Render cached data immediately and reconcile with the response.', 'Use op mark-read for bounded ids or all notifications.'],
+		requestExamples: [{ name: 'Refresh Watch', description: 'Fetch the newest notifications and account identity.', method: 'POST', body: { limit: 25, batteryLevel: 0.72, lowPowerMode: false } }],
+		responseExamples: [{ status: 200, description: 'Watch is healthy and current.', body: { ok: true, account: { username: 'lopu', displayName: 'Lopu', avatarUrl: '/api/v1/attachments/content?id=…' }, device: { id: 'watch-device-id' }, notifications: [], unreadCount: 0, serverTime: '2026-09-05T01:00:00.000Z' } }]
+	}),
+	endpoint({
+		id: 'watch-things',
+		featureVersion: '1.1.0', contractVersion: '1.1.0',
+		group: 'devices',
+		title: 'Create a private Thing from Apple Watch',
+		endpoint: '/api/v1/watch/things',
+		summary: 'Binds completed Watch uploads into a private Thing with server-owned device provenance.',
+		detail:
+			'Accepts one to ten completed post-purpose attachment ids belonging to the paired account, or stable upload request ids that the server resolves for retry recovery. Thingtime creates a private top-level post, atomically binds the attachments, and stamps sourceDeviceId from the authenticated Watch session; clients cannot forge another device id. HTTP 409 with code watch_upload_restart_required proves the owned unbound drafts are expired, deleted or being cleaned up; a Watch retaining the original bytes may persist a new upload request id and retry once. Other conflicts must not rotate ids or clear authentication.',
+		auth: { mode: 'session-or-bearer', description: 'Requires the paired Watch ttnode_ Bearer credential and watch.things.create capability.' },
+		methods: ['POST'],
+		steps: ['Complete direct multipart uploads with the same Watch credential.', 'POST their attachmentIds with a stable shareId.', 'After an ambiguous completion, retry with requestIds so Thingtime resolves the completed upload without duplicating it.'],
+		requestExamples: [{ name: 'Create recording Thing', description: 'Bind one completed Watch recording.', method: 'POST', body: { shareId: 'watch-upload-uuid', attachmentIds: ['attachment-id'], filenames: ['Recording.m4a'] } }],
+		responseExamples: [{ status: 201, description: 'Private Thing created.', body: { ok: true, post: { id: 'thing-id', attachments: [{ id: 'attachment-id', name: 'Recording.m4a' }] } } }]
+	}),
+	endpoint({
+		id: 'devices-permissions',
+		group: 'devices',
+		title: 'Device permission mode',
+		endpoint: '/api/v1/devices/permissions',
+		summary: 'Sets the current account’s execution preference for one paired computer.',
+		detail:
+			'Each account/device connection defaults to always-allow, so supported actions run without a repeated Thingtime approval prompt. ask-every-time retains the existing one-command approval flow; deny rejects new remote actions. Pairing, freshness, capability, locked-session and macOS privacy checks remain enforced in every mode.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+		methods: ['POST'],
+		steps: ['Choose a paired device.', 'Set its per-account execution mode.', 'Future commands follow the new preference.'],
+		requestExamples: [
+			{
+				name: 'Ask every time',
+				description: 'Require a prompt before each future command.',
+				method: 'POST',
+				body: { deviceId: 'device-id', mode: 'ask-every-time' }
+			}
+		],
+		responseExamples: [{ status: 200, description: 'Preference saved.', body: { ok: true, deviceId: 'device-id', mode: 'ask-every-time' } }]
+	}),
+	endpoint({
+		id: 'devices-pairing',
+		featureVersion: '1.1.0',
+		contractVersion: '1.1.0',
+		group: 'devices',
+		title: 'Create device pairing challenge',
+		endpoint: '/api/v1/devices/pairing',
+		summary: 'Creates one strong, short-lived, single-use pairing challenge.',
+		detail:
+			'Returns the only copy of a 256-bit pairing secret. Thingtime stores only its domain-separated SHA-256 hash in a TTL-reaped scoped session. Version 1.1.0 adds ownerId so clients discard a challenge if the signed-in account changed while creating it. Responses are private and no-store. Transfer secrets only to your intended computer; never persist them in browser storage, URLs or logs.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session; fail-closed rate limited.' },
+		methods: ['POST'],
+		steps: ['Create a challenge.', 'Transfer the secret to the local node over the QR/deep-link pairing channel.'],
+		requestExamples: [{ name: 'Pair computer', description: 'Create one challenge.', method: 'POST' }],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Challenge created.',
+				body: { ok: true, ownerId: 'user-id', pairing: { pairingId: 'pair-id', pairingSecret: 'ttpair_…', expiresAt: '2026-08-18T01:00:00.000Z' } }
+			}
+		]
+	}),
+	endpoint({
+		id: 'devices-pairing-claim',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
+		group: 'devices',
+		title: 'Claim device pairing',
+		endpoint: '/api/v1/devices/pairing/claim',
+		summary: 'Atomically pairs one node with a locally generated opaque credential.',
+		detail:
+			'Accepts macos, windows, linux, watchos, ios and android descriptors. The node generates a ttnode_ credential with at least 256 random bits and retains it in Keychain or an equivalent OS vault. Thingtime stores only its hash. The existing prepare/complete Ed25519 proof binds both nonces, descriptor and capabilities. Device creation, quota admission, credential session creation and challenge consumption commit together. Exact retries recover; changed retries return 409. Version 1.2 also preserves up to 128 capability identifiers, each normalized to at most 100 characters.',
+		auth: { mode: 'none', description: 'One-time pairing secret in the JSON body; fail-closed IP rate limit.' },
+		methods: ['POST'],
+		steps: [
+			'Generate and persist the node credential locally.',
+			'POST op=prepare with the pairing secret, Ed25519 public key and client nonce; persist the returned server proof.',
+			'POST op=complete with the challenge, credential, descriptor, capabilities and signed proof; recover uncertain responses with exactly the same body.',
+			'Use the credential only as Bearer auth on node routes.'
+		],
+		requestExamples: [
+			{
+				name: 'Claim',
+				description: 'Pair a macOS node.',
+				method: 'POST',
+				body: {
+					op: 'complete',
+					pairingSecret: 'ttpair_…',
+					credential: 'ttnode_…',
+					device: { name: 'MacBook Pro', platform: 'macos', model: 'MacBookPro', osVersion: '15.6', appVersion: '1.0' },
+					capabilities: ['session.read', 'session.send'],
+					proof: { pairingId: 'pair-id', publicKey: '<base64url-32-bytes>', nonce: '<base64url-32-bytes>', serverNonce: '<base64url-32-bytes>', signature: '<base64url-64-bytes>' }
+				}
+			}
+		],
+		responseExamples: [
+			{ status: 200, description: 'Paired.', body: { ok: true, device: { id: 'device-id', name: 'MacBook Pro' }, credentialStored: true } },
+			{
+				status: 409,
+				description: 'Challenge was claimed with different content.',
+				body: { ok: false, error: 'This pairing challenge was already claimed with different device data' }
+			}
+		]
+	}),
+	endpoint({
+        id: 'devices-disconnect', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'devices',
+        title: 'Disconnect a paired device', endpoint: '/api/v1/devices/disconnect',
+        summary: 'Revoke the device credentials owned by the current account.',
+        detail: 'The exact deviceId must belong to the authenticated full account. All live device sessions for that owner/device are revoked in the home identity plane. Repeated calls are safe; unrelated devices and browser sessions remain active. Device history, sync configurations and local/cloud files are retained. Native hosts must pair again; replaying the old completed claim cannot reactivate a revoked credential. This does not recall work already authorized before revocation.',
+        auth: { mode: 'session-or-bearer', description: 'Full signed-in user session; scoped device, app and PAT credentials are refused.' },
+        methods: ['POST'], steps: ['Choose one of your paired devices.', 'Disconnect its account access.'],
+        requestExamples: [{ name: 'Disconnect', description: 'Revoke one owned connection.', method: 'POST', body: { deviceId: 'device-id' } }],
+        responseExamples: [{ status: 200, description: 'Disconnected; files and history retained.', body: { ok: true, deviceId: 'device-id', disconnected: true } }]
+    }),
+	endpoint({
+		id: 'devices-node-identity', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'devices',
+		title: 'Read paired device identity', endpoint: '/api/v1/devices/node/identity',
+		summary: 'Returns only the owner and device fixed by a live device credential.',
+		detail: 'Native hosts use this private, uncached read before local folder access. The scoped ttnode_ credential must remain valid and its owned device must exist. Query/body IDs cannot select another identity. It grants no file access and exposes no session or credential fields.',
+		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only; ordinary browser sessions cannot read it.' },
+		methods: ['GET'], steps: ['Resolve the native credential at the configured origin.', 'Compare both IDs before using a native folder grant.'],
+		requestExamples: [{ name: 'Identity', description: 'Read this paired identity.', method: 'GET', headers: { Authorization: 'Bearer ttnode_…' } }],
+		responseExamples: [{ description: 'Paired identity', status: 200, body: { ok: true, ownerId: 'owner-id', deviceId: 'device-id' } }]
+	}),
+	endpoint({
+		id: 'devices-node-state',
+    featureVersion: '1.13.0',
+		contractVersion: '1.13.0',
+		group: 'devices',
+		title: 'Publish device state',
+		endpoint: '/api/v1/devices/node/state',
+		summary: 'Applies one quota-accounted, monotonic state and connector snapshot.',
+		detail:
+			'Version 1.13 adds optional 64px PNG menu-item thumbnails with explicit menu-bar/application provenance. Remote image URLs and SVG are rejected; old nodes may omit both fields. Optional capabilities replaces the paired device capability list atomically with a newer state revision. Version 1.12 accepts up to 128 identifiers, preserving fully equipped Macs that exceed the former 64-entry limit. Omission preserves older node capabilities; the full snapshot hash includes supplied capabilities. ' +
+			'The credential fixes owner and device; request ids cannot override either. Equal revision/equal hash is a no-op, equal revision/different hash is 409, and older revisions are ignored. Version 1.11 adds optional menuBar telemetry with owning application/executable paths only; arbitrary process arguments and window titles remain forbidden. A locked inventory must be empty. Omission supports older nodes; unsupported origins receive no menuBar field. Version 1.10 accepts optional, bounded read-only battery measurements: charge cycles, design cycles, capacities in mAh, signed battery current in mA, voltage in mV, temperature in Celsius, time estimates in minutes, and attached adapter rated watts, voltage and current. Missing measurements are null; battery serial numbers and raw registry dictionaries are never accepted.',
+		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
+		methods: ['POST'],
+		steps: [
+			'Increment the durable local revision.',
+			'Send the complete bounded state and connector snapshot.',
+			'Retry the exact body until acknowledged.'
+		],
+		requestExamples: [
+			{
+				name: 'Snapshot',
+				description: 'Publish device state.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: {
+					revision: 42,
+					state: {
+						locked: false,
+						volume: 0.5,
+						brightness: 0.8,
+						battery: { level: 0.82, charging: true, isExternalPower: true, isPreventingIdleSleep: false, isLowPowerModeEnabled: false, cycleCount: 280, designCapacityMAh: 6200, fullChargeCapacityMAh: 5300, currentMA: 1200, voltageMV: 12000, adapterWatts: 100 },
+						powerTimers: { displayIdleMinutes: 10, systemSleepMinutes: 30, diskIdleMinutes: 0 },
+						appleMusic: { isInstalled: true, isRunning: false },
+						spotify: { isInstalled: true, isRunning: false },
+						chromeYouTube: { isInstalled: true, isRunning: false },
+						displays: [{ id: 42, width: 1728, height: 1117, isMain: true, isBuiltIn: true, brightness: 0.8, brightnessControlSupported: true, currentMode: { id: '1728x1117@60000:0', width: 1728, height: 1117, refreshRate: 60 }, availableModes: [], originX: 0, originY: 0, mirroredDisplayId: null, hdrActive: false }],
+						openApps: [{ id: 'com.openai.chat', name: 'ChatGPT', frontmost: true }]
+					},
+					connectors: [
+						{ id: 'chatgpt-desktop', kind: 'chatgpt', label: 'ChatGPT', status: 'connected', capabilities: ['session.read', 'session.send'] }
+					]
+				}
+			}
+		],
+		responseExamples: [{ status: 200, description: 'Applied or exactly replayed.', body: { ok: true, revision: 42, applied: true, stale: false } }]
+	}),
+	endpoint({
+    id: 'devices-sync-control', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'devices',
+    title: 'Device folder sync control', endpoint: '/api/v1/devices/sync-control',
+    summary: 'Manage an owned device’s installed folder sync jobs from a logged-in browser.',
+    detail: 'Home-storage full-user control channel. Enqueue immutable requestId and allowlisted command; poll atomically claims once and returns a leaseId required for completion. GET reads only the exact owner/device/request. Requests stop accepting execution and replies after two minutes, and private operation identities remain for ten minutes to reject delayed replays. Pending work applies backpressure. Transport envelopes are bounded to 64 KiB per command and 2 MiB per result; file bytes never traverse this channel. The installed app rechecks the local account/device and retains native folder approval, jobs, file transfers and conflict journals. A paired, unrevoked device is required for every operation. Version 1.1.0 adds optional owner-private roots[].sourcePath absolute POSIX location metadata in status and folder responses when the native Mac fileAccessVersion is at least 1.15.0. Missing paths require explicit destination selection; paths grant no ancestor access and are never relative file-operation inputs. All responses are private/no-store.',
+    auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session; home storage only.' }, methods: ['GET', 'POST'],
+    steps: ['Keep the installed app running on the selected device.', 'Enqueue a status, folder-management, start, pause or review command.', 'Read its result with the same deviceId and requestId.'],
+    requestExamples: [{ name: 'Read device sync state', description: 'Ask the installed app for its current folders, jobs and transfer progress.', method: 'POST', body: { action: 'enqueue', deviceId: 'device-id', requestId: 'status-1', command: { action: 'status' } } }],
+    responseExamples: [{ status: 200, description: 'The request is queued for the installed app.', body: { ok: true, status: 'pending' } }]
+  }),
+  endpoint({
+		id: 'devices-commands',
+    featureVersion: '1.10.0',
+		contractVersion: '1.10.0',
+		group: 'devices',
+		title: 'Device commands',
+		endpoint: '/api/v1/devices/commands',
+		summary: 'Lists or creates idempotent, typed commands for one device.',
+		detail:
+			'script.run requires script.bash.v1, a Bash script of at most 16384 UTF-8 bytes and integer timeoutSeconds from 1 to 30. Every run requires fresh approval displaying the exact script; it runs with the Mac user access, not in a security sandbox. Output is capped at 16384 raw bytes (truncated is explicit); stdout, stderr, exitCode, signal and timedOut are returned by the exact owner/device/command GET for ten minutes. Recipes can be saved as Actions and composed with an explicit Thing write. Request bodies are capped at 128 KiB. ' +
+			'The filesystem command requires filesystem.v1 and carries a closed operation: list, read, write, mkdir, copy, move or trash. Paths are home-relative, with no symlink traversal or overwrite. Reads and source mutations require an inode version; files are limited to 32 MiB and chunks to 65536 bytes. Writes bind a UUID, destination, total size and SHA-256, and become visible only after final verification. GET with deviceId and commandId returns a private, owner-scoped result for ten minutes; histories and events omit file bytes, and terminal filesystem commands expire after ten minutes. Directory listings are paginated with cursor and hidden options. ' +
+      'Unknown kinds and input fields are rejected. The typed vocabulary covers controlled apps; audio routing, mute, and levels; Wi-Fi; persistent per-display mode, layout, and mirroring controls; printer, camera, Bluetooth-device, VPN, and power controls; fixed Apple Music and Spotify playback and app-volume changes; fixed active-tab Chrome YouTube/YouTube Music volume; strict screen-relative pointer movement/click/scroll; bounded text entry; allowlisted keyboard shortcuts; lifecycle actions; and screen-session metadata. Every remote input command always needs a fresh approval and the node must have macOS Accessibility permission. Text is not exposed as a key log, and these input commands do not request clipboard, scripts, event taps, Input Monitoring, Full Disk Access, or root access. The separate script.run command has its own approval contract. Every media volume action accepts only level: 0..1 and always needs a fresh approval plus macOS Automation consent. Chrome additionally requires the user-enabled Allow JavaScript from Apple Events setting and runs one fixed media-element command only; it never accepts a URL, selector, script, browser-profile input, or reports page data. AirDrop and global camera availability use two distinct fixed profile-proposal commands. They each accept only enabled: boolean, require a fresh approval, write exactly one local .mobileconfig, and open macOS profile review; the Mac user must separately install or decline it. The proposal cannot silently install a profile, create MDM enrollment, carry arbitrary profile content, or alter per-app camera TCC. Wi-Fi accepts only a visible SSID and never a password. HDR and Low Power Mode are read-only; Focus, Bluetooth radio state, per-app camera privacy, cross-origin browser embeds, generic global media playback, and live screen-pixel transport have no supported scoped setter. Only script.run accepts user-authored Bash source; other commands keep their closed schemas. Pairing, capability, freshness, locked-session and macOS privacy checks remain required in every mode.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+		methods: ['GET', 'POST'],
+		steps: ['Use a stable requestId.', 'POST one closed kind-specific envelope.', 'Retry it unchanged; changed reuse returns 409.'],
+		requestExamples: [
+      { name: 'Browse device home', description: 'List the paired device home folder using its current permission mode.', method: 'POST', body: { deviceId: 'device-id', requestId: 'browse-home-1', kind: 'filesystem', input: { op: 'list', path: '', hidden: false } } },
+      { name: 'Read one filesystem result', description: 'Exact owner/device/command read; no-store and ten-minute result expiry.', method: 'GET', query: { deviceId: 'device-id', commandId: 'command-id' } },
+			{
+				name: 'Move pointer',
+				description: 'Queue one approval-gated pointer event relative to a currently reported display.',
+				method: 'POST',
+				body: { deviceId: 'device-id', requestId: 'web-pointer-123', kind: 'input.pointer.move', input: { displayId: 42, x: 400, y: 300 } }
+			},
+			{
+				name: 'Queue chat message',
+				description: 'Queue, rather than steer, one session message.',
+				method: 'POST',
+				body: {
+					deviceId: 'device-id',
+					requestId: 'web-123',
+					kind: 'session.send',
+					input: { connectorId: 'chatgpt-desktop', sessionId: 'chat-1', text: 'Please run the tests.', delivery: 'queue' }
+				}
+			},
+			{
+				name: 'Steer current turn',
+				description: 'Optimistically locks steering to the visible turn.',
+				method: 'POST',
+				body: {
+					deviceId: 'device-id',
+					requestId: 'web-124',
+					kind: 'session.send',
+					input: { connectorId: 'chatgpt-desktop', sessionId: 'chat-1', text: 'Focus on auth.', delivery: 'steer', expectedTurnId: 'turn-9' }
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Command accepted.',
+				body: {
+					ok: true,
+					command: { id: 'command-id', status: 'queued', kind: 'session.send', requiresApproval: false, approvalState: 'not-required' },
+					idempotent: false
+				}
+			},
+			{ status: 409, description: 'requestId conflict.', body: { ok: false, error: 'requestId was already used for different command content' } }
+		]
+	}),
+	endpoint({
+		id: 'devices-node-commands',
+    featureVersion: '1.10.0',
+		contractVersion: '1.10.0',
+		group: 'devices',
+		title: 'Device command lease channel',
+		endpoint: '/api/v1/devices/node/commands',
+		summary: 'Claims, heartbeats and reports journal-backed device work.',
+		detail:
+			'Successful script.run reports require a bounded script result; only exact owner command reads expose stdout and stderr, and results expire after ten minutes. Shell exit failures and timeouts are reported inside the result, separately from transport completion. Report bodies are capped at 128 KiB. ' +
+			'Successful filesystem reports require a bounded result matching the leased operation. Byte results never enter event streams; terminal upload inputs are redacted and filesystem results are exposed only through the exact owner command read for ten minutes. Exact report retries retain their lease identity and content hash. ' +
+      'op=claim optionally long-polls for 20 seconds and returns a short random lease. Only the lease hash is stored. Required-approval commands cannot be claimed while approvalState is pending or denied; a claimed envelope explicitly carries approvalState=approved or not-required. op=heartbeat extends the lease; op=report carries a stable eventId and a monotonic status. Ambiguous expired execution becomes needs-review and is never blindly reclaimed. approval-request and approvals implement the separate in-flight one-decision approval bridge; screen-status updates lifecycle metadata only.',
+		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
+		methods: ['POST'],
+		steps: ['Claim one command.', 'Journal before side effects.', 'Heartbeat while active.', 'Report with a stable eventId until acknowledged.'],
+		requestExamples: [
+			{
+				name: 'Claim',
+				description: 'Bounded long poll.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: { op: 'claim', waitMs: 20000 }
+			},
+			{
+				name: 'Report',
+				description: 'Report exact result metadata.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: {
+					op: 'report',
+					commandId: 'command-id',
+					leaseId: 'lease-secret',
+					eventId: 'journal-event-7',
+					status: 'succeeded',
+					outputRef: 'turn-10'
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Command claimed.',
+				body: {
+					ok: true,
+					command: { id: 'command-id', leaseId: 'lease-secret', status: 'claimed', requiresApproval: true, approvalState: 'approved' },
+					serverTime: '2026-08-18T01:00:00.000Z'
+				}
+			}
+		]
+	}),
+	endpoint({
+		id: 'devices-node-sync',
+		group: 'devices',
+		title: 'Device chat mirror sync',
+		endpoint: '/api/v1/devices/node/sync',
+		summary: 'Maps one bounded native AI batch into quota-billed relational Messenger rows.',
+		detail:
+			'Same bounded batch vocabulary as /ai/connections, but owner/device identity comes from the node credential and the connector must already be active on that device. Device and connector are included in server-hashed idempotency namespaces. Edits update existing message segments and delete stale trailing segments transactionally, so retries neither duplicate nor leak quota.',
+		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
+		methods: ['POST'],
+		steps: [
+			'Publish the connector in node/state.',
+			'Send projects, conversations, then messages.',
+			'Coalesce live deltas and retry batches unchanged.'
+		],
+		requestExamples: [
+			{
+				name: 'Sync message',
+				description: 'Upsert one mirrored message.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: {
+					source: { provider: 'chatgpt', sourceId: 'desktop', label: 'ChatGPT', connector: 'chatgpt-desktop', mode: 'local' },
+					groups: [],
+					conversations: [{ id: 'chat-1', title: 'Thingtime', groupId: null }],
+					messages: [{ id: 'message-1', conversationId: 'chat-1', role: 'assistant', text: 'Working…' }],
+					final: false
+				}
+			}
+		],
+		responseExamples: [
+			{ status: 200, description: 'Batch applied.', body: { ok: true, accepted: { groups: 0, conversations: 1, messages: 1, messageSegments: 1 } } }
+		]
+	}),
+	endpoint({
+		id: 'devices-node-live-sync',
+		group: 'devices',
+		title: 'Device live AI materialization',
+		endpoint: '/api/v1/devices/node/live-sync',
+		summary: 'Materializes bounded live desktop sessions, transcript pages and monotonic visible events.',
+		detail:
+			'Node identity fixes owner and device; connector metadata and capabilities come from the active device-connector row. sessions.upsert accepts up to 100 revisioned summaries with optional opaque projectId and projectLabel but never paths. transcript.page accepts up to 100 discriminated revisioned entries: completed visible user/assistant messages are quota-billed relational mirrors, while closed safe activity labels are retained briefly as control-plane history. events.append accepts 1..100 contiguous sequence events from the closed visible vocabulary: message.queued/submitted/delta, item.started/completed, turn.started/completed/interrupted, approval.requested/responded, and connector.warning. Accepted events enter /devices/events as ai.session-event payloads shaped {connectorId,sessionId,sequence,observedAt,turnId,itemId,type,payload}; reasoning, paths and tool input/output are rejected. Deltas preserve exact whitespace and expire, while each non-empty completed visible item and every submitted user prompt must carry a matching revisioned message envelope that reconciles in the same transaction. The envelope is never projected into the event payload. Equal revisions/hashes replay, changed equal revisions and stale revisions return 409, and shorter completed revisions delete trailing segments and refund their exact quota bytes.',
+		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
+		methods: ['POST'],
+		steps: [
+			'Publish the AI connector through node/state.',
+			'Upsert revisioned session summaries.',
+			'Page discriminated visible history into transcript.page.',
+			'Append contiguous live events and include matching message envelopes on submitted/completed visible text.'
+		],
+		requestExamples: [
+			{
+				name: 'Session summary',
+				description: 'Create or refresh one live native session.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: {
+					op: 'sessions.upsert',
+					connectorId: 'chatgpt-desktop',
+					sessions: [
+						{
+							sessionId: 'session-1',
+							revision: 4,
+							title: 'Thingtime',
+							projectId: 'project-1',
+							projectLabel: 'Thingtime',
+							state: 'running',
+							updatedAt: '2026-08-18T01:00:00.000Z'
+						}
+					]
+				}
+			},
+			{
+				name: 'Transcript page',
+				description: 'Materialize completed visible messages and safe activity.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: {
+					op: 'transcript.page',
+					connectorId: 'chatgpt-desktop',
+					sessionId: 'session-1',
+					page: { cursor: null, nextCursor: 'older-2', hasMore: true },
+					entries: [
+						{
+							type: 'message',
+							messageId: 'message-1',
+							revision: 1,
+							role: 'assistant',
+							text: 'Working…',
+							createdAt: null,
+							completedAt: '2026-08-18T01:00:02.000Z'
+						},
+						{
+							type: 'activity',
+							activityId: 'activity-1',
+							revision: 1,
+							turnId: 'turn-1',
+							activity: 'command',
+							label: 'Command execution',
+							status: 'completed',
+							observedAt: '2026-08-18T01:00:02.000Z'
+						}
+					]
+				}
+			},
+			{
+				name: 'Live delta',
+				description: 'Publish one exact visible assistant delta.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: {
+					op: 'events.append',
+					connectorId: 'chatgpt-desktop',
+					sessionId: 'session-1',
+					events: [
+						{
+							eventId: 'event-1',
+							sequence: 1,
+							observedAt: '2026-08-18T01:00:03.000Z',
+							turnId: 'turn-1',
+							itemId: 'message-2',
+							type: 'message.delta',
+							payload: { delta: ' Running tests…' }
+						}
+					]
+				}
+			},
+			{
+				name: 'Submitted prompt',
+				description: 'Persist a remote user prompt while publishing its live delivery event.',
+				method: 'POST',
+				headers: { Authorization: 'Bearer ttnode_…' },
+				body: {
+					op: 'events.append',
+					connectorId: 'chatgpt-desktop',
+					sessionId: 'session-1',
+					events: [
+						{
+							eventId: 'event-2',
+							sequence: 2,
+							observedAt: '2026-08-18T01:00:04.000Z',
+							turnId: 'turn-1',
+							itemId: null,
+							type: 'message.submitted',
+							payload: { commandId: 'command-1', mode: 'queue', text: 'Run the tests' },
+							message: {
+								messageId: 'command-1',
+								revision: 1,
+								role: 'user',
+								text: 'Run the tests',
+								createdAt: '2026-08-18T01:00:04.000Z',
+								completedAt: '2026-08-18T01:00:04.000Z'
+							}
+						}
+					]
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Events accepted.',
+				body: {
+					ok: true,
+					op: 'events.append',
+					acceptedEvents: 1,
+					replayedEvents: 0,
+					materializedMessages: 1,
+					idempotentMessages: 0,
+					messageSegments: 1,
+					lastSequence: 2
+				}
+			},
+			{ status: 409, description: 'Stale or gapped sequence.', body: { ok: false, error: 'Live event sequence 2 is required before 3' } }
+		]
+	}),
+	endpoint({
+		id: 'devices-approvals',
+		group: 'devices',
+		title: 'Device approvals',
+		endpoint: '/api/v1/devices/approvals',
+		summary: 'Lists approval requests or records one final decision.',
+		detail: 'Approvals are owner/device filtered. Repeating the same decision is a no-op; a conflicting or expired decision returns 409.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+		methods: ['GET', 'POST'],
+		steps: ['GET pending approvals for a device.', 'POST approved or denied once.'],
+		requestExamples: [
+			{ name: 'Approve', description: 'Approve one local action.', method: 'POST', body: { approvalId: 'approval-id', decision: 'approved' } }
+		],
+		responseExamples: [
+			{ status: 200, description: 'Decision saved.', body: { ok: true, approval: { id: 'approval-id', status: 'approved' }, idempotent: false } }
+		]
+	}),
+	endpoint({
+		id: 'devices-events',
+		group: 'devices',
+		title: 'Device event stream',
+		endpoint: '/api/v1/devices/events',
+		summary: 'Returns a reconnectable, cursor-ordered NDJSON device event feed.',
+		detail:
+			'The request may wait up to 20 seconds. Each response emits hello, zero or more bounded events, and the next cursor, with no-store/no-buffer headers. Reconnect using the last acknowledged cursor; no high-frequency frames or token deltas are persisted here.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+		methods: ['GET'],
+		steps: ['Open with deviceId and optional cursor.', 'Process newline-delimited events.', 'Reconnect with the final cursor.'],
+		requestExamples: [
+			{ name: 'Stream', description: 'Wait for events.', method: 'GET', query: { deviceId: 'device-id', cursor: null, waitMs: 20000, limit: 100 } }
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'application/x-ndjson stream.',
+				body: { type: 'cursor', cursor: 'opaque-cursor' },
+				headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' }
+			}
+		]
+	}),
+	endpoint({
+		id: 'devices-screen',
+		group: 'devices',
+		title: 'Screen session lifecycle',
+		endpoint: '/api/v1/devices/screen',
+		summary: 'Lists, starts or stops safe screen-session lifecycle metadata.',
+		detail:
+			'Stores only quota-billed requested/approval/connecting/active/terminal metadata. Frames, screenshots, audio, SDP, ICE and TURN credentials are rejected and never persist through this endpoint. Starting queues an allowlisted screen.start command requiring local approval.',
+		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
+		methods: ['GET', 'POST'],
+		steps: ['POST action=start with a stable requestId.', 'Wait for local approval and screen-status events.', 'POST action=stop when done.'],
+		requestExamples: [
+			{
+				name: 'Start view-only',
+				description: 'Request local approval.',
+				method: 'POST',
+				body: { action: 'start', deviceId: 'device-id', requestId: 'screen-1', viewOnly: true }
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Lifecycle created.',
+				body: { ok: true, session: { id: 'screen-id', status: 'requested', viewOnly: true }, command: { kind: 'screen.start', status: 'queued' } }
+			}
+		]
+	})
+];
+
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'agent-overview', contractVersion: '2.0.0', featureVersion: '2.0.0', group: 'things',
