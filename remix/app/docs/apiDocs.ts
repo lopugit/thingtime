@@ -6638,7 +6638,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/themes/shared',
     summary: 'Reads a shared theme by id, or lists the public theme gallery without one.',
     detail:
-      'Version 1.1.0 includes optional focus border, gradient glow colours, blur and strength in returned theme documents; older documents remain compatible and resolve missing fields through theme defaults. Anonymous callers can read public shared themes. Authenticated owners can also read their own private themes by id. Omitting id returns the public gallery: every public theme, newest-updated first, capped at 60 (optional limit query lowers it).',
+      'Anonymous callers can read public shared themes. Authenticated owners can also read their own private themes by id. Omitting id returns the public gallery: every public theme, newest-updated first, capped at 60 (optional limit query lowers it).',
     auth: {
       mode: 'optional',
       description: 'Anonymous public reads are allowed; auth cookie or bearer token can reveal caller-owned private themes.'

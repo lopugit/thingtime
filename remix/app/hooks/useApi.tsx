@@ -1255,6 +1255,11 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
           getJson(`/api/v1/themes/shared${args?.limit ? `?limit=${encodeURIComponent(args.limit)}` : ''}`, options),
         [getJson]
       ),
+      // public gallery list (no id → every public theme, newest first)
+      listShared: useCallback(
+        async (args) => getJson(`/api/v1/themes/shared${args?.limit ? `?limit=${encodeURIComponent(args.limit)}` : ''}`),
+        []
+      ),
       save: useCallback(
         async (args) => {
           await requireThingtimeCapability('api.themes', '1.3.0');

@@ -324,15 +324,6 @@ export const listThemesForUser = async (ownerId: string): Promise<PublicTheme[]>
   return mergeThemeDocs(thingDocs, legacyDocs).map(toPublicTheme);
 };
 
-export const listThemesPageForUser = async (ownerId: string, cursor?: string | null, signal?: AbortSignal): Promise<{ themes: PublicTheme[]; nextCursor: string | null }> => {
-  signal?.throwIfAborted();
-  const page = await ownedListPage({ ownerId, purpose: 'themes', things: await getThingsCollection(), legacy: await getThemesCollection(),
-    kind: 'theme', field: 'updatedAt', direction: -1, cursor, signal, fromThing: themeThingToDoc });
-  const themes = page.items.map(toPublicTheme);
-  signal?.throwIfAborted();
-  return { themes, nextCursor: page.nextCursor };
-};
-
 // Public gallery list — every PUBLIC theme, newest-updated first, across both
 // eras (claude-todo/10 ✨ theme gallery). The acl/visibility filters mirror
 // getSharedTheme's public gate exactly, so a theme is listed iff its share
