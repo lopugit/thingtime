@@ -1685,100 +1685,38 @@ const saveThingSchema: ThingtimeSchema = {
   example: {}
 };
 
-// ---------------------------------------------------------------------------
-// Social graph + notifications. All three kinds are PROTECTED (see
-// PROTECTED_THINGTIME): only their dedicated endpoints/utils mint them.
+// Folders: the Drive-style organization kind behind /things. A folder is an
+// ordinary thing (thingtime ["folder"]) whose crystal names it; containment is
+// a `folderId` pointer ON THE CHILD (FUNDAMENTALS §3 — never an embedded list
+// of childIds on the folder), so a folder holds any number of things without
+// its own doc growing. Folders nest by carrying a folderId themselves; the
+// move path cycle-checks the ancestor chain. Organization is personal:
+// folderId only ever points at a folder the SAME owner holds, and folders
+// default private (organization structure is not content).
+export const MAX_FOLDER_NAME_CHARS = 120;
+export const MAX_FOLDER_ICON_CHARS = 32;
+export const MAX_FOLDER_DESCRIPTION_CHARS = 500;
 
-// One follow edge: ownerId follows targetId (a user thing's shareId). No
-// approval involved. crystal.follow is a constant marker so the unique
-// partial index (targetId, ownerId where crystal.follow exists) can scope to
-// follow docs — same trick as the reaction dedup index.
-const followThingSchema: ThingtimeSchema = {
-  id: 'follow',
+const folderSchema: ThingtimeSchema = {
+  id: 'folder',
   version: 1,
   kind: 'crystal',
   collection: null,
-  title: 'Follow',
-  summary: 'A one-way follow edge: the owner follows the target user. No approval needed.',
+  title: 'Folder',
+  summary: 'A Drive-style folder for organising your things on /things.',
   detail:
-    'Created/removed by POST /api/v1/users/follow { userId }. ownerId is the follower, targetId ' +
-    'the followed user\'s id. Always private to the follower (acl ["tt:user"]); follower/' +
-    'following counts and lists are served by /api/v1/users/relationships and ' +
-    '/api/v1/users/connections. The generic things CRUD refuses this kind.',
-  requiresTarget: true,
-  createdVia: 'POST /api/v1/users/follow',
+    'Folders organise the /things page: any of your things (posts, data, schemas, other ' +
+    'folders) can carry a folderId pointing at one of YOUR folder things — moving is just ' +
+    'rewriting that pointer (PATCH /api/v1/things { id, folderId } or POST /api/v1/things/bulk). ' +
+    'Folders nest; moves cycle-check the chain. Deleting a folder never deletes its contents — ' +
+    'they re-parent to the deleted folder’s parent. Folders default private (acl ["tt:user"]): ' +
+    'how you organise your things is yours even when the things themselves are public.',
   fields: [
-    { name: 'follow', type: 'boolean', required: true, description: 'Always true — dedup index marker.' }
+    { name: 'name', type: 'string', required: true, max: MAX_FOLDER_NAME_CHARS, description: 'Folder display name.' },
+    { name: 'icon', type: 'string', required: false, max: MAX_FOLDER_ICON_CHARS, description: 'Optional emoji shown instead of the default 📁.' },
+    { name: 'description', type: 'string', required: false, max: MAX_FOLDER_DESCRIPTION_CHARS, description: 'Optional note about what lives here.' }
   ],
-  example: { follow: true }
-};
-
-// One friendship per unordered pair: ownerId sent the request, targetId
-// received it. status flips pending → accepted; decline/cancel/unfriend
-// deletes the doc. crystal.friendKey = '<minId>~<maxId>' makes the pair
-// unique regardless of direction (unique partial index).
-const friendThingSchema: ThingtimeSchema = {
-  id: 'friend',
-  version: 1,
-  kind: 'crystal',
-  collection: null,
-  title: 'Friendship',
-  summary: 'A friendship (or pending friend request) between two users — one doc per pair.',
-  detail:
-    'Driven by POST /api/v1/users/friend { userId, intent }. ownerId is the requester, targetId ' +
-    'the recipient; crystal.status is pending until the recipient accepts. Accepted friendships ' +
-    'power the tt:userFriends acl circle (friends-only posts). Private to the pair (served via ' +
-    'the users endpoints); the generic things CRUD refuses this kind.',
-  requiresTarget: true,
-  createdVia: 'POST /api/v1/users/friend',
-  fields: [
-    { name: 'status', type: 'enum', required: true, values: ['pending', 'accepted'], description: 'Request state.' },
-    { name: 'friendKey', type: 'string', required: true, description: 'Canonical unordered pair key <minId>~<maxId> — unique per pair.' }
-  ],
-  example: { status: 'accepted', friendKey: '664f1c2a9d3e5b0012345678~664f1c2a9d3e5b0012345679' }
-};
-
-// Per-type notification switches users can flip in Settings → Notifications.
-// 'groups' is reserved for the future groups feature (the pref persists, no
-// emitter exists yet). Reads ALWAYS filter by the recipient's prefs, so a
-// fanned-out notification written before a pref flip stays hidden.
-export const NOTIFICATION_TYPES = [
-  'friend-request',
-  'friend-accepted',
-  'new-follower',
-  'post-from-followed',
-  'post-from-friend',
-  'comment',
-  'reply',
-  'reaction',
-  'share',
-  'groups'
-] as const;
-export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
-
-const notificationThingSchema: ThingtimeSchema = {
-  id: 'notification',
-  version: 1,
-  kind: 'crystal',
-  collection: null,
-  title: 'Notification',
-  summary: 'A server-minted in-app notification for one recipient (ownerId).',
-  detail:
-    'Minted by the server when someone else follows you, sends/accepts a friend request, ' +
-    'comments, replies, reacts, shares, or (fan-out, capped) posts while you follow them. ' +
-    'ownerId is the recipient, targetId the subject thing (post/comment/user), root readAt ' +
-    'flips when read. Listed via GET /api/v1/notifications (filtered by the recipient\'s ' +
-    'meta.notificationPrefs), marked via POST /api/v1/notifications/read. Always acl ' +
-    '["tt:user"]; the generic things CRUD refuses this kind.',
-  createdVia: 'server-side emission (social/engagement events)',
-  fields: [
-    { name: 'type', type: 'enum', required: true, values: [...NOTIFICATION_TYPES], description: 'Notification type (drives prefs + copy).' },
-    { name: 'actorId', type: 'id', required: true, description: 'The user whose action triggered this.' },
-    { name: 'actorName', type: 'string', required: false, description: 'Actor display name snapshot.' },
-    { name: 'postId', type: 'id', required: false, description: 'Related post for click-through.' },
-    { name: 'preview', type: 'string', required: false, max: 140, description: 'Short content preview.' }
-  ],
-  example: { type: 'new-follower', actorId: '664f1c2a9d3e5b0012345678', actorName: 'Rick Deckard' }
+  example: { name: 'Recipes', icon: '🍜', description: 'Everything I want to cook someday.' }
 };
 
 const sessionSchema: ThingtimeSchema = {
@@ -3205,16 +3143,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   actionSchema,
   actionRunSchema,
   saveThingSchema,
-  voteSchema,
-  updownSchema,
-  subspaceSchema,
-  subspaceMemberSchema,
-  subspaceModlogSchema,
-  subspaceTombstoneSchema,
-  subspaceReportSchema,
-  subspaceEmbedSchema,
   folderSchema,
-  fileSyncSchema,
   appSchema,
   appDataSchema,
   // social graph + notifications (protected, server-minted)
@@ -4904,6 +4833,7 @@ const sanitizeFeedAlgorithmCrystal = (input: Record<string, unknown>): { ok: tru
 const sanitizeFolderCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   if (!name) return fail(400, 'Folder name is required');
+  if (name.length > MAX_FOLDER_NAME_CHARS) return fail(400, `Folder name is too long (max ${MAX_FOLDER_NAME_CHARS})`);
   const crystal: Record<string, unknown> = { name };
   if (input.icon !== undefined && input.icon !== null) {
     if (typeof input.icon !== 'string' || input.icon.trim().length > MAX_FOLDER_ICON_CHARS) {
@@ -4912,25 +4842,10 @@ const sanitizeFolderCrystal = (input: Record<string, unknown>): { ok: true; crys
     if (input.icon.trim()) crystal.icon = input.icon.trim();
   }
   if (input.description !== undefined && input.description !== null) {
-    if (typeof input.description !== 'string') return fail(400, 'Folder description must be text');
+    if (typeof input.description !== 'string' || input.description.trim().length > MAX_FOLDER_DESCRIPTION_CHARS) {
+      return fail(400, `Folder description is too long (max ${MAX_FOLDER_DESCRIPTION_CHARS})`);
+    }
     if (input.description.trim()) crystal.description = input.description.trim();
-  }
-  if (input.builderApp !== undefined) {
-    if (input.builderApp !== true && input.builderApp !== false) return fail(400, 'builderApp must be a boolean');
-    if (input.builderApp) crystal.builderApp = true;
-  }
-  if (input.iconUrl !== undefined && input.iconUrl !== null) {
-    if (typeof input.iconUrl !== 'string') return fail(400, 'Folder icon URL must be text');
-    const iconUrl = input.iconUrl.trim();
-    if (iconUrl && !/^https:\/\/[^\s]+$/i.test(iconUrl) && !/^\/api\/v1\/attachments\/content\?id=[A-Za-z0-9_-]+$/.test(iconUrl))
-      return fail(400, 'Folder icon URL must be HTTPS or an uploaded Thingtime image');
-    if (iconUrl) crystal.iconUrl = iconUrl;
-  }
-  if (input.metadata !== undefined && input.metadata !== null) {
-    if (typeof input.metadata !== 'object' || Array.isArray(input.metadata)) return fail(400, 'Folder metadata must be an object');
-    const validated = sanitizeDataValue(input.metadata, { path: 'metadata', depth: 2 });
-    if (validated.ok === false) return validated;
-    crystal.metadata = validated.value;
   }
   return { ok: true, crystal };
 };
@@ -4946,11 +4861,6 @@ const crystalSanitizers: Record<
 	attachment: sanitizeAttachmentCrystal,
   post: sanitizePostCrystal,
   folder: sanitizeFolderCrystal,
-  [FILE_SYNC_KIND]: (input, ids) => {
-    if (ids.length !== 1) return fail(400, 'File sync configurations stand alone');
-    try { return { ok: true, crystal: { ...parseFileSyncConfiguration(input) } }; }
-    catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid file sync configuration'); }
-  },
   comment: sanitizeCommentCrystal,
   reaction: sanitizeReactionCrystal,
   share: () => ({ ok: true, crystal: {} }),
@@ -5021,7 +4931,7 @@ export const validateThingtimeCrystal = (
   // Folders are pure organization: combining them with a content schema would
   // make a doc that is both a container and content (and would let e.g.
   // ["post","folder"] ride the folder sanitizer past the post whitelist).
-  if (contentIds.includes('folder') && contentIds.length > 1) {
+  if (ids.includes('folder') && ids.length > 1) {
     return fail(400, 'folder things stand alone — put content IN the folder via folderId instead');
   }
 

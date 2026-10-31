@@ -1607,12 +1607,120 @@ const createHomeDatabaseIndexes = (db: any, { relationshipLookups, legacyLookups
         col('themes').createIndex({ shareId: 1 }, { unique: true }),
         col('themes').createIndex({ ownerId: 1 }),
         col('waitlist').createIndex({ email: 1 }, { unique: true }),
-        // the shared data-plane (`things`) index set — see createThingsDataIndexes
-        ...createThingsDataIndexes(db, { relationshipLookups, legacyLookups }),
-        // home-only `things` indexes (migration-diagnostic TTL)
-        ...createHomeOnlyThingsIndexes(db),
-        // the CI control-plane satellite — see createCiControlIndexes
-        ...createCiControlIndexes(db),
+        // everything in `things` is a thing (see api/utils/things + app/schemas);
+        // shareId is included so the (createdAt desc, shareId asc) page sort is
+        // fully index-provided instead of an in-memory sort per request. The
+        // kind-prefixed indexes serve v1-era docs until the things migration
+        // runs; the thingtime-prefixed ones serve v2 (multikey on the schema-id
+        // array), and targetId serves comment/reaction/share lookups.
+        col('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
+        // generalized uniqueness for system kinds (username:<u>, hashed email
+        // keys, schema:<id>, …): multikey unique — each element unique across
+        // the collection; sparse so ordinary things skip the index entirely
+        col('things').createIndex({ uniqueKeys: 1 }, { unique: true, sparse: true }),
+        // login + people-search lookups on user things (thingtime is the only
+        // multikey field here, so the compound is legal)
+        col('things').createIndex({ thingtime: 1, 'crystal.username': 1 }),
+        // admin roster: a partial index over just the (rare) admin user things,
+        // so listAdmins is a few-entry scan, not a full-user-base fetch+filter
+        col('things').createIndex(
+          { secureAdmin: 1 },
+          { partialFilterExpression: { secureAdmin: true } }
+        ),
+        col('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
+        col('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+        col('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+        // /things folder browsing: one owner's direct children of one folder,
+        // newest first — fully index-provided including the page sort
+        col('things').createIndex({ ownerId: 1, folderId: 1, createdAt: -1, shareId: 1 }),
+        col('things').createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
+        // schema-usage counting (schemas/browse decorate): data things are
+        // grouped by crystal.schemaId (stamped) with a crystal.schema name
+        // fallback for pre-stamp docs — both need index support or every
+        // schema browse page scans the whole data partition
+        col('things').createIndex({ thingtime: 1, 'crystal.schemaId': 1 }),
+        col('things').createIndex({ thingtime: 1, 'crystal.schema': 1 }),
+        // acl and thingtime are both arrays — Mongo forbids two multikey fields
+        // in one compound index, so the audience index stands alone
+        col('things').createIndex({ acl: 1, createdAt: -1, shareId: 1 }),
+        // One weighted wildcard text index powers /api/v1/things/search ranked
+        // text mode across every string field of every thing (a collection can
+        // hold at most ONE text index — this is it; wildcard is deliberate:
+        // data crystals hold arbitrary user keys, and searching them is the
+        // feature). The language_override name is honoured INSIDE embedded
+        // documents too (verified: a crystal key with the override name and an
+        // unsupported value fails the insert), so it must be a name no crystal
+        // can ever contain — ':' is outside the data-key grammar, making
+        // 'tt:textLanguage' unwritable through every sanitizer.
+        createIndexReplacing(
+          col('things'),
+          { '$**': 'text' },
+          {
+            name: 'things_text_search',
+            weights: { 'crystal.name': 10, 'crystal.text': 10, 'crystal.title': 8, 'crystal.listing.title': 8, tags: 6 },
+            default_language: 'english',
+            language_override: 'tt:textLanguage'
+          }
+        ),
+        // One reaction per (target, user, emoji token): makes toggle-on an
+        // idempotent upsert and dedups even under races. The partial filter
+        // requires a STRING targetId as well as crystal.emoji — reactions
+        // always attach to a target, while free-form data things (targetId
+        // null) may legitimately carry an `emoji` key and must never collide
+        // here (verified: the emoji-exists-only filter 409'd the second data
+        // thing sharing an emoji value).
+        createIndexReplacing(
+          col('things'),
+          { targetId: 1, ownerId: 1, 'crystal.emoji': 1 },
+          {
+            name: 'things_reaction_unique',
+            unique: true,
+            partialFilterExpression: { targetId: { $type: 'string' }, 'crystal.emoji': { $exists: true } }
+          },
+          ['targetId_1_ownerId_1_crystal.emoji_1']
+        ),
+        // Legacy relational era (kind:'reaction'/'comment' docs written by the
+        // pre-unification relational model): aggregation + dedup indexes stay
+        // until the things migration converts those docs to thingtime things.
+        col('things').createIndex({ kind: 1, parentId: 1, createdAt: 1 }),
+        col('things').createIndex(
+          { parentId: 1, ownerId: 1, token: 1 },
+          { unique: true, partialFilterExpression: { kind: 'reaction' } }
+        ),
+        col('things').createIndex(
+          { commentId: 1 },
+          { unique: true, partialFilterExpression: { kind: 'comment' } }
+        ),
+        // Embed apps ("Login with Thingtime", api/utils/apps): one thing per
+        // clientId, ever — a second doc claiming an existing clientId (however
+        // created) could answer origin lookups with a different allowlist, so
+        // uniqueness is structural. Only app things carry crystal.clientId;
+        // app-data things reference the app as crystal.appId instead.
+        col('things').createIndex(
+          { 'crystal.clientId': 1 },
+          { unique: true, partialFilterExpression: { 'crystal.clientId': { $exists: true } } }
+        ),
+        // App data: one thing per (user, app, key) — set() stays an idempotent
+        // insert-or-update under races, and the index serves list-by-(user, app).
+        col('things').createIndex(
+          { ownerId: 1, 'crystal.appId': 1, 'crystal.key': 1 },
+          {
+            unique: true,
+            partialFilterExpression: { 'crystal.appId': { $exists: true }, 'crystal.key': { $exists: true } }
+          }
+        ),
+        // The app-scoped shared read (/app-data/shared): entries whose acl
+        // carries tt:app/<clientId>, newest first. acl is the only multikey
+        // field here (appId/updatedAt/shareId are scalars), so the compound is
+        // legal; partial keeps every non-app-data thing out.
+        col('things').createIndex(
+          { 'crystal.appId': 1, acl: 1, updatedAt: -1, shareId: -1 },
+          { partialFilterExpression: { 'crystal.appId': { $exists: true } } }
+        ),
+        // Sandbox app-data is ephemeral: only docs written under a sandbox
+        // token carry sandboxExpiresAt (TTL skips docs without the field), so
+        // pretend data reaps itself with the token's lifetime.
+        col('things').createIndex({ sandboxExpiresAt: 1 }, { expireAfterSeconds: 0 }),
         col('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         col('feedAlgorithms').createIndex({ ownerId: 1 }),
         // global app settings singletons (rate-limit config lives here)
