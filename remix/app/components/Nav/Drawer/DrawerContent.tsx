@@ -331,6 +331,20 @@ export const DrawerContent = (props: DrawerContentProps) => {
 		[subSections, currentParentId, setOrderingFor]
 	);
 
+	// whole-section reorder: section order IS the flat item order (sections are
+	// grouped by first appearance), so persisting the sections' items
+	// concatenated in the new order reuses the existing per-top-item ordering
+	const sectionKeyOf = (group: string | null) => group ?? '__ungrouped__';
+	const onGroupSectionReorder = React.useCallback(
+		(newSectionKeys: string[]) => {
+			const byKey = new Map(subSections.map((section) => [sectionKeyOf(section.group), section]));
+			const flat = newSectionKeys.flatMap((key) => byKey.get(key)?.items.map((item) => item.id) || []);
+
+			setOrderingFor(selectedTopItem?.id, flat);
+		},
+		[subSections, selectedTopItem, setOrderingFor]
+	);
+
 	const onSearchClick = React.useCallback(
 		(event?: React.MouseEvent) => {
 			// this same native click bubbles to document where the Commander's

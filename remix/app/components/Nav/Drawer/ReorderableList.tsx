@@ -17,10 +17,6 @@ interface ReorderableListProps {
 	items: ReorderableEntry[];
 	onReorder: (ids: string[]) => void;
 	disabled?: boolean;
-	// When enabled, a drag can only start from an element marked with
-	// data-reorder-handle. Existing drawer lists deliberately keep their
-	// click-and-hold-anywhere behaviour.
-	handleOnly?: boolean;
 	// restrict where a drag may start (e.g. a dedicated handle) so a list of
 	// composite entries can nest other ReorderableLists without both arming
 	// from the same pointerdown
@@ -41,7 +37,7 @@ interface DragState {
 }
 
 export const ReorderableList = (props: ReorderableListProps) => {
-	const { items, onReorder, disabled, handleOnly, shouldStartDrag } = props;
+	const { items, onReorder, disabled, shouldStartDrag } = props;
 	const shouldStartDragRef = React.useRef(shouldStartDrag);
 	shouldStartDragRef.current = shouldStartDrag;
 
@@ -194,6 +190,10 @@ export const ReorderableList = (props: ReorderableListProps) => {
 
 			// primary button / touch only
 			if ((event.pointerType === 'mouse' && event.button !== 0) || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+				return;
+			}
+
+			if (shouldStartDragRef.current && !shouldStartDragRef.current(event)) {
 				return;
 			}
 

@@ -28,11 +28,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 11 | Account switcher — multi-account sign-in (`tt_accounts` roster, switch/remove, add + register-new inline) | 🟢 Built, live-tested locally | [11-account-switcher.md](./11-account-switcher.md) |
 | 12 | Multi-emoji reactions + custom emoji picker + optimistic UI (native keyboard, typed multi-emoji tokens, paginated recents, no loading flashes) | 🟢 Built, live-tested locally | [12-reactions-and-optimistic-ui.md](./12-reactions-and-optimistic-ui.md) |
 | 13 | Admin role + admin-configurable rate limits (env-allowlist + `meta.admin`, promote/demote UI, global rate-limit config, react/comment throttling) | 🟢 Built, live-tested locally | [13-admin-and-rate-limits.md](./13-admin-and-rate-limits.md) |
-| 14 | Editor.js block drag/drop reordering (desktop pointer, mobile long-press, keyboard alternative, autosave/undo-safe) | 🔴 Not started | [14-editorjs-block-drag-drop.md](./14-editorjs-block-drag-drop.md) |
-| 18 | Unique account invite links with optional username/profile prefill | 🔴 Not started | [18-account-invite-links.md](./18-account-invite-links.md) |
-| 19 | Group chats with per-participant anonymity, including the creator | 🔴 Not started | [19-anonymous-group-chats.md](./19-anonymous-group-chats.md) |
-| 20 | Run actions from the component tester (confirm gate, inert browse grid) | 🔴 Not started · owner-approved | [20-tester-runs-actions.md](./20-tester-runs-actions.md) |
-| 21 | Composed app surface — a folder of Things rendered as a working mini-app | 🔴 Not started | [21-app-composition-surface.md](./21-app-composition-surface.md) |
+| 14 | Editor.js block drag/drop reordering (desktop pointer, mobile long-press, keyboard alternative, autosave/undo-safe) | 🟢 Built (phase 1), live-tested locally | [14-editorjs-block-drag-drop.md](./14-editorjs-block-drag-drop.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 

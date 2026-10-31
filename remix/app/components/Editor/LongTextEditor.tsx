@@ -363,7 +363,6 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 		let cancelled = false;
 		let textFieldKeyboardCleanup: (() => void) | undefined;
 		let blockReorderCleanup: (() => void) | undefined;
-		let inlinePositionCleanup: (() => void) | undefined;
 		let popoverViewportCleanup: (() => void) | undefined;
 		let carryCleanup: (() => void) | undefined;
 		let chromeCleanup: (() => void) | undefined;
@@ -699,12 +698,6 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 			ref={holderRef}
 			// anchor for the block-reorder drop indicator (absolute child)
 			position="relative"
-			onPointerUp={(event) => {
-				if (readonlyRef.current) return;
-				const holder = event.currentTarget;
-				const editable = getEditorJsTouchFocusTarget(holder, event.target, event.pointerType, holder.ownerDocument.activeElement);
-				editable?.focus({ preventScroll: true });
-			}}
 			width="100%"
 			maxWidth="100%"
 			boxSizing="border-box"
