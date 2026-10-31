@@ -1,14 +1,17 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+// waitlist is a PROTECTED system kind: waitlist things stay on the home
+// deployment DB even while a data-plane endpoint override is active.
 import {
+  getHomeThingsCollection as getThingsCollection,
   getLopuMusingRateLimitsCollection,
-  getThingsCollection,
   getWaitlistCollection
 } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { toBin } from '../auth/users';
 
-// Waitlist entries are THINGS now (thingtime ['waitlist'], see claude-todo/12):
+// Waitlist entries are THINGS now (thingtime ['waitlist'], see
+// TODO/claude-todo/22-everything-is-a-thing-collections.md):
 // the crystal stays empty by design, the email lives ONLY under the root
 // `secure` field as BinData (the $** text index tokenizes every string field —
 // binary is invisible to it), and uniqueness rides a hashed uniqueKey. The key

@@ -1,6 +1,10 @@
+import { parseGeo, geoRadiusClause } from '~/schemas/geo';
 import { escapeRegex, findUserByUsername } from '../auth/users';
 import { getThingsCollection } from '../mongodb/collections';
+import { legacyThingReadsRequired } from '../mongodb/legacyThingLayout';
+import { fetchCappedTotal } from '../mongodb/cappedTotal';
 import {
+  ACL_INHERIT,
   KEY_SEGMENT_PATTERN,
   MAX_TEXT_CHARS,
   PROTECTED_THINGTIME,
@@ -9,8 +13,12 @@ import {
 } from '~/schemas/registry';
 import {
   POST_TYPES,
-  VISIBILITIES,
+  REQUESTABLE_VISIBILITIES,
+  appMatchClauses,
+  appShapeProjections,
+  appVisiblePage,
   asViewer,
+  batchedThingLookup,
   canViewInherited,
   chronoCursorClause,
   fail,
@@ -24,6 +32,7 @@ import {
   typeClause,
   visibilityQueryFor,
   withMatch,
+  type AppLens,
   type Fail,
   type PostType,
   type PostVisibility,
@@ -32,6 +41,9 @@ import {
   type ThingDoc,
   type Viewer
 } from './things';
+import { subspaceFeedClauses } from '../subspaces/gate';
+import { attachRankScores, type RankedSearchSource } from './searchRanking';
+import { emojiTokensForSearchTerm } from './emojiSearch';
 
 // Structured search over the things collection — the API behind /search.
 //
@@ -83,15 +95,17 @@ const DEFAULT_SEARCH_LIMIT = 20;
 // ranked text results page by offset within a bounded window (mirrors the
 // ranked feed's determinism trade-off)
 const MAX_RANKED_OFFSET = 500;
-// match counts are a UX nicety, never worth a collection scan hanging a request
-const COUNT_LIMIT = 1000;
-const COUNT_MAX_TIME_MS = 2000;
+// match-count ceiling + timeout live in ../mongodb/cappedTotal (fetchCappedTotal),
+// shared with the schema browser so /search and /schemas can't drift.
 // Engagement filters (min reactions/comments) can't be expressed as an indexed
 // match — counts live in child things (FUNDAMENTALS §3), so we score a bounded
 // window of the newest/best-matching candidates and page within it by offset.
 // Same determinism trade-off as the ranked feed's RANKED_CANDIDATE_WINDOW.
 const ENGAGEMENT_CANDIDATE_WINDOW = 400;
 const MAX_AUTHOR_CHARS = 64;
+// Attachments are level-one things and intentionally participate in generic
+// search. Other protected system kinds retain their existing exclusion.
+const GENERIC_SEARCH_EXCLUDED_THINGTIME = PROTECTED_THINGTIME.filter((kind) => kind !== 'attachment');
 
 // Root fields searchable by name; anything else lives under crystal (bare
 // names like "legs" auto-prefix to crystal.legs so the GUI can stay simple).
@@ -115,6 +129,8 @@ export type SearchGroup = {
 };
 
 export type SearchQuery = {
+  near?: unknown;
+  radiusKm?: unknown;
   q?: unknown;
   mode?: unknown;
   conditions?: unknown;
@@ -138,7 +154,7 @@ export type SearchQuery = {
 
 export type SearchResult = {
   ok: true;
-  things: PublicThing[];
+  things: Array<PublicThing & { rankScore?: number }>;
   // post projections for result things that are posts, keyed by thing id, so
   // the UI can render full post cards without a second round-trip
   posts: Record<string, PublicPost>;
@@ -209,6 +225,13 @@ const sanitizeOrdered = (field: string, op: string, value: unknown): string | nu
 };
 
 const buildCondition = (input: SearchCondition): Record<string, any> | Fail => {
+  // Non-object entries reach here from buildGroup's isGroup() dispatch: strings
+  // and numbers fall through to sanitizeFieldPath(undefined) and 400 on their
+  // own, but null/undefined would throw on the .field read and escape the route
+  // as a 500 instead. Reject every non-object shape up front.
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return fail(400, 'Each condition must be an object');
+  }
   const field = sanitizeFieldPath(input.field);
   if (isFail(field)) return field;
 
@@ -287,6 +310,17 @@ const buildCondition = (input: SearchCondition): Record<string, any> | Fail => {
       }
       const literal = escapeRegex(value);
       const pattern = op === 'startsWith' ? `^${literal}` : op === 'endsWith' ? `${literal}$` : literal;
+      if (field === 'crystal.emoji' && op === 'contains') {
+        const namedTokens = emojiTokensForSearchTerm(value);
+        if (namedTokens.length) {
+          return {
+            $or: [
+              { [field]: { $regex: pattern, $options: 'i' } },
+              { [field]: { $in: namedTokens } }
+            ]
+          };
+        }
+      }
       return { [field]: { $regex: pattern, $options: 'i' } };
     }
   }
@@ -358,19 +392,52 @@ const textLengthExpr = () => {
 // a visibility fix can never accidentally patch one branch and leak from the other.
 const projectVisiblePage = async (
   page: ThingDoc[],
-  viewer: Viewer
-): Promise<{ things: PublicThing[]; posts: Record<string, PublicPost> }> => {
-  const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer)));
+  viewer: Viewer,
+  app: AppLens = null
+): Promise<{ things: Array<PublicThing & { rankScore?: number }>; posts: Record<string, PublicPost> }> => {
+  // App lens: namespace verdict + author-liveness batch replace the acl walk,
+  // authors/acl are consent-shaped, and the PublicPost projection (scope-blind
+  // child aggregation) never rides an app response — generic things only.
+  if (app) {
+    const visible = await appVisiblePage(app, page);
+    const things = await toPublicThings(visible, viewer);
+    await appShapeProjections(app, visible, things);
+    return { things: attachRankScores(things, visible as RankedSearchSource[]), posts: {} };
+  }
+  // One shared batched lookup for the whole page, matching listThings: a page
+  // of attached things (comments, reactions, shares — anything carrying
+  // tt:inherit) then costs one round trip per chain LEVEL instead of one per
+  // doc. Unbatched, a 50-result page of depth-1 comments issued 50 findOnes
+  // against a 10-connection pool, draining as 5 serial pool waves.
+  const lookup = batchedThingLookup();
+  const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer, lookup)));
   const visible = page.filter((_, index) => verdicts[index]);
   const things = await toPublicThings(visible, viewer);
   const postDocs = visible.filter((doc) => isPostThing(doc));
-  const postProjections = postDocs.length ? await toPublicPosts(postDocs, viewer) : [];
+  const reactionTargets = await Promise.all(
+    visible.map(async (doc) =>
+      Array.isArray(doc.thingtime) && doc.thingtime.includes('reaction') && typeof doc.targetId === 'string'
+        ? lookup(doc.targetId)
+        : null
+    )
+  );
+  const targetPosts = reactionTargets.filter((doc): doc is ThingDoc => !!doc && isPostThing(doc));
+  const uniquePostDocs = [...new Map([...postDocs, ...targetPosts].map((doc) => [doc.shareId, doc])).values()];
+  const postProjections = uniquePostDocs.length ? await toPublicPosts(uniquePostDocs, viewer) : [];
   const posts: Record<string, PublicPost> = {};
   for (const post of postProjections) posts[post.id] = post;
-  return { things, posts };
+  visible.forEach((doc, index) => {
+    const target = reactionTargets[index];
+    if (target && posts[target.shareId]) posts[doc.shareId] = posts[target.shareId];
+  });
+  return { things: attachRankScores(things, visible as RankedSearchSource[]), posts };
 };
 
-export const searchThings = async (viewerInput: string | Viewer, query: SearchQuery): Promise<Fail | SearchResult> => {
+export const searchThings = async (
+  viewerInput: string | Viewer,
+  query: SearchQuery,
+  app: AppLens = null
+): Promise<Fail | SearchResult> => {
   const viewer = asViewer(viewerInput);
   const limit = Math.min(Math.max(1, Number(query.limit) || DEFAULT_SEARCH_LIMIT), MAX_SEARCH_LIMIT);
 
@@ -384,6 +451,12 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
   if (sort === 'relevance' && !q) return fail(400, 'Relevance sorting needs a text query (q)');
 
   const clauses: Record<string, any>[] = [];
+  if (query.near !== undefined) {
+    const point = parseGeo(query.near);
+    const radius = query.radiusKm === undefined ? 50 : query.radiusKm;
+    if (!point || typeof radius !== 'number' || !Number.isFinite(radius) || radius <= 0 || radius > 1000) return fail(400, 'near requires lat/lng and radiusKm must be greater than 0 and at most 1000');
+    clauses.push(geoRadiusClause(point, radius));
+  }
 
   if (query.conditions !== undefined && query.conditions !== null) {
     if (!Array.isArray(query.conditions)) return fail(400, 'conditions must be a list');
@@ -400,7 +473,7 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
 
   const thingtime = csvList(query.thingtime);
   if (thingtime.length) {
-    clauses.push(thingtimeInClause(thingtime));
+    clauses.push(await thingtimeInClause(thingtime));
   }
 
   // Protected system kinds are NOT discoverable through the generic search:
@@ -409,7 +482,7 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
   // scrape / account-existence + user-count oracle); theme/feed-algorithm/
   // waitlist things are owner-private and never meant to be searched. schema
   // things stay searchable — the schema browser relies on it.
-  clauses.push({ thingtime: { $nin: [...PROTECTED_THINGTIME] } });
+  clauses.push({ thingtime: { $nin: GENERIC_SEARCH_EXCLUDED_THINGTIME } });
 
   const tags = csvList(query.tags).map((tag) => tag.toLowerCase());
   if (tags.length) clauses.push({ tags: { $in: tags } });
@@ -433,9 +506,11 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
   const types = csvList(query.types).filter((entry): entry is PostType => POST_TYPES.includes(entry as PostType));
   if (types.length) clauses.push(typeClause(types));
 
-  // audience circles narrow the visibility superset below
+  // audience circles narrow the visibility superset below — validate against
+  // the REQUESTABLE set so 'hidden' survives (a dropped circle silently reads
+  // as "no circle filter", which widens rather than narrows)
   const circles = csvList(query.circles).filter((entry): entry is PostVisibility =>
-    VISIBILITIES.includes(entry as PostVisibility)
+    REQUESTABLE_VISIBILITIES.includes(entry as PostVisibility)
   );
 
   // author: one username → ownerId. An unknown username matches nothing —
@@ -483,10 +558,20 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
   // + the viewer's own), the exact acl verdict happens per doc below. Things
   // carrying ['tt:inherit'] (comments/reactions) only surface for their owner —
   // matching listThings, attached things aren't independently discoverable.
-  const visibility = visibilityQueryFor(viewer, circles);
+  // Under the app lens the audience superset IS the namespace conjunction —
+  // server-injected, never expressible from the client grammar (appId/acl stay
+  // out of SEARCHABLE_ROOT_FIELDS).
+  const directVisibility = app ? withMatch({}, ...appMatchClauses(app)) : visibilityQueryFor(viewer, circles);
+  // Inherited children (notably reactions) need their parent ACL evaluated by
+  // canViewInherited below; include them in this coarse DB-level superset.
+  const visibility =
+    !app && directVisibility && circles.length === 0
+      ? { $or: [directVisibility, { acl: ACL_INHERIT }] }
+      : directVisibility;
   if (!visibility) return emptyResult;
 
-  const baseMatch = withMatch(visibility, ...clauses);
+  // subspace fences (removed / private-subspace posts) — same clauses the feeds use
+  const baseMatch = withMatch(visibility, ...clauses, ...subspaceFeedClauses(viewer));
   const ranked = sort === 'relevance';
 
   // A cursor is minted for one paging mode and is meaningless in another: offset
@@ -537,6 +622,7 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
         {
           $project: {
             shareId: 1,
+            ...(ranked ? { score: { $meta: 'textScore' } } : {}),
             embeddedComments: { $size: { $ifNull: ['$comments', []] } },
             embeddedReactions: {
               $sum: {
@@ -550,7 +636,12 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
           }
         }
       ])
-      .toArray()) as any as { shareId: string; embeddedComments: number; embeddedReactions: number }[];
+      .toArray()) as any as {
+        shareId: string;
+        score?: number;
+        embeddedComments: number;
+        embeddedReactions: number;
+      }[];
 
     const ids = candidates.map((candidate) => candidate.shareId);
     const [v2Counts, legacyCounts] = ids.length
@@ -567,7 +658,7 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
               }
             ])
             .toArray() as Promise<any[]>,
-          things
+          await legacyThingReadsRequired() ? things
             .aggregate([
               { $match: { parentId: { $in: ids }, kind: { $in: ['comment', 'reaction'] } } },
               {
@@ -578,7 +669,7 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
                 }
               }
             ])
-            .toArray() as Promise<any[]>
+            .toArray() as Promise<any[]> : Promise.resolve([])
         ])
       : [[], []];
 
@@ -605,9 +696,17 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
       ? ((await things.find({ shareId: { $in: pageIds } } as any).toArray()) as any as ThingDoc[])
       : [];
     const docsById = new Map(pageDocs.map((doc) => [doc.shareId, doc]));
-    const page = pageIds.map((id) => docsById.get(id)).filter(Boolean) as ThingDoc[];
+    const scoreById = new Map(candidates.map((candidate) => [candidate.shareId, candidate.score]));
+    const page = pageIds
+      .map((id) => {
+        const doc = docsById.get(id);
+        if (!doc) return null;
+        const score = scoreById.get(id);
+        return typeof score === 'number' ? ({ ...doc, score } as ThingDoc) : doc;
+      })
+      .filter(Boolean) as ThingDoc[];
 
-    const { things: publicThings, posts } = await projectVisiblePage(page, viewer);
+    const { things: publicThings, posts } = await projectVisiblePage(page, viewer, app);
 
     return {
       ok: true,
@@ -653,23 +752,17 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
   // Capped count for the "N things match" readout — only on the FIRST page
   // (load-more keeps the total it already has), concurrent with the page find,
   // and approximate by design: it counts the DB visibility superset, so
-  // circle-restricted docs the exact acl pass rejects may be included.
-  const fetchTotal = async (): Promise<{ total: number | null; totalCapped: boolean }> => {
-    if (query.cursor) return { total: null, totalCapped: false };
-    try {
-      const count = await things.countDocuments(match as any, { limit: COUNT_LIMIT + 1, maxTimeMS: COUNT_MAX_TIME_MS });
-      return count > COUNT_LIMIT ? { total: COUNT_LIMIT, totalCapped: true } : { total: count, totalCapped: false };
-    } catch {
-      return { total: null, totalCapped: false };
-    }
-  };
-
-  const [{ docs, nextCursor }, { total, totalCapped }] = await Promise.all([fetchPage(), fetchTotal()]);
+  // circle-restricted docs the exact acl pass rejects may be included. Shared
+  // with the schema browser via fetchCappedTotal so both stay in lockstep.
+  const [{ docs, nextCursor }, { total, totalCapped }] = await Promise.all([
+    fetchPage(),
+    fetchCappedTotal(things, match, query.cursor)
+  ]);
   const page = docs.slice(0, limit);
 
   // exact acl evaluation — the DB match is only a superset; the cursor advances
   // over the raw page so filtered docs are skipped, not resurfaced.
-  const { things: publicThings, posts } = await projectVisiblePage(page, viewer);
+  const { things: publicThings, posts } = await projectVisiblePage(page, viewer, app);
 
   return { ok: true, things: publicThings, posts, nextCursor, total, totalCapped, ranked };
 };

@@ -7,9 +7,26 @@ export type ThingtimeBridgeMessage = {
 
 export type ThingtimeNativeBridge = {
   version: string;
-  platform: 'ios';
+  lopuVoiceVersion?: string;
+  lopuChatActivityVersion?: string;
+  widgetVersion?: string;
+  notificationsVersion?: string;
+  devicePairingVersion?: string;
+  fileAccessVersion?: string;
+  fileResourceLimitsVersion?: string;
+  fileDownloadVersion?: string;
+  fileUploadVersion?: string;
+  fileUploadBatchVersion?: string;
+  fileFolderBatchVersion?: string;
+  fileStagingVersion?: string;
+  filePublicationVersion?: string;
+  fileTrashVersion?: string;
+  fileVersionsVersion?: string;
+  fileExportVersion?: string;
+  platform: 'ios' | 'macos' | 'android';
   isNativeWebView: true;
   postMessage: (message: ThingtimeBridgeMessage) => void;
+  postFileFrame?: (frame: ArrayBuffer) => void;
   receiveMessageFromNative?: (message: ThingtimeBridgeMessage) => void;
   onMessage?: (listener: (message: ThingtimeBridgeMessage) => void) => () => void;
   offMessage?: (listener: (message: ThingtimeBridgeMessage) => void) => void;
@@ -49,4 +66,16 @@ export function postNativeBridgeMessage(message: ThingtimeBridgeMessage) {
   });
 
   return true;
+}
+
+// The general bridge shipped before the native voice controller. Its presence
+// alone must never make the UI claim that an iPhone is recording.
+export function supportsNativeLopuVoice(bridge = getNativeBridge()): boolean {
+  return Boolean(bridge?.isNativeWebView && /^1\.\d+\.\d+$/.test(bridge.lopuVoiceVersion ?? ''));
+}
+
+export function supportsNativeVoiceHistory(bridge = getNativeBridge()): boolean {
+  if (!supportsNativeLopuVoice(bridge)) return false;
+  const [, minor] = bridge!.lopuVoiceVersion!.split('.').map(Number);
+  return minor >= 3;
 }
