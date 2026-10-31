@@ -10,6 +10,7 @@ test('Feature Stack snapshots preserve admin order and exact same-repository hea
     targets: ['develop', 'main'],
     repository: 'lopugit/thingtime',
     stackId: 'ci-feature-stack-11111111-1111-4111-8111-111111111111',
+		runId: 'feature-stack-run-11111111-1111-4111-8111-111111111111',
     autoDecideBranches: true,
     pullRequests: [
 			{
@@ -75,6 +76,7 @@ test('Feature Stack accepts one source and auto-routes mixed branch families', (
     targets: ['main', 'github-actions'],
     repository: 'lopugit/thingtime',
     stackId: 'ci-feature-stack-22222222-2222-4222-8222-222222222222',
+		runId: 'feature-stack-run-22222222-2222-4222-8222-222222222222',
     autoDecideBranches: true
   };
   const mixed = canonicalFeatureStackPlanFromPullRequests({
@@ -129,6 +131,7 @@ test('Feature Stack auto-routing skips incompatible sources and empty targets wi
 		targets: ['main', 'github-actions'],
 		repository: 'lopugit/thingtime',
 		stackId: 'ci-feature-stack-33333333-3333-4333-8333-333333333333',
+		runId: 'feature-stack-run-33333333-3333-4333-8333-333333333333',
 		autoDecideBranches: true
 	};
 	const productOnly = canonicalFeatureStackPlanFromPullRequests({
@@ -206,6 +209,60 @@ test('Feature Stack auto-routing skips incompatible sources and empty targets wi
 	);
 });
 
+test('saved Feature Stack runs omit completed and draft sources while preserving live order', () => {
+	const repository = 'lopugit/thingtime';
+	const plan = canonicalFeatureStackPlanFromPullRequests({
+		name: 'Reusable stack',
+		sourcePrNumbers: [40, 41, 42, 43],
+		targets: ['main'],
+		repository,
+		stackId: 'ci-feature-stack-55555555-5555-4555-8555-555555555555',
+		runId: 'feature-stack-run-55555555-5555-4555-8555-555555555555',
+		autoDecideBranches: true,
+		pullRequests: [
+			{ number: 40, state: 'closed' },
+			{
+				number: 41,
+				title: 'First live source',
+				state: 'open',
+				draft: false,
+				base: { ref: 'develop' },
+				head: { ref: 'feature/first', sha: '1'.repeat(40), repo: { full_name: repository } }
+			},
+			{
+				number: 42,
+				title: 'Draft source',
+				state: 'open',
+				draft: true,
+				base: { ref: 'develop' },
+				head: { ref: 'feature/draft', sha: '2'.repeat(40), repo: { full_name: repository } }
+			},
+			{
+				number: 43,
+				title: 'Second live source',
+				state: 'open',
+				draft: false,
+				base: { ref: 'develop' },
+				head: { ref: 'feature/second', sha: '3'.repeat(40), repo: { full_name: repository } }
+			}
+		]
+	});
+	assert.deepEqual(plan.sources.map((source) => source.pr), [41, 43]);
+	assert.throws(
+		() => canonicalFeatureStackPlanFromPullRequests({
+			name: 'Completed stack',
+			sourcePrNumbers: [40],
+			targets: ['main'],
+			repository,
+			stackId: 'ci-feature-stack-55555555-5555-4555-8555-555555555555',
+			runId: 'feature-stack-run-55555555-5555-4555-8555-555555555555',
+			autoDecideBranches: true,
+			pullRequests: [{ number: 40, state: 'closed' }]
+		}),
+		/No selected pull request is compatible/
+	);
+});
+
 test('workflow dispatches enter only through reviewed product branches', () => {
   assert.equal(resolveCiWorkflowEntryRef('feature-stack'), 'develop');
   assert.equal(resolveCiWorkflowEntryRef('resolve-conflicts'), 'develop');
@@ -230,13 +287,15 @@ test('repository maintenance dispatches through the one Lopu manager', () => {
 	assert.deepEqual(
 		resolveCiWorkflowDispatch('feature-stack', {
     feature_stack_plan_b64: featureStackPlan,
+			feature_stack_run_id: 'feature-stack-run-44444444-4444-4444-8444-444444444444',
     unexpected: 'discarded'
 		}),
 		{
     workflowFile: 'resolve-pr-conflicts.yml',
     inputs: {
       maintenance_operation: 'merge-feature-stack',
-      feature_stack_plan_b64: featureStackPlan
+      feature_stack_plan_b64: featureStackPlan,
+			feature_stack_run_id: 'feature-stack-run-44444444-4444-4444-8444-444444444444'
     }
 		}
 	);
@@ -279,4 +338,28 @@ test('repository maintenance dispatches through the one Lopu manager', () => {
     workflowFile: 'resolve-pr-conflicts.yml',
     inputs: { maintenance_operation: 'sync-main-develop' }
   });
+});
+
+
+test('Feature Stack freezes an ordered endpoint waterfall only in version 4', () => {
+  const input = {
+    name: 'Mixed endpoints', sourcePrNumbers: [12], targets: ['develop'],
+    repository: 'lopugit/thingtime', stackId: 'ci-feature-stack-11111111-1111-4111-8111-111111111111',
+    runId: 'feature-stack-run-11111111-1111-4111-8111-111111111111', autoDecideBranches: true,
+    pullRequests: [{ number: 12, title: 'Search', state: 'open', draft: false, base: { ref: 'develop' }, head: { ref: 'feature/search', sha: 'a'.repeat(40), repo: { full_name: 'lopugit/thingtime' } } }]
+  };
+  const inherited = canonicalFeatureStackPlanFromPullRequests(input);
+  assert.equal(inherited.version, 3);
+  assert.equal(Object.prototype.hasOwnProperty.call(inherited, 'modelWaterfall'), false);
+  const modelWaterfall = { version: 1, entries: [
+    { endpointId: 'vault:custom', modelId: 'vendor/model', effort: null, speed: 'normal' },
+    { endpointId: 'server:anthropic', modelId: 'claude-opus-5', effort: 'high', speed: 'fast' }
+  ] };
+  const custom = canonicalFeatureStackPlanFromPullRequests({ ...input, modelWaterfall });
+  assert.equal(custom.version, 4);
+  assert.deepEqual(custom.modelWaterfall, modelWaterfall);
+  assert.equal(Object.keys(custom).at(-1), 'modelWaterfall');
+  modelWaterfall.entries.reverse();
+  assert.equal(custom.modelWaterfall?.entries[0].endpointId, 'vault:custom');
+  assert.throws(() => canonicalFeatureStackPlanFromPullRequests({ ...input, modelWaterfall: { ...modelWaterfall, token: 'not-permitted' } }));
 });

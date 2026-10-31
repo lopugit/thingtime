@@ -12,6 +12,7 @@ vi.mock('node:child_process', async (importOriginal) => ({
 }));
 
 import { fallbackSearch, SearchService } from './search.js';
+import { emojiSymbolsExtension, extensionItems } from './catalog.js';
 
 const item = (id: string, title: string, keywords: string[] = []): SearchItem => ({
   id,
@@ -70,9 +71,9 @@ describe('fallbackSearch', () => {
 
   it('adds an item’s intentional command priority to learned and category ranking', () => {
     const application = { ...item('application', 'Emoji Helper'), kind: 'application' as const };
-    const command = { ...item('emoji', 'Search Emoji & Symbols'), preferenceScore: 25_000 };
+    const command = extensionItems([emojiSymbolsExtension])[0]!;
     expect(fallbackSearch('emoji', [application, command], 10).map((hit) => hit.id)).toEqual([
-      'emoji',
+      command.id,
       'application',
     ]);
   });
@@ -124,6 +125,64 @@ describe('SearchService Rust failure fallback', () => {
 });
 
 describe('SearchService transient filesystem candidates', () => {
+  it.each([
+    ['magician', 'SamsungMagician', 'Magician.png'],
+    ['recovery', 'Thingtime Recovery', 'Recovery'],
+  ])(
+    'keeps the matching app first for %s even with more than 30 matching files',
+    async (query, title, filename) => {
+      const service = new SearchService();
+      service.setItems([{ ...item('application', title), kind: 'application' }]);
+      const files = Array.from({ length: 40 }, (_, index) => ({
+        ...item(`file:${index}`, filename),
+        kind: 'file' as const,
+      }));
+      const hits = await service.search(query, 30, files);
+      expect(hits).toHaveLength(30);
+      expect(hits[0]?.id).toBe('application');
+      expect(hits[0]!.score - hits[1]!.score).toBeLessThan(22_000);
+    },
+  );
+
+  it('keeps exact app names, explicit filenames, and user preferences ahead of a partial app name', async () => {
+    const service = new SearchService();
+    service.setItems([{ ...item('application', 'Thingtime Recovery'), kind: 'application' }]);
+    const folder = { ...item('folder', 'Recovery'), kind: 'directory' as const };
+    const file = { ...item('file', 'recovery.c'), kind: 'file' as const };
+    const exactApp = { ...item('exact', 'Recovery'), kind: 'application' as const };
+    expect((await service.search('recovery', 30, [exactApp]))[0]?.id).toBe('exact');
+    expect((await service.search('recovery.c', 30, [file]))[0]?.id).toBe('file');
+    expect((await service.search('recovery', 30, [folder], { folder: 2_000 }))[0]?.id).toBe('folder');
+    expect(
+      (await service.search('recovery', 30, [folder], {}, ['files', 'commands', 'applications']))[0]?.id,
+    ).toBe('folder');
+  });
+
+  it.each([
+    ['cover', 'Thingtime Recovery'],
+    ['magic', 'SamsungMagician'],
+    ['recvoery', 'Thingtime Recovery'],
+    ['go', 'Go Tools'],
+  ])('does not give %s a whole-word app boost in %s', async (query, title) => {
+    const service = new SearchService();
+    service.setItems([{ ...item('application', title), kind: 'application' }]);
+    const hits = await service.search(query);
+    expect(hits[0]?.score ?? 0).toBeLessThan(99_500);
+  });
+
+  it('does not promote apps that only match a path or keyword', async () => {
+    const service = new SearchService();
+    service.setItems([
+      {
+        ...item('application', 'Unrelated', ['recovery']),
+        kind: 'application',
+        subtitle: '/Applications/Recovery/Unrelated.app',
+      },
+    ]);
+    const hits = await service.search('recovery');
+    expect(hits[0]?.score).toBeLessThan(99_500);
+  });
+
   it('keeps an in-flight catalog snapshot coherent while new searches see a live update', async () => {
     const service = new SearchService();
     service.setItems([item('old', 'Old Catalogue Entry')]);

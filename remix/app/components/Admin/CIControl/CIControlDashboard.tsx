@@ -1,3 +1,9 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
+import type { AiWaterfallConfig } from '~/api/utils/ai/waterfallConfig';
+import { StackActivityPanel } from './StackActivityPanel';
+import { StackRunChat } from './StackRunChat';
+import { stackActivities, stackActivitySummary, type StackActivity } from './featureStackActivity';
+import { FeatureStackModelSelection } from './FeatureStackModelSelection';
 import React from 'react';
 import {
   Alert,
@@ -54,11 +60,14 @@ import {
 	FiGitBranch,
 	FiGithub,
 	FiLayers,
+	FiPauseCircle,
 	FiPlay,
 	FiPlus,
 	FiRefreshCw,
+	FiRotateCcw,
 	FiSave,
 	FiSearch,
+	FiStopCircle,
 	FiTrash2,
 	FiX
 } from 'react-icons/fi';
@@ -66,6 +75,7 @@ import {
 import { useLopu } from '~/components/Lopu/useLopu';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { resolveFeatureStackSources, sameNumberOrder } from './featureStackDraftCore';
+import { featureStackRunOutcome, latestFeatureStackHeartbeat, legacyFeatureStackWorkflowRunId, sortFeatureStackTimeline } from './featureStackRunCore';
 import {
 	CI_DASHBOARD_LIVE_POLL_INTERVAL_MS,
 	CI_DASHBOARD_POLL_INTERVAL_MS,
@@ -74,9 +84,16 @@ import {
 	shouldPollCiDashboard
 } from './dashboardPollingCore';
 import { featureStackTargetsForSource } from '~/api/utils/ciControl/featureStackRoutingCore';
+import {
+	featureStackCanPause,
+	featureStackCanRestart,
+	featureStackCanStop,
+	type FeatureStackLifecycleAction
+} from '~/api/utils/ciControl/featureStackLifecycleCore';
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { ClaudeCredentialWaterfall } from './ClaudeCredentialWaterfall';
+import { CARD_STYLES } from '~/theme/card';
+import { PlatformCredentials } from '../PlatformCredentials';
 import {
 	ALL_PULL_REQUEST_STATUS_FILTER_IDS,
 	matchesPullRequestStatusFilter,
@@ -100,20 +117,54 @@ const READY_STATUSES = new Set(['clean', 'ready', 'success', 'succeeded', 'compl
 
 const normalizedStatus = normalizePullRequestStatus;
 
-const statusColor = (status: unknown) => {
+const MONO = 'var(--tt-font-mono, ui-monospace, Menlo, monospace)';
+
+type StatusTone = 'danger' | 'active' | 'positive' | 'warning' | 'neutral';
+
+const statusTone = (status: unknown): StatusTone => {
   const normalized = normalizedStatus(status);
-  if (CONFLICT_STATUSES.has(normalized)) return 'red';
-  if (ACTIVE_STATUSES.has(normalized)) return 'blue';
-  if (READY_STATUSES.has(normalized)) return 'green';
-  if (normalized === 'draft' || normalized === 'cancelled' || normalized === 'skipped') return 'orange';
-  return 'gray';
+  if (CONFLICT_STATUSES.has(normalized)) return 'danger';
+  if (ACTIVE_STATUSES.has(normalized)) return 'active';
+  if (READY_STATUSES.has(normalized)) return 'positive';
+  if (normalized === 'draft' || normalized === 'cancelled' || normalized === 'skipped' || normalized === 'needs-attention') return 'warning';
+  return 'neutral';
 };
 
-const StatusBadge = ({ status }: { status: unknown }) => (
-  <Badge colorScheme={statusColor(status)} borderRadius="999px" px={2} py="2px" textTransform="none">
-    {String(status || 'unknown').replace(/_/g, ' ')}
-  </Badge>
-);
+const STATUS_CHIP_STYLES: Record<StatusTone, { bg: string; color: string }> = {
+  danger: { bg: 'rgba(214, 69, 90, 0.12)', color: 'var(--tt-danger, #d6455a)' },
+  active: { bg: 'rgba(47, 143, 214, 0.12)', color: 'var(--tt-link, #2f8fd6)' },
+  positive: { bg: 'var(--tt-positive-soft, rgba(88, 202, 112, 0.14))', color: 'var(--tt-positive, #2f8f4f)' },
+  warning: { bg: 'rgba(255, 188, 72, 0.18)', color: 'var(--tt-warning, #ffbc48)' },
+  neutral: { bg: 'var(--tt-surface-alt, #f5f5f7)', color: 'var(--tt-muted, #9a9aa6)' }
+};
+
+const STATUS_DOT_COLORS: Record<StatusTone, string> = {
+  danger: 'var(--tt-danger, #d6455a)',
+  active: 'var(--tt-link, #2f8fd6)',
+  positive: 'var(--tt-positive, #2f8f4f)',
+  warning: 'var(--tt-warning, #ffbc48)',
+  neutral: 'var(--tt-faint, #b6b6c0)'
+};
+
+const StatusBadge = ({ status }: { status: unknown }) => {
+  const chip = STATUS_CHIP_STYLES[statusTone(status)];
+  return (
+    <Box
+      as="span"
+      display="inline-block"
+      bg={chip.bg}
+      color={chip.color}
+      borderRadius="var(--tt-radius-pill, 999px)"
+      px={2}
+      py="2px"
+      fontSize="xs"
+      fontWeight={600}
+      whiteSpace="nowrap"
+    >
+      {String(status || 'unknown').replace(/_/g, ' ')}
+    </Box>
+  );
+};
 
 const parseTime = (value: unknown) => {
   const date = typeof value === 'string' || typeof value === 'number' ? new Date(value) : null;
@@ -161,7 +212,15 @@ const selectPrimaryPr = (feature: CiEntity | null, pullRequests: CiEntity[]) => 
 
 const DetailSection = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <Box>
-    <Text fontSize="10px" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" opacity={0.48} mb={2}>
+    <Text
+      fontFamily={MONO}
+      fontSize="10px"
+      fontWeight={600}
+      letterSpacing="0.08em"
+      textTransform="uppercase"
+      color="var(--tt-muted, #9a9aa6)"
+      mb={2}
+    >
       {label}
     </Text>
     {children}
@@ -169,7 +228,7 @@ const DetailSection = ({ label, children }: { label: string; children: React.Rea
 );
 
 const EmptyLine = ({ children }: { children: React.ReactNode }) => (
-  <Text fontSize="sm" opacity={0.58}>
+  <Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">
     {children}
   </Text>
 );
@@ -216,10 +275,10 @@ const FeatureDetail = ({
       <Box>
         <Flex align="flex-start" justify="space-between" gap={3}>
           <Box minW={0}>
-            <Heading size="sm" lineHeight="1.35" noOfLines={2}>
+            <Heading size="sm" lineHeight="1.35" noOfLines={2} color="var(--tt-ink, #16161a)">
               {feature.title || pr?.title || 'Untitled feature'}
             </Heading>
-            <Text fontSize="xs" opacity={0.55} mt={1}>
+            <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" mt={1}>
               {feature.repository || pr?.repository || 'Repository unavailable'}
             </Text>
           </Box>
@@ -240,7 +299,6 @@ const FeatureDetail = ({
             <Button
               size="xs"
               leftIcon={<FiPlay />}
-              colorScheme={CONFLICT_STATUSES.has(normalizedStatus(pr.status)) ? 'purple' : 'gray'}
               onClick={() => onDispatch('resolve-conflicts', pr)}
               isDisabled={!canDispatch}
             >
@@ -255,22 +313,55 @@ const FeatureDetail = ({
         </Flex>
       </Box>
 
-      <Divider />
+      <Box borderTop="1px solid var(--tt-border-light, #f0f0f2)" />
 
       <DetailSection label="Topology">
         {pr ? (
           <Flex align="center" gap={2} wrap="wrap" fontSize="sm">
-            <Badge variant="subtle" colorScheme="gray" maxW="100%" overflow="hidden" textOverflow="ellipsis">
+            <Text
+              as="span"
+              fontFamily={MONO}
+              fontSize="xs"
+              px={2}
+              py="2px"
+              borderRadius="var(--tt-radius-xs, 7px)"
+              bg="var(--tt-surface-alt, #f5f5f7)"
+              color="var(--tt-text, #5a5a66)"
+              maxW="100%"
+              overflow="hidden"
+              textOverflow="ellipsis"
+              whiteSpace="nowrap"
+            >
               {headRef}
-            </Badge>
-            <Text opacity={0.42}>→</Text>
-            <Badge variant="subtle" colorScheme="purple">
+            </Text>
+            <Text color="var(--tt-faint, #b6b6c0)">→</Text>
+            <Text
+              as="span"
+              fontFamily={MONO}
+              fontSize="xs"
+              px={2}
+              py="2px"
+              borderRadius="var(--tt-radius-xs, 7px)"
+              bg="var(--tt-accent-tint, #fff5fa)"
+              color="var(--tt-accent, hotpink)"
+              whiteSpace="nowrap"
+            >
               PR #{String(pr.number ?? pr.externalId ?? '')}
-            </Badge>
-            <Text opacity={0.42}>→</Text>
-            <Badge variant="subtle" colorScheme="gray">
+            </Text>
+            <Text color="var(--tt-faint, #b6b6c0)">→</Text>
+            <Text
+              as="span"
+              fontFamily={MONO}
+              fontSize="xs"
+              px={2}
+              py="2px"
+              borderRadius="var(--tt-radius-xs, 7px)"
+              bg="var(--tt-surface-alt, #f5f5f7)"
+              color="var(--tt-text, #5a5a66)"
+              whiteSpace="nowrap"
+            >
               {baseRef}
-            </Badge>
+            </Text>
           </Flex>
         ) : (
           <EmptyLine>No pull request is linked to this feature yet.</EmptyLine>
@@ -349,13 +440,9 @@ const FeatureDetail = ({
                       {run.title || `Run ${String(run.runNumber ?? run.externalId ?? '')}`}
                     </Link>
                   ) : (
-										<Text fontWeight="600" noOfLines={1}>
-											{run.title || 'Workflow run'}
-										</Text>
+                    <Text fontWeight="600" noOfLines={1} color="var(--tt-ink, #16161a)">{run.title || 'Workflow run'}</Text>
                   )}
-									<Text fontSize="xs" opacity={0.5}>
-										{relativeTime(entityTime(run))}
-									</Text>
+                  <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">{relativeTime(entityTime(run))}</Text>
                 </Box>
                 <StatusBadge status={run.conclusion ?? run.status} />
               </Flex>
@@ -372,14 +459,14 @@ const FeatureDetail = ({
             {events.slice(0, 8).map((event, index) => (
               <Flex key={event.id} gap={3} minH="54px">
                 <Flex direction="column" align="center" width="12px" flex="0 0 12px">
-                  <Box mt="5px" width="8px" height="8px" borderRadius="50%" bg={`${statusColor(event.statusTo)}.400`} />
-                  {index < Math.min(events.length, 8) - 1 ? <Box flex="1" width="1px" bg="var(--tt-border, #e7e7eb)" /> : null}
+                  <Box mt="5px" width="8px" height="8px" borderRadius="50%" bg={STATUS_DOT_COLORS[statusTone(event.statusTo)]} />
+                  {index < Math.min(events.length, 8) - 1 ? <Box flex="1" width="1px" bg="var(--tt-border-light, #f0f0f2)" /> : null}
                 </Flex>
                 <Box pb={3} minW={0}>
-                  <Text fontSize="sm" fontWeight="600" noOfLines={1}>
+                  <Text fontSize="sm" fontWeight="600" noOfLines={1} color="var(--tt-ink, #16161a)">
                     {event.action || event.eventType || 'Status updated'}
                   </Text>
-                  <Text fontSize="xs" opacity={0.56}>
+                  <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
                     {event.statusFrom && event.statusTo ? `${event.statusFrom} → ${event.statusTo} · ` : ''}
                     {formatTime(event.occurredAt ?? entityTime(event))}
                   </Text>
@@ -449,7 +536,7 @@ const DispatchModal = ({ isOpen, onClose, initialWorkflow, initialPr, isSubmitti
         <ModalCloseButton isDisabled={isSubmitting} />
         <ModalBody>
           <Stack spacing={4}>
-            <Alert status="info" borderRadius="md" fontSize="sm">
+            <Alert status="info" borderRadius="var(--tt-radius-md, 12px)" fontSize="sm">
               <AlertIcon />
               {executionProvider === 'vercel-sandbox'
                 ? 'Vercel Workflow will provision an isolated Sandbox runner, then GitHub will execute the exact protected workflow on that Vercel compute.'
@@ -476,8 +563,8 @@ const DispatchModal = ({ isOpen, onClose, initialWorkflow, initialPr, isSubmitti
             </FormControl>
             <FormControl>
               <FormLabel fontSize="sm">Workflow entry ref</FormLabel>
-              <Input value={entryRef} isReadOnly bg="var(--tt-surface-alt, #f6f6f8)" />
-              <Text mt={1} fontSize="xs" opacity={0.56}>
+              <Input value={entryRef} isReadOnly fontFamily={MONO} bg="var(--tt-surface-alt, #f5f5f7)" />
+              <Text mt={1} fontSize="xs" color="var(--tt-muted, #9a9aa6)">
                 Fixed server-side so arbitrary feature-branch workflow YAML can never run. The implementation is pinned to github-actions.
               </Text>
             </FormControl>
@@ -499,7 +586,6 @@ const DispatchModal = ({ isOpen, onClose, initialWorkflow, initialPr, isSubmitti
 						Cancel
 					</Button>
           <Button
-            colorScheme={sensitive ? 'orange' : 'purple'}
             leftIcon={<FiPlay />}
             onClick={submit}
             isLoading={isSubmitting}
@@ -514,6 +600,7 @@ const DispatchModal = ({ isOpen, onClose, initialWorkflow, initialPr, isSubmitti
 };
 
 type FeatureStackDraft = {
+	modelWaterfall?: AiWaterfallConfig | null;
 	id: string | null;
   name: string;
   selectedFeatureIds: string[];
@@ -523,6 +610,7 @@ type FeatureStackDraft = {
 };
 
 type SavedFeatureStack = {
+	modelWaterfall?: AiWaterfallConfig | null;
 	id: string;
 	name: string;
 	sourcePrNumbers: number[];
@@ -531,8 +619,21 @@ type SavedFeatureStack = {
 	status: string;
 	lastDispatchId: string | null;
 	lastRunAt: string | null;
+	runs: SavedFeatureStackRun[];
 	createdAt: string;
 	updatedAt: string;
+};
+
+type SavedFeatureStackRun = {
+	id: string;
+	runId: string | null;
+	status: string;
+	title: string;
+	url: string | null;
+	workflowRunId: number | null;
+	startedAt: string;
+	completedAt: string | null;
+	linkCheckedAt?: string | null;
 };
 
 type FeatureStackTargetProgress = {
@@ -550,15 +651,23 @@ type FeatureStackLiveLine = {
 };
 
 type FeatureStackLiveSnapshot = {
+  activities: StackActivity[];
+  heartbeatLabel: string;
+  chatRunId: string | null;
 	live: boolean;
+	needsAttention: boolean;
+	state: string;
 	percent: number;
 	summary: string;
 	finishLabel: string;
 	timeZone: string;
 	lines: FeatureStackLiveLine[];
+	runs: SavedFeatureStackRun[];
 };
 
 type FeatureStackComposerProps = {
+	modelWaterfall: AiWaterfallConfig | null;
+	onModelWaterfallChange: (value: AiWaterfallConfig | null) => void;
   name: string;
   selected: { feature: CiEntity; pr: CiEntity }[];
 	pendingSourcePrNumbers: number[];
@@ -573,6 +682,7 @@ type FeatureStackComposerProps = {
   onToggleCollapsed: () => void;
   isSubmitting: boolean;
 	isSaving: boolean;
+	lifecycleBusy: { id: string; action: FeatureStackLifecycleAction } | null;
   canDispatch: boolean;
   onNameChange: (value: string) => void;
   onRemove: (featureId: string) => void;
@@ -583,10 +693,13 @@ type FeatureStackComposerProps = {
 	onLoad: (stack: SavedFeatureStack) => void;
 	onSave: () => void;
 	onDelete: (id: string) => void;
+	onLifecycle: (stack: SavedFeatureStack, action: FeatureStackLifecycleAction) => void;
   onSubmit: () => void;
 };
 
 const FeatureStackComposer = ({
+	modelWaterfall,
+	onModelWaterfallChange,
   name,
   selected,
 	pendingSourcePrNumbers,
@@ -601,6 +714,7 @@ const FeatureStackComposer = ({
   onToggleCollapsed,
   isSubmitting,
 	isSaving,
+	lifecycleBusy,
   canDispatch,
   onNameChange,
   onRemove,
@@ -611,11 +725,14 @@ const FeatureStackComposer = ({
 	onLoad,
 	onSave,
 	onDelete,
+	onLifecycle,
   onSubmit
 }: FeatureStackComposerProps) => {
   const availableTargets = branchOptions.filter((branch) => !targets.includes(branch));
 	const selectedCount = selected.length + pendingSourcePrNumbers.length;
 	const ready = selected.length >= 1 && targets.length >= 1 && name.trim().length > 0;
+	const activeSavedStack = savedStacks.find((stack) => stack.id === activeStackId) ?? null;
+	const requiresRestart = activeSavedStack ? ['paused', 'stopped'].includes(activeSavedStack.status.toLowerCase()) : false;
   return (
 		<Box border="1px solid var(--tt-border, #e7e7eb)" borderRadius="var(--tt-radius-md, 12px)" bg="var(--tt-card, #fff)" mb={4} overflow="hidden">
       <Flex px={4} py={3} align={{ base: 'flex-start', md: 'center' }} justify="space-between" gap={3} direction={{ base: 'column', md: 'row' }}>
@@ -623,11 +740,14 @@ const FeatureStackComposer = ({
           variant="unstyled"
           height="auto"
           textAlign="left"
+          minW={0}
+          maxW="100%"
+          whiteSpace="normal"
           onClick={onToggleCollapsed}
           aria-expanded={!collapsed}
           aria-controls="feature-stack-section"
         >
-          <Flex align="center" gap={2}>
+          <Flex align="center" gap={2} wrap="wrap">
             <FiLayers />
             <Heading size="sm">Feature Stack</Heading>
 						<Badge colorScheme={selectedCount >= 1 ? 'purple' : 'gray'}>{selectedCount} selected</Badge>
@@ -671,7 +791,8 @@ const FeatureStackComposer = ({
           leftIcon={<FiPlay />}
           onClick={onSubmit}
           isLoading={isSubmitting}
-						isDisabled={!canDispatch || !ready || isSaving}
+						isDisabled={!canDispatch || !ready || isSaving || requiresRestart}
+						title={requiresRestart ? 'Use Restart to begin a fresh run for this paused or stopped stack' : undefined}
           flex="0 0 auto"
         >
 						Save &amp; merge
@@ -685,36 +806,94 @@ const FeatureStackComposer = ({
 					<Text fontSize="10px" fontWeight="700" letterSpacing="0.08em" textTransform="uppercase" opacity={0.5} mb={2}>
 						Saved stacks
 					</Text>
-					<Flex gap={2} wrap="wrap">
+					<Flex gap={2} wrap="wrap" align="stretch">
 						{savedStacks.map((stack) => {
 							const progress = progressByStack.get(stack.id) ?? [];
+							const busy = lifecycleBusy?.id === stack.id;
+							const lifecycleOverridesTarget = ['paused', 'stopped'].includes(stack.status.toLowerCase());
 							return (
-								<Button
+								<Box
 									key={stack.id}
-									size="sm"
-									height="auto"
-									py={2}
-									variant={activeStackId === stack.id ? 'solid' : 'outline'}
-									colorScheme={activeStackId === stack.id ? 'purple' : 'gray'}
-									leftIcon={<FiEdit3 />}
-									onClick={() => onLoad(stack)}
+									border="1px solid"
+									borderColor={activeStackId === stack.id ? 'purple.400' : 'var(--tt-border, #e7e7eb)'}
+									borderRadius="md"
+									bg={activeStackId === stack.id ? 'purple.50' : 'var(--tt-card, #fff)'}
+									minW={{ base: '100%', md: '260px' }}
 								>
-									<Box textAlign="left">
-										<Text fontSize="xs" fontWeight="700">
-											{stack.name}
-										</Text>
+									<Button
+										variant="unstyled"
+										height="auto"
+										width="100%"
+										px={3}
+										pt={2.5}
+										pb={2}
+										textAlign="left"
+										onClick={() => onLoad(stack)}
+										leftIcon={<FiEdit3 />}
+									>
+										<Box minW={0}>
+											<Text fontSize="xs" fontWeight="700" noOfLines={1}>{stack.name}</Text>
 										<Flex gap={1} mt={1} wrap="wrap">
 											{stack.targets.map((target) => {
 												const targetProgress = progress.find((item) => item.target === target);
+												const targetStatus = lifecycleOverridesTarget ? stack.status : targetProgress?.status ?? stack.status;
+												const chip = STATUS_CHIP_STYLES[statusTone(targetStatus)];
 												return (
-													<Badge key={target} colorScheme={statusColor(targetProgress?.status ?? stack.status)} textTransform="none">
-														{target}: {targetProgress?.status ?? stack.status}
-													</Badge>
+												<Box
+													as="span"
+													key={target}
+													display="inline-block"
+													bg={chip.bg}
+													color={chip.color}
+													borderRadius="var(--tt-radius-pill, 999px)"
+													px={2}
+													py="2px"
+													fontSize="xs"
+													fontWeight={600}
+													whiteSpace="nowrap"
+												>
+													{target}: {targetStatus}
+													</Box>
 												);
 											})}
 										</Flex>
-									</Box>
-        </Button>
+										</Box>
+									</Button>
+									<Flex borderTop="1px solid var(--tt-border, #e7e7eb)" px={2} py={1.5} gap={1} justify="flex-end">
+										<IconButton
+											aria-label={`Pause ${stack.name}`}
+											title="Pause: cancel current compute and preserve this stack for Restart"
+											icon={<FiPauseCircle />}
+											size="xs"
+											variant="ghost"
+											isLoading={busy && lifecycleBusy?.action === 'pause'}
+											isDisabled={busy || !featureStackCanPause(stack.status)}
+											onClick={() => onLifecycle(stack, 'pause')}
+										/>
+										<IconButton
+											aria-label={`Stop ${stack.name}`}
+											title="Stop: cancel current compute and keep the saved definition and history"
+											icon={<FiStopCircle />}
+											size="xs"
+											variant="ghost"
+											colorScheme="red"
+											isLoading={busy && lifecycleBusy?.action === 'stop'}
+											isDisabled={busy || !featureStackCanStop(stack.status)}
+											onClick={() => onLifecycle(stack, 'stop')}
+										/>
+										<IconButton
+											aria-label={`Restart ${stack.name}`}
+											title="Restart: cancel any active compute and begin a fresh immutable run"
+											icon={<FiRotateCcw />}
+											size="xs"
+											variant="ghost"
+											colorScheme="purple"
+											isLoading={busy && lifecycleBusy?.action === 'restart'}
+											isDisabled={busy || !featureStackCanRestart(stack.status)}
+											onClick={() => onLifecycle(stack, 'restart')}
+										/>
+									</Flex>
+								</Box>
 							);
 						})}
       </Flex>
@@ -730,6 +909,7 @@ const FeatureStackComposer = ({
         <FormControl>
           <FormLabel fontSize="xs">Stack name</FormLabel>
 					<Input size="sm" value={name} maxLength={80} onChange={(event) => onNameChange(event.target.value)} placeholder="Search + Messenger" />
+					<FeatureStackModelSelection value={modelWaterfall} onChange={onModelWaterfallChange} disabled={isSaving || isSubmitting} />
         </FormControl>
         <FormControl>
           <FormLabel fontSize="xs">Ordered feature list</FormLabel>
@@ -802,8 +982,10 @@ const FeatureStackComposer = ({
 					<Flex align={{ base: 'flex-start', md: 'center' }} justify="space-between" gap={2} direction={{ base: 'column', md: 'row' }}>
 						<Flex align="center" gap={2}>
 							<FiActivity />
-							<Heading size="xs">Live merge stream</Heading>
-							<Badge colorScheme={liveSnapshot.live ? 'green' : 'gray'}>{liveSnapshot.live ? 'Live' : 'Latest run'}</Badge>
+							<Heading size="xs">Current stack activity</Heading>
+							<Badge colorScheme={liveSnapshot.needsAttention ? 'orange' : liveSnapshot.live ? 'green' : 'gray'}>
+								{liveSnapshot.needsAttention ? 'Needs attention' : liveSnapshot.live ? 'Monitoring' : 'Latest run'}
+							</Badge>
 						</Flex>
 						<Flex align="center" gap={1.5} fontSize="xs" opacity={0.68}>
 							<FiClock />
@@ -821,8 +1003,12 @@ const FeatureStackComposer = ({
 						colorScheme="purple"
 						borderRadius="999px"
 						mt={3}
-						aria-label={`${liveSnapshot.percent}% complete`}
+						aria-label={`${liveSnapshot.percent}% of targets merged`}
 					/>
+          <Text fontSize="xs" mt={2} opacity={0.65}>{liveSnapshot.heartbeatLabel}</Text>
+          <StackActivityPanel rows={liveSnapshot.activities} />
+          {liveSnapshot.chatRunId ? <StackRunChat key={liveSnapshot.chatRunId} runId={liveSnapshot.chatRunId} /> : null}
+          <Text fontSize="xs" fontWeight="bold" mt={4}>Activity history</Text>
 					<Box
 						role="log"
 						aria-live="polite"
@@ -840,7 +1026,7 @@ const FeatureStackComposer = ({
 					>
 						<Stack spacing={1.5}>
 							{liveSnapshot.lines.map((line) => (
-								<Flex key={line.key} gap={2} align="baseline">
+								<Flex key={line.key} gap={2} align="baseline" direction={{ base: 'column', md: 'row' }} minW={0} overflowWrap="anywhere">
 									<Text color="#8b93a7" flex="0 0 auto">
 										{line.at ? formatTime(line.at) : '—'}
 									</Text>
@@ -850,6 +1036,52 @@ const FeatureStackComposer = ({
 										</Link>
 									) : (
 										<Text>{line.message}</Text>
+									)}
+								</Flex>
+							))}
+						</Stack>
+					</Box>
+					<Box mt={4} pt={4} borderTop="1px solid var(--tt-border, #e7e7eb)">
+						<Flex align="center" gap={2} mb={2}>
+							<FiGithub />
+							<Heading size="xs">Stack run status</Heading>
+							<StatusBadge status={liveSnapshot.state} />
+						</Flex>
+						{liveSnapshot.needsAttention ? (
+							<Alert status="warning" borderRadius="md" py={2} mb={3} fontSize="xs">
+								<AlertIcon />
+								One or more targets need attention. Read the target cards above for the blocker and next step; other targets may still be running.
+							</Alert>
+						) : null}
+						<Stack spacing={2}>
+							{liveSnapshot.runs.map((run, index) => (
+								<Flex
+									key={run.id}
+									align={{ base: 'flex-start', md: 'center' }}
+									justify="space-between"
+									gap={2}
+									direction={{ base: 'column', md: 'row' }}
+									px={3}
+									py={2}
+									border="1px solid var(--tt-border, #e7e7eb)"
+									borderRadius="md"
+									bg="var(--tt-card, #fff)"
+								>
+									<Box minW={0}>
+										<Flex align="center" gap={2} wrap="wrap">
+											<Text fontSize="xs" fontWeight="700">{index === 0 ? 'Current run' : `Historical run ${index + 1}`}</Text>
+											<StatusBadge status={run.status} />
+										</Flex>
+										<Text fontSize="xs" opacity={0.62} noOfLines={1} mt={1}>
+											{formatTime(run.startedAt)}{run.completedAt ? ` · finished ${formatTime(run.completedAt)}` : ''}
+										</Text>
+									</Box>
+									{run.url ? (
+										<Button as={Link} href={run.url} isExternal size="xs" variant="outline" rightIcon={<FiExternalLink />} flex="0 0 auto">
+											Open GitHub run
+										</Button>
+									) : (
+										<Text fontSize="xs" opacity={0.5}>GitHub link pending</Text>
 									)}
 								</Flex>
 							))}
@@ -1074,15 +1306,21 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
   const [dispatching, setDispatching] = React.useState(false);
   const [featureStackDispatching, setFeatureStackDispatching] = React.useState(false);
 	const [featureStackSaving, setFeatureStackSaving] = React.useState(false);
+	const [featureStackLifecycleBusy, setFeatureStackLifecycleBusy] = React.useState<{
+		id: string;
+		action: FeatureStackLifecycleAction;
+	} | null>(null);
   const [savingWorkflow, setSavingWorkflow] = React.useState<CiWorkflowKey | null>(null);
   const [savingPreviewEnvironment, setSavingPreviewEnvironment] = React.useState<'develop' | 'production' | null>(null);
 	const [savedFeatureStacks, setSavedFeatureStacks] = React.useState<SavedFeatureStack[]>([]);
+	const [featureStackEvents, setFeatureStackEvents] = React.useState<CiEvent[]>([]);
 	const [activeFeatureStackId, setActiveFeatureStackId] = React.useState<string | null>(initialStackDraft.id ?? null);
   const [featureStackName, setFeatureStackName] = React.useState(initialStackDraft.name);
   const [featureStackIds, setFeatureStackIds] = React.useState(initialStackDraft.selectedFeatureIds);
 	const [pendingFeatureStackPrNumbers, setPendingFeatureStackPrNumbers] = React.useState(
 		initialStackDraft.pendingSourcePrNumbers ?? []
 	);
+  const [featureStackModels, setFeatureStackModels] = React.useState<AiWaterfallConfig | null>(initialStackDraft.modelWaterfall ?? null);
   const [featureStackTargets, setFeatureStackTargets] = React.useState(initialStackDraft.targets);
 	const [featureStackAutoDecide, setFeatureStackAutoDecide] = React.useState(initialStackDraft.autoDecideBranches !== false);
   const [collapsedSections, setCollapsedSections] = React.useState<Set<string>>(
@@ -1109,11 +1347,13 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       selectedFeatureIds: featureStackIds,
 			pendingSourcePrNumbers: pendingFeatureStackPrNumbers,
 			targets: featureStackTargets,
+			modelWaterfall: featureStackModels,
 			autoDecideBranches: featureStackAutoDecide
     } satisfies FeatureStackDraft);
 	}, [
 		activeFeatureStackId,
 		featureStackAutoDecide,
+		featureStackModels,
 		featureStackIds,
 		featureStackName,
 		featureStackTargets,
@@ -1123,7 +1363,10 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 
 	const loadSavedFeatureStacks = React.useCallback(async (options?: { signal?: AbortSignal }) => {
 		const next = await apiRef.current.v1.admin.ciFeatureStacks(options);
-		if (next?.ok && Array.isArray(next.stacks)) setSavedFeatureStacks(next.stacks);
+		if (next?.ok && Array.isArray(next.stacks)) {
+			setSavedFeatureStacks(next.stacks);
+			setFeatureStackEvents(Array.isArray(next.events) ? next.events : []);
+		}
 	}, []);
 
 	const load = React.useCallback(
@@ -1172,12 +1415,12 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
     const controller = new AbortController();
     load({ signal: controller.signal });
 		loadSavedFeatureStacks({ signal: controller.signal }).catch(() => undefined);
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') load();
+    const interval = activityInterval('timer:components/Admin/CIControl/CIControlDashboard:1', 'CIControl Dashboard', () => {
+      if (document.visibilityState === 'visible') return load();
     }, CI_DASHBOARD_POLL_INTERVAL_MS);
     return () => {
       controller.abort();
-      window.clearInterval(interval);
+      clearActivityInterval(interval);
     };
 	}, [load, loadSavedFeatureStacks]);
 
@@ -1266,49 +1509,58 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		const targetProgress = featureStackProgress.get(stack.id) ?? [];
 		const targetRows = stack.targets.map((target) => targetProgress.find((entry) => entry.target === target) ?? { target, status: 'waiting' });
 		const activeTargets = targetRows.filter((entry) => normalizedStatus(entry.status) !== 'skipped');
-		const terminalStatuses = new Set(['merged', 'closed', 'completed', 'success', 'succeeded', 'failure', 'failed', 'cancelled']);
-		const completedTargets = activeTargets.filter((entry) => terminalStatuses.has(normalizedStatus(entry.status))).length;
+		const completedTargets = activeTargets.filter((entry) => normalizedStatus(entry.status) === 'merged').length;
 		const dispatch = dashboard.dispatches.find((candidate) => candidate.id === stack.lastDispatchId) ?? null;
-		const dispatchEvents = dashboard.events.filter((event) => event.parentId === stack.lastDispatchId);
-		const startedMs = startedAt.getTime();
-		const topLevelRuns = dashboard.workflowRuns
-			.filter((run) => {
-				if (String(run.entityType ?? '') === 'job' || normalizedStatus(run.event) !== 'workflow_dispatch') return false;
-				const runStarted = parseTime(run.startedAt ?? entityTime(run));
-				return runStarted && runStarted.getTime() >= startedMs - 30_000;
-			})
-			.sort((left, right) => {
-				const leftStarted = parseTime(left.startedAt ?? entityTime(left))?.getTime() ?? Number.MAX_SAFE_INTEGER;
-				const rightStarted = parseTime(right.startedAt ?? entityTime(right))?.getTime() ?? Number.MAX_SAFE_INTEGER;
-				return Math.abs(leftStarted - startedMs) - Math.abs(rightStarted - startedMs);
-			});
-		const run = topLevelRuns[0] ?? null;
+		const dispatchEvents = [
+			...new Map(
+				[...featureStackEvents, ...dashboard.events]
+					.filter((event) => event.parentId === stack.lastDispatchId)
+					.map((event) => [event.id, event])
+			).values()
+		];
+		const heartbeat = latestFeatureStackHeartbeat(dispatchEvents);
+		const topLevelRuns = dashboard.workflowRuns.filter(
+			(candidate) => String(candidate.entityType ?? '') !== 'job' && normalizedStatus(candidate.event) === 'workflow_dispatch'
+		);
+		const allJobs = dashboard.workflowRuns.filter((candidate) => String(candidate.entityType ?? '') === 'job');
+		const storedRuns = stack.runs ?? [];
+		const currentStoredRun = storedRuns.find((candidate) => candidate.id === stack.lastDispatchId) ?? storedRuns[0] ?? null;
+		const linkedRunId = currentStoredRun?.workflowRunId ?? null;
+		const legacyRunId = linkedRunId
+			? null
+			: legacyFeatureStackWorkflowRunId({
+					startedAt: stack.lastRunAt,
+					runs: topLevelRuns,
+					jobs: allJobs
+			  });
+		const exactRunId = linkedRunId ?? legacyRunId;
+		const run = exactRunId ? topLevelRuns.find((candidate) => Number(candidate.runId) === exactRunId) ?? null : null;
 		const jobs = run?.runId
-			? dashboard.workflowRuns
-					.filter((candidate) => String(candidate.entityType ?? '') === 'job' && Number(candidate.runId) === Number(run.runId))
+			? allJobs
+					.filter((candidate) => Number(candidate.runId) === Number(run.runId))
 					.sort((left, right) => (parseTime(left.startedAt)?.getTime() ?? 0) - (parseTime(right.startedAt)?.getTime() ?? 0))
 			: [];
-		const completedJobs = jobs.filter((job) => terminalStatuses.has(normalizedStatus(job.status))).length;
 		const allTargetsFinished = activeTargets.length > 0 && completedTargets === activeTargets.length;
-		const runFinished = run ? terminalStatuses.has(normalizedStatus(run.status)) : false;
-		const live = !allTargetsFinished && !(runFinished && ['failure', 'failed', 'cancelled'].includes(normalizedStatus(run?.status)));
-		let percent = dispatch ? 18 : 8;
-		if (run) percent = Math.max(percent, runFinished ? 55 : 30);
-		if (jobs.length) percent = Math.max(percent, 30 + Math.round((completedJobs / jobs.length) * 35));
-		if (activeTargets.length) percent = Math.max(percent, 30 + Math.round((completedTargets / activeTargets.length) * 70));
-		if (allTargetsFinished) percent = 100;
-		percent = Math.min(100, Math.max(5, percent));
-		const estimatedMinutes = Math.max(8, stack.sourcePrNumbers.length * 2 + Math.max(1, activeTargets.length) * 4);
-		const baselineFinish = new Date(startedMs + estimatedMinutes * 60_000);
-		const expectedFinish =
-			baselineFinish.getTime() > Date.now() ? baselineFinish : new Date(Date.now() + Math.max(2, activeTargets.length * 2) * 60_000);
+		const runStatus = run?.status ?? currentStoredRun?.status ?? dispatch?.status ?? stack.status;
+		const hasPublishedTarget = activeTargets.some((entry) => Boolean(entry.url));
+		const outcome = featureStackRunOutcome({
+			runStatus,
+			allTargetsFinished,
+			hasPublishedTarget,
+			dispatchAccepted: Boolean(dispatch || currentStoredRun || stack.status === 'running')
+		});
+    const activities = stackActivities(targetRows, heartbeat, ['paused', 'stopped'].includes(stack.status) ? stack.status : String(runStatus));
+    const activity = stackActivitySummary(activities);
+    const held = ['paused', 'stopped'].includes(stack.status) || ['cancelled', 'stopped'].includes(String(runStatus));
+    const percent = activity.percent;
+    const needsAttention = outcome.needsAttention || activities.some(row => ['failed', 'blocked'].includes(row.state));
 		const latestFinishedAt = [run?.completedAt, ...targetRows.map((entry) => entry.updatedAt)]
 			.map(parseTime)
 			.filter((date): date is Date => Boolean(date))
 			.sort((left, right) => right.getTime() - left.getTime())[0];
 		const timeFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 		const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local time';
-		const lines: FeatureStackLiveLine[] = [
+		const lines = sortFeatureStackTimeline<FeatureStackLiveLine>([
 			{
 				key: 'queued',
 				at: stack.lastRunAt,
@@ -1316,11 +1568,18 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 					activeTargets.length || stack.targets.length
 				} compatible target${(activeTargets.length || stack.targets.length) === 1 ? '' : 's'}.`
 			},
-			...dispatchEvents.map((event) => ({
-				key: `event:${event.id}`,
-				at: String(event.occurredAt ?? entityTime(event) ?? stack.lastRunAt),
-				message: `Dispatch ${String(event.statusTo ?? event.action ?? event.status ?? 'updated').replace(/_/g, ' ')}.`
-			})),
+			...dispatchEvents.map((event) => {
+				const data = event.data && typeof event.data === 'object' && !Array.isArray(event.data) ? event.data as Record<string, unknown> : null;
+				const isProgress = event.eventType === 'feature_stack_progress';
+				return {
+					key: `event:${event.id}`,
+					at: String(event.occurredAt ?? entityTime(event) ?? stack.lastRunAt),
+					message: isProgress && typeof data?.message === 'string'
+						? data.message
+						: `Dispatch ${String(event.statusTo ?? event.action ?? event.status ?? 'updated').replace(/_/g, ' ')}.`,
+					url: isProgress && typeof data?.workflowRunUrl === 'string' ? data.workflowRunUrl : null
+				};
+			}),
 			...(run
 				? [
 						{
@@ -1350,33 +1609,50 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 						  }.`,
 				url: entry.url
 			}))
-		];
+		]);
+		const historicalRuns = storedRuns
+			.map((storedRun) => {
+				const resolvedRunId = storedRun.workflowRunId ?? (storedRun.id === stack.lastDispatchId ? legacyRunId : null);
+				const entity = resolvedRunId ? topLevelRuns.find((candidate) => Number(candidate.runId) === resolvedRunId) ?? null : null;
+				return {
+					...storedRun,
+					status: String(entity?.status ?? storedRun.status),
+					title: String(entity?.title ?? storedRun.title),
+					url: typeof entity?.url === 'string' ? entity.url : storedRun.url,
+					workflowRunId: resolvedRunId,
+					startedAt: String(entity?.startedAt ?? storedRun.startedAt),
+					completedAt: entity?.completedAt ? String(entity.completedAt) : storedRun.completedAt
+				};
+			})
+			.sort((left, right) => (parseTime(right.startedAt)?.getTime() ?? 0) - (parseTime(left.startedAt)?.getTime() ?? 0));
 		return {
-			live,
-			percent,
-			summary: `${percent}% · ${completedTargets}/${activeTargets.length || stack.targets.length} target branches finished · ${completedJobs}/${
-				jobs.length
-			} visible workflow jobs finished`,
-			finishLabel:
-				allTargetsFinished && latestFinishedAt
-					? `Finished ${timeFormatter.format(latestFinishedAt)}`
-					: `Estimated finish ${timeFormatter.format(expectedFinish)}`,
+      activities,
+      chatRunId: currentStoredRun?.runId ?? null,
+      heartbeatLabel: heartbeat ? `Worker update ${timeFormatter.format(new Date(heartbeat.at))}${Date.now() - Date.parse(heartbeat.at) > 12 * 60_000 ? ' · stale; current worker activity is unconfirmed' : ' · updates on phase changes and at least every 10 minutes'}` : 'No worker heartbeat received yet. Target PR status is shown separately.',
+      live: outcome.live && !['paused', 'stopped'].includes(stack.status),
+      needsAttention,
+      state: activity.finished ? 'merged' : held ? 'stopped' : needsAttention ? 'needs-attention' : activities.some(row => row.state === 'working') ? 'working' : 'waiting',
+      percent,
+      summary: activity.summary,
+      finishLabel: activity.finished && latestFinishedAt ? `Finished ${timeFormatter.format(latestFinishedAt)}` : held ? 'Run stopped; unmerged targets remain' : 'Finish time unknown — depends on workers, conflicts and checks',
+
 			timeZone,
-			lines
+			lines,
+			runs: historicalRuns
 		};
-	}, [activeSavedFeatureStack, dashboard, featureStackProgress]);
+	}, [activeSavedFeatureStack, dashboard, featureStackEvents, featureStackProgress]);
 
 	React.useEffect(() => {
 		if (!featureStackLiveSnapshot?.live) return;
 		let inFlight = false;
-		const interval = window.setInterval(() => {
+		const interval = activityInterval('timer:components/Admin/CIControl/CIControlDashboard:2', 'CIControl Dashboard', () => {
 			if (inFlight || document.visibilityState !== 'visible') return;
 			inFlight = true;
-			Promise.allSettled([load(), loadSavedFeatureStacks()]).finally(() => {
+			return Promise.allSettled([load(), loadSavedFeatureStacks()]).finally(() => {
 				inFlight = false;
 			});
 		}, CI_DASHBOARD_LIVE_POLL_INTERVAL_MS);
-		return () => window.clearInterval(interval);
+		return () => clearActivityInterval(interval);
 	}, [featureStackLiveSnapshot?.live, load, loadSavedFeatureStacks]);
 	React.useEffect(() => {
 		if (!activeFeatureStackId || dashboard?.features.length || pendingFeatureStackPrNumbers.length) return;
@@ -1427,6 +1703,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		setFeatureStackName(stack.name);
 		setFeatureStackTargets(stack.targets);
 		setFeatureStackAutoDecide(stack.autoDecideBranches);
+		setFeatureStackModels(stack.modelWaterfall ?? null);
 		if (dashboard?.features.length) {
 			const resolved = resolveFeatureStackSources(stack.sourcePrNumbers, dashboard.pullRequests);
 			setFeatureStackIds(resolved.selectedFeatureIds);
@@ -1444,19 +1721,21 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		setPendingFeatureStackPrNumbers([]);
 		setFeatureStackTargets(['develop', 'main']);
 		setFeatureStackAutoDecide(true);
+		setFeatureStackModels(null);
 	};
 
 	const saveCurrentFeatureStack = async () => {
 		if (featureStackSaving || featureStackSelection.length < 1 || featureStackTargets.length < 1 || !featureStackName.trim()) return null;
 		setFeatureStackSaving(true);
 		try {
-			await requireThingtimeCapability('api.admin-ci-feature-stacks', '1.0.0');
+			await requireThingtimeCapability('api.admin-ci-feature-stacks', '1.4.0');
 			const result = await apiRef.current.v1.admin.mutateCiFeatureStack({
 				action: 'save',
 				...(activeFeatureStackId ? { id: activeFeatureStackId } : {}),
 				name: featureStackName.trim(),
 				sourcePrNumbers: featureStackSelection.map(({ pr }) => Number(pr.number)),
 				targets: featureStackTargets,
+				modelWaterfall: featureStackModels,
 				autoDecideBranches: featureStackAutoDecide
 			});
 			if (!result?.ok || !result.stack?.id) throw new Error(result?.error || 'Feature Stack save failed.');
@@ -1482,6 +1761,50 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 			setFeatureStackSaving(false);
 		}
   };
+
+	const changeFeatureStackLifecycle = async (stack: SavedFeatureStack, action: FeatureStackLifecycleAction) => {
+		if (featureStackLifecycleBusy) return;
+		if (
+			action === 'stop' &&
+			!window.confirm(`Stop “${stack.name}”?\n\nCurrent compute will be cancelled. The saved stack and its run history will remain available.`)
+		) {
+			return;
+		}
+		if (
+			action === 'restart' &&
+			featureStackCanPause(stack.status) &&
+			!window.confirm(`Restart “${stack.name}”?\n\nIts current compute will be cancelled before a fresh immutable run starts.`)
+		) {
+			return;
+		}
+		setFeatureStackLifecycleBusy({ id: stack.id, action });
+		try {
+			await requireThingtimeCapability('api.admin-ci-feature-stacks', '1.4.0');
+			const result = await apiRef.current.v1.admin.mutateCiFeatureStack({ action, id: stack.id });
+			if (!result?.ok) throw new Error(result?.error || `Feature Stack ${action} failed.`);
+			setSavedFeatureStacks(result.stacks ?? []);
+			lopu({
+				title: action === 'restart' ? 'Feature Stack restarted 🙌' : action === 'pause' ? 'Feature Stack paused' : 'Feature Stack stopped',
+				description:
+					action === 'restart'
+						? 'Lopu accepted a fresh immutable run. Live progress and the new GitHub run link will appear here.'
+						: 'Current compute was cancelled when still active. The saved definition and complete run history were preserved.',
+				status: 'success',
+				duration: 7000
+			});
+			window.setTimeout(() => {
+				void Promise.allSettled([load(), loadSavedFeatureStacks()]);
+			}, 1500);
+		} catch (error: any) {
+			lopu({
+				title: `The Feature Stack was not ${action === 'restart' ? 'restarted' : action === 'pause' ? 'paused' : 'stopped'}`,
+				description: error?.message || 'Nothing was changed.',
+				status: 'error'
+			});
+		} finally {
+			setFeatureStackLifecycleBusy(null);
+		}
+	};
 
   const selectFeature = (feature: CiEntity) => {
     setSelectedFeatureId(feature.id);
@@ -1526,7 +1849,8 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		if (featureStackDispatching || featureStackSelection.length < 1 || featureStackTargets.length < 1) return;
     setFeatureStackDispatching(true);
     try {
-			await requireThingtimeCapability('api.admin-ci-dispatch', '2.1.0');
+			await requireThingtimeCapability('api.admin-ci-dispatch', '2.2.0');
+			await requireThingtimeCapability('api.admin-ci-feature-stacks', '1.4.0');
 			const saved = await saveCurrentFeatureStack();
 			if (!saved) throw new Error('Feature Stack save failed');
 			const result = await apiRef.current.v1.admin.mutateCiFeatureStack({ action: 'run', id: saved.id });
@@ -1594,7 +1918,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
     }
     setSavingPreviewEnvironment(environment);
     try {
-      await requireThingtimeCapability('api.admin-ci-previews', '1.0.0');
+      await requireThingtimeCapability('api.admin-ci-previews', '2.0.0');
       const result = await apiRef.current.v1.admin.setCiPreviewPolicy({
         prNumber,
         environment,
@@ -1604,10 +1928,10 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       if (!result?.ok) throw new Error(result?.error || 'Preview policy rejected');
       await load();
       lopu({
-        title: enabled ? `${environment === 'production' ? 'Production' : 'Develop'} preview queued 🙌` : `${environment === 'production' ? 'Production' : 'Develop'} preview disabled`,
+        title: enabled ? `${environment === 'production' ? 'Production' : 'Develop'} preview queued 🙌` : `${environment === 'production' ? 'Production' : 'Develop'} preview cleanup queued`,
         description: enabled
-          ? `PR #${prNumber} is building at its exact current SHA. Signed Vercel progress will update here automatically.`
-          : `Only Thingtime-owned ${environment} preview deployments for PR #${prNumber} were removed.`,
+          ? `The protected GitHub Actions controller is building PR #${prNumber} at its exact current SHA.`
+          : `The protected controller will remove only Thingtime-owned ${environment} preview resources for PR #${prNumber}.`,
         status: 'success',
         duration: 7000
       });
@@ -1650,9 +1974,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
     return (
       <Flex minH="280px" align="center" justify="center" gap={3}>
         <Spinner size="sm" />
-				<Text fontSize="sm" opacity={0.62}>
-					Loading CI control data…
-				</Text>
+        <Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">Loading CI control data…</Text>
       </Flex>
     );
   }
@@ -1661,8 +1983,8 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
     <Box>
       <Flex align={{ base: 'flex-start', md: 'center' }} justify="space-between" gap={4} direction={{ base: 'column', md: 'row' }} mb={5}>
         <Box>
-          <Heading size="md">CI Control</Heading>
-          <Text mt={1} fontSize="sm" opacity={0.62}>
+          <Heading size="md" color="var(--tt-ink, #16161a)">CI Control</Heading>
+          <Text mt={1} fontSize="sm" color="var(--tt-text, #5a5a66)">
             Features, branches, pull requests, automation, previews, and status history in one place.
           </Text>
         </Box>
@@ -1681,7 +2003,6 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
           </Button>
           <Button
             size="sm"
-            colorScheme="purple"
             leftIcon={<FiPlay />}
             onClick={() => openDispatch('promote-features', null)}
             isDisabled={!integration?.githubAppConfigured}
@@ -1692,7 +2013,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       </Flex>
 
       {loadFailed ? (
-        <Alert status="warning" mb={4} borderRadius="md" fontSize="sm">
+        <Alert status="warning" mb={4} borderRadius="var(--tt-radius-md, 12px)" fontSize="sm">
           <AlertIcon />
           Live refresh failed. Last-known cached state remains visible and will retry
 				{nextRetryAt
@@ -1702,7 +2023,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       ) : null}
 
       {setupRequired || awaitingInitialReconcile ? (
-        <Alert status={setupRequired ? 'warning' : 'info'} mb={4} borderRadius="md" alignItems="flex-start">
+        <Alert status={setupRequired ? 'warning' : 'info'} mb={4} borderRadius="var(--tt-radius-md, 12px)" alignItems="flex-start">
           <AlertIcon mt="2px" />
           <Box>
             <Text fontSize="sm" fontWeight="650">
@@ -1718,9 +2039,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       ) : null}
 
       <Flex
-        border="1px solid var(--tt-border, #e7e7eb)"
-        borderRadius="var(--tt-radius-md, 12px)"
-        bg="var(--tt-card, #fff)"
+        {...CARD_STYLES}
         px={4}
         py={3}
         gap={{ base: 3, md: 6 }}
@@ -1734,23 +2053,51 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
           ['Ready previews', dashboard?.stats.readyPreviews ?? 0]
         ].map(([label, value]) => (
           <Box key={String(label)} minW="88px">
-						<Text fontSize="10px" fontWeight="700" textTransform="uppercase" letterSpacing="0.06em" opacity={0.45}>
-							{label}
-						</Text>
-						<Text fontSize="xl" fontWeight="700">
-							{value}
-						</Text>
+            <Text
+              fontFamily={MONO}
+              fontSize="10px"
+              fontWeight={600}
+              textTransform="uppercase"
+              letterSpacing="0.06em"
+              color="var(--tt-muted, #9a9aa6)"
+            >
+              {label}
+            </Text>
+            <Text fontSize="xl" fontWeight="700" color="var(--tt-ink, #16161a)">{value}</Text>
           </Box>
         ))}
         <Box ml={{ base: 0, md: 'auto' }} minW="190px">
-          <Flex gap={1.5} wrap="wrap" justify={{ base: 'flex-start', md: 'flex-end' }}>
-            <Badge colorScheme={integration?.githubAppConfigured ? 'green' : 'gray'}>GitHub App</Badge>
-            <Badge colorScheme={integration?.githubWebhookConfigured ? 'green' : 'gray'}>GitHub webhook</Badge>
-            <Badge colorScheme={integration?.vercelWebhookConfigured ? 'green' : 'gray'}>Vercel webhook</Badge>
-            <Badge colorScheme={integration?.providerRouterConfigured ? 'green' : 'gray'}>Provider router</Badge>
-            <Badge colorScheme={integration?.vercelRunnerReady ? 'green' : 'gray'}>Vercel runner</Badge>
+          <Flex gap={2.5} rowGap={1} wrap="wrap" justify={{ base: 'flex-start', md: 'flex-end' }}>
+            {[
+              ['GitHub App', Boolean(integration?.githubAppConfigured)] as const,
+              ['GitHub webhook', Boolean(integration?.githubWebhookConfigured)] as const,
+              ['Vercel webhook', Boolean(integration?.vercelWebhookConfigured)] as const,
+              ['Provider router', Boolean(integration?.providerRouterConfigured)] as const,
+              ['Vercel runner', Boolean(integration?.vercelRunnerReady)] as const
+            ].map(([label, ready]) => (
+              <Flex key={label} align="center" gap={1.5}>
+                <Box
+                  width="7px"
+                  height="7px"
+                  borderRadius="full"
+                  flexShrink={0}
+                  bg={ready ? 'var(--tt-positive, #2f8f4f)' : 'var(--tt-faint, #b6b6c0)'}
+                />
+                <Text
+                  fontFamily={MONO}
+                  fontSize="10px"
+                  fontWeight={600}
+                  letterSpacing="0.06em"
+                  textTransform="uppercase"
+                  color="var(--tt-muted, #9a9aa6)"
+                  whiteSpace="nowrap"
+                >
+                  {label}
+                </Text>
+              </Flex>
+            ))}
           </Flex>
-          <Text textAlign={{ base: 'left', md: 'right' }} mt={1} fontSize="xs" opacity={0.5}>
+          <Text textAlign={{ base: 'left', md: 'right' }} mt={1} fontSize="xs" color="var(--tt-muted, #9a9aa6)">
             Last event {relativeTime(dashboard?.freshness.latestEventAt)}
           </Text>
         </Box>
@@ -1766,13 +2113,15 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
         onToggleCollapsed={() => toggleSection('automation')}
       />
 
-      <ClaudeCredentialWaterfall
+      <PlatformCredentials readOnly
         cacheIdentity={cacheIdentity}
         collapsed={collapsedSections.has('credentials')}
         onToggleCollapsed={() => toggleSection('credentials')}
       />
 
-      <FeatureStackComposer
+      <FeatureStackComposer key={cacheIdentity}
+				modelWaterfall={featureStackModels}
+				onModelWaterfallChange={setFeatureStackModels}
         name={featureStackName}
         selected={featureStackSelection}
 				pendingSourcePrNumbers={pendingFeatureStackPrNumbers}
@@ -1787,6 +2136,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
         onToggleCollapsed={() => toggleSection('feature-stack')}
         isSubmitting={featureStackDispatching}
 				isSaving={featureStackSaving}
+				lifecycleBusy={featureStackLifecycleBusy}
         canDispatch={Boolean(integration?.githubAppConfigured && policies.find((policy) => policy.key === 'feature-stack')?.enabled)}
         onNameChange={(value) => {
           setFeatureStackName(value);
@@ -1820,13 +2170,14 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 						);
 				}}
 				onDelete={deleteFeatureStack}
+				onLifecycle={changeFeatureStackLifecycle}
         onSubmit={submitFeatureStack}
       />
 
       <Grid templateColumns={{ base: '1fr', lg: 'minmax(0, 1.65fr) minmax(320px, 0.85fr)' }} gap={4}>
-        <Box border="1px solid var(--tt-border, #e7e7eb)" borderRadius="var(--tt-radius-md, 12px)" bg="var(--tt-card, #fff)" overflow="hidden">
-          <Flex p={3} gap={2} borderBottom="1px solid var(--tt-border, #e7e7eb)" direction={{ base: 'column', sm: 'row' }}>
-            <Flex align="center" gap={2} flex="1" border="1px solid var(--tt-border, #e7e7eb)" borderRadius="md" px={3}>
+        <Box {...CARD_STYLES} overflow="hidden">
+          <Flex p={3} gap={2} borderBottom="1px solid var(--tt-border, #ececef)" direction={{ base: 'column', sm: 'row' }}>
+            <Flex align="center" gap={2} flex="1" border="1px solid var(--tt-border, #ececef)" borderRadius="var(--tt-radius-sm, 9px)" px={3}>
               <FiSearch opacity={0.45} />
 							<Input
 								value={query}
@@ -1890,11 +2241,12 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
             gap={3}
             px={4}
             py={2}
+            fontFamily={MONO}
             fontSize="10px"
-            fontWeight="700"
+            fontWeight={600}
             textTransform="uppercase"
             letterSpacing="0.06em"
-            opacity={0.45}
+            color="var(--tt-muted, #9a9aa6)"
           >
 						<Text aria-hidden="true">Add</Text>
 						<Text>Feature</Text>
@@ -1921,9 +2273,9 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
                   alignItems="center"
                   px={4}
                   py={3}
-                  borderTop="1px solid var(--tt-border, #eeeeF1)"
-                  bg={selected ? 'var(--tt-surface-alt, #f6f6f8)' : 'transparent'}
-                  _hover={{ bg: 'var(--tt-surface-alt, #f6f6f8)' }}
+                  borderTop="1px solid var(--tt-border-light, #f0f0f2)"
+                  bg={selected ? 'var(--tt-surface-alt, #f5f5f7)' : 'transparent'}
+                  _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
                 >
                   <Checkbox
                     gridColumn={{ base: '1', md: 'auto' }}
@@ -1971,7 +2323,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
             {!features.length ? (
               <Box p={8} textAlign="center">
                 <FiGitBranch style={{ margin: '0 auto 8px', opacity: 0.35 }} />
-                <Text fontSize="sm" opacity={0.58}>
+                <Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">
                   {dashboard?.features.length
                     ? 'No features match this search or status filter.'
                     : setupRequired
@@ -1985,9 +2337,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 
         <Box
           display={{ base: 'none', lg: 'block' }}
-          border="1px solid var(--tt-border, #e7e7eb)"
-          borderRadius="var(--tt-radius-md, 12px)"
-          bg="var(--tt-card, #fff)"
+          {...CARD_STYLES}
           p={5}
           alignSelf="start"
           position="sticky"
@@ -2013,11 +2363,15 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 
       <Drawer isOpen={mobileDetailOpen} placement="bottom" onClose={() => setMobileDetailOpen(false)} size="full">
         <DrawerOverlay />
-				<DrawerContent height="min(86dvh, 760px)" maxH="86dvh" borderTopRadius="18px" bg="var(--tt-card, #fff)" color="var(--tt-ink, #17171c)">
+        <DrawerContent
+          height="min(86dvh, 760px)"
+          maxH="86dvh"
+          borderTopRadius="var(--tt-radius-xl, 20px)"
+          bg="var(--tt-card, #ffffff)"
+          color="var(--tt-ink, #16161a)"
+        >
           <DrawerCloseButton />
-					<DrawerHeader borderBottom="1px solid var(--tt-border, #e7e7eb)" fontSize="sm">
-						Feature details
-					</DrawerHeader>
+          <DrawerHeader borderBottom="1px solid var(--tt-border, #ececef)" fontSize="sm">Feature details</DrawerHeader>
           <DrawerBody py={5} pb="calc(24px + env(safe-area-inset-bottom))">
             <FeatureDetail
               feature={selectedFeature}

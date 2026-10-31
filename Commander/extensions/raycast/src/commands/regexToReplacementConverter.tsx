@@ -72,12 +72,15 @@ export const regexToReplacementConverter = async (props: any) => {
   });
 
   // Decode only escapes that were present in the original input: \{ \\ \[ \] \} \.
-  // One left-to-right pass consumes each backslash together with the character it
-  // escapes, so a backslash produced by unescaping \\ is never unescaped a second
-  // time (\\] stays \], not ]).
-  // Chaining a separate replace per character double-unescaped the same backslash: the `\\` -> `\`
-  // pass produced a fresh `\]` that the following `\]` -> `]` pass then consumed, so an escaped
-  // backslash before a bracket was silently lost. A single pass cannot feed its own output back in.
+  //
+  // ONE left-to-right pass, not a chain of .replace() calls: a single pass consumes each
+  // backslash together with the character it escapes, so a backslash produced by unescaping
+  // \\ is never unescaped a second time (\\] stays \], not ]).
+  // Chaining a separate replace per character double-unescaped the same backslash: `\\}` should
+  // unescape to `\}` (a literal backslash, then a brace), but the old `\\` -> `\` pass produced a
+  // fresh backslash that the following `\}` -> `}` pass then consumed, silently eating it and
+  // yielding `}` — an escaped backslash before a brace or bracket was simply lost. A single pass
+  // cannot feed its own output back in.
   newValue = unescapeRegexReplacementText(newValue);
 
   // const regex = /([\s\r]+)/g;

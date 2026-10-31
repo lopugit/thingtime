@@ -40,6 +40,7 @@ export const action = async ({ request }: { request: Request }) => {
     viewerOf(user, actorPat(actor)),
     body?.id,
     {
+      thingtime: body?.thingtime,
       crystal: body?.crystal,
       extended: body?.extended,
       acl: body?.acl,

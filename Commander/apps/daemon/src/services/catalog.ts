@@ -252,7 +252,7 @@ export function extensionItems(extensions: CommanderExtension[]): SearchItem[] {
         // exact intent without preventing a learned preference from later
         // promoting a different result.
         ...(extension.id === emojiSymbolsExtension.id && command.name === searchEmojiSymbolsCommandName
-          ? { preferenceScore: 25_000 }
+          ? { preferenceScore: 45_000 }
           : {}),
         actions: [{ id: 'run', title: `Run ${command.title}`, shortcut: '↵' }],
       })),

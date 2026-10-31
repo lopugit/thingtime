@@ -7,6 +7,17 @@ export const NETWORK_PROBE_PACKET_BYTES = [56 * 1024, 500 * 1024, 2 * 1024 * 102
 
 export type NetworkProbePacketBytes = (typeof NETWORK_PROBE_PACKET_BYTES)[number];
 
+// Upload v2 keeps every individual request below Vercel's 4.5 MB body limit.
+// Commander assembles the larger logical samples from these bounded chunks.
+export const NETWORK_PROBE_UPLOAD_BYTES = [56 * 1024, 500 * 1024, 1024 * 1024, 2 * 1024 * 1024] as const;
+export type NetworkProbeUploadBytes = (typeof NETWORK_PROBE_UPLOAD_BYTES)[number];
+export const NETWORK_PROBE_UPLOAD_REQUESTS = 11;
+
+export function parseNetworkProbeUploadBytes(value: unknown): NetworkProbeUploadBytes | undefined {
+	const bytes = typeof value === 'string' ? Number(value) : value;
+	return NETWORK_PROBE_UPLOAD_BYTES.includes(bytes as NetworkProbeUploadBytes) ? (bytes as NetworkProbeUploadBytes) : undefined;
+}
+
 const COMMON_HEADERS = {
 	'cache-control': 'no-store',
 	'content-encoding': 'identity',
@@ -43,9 +54,12 @@ export function networkProbeDownloadResponse(bytes: NetworkProbePacketBytes): Re
 	});
 }
 
-export async function readExactNetworkProbeUpload(request: Request, bytes: NetworkProbePacketBytes): Promise<void> {
+export async function readExactNetworkProbeUpload(request: Request, bytes: NetworkProbeUploadBytes): Promise<void> {
 	const declaredLength = request.headers.get('content-length');
-	if (declaredLength !== String(bytes)) {
+	// Proxies may forward a valid body as a stream without Content-Length.
+	// A supplied length must still be correct; the actual byte count below is
+	// authoritative and stops oversized streams without buffering their data.
+	if (declaredLength !== null && declaredLength !== String(bytes)) {
 		throw json({ ok: false, error: `content-length must be exactly ${bytes} bytes` }, { status: 400 });
 	}
 	const reader = request.body?.getReader();

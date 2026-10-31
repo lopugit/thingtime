@@ -139,6 +139,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   private var showRequestID: UInt = 0
   private var windowMode = LauncherWindowMode.standard
   private var pasteTarget: NSRunningApplication?
+  private let isAccessibilityTrusted: () -> Bool
   private var fileDragInProgress = false
   private var isPresented = false
   private var commandPresentationItemID: String?
@@ -152,7 +153,8 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     ready: DaemonReady,
     bridge: CommanderNativeBridge,
     pinned: Bool = false,
-    pinningEnabled: Bool = true
+    pinningEnabled: Bool = true,
+    isAccessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() }
   ) {
     let panel = CommanderPanel(
       contentRect: NSRect(origin: .zero, size: LauncherWindowMode.standard.size),
@@ -165,6 +167,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     self.webView = CommanderWebView(ready: ready, surface: "launcher", bridge: bridge)
     self.isPinned = pinningEnabled && pinned
     self.pinningEnabled = pinningEnabled
+    self.isAccessibilityTrusted = isAccessibilityTrusted
     super.init()
     panel.delegate = self
     panel.level = .statusBar
@@ -207,6 +210,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   }
 
   func focus() {
+    rememberPasteTarget()
     guard contentReady else {
       show()
       return
@@ -258,7 +262,12 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     focusCurrentInput()
   }
 
-  func hide() {
+  func hide(restoringPreviousApplication: Bool = false) {
+    let restoreTarget = restoringPreviousApplication && Self.shouldRestorePreviousApplication(
+      isPresented: isPresented,
+      applicationIsActive: NSApp.isActive,
+      hasOtherKeyWindow: NSApp.keyWindow.map { $0 !== panel } ?? false
+    )
     pendingShow = false
     pendingCommandItemID = nil
     showPending = false
@@ -267,6 +276,19 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     cancelCommandHotKeyPresentation()
     panel.cancelResizeSession()
     panel.orderOut(nil)
+    if restoreTarget, let pasteTarget, !pasteTarget.isTerminated {
+      _ = pasteTarget.activate(options: [.activateAllWindows])
+    }
+  }
+
+  static func shouldRestorePreviousApplication(
+    isPresented: Bool,
+    applicationIsActive: Bool,
+    hasOtherKeyWindow: Bool
+  ) -> Bool {
+    // Explicit dismissal returns focus, but a late hide after opening a result
+    // or moving to Settings must not steal it from the user's new destination.
+    isPresented && applicationIsActive && !hasOtherKeyWindow
   }
 
   var pasteTargetName: String? {
@@ -275,48 +297,57 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   }
 
   func paste(_ text: String, preserveClipboard: Bool) async -> [String: Any] {
-    let previousClipboard = preserveClipboard ? PasteboardSnapshot.capture() : nil
-    NSPasteboard.general.clearContents()
-    let wrotePasteValue = NSPasteboard.general.setString(text, forType: .string)
+    let trusted = isAccessibilityTrusted()
     var result: [String: Any] = [
-      "copied": wrotePasteValue && !preserveClipboard,
+      "copied": false,
       "pasted": false,
-      "requiresAccessibility": false,
+      "requiresAccessibility": !trusted,
     ]
     if let pasteTargetName { result["targetApplication"] = pasteTargetName }
-    guard wrotePasteValue else {
-      previousClipboard?.restore()
+    // A denied keep-clipboard action must not write even transiently: clipboard
+    // observers can retain a failed emoji paste despite a later restoration.
+    if preserveClipboard, !trusted || pasteTarget == nil || pasteTarget?.isTerminated == true {
       return result
     }
-    guard AXIsProcessTrusted() else {
-      result["requiresAccessibility"] = true
-      previousClipboard?.restore()
-      return result
-    }
-    guard let pasteTarget, !pasteTarget.isTerminated else {
-      previousClipboard?.restore()
-      return result
-    }
-
-    hide()
-    _ = pasteTarget.activate(options: [.activateAllWindows])
-    try? await Task.sleep(for: .milliseconds(120))
-
-    guard let source = CGEventSource(stateID: .hidSystemState),
-          let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
-          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
-      previousClipboard?.restore()
-      return result
-    }
-    keyDown.flags = .maskCommand
-    keyUp.flags = .maskCommand
-    keyDown.post(tap: .cghidEventTap)
-    keyUp.post(tap: .cghidEventTap)
-    result["pasted"] = true
-    if let previousClipboard {
-      try? await Task.sleep(for: .milliseconds(180))
-      previousClipboard.restore()
-    }
+    let target = pasteTarget
+    let pasteResult = await ClipboardPasteCoordinator.shared.paste(
+      text,
+      preserveClipboard: preserveClipboard,
+      prepareTarget: { [self] in
+        guard trusted, let target, !target.isTerminated, !Task.isCancelled else { return false }
+        hide()
+        guard target.activate(options: [.activateAllWindows]) else { return false }
+        // A fixed 120ms delay can send Cmd-V before the target becomes active.
+        // Wait for activation, then allow the window focus handoff to settle.
+        for _ in 0..<50 {
+          do { try await Task.sleep(for: .milliseconds(20)) }
+          catch { return false }
+          guard !target.isTerminated else { return false }
+          if NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier {
+            do { try await Task.sleep(for: .milliseconds(100)) }
+            catch { return false }
+            return NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier
+          }
+        }
+        return false
+      },
+      sendPaste: {
+        guard let target, !target.isTerminated,
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier,
+              let source = CGEventSource(stateID: .hidSystemState),
+              let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
+          return false
+        }
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+        return true
+      }
+    )
+    result["copied"] = pasteResult.copied
+    result["pasted"] = pasteResult.pasted
     return result
   }
   func toggle() {
@@ -325,7 +356,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     } else if isPinned && isPresented && panel.isVisible {
       focus()
     } else if (isPresented && panel.isVisible) || pendingShow || showPending {
-      hide()
+      hide(restoringPreviousApplication: true)
     } else {
       show()
     }
@@ -403,6 +434,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
 
   func windowDidResignKey(_ notification: Notification) {
     panel.cancelResizeSession()
+    guard isPresented else { return }
     guard !fileDragInProgress else { return }
     guard !isPinned else { return }
     let commandPresentationWasActive = commandPresentationItemID != nil
@@ -546,29 +578,5 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     if !pinned { behavior.insert(.transient) }
     return behavior
-  }
-}
-
-private struct PasteboardSnapshot {
-  let items: [[NSPasteboard.PasteboardType: Data]]
-
-  static func capture() -> PasteboardSnapshot {
-    let items = NSPasteboard.general.pasteboardItems?.map { item in
-      Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
-        item.data(forType: type).map { (type, $0) }
-      })
-    } ?? []
-    return PasteboardSnapshot(items: items)
-  }
-
-  func restore() {
-    let pasteboard = NSPasteboard.general
-    pasteboard.clearContents()
-    let restored = items.map { values in
-      let item = NSPasteboardItem()
-      for (type, data) in values { item.setData(data, forType: type) }
-      return item
-    }
-    if !restored.isEmpty { pasteboard.writeObjects(restored) }
   }
 }

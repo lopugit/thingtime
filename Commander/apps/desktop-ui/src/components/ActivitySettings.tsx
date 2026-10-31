@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   CommanderSettings,
-  SystemMetrics,
-  SystemProcessMetric,
   SystemResponsivenessApplication,
   ThingtimeNetworkProbe,
 } from '@commander/protocol';
@@ -17,17 +15,15 @@ import {
   Play,
   RefreshCw,
   RotateCcw,
-  Rows3,
   Power,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { nativeBridgeAvailable, nativeRequest } from '../lib/nativeBridge.js';
 import '../styles/ActivityUnresponsiveApplications.css';
+import { ProcessesPanel, useProcessPreferences } from './ProcessesPanel.js';
+import { useSystemMetrics } from '../hooks/useSystemMetrics.js';
 
-const REFRESH_INTERVAL_MS = 2_000;
 const NETWORK_PING_INTERVAL_MS = 15_000;
-type ProcessSortKey = 'name' | 'parent' | 'cpu' | 'gpu' | 'memory' | 'network' | 'disk';
-type SortDirection = 'ascending' | 'descending';
 type ApplicationControlAction = 'quit' | 'forceQuit' | 'restart';
 type ApplicationControlResult = { submitted?: boolean; cancelled?: boolean };
 
@@ -40,52 +36,27 @@ export function ActivitySettings({
   onChange(next: CommanderSettings): void;
   onError(value: string | null): void;
 }) {
-  const [metrics, setMetrics] = useState<SystemMetrics>();
+  const [processPreferences, setProcessPreferences] = useProcessPreferences();
+  const { metrics, loading } = useSystemMetrics(onError, processPreferences.averageSeconds);
   const [network, setNetwork] = useState<ThingtimeNetworkProbe>();
   const [networkError, setNetworkError] = useState<string>();
-  const [loading, setLoading] = useState(true);
+  const [speedError, setSpeedError] = useState<string>();
   const [speedTesting, setSpeedTesting] = useState(false);
-  const [sortKey, setSortKey] = useState<ProcessSortKey>('cpu');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('descending');
-  const [groupByParent, setGroupByParent] = useState(false);
   const speedTestInFlight = useRef(false);
-
-  useEffect(() => {
-    if (!nativeBridgeAvailable()) {
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    const refresh = async () => {
-      try {
-        const next = await nativeRequest<SystemMetrics>('system.metrics');
-        if (!cancelled && next) {
-          setMetrics(next);
-          setLoading(false);
-          onError(null);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setLoading(false);
-          onError(error instanceof Error ? error.message : 'Could not read Commander activity');
-        }
-      }
-    };
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), REFRESH_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [onError]);
+  const networkGeneration = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
+    networkGeneration.current += 1;
+    setNetwork(undefined);
+    setNetworkError(undefined);
+    setSpeedError(undefined);
     const refresh = async () => {
+      if (speedTestInFlight.current) return;
       try {
         const next = await api.activityNetwork();
         if (!cancelled) {
-          setNetwork(next);
+          setNetwork((previous) => ({ ...next, ...(previous?.speed ? { speed: previous.speed } : {}) }));
           setNetworkError(undefined);
         }
       } catch (error) {
@@ -97,20 +68,30 @@ export function ActivitySettings({
     const timer = window.setInterval(() => void refresh(), NETWORK_PING_INTERVAL_MS);
     return () => {
       cancelled = true;
+      networkGeneration.current += 1;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [settings.thingtimeBaseUrl, settings.activeAccountId]);
 
   const runSpeedTest = useCallback(async () => {
     if (speedTestInFlight.current) return;
     speedTestInFlight.current = true;
+    const generation = networkGeneration.current;
     setSpeedTesting(true);
     try {
       const next = await api.activityNetworkSpeed();
-      setNetwork(next);
+      if (generation !== networkGeneration.current) return;
+      const hasSamples = Boolean(next.speed?.downloads.length || next.speed?.uploads.length);
+      setNetwork((previous) => (hasSamples || !previous?.speed ? next : { ...next, speed: previous.speed }));
       setNetworkError(undefined);
+      setSpeedError(
+        !hasSamples && next.speed?.errors?.length
+          ? next.speed.errors.map((error) => error.message).join(' ')
+          : undefined,
+      );
     } catch (error) {
-      setNetworkError(error instanceof Error ? error.message : 'Thingtime speed test failed');
+      if (generation === networkGeneration.current)
+        setSpeedError(error instanceof Error ? error.message : 'Thingtime speed test failed');
     } finally {
       speedTestInFlight.current = false;
       setSpeedTesting(false);
@@ -270,7 +251,17 @@ export function ActivitySettings({
 
       <NetworkCard
         network={network}
-        error={networkError}
+        error={
+          [
+            networkError,
+            speedError,
+            ...(network?.speed?.errors ?? []).map(
+              ({ direction, message }) => `${direction === 'download' ? 'Download' : 'Upload'}: ${message}`,
+            ),
+          ]
+            .filter(Boolean)
+            .join(' ') || undefined
+        }
         speedTesting={speedTesting}
         periodicEnabled={settings.activity.periodicSpeedTestEnabled}
         periodicIntervalMinutes={settings.activity.periodicSpeedTestIntervalMinutes}
@@ -284,20 +275,11 @@ export function ActivitySettings({
         applications={machine?.responsivenessApplications ?? []}
         onControl={controlUnresponsiveApplication}
       />
-      <ProcessTable
+      <ProcessesPanel
         processes={machine?.processes ?? []}
-        sortKey={sortKey}
-        sortDirection={sortDirection}
-        groupByParent={groupByParent}
-        onSort={(next) => {
-          if (next === sortKey)
-            setSortDirection((direction) => (direction === 'ascending' ? 'descending' : 'ascending'));
-          else {
-            setSortKey(next);
-            setSortDirection(next === 'name' || next === 'parent' ? 'ascending' : 'descending');
-          }
-        }}
-        onGroupChange={setGroupByParent}
+        preferences={processPreferences}
+        onPreferencesChange={setProcessPreferences}
+        onError={onError}
       />
       <p className="activity-footnote">
         GPU utilisation is a best-effort system-wide value exposed by the active macOS graphics driver. macOS
@@ -498,7 +480,7 @@ function NetworkCard({
           <h3 id="network-usage-title">
             <Network /> Thingtime network
           </h3>
-          <p>Direct, uncached latency to thingtime.com. Speed tests are explicit and bounded.</p>
+          <p>Direct, uncached latency to your Thingtime server. Speed tests are explicit and bounded.</p>
         </div>
         <span>
           {network
@@ -550,230 +532,25 @@ function NetworkCard({
       </div>
       <small className="activity-network-note">
         Each complete test transfers 17.6 MiB down and 17.6 MiB up across 56 KiB, 500 KiB, 2 MiB, 5 MiB, and
-        10 MiB packets. Automatic testing is off by default.
+        10 MiB samples. Uploads use serial chunks of at most 2 MiB. Automatic testing is off by default.
       </small>
-    </section>
-  );
-}
-
-function ProcessTable({
-  processes,
-  sortKey,
-  sortDirection,
-  groupByParent,
-  onSort,
-  onGroupChange,
-}: {
-  processes: SystemProcessMetric[];
-  sortKey: ProcessSortKey;
-  sortDirection: SortDirection;
-  groupByParent: boolean;
-  onSort(key: ProcessSortKey): void;
-  onGroupChange(value: boolean): void;
-}) {
-  const sorted = useMemo(
-    () => sortProcesses(processes, sortKey, sortDirection),
-    [processes, sortKey, sortDirection],
-  );
-  const groups = useMemo(() => groupProcesses(sorted), [sorted]);
-  return (
-    <section className="activity-section activity-processes" aria-labelledby="process-usage-title">
-      <div className="activity-section-heading">
-        <div>
-          <h3 id="process-usage-title">
-            <Rows3 /> Processes
-          </h3>
-          <p>Live per-process CPU, memory, and disk throughput from macOS.</p>
-        </div>
-        <label className="activity-group-toggle">
-          <input
-            type="checkbox"
-            checked={groupByParent}
-            onChange={(event) => onGroupChange(event.target.checked)}
-          />{' '}
-          Group by parent
-        </label>
-      </div>
-      <div className="activity-process-table-wrap">
-        <table className="activity-process-table">
-          <thead>
-            <tr>
-              <ProcessHeader
-                label="Name"
-                column="name"
-                active={sortKey}
-                direction={sortDirection}
-                onSort={onSort}
-              />
-              <ProcessHeader
-                label="Parent"
-                column="parent"
-                active={sortKey}
-                direction={sortDirection}
-                onSort={onSort}
-              />
-              <ProcessHeader
-                label="CPU"
-                column="cpu"
-                active={sortKey}
-                direction={sortDirection}
-                onSort={onSort}
-              />
-              <ProcessHeader
-                label="GPU"
-                column="gpu"
-                active={sortKey}
-                direction={sortDirection}
-                onSort={onSort}
-                unavailable
-              />
-              <ProcessHeader
-                label="Memory"
-                column="memory"
-                active={sortKey}
-                direction={sortDirection}
-                onSort={onSort}
-              />
-              <ProcessHeader
-                label="Network"
-                column="network"
-                active={sortKey}
-                direction={sortDirection}
-                onSort={onSort}
-                unavailable
-              />
-              <ProcessHeader
-                label="Disk"
-                column="disk"
-                active={sortKey}
-                direction={sortDirection}
-                onSort={onSort}
-              />
-            </tr>
-          </thead>
-          <tbody>
-            {groupByParent
-              ? groups.map((group) => <ProcessGroupRows key={group.parentPid} group={group} />)
-              : sorted.map((process) => <ProcessRow key={process.pid} process={process} />)}
-          </tbody>
-        </table>
-      </div>
-      {!processes.length ? (
-        <p className="activity-process-empty">Waiting for the next macOS process sample…</p>
+      {network?.speed ? (
+        <p className="activity-network-note">
+          Speed test: {network.speed.downloads.length}/{network.speed.packetBytes.length} download and{' '}
+          {network.speed.uploads.length}/{network.speed.packetBytes.length} upload samples completed
+          {network.speed.sampledAtMs ? ` at ${new Date(network.speed.sampledAtMs).toLocaleTimeString()}` : ''}
+          .{network.speed.errors?.length ? ' Partial results shown.' : ''}
+        </p>
       ) : null}
     </section>
   );
 }
 
-function ProcessHeader({
-  label,
-  column,
-  active,
-  direction,
-  onSort,
-  unavailable = false,
-}: {
-  label: string;
-  column: ProcessSortKey;
-  active: ProcessSortKey;
-  direction: SortDirection;
-  onSort(key: ProcessSortKey): void;
-  unavailable?: boolean;
-}) {
-  return (
-    <th>
-      <button
-        type="button"
-        title={unavailable ? `${label} is not exposed per process by public macOS APIs` : `Sort by ${label}`}
-        onClick={() => onSort(column)}
-      >
-        {label}
-        {unavailable ? ' —' : null}
-        {active === column ? (direction === 'ascending' ? ' ↑' : ' ↓') : null}
-      </button>
-    </th>
-  );
-}
-function ProcessGroupRows({ group }: { group: ProcessGroup }) {
-  return (
-    <>
-      <tr className="activity-process-group">
-        <td colSpan={7}>
-          {group.parentName
-            ? `${group.parentName} (${group.parentPid})`
-            : `Parent process ${group.parentPid}`}{' '}
-          <span>{group.processes.length} children</span>
-        </td>
-      </tr>
-      {group.processes.map((process) => (
-        <ProcessRow key={process.pid} process={process} />
-      ))}
-    </>
-  );
-}
-function ProcessRow({ process }: { process: SystemProcessMetric }) {
-  const disk = process.diskReadBytesPerSecond + process.diskWriteBytesPerSecond;
-  return (
-    <tr>
-      <td>
-        <strong>{process.name}</strong>
-        <small>PID {process.pid}</small>
-      </td>
-      <td>{process.parentPid}</td>
-      <td>{formatPercent(process.cpuPercent)}</td>
-      <td>{formatOptionalPercent(process.gpuPercent)}</td>
-      <td>{formatBytes(process.residentMemoryBytes)}</td>
-      <td>{formatRate(process.networkBytesPerSecond)}</td>
-      <td>{formatRate(disk)}</td>
-    </tr>
-  );
-}
-type ProcessGroup = {
-  parentPid: number;
-  parentName?: string | undefined;
-  processes: SystemProcessMetric[];
-};
-function groupProcesses(processes: SystemProcessMetric[]): ProcessGroup[] {
-  const names = new Map(processes.map((process) => [process.pid, process.name]));
-  const groups = new Map<number, SystemProcessMetric[]>();
-  for (const process of processes)
-    groups.set(process.parentPid, [...(groups.get(process.parentPid) ?? []), process]);
-  return [...groups.entries()].map(([parentPid, children]) => ({
-    parentPid,
-    parentName: names.get(parentPid),
-    processes: children,
-  }));
-}
-function sortProcesses(
-  processes: SystemProcessMetric[],
-  key: ProcessSortKey,
-  direction: SortDirection,
-): SystemProcessMetric[] {
-  const factor = direction === 'ascending' ? 1 : -1;
-  return [...processes].sort((left, right) => {
-    if (key === 'name') return factor * left.name.localeCompare(right.name);
-    const leftValue = processSortValue(left, key);
-    const rightValue = processSortValue(right, key);
-    if (leftValue === undefined && rightValue === undefined) return left.name.localeCompare(right.name);
-    if (leftValue === undefined) return 1;
-    if (rightValue === undefined) return -1;
-    return factor * (leftValue - rightValue) || left.name.localeCompare(right.name);
-  });
-}
-function processSortValue(
-  process: SystemProcessMetric,
-  key: Exclude<ProcessSortKey, 'name'>,
-): number | undefined {
-  if (key === 'parent') return process.parentPid;
-  if (key === 'cpu') return process.cpuPercent;
-  if (key === 'gpu') return process.gpuPercent;
-  if (key === 'memory') return process.residentMemoryBytes;
-  if (key === 'network') return process.networkBytesPerSecond;
-  return process.diskReadBytesPerSecond + process.diskWriteBytesPerSecond;
-}
-function averageSpeed(values: Array<{ megabitsPerSecond: number }> | undefined): number | undefined {
+function averageSpeed(values: Array<{ bytes: number; durationMs: number }> | undefined): number | undefined {
   if (!values?.length) return undefined;
-  return values.reduce((total, value) => total + value.megabitsPerSecond, 0) / values.length;
+  const bytes = values.reduce((total, value) => total + value.bytes, 0);
+  const durationMs = values.reduce((total, value) => total + value.durationMs, 0);
+  return durationMs > 0 ? (bytes * 8) / (durationMs * 1000) : undefined;
 }
 function formatBytes(value: number | undefined): string {
   if (value === undefined || value < 0) return '—';
@@ -788,12 +565,6 @@ function formatBytes(value: number | undefined): string {
 }
 function formatPercent(value: number | undefined): string {
   return value === undefined ? '—' : `${value.toFixed(value >= 10 ? 0 : 1)}%`;
-}
-function formatOptionalPercent(value: number | undefined): string {
-  return value === undefined ? '—' : formatPercent(value);
-}
-function formatRate(value: number | undefined): string {
-  return value === undefined ? '—' : `${formatBytes(value)}/s`;
 }
 function formatDuration(value: number | undefined): string {
   return value === undefined ? '—' : `${Math.round(value)} ms`;

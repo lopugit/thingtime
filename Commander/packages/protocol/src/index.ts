@@ -893,6 +893,12 @@ export interface IndexingStatus {
   available: boolean;
   running: IndexScope[];
   totalRecords: number;
+  /** Latest measured committed file/folder snapshot plus the enabled command/application catalogue; live observations may precede this count. */
+  searchableRecords?: number;
+  /** True when measured counters apply to the current policy and roots; ordinary pending changes retain the last measured snapshot. */
+  countsCurrent?: boolean;
+  /** Oldest successful full refresh across active indexes. */
+  lastIndexedAtMs?: number;
   databaseSizeBytes: number;
   kinds: IndexKindStatus[];
   commands: {
@@ -1114,6 +1120,10 @@ export interface NativeRequest<T = unknown> {
     | 'application.quit'
     | 'application.control'
     | 'window.beginDrag'
+    | 'window.toggleMaximize'
+    | 'window.state'
+    | 'window.keepAbove'
+    | 'processes.open'
     | 'filesystem.beginDrag'
     | 'filesystem.icon'
     | 'filesystem.copy'
@@ -1185,7 +1195,19 @@ export interface SystemMetrics {
   };
 }
 
+export interface SystemProcessAverage {
+  cpuPercent: number;
+  residentMemoryBytes: number;
+  diskReadBytesPerSecond: number;
+  diskWriteBytesPerSecond: number;
+  gpuPercent?: number;
+  networkBytesPerSecond?: number;
+  observedSeconds: number;
+}
+
 export interface SystemProcessMetric {
+  startedAtMs?: number;
+  average?: SystemProcessAverage;
   pid: number;
   parentPid: number;
   name: string;
@@ -1215,9 +1237,11 @@ export interface ThingtimeNetworkProbe {
     responseMs: number;
   };
   speed?: {
+    sampledAtMs?: number;
     packetBytes: number[];
     downloads: Array<{ bytes: number; durationMs: number; megabitsPerSecond: number }>;
     uploads: Array<{ bytes: number; durationMs: number; megabitsPerSecond: number }>;
+    errors?: Array<{ direction: 'download' | 'upload'; message: string }>;
   };
 }
 

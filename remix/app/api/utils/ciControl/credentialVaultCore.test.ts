@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   normalizeCredentialName,
+  requirePlatformCredentialValue,
   normalizeCredentialPlatform,
   normalizeBootstrapCredentials,
   normalizeCredentialOrder,
@@ -26,7 +27,7 @@ test('normalizes names and exact unique order arrays', () => {
   assert.equal(normalizeCredentialPlatform('bad\nplatform'), null);
   assert.deepEqual(normalizeCredentialOrder(['a', 'b']), ['a', 'b']);
   assert.equal(normalizeCredentialOrder(['a', 'a']), null);
-  assert.equal(normalizeCredentialOrder(new Array(9).fill(0).map((_, index) => `id-${index}`)), null);
+  assert.equal(normalizeCredentialOrder(new Array(129).fill(0).map((_, index) => `id-${index}`)), null);
 });
 
 test('accepts only bounded unique bootstrap rows', () => {
@@ -43,4 +44,11 @@ test('accepts only fresh protected-controller workflow requests', () => {
   assert.equal(parseLopuCredentialFetchRequest({ ...valid, workflowRef: valid.workflowRef.replace('resolve-pr-conflicts.yml', 'untrusted.yml') }, { repository: 'lopugit/thingtime', allowedRefs: ['github-actions', 'develop', 'main'], now }), null);
   assert.equal(parseLopuCredentialFetchRequest({ ...valid, requestedAt: new Date(now - 6 * 60 * 1000).toISOString() }, { repository: 'lopugit/thingtime', now }), null);
   assert.equal(parseLopuCredentialFetchRequest({ ...valid, nonce: 'too-short' }, { repository: 'lopugit/thingtime', now }), null);
+});
+
+
+test('Claude values accept OAuth only while other platforms keep their token formats', () => {
+  assert.equal(requirePlatformCredentialValue('Claude', ' sk-ant-oat-test '), 'sk-ant-oat-test');
+  assert.throws(() => requirePlatformCredentialValue('Anthropic', 'sk-ant-api03-old'), /OAuth/);
+  assert.equal(requirePlatformCredentialValue('OpenAI', 'sk-test'), 'sk-test');
 });

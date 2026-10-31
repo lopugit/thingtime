@@ -34,6 +34,9 @@ export interface IndexConfiguration {
   maxEntries?: number | null;
   resourceLimits?: IndexResourceLimits;
   pruneSourcePrefixes?: string[];
+  /** Absolute subtrees to refresh atomically; omitted means a full reconciliation. */
+  changedPaths?: string[];
+  settingsFingerprint?: string;
 }
 
 export interface IndexRecord {
@@ -49,7 +52,8 @@ export interface IndexRecord {
 export interface QueryRequest {
   query: string;
   kinds?: IndexKind[];
-  limit?: number;
+  /** Returned result count only; null returns the complete matching catalogue. */
+  limit?: number | null;
 }
 
 export interface QueryResponse {
@@ -68,6 +72,7 @@ export interface IndexStatus {
   schemaVersion: number;
   totalRecords: number;
   databaseSizeBytes: number;
+  configurationFingerprints?: Record<string, string>;
   kinds: KindStatus[];
 }
 
@@ -123,6 +128,10 @@ export interface IndexResourceUsage {
 
 type RequestOperation =
   | { operation: 'status' }
+  | { operation: 'readPolicy'; configuration: IndexConfiguration | null }
+  | { operation: 'observe'; configuration: IndexConfiguration; paths: string[] }
+  | { operation: 'readback'; paths: string[]; sourceIds?: string[] }
+  | { operation: 'catalogue'; kinds: IndexKind[]; sourcePrefix: string; sourceIds?: string[] }
   | { operation: 'index'; configuration: IndexConfiguration }
   | { operation: 'query'; request: QueryRequest }
   | { operation: 'lookup'; path: string; kind: IndexKind };
@@ -163,6 +172,8 @@ interface QueuedQuery {
 export interface FileSystemIndexerClientOptions {
   binaryPath: string;
   databasePath: string;
+  /** Query client: serve committed old-schema data while writer migrations run. */
+  reader?: boolean;
   requestTimeoutMs?: number;
   indexTimeoutMs?: number;
   /** Primarily useful for test harnesses or a platform launcher wrapper. */
@@ -196,12 +207,33 @@ export class FileSystemIndexerClient {
   #queryOperation: { key: string; promise: Promise<QueryResponse> } | undefined;
   #queuedQuery: QueuedQuery | undefined;
   #restartAttempts = 0;
+  #readPolicy: IndexConfiguration | null | undefined;
+  #policyRestore: Promise<void> | undefined;
 
   constructor(options: FileSystemIndexerClientOptions) {
     this.#options = options;
     this.#start();
     this.#cpuTimer = setInterval(() => void this.#checkWorkerCpu(), INDEXER_CPU_SAMPLE_MS);
     this.#cpuTimer.unref();
+  }
+
+  observe(
+    configuration: IndexConfiguration,
+    paths: string[],
+  ): Promise<{ observations: { path: string; record?: IndexRecord; descend: boolean }[] }> {
+    return this.#request({ operation: 'observe', configuration, paths });
+  }
+
+  readback(
+    paths: string[],
+    sourceIds?: string[],
+  ): Promise<{ entries: { path: string; records: IndexRecord[]; hasDescendants: boolean }[] }> {
+    return this.#request({ operation: 'readback', paths, ...(sourceIds ? { sourceIds } : {}) });
+  }
+
+  readPolicy(configuration: IndexConfiguration | null): Promise<void> {
+    this.#readPolicy = configuration === null ? null : structuredClone(configuration);
+    return this.#request<void>({ operation: 'readPolicy', configuration: this.#readPolicy });
   }
 
   status(): Promise<IndexStatus> {
@@ -247,6 +279,21 @@ export class FileSystemIndexerClient {
     return promise;
   }
 
+  /** Complete catalogue reads must not be superseded by interactive typing. */
+  catalogue(kinds: IndexKind[], sourcePrefix?: string, sourceIds?: string[]): Promise<QueryResponse> {
+    if (sourcePrefix)
+      return this.#request<QueryResponse>({
+        operation: 'catalogue',
+        kinds,
+        sourcePrefix,
+        ...(sourceIds ? { sourceIds } : {}),
+      });
+    return this.#request<QueryResponse>({
+      operation: 'query',
+      request: { query: '', kinds, limit: null },
+    });
+  }
+
   lookup(path: string, kind: IndexKind): Promise<IndexRecord | null> {
     return this.#request<IndexRecord | null>({ operation: 'lookup', path, kind });
   }
@@ -282,6 +329,7 @@ export class FileSystemIndexerClient {
       'serve',
       '--database',
       this.#options.databasePath,
+      ...(this.#options.reader ? ['--reader'] : []),
     ];
     const child = spawn(this.#options.binaryPath, arguments_, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -304,6 +352,19 @@ export class FileSystemIndexerClient {
     child.once('exit', (code, signal) =>
       this.#failProcess(child, new Error(`Filesystem indexer exited (${signal ?? code ?? 'unknown'})`)),
     );
+    if (this.#readPolicy !== undefined) {
+      const restore = this.#request<void>({ operation: 'readPolicy', configuration: this.#readPolicy });
+      this.#policyRestore = restore;
+      void restore.then(
+        () => {
+          if (this.#policyRestore === restore) this.#policyRestore = undefined;
+        },
+        (error) => {
+          if (this.#policyRestore === restore) this.#policyRestore = undefined;
+          this.#failProcess(child, error instanceof Error ? error : new Error(String(error)));
+        },
+      );
+    }
   }
 
   #beginQuery(key: string, request: QueryRequest): Promise<QueryResponse> {
@@ -337,6 +398,10 @@ export class FileSystemIndexerClient {
   ): Promise<T> {
     this.#closed = false;
     if (!this.#process) this.#start();
+    const restore = this.#policyRestore;
+    if (restore && (operation.operation === 'query' || operation.operation === 'lookup')) {
+      return restore.then(() => this.#request<T>(operation, timeoutMs, onProgress));
+    }
     const child = this.#process!;
     const id = `indexer-${process.pid}-${++this.#sequence}`;
     return new Promise<T>((resolve, reject) => {
@@ -350,7 +415,7 @@ export class FileSystemIndexerClient {
         timeout,
         ...(onProgress ? { onProgress } : {}),
       });
-      if (operation.operation === 'index') this.#indexRequests.add(id);
+      if (['index', 'observe', 'readback'].includes(operation.operation)) this.#indexRequests.add(id);
       child.stdin.write(`${JSON.stringify({ id, ...operation })}\n`, (error) => {
         if (!error) return;
         const pending = this.#pending.get(id);
@@ -396,6 +461,7 @@ export class FileSystemIndexerClient {
   #failProcess(child: ChildProcessWithoutNullStreams, error: Error): void {
     if (this.#process !== child) return;
     this.#process = undefined;
+    this.#policyRestore = undefined;
     if (child.exitCode === null) child.kill('SIGTERM');
     this.#failPending(error);
     this.#scheduleRestart();
@@ -412,8 +478,7 @@ export class FileSystemIndexerClient {
   }
 
   #scheduleRestart(): void {
-    if (this.#closed || this.#restartTimer || this.#restartAttempts >= INDEXER_MAX_RESTART_ATTEMPTS)
-      return;
+    if (this.#closed || this.#restartTimer || this.#restartAttempts >= INDEXER_MAX_RESTART_ATTEMPTS) return;
     const delay = Math.min(10_000, 1_000 * 2 ** this.#restartAttempts);
     this.#restartAttempts += 1;
     this.#restartTimer = setTimeout(() => {
@@ -435,12 +500,14 @@ export class FileSystemIndexerClient {
         maxBuffer: 1_024,
       });
       const cpu = Number(stdout.trim());
-      this.#highCpuSamples = Number.isFinite(cpu) && cpu >= INDEXER_HIGH_CPU_PERCENT
-        ? this.#highCpuSamples + 1
-        : 0;
+      this.#highCpuSamples =
+        Number.isFinite(cpu) && cpu >= INDEXER_HIGH_CPU_PERCENT ? this.#highCpuSamples + 1 : 0;
       if (this.#highCpuSamples < INDEXER_HIGH_CPU_SAMPLES) return;
       this.#highCpuSamples = 0;
-      this.#failProcess(child, new Error('Filesystem indexer restarted after sustained high CPU outside indexing'));
+      this.#failProcess(
+        child,
+        new Error('Filesystem indexer restarted after sustained high CPU outside indexing'),
+      );
     } catch {
       // A process that exits between sampling and ps is handled by its exit listener.
     }

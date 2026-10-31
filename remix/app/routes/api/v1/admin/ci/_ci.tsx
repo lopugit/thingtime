@@ -2,7 +2,7 @@ import { json } from '~/api/http';
 import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import { ciProviderReadiness } from '~/api/utils/ciControl/providerReadiness';
-import { ciAdminPreviewReadiness } from '~/api/utils/ciControl/adminPreviewDeployments';
+import { ciAdminPreviewReadiness } from '~/api/utils/ciControl/adminPreviewController';
 import { ciDashboardCapacityFailure } from '~/api/utils/ciControl/dashboardFailure';
 import { listCiDashboard } from '~/api/utils/ciControl/store';
 

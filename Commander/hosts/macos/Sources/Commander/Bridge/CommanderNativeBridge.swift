@@ -70,12 +70,14 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
   private let nativeToken: String
   private let showLauncher: () -> Void
   private let hideLauncher: () -> Void
+  private let dismissLauncher: () -> Void
   private let launcherState: () throws -> [String: Any]
   private let updateLauncherPin: (Bool) throws -> [String: Any]
   private let openNewLauncherWindow: () throws -> [String: Any]
   private let commandHotKeyReady: (String) -> Void
   private let pasteClipboard: (String, Bool) async -> [String: Any]
   private let pasteTargetName: () -> String?
+  private let showProcesses: () -> Void
   private let showSettings: (CommanderSettingsTab?) -> Void
   private let updateHotKeys: (String?, [String: String]?) throws -> Void
   private let updateMenuBar: (Bool) -> Void
@@ -95,6 +97,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     loginItem: LaunchAtLoginService,
     showLauncher: @escaping () -> Void,
     hideLauncher: @escaping () -> Void,
+    dismissLauncher: (() -> Void)? = nil,
     launcherState: @escaping () throws -> [String: Any] = {
       ["windowId": "default", "pinned": false, "pinningEnabled": false]
     },
@@ -115,7 +118,9 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     updateWindowMode: @escaping (String) throws -> Void,
     updateCustomWindowResizeHandling: @escaping (Bool) -> Void = { _ in },
     updateWindowPinning: @escaping (Bool, Bool, Bool) -> Void = { _, _, _ in },
-    applicationOpener: CommanderApplicationOpener = CommanderApplicationOpener()
+    applicationOpener: CommanderApplicationOpener = CommanderApplicationOpener(),
+    sharedMetrics: SystemMetricsService? = nil,
+    showProcesses: @escaping () -> Void = {}
   ) {
     self.daemonURL = URL(string: ready.url)!
     self.nativeToken = ready.nativeToken
@@ -123,6 +128,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     self.loginItem = loginItem
     self.showLauncher = showLauncher
     self.hideLauncher = hideLauncher
+    self.dismissLauncher = dismissLauncher ?? hideLauncher
     self.launcherState = launcherState
     self.updateLauncherPin = updateLauncherPin
     self.openNewLauncherWindow = openNewLauncherWindow
@@ -130,15 +136,16 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     self.pasteClipboard = pasteClipboard
     self.pasteTargetName = pasteTargetName
     self.showSettings = showSettings
+    self.showProcesses = showProcesses
     self.updateHotKeys = updateHotKeys
     self.updateMenuBar = updateMenuBar
     self.updateWindowMode = updateWindowMode
     self.updateCustomWindowResizeHandling = updateCustomWindowResizeHandling
     self.updateWindowPinning = updateWindowPinning
     self.applicationOpener = applicationOpener
-    let applicationResponsiveness = ApplicationResponsivenessService()
+    let applicationResponsiveness = sharedMetrics?.applicationResponsiveness ?? ApplicationResponsivenessService()
     self.applicationResponsiveness = applicationResponsiveness
-    self.metrics = SystemMetricsService(
+    self.metrics = sharedMetrics ?? SystemMetricsService(
       daemonPID: ready.pid,
       applicationResponsiveness: applicationResponsiveness
     )
@@ -189,7 +196,11 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
       return
     }
     reply(id: requestID, ok: true, result: nil, error: nil)
-    window.performDrag(with: event)
+    if event.clickCount == 2, let utility = window as? CommanderUtilityWindow {
+      utility.zoom(nil)
+    } else {
+      window.performDrag(with: event)
+    }
   }
 
   private func beginFileDrag(_ request: BridgeRequest) {
@@ -218,7 +229,13 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     do {
       let result: Any?
       switch request.method {
-      case "launcher.hide": hideLauncher(); result = nil
+      case "launcher.hide":
+        if request.params?["restorePreviousApplication"]?.bool == true {
+          dismissLauncher()
+        } else {
+          hideLauncher()
+        }
+        result = nil
       case "launcher.show": showLauncher(); result = nil
       case "launcher.state": result = try launcherState()
       case "launcher.pin":
@@ -289,7 +306,26 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
         }
         try FileManager.default.removeItem(at: url)
         result = ["deleted": true]
-      case "system.metrics": result = metrics.snapshot()
+      case "system.metrics":
+        let seconds = request.params?["averageSeconds"]
+        let value: Int
+        if let seconds {
+          guard case .number(let raw) = seconds, raw.isFinite,
+                ProcessUsageHistory.windows.contains(Int(exactly: raw) ?? -1) else { throw BridgeError.missing("valid averageSeconds") }
+          value = Int(raw)
+        } else { value = 0 }
+        result = metrics.snapshot(averageSeconds: value)
+      case "processes.open": showProcesses(); result = nil
+      case "window.toggleMaximize":
+        guard let window = webView?.window as? CommanderUtilityWindow else { throw BridgeError.missing("utility window") }
+        window.zoom(nil); result = nil
+      case "window.state", "window.keepAbove":
+        guard let window = webView?.window as? CommanderUtilityWindow else { throw BridgeError.missing("utility window") }
+        if request.method == "window.keepAbove" {
+          guard let enabled = request.params?["enabled"]?.bool else { throw BridgeError.missing("enabled") }
+          window.level = enabled ? .floating : .normal
+        }
+        result = ["keepAbove": window.level == .floating]
       case "permission.fullDiskAccess": result = ["granted": FullDiskAccessService.isGranted]
       case "notification.show":
         guard let id = request.params?["id"]?.string,

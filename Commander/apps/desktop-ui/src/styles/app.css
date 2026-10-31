@@ -387,9 +387,11 @@
   width: 13px;
   height: 13px;
 }
-.result-count.updating svg,
 .search-spinner {
-  animation: commander-spin 900ms linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: commander-spin 1s linear infinite;
+  will-change: transform;
 }
 .category-heading {
   min-height: 30px;
@@ -423,6 +425,7 @@
   line-height: 1.1;
 }
 .footer-index-progress {
+  min-width: 0;
   max-width: 330px;
   overflow: hidden;
   color: var(--text);
@@ -535,7 +538,8 @@
   z-index: 22;
   right: 0;
   bottom: 28px;
-  width: 190px;
+  width: 240px;
+  max-width: calc(100vw - 24px);
   padding: 5px;
   border: 1px solid var(--line);
   border-radius: 11px;
@@ -560,6 +564,7 @@
   background: var(--selected);
 }
 .pin-menu svg {
+  flex-shrink: 0;
   width: 14px;
   height: 14px;
   color: var(--muted);
@@ -589,10 +594,19 @@
   border: 0;
 }
 
+/* Keep the web surface aligned with Commander's native mask at narrow widths.
+   The generic launcher media rule uses an 8px inset, but this panel is 18px. */
+.launcher-shell:has(> .emoji-picker-panel) {
+  padding: 18px;
+}
 .emoji-picker-panel {
+  /* The implicit auto column otherwise grows to a feedback row's min-content
+     width, stretching every emoji cell beyond the native window's fixed mask. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 .emoji-toolbar {
+  min-width: 0;
   min-height: 62px;
   display: flex;
   align-items: center;
@@ -681,6 +695,7 @@
   min-width: 92px;
 }
 .emoji-results {
+  min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -766,6 +781,10 @@
   font-size: 0.78rem;
 }
 .emoji-footer {
+  max-height: 50vh;
+  overflow-y: auto;
+  min-width: 0;
+  flex-wrap: wrap;
   min-height: 42px;
   display: flex;
   align-items: center;
@@ -790,6 +809,7 @@
   width: 12px;
 }
 .emoji-footer-selection {
+  min-width: 0;
   max-width: 245px;
   overflow: hidden;
   color: var(--text);
@@ -797,13 +817,55 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.emoji-status {
+.emoji-feedback {
+  flex: 0 0 100%;
   min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  color: var(--muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: grid;
+  gap: 6px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+}
+.emoji-status,
+.emoji-permission-help {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.emoji-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.emoji-recovery-actions button {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  font: inherit;
+}
+@media (max-width: 650px) {
+  .emoji-search {
+    min-width: 0;
+  }
+  .emoji-select-wrap {
+    min-width: 110px;
+  }
+  .tone-select-wrap {
+    min-width: 78px;
+  }
+  .emoji-footer-selection {
+    max-width: 135px;
+  }
+}
+@media (max-width: 440px) {
+  .emoji-toolbar {
+    flex-wrap: wrap;
+  }
+  .emoji-search {
+    flex-basis: calc(100% - 50px);
+  }
+  .emoji-select-wrap {
+    flex: 1;
+  }
 }
 .emoji-primary-action {
   display: inline-flex;
@@ -2739,7 +2801,7 @@
   }
   .search-hint,
   .result-kind,
-  .launcher-footer > span:not(.connection-dot):not(.footer-error) {
+  .launcher-footer > span:not(.connection-dot):not(.footer-error):not(.footer-index-progress):not(.footer-spacer) {
     display: none;
   }
   .actions-panel {

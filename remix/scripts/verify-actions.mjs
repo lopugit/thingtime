@@ -240,9 +240,8 @@ const run = async () => {
 		JSON.stringify(protoDefault.body).slice(0, 300)
 	);
 
-	// A boolean input named __proto__ can never hold an own key (the assignment
-	// hits the accessor and is a silent no-op), so $input.__proto__ must read as
-	// undefined — never as Object.prototype leaking into a step value.
+	// Declared own keys survive the null-prototype input accumulator. Omitting
+	// that key must still resolve to nothing, never an inherited prototype.
 	const protoLeak = await createThing(alice.cookie, {
 		thingtime: ['action'],
 		crystal: {
@@ -258,9 +257,15 @@ const run = async () => {
 		inputs: JSON.parse('{"__proto__":true}')
 	});
 	check(
-		'$input.__proto__ resolves to nothing, not Object.prototype',
-		protoLeakRun.status === 200 && protoLeakRun.body?.status === 'ok' && protoLeakRun.body?.result == null,
+		'$input.__proto__ preserves the explicitly supplied boolean',
+		protoLeakRun.status === 200 && protoLeakRun.body?.status === 'ok' && protoLeakRun.body?.result === true,
 		JSON.stringify(protoLeakRun.body).slice(0, 300)
+	);
+	const protoOmittedRun = await runAction(alice.cookie, { action: `proto-leak-${suffix}`, inputs: {} });
+	check(
+		'omitted $input.__proto__ resolves to nothing, not Object.prototype',
+		protoOmittedRun.status === 200 && protoOmittedRun.body?.status === 'ok' && protoOmittedRun.body?.result == null,
+		JSON.stringify(protoOmittedRun.body).slice(0, 300)
 	);
 
 	const run1 = await runAction(alice.cookie, { action: `create-customer-${suffix}`, inputs: { name: 'Ada Lovelace', email: 'ada@example.com' } });
@@ -763,6 +768,35 @@ const run = async () => {
 		secDeliberateRun.status === 200 && secDeliberateRun.body?.result === 'bella-ran',
 		`status ${secDeliberateRun.status}`
 	);
+
+	// Builder form clearing is an explicit value, not a request for defaults.
+	const clearAction = await createThing(alice.cookie, { thingtime: ['action'], crystal: {
+		name: 'Clear customer note', inputs: [{ name: 'id', type: 'string', required: true }, { name: 'note', type: 'text', default: 'fallback' }],
+		capabilities: [{ capability: 'things.update', schemas: [CUSTOMER] }],
+		steps: [{ op: 'things.update', id: '$input.id', values: { note: '$input.note' } }, { op: 'return', value: '$step.1' }]
+	} });
+	check('builder clear action saves', clearAction.status === 200);
+	const clearRun = await runAction(alice.cookie, { action: clearAction.body?.thing?.id, source: 'component', inputs: { id: secMintedId, note: '' } });
+	check('builder clear action succeeds', clearRun.body?.status === 'ok', JSON.stringify(clearRun.body).slice(0, 300));
+	const clearedRead = await api(`/api/v1/things?id=${encodeURIComponent(secMintedId)}`, { cookie: alice.cookie });
+	check('empty text survives API save and readback instead of applying default', clearedRead.body?.thing?.crystal?.note === '');
+	check('partial form edit preserves unrelated fields', clearedRead.body?.thing?.crystal?.name === 'Audience Probe');
+	await runAction(alice.cookie, { action: clearAction.body?.thing?.id, inputs: { id: secMintedId } });
+	const defaultRead = await api(`/api/v1/things?id=${encodeURIComponent(secMintedId)}`, { cookie: alice.cookie });
+	check('omitted text still uses descriptor default', defaultRead.body?.thing?.crystal?.note === 'fallback');
+	const missingRequired = await runAction(alice.cookie, { action: clearAction.body?.thing?.id, inputs: { id: '', note: '' } });
+	check('empty required input is refused before writes', missingRequired.status === 400);
+	const lookupAction = await createThing(alice.cookie, { thingtime: ['action'], acl: ['tt:all'], crystal: {
+		name: 'Address lookup', inputs: [{ name: 'address', type: 'string', required: true }],
+		capabilities: [{ capability: 'lookup', providers: ['google-geocoding'] }],
+		steps: [{ op: 'lookup', provider: 'google-geocoding', credentialId: 'missing-test-vault-entry', query: '$input.address' }, { op: 'return', value: '$step.1' }]
+	} });
+	check('registered lookup action publishes', lookupAction.status === 200);
+	const noKey = await runAction(alice.cookie, { action: lookupAction.body?.thing?.id, inputs: { address: 'Synthetic example' } });
+	check('missing Vault key fails without network access', noKey.body?.status === 'error' && /Vault/.test(noKey.body?.error || ''));
+	check('lookup results are marked transient', noKey.body?.cache === 'no-store');
+	const foreignLookup = await runAction(bella.cookie, { action: lookupAction.body?.thing?.id, inputs: { address: 'Synthetic example' } });
+	check('even deliberate foreign lookup cannot use viewer Vault', foreignLookup.body?.status === 'error' && /action you own/.test(foreignLookup.body?.error || ''));
 
 	// ---- docs twins ----------------------------------------------------------
 	const runDocs = await api('/api/v1/actions/run-docs');

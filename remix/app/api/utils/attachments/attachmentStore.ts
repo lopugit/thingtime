@@ -1,4 +1,8 @@
+import { parseFileSyncUploadOrigin, sameFileSyncUploadOrigin, type FileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
+import { ownedMediaDraftIds } from '../drafts/media';
+import { MAX_POST_ATTACHMENTS, attachmentCountLimit } from '../../../schemas/attachmentLimits';
 import { isDeepStrictEqual } from 'node:util';
+import { isDurableRecordingUpload, prepareRecordingImport } from './recordingImportCore';
 
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
@@ -12,6 +16,10 @@ import {
 	isAttachmentFinalizationLeaseId,
 	isAttachmentObjectVersionId,
 	planAttachmentReorder,
+	planAttachmentSync,
+	attachmentModerationHidesFromPublic,
+	attachmentStoredSortValue,
+	LINKED_ATTACHMENT_OBJECT_KEY_PREFIX,
 	type AttachmentAnnotationPatch,
 	type AttachmentCrystal,
 	type AttachmentPurpose,
@@ -19,7 +27,7 @@ import {
 	type AttachmentState
 } from './attachmentCore';
 
-export const MAX_ATTACHMENTS_PER_TARGET = 25;
+export { MAX_ATTACHMENTS_PER_TARGET } from '../../../schemas/attachmentLimits';
 export const ATTACHMENT_FINALIZING_DELETE_GRACE_MS = 60 * 60 * 1000;
 export const ATTACHMENT_FINALIZATION_LEASE_MS = 15 * 60 * 1000;
 export const ATTACHMENT_DELETING_RETRY_DELAY_MS = 15 * 60 * 1000;
@@ -59,7 +67,10 @@ export type AttachmentDoc = {
 	objectKey: string;
 	objectVersionId?: string;
 	attachmentRequestFingerprint?: string;
+	attachmentFileSyncOrigin?: FileSyncUploadOrigin;
 	attachmentPurpose?: AttachmentPurpose;
+	// Server-only import lifecycle marker; never copied from portable content.
+	attachmentImportDraft?: true;
 	attachmentProfileSlot?: ProfileAttachmentSlot;
 	attachmentFinalizationLeaseId?: string;
 	attachmentPartsIssuedAt?: Date;
@@ -67,6 +78,11 @@ export type AttachmentDoc = {
 	attachmentMpuEmptyVerifiedAt?: Date;
 	uploadId?: string;
 	attachmentExpiresAt?: Date;
+	attachmentRetainUntil?: Date;
+	attachmentRetentionClosed?: true;
+	// true only on linked (external URL) attachments: no S3 object exists, the
+	// crystal carries the url, and object bytes are always zero
+	attachmentLinked?: true;
 	// owner-chosen display position within the bound target (stamped at
 	// bind/reorder time; legacy bound docs without it sort by createdAt)
 	attachmentSortIndex?: number;
@@ -86,13 +102,23 @@ export type AttachmentDoc = {
 };
 
 type PendingInput = {
+	fileSyncOrigin?: FileSyncUploadOrigin;
 	id: string;
 	ownerId: string;
 	crystal: AttachmentCrystal;
 	objectKey: string;
 	requestFingerprint: string;
 	purpose: AttachmentPurpose;
+	recordingImportDraft?: true;
 	profileSlot?: ProfileAttachmentSlot;
+	expiresAt: Date;
+};
+
+type LinkedReadyInput = {
+	id: string;
+	ownerId: string;
+	crystal: AttachmentCrystal;
+	purpose: AttachmentPurpose;
 	expiresAt: Date;
 };
 
@@ -143,6 +169,8 @@ const attachmentMatch = (id: string) => ({ shareId: id, thingtime: ATTACHMENT_TH
 
 export type AttachmentStore = {
 	reservePending(input: PendingInput): Promise<AttachmentDoc>;
+	recordFileSyncOrigin(ownerId: string, id: string, requestFingerprint: string, origin: FileSyncUploadOrigin): Promise<AttachmentDoc>;
+	insertLinkedReady(input: LinkedReadyInput): Promise<AttachmentDoc>;
 	claimUploadInitialization(ownerId: string, id: string, staleAtOrBefore: Date): Promise<AttachmentDoc | null>;
 	setUploadId(ownerId: string, id: string, uploadId: string): Promise<AttachmentDoc>;
 	markPartsIssued(ownerId: string, id: string, issuedAt: Date): Promise<AttachmentDoc>;
@@ -183,7 +211,8 @@ export const expiredAttachmentDraftFilter = (
 	thingtime: ATTACHMENT_THINGTIME,
 	attachmentExpiresAt: { $lte: expiredAtOrBefore },
 	$or: [
-		{ targetId: { $exists: false }, attachmentState: { $in: ['pending', 'ready'] } },
+		{ targetId: { $exists: false }, attachmentState: 'pending' },
+		{ targetId: { $exists: false }, attachmentState: 'ready', $or: [{ attachmentPurpose: { $nin: ['recording', 'file'] } }, { attachmentPurpose: { $in: ['recording', 'file'] }, attachmentImportDraft: true }] },
 		{
 			targetId: { $exists: false },
 			attachmentState: 'finalizing',
@@ -197,7 +226,29 @@ export const expiredAttachmentDraftFilter = (
 });
 
 export const attachmentStore: AttachmentStore = {
-	async reservePending({ id, ownerId, crystal, objectKey, requestFingerprint, purpose, profileSlot, expiresAt }) {
+	async recordFileSyncOrigin(ownerId, id, requestFingerprint, originInput) {
+    const origin = parseFileSyncUploadOrigin(originInput);
+    return withHomeMongoTransaction(async session => {
+      const things = await getHomeThingsCollection();
+      const before = await things.findOne({ ...attachmentMatch(id), ownerId, attachmentRequestFingerprint: requestFingerprint } as any, { session }) as any as AttachmentDoc;
+      if (!before || before.attachmentPurpose !== 'file' || before.attachmentImportDraft || !['pending', 'finalizing', 'ready'].includes(before.attachmentState) || before.attachmentLinked ||
+        (before.targetId != null && before.targetId !== origin.fileId) || (before.targetId == null && !isDeepStrictEqual(before.acl, [ACL_OWNER]))) throw new AttachmentStoreConflictError('Sync upload reservation changed');
+      if (before.attachmentFileSyncOrigin) {
+        if (!sameFileSyncUploadOrigin(before.attachmentFileSyncOrigin, origin)) throw new AttachmentStoreConflictError('Sync upload origin changed');
+        return before;
+      }
+      const next = { ...before, attachmentFileSyncOrigin: origin, updatedAt: new Date() };
+      const nextSize = thingStorageSizeBytes(next);
+      await applyUserStorageDelta(ownerId, nextSize - canonicalStoredBytes(before), session);
+      const written = await things.updateOne({ _id: before._id, ownerId, attachmentRequestFingerprint: requestFingerprint, attachmentFileSyncOrigin: { $exists: false }, updatedAt: before.updatedAt, sizeBytes: before.sizeBytes } as any,
+        { $set: { attachmentFileSyncOrigin: origin, sizeBytes: nextSize, updatedAt: next.updatedAt } }, { session });
+      if (written.matchedCount !== 1) throw new AttachmentStoreConflictError();
+      return { ...next, sizeBytes: nextSize };
+    });
+  },
+	async reservePending({ id, ownerId, crystal, objectKey, requestFingerprint, purpose, profileSlot, expiresAt, recordingImportDraft, fileSyncOrigin }) {
+		if (fileSyncOrigin && (purpose !== 'file' || recordingImportDraft)) throw new AttachmentBindingError(400, 'Sync origin requires an ordinary file reservation');
+		if (recordingImportDraft && (!['recording', 'file'].includes(purpose) || profileSlot)) throw new AttachmentBindingError(400, 'Recording import drafts must retain recording purpose');
 		const now = new Date();
 		const unstamped = {
 			shareId: id,
@@ -215,9 +266,50 @@ export const attachmentStore: AttachmentStore = {
 			objectSizeBytes: crystal.size,
 			objectKey,
 			attachmentRequestFingerprint: requestFingerprint,
+			...(fileSyncOrigin ? { attachmentFileSyncOrigin: parseFileSyncUploadOrigin(fileSyncOrigin) } : {}),
 			attachmentPurpose: purpose,
+			...(recordingImportDraft ? { attachmentImportDraft: true as const } : {}),
 			...(profileSlot ? { attachmentProfileSlot: profileSlot } : {}),
 			attachmentExpiresAt: expiresAt,
+			createdAt: now,
+			updatedAt: now
+		};
+		const doc: AttachmentDoc = { ...unstamped, sizeBytes: thingStorageSizeBytes(unstamped) };
+
+		await withHomeMongoTransaction(async (session) => {
+			await applyUserStorageDelta(ownerId, doc.sizeBytes, session);
+			await (await getHomeThingsCollection()).insertOne(doc as any, { session });
+		});
+		return doc;
+	},
+
+	// A linked (external URL) attachment is born READY: there is no upload to
+	// finalize and no object bytes to verify — the crystal's url IS the media.
+	// It carries the same draft TTL as an uploaded ready draft, binds through
+	// the same fences, and only its JSON payload bytes hit the owner's quota.
+	// Moderation is stamped 'skipped' at mint: there are no stored bytes for
+	// the analyzer to fetch, and an unstamped doc would loop the sweep forever.
+	async insertLinkedReady({ id, ownerId, crystal, purpose, expiresAt }) {
+		const now = new Date();
+		const unstamped = {
+			shareId: id,
+			schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+			thingtime: [ATTACHMENT_THINGTIME] as [typeof ATTACHMENT_THINGTIME],
+			crystal,
+			extended: null,
+			ownerId,
+			acl: [ACL_OWNER],
+			tags: [] as [],
+			storageClass: 'content' as const,
+			storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+			attachmentEnvelopeVersion: ATTACHMENT_ENVELOPE_VERSION,
+			attachmentState: 'ready' as const,
+			attachmentLinked: true as const,
+			objectSizeBytes: 0,
+			objectKey: `${LINKED_ATTACHMENT_OBJECT_KEY_PREFIX}${id}`,
+			attachmentPurpose: purpose,
+			attachmentExpiresAt: expiresAt,
+			moderation: { status: 'skipped' as const, categories: ['external-url'], provider: 'linked', analyzedAt: now },
 			createdAt: now,
 			updatedAt: now
 		};
@@ -339,7 +431,7 @@ export const attachmentStore: AttachmentStore = {
 				attachmentState: 'pending',
 				targetId: { $exists: false },
 				attachmentExpiresAt: { $gt: now },
-				uploadId: { $type: 'string' }
+				$or: [{ uploadId: { $type: 'string' } }, { objectSizeBytes: 0, attachmentPurpose: 'file' }]
 			} as any,
 			{ $set: { attachmentState: 'finalizing', attachmentFinalizationLeaseId: leaseId, updatedAt: now } },
 			{ returnDocument: 'after' }
@@ -433,10 +525,14 @@ export const attachmentStore: AttachmentStore = {
 				// Quarantine every newly durable object until analysis either clears/
 				// flags it or deliberately marks it skipped. This lands before complete
 				// returns, so a fast bind cannot expose unscreened bytes during outage.
-				moderation: { status: 'pending' as const },
+				moderation: before.objectSizeBytes === 0 && before.attachmentPurpose === 'file'
+                    ? { status: 'skipped' as const, provider: 'verified-empty-object', categories: ['empty-content'], analyzedAt: new Date() }
+                    : { status: before.attachmentPurpose === 'password' ? 'skipped' as const : 'pending' as const },
 				attachmentExpiresAt: expiresAt,
 				updatedAt: new Date()
 			};
+			// A completed recording is an owner-private library Thing, not a draft.
+			if (isDurableRecordingUpload(before)) delete next.attachmentExpiresAt;
 			delete next.uploadId;
 			delete next.attachmentFinalizationLeaseId;
 			delete next.attachmentPartsIssuedAt;
@@ -458,12 +554,12 @@ export const attachmentStore: AttachmentStore = {
 						crystal,
 						objectVersionId,
 						attachmentState: 'ready',
-						moderation: { status: 'pending' },
-						attachmentExpiresAt: expiresAt,
+						moderation: next.moderation,
+						...(isDurableRecordingUpload(before) ? {} : { attachmentExpiresAt: expiresAt }),
 						sizeBytes: nextSize,
 						updatedAt: next.updatedAt
 					},
-					$unset: { uploadId: '', attachmentFinalizationLeaseId: '', attachmentPartsIssuedAt: '' }
+					$unset: { uploadId: '', attachmentFinalizationLeaseId: '', attachmentPartsIssuedAt: '', ...(isDurableRecordingUpload(before) ? { attachmentExpiresAt: '' } : {}) }
 				},
 				{ session }
 			);
@@ -561,7 +657,10 @@ export const attachmentStore: AttachmentStore = {
 							$set: {
 								attachmentState: 'deleting',
 								attachmentExpiresAt: {
-									$cond: [{ $eq: [{ $type: '$attachmentPartsIssuedAt' }, 'date'] }, attachmentMpuSettlementAt(now), attachmentDeletingRetryAt(now)]
+									$max: [
+										{ $cond: [{ $eq: [{ $type: '$attachmentPartsIssuedAt' }, 'date'] }, attachmentMpuSettlementAt(now), attachmentDeletingRetryAt(now)] },
+										{ $ifNull: ['$attachmentRetainUntil', attachmentDeletingRetryAt(now)] }
+									]
 								},
 								updatedAt: now
 							}
@@ -677,6 +776,7 @@ export const attachmentStore: AttachmentStore = {
 				attachmentState: 'ready',
 				'crystal.contentType': 'application/octet-stream',
 				'crystal.detectedContentType': { $exists: false },
+				attachmentPurpose: { $ne: 'password' },
 				...(afterId ? { shareId: { $gt: afterId } } : {})
 			} as any)
 			.sort({ shareId: 1 })
@@ -725,26 +825,28 @@ export const attachmentStore: AttachmentStore = {
 	}
 };
 
-type BindableAttachmentPurpose = Exclude<AttachmentPurpose, 'profile'>;
+type BindableAttachmentPurpose = Exclude<AttachmentPurpose, 'profile' | 'recording' | 'file' | 'password'>;
 
 const attachmentPurposeLabel: Record<BindableAttachmentPurpose, string> = {
 	post: 'post',
 	comment: 'comment',
 	message: 'message',
-	emoji: 'custom emoji'
+	emoji: 'custom emoji',
+	'subspace-icon': 'subspace icon',
+	'subspace-banner': 'subspace banner'
 };
 
 // Called by each content writer inside the SAME home-Mongo transaction as its
 // target creation. This is the only supported transition from a private,
 // unbound object to a relational child. Purpose is immutable: an upload plan
 // minted for a DM cannot be replayed into a public post or custom emoji.
-const bindReadyAttachmentsForPurpose = async (
+export const bindReadyAttachmentsForPurpose = async (
 	ownerId: string,
 	attachmentIds: readonly string[],
 	targetId: string,
 	session: any,
 	purpose: BindableAttachmentPurpose,
-	maxAttachments = MAX_ATTACHMENTS_PER_TARGET
+	maxAttachments = attachmentCountLimit(purpose)
 ): Promise<void> => {
 	if (isCustomMongoEndpointActive()) {
 		throw new AttachmentBindingError(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
@@ -770,6 +872,8 @@ const bindReadyAttachmentsForPurpose = async (
 	const now = new Date();
 	const purposeFence =
 		purpose === 'post' ? { $or: [{ attachmentPurpose: 'post' }, { attachmentPurpose: { $exists: false } }] } : { attachmentPurpose: purpose };
+  const sourceRows = await things.find({ shareId: { $in: ids }, ownerId, thingtime: ATTACHMENT_THINGTIME }, { session, projection: { targetId: 1 } }).toArray();
+  const sources = await ownedMediaDraftIds(ownerId, sourceRows.map(row => row.targetId).filter((id): id is string => typeof id === 'string' && id !== targetId), session);
 	const candidates = (await things
 		.find(
 			{
@@ -782,7 +886,7 @@ const bindReadyAttachmentsForPurpose = async (
 					{ attachmentProfileSlot: { $exists: false } },
 					{
 				$or: [
-					{ targetId, attachmentExpiresAt: { $exists: false } },
+					{ targetId: { $in: [targetId, ...sources] }, attachmentExpiresAt: { $exists: false } },
 					{ targetId: { $exists: false }, attachmentExpiresAt: { $gt: now } }
 				]
 					}
@@ -792,7 +896,7 @@ const bindReadyAttachmentsForPurpose = async (
 		)
 		.toArray()) as Array<{ shareId: string; targetId?: string }>;
 
-	if (candidates.length !== ids.length || candidates.some((attachment) => attachment.targetId && attachment.targetId !== targetId)) {
+	if (candidates.length !== ids.length || candidates.some((attachment) => attachment.targetId && attachment.targetId !== targetId && !sources.includes(attachment.targetId))) {
 		throw new AttachmentBindingError(409, 'One or more attachments are unavailable or already attached');
 	}
 
@@ -811,7 +915,7 @@ const bindReadyAttachmentsForPurpose = async (
 						{ attachmentProfileSlot: { $exists: false } },
 						{
 							$or: [
-								{ targetId, attachmentExpiresAt: { $exists: false } },
+								{ targetId: { $in: [targetId, ...sources] }, attachmentExpiresAt: { $exists: false } },
 								{ targetId: { $exists: false }, attachmentExpiresAt: { $gt: now } }
 							]
 						}
@@ -830,24 +934,60 @@ const bindReadyAttachmentsForPurpose = async (
 	}
 };
 
-// Owner-authored title/description on a READY attachment. Ready-only on
+// Owner-authored display metadata on a READY attachment. Ready-only on
 // purpose: finalize (markReady) rebuilds the crystal from the verified S3
 // object, so annotating an in-flight upload would be silently clobbered.
 // Crystal bytes change, so the delta rides the same exact-accounting
 // transaction markReady uses.
-export const annotateOwnedAttachment = async (ownerId: string, id: string, patch: AttachmentAnnotationPatch): Promise<AttachmentDoc> =>
+export const assertUnboundPostAnnotation = (doc: AttachmentDoc, now = new Date()) => {
+  if (doc.targetId || (doc.attachmentPurpose && doc.attachmentPurpose !== 'post') || doc.attachmentProfileSlot || !(doc.attachmentExpiresAt instanceof Date) || !Number.isFinite(doc.attachmentExpiresAt.getTime()) || doc.attachmentExpiresAt <= now) {
+    throw new AttachmentBindingError(409, 'Import annotations require a fresh unbound post attachment');
+  }
+};
+
+/** Server-only final step for recording imports. Upload approval, byte
+ * verification and moderation remain the normal upload pipeline's job.
+ * This cannot mint media, change purpose, or reuse an existing recording. */
+export const commitRecordingImport = async (ownerId: string, id: string, expectedBytes: number, patch: AttachmentAnnotationPatch = {}): Promise<AttachmentDoc> => {
+  if (isCustomMongoEndpointActive()) throw new AttachmentBindingError(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+  return withHomeMongoTransaction(async (session) => {
+    const things = await getHomeThingsCollection();
+    const before = await things.findOne({ ...attachmentMatch(id), ownerId } as any, { session }) as unknown as AttachmentDoc | null;
+    if (!before) throw new AttachmentBindingError(404, 'Attachment not found');
+    let next: AttachmentDoc;
+    try { next = prepareRecordingImport(before, ownerId, expectedBytes, patch); }
+    catch (error) { throw new AttachmentBindingError(409, error instanceof Error ? error.message : 'Invalid recording import'); }
+    const sizeBytes = thingStorageSizeBytes(next);
+    await applyUserStorageDelta(ownerId, sizeBytes - canonicalStoredBytes(before), session);
+    const write = await things.updateOne({
+      _id: before._id, ownerId, attachmentState: 'ready', attachmentPurpose: before.attachmentPurpose, attachmentImportDraft: true,
+      updatedAt: before.updatedAt, sizeBytes: before.sizeBytes
+    } as any, {
+      $set: { crystal: next.crystal, acl: [ACL_OWNER], updatedAt: next.updatedAt, sizeBytes },
+      $unset: { attachmentImportDraft: '', attachmentExpiresAt: '' }
+    }, { session });
+    if (write.matchedCount !== 1) throw new AttachmentBindingError(409, 'Recording changed during import');
+    return { ...next, sizeBytes };
+  });
+};
+
+export const annotateOwnedAttachment = async (ownerId: string, id: string, patch: AttachmentAnnotationPatch, options: { unboundPostOnly?: boolean } = {}): Promise<AttachmentDoc> =>
 	withHomeMongoTransaction(async (session) => {
 		const things = await getHomeThingsCollection();
 		const before = (await things.findOne({ ...attachmentMatch(id), ownerId } as any, { session })) as any as AttachmentDoc | null;
-		if (!before) throw new AttachmentBindingError(404, 'Attachment not found');
+		if (!before || before.attachmentPurpose === 'password') throw new AttachmentBindingError(404, 'Attachment not found');
 		if (before.attachmentState !== 'ready') {
 			throw new AttachmentBindingError(409, 'This file is still uploading — try again once it is ready');
 		}
+		// Checked inside the same transaction as the metadata write. A concurrent
+		// bind retries against the new target and cannot alter an existing gallery.
+		if (options.unboundPostOnly) assertUnboundPostAnnotation(before);
 
 		const annotated = applyAttachmentAnnotationPatch(before.crystal, patch);
 		if (annotated.ok === false) throw new AttachmentBindingError(400, annotated.error);
 		const nextCrystal: AttachmentCrystal = annotated.crystal;
 		if (
+			nextCrystal.filenamePreview === before.crystal.filenamePreview &&
 			nextCrystal.title === before.crystal.title &&
 			nextCrystal.description === before.crystal.description &&
 			nextCrystal.name === before.crystal.name
@@ -892,7 +1032,7 @@ export const reorderBoundTargetAttachments = async (ownerId: string, targetId: s
 	const plan = planAttachmentReorder(
 		requestedIds,
 		bound.map((doc) => String(doc.shareId)),
-		MAX_ATTACHMENTS_PER_TARGET
+		MAX_POST_ATTACHMENTS
 	);
 	if (plan.ok === false) throw new AttachmentBindingError(plan.status, plan.error);
 	if (!plan.orderedIds.length) return;
@@ -906,6 +1046,69 @@ export const reorderBoundTargetAttachments = async (ownerId: string, targetId: s
 	if (write.matchedCount !== plan.orderedIds.length) {
 		throw new AttachmentBindingError(409, 'The attachments on this post changed — refresh and reorder again');
 	}
+};
+
+// PATCH-time attachment sync: re-stamp display order AND bind any newly
+// uploaded/linked ready drafts into an existing post/rich comment the owner
+// is editing. The requested list is the full desired order — it must cover
+// every VISIBLE bound id (planAttachmentSync rejects removals) and may append
+// unbound ready drafts, which bindReadyAttachmentsForPurpose claims with the
+// same fences create-time binding uses. Bound docs the projection HIDES
+// (moderation pending the client predates, blocked) are exempt from the cover
+// requirement — the client can never have seen them — and are re-stamped
+// after the requested list so their binding and relative order survive the
+// save. The target must be an owned post-family thing: binding to an
+// arbitrary target id would let an edit deface another owner's thread with
+// the editor's own inherit-acl media.
+export const syncBoundTargetAttachments = async (ownerId: string, targetId: string, requestedIds: readonly unknown[]): Promise<void> => {
+	if (isCustomMongoEndpointActive()) {
+		throw new AttachmentBindingError(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+	}
+	if (!targetId.trim()) throw new AttachmentBindingError(400, 'Attachment target is required');
+	const things = await getHomeThingsCollection();
+	// post-family only (posts, rich AND plain comments) — message, emoji and
+	// profile targets keep their dedicated purpose-bound routes
+	const target = (await things.findOne({ shareId: targetId, ownerId, thingtime: { $in: ['post', 'comment'] } } as any, {
+		projection: { shareId: 1, thingtime: 1 }
+	})) as { shareId: string; thingtime?: unknown } | null;
+	if (!target) throw new AttachmentBindingError(404, 'Post not found');
+	const bound = (await things
+		.find({ ownerId, thingtime: ATTACHMENT_THINGTIME, attachmentState: 'ready', targetId } as any, {
+			projection: { shareId: 1, moderation: 1, attachmentSortIndex: 1 }
+		})
+		.toArray()) as Array<{ shareId: string; moderation?: unknown; attachmentSortIndex?: unknown }>;
+	const hiddenBound = bound
+		.filter((doc) => attachmentModerationHidesFromPublic(doc.moderation))
+		.sort((left, right) => attachmentStoredSortValue(left.attachmentSortIndex) - attachmentStoredSortValue(right.attachmentSortIndex));
+	const purpose: BindableAttachmentPurpose = Array.isArray(target.thingtime) && target.thingtime.includes('comment') ? 'comment' : 'post';
+	const plan = planAttachmentSync(
+		requestedIds,
+		bound.map((doc) => String(doc.shareId)),
+		hiddenBound.map((doc) => String(doc.shareId)),
+		attachmentCountLimit(purpose)
+	);
+	if (plan.ok === false) throw new AttachmentBindingError(plan.status, plan.error);
+	if (!plan.orderedIds.length && !plan.hiddenTrailingIds.length) return;
+	await withHomeMongoTransaction(async (session) => {
+		if (plan.orderedIds.length) {
+			await bindReadyAttachmentsForPurpose(ownerId, plan.orderedIds, targetId, session, purpose);
+		}
+		if (plan.hiddenTrailingIds.length) {
+			const now = new Date();
+			const write = await things.bulkWrite(
+				plan.hiddenTrailingIds.map((shareId, index) => ({
+					updateOne: {
+						filter: { ownerId, thingtime: ATTACHMENT_THINGTIME, attachmentState: 'ready', targetId, shareId },
+						update: { $set: { attachmentSortIndex: plan.orderedIds.length + index, updatedAt: now } }
+					}
+				})) as any,
+				{ session, ordered: true }
+			);
+			if (write.matchedCount !== plan.hiddenTrailingIds.length) {
+				throw new AttachmentBindingError(409, 'The attachments on this post changed — refresh and try again');
+			}
+		}
+	});
 };
 
 export const bindReadyAttachmentsToTarget = async (

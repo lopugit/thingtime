@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { BootstrapResponse, SearchHit } from '@commander/protocol';
+import type { BootstrapResponse, SearchHit, IndexingStatus } from '@commander/protocol';
 import { DEFAULT_SETTINGS } from '@commander/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommanderState } from '../hooks/useCommander.js';
 import { resetNativeFileIconSchedulerForTests } from '../lib/nativeFileIcons.js';
-import { beginWindowDrag, nativeRequest } from '../lib/nativeBridge.js';
-import { Launcher } from './Launcher.js';
+import { beginWindowDrag, hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
+import { Launcher, indexSummary } from './Launcher.js';
 
 vi.mock('../lib/nativeBridge.js', () => ({
   beginWindowDrag: vi.fn(),
@@ -95,6 +95,44 @@ describe('Launcher keyboard navigation', () => {
   afterEach(() => {
     cleanup();
     resetNativeFileIconSchedulerForTests();
+  });
+
+  it('opens Settings without changing the query or running the selected result from keyboard focus', async () => {
+    const commander = state({ query: 'notes', selectedIndex: 1 });
+    render(<Launcher state={commander} />);
+    const button = screen.getByRole('button', { name: 'Open Commander Settings' });
+    button.focus();
+    fireEvent.keyDown(button, { key: 'Enter' });
+    expect(commander.executeCommand).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(commander.executeCommand).toHaveBeenCalledWith('builtin:settings', 'open-settings', ''),
+    );
+    expect(commander.setQuery).not.toHaveBeenCalled();
+    expect(commander.rememberRecentSearch).not.toHaveBeenCalled();
+  });
+
+  it('reports Settings failures through the existing error surface', async () => {
+    const commander = state({ executeCommand: vi.fn().mockRejectedValue(new Error('Settings unavailable')) });
+    render(<Launcher state={commander} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open Commander Settings' }));
+    await waitFor(() => expect(commander.reportError).toHaveBeenCalledWith('Settings unavailable'));
+  });
+
+  it('returns focus to the previous app when Escape dismisses the launcher', async () => {
+    const commander = state();
+    render(<Launcher state={commander} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(hideLauncher).toHaveBeenCalledWith(true));
+    expect(commander.rememberRecentSearch).toHaveBeenCalledWith(commander.query);
+  });
+
+  it('keeps focus in Commander when Escape only closes the actions panel', () => {
+    const commander = state({ actionsOpen: true });
+    render(<Launcher state={commander} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(commander.setActionsOpen).toHaveBeenCalledWith(false);
+    expect(hideLauncher).not.toHaveBeenCalled();
   });
 
   it('moves selection down and opens the actions panel with Command-K', () => {
@@ -586,7 +624,22 @@ describe('Launcher keyboard navigation', () => {
     expect(commander.executeCommand).not.toHaveBeenCalled();
   });
 
-  it('shows live index progress in the footer', () => {
+  it('keeps one fixed loading spinner mounted while search results stream', () => {
+    const commander = state({ hits: [], searchPending: true });
+    const view = render(<Launcher state={commander} />);
+
+    const spinner = screen.getByLabelText('Updating results');
+    expect(spinner).toHaveClass('search-spinner');
+    expect(view.container.querySelectorAll('.search-spinner')).toHaveLength(1);
+    expect(screen.getByText('Searching…')).toBeVisible();
+
+    view.rerender(<Launcher state={{ ...commander, hits }} />);
+
+    expect(screen.getByLabelText('Updating results')).toBe(spinner);
+    expect(view.container.querySelectorAll('.search-spinner')).toHaveLength(1);
+  });
+
+  it('shows searchable total and index age while indexing stays in the background', () => {
     render(
       <Launcher
         state={state({
@@ -594,6 +647,8 @@ describe('Launcher keyboard navigation', () => {
             available: true,
             running: ['files'],
             totalRecords: 4_000,
+            searchableRecords: 4_020,
+            lastIndexedAtMs: Date.now() - 120_000,
             databaseSizeBytes: 1_024,
             kinds: [],
             commands: { count: 20 },
@@ -614,7 +669,8 @@ describe('Launcher keyboard navigation', () => {
       />,
     );
 
-    expect(screen.getByText('Indexing Files · 1,250 / 4,000')).toBeVisible();
+    expect(screen.getByText('4,020 searchable items · indexed 2m ago')).toBeVisible();
+    expect(screen.queryByText(/Indexing Files/)).toBeNull();
   });
 
   it('pins the current window and offers a right-click Open New Window action', async () => {
@@ -633,5 +689,83 @@ describe('Launcher keyboard navigation', () => {
     fireEvent.contextMenu(screen.getByRole('button', { name: 'Unpin Commander window' }));
     fireEvent.click(screen.getByRole('button', { name: 'Open New Window' }));
     await waitFor(() => expect(nativeRequest).toHaveBeenCalledWith('launcher.openNewWindow'));
+  });
+
+  it.each([false, true])(
+    'toggles the shared new-window pin default from %s without pinning this window',
+    async (defaultPinned) => {
+      const settings = {
+        ...DEFAULT_SETTINGS,
+        windowPinning: { ...DEFAULT_SETTINGS.windowPinning, defaultPinned },
+      };
+      vi.mocked(nativeRequest).mockImplementation(async (method) =>
+        method === 'launcher.state'
+          ? { windowId: 'window-1', pinned: false, pinningEnabled: true }
+          : undefined,
+      );
+      const commander = state({ bootstrap: { ...bootstrap, settings } });
+      const view = render(<Launcher state={commander} />);
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Pin Commander window' })).toHaveAttribute(
+          'aria-pressed',
+          'false',
+        ),
+      );
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Pin Commander window' }));
+      const toggle = screen.getByRole('switch', { name: 'Open New Windows Pinned' });
+      expect(toggle).toHaveAttribute('aria-checked', String(defaultPinned));
+      fireEvent.click(toggle);
+      const nextSettings = {
+        ...settings,
+        windowPinning: { ...settings.windowPinning, defaultPinned: !defaultPinned },
+      };
+      expect(commander.saveSettings).toHaveBeenCalledExactlyOnceWith(nextSettings);
+      expect(nativeRequest).not.toHaveBeenCalledWith('launcher.pin', expect.anything());
+      expect(screen.queryByRole('switch', { name: 'Open New Windows Pinned' })).not.toBeInTheDocument();
+
+      view.rerender(
+        <Launcher state={{ ...commander, bootstrap: { ...bootstrap, settings: nextSettings } }} />,
+      );
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Pin Commander window' }));
+      expect(screen.getByRole('switch', { name: 'Open New Windows Pinned' })).toHaveAttribute(
+        'aria-checked',
+        String(!defaultPinned),
+      );
+      expect(screen.getByRole('button', { name: 'Pin Commander window' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+
+      // A failed save/refetch (or a change from General settings) must update the
+      // checkmark from the shared settings, not leave a separate local toggle.
+      view.rerender(<Launcher state={commander} />);
+      expect(screen.getByRole('switch', { name: 'Open New Windows Pinned' })).toHaveAttribute(
+        'aria-checked',
+        String(defaultPinned),
+      );
+    },
+  );
+});
+
+describe('launcher index summary', () => {
+  const status: IndexingStatus = {
+    available: true,
+    running: ['all'],
+    totalRecords: 0,
+    databaseSizeBytes: 0,
+    kinds: [],
+    commands: { count: 0 },
+    automaticRefresh: { applicationsMinutes: 360, filesystemMinutes: 360 },
+    customTimeoutMs: null,
+    resourceLimits: DEFAULT_SETTINGS.indexing.resourceLimits,
+    timing: { samples: 0 },
+    timeoutAttempts: [],
+  };
+  it('stays ready to search when eligible counts are unknown', () => {
+    expect(indexSummary(null)).toBe('Ready to search');
+    expect(indexSummary({ ...status, countsCurrent: false })).toBe('Ready to search');
+  });
+  it('shows a known count without implying a wait when its timestamp is unavailable', () => {
+    expect(indexSummary({ ...status, searchableRecords: 42 })).toBe('42 searchable items');
   });
 });

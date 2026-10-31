@@ -1,10 +1,32 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { beginWindowDrag, nativeRequest } from './nativeBridge.js';
+import { beginTitlebarDrag, beginWindowDrag, hideLauncher, nativeRequest } from './nativeBridge.js';
 
 describe('native window dragging', () => {
   afterEach(() => {
     Reflect.deleteProperty(window, 'webkit');
+  });
+
+  it('requests focus restoration only for an explicit launcher dismissal', async () => {
+    const postMessage = vi.fn((message: { id: string }) => {
+      window.commanderNativeReply?.({ id: message.id, ok: true });
+    });
+    Object.defineProperty(window, 'webkit', {
+      configurable: true,
+      value: { messageHandlers: { commander: { postMessage } } },
+    });
+
+    await hideLauncher(true);
+    expect(postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        method: 'launcher.hide',
+        params: { restorePreviousApplication: true },
+      }),
+    );
+
+    await hideLauncher();
+    expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ method: 'launcher.hide' }));
+    expect(postMessage.mock.lastCall?.[0]).not.toHaveProperty('params');
   });
 
   it('requests a native drag from non-interactive chrome and ignores controls', () => {
@@ -25,6 +47,31 @@ describe('native window dragging', () => {
 
     const input = document.createElement('input');
     beginWindowDrag({ button: 0, target: input, preventDefault } as never);
+    expect(postMessage).toHaveBeenCalledOnce();
+  });
+
+  it('maximizes only a titlebar double-click and leaves controls alone', () => {
+    const postMessage = vi.fn((message: { id: string }) =>
+      window.commanderNativeReply?.({ id: message.id, ok: true }),
+    );
+    Object.defineProperty(window, 'webkit', {
+      configurable: true,
+      value: { messageHandlers: { commander: { postMessage } } },
+    });
+    const preventDefault = vi.fn();
+    beginTitlebarDrag({
+      button: 0,
+      detail: 2,
+      target: document.createElement('strong'),
+      preventDefault,
+    } as never);
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ method: 'window.toggleMaximize' }));
+    beginTitlebarDrag({
+      button: 0,
+      detail: 2,
+      target: document.createElement('input'),
+      preventDefault,
+    } as never);
     expect(postMessage).toHaveBeenCalledOnce();
   });
 
