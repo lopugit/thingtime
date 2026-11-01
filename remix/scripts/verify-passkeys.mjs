@@ -212,10 +212,14 @@ const main = async () => {
 
 	const regOptions = await api(owner, 'POST', '/api/v1/auth/passkeys/register-options', { password });
 	check('register-options 200 with options', regOptions.json?.ok === true && typeof regOptions.json.options?.challenge === 'string');
-	check('challenge cookie set', owner.cookies.has('tt_webauthn_reg'));
+	check('challenge cookie set', [...owner.cookies.keys()].some((key) => key.startsWith('tt_webauthn_reg_')));
 	check(
 		'options request a discoverable credential',
 		regOptions.json?.options?.authenticatorSelection?.residentKey === 'required'
+	);
+	check(
+		'registration requires device user verification',
+		regOptions.json?.options?.authenticatorSelection?.userVerification === 'required'
 	);
 
 	const authenticator = makeAuthenticator();
@@ -227,7 +231,7 @@ const main = async () => {
 		description: 'minted by verify-passkeys.mjs'
 	});
 	check('register verifies + stores', stored.json?.ok === true && typeof stored.json.passkey?.id === 'string', JSON.stringify(stored.json));
-	check('challenge cookie cleared after verify', !owner.cookies.has('tt_webauthn_reg'));
+	check('challenge cookie cleared after verify', ![...owner.cookies.keys()].some((key) => key.startsWith('tt_webauthn_reg_')));
 	const passkeyId = stored.json?.passkey?.id;
 
 	const replayReg = await api(owner, 'POST', '/api/v1/auth/passkeys/register', { response: attestation });
@@ -254,9 +258,29 @@ const main = async () => {
 	const visitor = newJar(); // a fresh browser: no session, no roster
 	const loginOptions = await api(visitor, 'POST', '/api/v1/auth/passkeys/login-options');
 	check('login-options 200, empty allowCredentials', loginOptions.json?.ok === true && loginOptions.json.options?.allowCredentials?.length === 0);
-	check('login challenge cookie set', visitor.cookies.has('tt_webauthn_auth'));
+	check('login requires device user verification', loginOptions.json?.options?.userVerification === 'required');
+	check('login challenge cookie set', [...visitor.cookies.keys()].some((key) => key.startsWith('tt_webauthn_auth_')));
 
-	const assertion = assertionResponseFor(authenticator, loginOptions.json.options, userHandle);
+	// A second tab shares cookies but must not overwrite the first challenge.
+ const secondOptions = await api(visitor, 'POST', '/api/v1/auth/passkeys/login-options');
+ const savedChallengeCookies = new Map(visitor.cookies);
+ const assertion = assertionResponseFor(authenticator, loginOptions.json.options, userHandle);
+ const wrongOrigin = structuredClone(assertion);
+ const clientData = Buffer.from(JSON.stringify({ type: 'webauthn.get', challenge: loginOptions.json.options.challenge, origin: 'https://unrelated.example', crossOrigin: false }));
+ wrongOrigin.response.clientDataJSON = b64url(clientData);
+ wrongOrigin.response.signature = b64url(authenticator.sign(Buffer.concat([Buffer.from(wrongOrigin.response.authenticatorData, 'base64url'), createHash('sha256').update(clientData).digest()])));
+ const originRejected = await api(visitor, 'POST', '/api/v1/auth/passkeys/login', { response: wrongOrigin });
+ check('valid signature from a different origin is rejected', originRejected.status === 401);
+ const noVerification = structuredClone(assertion);
+ const noUvData = Buffer.from(noVerification.response.authenticatorData, 'base64url'); noUvData[32] &= ~0x04;
+ noVerification.response.authenticatorData = b64url(noUvData);
+ noVerification.response.signature = b64url(authenticator.sign(Buffer.concat([noUvData, createHash('sha256').update(Buffer.from(assertion.response.clientDataJSON, 'base64url')).digest()])));
+ const uvRejected = await api(visitor, 'POST', '/api/v1/auth/passkeys/login', { response: noVerification });
+ check('valid signature without user verification is rejected', uvRejected.status === 401);
+ const wrongOwner = structuredClone(assertion); wrongOwner.response.userHandle = b64url(Buffer.from('another-account'));
+ const ownerRejected = await api(visitor, 'POST', '/api/v1/auth/passkeys/login', { response: wrongOwner });
+ check('credential cannot authenticate a different user handle', ownerRejected.status === 401);
+
 	const loggedIn = await api(visitor, 'POST', '/api/v1/auth/passkeys/login', { response: assertion });
 	check('login verifies assertion', loggedIn.json?.ok === true && loggedIn.json.user?.username === username, JSON.stringify(loggedIn.json));
 	check('login sets tt_auth', visitor.cookies.has('tt_auth'));
@@ -271,13 +295,54 @@ const main = async () => {
 	const replayLogin = await api(visitor, 'POST', '/api/v1/auth/passkeys/login', { response: assertion });
 	check('assertion replay refused (challenge consumed)', replayLogin.json?.ok !== true);
 
-	const afterLogin = await api(owner, 'GET', '/api/v1/auth/passkeys');
+	const replayWithCookie = newJar(); replayWithCookie.cookies = new Map(savedChallengeCookies);
+ const replaySaved = await api(replayWithCookie, 'POST', '/api/v1/auth/passkeys/login', { response: assertion });
+ check('saved cookie cannot replay a verified zero-counter assertion', replaySaved.json?.ok !== true);
+ const secondLogin = await api(visitor, 'POST', '/api/v1/auth/passkeys/login', { response: assertionResponseFor(authenticator, secondOptions.json.options, userHandle) });
+ check('other tab challenge survives first successful login', secondLogin.json?.ok === true);
+ const afterLogin = await api(owner, 'GET', '/api/v1/auth/passkeys');
 	const afterLoginKey = afterLogin.json?.passkeys?.find((p) => p.id === passkeyId);
 	check('lastUsedAt recorded', typeof afterLoginKey?.lastUsedAt === 'string');
 	check(
 		'origin linked-app recorded',
 		afterLoginKey?.linkedApps?.some((l) => l.appKey === `origin:${ORIGIN}` && l.usageCount >= 1) === true,
 		JSON.stringify(afterLoginKey?.linkedApps)
+	);
+
+	// Squat regression (the reason app-link dedupe rides root uniqueKeys, not
+	// a kind-blind crystal-path unique index): a free-form data thing carrying
+	// the SAME crystal.linkKey must be accepted as ordinary data AND must not
+	// disturb the real link. Under the retired unique index this insert died
+	// with E11000 — and a duplicate could fail the whole boot index battery.
+	// Two data things sharing one linkKey value: under a kind-blind unique
+	// index the second dies with E11000, so this pins the retirement without
+	// depending on any real link's key.
+	const squatKey = `squat-${suffix}-${passkeyId}`;
+	const squatOne = await api(owner, 'POST', '/api/v1/things', { crystal: { linkKey: squatKey } });
+	const squatTwo = await api(owner, 'POST', '/api/v1/things', { crystal: { linkKey: squatKey } });
+	check(
+		'data things may share a linkKey crystal (no kind-blind unique index)',
+		squatOne.json?.ok === true && squatTwo.json?.ok === true,
+		`${squatOne.status}/${squatTwo.status} ${JSON.stringify(squatTwo.json)?.slice(0, 120)}`
+	);
+	// …and one carrying the REAL link's key must not disturb it either.
+	await api(owner, 'POST', '/api/v1/things', { crystal: { linkKey: `${passkeyId}:origin:${ORIGIN}` } });
+
+	const squatJar = newJar();
+	const squatLoginOptions = await api(squatJar, 'POST', '/api/v1/auth/passkeys/login-options');
+	const afterSquatLogin = await api(squatJar, 'POST', '/api/v1/auth/passkeys/login', {
+		response: assertionResponseFor(authenticator, squatLoginOptions.json.options, userHandle)
+	});
+	check('passkey login still works with a squatting data thing present', afterSquatLogin.json?.ok === true, JSON.stringify(afterSquatLogin.json));
+
+	const afterSquat = await api(owner, 'GET', '/api/v1/auth/passkeys');
+	const originLinks = (afterSquat.json?.passkeys?.find((p) => p.id === passkeyId)?.linkedApps || []).filter(
+		(l) => l.appKey === `origin:${ORIGIN}`
+	);
+	check(
+		'the real link still dedupes to ONE row and keeps counting',
+		originLinks.length === 1 && originLinks[0].usageCount >= 2,
+		JSON.stringify(originLinks)
 	);
 
 	// ── cross-deployment hints ──

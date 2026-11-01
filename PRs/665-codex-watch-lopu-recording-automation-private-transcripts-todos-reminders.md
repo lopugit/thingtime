@@ -1,0 +1,274 @@
+# PR #665 — private Watch recording automation
+
+Updated 2026-09-07. [Pull request](https://github.com/lopugit/thingtime/pull/665).
+Branch: `codex/watch-lopu-recording-automation`.
+
+## 2026-09-09 Watch recovery and actionable Lopu reminders
+
+Build 25 reports an unavailable attachment and then offline. Read-only production
+inspection found an unbound `deleting` Watch draft ahead of already-bound copies;
+the client treated every upload failure as offline and stopped the entire queue.
+New recovery classifies only owned missing/expired/deleting unbound drafts,
+rotates their persisted request identity once, and retains local audio. Valid
+bindings and ambiguous successful replies keep stable idempotency. File rejection
+does not disconnect the account, and later files can proceed. Local content
+receipts/queue dedupe prevent repeat taps from creating another upload.
+
+Lopu's shared standard voice/chat tool set now creates private notes/todos,
+immediate notifications and durable one-off/repeating reminders. Protected
+owner-only linked schedules support pause/resume, leased execution, transactional
+notification/checkpoint dedupe and skip-ahead after downtime. Existing platform
+indexes are retained; no destructive index migration is part of this change.
+The scheduler still needs a verified five-minute hosted cron before live release.
+
+Settings adds Quiet/Normal/Urgent, rich-text/image and per-type test buttons.
+Samples address only the current account, never email, respect mute preferences,
+and distinguish a history receipt from physical push delivery. Rich content is
+rendered in Thingtime history; native banners use text. Time Sensitive capability
+is declared in the native spec; signed profiles must be refreshed at release.
+
+Recordings gain Send to Lopu with explicit confirmation, durable handoff status
+and a private conversation. The standard reply path retains billing, ownership
+and destructive-action confirmation checks. Ambiguous execution is not retried
+automatically. The original automatic transcription opt-in cannot execute tools.
+
+Verification so far: targeted core/auth/lease/handoff/presentation tests, existing
+Lopu and notification suites, capability registry and chat streaming suites,
+and Vite/Nitro Vercel output verification pass. Integrated iPhone/Watch simulator
+build passes. Full TypeScript still has the pre-existing baseline; no new errors
+were found in the changed feature files. Local Chrome is signed out, so actual
+account controls await login; physical Watch upload/push, hosted scheduler and
+provider-backed handoff remain unverified. No main merge or TestFlight upload is
+claimed. Current worktree local web/API/HMR ports: 16340/16342/16341; Funnel CLI
+points to a missing app binary.
+
+## 2026-09-09 subscription rates and resumed acceptance
+
+Live index cutover is complete: production47/develop48, all four final dry
+runs zero. The full index definitions match except for develop's preserved
+`lopu_recording_due`. See the [live receipt](https://github.com/lopugit/thingtime/pull/692#issuecomment-5593384914).
+
+Native Claude Code auth freshly verified the requested Thingtime account,
+and a synthetic text completion succeeded without sending audio or private
+user content. Existing AI/recording suites passed, including the seven local
+adapter regressions. Cloud job/personal-runtime bridging is still unfinished;
+recording automation remains off and no end-to-end Watch receipt is claimed.
+
+The requested product rate policy resolves the protected home subscription on
+every request: Free/custom retain configured limits/windows; Plus5x;
+Pro/PAYG bypass the shared-AI and recording-control request buckets entirely.
+Authentication, provider quota, upload/storage limits and worker safety remain.
+Existing account bucket identities survive changes of plan/device/session/IP;
+no new indexes, stored tier revisions or account migrations are required.
+Entitlement outages produce a private503 instead of quota429. Feature/client
+versions are ai-complete1.1.0 and lopu-recordings1.2.0; scheduler unchanged.
+
+## 2026-09-09 index rollout compatibility
+
+Merged released main `60b4c4bd638728aed7126112a314a658e1bede93` into the
+feature branch without promoting unfinished recording functionality to main.
+The Watch startup poll-index retirement conflicted with released indexed poll
+readers; removed that competing layout gate and retained the production poll
+writer and regression verifier. The recording scheduler index is preserved:
+the steady-state branch plan is 48 indexes (released 47 plus `lopu_recording_due`).
+The Vite/Nitro build and Vercel output checks pass. Production/develop migration
+activation and the replacement preview's live validation remain pending.
+
+## Implemented
+
+- Explicit account opt-in for NEW private Apple Watch audio uploads, with a
+  manual queue for an existing private recording post.
+- Authorized, bounded audio download and OpenAI transcription; relational
+  transcript comments on the private source post. Lopu organizes grounded
+  private notes and todos without executing any extracted instructions.
+- Quota-billed content and transactional job checkpoints, privacy/consent
+  fences, bounded retries, resumable stages, and no raw provider errors in
+  account-visible state.
+- Daily local-calendar reminders for unfinished private todos, with durable
+  per-day notification identity and completion/opt-out checks inside emission.
+- Account-specific settings, current username, refresh, job status/retry, todo
+  completion and reminder pause controls at `/lopu/recordings`.
+- Origin-scoped versioned capabilities and canonical route/docs registration;
+  five-minute scheduler; fork-safe configuration in README.
+
+## Verification receipt
+
+- `test:lopu`: 24 passing core, capability, worker and reminder tests. Includes
+  transaction-time opt-out, completed/public/deleted todos, same-day retry,
+  checkpoint recovery and Unicode transcript splitting. Collaborators are
+  in-memory mocks, not direct database seeding.
+- Notification tests: 18 passed; capability/index-budget tests: 18 passed;
+  model-routing contract passed; real anonymous/cross-origin HTTP checks: 4/4.
+- Vite/Nitro Vercel build and built-server manifest smoke passed. Typecheck
+  ratchet remained at the existing 108-error baseline, not a clean typecheck.
+- Real browser checks at 1280x900 and 390x844: settings persisted, status
+  refresh worked, full-page scrolling and inputs had no horizontal overflow,
+  and there were no page errors. Synthetic disposable QA accounts only.
+- PM2 uses one deterministic worktree instance with automatic restart disabled.
+  Local URL: http://127.0.0.1:17460/lopu/recordings (HMR 17461, Nitro 17462).
+  Tailscale/Funnel is unavailable: its CLI shim points to a missing app binary.
+
+## Delivery gates still open
+
+### 2026-09-07 provider quota and credential waterfall follow-up
+
+At `51b93134a01e5bc049b457d39f02b41ca24a1c89`, all four required CI checks
+passed and preview deployment `dpl_BYzw21bD19qPPWiGZhWJmSX6rPFs` was READY.
+The authorized synthetic fixture's real worker retry returned a safe provider
+429/quota category in 1923 ms. Automation is paused; no real transcript or
+native reminder is claimed. TestFlight status run 34088034401 confirmed build
+25 VALID / IN_BETA_TESTING internally, and a fresh integrated Watch simulator
+build passed. No new TestFlight build was uploaded.
+
+The user's requested follow-up adds separate ordered transcription/analysis
+credential lists using the current account's existing Secure Vault. It does
+not silently import CI OAuth credentials. Anthropic Console API keys support
+notes/todos only; a speech-capable API connection is still needed. The named
+Nikolaj credential has not yet been located/validated as an API key, and no
+deployment secret or account credential selection has been changed. New
+fallback tests use synthetic keys and mocked provider transport only. Live
+provider success and the refreshed UI remain acceptance gates.
+
+Live acceptance, 2026-09-07: the user signed into the exact-head preview as
+@lopu. Preview and production use separate account data. A private copy of the
+approved synthetic WAV uploaded successfully on the preview and queued once.
+The admin worker returned processed=1/outcomes=[retry] in 431 ms, without a
+transcript. Automatic processing was paused while investigating. The existing
+generic error hid the failing phase, so this follow-up adds closed, redacted
+failure categories and isolated provider/download tests. It also applies the
+user-requested provider-neutral consent copy. No provider-backed transcription
+or actual native reminder is claimed yet.
+
+Update 2026-09-07: the historical foundation/APNs/storage blockers below are resolved.
+The selected Watch, Lopu, Builder and rich-text releases are merged into main,
+and this branch incorporates main through `6ad5ef21b7a89fa54b4932809c0f17359124beab`.
+The topic-specific production APNs key is in Keychain and the production Vercel
+secret store. PRs #674/#676 repaired storage-ledger compatibility; the authorized
+production migration reconciled 53 accounts and health now reports accounting
+ready. One synthetic private recording/reminder test in Nikk/@lopu's account is
+authorized. Exact-SHA CI, provider-backed acceptance, and actual native receipt
+remain to verify. The list below is retained as historical context, not current
+evidence of an unresolved foundation dependency.
+
+The PR is regular OPEN and labelled `ai-merge-paused` intentionally while these
+checks remain. Do not remove that hold merely because CI or a preview is green.
+
+1. Integrate the separately authorized Watch/Lopu/Builder/rich-text foundation
+   into main and into this branch. The saved Feature Stack targets main only;
+   source order is #596, #291, #578, #612, #592, #635.
+2. Wire the Watch foundation's shared APNs sender into the durable reminder
+   emitter, including a safe reminder title and recording-page navigation.
+   Current code persists the bell entry but does not yet send native push.
+3. On a real preview with deployment-held provider credentials, verify a
+   synthetic recording creates private transcript comments and grounded bike
+   tube/toothpaste todos. Verify daily reminders and completion end to end.
+   Local configured=false is expected; no provider key was copied locally.
+4. Re-run focused checks on the integrated exact SHA and verify its deployment
+   before merging this feature to main. Production behavior is not yet proven.
+
+Preview discovery is maintained by the trusted controller in the PR body at
+https://pr-665.previews.dev.thingtime.com. A URL or build alone is not runtime
+acceptance. The initial preview attempt rejected an older source SHA after the
+documentation snapshot commit; the subsequent exact-SHA attempt was publishing
+when this receipt was written.
+
+## Foundation merge coordination
+
+The first merge run failed safely because #635 changed during resolution.
+The second run, [34005577365](https://github.com/lopugit/thingtime/actions/runs/34005577365),
+also became stale when Lopu review updated #612 to `b169d31ed844747d383405c4366b2b301e14c64a`.
+Restart was requested on the SAME saved stack, but Chrome's confirmation
+handler stalled. Run 34005577365 was then cancelled directly in GitHub and
+verified terminal/cancelled. No replacement stack run has been dispatched.
+All six selected PRs temporarily carry `no-lopu-review` to prevent concurrent
+automated review edits; remove this temporary label after their verified merge.
+The already-existing review hold `ai-merge-paused` on #665 remains separate.
+
+An isolated `codex/watch-main-release` worktree now starts from main
+`2c77f08c0081518e19a0924f954e427aff6972d0` to deliver the Watch foundation
+through a focused PR without the blocked browser. A read-only merge-tree test
+found no product-code conflicts, only changelog and generated snapshot renames.
+Do not duplicate active runs or touch the original checkout's unrelated merge.
+
+CI found that the three protected recording schemas needed explicit empty
+entries in the pinned builtin-schema projection test. Those fixtures were added;
+the privacy/schema gate itself was not weakened.
+
+## Watch integration — 2026-09-06
+
+Watch #667 merged to main at `2e945e8d8e8958c1b7ed7b368107fa00dc7781d6` after
+all four required contexts passed. This feature now includes that ancestry.
+The notification list combines Watch pagination with the new reminder family
+at 1.3.0; settings remain 1.2.0. Native push runs only after the unique daily
+bell row commits, uses a bounded reminder title, and links safely to recordings.
+Three collaborator tests prove post-commit fan-out, duplicate suppression,
+preference/private-checkpoint suppression, and best-effort failure behavior.
+Notification payload tests: 32 passed; capability/health tests: 12; recording
+core/worker/reminder tests: 24. No real APNs/device delivery is claimed.
+
+Production now advertises Watch pairing 1.2.0 and sync 1.0.0, but its new
+readiness check reports storage migration required. The documented production
+migration ran successfully on September 3; new or stale account ledgers need
+a current admin census before deciding whether to run it again. The available
+signed-in Chrome tab cannot currently be controlled reliably. No migration,
+scope grant, credential fabrication or direct database bypass was performed.
+Lopu/Builder integration #668 and real provider-backed audio acceptance remain
+release gates. The user was asked which account to use for synthetic private
+test items; no answer has been received yet.
+
+## Shared AI router and accepted runtime direction — 2026-09-08
+
+Index-headroom repair: the combined plan's 61/64 failure is addressed without
+relaxing its four-slot reserve. Poll reads/writes reuse protected Binary
+voteKey slots; the layout gate validates/backfills genuine legacy votes before
+dropping the home lookup-only index, and preserves foreign custom indexes.
+Malformed/duplicate legacy records stop the gate without data deletion or
+index retirement. The native MongoDB verifier exercised 1,001 synthetic legacy
+votes, an idempotent second pass, free-form crystal isolation, duplicate
+rejection, 60 total indexes and a one-document uniqueKeys_1 point lookup.
+This does not constitute production migration or Watch-worker acceptance.
+
+Main reconciliation: merge main 2fea784bb (Desktop Node ownership plus subspaces)
+into this feature branch, preserving private recording reminders and all six
+subspace notification types. Notification list/settings publish 1.4.0/1.3.0
+so the combined additions do not reuse two independently assigned versions.
+Email remains opt-in for recording reminders and mod queues. Delete cascades
+retain both up/down votes and recording job/reminder children. This merge does
+not enable production automation or remove the final acceptance hold.
+
+Subsequent local-runtime acceptance: installed whisper.cpp 1.9.2 and verified
+the documented base.en model SHA-256 before processing the existing synthetic
+fixture. The reusable local adapter decoded audio, transcribed it locally,
+then sent only text through the personally signed-in unmodified Claude Code
+CLI. The production recording-insight parser accepted two grounded todos and
+no milk todo (already bought). The model heard the toothpaste name as AART,
+which remains an accuracy caveat, not silently corrected evidence.
+
+The adapter disables Claude tools/customizations, checks native account auth,
+excludes inherited API keys and endpoint overrides, limits subprocess time and
+output, and cleans up private temporary audio. Preserve USER/LOGNAME/SHELL with
+HOME/PATH: stripping native user identity made Claude report no sign-in during
+validation. Adapter regressions join test:ai-models. This is not yet a
+cloud-paired worker or a route from the shared endpoint to personal Claude;
+automation remains off and merge acceptance remains pending.
+
+The later user decision supersedes the historical credential blocker: use
+local/separate **speech-to-text**, then a personal signed-in Claude Code
+runtime for text. Keep a central Thingtime endpoint that supports multiple
+provider endpoints and credentials. Do not turn the shared CI OAuth vault
+into an application API-key pool.
+
+The first implementation slice adds `/api/v1/ai/complete` (feature 1.0.0),
+an origin-negotiated `useApi` client, and a shared waterfall execution policy
+also used by the recording worker. The route supports explicit ordered owned
+Secure Vault connections across existing HTTP adapters. It validates the full
+selection before any provider call, resolves current keys per attempt,
+refuses inline endpoints/secrets/tools/audio, and returns only a redacted
+attempt trace beside the requested completion. Auth, no-store, bounded input,
+transport deadlines, cancellation and fail-closed rate limiting apply.
+
+Not yet implemented in this slice: personal runtime pairing/hosting,
+offline transcription, routing the recording analysis call through that
+runtime, and a real synthetic recording → transcript → notes/todos → reminder
+→ physical Watch receipt. Existing default recording settings are unchanged.
+Do not treat this endpoint or green CI as complete live acceptance.

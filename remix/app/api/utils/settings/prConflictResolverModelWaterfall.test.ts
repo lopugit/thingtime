@@ -55,7 +55,7 @@ test('an Admin save persists the validated order and becomes the outage fallback
     }
   });
 
-  const waterfall = ['claude-opus-5', 'claude-fable-5', 'default'] as const;
+  const waterfall = ['claude-opus-5:high', 'claude-fable-5'] as const;
   assert.deepEqual(await store.setWaterfall(waterfall, 'admin-123'), waterfall);
   assert.deepEqual(persisted, { waterfall: [...waterfall], updatedBy: 'admin-123' });
   assert.deepEqual(await store.getWaterfall(), waterfall);

@@ -1,0 +1,94 @@
+name: ThingtimeWidgets
+options:
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    ENABLE_DEBUG_DYLIB: false
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    THINGTIME_WIDGET_GROUP: group.com.thingtime.widgets
+    THINGTIME_WEB_URL: https://thingtime.com
+    ENABLE_HARDENED_RUNTIME: true
+targets:
+  ThingtimeWidgets:
+    type: application
+    platform: macOS
+    sources:
+      - path: WidgetApp.swift
+      - path: Connection
+      - path: ../../iOS/Thingtime/Lopu
+      - path: ../../apple/Shared
+      - path: ../../apple/Widgets
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Thingtime Widgets
+        CFBundleURLTypes:
+          - CFBundleURLSchemes: [thingtime-widgets, com.thingtime.widgets]
+        ThingtimeWidgetGroup: $(THINGTIME_WIDGET_GROUP)
+        ThingtimeWebURL: $(THINGTIME_WEB_URL)
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSMicrophoneUsageDescription: Thingtime uses the microphone for Lopu voice and transcription.
+        NSSpeechRecognitionUsageDescription: Thingtime transcribes your speech for Lopu.
+    entitlements:
+      path: Resources/ThingtimeWidgets.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.device.audio-input: true
+        com.apple.security.application-groups: [$(THINGTIME_WIDGET_GROUP)]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.thingtime.widgets
+        PRODUCT_NAME: Thingtime Widgets
+    dependencies:
+      - target: ThingtimeWidgetsExtension
+  ThingtimeWidgetsTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.thingtime.widgets.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Thingtime Widgets.app/Contents/MacOS/Thingtime Widgets"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+    dependencies:
+      - target: ThingtimeWidgets
+  ThingtimeWidgetsExtension:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: WidgetBundle.swift
+      - path: ../../apple/Shared
+      - path: ../../apple/Widgets
+    info:
+      path: Resources/Extension-Info.plist
+      properties:
+        CFBundleDisplayName: Thingtime
+        ThingtimeWidgetGroup: $(THINGTIME_WIDGET_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Resources/Extension.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups: [$(THINGTIME_WIDGET_GROUP)]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.thingtime.widgets.extension
+        APPLICATION_EXTENSION_API_ONLY: true
+        SKIP_INSTALL: true
+schemes:
+  ThingtimeWidgets:
+    build:
+      targets:
+        ThingtimeWidgets: all
+    test:
+      targets:
+        - ThingtimeWidgetsTests

@@ -1,6 +1,6 @@
 import { json } from '~/api/http';
 
-import { getThingtimeSchema, thingtimeSchemas, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
+import { getThingtimeSchema, projectBuiltinSchemaCrystal, thingtimeSchemas, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 // GET /api/v1/schemas — every Thingtime Schema (root thing schema, crystal
 // sub-schemas, collection schemas), straight from the registry the API
@@ -15,7 +15,7 @@ export const loader = async ({ request }: { request: Request }) => {
     if (!schema) {
       return json({ ok: false, error: 'Unknown schema' }, { status: 404 });
     }
-    return json({ ok: true, schema });
+    return json({ ok: true, schema, copy: { thingtime: ['schema'], crystal: { ...projectBuiltinSchemaCrystal(schema), forkOf: `schema-${schema.id}` } } });
   }
 
   return json({

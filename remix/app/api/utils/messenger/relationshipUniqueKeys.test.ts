@@ -6,6 +6,8 @@ import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, relationshipUniqueKeys, newThingDoc, 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { fromBin } from '../auth/users.ts';
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
+import { thingUniqueKey } from '../mongodb/uniqueKeys.ts';
+// @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { validateThingtimeCrystal } from '~/schemas/registry';
 
 // Relationship dedupe rides the server-only root uniqueKeys namespace (the
@@ -18,7 +20,12 @@ import { validateThingtimeCrystal } from '~/schemas/registry';
 // kind-blind index in the shared develop database, so phase 1 must retire and
 // backfill that family before phase 2 reopens the crystal namespace.
 
-test('the relationship map covers exactly the seven retired unique-index families', () => {
+// `external-post-source` joins the map from the other direction: it is a NEW
+// relationship (one membership row per external post × sourcing account, see
+// connections/connections.ts) rather than a retired unique-index family, so it
+// never had a kind-blind ancestor to retire. It is listed here because the
+// backfill migration and the data-thing census walk this map.
+test('the relationship map covers exactly the retired unique-index families plus external-post-source', () => {
 	assert.deepEqual(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, {
 		follow: 'followKey',
 		'chat-member': 'memberKey',
@@ -27,8 +34,20 @@ test('the relationship map covers exactly the seven retired unique-index familie
 		'community-invite': 'inviteCode',
 		'custom-emoji': 'emojiKey',
 		friend: 'friendKey',
-		vote: 'voteKey'
+		vote: 'voteKey',
+		// joined late: shipped with its own kind-blind crystal.linkKey unique
+		// index (PR #323, authored while this migration was in flight)
+		'passkey-app-link': 'linkKey',
+		'external-post-source': 'sourceKey'
 	});
+});
+
+test('passkey app links stamp through the shared helper (auth writer builds its own doc)', () => {
+	const stamped = relationshipUniqueKeys('passkey-app-link', { linkKey: 'passkey-1:origin:https://thingtime.com' });
+	assert.ok(stamped && stamped.length === 1);
+	assert.equal(fromBin(stamped![0]), 'linkKey:passkey-1:origin:https://thingtime.com');
+	// no key → no stamp, so a malformed link can never claim the empty slot
+	assert.equal(relationshipUniqueKeys('passkey-app-link', { linkKey: '' }), undefined);
 });
 
 test('stamps are `<field>:<key>` BinData and round-trip', () => {
@@ -65,6 +84,16 @@ test('group/channel chats (dmKey null) and unmapped kinds stay unstamped', () =>
 	assert.equal(relationshipUniqueKeys('follow', { followKey: 42 }), undefined);
 	assert.equal(relationshipUniqueKeys('follow', { followKey: '' }), undefined);
 	assert.equal(relationshipUniqueKeys('follow', null), undefined);
+});
+
+test('callers can add domain Binary keys without losing relationship stamps', () => {
+	const externalKey = thingUniqueKey('externalConversationKey', 'hash-1');
+	const importedDm = newThingDoc('chat', {
+		ownerId: 'u',
+		crystal: { chatType: 'dm', dmKey: 'a:b' },
+		uniqueKeys: [externalKey]
+	}) as any;
+	assert.deepEqual(importedDm.uniqueKeys.map(fromBin), ['dmKey:a:b', 'externalConversationKey:hash-1']);
 });
 
 test('relationship prefixes are disjoint from the other uniqueKeys families', () => {

@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { Flex, Button, FormControl, Input, Spinner, InputGroup, InputRightElement, Box } from '@chakra-ui/react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 
+import { useSsoHub } from '../Account/useSsoHub';
+import { beginSsoRedirect } from '../Account/ssoNavigation';
 import { useApi } from '~/hooks/useApi';
-import { isPasskeyCancel, passkeysSupported, useAccountHints, usePasskeyAuth, usePasskeyAutofill } from '~/hooks/usePasskeys';
+import { isPasskeyCancel, passkeyErrorMessage, passkeysSupported, useAccountHints, usePasskeyAuth, usePasskeyAutofill } from '~/hooks/usePasskeys';
 import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
 import { consumeAuthReturnTo } from '~/utils/authReturn';
 import { AccountHintRow } from '../Account/AccountHints';
@@ -38,6 +40,7 @@ const inputSx = {
 // becomes an in-place mode toggle via onSwitchMode.
 export const Login = (props) => {
 	const { embedded, onSuccess, onSwitchMode } = props || {};
+	const sso = useSsoHub();
 
 	const { thingtime } = useThingtime();
 
@@ -101,7 +104,7 @@ export const Login = (props) => {
 		[onSuccess, navigate]
 	);
 
-	const { loginWithPasskey } = usePasskeyAuth();
+	const { loginWithPasskey, cancelPasskey } = usePasskeyAuth();
 	const [passkeyLoading, setPasskeyLoading] = React.useState(false);
 
 	// Conditional UI: while the form is idle, one background ceremony arms the
@@ -111,9 +114,16 @@ export const Login = (props) => {
 	// account" form renders while ALREADY signed in, where an armed background
 	// request just invites surprise passkey popups (the modal 🔑 button still
 	// works there).
-	usePasskeyAutofill(!otpChallenge && !embedded, (resp) => handleLoggedIn(resp?.user));
+	usePasskeyAutofill(!sso.foreign && !otpChallenge && !embedded && !loading && !passkeyLoading, (resp) => handleLoggedIn(resp?.user), (error) => {
+		lopu({ title: 'Passkey sign-in failed', description: passkeyErrorMessage(error), status: 'error', duration: 6000 });
+	});
 
 	const handlePasskeyLogin = async () => {
+		if (sso.foreign && sso.hub) {
+			try { beginSsoRedirect(sso.hub, window.location, window.sessionStorage); }
+			catch { lopu({ title: 'Could not open sign-in', description: 'Open this page in Safari or Chrome and try again.', status: 'info' }); }
+			return;
+		}
 		if (passkeyLoading) return;
 		setPasskeyLoading(true);
 		try {
@@ -124,17 +134,18 @@ export const Login = (props) => {
 			// outcome gets gentle feedback: the browser reports a failed
 			// cross-device (QR/Bluetooth) handoff with the SAME error as a user
 			// cancel, and dead air after scanning a QR reads as broken.
+			if (err?.name === 'AbortError') return;
 			if (isPasskeyCancel(err)) {
 				lopu({
 					title: 'Passkey sign-in didn’t complete 🤏',
-					description: 'No worries — try again, or use your password. Phone-scan sign-ins need Bluetooth nearby.',
+					description: passkeyErrorMessage(err),
 					status: 'info',
 					duration: 5000,
 				});
 			} else {
 				lopu({
 					title: 'Passkey login failed',
-					description: err?.error || 'Try your password instead.',
+					description: passkeyErrorMessage(err),
 					status: 'error',
 					duration: 6000,
 				});
@@ -180,6 +191,7 @@ export const Login = (props) => {
 			return;
 		}
 
+		cancelPasskey();
 		setLoading(true);
 
 		try {
@@ -429,7 +441,8 @@ export const Login = (props) => {
 						{otpChallenge ? 'Verify code ✨' : embedded ? 'Add account ✨' : 'Login ✨'}
 					</Button>
 
-					{!otpChallenge && passkeysSupported() ? (
+					{passkeyLoading ? <Button type="button" variant="ghost" size="sm" onClick={cancelPasskey}>Cancel passkey sign-in</Button> : null}
+					{!otpChallenge && (sso.foreign ? !!sso.hub : passkeysSupported()) ? (
 						<Button
 							type="button"
 							onClick={handlePasskeyLogin}
@@ -449,8 +462,11 @@ export const Login = (props) => {
 							transition="all 150ms ease-in-out"
 							paddingX={4}
 							paddingY={2}
+							height="auto"
+							minHeight="40px"
+							whiteSpace="normal"
 						>
-							Sign in with a passkey 🔑
+							{sso.foreign ? `Continue with ${sso.name} 🌈` : 'Sign in with a passkey 🔑'}
 						</Button>
 					) : null}
 
