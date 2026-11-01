@@ -9,9 +9,9 @@ import { Thingtime } from "../Thingtime/Thingtime"
 import { useThingtime } from "../Thingtime/useThingtime"
 
 import { sanitise } from "~/functions/sanitise"
-import { getParentPath } from "~/smarts"
 import { PathArray } from '~/hooks/useThingtimeMachine';
 import { safeJoin, safeSplit } from '~/utils';
+import { parseCommanderLiteral } from './commanderLiteral';
 
 type commanderArgs = {
 	pathPrefix?: PathArray;
@@ -31,7 +31,7 @@ export const CommanderV1 = (props: commanderArgs) => {
 		return props?.id || 'global';
 	}, [props?.id]);
 
-	const inputRef = React.useRef();
+	const inputRef = React.useRef<HTMLInputElement>(null);
 
 	const global = props?.global;
 
@@ -41,7 +41,7 @@ export const CommanderV1 = (props: commanderArgs) => {
 
 	const [inputValue, setInputValue] = React.useState('');
 	const [virtualValue, setVirtualValue] = React.useState('');
-	const [hoveredSuggestion, setHoveredSuggestion] = React.useState();
+	const [hoveredSuggestion, setHoveredSuggestion] = React.useState<number | null>(null);
 	const [active, setActive] = React.useState(false);
 	const [contextPath, setContextPath] = React.useState<PathArray>();
 
@@ -83,7 +83,7 @@ export const CommanderV1 = (props: commanderArgs) => {
 			}
 		} else {
 			if (props?.global) {
-				document.activeElement.blur();
+				if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 			}
 
 			if (thingtimeRef?.current?.settings?.commander?.[commanderId]?.clearCommanderOnToggle) {
@@ -113,8 +113,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 	}, []);
 
 	const command = React.useMemo(() => {
-		const debug: any = {};
-		console.log('[tt][CommanderV1Deprecated.tsx][command useMemo][debug]', debug);
 		// const sanitizedCommand = sanitise(value)
 		// const sanitizedCommand = inputValue
 		const sanitizedInput = virtualValue;
@@ -127,7 +125,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 		});
 
 		if (typeof validSetter === 'string') {
-			debug.validSetter = validSetter;
 			const indexOfSplitter = sanitizedInput?.indexOf(validSetter);
 			const [pathRaw, valRaw] = [sanitizedInput?.slice(0, indexOfSplitter), sanitizedInput?.slice(indexOfSplitter + validSetter?.length)];
 
@@ -150,8 +147,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 		}
 
 		if (props?.pathPrefix) {
-			debug.pathPrefix = props?.pathPrefix;
-			debug.safeSplitPathPrefix = safeSplit(props?.pathPrefix);
 			return [safeSplit(props?.pathPrefix), sanitizedInput];
 		}
 
@@ -170,22 +165,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 	const commandValue = React.useMemo(() => {
 		return command?.[1];
 	}, [command]);
-
-	const validQuotations = React.useMemo(() => {
-		return ['"', "'"];
-	}, []);
-
-	const escapedCommandValue = React.useMemo(() => {
-		// replace quotations with escaped quoations except for first and last quotation
-		const startingQuotation = commandValue?.[0];
-		const endingQuotation = commandValue?.[commandValue?.length - 1];
-		const isQuoted = validQuotations?.includes(startingQuotation) && validQuotations?.includes(endingQuotation);
-		const restOfCommandValue = isQuoted ? commandValue?.slice(1, commandValue?.length - 1) : commandValue;
-		const escaped = restOfCommandValue?.replace(/"/g, '\\"')?.replace(/'/g, "\\'")?.replace(/`/g, '\\`');
-
-		const ret = `\`${escaped}\``;
-		return ret;
-	}, [commandValue, validQuotations]);
 
 	const commandIsAction = React.useMemo(() => {
 		return commandPath && commandValue;
@@ -232,15 +211,18 @@ export const CommanderV1 = (props: commanderArgs) => {
 		return commandIncludesSuggestion;
 	}, [safeJoin(commandPath), suggestions]);
 
+	// Still rendered from Thingtime.tsx, and it writes the same commanderActive
+	// keys as CommanderV2 — so it needs the same tab-local treatment or it would
+	// reopen the cross-tab palette-toggling hole from the other side.
 	const openCommander = React.useCallback(() => {
-		setThingtime(`settings.commander.${commanderId}.commanderActive`, true);
+		setThingtime(`settings.commander.${commanderId}.commanderActive`, true, { namespace: 'default', tabLocal: true });
 	}, [setThingtime, commanderId]);
 
 	const closeCommander = React.useCallback(
 		(e?: any) => {
 			if (!e?.defaultPrevented) {
 				if (thingtime?.settings?.commander?.[commanderId]?.commanderActive) {
-					setThingtime(`settings.commander.${commanderId}.commanderActive`, false);
+					setThingtime(`settings.commander.${commanderId}.commanderActive`, false, { namespace: 'default', tabLocal: true });
 				}
 			}
 		},
@@ -266,37 +248,11 @@ export const CommanderV1 = (props: commanderArgs) => {
 		if (commanderActive) {
 			try {
 				if (commandIsAction) {
-					// nothing
-					const prevVal = getThingtime(commandPath);
-					const parentPath = getParentPath(commandPath) || 'thingtime';
-					try {
-						debug.attemptingToExecuteLiteralJavascript = true;
-						// first try to execute literal javscript
-						const fn = `() => { return ${commandValue} }`;
-						const tt = thingtime;
-						const evalFn = eval(fn);
-						const realVal = evalFn();
-						debug.commandPath = commandPath;
-						debug.realVal = realVal;
-						setThingtime(commandPath, realVal);
-						debug.executedLiteralJavascript = true;
-					} catch (err) {
-						console.log('Caught error after trying to execute literal javascript', err);
-
-						// likely literaly javascript wasn't valid
-						try {
-							const fn = `() => { return ${escapedCommandValue} }`;
-							const tt = thingtime;
-							const evalFn = eval(fn);
-							const realVal = evalFn();
-							const prevVal = getThingtime(commandPath);
-							const parentPath = getParentPath(commandPath);
-							setThingtime(commandPath, realVal);
-						} catch {
-							// something very bad went wrong
-							console.log('Caught error after trying to execute escaped literal javascript', err);
-						}
-					}
+					const realVal = parseCommanderLiteral(commandValue);
+					debug.commandPath = commandPath;
+					debug.realVal = realVal;
+					setThingtime(commandPath, realVal);
+					debug.executedDataLiteral = true;
 					// if (!prevVal) {
 					setContextPath(commandPath);
 					setShowContext(true, 'commandIsAction check');
@@ -322,10 +278,7 @@ export const CommanderV1 = (props: commanderArgs) => {
 		commanderActive,
 		commandIsAction,
 		safeJoin(commandPath),
-		thingtime,
 		commandValue,
-		escapedCommandValue,
-		getThingtime,
 		setThingtime,
 		setContextPath,
 		setShowContext
@@ -333,7 +286,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 
 	const allCommanderKeyListener = React.useCallback(
 		(e: any) => {
-			console.log('commander key listener e?.code', e?.code);
 			thingtimeRef.current = thingtime;
 			if (e?.metaKey && e?.code === 'KeyP') {
 				e.preventDefault();

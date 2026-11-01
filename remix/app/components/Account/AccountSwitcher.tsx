@@ -10,6 +10,7 @@ import type { SwitcherAccount, SwitcherAccountUser } from './useAccountSwitcher'
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { RAINBOW } from '~/theme/rainbow';
+import { getUserDisplayName, getUserIdentityDetail, getUserMention } from '~/utils/userIdentity';
 
 // Account switcher: every account signed in to this browser, click-to-switch,
 // per-account sign-out, plus "Add account" (login) and "Register new" (fresh
@@ -23,7 +24,7 @@ const RowAvatar = (props: { user: SwitcherAccountUser }) => {
     return (
       <Image
         src={user.avatarUrl}
-        alt={user.displayName || user.username}
+        alt={getUserDisplayName(user)}
         width="32px"
         height="32px"
         borderRadius="999px"
@@ -34,7 +35,7 @@ const RowAvatar = (props: { user: SwitcherAccountUser }) => {
     );
   }
 
-  const initial = (user?.displayName || user?.username || '?').trim().charAt(0).toUpperCase();
+  const initial = getUserDisplayName(user).trim().charAt(0).toUpperCase();
 
   return (
     <Center
@@ -58,6 +59,7 @@ type OwnedAccount = {
   id: string;
   username: string;
   displayName: string | null;
+  temporary?: boolean;
   avatarUrl?: string | null;
   accountKind: 'user' | 'service';
 };
@@ -185,7 +187,7 @@ export const AccountSwitcher = (props: { onNavigate?: () => void }) => {
               key={account.user.id}
               role={account.active ? 'group' : 'button'}
               tabIndex={account.active ? undefined : 0}
-              aria-label={account.active ? undefined : `Switch to @${account.user.username}`}
+              aria-label={account.active ? undefined : `Switch to ${getUserMention(account.user)}`}
               alignItems="center"
               columnGap={3}
               padding={2}
@@ -201,16 +203,16 @@ export const AccountSwitcher = (props: { onNavigate?: () => void }) => {
                   handleSwitch(account);
                 }
               }}
-              title={account.active ? 'Active account' : `Switch to @${account.user.username}`}
+              title={account.active ? 'Active account' : `Switch to ${getUserMention(account.user)}`}
             >
               <RowAvatar user={account.user} />
               <Box minWidth={0} flex="1 1 auto">
                 <Text fontSize="sm" fontWeight={600} noOfLines={1}>
-                  {account.user.displayName || account.user.username}
+                  {getUserDisplayName(account.user)}
                 </Text>
                 <Text fontSize="xs" opacity={0.6} noOfLines={1}>
-                  @{account.user.username}
-                  {account.active && account.user.email
+                  {getUserIdentityDetail(account.user)}
+                  {account.active && !account.user.temporary && account.user.email
                     ? ` · ${account.user.email} ${account.user.emailVerified ? '✅' : '· ✉️ unverified'}`
                     : ''}
                 </Text>
@@ -232,8 +234,8 @@ export const AccountSwitcher = (props: { onNavigate?: () => void }) => {
                 opacity={0.35}
                 _hover={{ opacity: 1, background: 'var(--tt-surface-hover, rgba(0,0,0,0.05))' }}
                 cursor="pointer"
-                aria-label={`Sign @${account.user.username} out`}
-                title={`Sign @${account.user.username} out`}
+                aria-label={`Sign ${getUserMention(account.user)} out`}
+                title={`Sign ${getUserMention(account.user)} out`}
                 onClick={(event) => handleRemove(event, account)}
               >
                 <X size={13} strokeWidth={2} />
@@ -253,7 +255,7 @@ export const AccountSwitcher = (props: { onNavigate?: () => void }) => {
               key={account.id}
               role="button"
               tabIndex={0}
-              aria-label={`Sign in as @${account.username}`}
+              aria-label={`Sign in as ${getUserMention(account)}`}
               alignItems="center"
               columnGap={3}
               padding={2}
@@ -268,15 +270,15 @@ export const AccountSwitcher = (props: { onNavigate?: () => void }) => {
                   handleAssume(account);
                 }
               }}
-              title={`Sign in as @${account.username} (no password needed — you own this account)`}
+              title={`Sign in as ${getUserMention(account)} (no password needed — you own this account)`}
             >
               <RowAvatar user={account as SwitcherAccountUser} />
               <Box minWidth={0} flex="1 1 auto">
                 <Text fontSize="sm" fontWeight={600} noOfLines={1}>
-                  {account.displayName || account.username}
+                  {getUserDisplayName(account)}
                 </Text>
                 <Text fontSize="xs" opacity={0.6} noOfLines={1}>
-                  @{account.username}
+                  {getUserIdentityDetail(account)}
                   {account.accountKind === 'service' ? ' · 🤖 service' : ''}
                 </Text>
               </Box>

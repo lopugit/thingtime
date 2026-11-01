@@ -2,6 +2,7 @@ import { json } from '~/api/http';
 
 import { getCurrentUser } from './getCurrentUser';
 import { resolveThingsActor as resolvePatOrSessionActor } from './patTokens';
+import * as thingsActors from './patTokens';
 import type { PatContext } from './patTokens';
 import type { PublicUser } from './users';
 import { resolveAppToken } from '../apps/appTokens';
@@ -10,6 +11,7 @@ import { appCorsHeaders } from '../apps/cors';
 import { appScopeOf } from '../apps/namespace';
 import type { AppNamespaceScope } from '../apps/namespace';
 import { scopeCovers } from '../apps/scopes';
+import { appAccountAllows } from '../apps/accountScopes';
 
 // Who is calling a things route? A tagged union so no call site can forget
 // the question (the danger of handing back a bare PublicUser for both paths
@@ -36,7 +38,7 @@ import { scopeCovers } from '../apps/scopes';
 
 export type Actor =
   | { kind: 'user'; user: PublicUser }
-  | { kind: 'pat'; user: PublicUser; pat: PatContext }
+  | { kind: 'pat'; user: PublicUser; pat: PatContext; cors?: Record<string, string> }
   | {
       kind: 'app';
       ctx: AppTokenContext;
@@ -49,7 +51,7 @@ export type Actor =
 export const actorUser = (actor: Actor): PublicUser | null =>
   actor.kind === 'anonymous' ? null : actor.kind === 'app' ? actor.ctx.user : actor.user;
 
-export const actorCors = (actor: Actor): Record<string, string> => (actor.kind === 'app' ? actor.cors : {});
+export const actorCors = (actor: Actor): Record<string, string> => (actor.kind === 'app' ? actor.cors : actor.kind === 'pat' ? actor.cors ?? {} : {});
 
 // The pat context (or null) for threading into viewerOf — a helper so call
 // sites can't accidentally hand a pat-less viewer to the util layer and skip
@@ -71,6 +73,7 @@ export const resolveActor = async (
   // resolveAppToken and falls through to the first-party path below.
   const ctx = await resolveAppToken(request);
   if (ctx) {
+    if (request.headers.has('X-Thingtime-Character')) return json({ ok: false, error: 'Character selection requires a full account session' }, { status: 403 });
     const requestOrigin = request.headers.get('Origin');
     const cors = appCorsHeaders(requestOrigin);
 
@@ -81,7 +84,28 @@ export const resolveActor = async (
       return json({ ok: false, error: 'Origin does not match this token' }, { status: 403, headers: cors });
     }
 
+    // Account grants deliberately opt into the user's Things surface. Keep
+    // legacy app-data grants in their existing isolated app namespace — a
+    // token holding BOTH must still reach its own namespace for the
+    // operations the account grant doesn't cover, so route on coverage of THIS
+    // operation, not on the mere presence of an account scope. A token with no
+    // namespace capability to fall back to still routes here, so an
+    // account-only app keeps the account-flavoured missing-permission error
+    // instead of a confusing "not granted the app-data scope".
     const requiredScope = opts.requiredAppScope ?? 'app-data';
+    const accountThings =
+      opts.thingsScope !== undefined &&
+      (appAccountAllows(ctx.scopes, opts.thingsScope) ||
+        (!scopeCovers(ctx.scopes, requiredScope) &&
+          ctx.scopes.some((scope) => scope === 'account.things' || scope.startsWith('account.things.'))));
+    if (!ctx.sandbox && accountThings) {
+      const resolved = await resolvePatOrSessionActor(request, opts.thingsScope);
+      if (resolved.ok === false) return json({ ok: false, error: resolved.error }, { status: resolved.status, headers: cors });
+      const { user, pat } = resolved.actor;
+      if (user && pat) return { kind: 'pat', user, pat, cors };
+      return json({ ok: false, error: 'Unauthorized' }, { status: 401, headers: cors });
+    }
+
     if (!scopeCovers(ctx.scopes, requiredScope)) {
       return json(
         { ok: false, error: `This token was not granted the ${requiredScope} scope` },
@@ -116,5 +140,17 @@ export const resolveActor = async (
 
   const user = await getCurrentUser(request);
   if (user) return { kind: 'user', user };
+  if (request.headers.has('X-Thingtime-Character')) return json({ ok: false, error: 'Session or Character unavailable' }, { status: 401 });
   return { kind: 'anonymous' };
+};
+
+/** Reauthorize one already-admitted long-lived read. The token layer binds its
+ * admission to this exact Request/object/scope; callers cannot opt out of the
+ * initial atomic use consumption with a request parameter or copied actor. */
+export const revalidateActor = async (request: Request, admitted: Actor, opts: { thingsScope: string | string[] }): Promise<Actor | Response> => {
+  if (admitted.kind !== 'pat') return resolveActor(request, opts);
+  const resolved = await thingsActors.revalidateThingsActor(request, opts.thingsScope, admitted.pat);
+  if (resolved.ok === false) return json({ ok: false, error: resolved.error }, { status: resolved.status, headers: actorCors(admitted) });
+  if (!resolved.actor.user || !resolved.actor.pat) return { kind: 'anonymous' };
+  return { kind: 'pat', user: resolved.actor.user, pat: resolved.actor.pat, ...(admitted.cors ? { cors: admitted.cors } : {}) };
 };

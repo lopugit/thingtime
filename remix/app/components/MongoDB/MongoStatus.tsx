@@ -88,9 +88,11 @@ export const MongoStatus = (props: { chakras?: Record<string, unknown>; targetOr
     label = 'MongoDB: status unavailable';
   } else if (status) {
     color = status.connected ? STATUS_COLORS.ready : STATUS_COLORS.unavailable;
+    // flag when the session's custom data-endpoint override is what's connected
+    const name = status.custom ? 'MongoDB (custom)' : 'MongoDB';
     label = status.connected
-      ? `MongoDB: connected${typeof status.pingMs === 'number' ? ` (${status.pingMs}ms)` : ''}`
-      : 'MongoDB: disconnected';
+      ? `${name}: connected${typeof status.pingMs === 'number' ? ` (${status.pingMs}ms)` : ''}`
+      : `${name}: disconnected`;
   }
 
   const isUnavailable = Boolean(checking || error || (status && !status.connected));

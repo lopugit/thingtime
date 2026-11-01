@@ -2,6 +2,7 @@ import { json } from '~/api/http';
 
 import { getJwtIssuer } from '~/api/utils/auth/jwt';
 import { resolveAppToken } from '~/api/utils/apps/appTokens';
+import { thirdPartyProfileMediaUrl } from '~/api/utils/apps/profileMedia';
 import { appCorsHeaders, appDataPreflight } from '~/api/utils/apps/cors';
 import { scopeCovers } from '~/api/utils/apps/scopes';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -12,6 +13,8 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 // mirrors exactly what the user chose on the consent screen:
 //   id, username, profileUrl        — always (profile.username baseline)
 //   displayName / avatarUrl / bio / bannerUrl — profile.<field> (or profile)
+//   birthday                         — profile.birthday only (exact: a plain
+//                                      `profile` grant never covers it)
 //   email                            — email scope
 // Well-built platforms read `scopes` and light up features for whatever the
 // user shared ("auto" sharing) instead of assuming a fixed shape. Same CORS +
@@ -32,10 +35,7 @@ export const loader = async ({ request }: { request: Request }) => {
   const limit = await enforceRateLimit(request, 'oauth.read', `user:${ctx.user.id}:app:${ctx.clientId}`);
   if (!limit.allowed) {
     const init = rateLimitedResponseInit(limit);
-    return json(
-      { ok: false, error: 'Reading too fast — take a breather 🌸' },
-      { ...init, headers: { ...init.headers, ...cors } }
-    );
+		return json({ ok: false, error: 'Reading too fast — take a breather 🌸' }, { ...init, headers: { ...init.headers, ...cors } });
   }
 
   const issuer = getJwtIssuer().replace(/\/+$/, '');
@@ -51,9 +51,10 @@ export const loader = async ({ request }: { request: Request }) => {
         username: ctx.user.username,
         profileUrl: `${issuer}/profile/${encodeURIComponent(ctx.user.username)}`,
         ...(has('profile.displayName') ? { displayName: ctx.user.displayName } : {}),
-        ...(has('profile.avatar') ? { avatarUrl: ctx.user.avatarUrl } : {}),
+				...(has('profile.avatar') ? { avatarUrl: thirdPartyProfileMediaUrl(ctx.user.avatarUrl) } : {}),
         ...(has('profile.bio') ? { bio: ctx.user.bio } : {}),
-        ...(has('profile.banner') ? { bannerUrl: ctx.user.bannerUrl } : {}),
+				...(has('profile.banner') ? { bannerUrl: thirdPartyProfileMediaUrl(ctx.user.bannerUrl) } : {}),
+        ...(has('profile.birthday') ? { birthday: ctx.user.birthday } : {}),
         ...(has('email') ? { email: ctx.user.email } : {})
       }
     },
@@ -69,8 +70,5 @@ export const action = async ({ request }: { request: Request }) => {
   const preflight = appDataPreflight(request, 'GET, OPTIONS');
   if (preflight) return preflight;
 
-  return json(
-    { ok: false, error: 'Method not allowed' },
-    { status: 405, headers: appCorsHeaders(request.headers.get('Origin')) }
-  );
+	return json({ ok: false, error: 'Method not allowed' }, { status: 405, headers: appCorsHeaders(request.headers.get('Origin')) });
 };

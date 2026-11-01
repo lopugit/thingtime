@@ -1,24 +1,28 @@
 import { definePlugin } from 'nitro';
+import { agentTestEnvironment } from '../../app/api/utils/agentTesting';
+import { hasSelfHostedApiEnv } from '../utils/apiFallback';
+import { getGatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
 
-import { ensureIndexes } from '../../app/api/utils/mongodb/collections';
+import { ensureIndexes, warnIfTransactionsUnsupported } from '../../app/api/utils/mongodb/collections';
 
-// Cold-start warmup: start the Mongo client connect + adoption pass + index
-// ensure the moment a fresh instance boots, instead of awaiting them inside
-// the first user's request (the old inline `await ensureIndexes()` on hot
-// paths cost every new serverless instance a ~55-command createIndex battery
-// mid-request). ensureIndexes memoises per process, so request paths that
-// race this warmup simply await the same promise-in-flight via their own
-// collection getters; index CREATION is otherwise guaranteed by the awaited
-// bootstrap calls that remain in registerUser and the admin migrations.
+// Unconfigured self-hosted mode can prepare indexes in the background.
+// Mutations still await durable readiness, while authentication reads remain
+// available if required DDL fails. Explicit gateways initialize lazily below.
 //
-// Fire-and-forget by design: an env-less deployment (api-fallback proxy mode,
-// where getMongoUri throws synchronously) or a transient Atlas outage must
-// not take the instance down — request paths surface real errors themselves
-// the moment they touch the db.
+// An incomplete server must not connect or create indexes before the request
+// guard can reject it. Explicit desktop bridges also skip local DB warmup.
 export default definePlugin(() => {
+  // A malformed isolated test must never connect or adopt remote storage.
+  agentTestEnvironment();
+  if (!hasSelfHostedApiEnv()) return;
   try {
+    // Discovery can itself cold-start the alias target. Never recursively
+    // discover/warm a configured gateway from its startup plugin. First
+    // admitted DB access opens the pool; first mutation ensures its plan.
+    if (getGatewaySettings()) return;
     void ensureIndexes().catch(() => {});
+    void warnIfTransactionsUnsupported().catch(() => {});
   } catch {
-    // no MONGODB env: fallback-proxy deployments boot without a database
+    // A configured but unavailable database must not crash static serving.
   }
 });

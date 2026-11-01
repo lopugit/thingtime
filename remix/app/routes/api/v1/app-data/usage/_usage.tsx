@@ -5,10 +5,10 @@ import { appDataPreflight } from '~/api/utils/apps/cors';
 import { appScopeOf, getAppStorageUsage } from '~/api/utils/apps/namespace';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
-// GET /api/v1/app-data/usage — this (user, app) namespace's storage ledger:
-// { usedBytes, budgetBytes }. Storage is byte-budgeted (no doc counts): every
-// app write charges its serialized size against the budget and deletes
-// refund, so an app can pace itself instead of discovering 507s.
+// GET /api/v1/app-data/usage — both standing storage ledgers: this app user
+// plus the registered app aggregate. usedBytes/budgetBytes remain aliases for
+// the user ledger. Storage is byte-budgeted (no doc counts), so apps can pace
+// themselves instead of discovering 507s.
 export const loader = async ({ request }: { request: Request }) => {
   const resolved = await resolveAppRequest(request, 'app-data');
   if (resolved instanceof Response) return resolved;
@@ -24,6 +24,12 @@ export const loader = async ({ request }: { request: Request }) => {
   }
 
   const usage = await getAppStorageUsage(appScopeOf(ctx));
+  if (!usage.storageAccountingReady) {
+    return json(
+      { ok: false, error: 'App storage accounting is not initialized — run the pending storage migration' },
+      { status: 503, headers: cors }
+    );
+  }
   return json({ ok: true, ...usage }, { headers: cors });
 };
 

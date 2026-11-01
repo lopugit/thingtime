@@ -9,7 +9,7 @@ import {
 } from '~/api/utils/accounts/accountLinks';
 import { findAppByClientId } from '~/api/utils/apps/apps';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
-import { findUserById, toPublicUser } from '~/api/utils/auth/users';
+import { findUserById } from '~/api/utils/auth/users';
 
 // Decorate raw links with display names so the admin UI never needs N
 // follow-up lookups.
@@ -17,14 +17,13 @@ const decorate = async (links: Awaited<ReturnType<typeof listAccountLinksForUser
   const personIds = [...new Set(links.flatMap((link) => [link.userId, ...(link.linkKind === 'account' ? [link.targetId] : [])]))];
   const people = new Map(
     (await Promise.all(personIds.map((id) => findUserById(id)))).filter(Boolean).map((doc: any) => {
-      const pub = toPublicUser(doc);
-      return [pub.id, pub.username] as const;
+			return [String(doc._id), typeof doc.username === 'string' ? doc.username : null] as const;
     })
   );
   return links.map((link) => ({
     ...link,
     username: people.get(link.userId) ?? null,
-    targetUsername: link.linkKind === 'account' ? people.get(link.targetId) ?? null : null
+		targetUsername: link.linkKind === 'account' ? (people.get(link.targetId) ?? null) : null
   }));
 };
 
@@ -42,9 +41,7 @@ export const loader = async ({ request }: { request: Request }) => {
 
   if (!userId && !targetId) return json({ ok: false, error: 'userId or targetId is required' }, { status: 400 });
 
-  const links = userId
-    ? await listAccountLinksForUser(userId, linkKind)
-    : await listAccountLinksForTarget(targetId, linkKind);
+	const links = userId ? await listAccountLinksForUser(userId, linkKind) : await listAccountLinksForTarget(targetId, linkKind);
   return json({ ok: true, links: await decorate(links) });
 };
 

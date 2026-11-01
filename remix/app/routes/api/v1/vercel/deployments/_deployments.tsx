@@ -3,7 +3,8 @@ import { json } from '~/api/http';
 import {
   getVercelDeploymentsOverview,
   isVercelStatusEnabled,
-  normaliseDeploymentBranchLimit
+  normaliseDeploymentBranchLimit,
+  normaliseDeploymentHistoryLimit
 } from '~/api/utils/vercel/status';
 
 const getBranchLimitFromRequest = (request: Request) => {
@@ -16,12 +17,23 @@ const getBranchLimitFromRequest = (request: Request) => {
   );
 };
 
+const getHistoryLimitFromRequest = (request: Request) => {
+  const url = new URL(request.url);
+
+  return normaliseDeploymentHistoryLimit(
+    url.searchParams.get('history') ||
+      url.searchParams.get('historyLimit') ||
+      url.searchParams.get('deploymentsPerBranch')
+  );
+};
+
 const getDeployments = async ({ request }: { request: Request }) => {
   if (!isVercelStatusEnabled()) {
     throw new Response('Not found', { status: 404 });
   }
 
   const overview = await getVercelDeploymentsOverview({
+    historyLimit: getHistoryLimitFromRequest(request),
     limit: getBranchLimitFromRequest(request)
   });
 

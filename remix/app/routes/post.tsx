@@ -1,10 +1,15 @@
+import { sharePathForThing } from '~/components/Sharing/audienceCore';
+import { sharedThingPath } from '~/components/Sharing/sharedMediaCore';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
 import React from 'react';
 import { Box, Button, Center, Flex, Spinner, Text } from '@chakra-ui/react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ArrowLeft } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { PostCard } from '~/components/Feed/PostCard';
+import { useViewTracking } from '~/components/Feed/useViewTracking';
 import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
@@ -23,12 +28,21 @@ type ThingResponse = {
 
 export const PostPage = () => {
   const { id } = useParams();
+  // hidden (unlisted) posts: the secret ?key= from the shared link makes the
+  // post viewable to whoever opened it — logged out included
+  const [searchParams] = useSearchParams();
+  const linkKey = (searchParams.get('key') || '').trim();
+  const sharedRoot = searchParams.get('sharedRoot') || '';
+  const parentPath = (thing: PublicPost) => sharedThingPath(sharePathForThing(thing), linkKey, sharedRoot);
   const api = useApi();
+  const user = useCurrentUser();
   const navigate = useNavigate();
 
   const [data, setData] = React.useState<ThingResponse | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  // permalink pages count as views too (feed/profile wire this via PostList)
+  const { observeView } = useViewTracking();
 
   React.useEffect(() => {
     let cancelled = false;
@@ -40,7 +54,7 @@ export const PostPage = () => {
     // lands after it merges through the viewer's overlay, never clobbers it
     const startedAt = Date.now();
     api.v1.things
-      .get({ id: id || '' })
+      .get({ id: id || '', key: linkKey || undefined, sharedRoot: sharedRoot || undefined })
       .then((resp: any) => {
         if (cancelled) return;
         setData({
@@ -62,16 +76,16 @@ export const PostPage = () => {
     };
     // api.v1.things.get is a stable useCallback
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, linkKey, sharedRoot, user?.id]);
 
   const post = data?.post ?? null;
   const isComment = !!post?.thingtime?.includes('comment');
   const parentId = data?.parent?.id ?? null;
   const rootId = data?.root?.id ?? null;
 
-  const handleChanged = (change: PostChange) => {
+  const handleChanged = (id: string, change: PostChange) => {
     setData((prev) => {
-      if (!prev?.post) return prev;
+      if (!prev?.post || prev.post.id !== id) return prev;
       const next = typeof change === 'function' ? change(prev.post) : change;
       if (!next) {
         // the thing was deleted from its own page — go somewhere sensible
@@ -83,7 +97,7 @@ export const PostPage = () => {
   };
 
   return (
-    <Flex
+    <SharedMediaProvider linkKey={post?.audience?.linkKey || post?.linkKey || linkKey} sharedRoot={sharedRoot}><Flex
       justifyContent="center"
       width="100%"
       minHeight="100vh"
@@ -134,14 +148,14 @@ export const PostPage = () => {
         {post && isComment && (
           <Flex alignItems="center" columnGap={3} flexWrap="wrap">
             {parentId && (
-              <Link to={`/post/${parentId}`}>
+              <Link to={parentPath(data!.parent!)}>
                 <Button size="xs" variant="outline" borderRadius="999px" leftIcon={<ArrowLeft size={12} />}>
                   {parentId === rootId ? 'View full conversation 🧵' : 'View parent comment 💬'}
                 </Button>
               </Link>
             )}
             {rootId && rootId !== parentId && (
-              <Link to={`/post/${rootId}`}>
+              <Link to={parentPath(data!.root!)}>
                 <Button size="xs" variant="ghost" borderRadius="999px">
                   Go to the top of the thread 🧵
                 </Button>
@@ -174,9 +188,13 @@ export const PostPage = () => {
           </Flex>
         )}
 
-        {!loading && post && <PostCard post={post} onChanged={handleChanged} defaultCommentsOpen />}
+        {!loading && post && (
+          <Box ref={(element: HTMLDivElement | null) => observeView(element, post.id)}>
+            <PostCard post={post} onChanged={handleChanged} defaultCommentsOpen />
+          </Box>
+        )}
       </Flex>
-    </Flex>
+    </Flex></SharedMediaProvider>
   );
 };
 

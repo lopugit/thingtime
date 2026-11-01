@@ -1,0 +1,333 @@
+# Thingtime Commander
+
+Commander is a fast, keyboard-first desktop launcher for macOS, Windows, and Linux. The current milestone ships
+and validates the macOS host while keeping all product UI, business logic, extension infrastructure, and search
+portable from day one.
+
+## What works in this milestone
+
+- global Commander shortcut on macOS (defaults to Command-Space; customizable in Settings);
+- typo-tolerant fuzzy application, command, extension, file, folder, and Store search with deterministic Rust
+  ranking plus bounded device-local preference learning from the result a user actually chooses;
+- disk-backed last-known-result caching and incremental search streaming, so a new query keeps useful prior results
+  visible until live application, command, file, and folder matches arrive;
+- grouped Apps, Commands, and Files & Folders sections with draggable category priority, a modest default app boost,
+  native file icons, compact `.app` badges, and learned/text relevance that can still overcome the preferred order;
+- an automatic, bounded expression evaluator that recognizes complete arithmetic directly in the root search field,
+  leads with a dedicated Calculator result, keeps ordinary results underneath, and copies the answer with Return;
+- coalesced application/file/folder background watching, six-hour full application reconciliation, configurable
+  six-hour file/folder refresh, and built-in Index Now, Index Apps, Index Commands, Index Files, and Index Directories commands;
+- inherited `.gitignore`/Git excludes plus user-defined wildcard and regular-expression ignore rules, editable with
+  index roots, an optional entry cap, and live database size/status in dedicated Search Settings;
+- unlimited filesystem entries and hidden files by default, including metadata-only references for executables,
+  symlinks, special Unix file types, packages, and app bundles found outside standard application folders;
+- reusable machine-resource controls for indexer threads, parallel work, open-directory handles, CPU share, and RAM,
+  with transactional memory-limit rollback and measured per-run usage;
+- per-command global shortcuts with click-to-record bindings in Extensions Settings, native conflict validation,
+  and rollback to the previously working shortcut set;
+- arrow-key selection, Return execution, Escape dismissal, and Command-K actions;
+- type-aware right-click menus, including Finder reveal, file copy, path/name copy, recoverable Trash, and confirmed
+  permanent delete actions for filesystem-backed results;
+- a Settings gear in the launcher header, with mouse and keyboard access to the native Settings window;
+- searchable Commander Settings results with tab-aware deep links into the separate native settings window;
+- a dedicated Activity settings tab that samples Commander host/daemon CPU, memory, storage, process count, plus
+  local Mac CPU, best-effort system GPU, memory, thermal state, and filesystem capacity without uploading metrics;
+- a Raycast-shaped built-in Commander extension with separate quit, hide-window, and open-window commands;
+- a Bundled Commands catalog led by a Commander-native Search Emoji & Symbols picker inspired by Raycast, with
+  semantic search, categories, skin tones, recents, keyboard navigation, configurable Return actions, and
+  paste-back that restores the user's previous clipboard;
+- launcher queries clear on every reopen while private, device-local search sessions remain available in a first
+  History section, led by the newest command launched from each search and followed by its search term as a separate
+  top-level result;
+- launch-at-login, menu-bar icon, favourites-in-compact-mode, window mode, appearance, and text-size preferences;
+- draggable native launcher and Settings chrome plus physical-key shortcut recording for modified macOS keys;
+- optional pinned launcher windows, a configurable pin shortcut, per-display recent-window focus, and a native
+  Open New Window action for keeping multiple independent Commander searches available;
+- Finder-compatible drag-out from application/file search results using validated native file URLs, so a result can
+  be dropped into Terminal, Finder, System Settings, or another macOS file target without browsing for it again;
+- installed extension management, safe folder/ZIP sideloading with opt-in source builds, live Store browsing, and a
+  macOS Your Raycast view that can add public sources or sync manifest-declared non-password preferences;
+- timeout- and memory-bounded extension workers plus an explicit Raycast compatibility capability registry;
+- Thingtime desktop OAuth/PKCE, multi-account UI, Keychain token storage, account switching, and private app-data
+  settings sync;
+- Swift/AppKit/WKWebView macOS host; C#/.NET 8/WPF/WebView2 Windows host boundary; Linux host contract;
+- persistent Rust command-search and filesystem-index processes with stable cross-platform JSON-lines protocols.
+
+## Compatibility promise
+
+Commander targets **source compatibility** with Raycast extensions. It reads `package.json` and `extension.json`,
+inspects conventional source/build entries, and can run an extension-authored build only after explicit consent.
+Raycast’s private Store archive and host-RPC formats are undocumented, so binary compatibility is neither safe nor
+promised. A complete Commander-owned `@raycast/api` render/runtime shim is still roadmap work.
+
+The current runtime imports manifests and executes compatible prebuilt `no-view` commands inside bounded workers.
+Workers contain crashes, hangs, and JavaScript heap growth but are not an OS permissions sandbox.
+The Your Raycast importer never opens Raycast's encrypted database or Keychain: it discovers profile-linked
+metadata from the exported preference domain and copies only manifest-declared non-password values. The view-command
+React reconciler is not complete yet. Commander reports this as partial compatibility rather than claiming imported
+metadata equals working compatibility. The exact matrix and roadmap are in
+[`docs/RAYCAST_COMPATIBILITY.md`](docs/RAYCAST_COMPATIBILITY.md).
+
+Commander-owned equivalents of Raycast commands that have no importable extension package appear separately under
+**Extensions → Bundled**. Search Emoji & Symbols is a Commander-native command inspired by Raycast's picker. Its
+searchable Unicode/CLDR catalog is powered by [Emojibase](https://emojibase.dev/) data under the MIT license, while
+its view, actions, recents, and native paste behavior are implemented by Commander. Calculator is a separate bundled
+extension that safely parses arithmetic without JavaScript evaluation or a command prefix; its card controls
+automatic detection and maximum displayed decimal precision. The complete attribution is bundled with every app
+build and tracked in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+## Architecture
+
+The complete runtime diagram, trust boundaries, IPC contract, process budgets, and Raycast 2.0 design rationale are
+in [`ARCHITECTURE.md`](ARCHITECTURE.md). The high-level stack is:
+
+- React + TypeScript shared UI;
+- one long-lived Node 22 daemon;
+- persistent Rust command-search and standalone SQLite/FTS5 filesystem-index processes;
+- Swift/AppKit + WKWebView on macOS;
+- C#/.NET 8 + WPF + WebView2 on Windows;
+- the same native bridge contract for Linux.
+
+## Build and run on macOS
+
+Requirements: macOS 14+, Xcode command-line tools, Node 22+, pnpm, and Rust 1.75+.
+
+```bash
+cd Commander
+corepack pnpm install --frozen-lockfile
+./script/build_and_run.sh --verify
+```
+
+The script builds the TypeScript workspaces and both Rust crates, builds the Swift host, stages and signs
+`dist/Commander.app`, embeds a checksum-pinned Node 22 runtime, installs it to
+`~/Applications/Commander.app`, launches that exact copy, and verifies the signed host owns the reported daemon
+process and health endpoint. The daemon also watches its native parent so a forced host exit cannot leave port 47820
+occupied by an orphaned service.
+
+The Codex Run button is wired through `.codex/environments/environment.toml` to the same script.
+
+### macOS signing policy
+
+Normal Commander builds are direct-distribution builds. The script automatically selects an installed
+`Developer ID Application` identity and uses a secure timestamp. It deliberately fails before touching the
+currently installed app when that identity is unavailable: `Apple Development` is for local/TCC testing and
+`Apple Distribution` is for App Store delivery; neither is a substitute for Developer ID distribution.
+
+For an explicitly local-only iteration, use `COMMANDER_SIGNING_MODE=development ./script/build_and_run.sh --verify`.
+That path is not a distributable Gatekeeper build. `COMMANDER_SIGNING_IDENTITY` may select a specific identity,
+but distribution mode accepts only a `Developer ID Application` identity. Public downloads additionally need
+Apple notarization credentials configured outside this repository; a valid Developer ID signature alone is not
+a notarization ticket. Local distribution builds use the Keychain profile named `Commander Notarization` by default,
+submit a ZIP with `notarytool`, staple the accepted ticket, and only then replace `~/Applications/Commander.app`.
+Set `COMMANDER_NOTARY_PROFILE` to use another Keychain profile. The GitHub release workflow uses
+`COMMANDER_NOTARIZATION_MODE=external` because it submits with its short-lived CI API-key credentials instead.
+
+## GitHub Releases
+
+The main-branch `.github/workflows/commander-release.yml` is a thin caller of the
+protected `github-actions` implementation. Main pushes touching Commander, or an
+owner dispatch on main/github-actions, build the exact main commit on an Apple
+silicon macOS runner. The workflow publishes a Developer ID signed, notarized
+`Commander-App-Release-<version>-macos-arm64.zip`, a matching Thingtime Recovery
+ZIP, and `SHA256SUMS.txt`. Both final archives are extracted and verified before
+publication. Commander releases use `--latest=false` to preserve Electron's
+repository-wide latest release.
+
+Versions include the run number and source commit, for example
+`commander-v0.1.0+build.103.gabcdef123456`. The app keeps `0.1.0` as its marketing
+version and `103` as `CFBundleVersion`; signed bundle metadata retains the release
+tag, full commit and main branch. Recovery's Commander selector discovers these
+archives and preserves that provenance in This Mac even when offline.
+
+The base version is deliberately human-controlled and shared by every
+Commander workspace. Check it with `corepack pnpm version:check`; intentionally
+bump it in a normal reviewed change with one of:
+
+```bash
+corepack pnpm version:bump -- patch
+corepack pnpm version:bump -- minor
+corepack pnpm version:bump -- major
+corepack pnpm version:bump -- 1.2.3
+```
+
+The workflow's build metadata never writes back to source, so repeat builds are
+uniquely versioned without noisy release-only commits. GitHub-hosted builds fail closed without the complete Developer ID and notarization
+credentials; there is no unsigned distribution fallback. Configure encrypted
+repository secrets `MAC_CSC_LINK` (base64 PKCS#12), `MAC_CSC_KEY_PASSWORD`,
+`APPLE_TEAM_ID`, and either `APPLE_API_KEY_BASE64` / `APPLE_API_KEY_ID` /
+`APPLE_API_ISSUER` or the existing `ASC_KEY_CONTENT` / `ASC_KEY_ID` /
+`ASC_ISSUER_ID` API-key secrets. The workflow imports an ephemeral Keychain only
+after source checks and removes its signing material on success or failure.
+Forks must configure their own approved controller, caller guard and credentials.
+
+For CI, `./script/build_and_run.sh --prepare` installs, compiles and tests without
+accessing signing credentials or stopping the installed app. After importing
+credentials, `./script/build-production-release.sh` packages those outputs,
+notarizes, staples and checks the extracted archive. `--build-only` also leaves
+the installed app running. Production packaging requires `COMMANDER_RELEASE_VERSION`,
+`COMMANDER_BUILD_NUMBER`, `COMMANDER_GIT_COMMIT`, `COMMANDER_SIGNING_IDENTITY`,
+`APPLE_TEAM_ID` and the three `APPLE_API_*` notarization variables; the workflow
+sets these without writing secrets to source. `COMMANDER_GIT_BRANCH` records main.
+
+Switching an existing local Apple Development build to a Developer ID release
+changes macOS's signing requirement. If a privacy permission stops working, use
+Commander's permission status and System Settings to grant that app access again;
+Recovery never changes privacy toggles or resets grants.
+
+## Thingtime setup
+
+Commander uses the real Thingtime API; it never reads the database directly.
+
+The local daemon publishes `/.well-known/commander-capabilities.json`, generated from the
+same operation registry used for HTTP dispatch. Its origin-scoped feature versions cover
+every active route, including native callbacks and static assets, without exposing account
+data or credentials. Before sign-in the UI requires `commander.accounts-login` 1.1.0 or a
+compatible same-major update. That contract adds verified callback selection; callback
+contracts also enforce the original server, client and redirect binding. Add or change
+operations in `apps/daemon/src/services/httpRoutes.ts` and deliberately version their contracts.
+
+Commander ships with a public Thingtime client ID. Before opening browser sign-in, it negotiates
+the selected server's OAuth capabilities and checks the exact callback registration. It prefers
+`com.thingtime.commander://oauth/callback`. If the server explicitly reports that native callback
+as unregistered, Commander checks and uses its currently bound loopback callback, normally
+`http://127.0.0.1:47820/oauth/callback`. Both paths use one-time authorization codes and S256 PKCE;
+each attempt is bound to its original server, client ID and callback. Network errors, suspended apps
+and incompatible capabilities fail without switching callbacks.
+
+For another deployment, register your own app through Thingtime Apps, allow the exact loopback
+origin used by Commander, and optionally register the exact native callback under native redirect
+URIs (not web origins). Advanced settings retain the server/client-ID overrides. Do not assume a
+callback is registered merely because it appears in this README: the live server remains the
+authority. The login requests only `profile.username` and `app-data`.
+
+The browser login uses authorization code + PKCE. Access tokens are saved only through the native credential bridge:
+Keychain on macOS, Credential Manager on Windows, and Secret Service on Linux. Sync data is stored privately under
+the app-data key `commander.settings.v1`.
+
+The bundled client ID is public by design. Tokens, passwords, and other credentials never belong in this repository.
+
+Whole-home filesystem indexing on macOS requires Full Disk Access for Commander. Search → Search Index links
+directly to the system pane; without that permission, use explicitly allowed folders as roots. Unlimited scans get
+a bounded 15-minute writer window; a custom-capped scan normally stops a blocked writer after 90 seconds, keeps the
+prior committed snapshot searchable, and reports actionable guidance. Deliberately constraining a capped indexer
+below 25% CPU extends that shorter deadline proportionally, up to 15 minutes.
+
+The launcher footer retains its measured count and index age during a scan; live processed/indexed progress
+appears in Search Settings. Search settings also expose the result-section order and a private cache policy: enable/disable, maximum
+size, expiry, custom cache-directory override, reveal, and clear. Cache files contain result metadata only, use
+owner-only permissions, and are never included in Thingtime cloud settings sync. Commander warms recent snapshots
+into a bounded in-memory tier and re-ranks cached filesystem candidates while a refined live query completes. When
+the input changes, it clears the prior query's rows first, so stale matches are never presented as results for the
+new query.
+Live trigram search has no pre-ranking candidate-count ceiling: every matching FTS row is scored, while only the
+best requested results stay resident in memory. The indexer reader runs the active query plus only the latest queued
+refinement, so rapid typing cannot build a stale backlog of uncapped searches.
+
+## Raycast companion command
+
+The existing Raycast extension now lives with Commander at `extensions/raycast/`. It preserves all of its legacy
+image tools and includes an `Open Commander` no-view command at `extensions/raycast/src/openCommander.ts`. Build it
+with its pinned pnpm 8 toolchain, then run the development command once to import it into Raycast:
+
+```bash
+corepack pnpm@8.15.9 --dir extensions/raycast install --frozen-lockfile
+corepack pnpm@8.15.9 --dir extensions/raycast build
+corepack pnpm@8.15.9 --dir extensions/raycast dev
+```
+
+After Raycast imports the extension, the development process can stop and the command remains available. It opens
+the installed app by bundle identifier, so it can relaunch Commander after `Close Commander` has quit the host and
+daemon. Recent launcher searches stay local to Commander's daemon state and are intentionally excluded from cloud
+settings sync. The launcher shows the eight newest search sessions initially; Show More expands the retained local
+history, and each session keeps up to eight de-duplicated commands for direct replay.
+
+## Verification
+
+```bash
+corepack pnpm typecheck
+corepack pnpm test
+corepack pnpm build
+cargo fmt --check --manifest-path crates/commander-core/Cargo.toml
+cargo test --manifest-path crates/commander-core/Cargo.toml
+cargo fmt --check --manifest-path crates/commander-indexer/Cargo.toml
+cargo test --manifest-path crates/commander-indexer/Cargo.toml
+swift build --package-path hosts/macos
+./script/build_and_run.sh --verify
+```
+
+Windows and Linux compile/runtime testing is deliberately deferred, as requested. Their shared layers are covered
+by the TypeScript and Rust checks; their native shells remain explicitly unverified.
+
+## Process monitor and utility windows
+
+Activity's Processes panel defaults to Name ascending, with PID as the final
+stable tie-breaker. CPU/memory/disk changes update readings without reordering
+rows unless you choose a usage sort. Sort by, Order, Average window, parent
+grouping and composable filters are saved locally and shared with the separate
+Processes window. Filters support text matching, numeric comparisons, binary
+memory/throughput units and explicit available/unavailable values.
+
+Average window offers Current, 5/10/30 minutes, 1/3/6/12 hours and 1 day. Usage
+columns, filters and sorting all use the selected sampled average. Native windows
+share one sampler and history; readings are duration-weighted in one-minute
+buckets. History is collected while a metrics view polls, stays in memory for the
+running app, expires after one day, and resets for exited/reused PIDs. Each row
+shows the actual observed minutes; sleep/closed-view gaps are excluded, and
+unavailable GPU/network readings never become zero. No past history is invented
+when selecting a longer window. This is a sampled monitor, not a historical
+recorder or a guarantee of continuous background collection.
+
+Use the pop-out icon beside Processes for its resizable native window. Keep above
+sets only that window's level; closing/reopening reuses the window during the
+current app session. Double-click the Settings or Processes title bar to maximize
+within the current screen's usable area, then again to restore its previous frame.
+This does not enter a fullscreen Space.
+
+### Isolated native window development
+
+Run `./script/window-preview.sh` from `Commander/` to build a fast unsigned
+window preview, then open the printed `.app` path. It uses the production
+`CommanderUtilityWindow` implementation and a worktree-specific bundle identity
+and cache directory. It has no daemon, ports, network, credentials, global
+hotkeys, or access to the installed Commander profile. Its duplicate-delivery
+button exercises native/web double-click coalescing; the titlebar and Keep above
+control exercise native window behavior. Run `./script/window-preview.sh --clean`
+to stop and remove this worktree's generated preview before final verification.
+The preview supplements the canonical signed installed-app acceptance checks.
+
+
+### Background search indexes and isolated development
+
+The launcher footer combines the latest measured committed file/folder snapshot with the enabled application and
+command catalogue, alongside the age of the oldest successful full index refresh. It keeps that summary while ordinary
+background changes are pending; live search can reflect changes before the measured count catches up. Detailed
+progress, errors and resource controls remain in Search Settings. Remote Store results, disabled
+file sources and duplicate paths are excluded. An absent age means that an active source has not completed its first
+index. Full application reconciliation runs six-hourly; file/folder reconciliation uses the saved interval (six hours
+by default), and the command catalogue refreshes each minute. Supported OS notifications normally refresh affected
+subtrees after a 750 ms quiet period, with a three-second batching deadline during continuous activity. Events arriving
+during a scan are coalesced and processed afterward. Missed/unsupported filesystem notifications use periodic
+reconciliation. The Linux non-recursive watcher remains best-effort; macOS is the accepted native target.
+
+A changed index configuration or mounted-source set suppresses the previous file source until its replacement is
+committed, including after relaunch. The schema-4 upgrade computes unique counters once in the writer; the independent
+reader can continue reading committed data while that migration runs. Legacy databases lack the saved settings fingerprint. Their valid cached file results remain searchable under a
+scoped current-root, ignore, hidden-file, Git and existence policy while migration and reconciliation run; totals
+remain explicitly unmeasured until a complete current snapshot is committed. A known mismatched saved fingerprint
+never uses this legacy fallback. During this transition a result page can contain fewer items after ineligible old
+candidates are removed; it does not scan the whole index to refill the page.
+
+For unsigned iteration alongside the installed app:
+
+```bash
+./script/dev-parallel.sh build
+./script/dev-parallel.sh start
+./script/dev-parallel.sh status
+node ./script/verify-background-index.mjs '<printed development app path>'
+./script/dev-parallel.sh clean
+```
+
+The lane owns an isolated bundle identity, data/cache/Keychain identity, fixture application roots and deterministic
+port; it leaves the installed app and profile in place. `COMMANDER_APPLICATION_ROOTS` is a JSON array of absolute
+roots for the isolated daemon application inventory. Production omits it and indexes eligible mounted volumes.
+After development acceptance, clean this lane and use the canonical signed build/install verification above.

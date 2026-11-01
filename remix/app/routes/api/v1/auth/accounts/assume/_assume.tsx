@@ -6,7 +6,8 @@ import { serializeAuthCookie } from '~/api/utils/auth/authCookie';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { signJwt } from '~/api/utils/auth/jwt';
 import { createSession } from '~/api/utils/auth/sessions';
-import { findUserById, toPublicUser } from '~/api/utils/auth/users';
+import { findUserById, toPublicUserWithStorage } from '~/api/utils/auth/users';
+import { prepareUnboundAttachmentCleanupForSessionReplacement } from '~/api/utils/attachments/attachments';
 
 const ASSUME_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30d, same as login
 
@@ -40,11 +41,15 @@ export const action = async ({ request }: { request: Request }) => {
     meta: { ownedBy: user.id, createdVia: 'account-link' }
   });
 
+	if (user.id !== accountId) {
+		await prepareUnboundAttachmentCleanupForSessionReplacement(user.id).catch(() => null);
+	}
+
   const headers = new Headers();
   for (const cookie of await mergeAccountSession(request, { userId: accountId, jti: session.jti })) {
     headers.append('Set-Cookie', cookie);
   }
   headers.append('Set-Cookie', await serializeAuthCookie(await signJwt({ sub: accountId, jti: session.jti })));
 
-  return json({ ok: true, user: toPublicUser(target) }, { headers });
+	return json({ ok: true, user: await toPublicUserWithStorage(target) }, { headers });
 };

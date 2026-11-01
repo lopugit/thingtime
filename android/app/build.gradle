@@ -1,0 +1,40 @@
+plugins { id 'com.android.application' }
+
+def selectedOrigin = providers.gradleProperty('thingtimeWebUrl').getOrElse('https://thingtime.com')
+if (!(selectedOrigin ==~ /https:\/\/[A-Za-z0-9.-]+(:[0-9]+)?\/?|http:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?\/?/)) {
+    throw new GradleException('thingtimeWebUrl must be an HTTPS origin or loopback HTTP origin')
+}
+android {
+    namespace 'com.thingtime.mobile'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.thingtime.mobile'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        buildConfigField 'String', 'WEB_ORIGIN', '"' + selectedOrigin + '"'
+    }
+    buildFeatures { buildConfig true }
+    buildTypes {
+        debug { applicationIdSuffix '.dev'; versionNameSuffix '-dev' }
+        release { minifyEnabled true; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro' }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    sourceSets {
+        test.resources.srcDirs += '../../iOS/ThingtimeTests/Fixtures'
+        androidTest.assets.srcDirs += '../../iOS/ThingtimeTests/Fixtures'
+    }
+    packaging { resources.excludes += ['META-INF/versions/**', 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'] }
+}
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'com.squareup.okhttp3:okhttp:5.3.0'
+    implementation 'org.bouncycastle:bcprov-jdk15to18:1.86'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20250517'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test:rules:1.6.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+}
