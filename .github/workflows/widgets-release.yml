@@ -1,0 +1,211 @@
+name: Thingtime Widgets App Release
+
+# Only exact trusted main source can publish. PR workflows never receive signing credentials.
+on:
+  push:
+    branches: [main]
+    paths:
+      - macos/ThingtimeWidgets/**
+      - macos/ThingtimeRecovery/**
+      - apple/**
+      - iOS/Thingtime/Lopu/**
+      - .github/workflows/widgets-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: widgets-release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish signed Thingtime Widgets and Recovery
+    if: >-
+      github.repository == 'lopugit/thingtime' && (
+        (github.event_name == 'push' && github.ref_name == 'main') ||
+        (github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner &&
+          github.ref_name == 'main'))
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - name: Resolve protected main source
+        id: source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = lopugit/thingtime
+          case "$GITHUB_EVENT_NAME:$GITHUB_REF_NAME" in
+            push:main) head_sha="$GITHUB_SHA" ;;
+            workflow_dispatch:main)
+              test "$GITHUB_ACTOR" = "$GITHUB_REPOSITORY_OWNER"
+              head_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" ;;
+            *) echo '::error::Only a main push or owner dispatch can publish Thingtime Widgets.'; exit 1 ;;
+          esac
+          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Check out exact main commit without publication credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.head_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Set up XcodeGen
+        run: brew install xcodegen
+
+      - name: Resolve release identity
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          base_version="$(python3 macos/ThingtimeWidgets/script/release-version.py)"
+          release_version="${base_version}+build.${GITHUB_RUN_NUMBER}.g${SOURCE_SHA:0:12}"
+          {
+            echo "THINGTIME_WIDGETS_BUILD_NUMBER=$GITHUB_RUN_NUMBER"
+            echo "THINGTIME_WIDGETS_RELEASE_VERSION=$release_version"
+            echo "THINGTIME_WIDGETS_RELEASE_TAG=widgets-v$release_version"
+            echo "THINGTIME_WIDGETS_GIT_COMMIT=$SOURCE_SHA"
+            echo "THINGTIME_WIDGETS_GIT_BRANCH=main"
+            echo "THINGTIME_RECOVERY_BUILD_NUMBER=$GITHUB_RUN_NUMBER"
+            echo "THINGTIME_RECOVERY_VERSION=$release_version"
+            echo "THINGTIME_RECOVERY_RELEASE_TAG=widgets-v$release_version"
+            echo "THINGTIME_RECOVERY_GIT_COMMIT=$SOURCE_SHA"
+            echo "THINGTIME_RECOVERY_GIT_BRANCH=main"
+          } >> "$GITHUB_ENV"
+
+      - name: Stop if this release already exists
+        id: existing_release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Authentication/network failures are errors, never proof of absence.
+          tags="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[].tag_name')"
+          if printf '%s\n' "$tags" | grep -Fxq -- "$THINGTIME_WIDGETS_RELEASE_TAG"; then
+            echo exists=true >> "$GITHUB_OUTPUT"
+          else
+            echo exists=false >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compile and test source before importing signing credentials
+        if: steps.existing_release.outputs.exists != 'true'
+        run: |
+          set -euo pipefail
+          node --test macos/ThingtimeWidgets/script/release-contract.test.mjs
+          xcodegen generate --spec macos/ThingtimeWidgets/project.yml
+          xcodebuild -project macos/ThingtimeWidgets/ThingtimeWidgets.xcodeproj -scheme ThingtimeWidgets -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO THINGTIME_WIDGET_GROUP=group.com.thingtime.widgets.tests.per-endpoint test
+          swift test --package-path macos/ThingtimeRecovery
+          swift build --package-path macos/ThingtimeRecovery --configuration release
+
+      - name: Import Developer ID and notarization credentials
+        if: steps.existing_release.outputs.exists != 'true'
+        shell: bash
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 || secrets.ASC_KEY_CONTENT }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID || secrets.ASC_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER || secrets.ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          : "${MAC_CSC_LINK:?MAC_CSC_LINK is required}"
+          : "${MAC_CSC_KEY_PASSWORD:?MAC_CSC_KEY_PASSWORD is required}"
+          : "${APPLE_API_KEY_BASE64:?APPLE_API_KEY_BASE64 is required}"
+          : "${APPLE_API_KEY_ID:?APPLE_API_KEY_ID is required}"
+          : "${APPLE_API_ISSUER:?APPLE_API_ISSUER is required}"
+          : "${APPLE_TEAM_ID:?APPLE_TEAM_ID is required}"
+          keychain_path="${RUNNER_TEMP}/widgets-signing.keychain-db"
+          certificate_path="${RUNNER_TEMP}/widgets-developer-id.p12"
+          api_key_path="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY_ID}.p8"
+          keychain_password="$(openssl rand -hex 32)"
+          printf '%s' "${MAC_CSC_LINK}" | /usr/bin/base64 -D > "${certificate_path}"
+          printf '%s' "${APPLE_API_KEY_BASE64}" | /usr/bin/base64 -D > "${api_key_path}"
+          chmod 600 "${certificate_path}" "${api_key_path}"
+          security create-keychain -p "${keychain_password}" "${keychain_path}"
+          security set-keychain-settings -lut 21600 "${keychain_path}"
+          security unlock-keychain -p "${keychain_password}" "${keychain_path}"
+          security import "${certificate_path}" -k "${keychain_path}" -P "${MAC_CSC_KEY_PASSWORD}" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${keychain_password}" "${keychain_path}"
+          security list-keychains -d user -s "${keychain_path}"
+          security default-keychain -d user -s "${keychain_path}"
+          identity="$(security find-identity -v -p codesigning "${keychain_path}" | sed -nE 's/.*"(Developer ID Application:[^"]+)".*/\1/p' | head -n 1)"
+          test -n "${identity}"
+          {
+            echo "CSC_KEYCHAIN=${keychain_path}"
+            echo "CSC_NAME=${identity}"
+            echo "THINGTIME_WIDGETS_SIGNING_IDENTITY=${identity}"
+            echo "THINGTIME_RECOVERY_SIGNING_IDENTITY=${identity}"
+            echo "APPLE_API_KEY=${api_key_path}"
+            echo "APPLE_API_KEY_ID=${APPLE_API_KEY_ID}"
+            echo "APPLE_API_ISSUER=${APPLE_API_ISSUER}"
+            echo "APPLE_TEAM_ID=${APPLE_TEAM_ID}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Build signed notarized Thingtime Widgets archive and verify extraction
+        if: steps.existing_release.outputs.exists != 'true'
+        timeout-minutes: 45
+        run: macos/ThingtimeWidgets/script/build-production-release.sh
+
+      - name: Build matching signed Recovery archive and verify extraction
+        if: steps.existing_release.outputs.exists != 'true'
+        timeout-minutes: 45
+        run: macos/ThingtimeRecovery/script/build-production-release.sh
+
+      - name: Collect verified assets and notes
+        if: steps.existing_release.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset_dir=macos/ThingtimeWidgets/release-upload
+          mkdir -p "$asset_dir"
+          widgets="macos/ThingtimeWidgets/release/Thingtime-Widgets-App-Release-${THINGTIME_WIDGETS_RELEASE_VERSION}-macos-arm64.zip"
+          recovery="macos/ThingtimeRecovery/release/Thingtime-Recovery-App-Release-${THINGTIME_WIDGETS_RELEASE_VERSION}-macos-$(uname -m).zip"
+          test -s "$widgets"
+          test -s "$recovery"
+          cp "$widgets" "$recovery" "$asset_dir/"
+          (cd "$asset_dir" && shasum -a 256 ./*.zip > SHA256SUMS.txt)
+          {
+            echo '## Signed Thingtime Widgets and Thingtime Recovery'
+            echo
+            echo "- Version: \`$THINGTIME_WIDGETS_RELEASE_VERSION\`"
+            echo "- Build: \`$THINGTIME_WIDGETS_BUILD_NUMBER\`"
+            echo '- Branch: `main`'
+            echo "- Commit: \`$THINGTIME_WIDGETS_GIT_COMMIT\`"
+            echo '- Platform: macOS 14 or later, Apple silicon.'
+            echo '- Trust: Developer ID signed, Apple notarized, and stapled; both final ZIPs pass verification after extraction.'
+            echo '- Install: open Thingtime Recovery, select Thingtime Widgets, refresh GitHub releases, then download and verify the Thingtime Widgets card.'
+            echo '- Recovery: the matching Recovery archive can update the launcher independently.'
+            echo '- Updates preserve the previous app in its own cache. Existing local development builds may need privacy permissions granted again when moving to Developer ID signing.'
+          } > widgets-release-notes.md
+
+      - name: Publish complete release
+        if: steps.existing_release.outputs.exists != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Thingtime Widgets must not replace Electron's repository-wide latest release.
+          gh release create "$THINGTIME_WIDGETS_RELEASE_TAG" macos/ThingtimeWidgets/release-upload/* \
+            --target "$THINGTIME_WIDGETS_GIT_COMMIT" --title "Thingtime Widgets $THINGTIME_WIDGETS_RELEASE_VERSION" \
+            --notes-file widgets-release-notes.md --latest=false
+
+      - name: Remove ephemeral signing material
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "$RUNNER_TEMP/widgets-signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/widgets-developer-id.p12" "$RUNNER_TEMP"/AuthKey_*.p8

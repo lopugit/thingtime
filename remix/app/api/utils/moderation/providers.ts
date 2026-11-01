@@ -1,3 +1,4 @@
+import { claudeOAuthConfigured } from '../ai/claudeOAuthCore';
 // Moderation provider registry. The provider analyzes ONE image and returns
 // a ModerationVerdict; the orchestrator (analyzeAttachment.ts) owns loading
 // bytes, stamping results, and every attachment-shape decision.
@@ -26,6 +27,7 @@
 
 import type { ModerationVerdict } from './moderationCore';
 import { DEFAULT_MODERATION_SETTINGS, type ModerationMediaProviderId } from './moderationSettingsCore';
+import { resolveModerationEnvironment } from './moderationCredentials';
 
 export type ModerationImageInput = {
 	bytes: Uint8Array;
@@ -102,11 +104,11 @@ export const resolveModerationProvider = async (
 			`[moderation] unrecognized THINGTIME_MODERATION_PROVIDER "${configured}" — using the key-based default. Valid: openai+claude | tiered | claude | openai | test | off.`
 		);
 	}
-	if (env.OPENAI_API_KEY && env.ANTHROPIC_API_KEY) {
+	if (env.OPENAI_API_KEY && claudeOAuthConfigured(env)) {
 		const { createTieredModerationProvider } = await import('./openaiProvider');
 		return { kind: 'provider', provider: createTieredModerationProvider(env) };
 	}
-	if (env.ANTHROPIC_API_KEY) {
+	if (claudeOAuthConfigured(env)) {
 		const { createClaudeModerationProvider } = await import('./claudeProvider');
 		return { kind: 'provider', provider: createClaudeModerationProvider(env) };
 	}
@@ -129,5 +131,6 @@ export const resolveConfiguredModerationProvider = async (env: NodeJS.ProcessEnv
 	} catch (error) {
 		console.warn('[moderation] settings read failed; using env default provider:', (error as Error)?.message || error);
 	}
-	return resolveModerationProvider(env, adminProvider);
+	if (adminProvider === 'off') return { kind: 'off' };
+	return resolveModerationProvider(await resolveModerationEnvironment(env), adminProvider);
 };

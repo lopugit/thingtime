@@ -13,14 +13,14 @@ test('generic Things accept attachmentIds only on POST top-level post creation',
 	assert.equal(postAttachmentRequest('POST', { type: 'text', attachmentIds: 'not-a-list' }, false).ok, false);
 });
 
-test('PATCH attachmentIds is a reorder request bound to an explicit thing id', () => {
+test('PATCH attachmentIds is a sync (reorder + add) request bound to an explicit thing id', () => {
 	assert.deepEqual(postAttachmentRequest('PATCH', { id: 'post-1', attachmentIds: ['attachment-2', 'attachment-1'] }, false), {
 		ok: true,
 		present: true,
-		kind: 'reorder',
+		kind: 'sync',
 		attachmentIds: ['attachment-2', 'attachment-1']
 	});
-	// no id → nothing to reorder against
+	// no id → nothing to sync against
 	assert.equal(postAttachmentRequest('PATCH', { attachmentIds: ['attachment-1'] }, false).ok, false);
 	assert.equal(postAttachmentRequest('PATCH', { id: '   ', attachmentIds: ['attachment-1'] }, false).ok, false);
 	assert.equal(postAttachmentRequest('PATCH', { id: 'post-1', attachmentIds: 'not-a-list' }, false).ok, false);

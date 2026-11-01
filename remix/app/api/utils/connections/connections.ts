@@ -16,6 +16,7 @@ import {
   publicProviders,
   resolveYoutubeChannelQuery,
   sanitizeChannelList,
+  webLink,
   youtubeApiKey,
   FEED_FETCH_LIMIT,
   MAX_FEED_PAGES,
@@ -160,8 +161,14 @@ const toPublicConnection = (linkDoc: any, accountDoc: any, provider: ConnectionP
     id: String(accountDoc?.shareId || linkDoc?.crystal?.accountId || ''),
     handle: String(accountDoc?.crystal?.handle || ''),
     displayName: String(accountDoc?.crystal?.displayName || ''),
-    avatarUrl: typeof accountDoc?.crystal?.avatarUrl === 'string' ? accountDoc.crystal.avatarUrl : null,
-    profileUrl: typeof accountDoc?.crystal?.profileUrl === 'string' ? accountDoc.crystal.profileUrl : null
+    // Scheme-checked on the way out, exactly like the synced-post author links
+    // above (and toPublicPosts' safeExternalLink): an account's crystal carries
+    // provider-supplied values — RSS takes `profileUrl` straight from a feed's
+    // <link href>, and that feed is any URL a user named — so a bare typeof
+    // check would let a hostile source park a `javascript:` target in a field
+    // the UI is free to render as an <a href>/<img src> later.
+    avatarUrl: webLink(accountDoc?.crystal?.avatarUrl),
+    profileUrl: webLink(accountDoc?.crystal?.profileUrl)
   },
   ...(provider?.id === 'youtube' ? { channels: sanitizeChannelList(accountDoc?.crystal?.config?.channels) } : {}),
   lastSyncedAt: accountDoc?.crystal?.lastSyncedAt instanceof Date ? accountDoc.crystal.lastSyncedAt.toISOString() : null,
@@ -192,7 +199,7 @@ export const upsertAccountAndLink = async (
   if (!existingLink) {
     const [userLinks, accountLinks] = await Promise.all([
       home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, ownerId: user.id }),
-      home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, 'crystal.accountId': accountShareId })
+      home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, parentId: accountShareId })
     ]);
     if (userLinks >= MAX_LINKS_PER_USER) return fail(400, `You can hold at most ${MAX_LINKS_PER_USER} connections`);
     if (accountLinks >= MAX_LINKS_PER_ACCOUNT) {
@@ -257,6 +264,15 @@ export const upsertAccountAndLink = async (
     const linked = await home.updateOne(
       { shareId: linkId, thingtime: EXTERNAL_LINK_KIND },
       {
+        // the linked ACCOUNT as the relational parent, so "who links this
+        // account" is a root-field compare on the (thingtime, createdAt,
+        // shareId) index's kind-bounded scan rather than a crystal reach —
+        // see the connections note in createThingsDataIndexes for why the
+        // (thingtime, parentId, …) prefix is deliberately NOT revived.
+        // $set (not $setOnInsert) heals
+        // links written by an earlier build; upsertedCount still reports
+        // whether THIS call created the link.
+        $set: { parentId: accountShareId },
         $setOnInsert: {
           schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
           shareId: linkId,
@@ -363,8 +379,21 @@ export const unlinkConnection = async (
     // Last link gone → retire the shared account thing (and any credentials
     // in its secure blob); synced external posts stay — they are inert
     // public/audience content other users' comments may hang off.
-    const remaining = await home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, 'crystal.accountId': accountId });
-    if (remaining === 0) {
+    const remaining = await home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, parentId: accountId });
+    // `parentId` is the indexed denormalization of crystal.accountId, and it is
+    // healed on connect ($set above) rather than backfilled — so a link written
+    // by an earlier build carries the crystal field but no parentId until its
+    // owner happens to reconnect. Everywhere else that costs a stale count;
+    // HERE it would read "nobody else links this account" and take the
+    // destructive branch, deleting a live account thing (with its sealed
+    // credentials) and every membership row behind another user's feed. One
+    // confirming count on the authoritative field, only ever on the
+    // already-rare last-unlink path, keeps the irreversible step fail-closed.
+    const confirmed =
+      remaining === 0
+        ? await home.countDocuments({ thingtime: EXTERNAL_LINK_KIND, 'crystal.accountId': accountId })
+        : remaining;
+    if (confirmed === 0) {
       await home.deleteOne({ shareId: accountId, thingtime: EXTERNAL_ACCOUNT_KIND });
       // The account is gone, so no viewer can ever match its membership rows
       // again — drain them rather than leaving dead index entries that every
@@ -372,7 +401,7 @@ export const unlinkConnection = async (
       // and existing comment threads may reference them); only this account's
       // claim on them disappears.
       const things = await getThingsCollection();
-      await things.deleteMany({ thingtime: EXTERNAL_POST_SOURCE_KIND, 'crystal.accountId': accountId } as any);
+      await things.deleteMany({ thingtime: EXTERNAL_POST_SOURCE_KIND, parentId: accountId } as any);
     }
   }
   return { ok: true, removed: true };
@@ -403,7 +432,10 @@ const clampPublishedAt = (value: Date | null, now: Date): Date => {
   return value as Date;
 };
 
-const upsertExternalPosts = async (
+// Exported for the same reason pageFromSourceRows is: the membership rows it
+// stamps carry the sort key the feed pages by, and that contract is worth
+// pinning in a unit test rather than only in a live end-to-end run.
+export const upsertExternalPosts = async (
   provider: ConnectionProvider,
   accountShareId: string,
   items: ExternalFeedItem[]
@@ -447,9 +479,19 @@ const upsertExternalPosts = async (
                 providerName: provider.name,
                 providerIcon: provider.icon,
                 externalId: item.externalId,
-                url: item.url,
+                // Every remote-supplied link is scheme-checked HERE, once, for
+                // every provider present and future: these values are rendered
+                // as real <a href>/<img src> targets, and a provider can be any
+                // RSS feed or Mastodon/Lemmy instance the user named, so an
+                // unchecked `javascript:` would be stored XSS. Doing it at the
+                // single write point beats trusting ~20 per-provider mappers.
+                url: webLink(item.url),
                 title: item.title,
-                author: item.author,
+                author: {
+                  ...item.author,
+                  url: webLink(item.author?.url),
+                  avatarUrl: webLink(item.author?.avatarUrl)
+                },
                 stats: item.stats,
                 publishedAt: publishedAt.toISOString()
               }
@@ -477,6 +519,30 @@ const upsertExternalPosts = async (
   // post may already exist from ANOTHER account's sync, and this account's
   // claim on it is exactly what the feed read and tt:extsourced evaluate.
   const stampSources = async () => {
+    // Read back each post's OWN createdAt and denormalize THAT, exactly like
+    // the relational-external-post-sources migration does. Recomputing
+    // clampPublishedAt(item.publishedAt, now) here instead would agree with the
+    // post only while the item carries a usable date: for a dateless item (an
+    // RSS entry with no pubDate/dc:date, an HN item with no `time` — both
+    // resolve to `null`, and dateOrNull makes that a routine shape rather than
+    // an error) the clamp falls through to `now`. The post's createdAt was
+    // stamped $setOnInsert at the FIRST account's sync, so a second account
+    // reaching the same post later would mint a row whose createdAt is its own
+    // wall clock — a different sort position for the same post. That breaks the
+    // invariant this field exists to hold: the feed pages membership rows and
+    // de-dupes only WITHIN a fetched window (pageFromSourceRows), which is
+    // sound because a post's rows share a createdAt and are therefore adjacent
+    // in the (createdAt, shareId) order. Rows scattered across the timeline
+    // instead put one post on two arbitrarily distant pages, and order it by
+    // sync time rather than by the publish time every other surface shows.
+    const postIds = [...new Set(items.map((item) => externalPostShareId(namespace, item.externalId)))];
+    const postCreatedAt = new Map<string, Date>();
+    const postDocs: any[] = await things
+      .find({ shareId: { $in: postIds }, thingtime: EXTERNAL_POST_KIND }, { projection: { shareId: 1, createdAt: 1 } })
+      .toArray();
+    for (const doc of postDocs) {
+      if (doc?.createdAt instanceof Date) postCreatedAt.set(String(doc.shareId), doc.createdAt);
+    }
     const rows = items.map((item) => {
       const postShareId = externalPostShareId(namespace, item.externalId);
       const sourceKey = externalPostSourceKey(postShareId, accountShareId);
@@ -484,7 +550,14 @@ const upsertExternalPosts = async (
         updateOne: {
           filter: { shareId: externalPostSourceShareId(postShareId, accountShareId), thingtime: EXTERNAL_POST_SOURCE_KIND },
           update: {
-            $set: { updatedAt: now },
+            // parentId (the sourcing ACCOUNT) is what the feed pages and what
+            // the tt:extsourced membership check filters on — as a root-field
+            // residual over the existing (thingtime, createdAt, shareId) and
+            // (targetId, thingtime, …) indexes rather than costing the
+            // saturated Things index budget a new slot. It
+            // lives in $set, not $setOnInsert, so rows written by an earlier
+            // build converge on their next sync instead of needing a backfill.
+            $set: { updatedAt: now, parentId: accountShareId },
             $setOnInsert: {
               schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
               thingtime: [EXTERNAL_POST_SOURCE_KIND],
@@ -501,8 +574,12 @@ const upsertExternalPosts = async (
               extended: null,
               tags: [],
               // denormalized post publish time: the feed pages MEMBERSHIP by
-              // this field, so it must sort identically to the post itself
-              createdAt: clampPublishedAt(item.publishedAt, now)
+              // this field, so it must sort identically to the post itself.
+              // The clamp is only the fallback for a post that somehow is not
+              // readable back (a concurrent delete) — the post's own stamp is
+              // the authority, so every row for it agrees no matter which
+              // account minted it or when.
+              createdAt: postCreatedAt.get(postShareId) || clampPublishedAt(item.publishedAt, now)
             }
           },
           upsert: true
@@ -590,6 +667,55 @@ const liveTokensFor = async (provider: ConnectionProvider, accountDoc: any): Pro
   return refreshed;
 };
 
+// Reduce a fetched page of membership ROWS to the distinct posts it yields
+// plus the cursor that resumes exactly after the last row consumed. Pure, and
+// separated from the query so the paging contract is unit-testable: it is the
+// one place a viewer's feed history can be silently cut short.
+//
+// `rowLimit` is the caller's fetch limit (the 2× over-fetch plus one), and it
+// is load-bearing, not decoration — see `moreRows`.
+export const pageFromSourceRows = (
+  rows: { targetId?: unknown; shareId?: unknown; createdAt?: unknown }[],
+  limit: number,
+  rowLimit: number
+): { postIds: string[]; nextCursor: string | null } => {
+  // de-dupe by post, preserving row order; the cursor rides the last ROW we
+  // actually consumed so the next page resumes exactly after it
+  const seen = new Set<string>();
+  const consumed: typeof rows = [];
+  const postIds: string[] = [];
+  // set only by the deliberate stop below — NOT inferred from
+  // `consumed.length < rows.length`, which a skipped orphan row also satisfies
+  let stoppedEarly = false;
+  for (const row of rows) {
+    const postId = String(row?.targetId || '');
+    if (!postId) continue;
+    if (!seen.has(postId)) {
+      if (postIds.length >= limit) {
+        stoppedEarly = true;
+        break;
+      }
+      seen.add(postId);
+      postIds.push(postId);
+    }
+    consumed.push(row);
+  }
+  const lastRow = consumed[consumed.length - 1];
+  const lastMs = lastRow ? new Date(lastRow.createdAt as any).getTime() : NaN;
+  // More rows exist if EITHER the loop stopped early (a full page of distinct
+  // posts with rows still behind it) OR the fetch itself came back full. Both
+  // are needed: the over-fetch is only 2×, so a viewer whose connections
+  // overlap heavily (the same posts sourced by three accounts) can consume
+  // every fetched row without ever reaching `limit` distinct posts — reading
+  // "consumed everything we fetched" as "reached the end" ends the feed at
+  // that page and buries everything older than it.
+  const moreRows = stoppedEarly || rows.length >= rowLimit;
+  // never mint a cursor the parser would reject (dates are clamped at
+  // upsert, but pre-clamp rows must not wedge pagination into a loop)
+  const nextCursor = moreRows && lastRow && Number.isFinite(lastMs) && lastMs > 0 ? `${lastMs}_${String(lastRow.shareId)}` : null;
+  return { postIds, nextCursor };
+};
+
 export const readConnectionsFeed = async (
   user: SessionUser,
   query: { connectionId?: string | null; cursor?: string | null; limit?: number; forceSync?: boolean; deepen?: boolean; deferSync?: boolean }
@@ -610,48 +736,89 @@ export const readConnectionsFeed = async (
   const linkedPairs = pairs.filter(({ account }) => !!account);
   const syncTargets = query.deferSync ? [] : linkedPairs;
   const CONCURRENCY = 4;
-  for (let start = 0; start < syncTargets.length; start += CONCURRENCY) {
-    await Promise.all(
-      syncTargets.slice(start, start + CONCURRENCY).map(async ({ link, account }) => {
-        const provider = connectionProviderById(account?.crystal?.provider);
-        const connectionId = String(link.shareId);
-        if (!provider) {
-          synced.push({ connectionId, provider: String(account?.crystal?.provider || ''), fetched: 0, skipped: true, error: 'Unknown provider' });
-          return;
-        }
-        const storedDepth = Math.min(Math.max(1, Number(account?.crystal?.syncDepth) || 1), MAX_FEED_PAGES);
-        // deepening only bypasses the cooldown while it can actually go
-        // deeper — at the cap it degrades to a normal cooldown-gated read so
-        // a scroll-happy client can't hammer providers
-        const canDeepen = !!query.deepen && storedDepth < MAX_FEED_PAGES;
-        const pages = canDeepen ? storedDepth + 1 : storedDepth;
-        const lastSyncedAt = account?.crystal?.lastSyncedAt instanceof Date ? account.crystal.lastSyncedAt.getTime() : 0;
-        if (!query.forceSync && !canDeepen && Date.now() - lastSyncedAt < SYNC_COOLDOWN_MS) {
-          synced.push({ connectionId, provider: provider.id, fetched: 0, skipped: true, error: null });
-          return;
-        }
-        const tokens = await liveTokensFor(provider, account);
-        const fetched = await provider.fetchFeed(
-          { providerAccountId: String(account?.crystal?.providerAccountId || ''), config: account?.crystal?.config || {} },
-          { limit: FEED_FETCH_LIMIT, tokens, pages }
+  // One connection's sync must never take down the read. The provider helpers
+  // already turn network trouble into a Fail, but everything else in a sync —
+  // an upsert write error, a token refresh, a mapper meeting a shape its
+  // provider has never sent before — can still throw, and inside Promise.all a
+  // single throw rejects the whole batch and 500s a request that could have
+  // served every OTHER connection's already-stored posts. `synced[]` carries a
+  // per-connection `error` for exactly this: report the failure against the
+  // connection that caused it and let the read pass run.
+  const syncOne = async ({ link, account }: { link: any; account: any }) => {
+    const connectionId = String(link.shareId);
+    try {
+      const provider = connectionProviderById(account?.crystal?.provider);
+      if (!provider) {
+        synced.push({ connectionId, provider: String(account?.crystal?.provider || ''), fetched: 0, skipped: true, error: 'Unknown provider' });
+        return;
+      }
+      const storedDepth = Math.min(Math.max(1, Number(account?.crystal?.syncDepth) || 1), MAX_FEED_PAGES);
+      // deepening only bypasses the cooldown while it can actually go
+      // deeper — at the cap it degrades to a normal cooldown-gated read so
+      // a scroll-happy client can't hammer providers
+      const canDeepen = !!query.deepen && storedDepth < MAX_FEED_PAGES;
+      const pages = canDeepen ? storedDepth + 1 : storedDepth;
+      const lastSyncedAt = account?.crystal?.lastSyncedAt instanceof Date ? account.crystal.lastSyncedAt.getTime() : 0;
+      if (!query.forceSync && !canDeepen && Date.now() - lastSyncedAt < SYNC_COOLDOWN_MS) {
+        synced.push({ connectionId, provider: provider.id, fetched: 0, skipped: true, error: null });
+        return;
+      }
+      const tokens = await liveTokensFor(provider, account);
+      const fetched = await provider.fetchFeed(
+        { providerAccountId: String(account?.crystal?.providerAccountId || ''), config: account?.crystal?.config || {} },
+        { limit: FEED_FETCH_LIMIT, tokens, pages }
+      );
+      if (fetched.ok === false) {
+        await markAccountSync(String(account.shareId), fetched.error);
+        synced.push({ connectionId, provider: provider.id, fetched: 0, skipped: false, error: fetched.error });
+        return;
+      }
+      const written = await upsertExternalPosts(provider, String(account.shareId), fetched.items);
+      await markAccountSync(String(account.shareId), null);
+      if (canDeepen) {
+        const home = await getHomeThingsCollection();
+        await home.updateOne(
+          { shareId: String(account.shareId), thingtime: EXTERNAL_ACCOUNT_KIND },
+          { $set: { 'crystal.syncDepth': pages } }
         );
-        if (fetched.ok === false) {
-          await markAccountSync(String(account.shareId), fetched.error);
-          synced.push({ connectionId, provider: provider.id, fetched: 0, skipped: false, error: fetched.error });
-          return;
-        }
-        const written = await upsertExternalPosts(provider, String(account.shareId), fetched.items);
-        await markAccountSync(String(account.shareId), null);
-        if (canDeepen) {
-          const home = await getHomeThingsCollection();
-          await home.updateOne(
-            { shareId: String(account.shareId), thingtime: EXTERNAL_ACCOUNT_KIND },
-            { $set: { 'crystal.syncDepth': pages } }
-          );
-        }
-        synced.push({ connectionId, provider: provider.id, fetched: written, skipped: false, error: null });
-      })
-    );
+      }
+      synced.push({ connectionId, provider: provider.id, fetched: written, skipped: false, error: null });
+    } catch (err: any) {
+      // the message is the server's, never the caught error's — a thrown
+      // driver/provider error can carry hosts, queries, or token material
+      console.error(`[connections] sync failed for ${String(account?.crystal?.provider || 'unknown')}:`, err?.message || err);
+      const message = 'That connection could not be synced just now — showing what was already saved';
+      // Stamp the cooldown, exactly like the provider-Fail branch above. The
+      // cooldown is what bounds outbound fan-out, and only a stamp advances it:
+      // a connection that throws DETERMINISTICALLY (the upsert-error and
+      // unfamiliar-shape cases this catch was added for) would otherwise never
+      // move lastSyncedAt, so the gate above re-fetches from the provider on
+      // EVERY ordinary feed read. Ordinary reads sit in the generous
+      // connections.read bucket (120/min) rather than connections.provider
+      // (20/min) precisely BECAUSE the cooldown is assumed to hold — so an
+      // unstamped failure quietly buys a 6× sustained amplification against a
+      // third party. Swallowing the throw must not also swallow the brake:
+      // before this catch existed the request 500'd and the client stopped;
+      // now it succeeds, so the client keeps polling. `sync=force` still
+      // bypasses the cooldown for a deliberate retry, on the tight bucket.
+      try {
+        if (account?.shareId) await markAccountSync(String(account.shareId), message);
+      } catch (stampErr: any) {
+        // best-effort: markAccountSync is itself a home-DB write, and a DB
+        // fault is one of the things that can land us in this catch
+        console.error('[connections] could not record the sync failure:', stampErr?.message || stampErr);
+      }
+      synced.push({
+        connectionId,
+        provider: String(account?.crystal?.provider || ''),
+        fetched: 0,
+        skipped: false,
+        error: message
+      });
+    }
+  };
+  for (let start = 0; start < syncTargets.length; start += CONCURRENCY) {
+    await Promise.all(syncTargets.slice(start, start + CONCURRENCY).map(syncOne));
   }
 
   // read pass — membership (the link) IS the authorization: only linked
@@ -665,10 +832,15 @@ export const readConnectionsFeed = async (
     // the viewer's accounts, newest first, then fetch that page's posts. The
     // rows carry the post's publish time as their own createdAt, so this sorts
     // and cursors identically to paging the posts directly — and it rides the
-    // existing (thingtime, crystal.accountId, createdAt, shareId) index.
+    // existing `thingtime_1_createdAt_-1_shareId_1` index: `thingtime`
+    // equality bounds the scan to this kind and (createdAt:-1, shareId:1) is
+    // exactly the sort below, so the page order is index-provided rather than
+    // a blocking sort. The `parentId` $in applies as a residual on the way
+    // through — see the connections note in createThingsDataIndexes for why
+    // that is deliberate, and what to measure before adding an index.
     const match: Record<string, any> = {
       thingtime: EXTERNAL_POST_SOURCE_KIND,
-      'crystal.accountId': { $in: accountIds }
+      parentId: { $in: accountIds }
     };
     // the shared chrono-cursor grammar from things.ts — one parser, one format
     const parsed = parseChronoCursor(query.cursor);
@@ -685,27 +857,9 @@ export const readConnectionsFeed = async (
       .limit(rowLimit)
       .toArray();
 
-    // de-dupe by post, preserving row order; the cursor rides the last ROW we
-    // actually consumed so the next page resumes exactly after it
-    const seen = new Set<string>();
-    const consumed: any[] = [];
-    const postIds: string[] = [];
-    for (const row of rows) {
-      const postId = String(row?.targetId || '');
-      if (!postId) continue;
-      if (!seen.has(postId)) {
-        if (postIds.length >= limit) break;
-        seen.add(postId);
-        postIds.push(postId);
-      }
-      consumed.push(row);
-    }
-    const lastRow = consumed[consumed.length - 1];
-    const lastMs = lastRow ? new Date(lastRow.createdAt).getTime() : NaN;
-    const exhausted = consumed.length >= rows.length;
-    // never mint a cursor the parser would reject (dates are clamped at
-    // upsert, but pre-clamp rows must not wedge pagination into a loop)
-    nextCursor = !exhausted && lastRow && Number.isFinite(lastMs) && lastMs > 0 ? `${lastMs}_${lastRow.shareId}` : null;
+    const paged = pageFromSourceRows(rows, limit, rowLimit);
+    const postIds = paged.postIds;
+    nextCursor = paged.nextCursor;
 
     const postsById = new Map<string, any>();
     if (postIds.length) {

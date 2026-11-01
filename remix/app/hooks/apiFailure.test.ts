@@ -81,6 +81,30 @@ test('only allowlisted attachment retry metadata survives normalization', () => 
 	assert.equal(hostile.retryable, undefined);
 });
 
+test('the Lopu access gate codes and the 402 balance survive normalization; other codes do not', () => {
+	const noCredits = createApiFailure({
+		payload: { ok: false, error: 'Lopu’s credits for your account are used up — add credits to keep going', code: 'LOPU_NO_CREDITS', balanceMicros: -12500 },
+		status: 402,
+		method: 'POST'
+	});
+	assert.equal(noCredits.code, 'LOPU_NO_CREDITS');
+	assert.equal(noCredits.balanceMicros, -12500);
+	assert.equal(noCredits.message, 'Lopu’s credits for your account are used up — add credits to keep going');
+
+	const unverified = createApiFailure({ payload: { ok: false, error: 'Lopu is invite-only for now', code: 'LOPU_UNVERIFIED' }, status: 403, method: 'POST' });
+	assert.equal(unverified.code, 'LOPU_UNVERIFIED');
+	assert.equal(unverified.balanceMicros, undefined);
+
+	const guest = createApiFailure({ payload: { ok: false, error: 'Create an account to chat with Lopu', code: 'LOPU_GUEST' }, status: 403, method: 'POST' });
+	assert.equal(guest.code, 'LOPU_GUEST');
+
+	// a code outside both allowlists never reaches the client, and a balance
+	// only rides a gate refusal
+	const stranger = createApiFailure({ payload: { ok: false, error: 'No', code: 'LOPU_SOMETHING_ELSE', balanceMicros: 5 }, status: 403, method: 'POST' });
+	assert.equal(stranger.code, undefined);
+	assert.equal(stranger.balanceMicros, undefined);
+});
+
 test('migration diagnostics accept only bounded authored detail and fixed-format ids', () => {
 	const id = 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90';
 	const error = createApiFailure({

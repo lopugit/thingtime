@@ -1,4 +1,5 @@
 export const CI_WORKFLOW_KEYS = [
+  'feature-stack',
   'resolve-conflicts',
   'rebase-stack',
   'promote-features',
@@ -27,6 +28,13 @@ export type CiAutomationPolicy = CiAutomationDefinition & {
 };
 
 export const CI_AUTOMATION_DEFINITIONS: readonly CiAutomationDefinition[] = [
+  {
+    key: 'feature-stack',
+    title: 'Merge Feature Stack',
+    summary: 'Combine an ordered set of feature PRs into one or more target branches with verified AI conflict resolution.',
+    defaultProvider: 'github-actions',
+    vercelSupported: false
+  },
   {
     key: 'resolve-conflicts',
     title: 'Resolve PR conflicts',

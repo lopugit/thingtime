@@ -97,7 +97,14 @@ export default function ResetPassword() {
   };
 
   return (
-    <Flex alignItems="center" justifyContent="center" width="100%" minHeight="70vh" padding={6}>
+    <Flex
+      alignItems="center"
+      justifyContent="center"
+      width="100%"
+      minHeight="100vh"
+      background="var(--tt-surface, #fafafb)"
+      padding={6}
+    >
       <Flex
         flexDirection="column"
         gap={4}

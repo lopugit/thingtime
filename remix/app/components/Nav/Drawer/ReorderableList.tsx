@@ -21,6 +21,10 @@ interface ReorderableListProps {
 	// data-reorder-handle. Existing drawer lists deliberately keep their
 	// click-and-hold-anywhere behaviour.
 	handleOnly?: boolean;
+	// restrict where a drag may start (e.g. a dedicated handle) so a list of
+	// composite entries can nest other ReorderableLists without both arming
+	// from the same pointerdown
+	shouldStartDrag?: (event: React.PointerEvent) => boolean;
 }
 
 const HOLD_MS = 280;
@@ -37,7 +41,9 @@ interface DragState {
 }
 
 export const ReorderableList = (props: ReorderableListProps) => {
-	const { items, onReorder, disabled, handleOnly } = props;
+	const { items, onReorder, disabled, handleOnly, shouldStartDrag } = props;
+	const shouldStartDragRef = React.useRef(shouldStartDrag);
+	shouldStartDragRef.current = shouldStartDrag;
 
 	const ids = React.useMemo(() => items.map((item) => item.id), [items]);
 	const idsRef = React.useRef(ids);
@@ -187,7 +193,11 @@ export const ReorderableList = (props: ReorderableListProps) => {
 			}
 
 			// primary button / touch only
-			if (event.pointerType === 'mouse' && event.button !== 0) {
+			if ((event.pointerType === 'mouse' && event.button !== 0) || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+				return;
+			}
+
+			if (shouldStartDragRef.current && !shouldStartDragRef.current(event)) {
 				return;
 			}
 
@@ -286,6 +296,15 @@ export const ReorderableList = (props: ReorderableListProps) => {
 		}
 	}, []);
 
+	const onItemDragStartCapture = React.useCallback((event: React.DragEvent) => {
+		// Anchors and images can start a native HTML drag, which sends
+		// pointercancel and tears down our held-row reorder. Keep the pointer
+		// stream while reordering; ordinary/modified link drags stay native.
+		if (sessionRef.current?.armed) {
+			event.preventDefault();
+		}
+	}, []);
+
 	const session = sessionRef.current;
 
 	const renderItems = React.useMemo(() => {
@@ -343,6 +362,7 @@ export const ReorderableList = (props: ReorderableListProps) => {
 						background={isActive ? 'var(--tt-card, #ffffff)' : undefined}
 						cursor={isActive ? 'grabbing' : undefined}
 						onClickCapture={onItemClickCapture}
+						onDragStartCapture={onItemDragStartCapture}
 						onPointerDown={(e) => onItemPointerDown(e, item.id)}
 					>
 						{item.node}

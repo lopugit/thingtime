@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 
 import { fail, type Fail } from './shared';
 
@@ -188,6 +190,31 @@ const stripBlocks = (value: string, tags: string[]): string => {
   return out;
 };
 
+// Linear tag removal, for the same reason stripBlocks above is linear:
+// `<[^>]+>` backtracks from every `<` in the input when no `>` follows it, so
+// 100KB of bare `<` — the cap below, reached by one feed item — cost ~8s of
+// blocked event loop on its own.
+const stripTags = (value: string): string => {
+  let out = '';
+  let cursor = 0;
+  while (cursor < value.length) {
+    const start = value.indexOf('<', cursor);
+    if (start === -1) break;
+    const close = value.indexOf('>', start + 1);
+    // an unterminated `<` is literal text, and `<>` has nothing inside to
+    // strip — both true of the `<[^>]+>` pattern this replaces
+    if (close === -1) break;
+    if (close === start + 1) {
+      out += value.slice(cursor, close + 1);
+      cursor = close + 1;
+      continue;
+    }
+    out += `${value.slice(cursor, start)} `;
+    cursor = close + 1;
+  }
+  return out + value.slice(cursor);
+};
+
 // Bound regex work: nothing downstream keeps more than MAX_TEXT_CHARS, so
 // hostile multi-megabyte bodies never reach the pattern passes.
 const STRIP_INPUT_CAP = 100_000;
@@ -198,10 +225,11 @@ export const stripHtml = (value: unknown): string => {
   // Atom bodies carry &lt;div&gt;…&amp;#32;…) unescape to markup on the first
   // pass, lose the markup on the strip, and surface clean text on the second
   return decodeEntities(
-    stripBlocks(decodeEntities(value.slice(0, STRIP_INPUT_CAP)), ['script', 'style'])
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/(p|div|li|h[1-6]|blockquote)>/gi, '\n')
-      .replace(/<[^>]+>/g, ' ')
+    stripTags(
+      stripBlocks(decodeEntities(value.slice(0, STRIP_INPUT_CAP)), ['script', 'style'])
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|li|h[1-6]|blockquote)>/gi, '\n')
+    )
   )
     .replace(/[ \t]+/g, ' ')
     .replace(/ ?\n ?/g, '\n')
@@ -215,6 +243,25 @@ const httpsImage = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const url = decodeEntities(value.trim());
   return /^https:\/\/[^\s"'<>]+$/.test(url) && url.length <= 1500 ? url : null;
+};
+
+// A remote-supplied link that is safe to render as a real <a href>. Feed items
+// and third-party authors carry permalinks straight from provider data, and
+// PostCard renders them as anchors — but "provider data" includes any RSS feed
+// or Mastodon/Lemmy instance the USER named, so an unchecked value lets a
+// hostile source store `javascript:` (or `data:`) and turn a synced post into
+// stored XSS. Only real web schemes survive; anything else becomes null, the
+// same shape every provider already uses for "no link".
+export const webLink = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const raw = decodeEntities(value.trim());
+  if (!raw || raw.length > 1500) return null;
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? raw : null;
+  } catch {
+    return null; // relative or unparseable — not a usable link target either
+  }
 };
 
 const boundedImages = (values: unknown[]): string[] => {
@@ -238,24 +285,272 @@ const dateOrNull = (value: unknown): Date | null => {
 // that's malformed (a bad paging.next), so the naming must never throw.
 const hostOf = (url: string): string => {
   try {
-    return hostOf(url);
+    return new URL(url).host;
   } catch {
     return 'the provider';
   }
 };
 
+// --- outbound target guard (SSRF) -------------------------------------------
+//
+// Feed sources are USER-SUPPLIED: the RSS provider takes any feedUrl, and
+// Mastodon/Lemmy take an instance hostname. Unguarded, that lets any signed-in
+// account aim Thingtime's server at the deployment's own private network —
+// cloud metadata (169.254.169.254), internal admin ports, databases — and read
+// the answer back as feed content, or infer it from the distinct error strings
+// ("answered 401" vs "could not be reached" vs "does not look like a feed") is
+// already a working port scanner. So every outbound provider call resolves its
+// host first and refuses private/reserved space.
+//
+// Redirects are followed MANUALLY for the same reason: `redirect: 'follow'`
+// would let an attacker-owned public host 302 straight into private space,
+// bypassing any check made only on the URL the user typed. Each hop is
+// re-validated, and non-GET requests never follow a redirect at all so
+// credentials are never replayed to a new origin.
+//
+// Honest limitation: this validates the addresses the resolver returns and
+// then fetch() resolves again, so a DNS record that changes between the two
+// (rebinding) is not covered — closing that needs connection-level address
+// pinning via a custom undici dispatcher, which is a larger change than this
+// feature warrants. Every direct and redirect-based attempt is stopped.
+
+const MAX_REDIRECT_HOPS = 4;
+
+// Distinguishable so callers can surface the refusal instead of the generic
+// "could not be reached" — a blocked target is a user input problem (400),
+// not a provider outage (502).
+class BlockedTargetError extends Error {
+  readonly blocked = true;
+}
+
+// Every blockedTargetReason is a full clause ("that host is not a public
+// internet address", "only https:// feed sources are supported"), so it has to
+// be joined as one — concatenating it straight after "will not fetch" read as
+// "Thingtime will not fetch only https:// feed sources are supported". This is
+// the error a user actually meets when they paste an http:// or intranet feed
+// URL into the connect form, so it is worth reading as a sentence.
+const blockedFail = (err: unknown): Fail | null =>
+  err instanceof BlockedTargetError ? fail(400, `Thingtime will not fetch that feed — ${err.message}`) : null;
+
+const ipv4Blocked = (address: string): boolean => {
+  const parts = address.split('.').map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
+  const [a, b] = parts;
+  if (a === 0 || a === 10 || a === 127) return true; // this-network, private, loopback
+  if (a === 169 && b === 254) return true; // link-local — cloud metadata lives here
+  if (a === 172 && b >= 16 && b <= 31) return true; // private
+  if (a === 192 && b === 168) return true; // private
+  if (a === 192 && b === 0) return true; // IETF protocol assignments
+  if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT
+  if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking
+  // 192.88.99.0/24 is the 6to4 RELAY anycast address (RFC 7526 deprecated it
+  // but did not withdraw the route): a packet sent there is handed to whatever
+  // relay answers, which is an off-path third party deciding where it lands.
+  if (a === 192 && b === 88 && parts[2] === 99) return true; // 6to4 relay anycast
+  if (a >= 224) return true; // multicast + reserved + broadcast
+  return false;
+};
+
+// Expand any textual IPv6 form to its 8 numeric groups, so the range checks
+// never depend on how the address happened to be spelled. This matters:
+// WHATWG URL renders `[::ffff:127.0.0.1]` as `::ffff:7f00:1`, so a check
+// written against the dotted spelling silently misses the very address it was
+// written to catch.
+const ipv6Groups = (value: string): number[] | null => {
+  let text = value;
+  const dotted = text.match(/^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (dotted) {
+    const octets = dotted[2].split('.').map((part) => Number(part));
+    if (octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) return null;
+    text = `${dotted[1]}${(((octets[0] << 8) | octets[1]) >>> 0).toString(16)}:${(((octets[2] << 8) | octets[3]) >>> 0).toString(16)}`;
+  }
+  const halves = text.split('::');
+  if (halves.length > 2) return null;
+  const parseGroups = (part: string): number[] => (part ? part.split(':').map((group) => Number.parseInt(group, 16)) : []);
+  const head = parseGroups(halves[0]);
+  const tail = halves.length === 2 ? parseGroups(halves[1]) : [];
+  const groups =
+    halves.length === 2 ? [...head, ...new Array(Math.max(0, 8 - head.length - tail.length)).fill(0), ...tail] : head;
+  if (groups.length !== 8 || groups.some((group) => !Number.isInteger(group) || group < 0 || group > 0xffff)) return null;
+  return groups;
+};
+
+// The v4 address carried in two adjacent v6 groups, spelled as a dotted quad
+// so the one set of v4 rules above judges every embedding format.
+const embeddedIpv4 = (high: number, low: number): string =>
+  `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`;
+
+const ipv6Blocked = (address: string): boolean => {
+  const groups = ipv6Groups(address.toLowerCase().split('%')[0]); // drop any zone index
+  if (!groups) return true; // unparseable — refuse rather than guess
+  // IPv4-mapped (::ffff:a.b.c.d) and IPv4-compatible (::a.b.c.d) carry a v4
+  // address in the low 32 bits, and `::`/`::1` fall out of the same branch as
+  // 0.0.0.0/0.0.0.1 — both already blocked by the v4 rules.
+  if (groups.slice(0, 5).every((group) => group === 0) && (groups[5] === 0xffff || groups[5] === 0)) {
+    return ipv4Blocked(embeddedIpv4(groups[6], groups[7]));
+  }
+  // 6to4 and NAT64 are TRANSITION formats that carry a v4 destination inside an
+  // address whose leading groups are non-zero — so the v4-mapped branch above,
+  // which keys on a five-group zero run, never sees them. On a host with either
+  // route configured, `[2002:7f00:1::]` reaches 127.0.0.1 and
+  // `[64:ff9b::a9fe:a9fe]` reaches the metadata service, while the prefix looks
+  // like ordinary global unicast. Decode the embedded quad and apply the same
+  // v4 rules rather than trusting the prefix: a 6to4/NAT64 address wrapping a
+  // genuinely public v4 stays allowed, so this blocks the bypass without
+  // becoming over-broad.
+  if (groups[0] === 0x2002) return ipv4Blocked(embeddedIpv4(groups[1], groups[2])); // 2002::/16
+  if (groups[0] === 0x0064 && groups[1] === 0xff9b && groups.slice(2, 6).every((group) => group === 0)) {
+    return ipv4Blocked(embeddedIpv4(groups[6], groups[7])); // 64:ff9b::/96 well-known prefix
+  }
+  const head = groups[0];
+  if ((head & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
+  if ((head & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+  if ((head & 0xffc0) === 0xfec0) return true; // fec0::/10 site-local (deprecated)
+  if ((head & 0xff00) === 0xff00) return true; // ff00::/8 multicast
+  return false;
+};
+
+const addressBlocked = (address: string, family: number): boolean =>
+  family === 6 ? ipv6Blocked(address) : ipv4Blocked(address);
+
+const BLOCKED_HOST_SUFFIXES = ['.local', '.internal', '.localhost', '.home.arpa'];
+
+// null = allowed; a string = the refusal reason (deliberately generic to the
+// caller, so a probe learns nothing it did not already supply)
+const blockedTargetReason = async (raw: string): Promise<string | null> => {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return 'that URL could not be parsed';
+  }
+  if (url.protocol !== 'https:') return 'only https:// feed sources are supported';
+  // WHATWG `hostname` keeps the brackets around an IPv6 literal ("[::1]"),
+  // which isIP() does not recognise — strip them or every v6 address would
+  // fall through to the DNS branch, fail to resolve, and be allowed.
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (!hostname) return 'that URL has no host';
+  if (hostname === 'localhost' || BLOCKED_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix))) {
+    return 'that host is not a public internet address';
+  }
+  const literal = isIP(hostname);
+  if (literal) {
+    return addressBlocked(hostname, literal) ? 'that host is not a public internet address' : null;
+  }
+  let resolved: { address: string; family: number }[];
+  try {
+    resolved = await lookup(hostname, { all: true });
+  } catch {
+    // Unresolvable here means unresolvable for fetch() too — let the real
+    // request fail with its own message rather than inventing a refusal.
+    return null;
+  }
+  if (resolved.some((entry) => addressBlocked(entry.address, entry.family))) {
+    return 'that host is not a public internet address';
+  }
+  return null;
+};
+
+// Credentials must not survive a hop to a different origin. `fetch` strips
+// these itself on `redirect: 'follow'`; following redirects by hand means
+// doing it here too, or the "never replayed to a new origin" rule below holds
+// only for the non-GET half. An authenticated GET is the other half: every
+// token-bearing call in this file is a GET, so a single 302 out of a provider
+// (an open redirect on its own domain, a hijacked API subdomain) would hand
+// that user's OAuth access token to whatever public host the Location names —
+// and a public host is exactly what blockedTargetReason lets through.
+const CREDENTIAL_HEADERS = ['authorization', 'cookie', 'proxy-authorization'];
+
+// One guarded fetch for every outbound provider call: validates the target,
+// then walks redirects by hand re-validating each hop.
+const guardedFetch = async (url: string, init: RequestInit & { method?: string }): Promise<Response> => {
+  const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  const method = init.method || 'GET';
+  let target = url;
+  let headers = new Headers(init.headers);
+  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
+    const blocked = await blockedTargetReason(target);
+    if (blocked) throw new BlockedTargetError(blocked);
+    const resp = await fetch(target, { ...init, headers, signal, redirect: 'manual' });
+    if (resp.status < 300 || resp.status > 399) return resp;
+    const location = resp.headers.get('location');
+    // Only idempotent GETs follow a redirect — a POST carrying client
+    // credentials or a Bearer token must never be replayed to a new origin.
+    if (!location || method !== 'GET') return resp;
+    // Release the hop we are abandoning. Only `location` is used from a 3xx,
+    // so its body is dead weight — and an undrained body holds its connection
+    // open for the whole fetch window. Same threat model readBoundedBody was
+    // added for: the host on the other end is user-supplied and may be
+    // hostile, and it gets one of these per hop.
+    await resp.body?.cancel().catch(() => {});
+    const next = new URL(location, target);
+    // Compare against the origin we just talked to, not the original one, so
+    // credentials dropped on an earlier hop are never reinstated by a later
+    // redirect back to the starting origin.
+    if (next.origin !== new URL(target).origin) {
+      headers = new Headers(headers);
+      for (const name of CREDENTIAL_HEADERS) headers.delete(name);
+    }
+    target = next.toString();
+  }
+  throw new BlockedTargetError('that URL redirected too many times');
+};
+
+// Response-size caps. FEED covers feed/data bodies, TOKEN the much smaller
+// OAuth token responses.
+const MAX_FEED_RESPONSE_BYTES = 3_000_000;
+const MAX_TOKEN_RESPONSE_BYTES = 1_000_000;
+
+// Read at most `max` bytes of a body; null means "over the cap, give up".
+//
+// The cap has to be enforced WHILE reading. `resp.text()` buffers the entire
+// body first, so checking its length afterwards is a check the attacker has
+// already won: feed sources are user-supplied (the RSS provider takes any
+// typed URL, Mastodon/Lemmy any instance host), so a hostile host can answer
+// a signed-in user's connect with an endless body and spend the whole fetch
+// timeout streaming it into the server's heap — gigabytes on a fast link, on
+// a serverless runtime sized in hundreds of megabytes. Content-Length is
+// honoured as the cheap early out, but never trusted as the only bound: it is
+// absent on chunked responses and the sender picks it.
+const readBoundedBody = async (resp: Response, max: number): Promise<string | null> => {
+  const body = resp.body;
+  if (!body) return '';
+  const declared = Number(resp.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > max) {
+    await body.cancel().catch(() => {});
+    return null;
+  }
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  let bytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > max) {
+      // stop the transfer as well as the buffering — an abandoned reader
+      // would leave the hostile host streaming into a socket we still hold
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+};
+
 const fetchText = async (url: string, accept: string): Promise<{ ok: true; text: string } | Fail> => {
   try {
-    const resp = await fetch(url, {
-      headers: { 'User-Agent': USER_AGENT, Accept: accept },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      redirect: 'follow'
+    const resp = await guardedFetch(url, {
+      headers: { 'User-Agent': USER_AGENT, Accept: accept }
     });
     if (!resp.ok) return fail(502, `The provider answered ${resp.status} for ${hostOf(url)}`);
-    const text = await resp.text();
-    if (text.length > 3_000_000) return fail(502, 'The provider response was too large to process');
+    const text = await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
+    if (text === null) return fail(502, 'The provider response was too large to process');
     return { ok: true, text };
   } catch (err: any) {
+    const blocked = blockedFail(err);
+    if (blocked) return blocked;
     const reason = err?.name === 'TimeoutError' ? 'timed out' : 'could not be reached';
     return fail(502, `The provider ${reason} (${hostOf(url)})`);
   }
@@ -280,7 +575,7 @@ const postForm = async (
   opts: { basicAuth?: { user: string; pass: string } } = {}
 ): Promise<{ ok: true; data: any } | Fail> => {
   try {
-    const resp = await fetch(url, {
+    const resp = await guardedFetch(url, {
       method: 'POST',
       headers: {
         'User-Agent': USER_AGENT,
@@ -288,11 +583,10 @@ const postForm = async (
         Accept: 'application/json',
         ...(opts.basicAuth ? { Authorization: `Basic ${Buffer.from(`${opts.basicAuth.user}:${opts.basicAuth.pass}`).toString('base64')}` } : {})
       },
-      body: new URLSearchParams(form).toString(),
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+      body: new URLSearchParams(form).toString()
     });
-    const text = await resp.text();
-    if (text.length > 1_000_000) return fail(502, 'The provider response was too large to process');
+    const text = await readBoundedBody(resp, MAX_TOKEN_RESPONSE_BYTES);
+    if (text === null) return fail(502, 'The provider response was too large to process');
     let data: any = null;
     try {
       data = JSON.parse(text);
@@ -305,6 +599,8 @@ const postForm = async (
     }
     return { ok: true, data };
   } catch (err: any) {
+    const blocked = blockedFail(err);
+    if (blocked) return blocked;
     const reason = err?.name === 'TimeoutError' ? 'timed out' : 'could not be reached';
     return fail(502, `The provider ${reason} (${hostOf(url)})`);
   }
@@ -318,7 +614,7 @@ const authedJson = async (
   opts: { token?: string; method?: 'GET' | 'POST'; body?: unknown; headers?: Record<string, string> } = {}
 ): Promise<{ ok: true; data: any } | Fail> => {
   try {
-    const resp = await fetch(url, {
+    const resp = await guardedFetch(url, {
       method: opts.method || 'GET',
       headers: {
         'User-Agent': USER_AGENT,
@@ -328,11 +624,10 @@ const authedJson = async (
         // provider-specific extras (Twitch helix requires a Client-Id header)
         ...(opts.headers || {})
       },
-      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {})
     });
-    const text = await resp.text();
-    if (text.length > 3_000_000) return fail(502, 'The provider response was too large to process');
+    const text = await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
+    if (text === null) return fail(502, 'The provider response was too large to process');
     let data: any = null;
     try {
       data = JSON.parse(text);
@@ -346,6 +641,8 @@ const authedJson = async (
     }
     return { ok: true, data };
   } catch (err: any) {
+    const blocked = blockedFail(err);
+    if (blocked) return blocked;
     const reason = err?.name === 'TimeoutError' ? 'timed out' : 'could not be reached';
     return fail(502, `The provider ${reason} (${hostOf(url)})`);
   }
@@ -473,38 +770,128 @@ const sanitizeHost = (value: unknown): string | null => {
 
 // --- minimal RSS/Atom parsing (well-formed feeds; no new dependencies) ------
 
-const tagContent = (xml: string, tag: string): string | null => {
-  const match = xml.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, 'i'));
-  if (!match) return null;
-  const inner = match[1].trim();
-  const cdata = inner.match(/^<!\[CDATA\[([\s\S]*?)\]\]>$/);
-  return (cdata ? cdata[1] : inner).trim();
+// Every helper below walks the document with indexOf rather than letting a
+// regex backtrack — the same rule stripBlocks/stripTags follow, and for the
+// same reason: this XML is attacker-fetched. The lazy `<tag…>([\s\S]*?)</tag>`
+// and `<tag[^>]*…>` patterns these replace retried from EVERY occurrence of the
+// opening tag when the closing one never arrived, so a body of `<title>`
+// repeated with no `</title>` was quadratic — 256KB cost ~3s, and the response
+// cap is 3MB. Any signed-in account can point the RSS provider at a host it
+// controls, so that was a remote stall of the whole event loop.
+
+// Index just past the `>` that ends the tag whose name ends at `from`, or -1.
+// Quoted attribute values are skipped: XML only requires `<` and `&` to be
+// escaped, so `href="…?a=1>2"` is legal and its `>` does not end the tag. The
+// old `[^>]*` … `"([^"]*)"` pair happened to tolerate that (the VALUE class
+// could cross `>`), and a differential fuzz against it surfaced exactly this
+// case — so the scan is quote-aware rather than truncating such a tag and
+// silently dropping the attribute.
+const tagEndsAt = (xml: string, from: number): number => {
+  let quote = '';
+  for (let at = from; at < xml.length; at += 1) {
+    const char = xml[at];
+    if (quote) {
+      if (char === quote) quote = '';
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '>') {
+      return at + 1;
+    }
+  }
+  return -1;
 };
 
-const tagAttr = (xml: string, tag: string, attr: string): string | null => {
-  const match = xml.match(new RegExp(`<${tag}[^>]*\\s${attr}="([^"]*)"[^>]*/?>`, 'i'));
-  return match ? decodeEntities(match[1]) : null;
-};
-
-// Attribute order in real feeds is arbitrary (<enclosure url=… type=…/> is the
-// common shape) — find the first tag whose full attribute text satisfies
-// `where`, then pull the attribute out separately.
-const tagAttrWhere = (xml: string, tag: string, attr: string, where: RegExp): string | null => {
-  const tags = xml.match(new RegExp(`<${tag}\\b[^>]*/?>`, 'gi')) || [];
-  for (const entry of tags) {
-    if (!where.test(entry)) continue;
-    const match = entry.match(new RegExp(`\\s${attr}="([^"]*)"`, 'i'));
-    if (match) return decodeEntities(match[1]);
+// The next `<tag …>` at or after `from`: its `<` index, the index just past the
+// opening `>`, and the raw tag text. null once no further opening tag exists.
+const nextOpenTag = (
+  xml: string,
+  lower: string,
+  tag: string,
+  from: number
+): { start: number; bodyAt: number; text: string } | null => {
+  // `lower` is the whole document lowercased, so the NAME has to be lowered
+  // too or a mixed-case tag (`pubDate`, `media:thumbnail`) never matches —
+  // the patterns this replaces carried the `i` flag, which covered both sides.
+  const open = `<${tag.toLowerCase()}`;
+  let cursor = from;
+  while (cursor < lower.length) {
+    const start = lower.indexOf(open, cursor);
+    if (start === -1) return null;
+    // the name has to END here: `<link>` and `<link …>` are the `link` tag,
+    // `<linkinfo>` is not (the `\s`/`\b` the old patterns spelled out)
+    const boundary = lower[start + open.length];
+    if (boundary === '>' || (boundary !== undefined && /\s/.test(boundary))) {
+      const bodyAt = tagEndsAt(xml, start + open.length);
+      if (bodyAt === -1) return null; // never terminated — no usable tag follows
+      return { start, bodyAt, text: xml.slice(start, bodyAt) };
+    }
+    cursor = start + open.length;
   }
   return null;
 };
 
+const tagContent = (xml: string, tag: string): string | null => {
+  const lower = xml.toLowerCase();
+  const opened = nextOpenTag(xml, lower, tag, 0);
+  if (!opened) return null;
+  const end = lower.indexOf(`</${tag.toLowerCase()}>`, opened.bodyAt);
+  if (end === -1) return null;
+  const inner = xml.slice(opened.bodyAt, end).trim();
+  const cdata = inner.match(/^<!\[CDATA\[([\s\S]*?)\]\]>$/);
+  return (cdata ? cdata[1] : inner).trim();
+};
+
+// `attr="…"` inside ONE already-bounded tag's text.
+const attrValueIn = (tagText: string, attr: string): string | null => {
+  const lower = tagText.toLowerCase();
+  const needle = `${attr.toLowerCase()}="`;
+  let cursor = 0;
+  while (cursor < lower.length) {
+    const at = lower.indexOf(needle, cursor);
+    if (at === -1) return null;
+    // whitespace before the name, as the old patterns required — so
+    // `data-href="…"` never answers a request for `href`
+    if (at > 0 && /\s/.test(tagText[at - 1])) {
+      const close = tagText.indexOf('"', at + needle.length);
+      if (close === -1) return null;
+      return decodeEntities(tagText.slice(at + needle.length, close));
+    }
+    cursor = at + needle.length;
+  }
+  return null;
+};
+
+// Attribute order in real feeds is arbitrary (<enclosure url=… type=…/> is the
+// common shape) — find the first tag whose full attribute text satisfies
+// `where`, then pull the attribute out separately. Without `where` this is the
+// plain "first <tag> carrying that attribute" lookup.
+const tagAttrWhere = (xml: string, tag: string, attr: string, where?: RegExp): string | null => {
+  const lower = xml.toLowerCase();
+  let cursor = 0;
+  for (;;) {
+    const opened = nextOpenTag(xml, lower, tag, cursor);
+    if (!opened) return null;
+    cursor = opened.bodyAt;
+    if (where && !where.test(opened.text)) continue;
+    const value = attrValueIn(opened.text, attr);
+    if (value !== null) return value;
+  }
+};
+
+const tagAttr = (xml: string, tag: string, attr: string): string | null => tagAttrWhere(xml, tag, attr);
+
 const blocksOf = (xml: string, tag: string): string[] => {
+  const lower = xml.toLowerCase();
+  const close = `</${tag.toLowerCase()}>`;
   const blocks: string[] = [];
-  const pattern = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, 'gi');
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(xml)) && blocks.length < FEED_FETCH_LIMIT * 2) {
-    blocks.push(match[1]);
+  let cursor = 0;
+  while (blocks.length < FEED_FETCH_LIMIT * 2) {
+    const opened = nextOpenTag(xml, lower, tag, cursor);
+    if (!opened) break;
+    const end = lower.indexOf(close, opened.bodyAt);
+    if (end === -1) break;
+    blocks.push(xml.slice(opened.bodyAt, end));
+    cursor = end + close.length;
   }
   return blocks;
 };
@@ -518,7 +905,10 @@ export const parseRssOrAtom = (xml: string): ParsedFeed | null => {
     const headEnd = xml.search(/<entry[\s>]/i);
     const head = headEnd === -1 ? xml : xml.slice(0, headEnd);
     const feedTitle = boundedText(tagContent(head, 'title') || '', MAX_TITLE_CHARS);
-    const feedLink = tagAttr(head, 'link[^>]*rel="alternate"', 'href') || tagAttr(head, 'link', 'href');
+    // `where` rather than a regex fragment smuggled through the tag name, now
+    // that tag names are matched literally — and it no longer requires href to
+    // come after rel, which real feeds do not guarantee
+    const feedLink = tagAttrWhere(head, 'link', 'href', /rel="alternate"/i) || tagAttr(head, 'link', 'href');
     for (const entry of blocksOf(xml, 'entry')) {
       const id = tagContent(entry, 'id') || tagAttr(entry, 'link', 'href') || '';
       if (!id) continue;
@@ -657,7 +1047,11 @@ const rssProvider: ConnectionProvider = {
         displayName: feed.title || host,
         handle: host,
         avatarUrl: null,
-        profileUrl: feed.link,
+        // The feed's own <link href> — fully attacker-controlled, since the
+        // feed is whatever URL the user typed. Every other remote-supplied
+        // link in this file rides webLink for exactly this reason; without it
+        // a `javascript:` href is stored verbatim on the account crystal.
+        profileUrl: webLink(feed.link),
         config: { feedUrl: raw }
       }
     };
@@ -992,7 +1386,11 @@ const mastodonProvider: ConnectionProvider = {
         displayName: boundedText(looked.data.display_name, 120) || `@${acct}`,
         handle: `@${looked.data.acct || acct}@${instance}`,
         avatarUrl: httpsImage(looked.data.avatar),
-        profileUrl: typeof looked.data.url === 'string' ? looked.data.url.slice(0, 1500) : `https://${instance}/@${acct}`,
+        // The instance is whatever host the user named, so `url` is remote
+        // input like every other link here: scheme-check it rather than just
+        // truncating. webLink already caps at 1500, and rejecting an
+        // over-long URL beats storing a silently truncated (broken) one.
+        profileUrl: webLink(looked.data.url) || `https://${instance}/@${acct}`,
         config: { instance, accountId: String(looked.data.id), account: acct }
       }
     };
@@ -1702,7 +2100,25 @@ const redditAccountProvider: ConnectionProvider = {
   }
 };
 
-const mastodonInstance = (): string => envValue('MASTODON_INSTANCE').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+// Normalized exactly like sanitizeHost above — lowercase FIRST, then strip the
+// scheme and any path. The ordering is load-bearing twice over, and this helper
+// is the one place in the file that used to skip it:
+//   • the scheme strip is case-SENSITIVE, so `HTTPS://mastodon.social` kept its
+//     prefix, `/\/.*$/` then cut at the first slash, and the instance became the
+//     literal `HTTPS:` — every authorize/token/timeline URL built from it
+//     (`https://HTTPS:/oauth/authorize`) is unreachable;
+//   • a merely mis-cased `Mastodon.Social` resolves fine over DNS but breaks the
+//     invariant `postNamespace: 'mastodon'` exists to hold: mapMastodonStatus
+//     keys externalIds on `${instance}-${status.id}`, so the same status reached
+//     through the public provider (whose instance came from sanitizeHost, i.e.
+//     lowercase) and through this one would mint TWO external-posts with split
+//     comments — the exact drift the shared namespace is there to prevent. It
+//     would also re-mint providerAccountId (`${instance}:id:…`), so one identity
+//     could hold two external-account things.
+// Both are deployment-config sensitivity rather than user input, which is why
+// the sibling that DOES take user input already normalizes this way.
+const mastodonInstance = (): string =>
+  envValue('MASTODON_INSTANCE').toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 
 const mastodonAccountProvider: ConnectionProvider = {
   id: 'mastodon-account',
@@ -1747,7 +2163,8 @@ const mastodonAccountProvider: ConnectionProvider = {
           displayName: boundedText(me.data.display_name, 120) || `@${me.data.acct}`,
           handle: `@${me.data.acct}@${instance}`,
           avatarUrl: httpsImage(me.data.avatar),
-          profileUrl: typeof me.data.url === 'string' ? me.data.url.slice(0, 1500) : `https://${instance}/@${me.data.acct}`,
+          // Same remote-input rule as the instance-lookup branch above.
+          profileUrl: webLink(me.data.url) || `https://${instance}/@${me.data.acct}`,
           config: { instance }
         }
       };

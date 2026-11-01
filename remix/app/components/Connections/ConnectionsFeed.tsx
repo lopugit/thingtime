@@ -8,7 +8,7 @@ import type { FeedFilterMatch, PostChange, PublicPost } from '~/components/Feed/
 import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
-import { cardStyle, type Connection } from './shared';
+import { appendFeedPage, cardStyle, type Connection } from './shared';
 
 // /connections/feed — browse connected third-party feeds as native Thingtime
 // posts. PostCard renders each external post, so comments and reactions work
@@ -54,8 +54,11 @@ export const ConnectionsFeedPage = () => {
   const [revealed, setRevealed] = React.useState<Set<string>>(() => new Set());
   const [signedOut, setSignedOut] = React.useState(false);
   const requestSeq = React.useRef(0);
-  // one provider-deepening pass per exhausted scroll — reset when the tab
-  // changes or fresh pages arrive
+  // At most ONE automatic provider-deepening pass per tab visit: reset only by
+  // the [activeConnection] effect below, never on page arrival. Scrolling past
+  // the end of a deepened feed therefore stops fanning out to providers instead
+  // of deepening again — the "Fetch older from your apps" button stays the
+  // explicit way to ask for more, and it bypasses this latch entirely.
   const deepenedRef = React.useRef(false);
 
   const load = React.useCallback(
@@ -72,7 +75,10 @@ export const ConnectionsFeedPage = () => {
         });
         if (seq !== requestSeq.current) return;
         const merged = mergeReactionOverlays(startedAt, (resp.posts || []) as PublicPost[]);
-        setPosts((current) => (cursor ? [...current, ...merged] : merged));
+        // appended pages can overlap what is already rendered (see
+        // appendFeedPage) — a plain concat would repeat a post and duplicate
+        // its React key
+        setPosts((current) => (cursor ? appendFeedPage(current, merged) : merged));
         if (!cursor) writeLocalCache(feedCacheKey(connection), merged.slice(0, PAGE_SIZE));
         setNextCursor(resp.nextCursor || null);
         // a narrowed read returns only the selected connection — never let it
@@ -109,7 +115,20 @@ export const ConnectionsFeedPage = () => {
     // (no provider fan-out on the request), then the full read syncs fresh —
     // a second request, because serverless can't background work after a
     // response. The seq guard makes the fresh read supersede cleanly.
-    load(activeConnection, null, true).then(() => load(activeConnection, null));
+    //
+    // The chained call needs its OWN cancellation, because the seq guard cannot
+    // cover it: seq only discards a superseded request's RESULT, and this
+    // `.then` runs on the superseded defer read to START a request. Switching
+    // tabs while the defer read is in flight would let the old tab's follow-up
+    // fire after the new tab's, take the newest seq, and repaint the previous
+    // connection's posts (and its cursor) under the selected tab.
+    let cancelled = false;
+    load(activeConnection, null, true).then(() => {
+      if (!cancelled) load(activeConnection, null);
+    });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConnection, load]);
 
@@ -130,7 +149,10 @@ export const ConnectionsFeedPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConnection]);
 
-  const handlePostChanged = (id: string, next: PostChange) => {
+  // PostCard calls onChanged(id, change) — the id comes FIRST precisely so one
+  // stable handler serves every card (PostCardProps.onChanged), which is why
+  // every other call site passes this straight through rather than wrapping it.
+  const handlePostChanged = React.useCallback((id: string, next: PostChange) => {
     setPosts((current) =>
       current.flatMap((post) => {
         if (post.id !== id) return [post];
@@ -138,7 +160,7 @@ export const ConnectionsFeedPage = () => {
         return value ? [value] : [];
       })
     );
-  };
+  }, []);
 
   const hiddenCount = posts.filter((post) => hideMatches(post).length > 0).length;
   const visible = posts.filter((post) => hideMatches(post).length === 0);
@@ -157,8 +179,16 @@ export const ConnectionsFeedPage = () => {
     }
     const last = posts[posts.length - 1];
     const lastMs = last ? new Date(last.createdAt).getTime() : NaN;
-    // never send a cursor the server would reject — an ignored cursor returns
-    // page 1, which would APPEND already-rendered posts (duplicate keys)
+    // Never send a cursor the server would reject — an ignored cursor returns
+    // page 1, i.e. content the reader has already scrolled past.
+    //
+    // This cursor is deliberately APPROXIMATE in the safe direction. The server
+    // pages membership rows and mints cursors from their `ext-source-…`
+    // shareIds; all the client has is the post's `ext-post-…` id. Since the
+    // chrono tiebreak is `shareId > cursorId` at an equal createdAt, and
+    // `ext-source-…` sorts after `ext-post-…`, the boundary timestamp is
+    // re-read rather than skipped — nothing is ever lost, and appendFeedPage
+    // absorbs the resulting overlap.
     const syntheticCursor = Number.isFinite(lastMs) && lastMs > 0 && last ? `${lastMs}_${last.id}` : null;
     if (!syntheticCursor) return;
     await load(activeConnection, syntheticCursor);
@@ -263,7 +293,7 @@ export const ConnectionsFeedPage = () => {
             />
           );
         }
-        return <PostCard key={post.id} post={post} onChanged={(next) => handlePostChanged(post.id, next)} />;
+        return <PostCard key={post.id} post={post} onChanged={handlePostChanged} />;
       })}
 
       {!visible.length && !loading && !signedOut ? (
