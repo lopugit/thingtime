@@ -2,6 +2,8 @@ import React from 'react';
 import { Button, Flex, IconButton, Input, Select, Text } from '@chakra-ui/react';
 import { X } from 'lucide-react';
 
+import { SEARCHABLE_ROOT_FIELDS, SEARCH_DATATYPES } from '~/schemas/registry';
+
 import type { ConditionRow, RowValueType } from './searchTypes';
 
 // The query-builder core shared by /search and the feed/profile Advanced
@@ -27,9 +29,13 @@ export const OPERATORS: { id: string; label: string; kind: 'value' | 'range' | '
   { id: 'type', label: 'has type', kind: 'type' }
 ];
 
-export const DATATYPES = ['string', 'number', 'boolean', 'date', 'array', 'object', 'null'];
+// Derived from the shared registry lists so the client can't offer a datatype
+// the server rejects, or miss a root field the server searches (shareId was
+// exactly this drift). See schemas/registry.ts SEARCH_DATATYPES /
+// SEARCHABLE_ROOT_FIELDS — the single source shared with things/search.ts.
+export const DATATYPES = [...SEARCH_DATATYPES];
 
-export const ROOT_FIELD_SUGGESTIONS = ['tags', 'thingtime', 'createdAt', 'updatedAt', 'targetId'];
+export const ROOT_FIELD_SUGGESTIONS = [...SEARCHABLE_ROOT_FIELDS];
 
 export const opKind = (op: string) => OPERATORS.find((entry) => entry.id === op)?.kind || 'value';
 
@@ -47,6 +53,13 @@ export const newRow = (partial: Partial<ConditionRow> = {}): ConditionRow => ({
 });
 
 export const PURE_NUMBER = /^-?\d+(\.\d+)?$/;
+
+// Substring/prefix/suffix operators are text-only server-side (search.ts rejects
+// non-string values with a 400). With the default op `contains` + datatype
+// `auto`, a bare numeric/true/false/null value would otherwise coerce to a real
+// number/boolean/null and 400 — wiping the results list — so these ops always
+// keep the raw string regardless of the row's datatype hint.
+export const TEXT_ONLY_OPS = new Set(['contains', 'startsWith', 'endsWith']);
 
 // GUI string → API scalar, honouring the row's datatype hint. 'auto' reads
 // like a developer would: true/false/null literals and pure numbers become
@@ -130,7 +143,8 @@ export const compileRows = (rows: ConditionRow[]): ApiCondition[] | null => {
       continue;
     }
     if (row.valueType !== 'null' && !row.value.trim()) continue;
-    conditions.push({ field, op: row.op, value: coerceValue(row.value, row.valueType) });
+    const valueType = TEXT_ONLY_OPS.has(row.op) ? 'text' : row.valueType;
+    conditions.push({ field, op: row.op, value: coerceValue(row.value, valueType) });
   }
   return conditions.length ? conditions : null;
 };

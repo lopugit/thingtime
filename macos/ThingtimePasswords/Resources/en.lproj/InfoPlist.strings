@@ -1,0 +1,3 @@
+/* Match the raw host name to its unchanged filename; localize the visible name. */
+"CFBundleDisplayName" = "Thingtime";
+"CFBundleName" = "Thingtime";

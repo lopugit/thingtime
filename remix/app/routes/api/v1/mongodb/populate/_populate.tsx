@@ -1,9 +1,10 @@
-import { Flex, Heading } from '@chakra-ui/react';
+import { Flex } from '@chakra-ui/react';
 import { useLocation } from 'react-router';
 import { Submit } from '~/components/API/Submit';
+import { json } from '~/api/http';
+import { requireAdmin } from '~/api/utils/auth/requireAdmin';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import setup, { SETUP_STAGES } from '~/scripts/mongodb/setup';
-
-const routeName = 'Populate';
 
 export default function Index() {
   const { pathname } = useLocation();
@@ -17,7 +18,30 @@ export default function Index() {
   );
 }
 
-const actionExport = async ({ request }) => {
+// POST /api/v1/mongodb/populate — run the seed/setup script. This mutates the
+// live database: it registers fixture users whose passwords are known constants
+// and seeds showcase posts/schemas (app/scripts/mongodb/setup + data/*). On a
+// self-hosted/production deploy an anonymous caller must never be able to seed
+// known-credential accounts into the live DB, so this is admin-only and rate
+// limited fail-closed — mirroring the sibling mongodb/raw-results route.
+const actionExport = async ({ request }: { request: Request }) => {
+  const gate = await requireAdmin(request);
+  if ('error' in gate) return json({ ok: false, error: gate.error.message }, { status: gate.error.status });
+
+  const limit = await enforceRateLimit(request, 'mongodb.populate', `user:${gate.user.id}`, { failClosed: true });
+  if (!limit.allowed) {
+    if (limit.unavailable) {
+      return json(
+        { ok: false, error: 'The database seed limiter is temporarily unavailable. Please try again shortly.' },
+        { status: 503, headers: { 'Retry-After': '5' } }
+      );
+    }
+    return json(
+      { ok: false, error: 'Seeding is heavy — please wait a moment before running it again 🌸' },
+      rateLimitedResponseInit(limit)
+    );
+  }
+
   // Run the setup.ts seeder, time-boxed: serverless functions get a hard
   // platform budget, so each invocation seeds what fits (default 8s) and
   // reports complete: false when it ran out — every write is idempotent, so
@@ -40,35 +64,10 @@ const actionExport = async ({ request }) => {
   });
 
   if (!ret) {
-    return earlyReturn({
-      status: 500,
-      message: `failed to setup mongodb`
-    });
+    return json({ ok: false, error: 'failed to setup mongodb' }, { status: 500 });
   }
 
-  return earlyReturn({
-    status: 200,
-    message: `successful`,
-    data: {
-      ret
-    }
-  });
-};
-
-const earlyReturn = (args) => {
-  return {
-    status: args?.status || 200,
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: {
-      message: `Early return triggered in ${routeName} action` + (args?.message ? `: ${args.message}` : ''),
-      data: args?.data
-    },
-    cache: {
-      revalidate: 60
-    }
-  };
+  return json({ ok: true, message: 'successful', data: { ret } });
 };
 
 export const action = actionExport;

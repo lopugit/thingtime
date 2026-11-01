@@ -1,4 +1,5 @@
 import { json } from '~/api/http';
+import { safeErrorText } from '~/api/utils/errors/safeError';
 import { fetchRemoteJson, resolveStatusTarget } from '~/api/utils/health/statusTarget';
 import { getVercelDeploymentStatus, type VercelDeploymentStatus } from '~/api/utils/vercel/status';
 
@@ -6,7 +7,7 @@ const unavailableVercelStatus = (error: unknown): VercelDeploymentStatus => {
   return {
     configured: false,
     hasError: true,
-    error: error instanceof Error ? error.message : String(error),
+    error: safeErrorText(error, 'health: remote vercel status', 'Remote status unavailable'),
     label: 'Vercel: status unavailable',
     state: 'unknown'
   };

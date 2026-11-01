@@ -121,7 +121,10 @@ export const useAdvancedFilters = () => {
       });
       return;
     }
-    setApplied(advancedFiltersActive(current) ? current : null);
+    // snapshot a fresh reference every Apply — an unchanged draft would
+    // otherwise be the same object, React bails on the identical state, and the
+    // pager effect never re-runs, so re-clicking Search to refresh does nothing
+    setApplied(advancedFiltersActive(current) ? { ...current, rows: [...current.rows] } : null);
   }, []);
 
   const clear = React.useCallback(() => {

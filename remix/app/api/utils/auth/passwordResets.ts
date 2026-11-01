@@ -1,3 +1,5 @@
+import { resetVaultPassword } from './vaultKeys';
+import { ownerVaultConfigured } from './vaultCipher';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 import {
@@ -7,16 +9,16 @@ import {
 } from '../mongodb/collections';
 
 import { hashPassword } from './passwords';
-import { newAuthToken } from './tokens';
-import { setUserPasswordHash } from './users';
+import { revokedSessionPipeline } from './sessions';
+import { consumeSingleUseToken, createSingleUseToken, type ConsumeTokenResult } from './singleUseTokens';
+import { findUserById, readUserVaultKey, setUserPasswordHash } from './users';
 
 const ONE_HOUR_MS = 1000 * 60 * 60;
 
-const newToken = newAuthToken;
-
-// Issue a single-use, time-limited password reset token — mirrors the
-// emailVerifications token pattern (single-use burn, short TTL).
-export const createPasswordReset = async ({
+// Issue a single-use, time-limited password reset token. Thin wrapper over the
+// shared single-use-token helper (see singleUseTokens.ts) — the same machinery
+// behind email verification, so a hardening fix reaches both credentials.
+export const createPasswordReset = ({
   userId,
   email,
   expiresInMs = ONE_HOUR_MS
@@ -24,47 +26,20 @@ export const createPasswordReset = async ({
   userId: string;
   email: string;
   expiresInMs?: number;
-}) => {
-  const now = new Date();
-  const doc = {
-    token: newToken(),
-    userId,
-    email: email.trim().toLowerCase(),
+}) =>
+  createSingleUseToken({
+    getCollection: getPasswordResetsCollection,
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.passwordResets,
-    createdAt: now,
-    expiresAt: new Date(now.getTime() + expiresInMs),
-    consumedAt: null as Date | null
-  };
-  await (await getPasswordResetsCollection()).insertOne(doc);
-  return doc;
-};
+    userId,
+    email,
+    expiresInMs
+  });
 
-export type ConsumePasswordResetResult =
-  | { ok: true; userId: string; email: string }
-  | { ok: false; reason: 'invalid' | 'used' | 'expired' };
+export type ConsumePasswordResetResult = ConsumeTokenResult;
 
 // Validate + burn a reset token atomically (two racing submits: one wins).
-export const consumePasswordReset = async (token: string): Promise<ConsumePasswordResetResult> => {
-  const coll = await getPasswordResetsCollection();
-  const now = new Date();
-
-  const consumed = await coll.findOneAndUpdate(
-    {
-      token,
-      consumedAt: null,
-      expiresAt: { $gt: now }
-    },
-    { $set: { consumedAt: now } },
-    { returnDocument: 'after' }
-  );
-
-  if (consumed) return { ok: true, userId: consumed.userId, email: consumed.email };
-
-  const doc = await coll.findOne({ token });
-  if (!doc) return { ok: false, reason: 'invalid' };
-  if (doc.consumedAt) return { ok: false, reason: 'used' };
-  return { ok: false, reason: 'expired' };
-};
+export const consumePasswordReset = (token: string): Promise<ConsumePasswordResetResult> =>
+  consumeSingleUseToken(getPasswordResetsCollection, token);
 
 // Apply the new password and invalidate every other live credential for the
 // user — a reset is a credential rotation, so stolen cookies/tokens must stop
@@ -74,11 +49,24 @@ export const consumePasswordReset = async (token: string): Promise<ConsumePasswo
 // so the caller must not report success.
 export const applyPasswordReset = async (userId: string, password: string): Promise<boolean> => {
   const now = new Date();
-  const rotated = await setUserPasswordHash(userId, await hashPassword(password));
+  if (!await findUserById(userId)) return false;
+  if (!ownerVaultConfigured() && await readUserVaultKey(userId)) {
+    throw new Error('Restore the configured vault recovery key before resetting this password.');
+  }
+  const hash = await hashPassword(password);
+  const rotated = ownerVaultConfigured()
+    ? await resetVaultPassword(userId, password, hash).then(() => true)
+    : await setUserPasswordHash(userId, hash);
   if (!rotated) return false;
   await Promise.all([
-    // revoke live sessions (stolen cookies/bearer tokens stop working)
-    (await getSessionsCollection()).updateMany({ userId, revokedAt: null }, { $set: { revokedAt: now } }),
+    // Revoke live sessions (stolen cookies/bearer tokens stop working). This is
+    // the one sweep that hits every purpose the user owns at once, including the
+    // never-expiring ones (service accounts, PATs, the ChatGPT MCP bridge), so
+    // it is also the widest source of unreapable rows: the sessions TTL index
+    // skips expiresAt: null, and a plain `$set: { revokedAt }` would strand each
+    // of those documents in Mongo forever. revokedSessionPipeline fills a missing
+    // expiry and preserves a real one, so a browser session keeps its own TTL.
+    (await getSessionsCollection()).updateMany({ userId, revokedAt: null }, revokedSessionPipeline(now)),
     // burn any other unconsumed reset tokens for this user — a captured second
     // link must not let someone rotate the password right back
     (await getPasswordResetsCollection()).updateMany(

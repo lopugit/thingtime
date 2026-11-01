@@ -1,6 +1,11 @@
 packages:
   - .
 
+# Never block a non-interactive install (PM2, agent shells, fresh worktree
+# bootstraps) on the modules-purge confirmation prompt — without a TTY that
+# prompt aborts with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY.
+confirmModulesPurge: false
+
 # Vercel enforces pnpm's minimum release-age policy during preview installs.
 # These exact versions are locked by Vite 8.1.2 and were intentionally selected
 # for the Nitro migration; future fresh rolldown releases remain blocked.

@@ -3,7 +3,9 @@ import { Box, Button, Center, Flex, Text } from '@chakra-ui/react';
 import { Link, useNavigate } from 'react-router';
 import { SlidersHorizontal } from 'lucide-react';
 
+import { ActivityHeatmap } from './ActivityHeatmap';
 import { EditProfileModal } from './EditProfileModal';
+import { RelationshipControls } from './RelationshipControls';
 import {
   AdvancedFilters,
   advancedSearchBody,
@@ -13,11 +15,18 @@ import {
 } from '~/components/Feed/AdvancedFilters';
 import { PostComposer } from '~/components/Feed/PostComposer';
 import { PostList } from '~/components/Feed/PostList';
+import { mergeReactionOverlays } from '~/components/Feed/reactionOverlay';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { useThingtime } from '~/components/Thingtime/useThingtime';
+import { useTtTheme } from '~/hooks/useTtTheme';
 import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
+import { isWearingTryOn, nextTryOnRun, restoredThemeSettings } from './themeTryOnCore';
+import type { WornTheme } from './themeTryOnCore';
+import { appendPostsDeduped } from '~/components/Feed/feedTypes';
 import type { PostChange, PublicPost, PublicProfile } from '~/components/Feed/feedTypes';
+import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName, getUserIdentityDetail, getUserMention } from '~/utils/userIdentity';
 
 // Full profile page. SELF mode (no username param, or the param is the logged-in
 // user) shows email/verification + edit/logout controls; PUBLIC mode fetches the
@@ -32,7 +41,7 @@ export type ProfilePageProps = {
 type RemoteProfileState =
   | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'loaded'; profile: PublicProfile; postCount: number }
+  | { status: 'loaded'; profile: PublicProfile; postCount: number; wornTheme: WornTheme | null }
   | { status: 'missing' };
 
 const POSTS_PAGE_SIZE = 20;
@@ -60,15 +69,9 @@ export const ProfileBanner = (props: { bannerUrl: string | null; height: string 
       flexShrink={0}
     >
       {src ? (
-        <Box as="img" src={src} alt="" width="100%" height="100%" objectFit="cover" display="block" />
+				<Box as="img" src={src} alt="" referrerPolicy="no-referrer" width="100%" height="100%" objectFit="cover" display="block" />
       ) : (
-        <Box
-          width="100%"
-          height="100%"
-          background={RAINBOW}
-          backgroundSize="calc(100px + 200%)"
-          sx={{ animation: RAINBOW_ANIM }}
-        />
+				<Box width="100%" height="100%" background={RAINBOW} backgroundSize="calc(100px + 200%)" sx={{ animation: RAINBOW_ANIM }} />
       )}
     </Box>
   );
@@ -76,13 +79,7 @@ export const ProfileBanner = (props: { bannerUrl: string | null; height: string 
 
 // Avatar circle: image when a URL is set, rainbow initial otherwise (the
 // UserAvatarCircle idiom, sized). Shared with EditProfileModal's live preview.
-export const ProfileAvatarCircle = (props: {
-  avatarUrl: string | null;
-  name: string;
-  size: string;
-  fontSize?: string;
-  borderWidth?: string;
-}) => {
+export const ProfileAvatarCircle = (props: { avatarUrl: string | null; name: string; size: string; fontSize?: string; borderWidth?: string }) => {
   const src = (props.avatarUrl || '').trim();
   const initial = (props.name || '?').trim().charAt(0).toUpperCase() || '?';
 
@@ -100,20 +97,13 @@ export const ProfileAvatarCircle = (props: {
       fontWeight={700}
       fontSize={props.fontSize || '2xl'}
     >
-      {src ? <Box as="img" src={src} alt="" width="100%" height="100%" objectFit="cover" display="block" /> : initial}
+			{src ? <Box as="img" src={src} alt="" referrerPolicy="no-referrer" width="100%" height="100%" objectFit="cover" display="block" /> : initial}
     </Center>
   );
 };
 
 const Eyebrow = (props: { children: React.ReactNode }) => (
-  <Text
-    fontFamily="mono"
-    fontSize="10px"
-    fontWeight={600}
-    letterSpacing="0.08em"
-    textTransform="uppercase"
-    color="var(--tt-muted, #9a9aa6)"
-  >
+	<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color="var(--tt-muted, #9a9aa6)">
     {props.children}
   </Text>
 );
@@ -152,7 +142,11 @@ export const ProfilePage = (props: ProfilePageProps) => {
           setRemote({
             status: 'loaded',
             profile: resp.profile,
-            postCount: typeof resp?.postCount === 'number' ? resp.postCount : 0
+            postCount: typeof resp?.postCount === 'number' ? resp.postCount : 0,
+            wornTheme:
+              resp?.wornTheme && typeof resp.wornTheme.id === 'string' && typeof resp.wornTheme.name === 'string'
+                ? { id: resp.wornTheme.id, name: resp.wornTheme.name }
+                : null
           });
         } else {
           setRemote({ status: 'missing' });
@@ -166,6 +160,100 @@ export const ProfilePage = (props: ProfilePageProps) => {
       cancelled = true;
     };
   }, [username, isSelf, getProfile]);
+
+  // "Wear my theme" (claude-todo/10 ✨): the profile owner's active PUBLIC
+  // theme, worn as a chip. Public profiles get it from the profile payload
+  // (server resolves it through the share-link gate); self profiles resolve
+  // their own activeThemeId — getShared with the session cookie also resolves
+  // the owner's private theme, which is correct for their own eyes.
+  const getSharedTheme = api.v1.themes.getShared;
+  const [selfWorn, setSelfWorn] = React.useState<WornTheme | null>(null);
+
+  React.useEffect(() => {
+    const activeId = isSelf && user?.activeThemeId ? user.activeThemeId : null;
+    if (!activeId) {
+      setSelfWorn(null);
+      return;
+    }
+    let cancelled = false;
+    getSharedTheme({ id: activeId })
+      .then((resp: any) => {
+        if (!cancelled) setSelfWorn(resp?.ok && resp?.theme ? { id: resp.theme.id, name: resp.theme.name } : null);
+      })
+      .catch(() => {
+        if (!cancelled) setSelfWorn(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSelf, user?.activeThemeId, getSharedTheme]);
+
+  const wornTheme: WornTheme | null = isSelf ? selfWorn : remote.status === 'loaded' ? remote.wornTheme : null;
+
+  // Try-on with an always-available revert: clicking the chip applies the
+  // owner's theme (snapshotting the visitor's settings.theme first); clicking
+  // it again restores the snapshot. A toast-button flow would expire in
+  // seconds — the chip itself is the keep/revert control.
+  const { applyThemeDoc } = useTtTheme();
+  const { thingtime, setThingtime, getThingtime } = useThingtime();
+
+  // Both halves of the try-on live in persisted `settings.*`, not component
+  // state: `settings.theme` is written through to localforage, so a try-on
+  // survives navigating away, but a React ref does not. With the snapshot in a
+  // ref, leaving the profile and coming back showed the chip in its "try on"
+  // state again, and a second click snapshotted the ALREADY-WORN foreign theme
+  // as the revert target — the visitor's own look became unrecoverable from the
+  // one control that advertises it. Deriving both from persisted state keeps
+  // "click again to take it off" true across navigation and reloads.
+  //
+  // An open RUN (the held look plus the share id it borrowed), not the applied
+  // share id alone, is what the chip reads — see themeTryOnCore for why the
+  // share id alone mislabels a visitor who simply wears the same theme as the
+  // owner, and why a run has to end once they adopt a look of their own.
+  const currentThemeSettings = thingtime?.settings?.theme;
+  const tryOnRun = thingtime?.settings?.themeBeforeTryOn;
+  const tryingOn = isWearingTryOn({ wornTheme, currentTheme: currentThemeSettings, run: tryOnRun });
+
+  const handleWornChipClick = React.useCallback(async () => {
+    if (!wornTheme) return;
+    if (isSelf) {
+      navigate('/themes');
+      return;
+    }
+    if (tryingOn) {
+      const openRun = getThingtime('settings.themeBeforeTryOn');
+      setThingtime('settings.theme', restoredThemeSettings(openRun, getThingtime('settings.theme')), {
+        ignoreUndoRedo: true,
+        namespace: 'theme'
+      });
+      setThingtime('settings.themeBeforeTryOn', null, { ignoreUndoRedo: true, namespace: 'theme' });
+      lopuRef.current({ title: 'Back to your own look ✨', status: 'success' });
+      return;
+    }
+    try {
+      const resp: any = await getSharedTheme({ id: wornTheme.id });
+      if (!resp?.ok || !resp?.theme?.theme) {
+        lopuRef.current({ title: 'That theme is no longer shared 🌫️', status: 'error' });
+        return;
+      }
+      // Open or continue the run, then borrow. Hopping to a second profile
+      // while a run is open advances only the borrowed id, so the original
+      // look stays the revert target — while a visitor who arrived already
+      // wearing a shared theme (share link, gallery, cross-device pickup), or
+      // who has since adopted a look of their own, gets THAT captured, so
+      // take-off returns them to what they were actually wearing.
+      const run = nextTryOnRun(getThingtime('settings.themeBeforeTryOn'), getThingtime('settings.theme'), resp.theme.id);
+      setThingtime('settings.themeBeforeTryOn', run, { ignoreUndoRedo: true, namespace: 'theme' });
+      applyThemeDoc(resp.theme.theme, { shareId: resp.theme.id });
+      lopuRef.current({
+        title: `Trying on "${resp.theme.name}" 🌈`,
+        description: 'Click the chip again to take it off, or keep it and tweak in /themes.',
+        status: 'success'
+      });
+    } catch {
+      lopuRef.current({ title: 'That theme could not be loaded 🌧️', status: 'error' });
+    }
+  }, [wornTheme, isSelf, tryingOn, navigate, getSharedTheme, getThingtime, setThingtime, applyThemeDoc]);
 
   // posts pager — self posts load immediately; public posts wait for the
   // profile to resolve so a missing user never fires a second failing fetch
@@ -191,14 +279,12 @@ export const ProfilePage = (props: ProfilePageProps) => {
   const appliedAdvanced = advancedFilters.applied;
 
   const loadPage = React.useCallback(
-    async (
-      targetUsername: string,
-      cursor: string | null,
-      generation: number,
-      advancedState: AdvancedFiltersState | null
-    ) => {
+		async (targetUsername: string, cursor: string | null, generation: number, advancedState: AdvancedFiltersState | null) => {
       if (loadingRef.current) return;
       loadingRef.current = true;
+      // stamp the START — responses snapshotted before a reaction tap that
+      // lands after it merge through the viewer's overlay, never clobber it
+      const startedAt = Date.now();
       setPostsLoading(true);
 
       try {
@@ -213,12 +299,8 @@ export const ProfilePage = (props: ProfilePageProps) => {
           });
           if (generationRef.current !== generation) return;
 
-          const page: PublicPost[] = searchResponsePosts(resp);
-          setPosts((prev) => {
-            if (!cursor) return page;
-            const seen = new Set(prev.map((post) => post.id));
-            return [...prev, ...page.filter((post) => !seen.has(post.id))];
-          });
+          const page: PublicPost[] = mergeReactionOverlays(startedAt, searchResponsePosts(resp));
+          setPosts((prev) => appendPostsDeduped(cursor ? prev : [], page));
           nextCursorRef.current = resp?.nextCursor ?? null;
           setNextCursor(resp?.nextCursor ?? null);
           return;
@@ -231,8 +313,8 @@ export const ProfilePage = (props: ProfilePageProps) => {
         });
         if (generationRef.current !== generation) return;
 
-        const page: PublicPost[] = Array.isArray(resp?.posts) ? resp.posts : [];
-        setPosts((prev) => (cursor ? [...prev, ...page] : page));
+        const page: PublicPost[] = mergeReactionOverlays(startedAt, Array.isArray(resp?.posts) ? resp.posts : []);
+        setPosts((prev) => appendPostsDeduped(cursor ? prev : [], page));
         nextCursorRef.current = resp?.nextCursor ?? null;
         setNextCursor(resp?.nextCursor ?? null);
         if (typeof resp?.postCount === 'number') setPostCount(resp.postCount);
@@ -319,7 +401,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
     // Switcher semantics: with other accounts signed in the next one takes
     // over — stay put and let the page re-render on it.
     if (resp?.user) {
-      lopu({ title: `Logged out — switched to @${resp.user.username} ✨`, status: 'success', duration: 6000 });
+      lopu({ title: `Logged out — switched to ${getUserMention(resp.user)} ✨`, status: 'success', duration: 6000 });
       return;
     }
     navigate('/login');
@@ -340,23 +422,8 @@ export const ProfilePage = (props: ProfilePageProps) => {
   // previous routes/profile.tsx
   if (!user && !username) {
     return (
-      <Flex
-        minHeight="100vh"
-        width="100%"
-        align="center"
-        justify="center"
-        direction="column"
-        gap={4}
-        background="var(--tt-surface, #fafafb)"
-      >
-        <Box
-          fontFamily="heading"
-          fontSize="xs"
-          fontWeight="600"
-          letterSpacing="0.14em"
-          textTransform="uppercase"
-          color="var(--tt-muted, #9a9aa6)"
-        >
+			<Flex minHeight="100vh" width="100%" align="center" justify="center" direction="column" gap={4} background="var(--tt-surface, #fafafb)">
+				<Box fontFamily="heading" fontSize="xs" fontWeight="600" letterSpacing="0.14em" textTransform="uppercase" color="var(--tt-muted, #9a9aa6)">
           Thingtime · Profile
         </Box>
         <Box
@@ -454,12 +521,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
   if (!isSelf && remote.status !== 'loaded') {
     return pageShell(
       <>
-        <Box
-          width="100%"
-          height={['140px', '220px']}
-          borderRadius="var(--tt-radius-lg, 16px)"
-          background="var(--tt-surface-alt, #f5f5f7)"
-        />
+				<Box width="100%" height={['140px', '220px']} borderRadius="var(--tt-radius-lg, 16px)" background="var(--tt-surface-alt, #f5f5f7)" />
         <Text mt={4} px={[4, 6]} fontSize="sm" color="var(--tt-muted, #9a9aa6)">
           Loading profile ⏳
         </Text>
@@ -472,6 +534,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
       ? {
           username: user.username,
           displayName: user.displayName,
+          temporary: user.temporary,
           bio: user.bio,
           avatarUrl: user.avatarUrl,
           bannerUrl: user.bannerUrl,
@@ -482,6 +545,8 @@ export const ProfilePage = (props: ProfilePageProps) => {
         : null;
 
   if (!profile) return null;
+
+  const temporaryProfile = profile.temporary === true;
 
   const joinedLabel = formatJoined(profile.createdAt);
   const shownPostCount = postCount ?? (remote.status === 'loaded' ? remote.postCount : null);
@@ -495,22 +560,17 @@ export const ProfilePage = (props: ProfilePageProps) => {
       <ProfileBanner bannerUrl={profile.bannerUrl} height={['140px', '220px']} />
 
       <Flex px={[4, 6]} marginTop="-48px" position="relative" zIndex={1}>
-        <ProfileAvatarCircle
-          avatarUrl={profile.avatarUrl}
-          name={profile.displayName || profile.username}
-          size="96px"
-          borderWidth="4px"
-        />
+				<ProfileAvatarCircle avatarUrl={profile.avatarUrl} name={getUserDisplayName(profile)} size="96px" borderWidth="4px" />
       </Flex>
 
       <Box px={[4, 6]} pt={3} whiteSpace="normal">
         <Text fontFamily="heading" fontSize="2xl" fontWeight={700} letterSpacing="-0.02em" color="var(--tt-ink, #16161a)">
-          {profile.displayName || profile.username}
+          {getUserDisplayName(profile)}
         </Text>
         <Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">
-          @{profile.username}
+          {getUserIdentityDetail(profile)}
         </Text>
-        {isSelf && user && (
+        {isSelf && user && !temporaryProfile && user.hideEmailOnProfile === false && (
           <Text mt={1} fontSize="sm" color="var(--tt-text, #5a5a66)">
             {user.email} {user.emailVerified ? '✅' : '· ✉️ unverified'}
           </Text>
@@ -520,7 +580,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
           <Text mt={3} fontSize="sm" color="var(--tt-text, #5a5a66)" whiteSpace="pre-wrap">
             {profile.bio}
           </Text>
-        ) : isSelf ? (
+        ) : isSelf && !temporaryProfile ? (
           <Text mt={3} fontSize="sm" color="var(--tt-muted, #9a9aa6)">
             No bio yet ✍️
           </Text>
@@ -532,7 +592,83 @@ export const ProfilePage = (props: ProfilePageProps) => {
           </Text>
         )}
 
-        {isSelf && user ? (
+        {/* follower/following/friend counts + follow/friend actions (and the
+        pending friend-request inbox on your own profile) */}
+        {!temporaryProfile && <RelationshipControls username={profile.username} isSelf={isSelf} />}
+
+        {wornTheme && (
+          <Box
+            as="button"
+            type="button"
+            onClick={handleWornChipClick}
+            mt={3}
+            p="1.5px"
+            borderRadius="999px"
+            background={RAINBOW}
+            backgroundSize="calc(100px + 200%)"
+            sx={{ animation: RAINBOW_ANIM }}
+            cursor="pointer"
+            display="inline-flex"
+            title={
+              isSelf
+                ? 'Your active theme — open the Theme Studio'
+                : tryingOn
+                  ? 'Take their theme off'
+                  : 'Preview Thingtime through their eyes'
+            }
+          >
+            <Flex
+              alignItems="center"
+              columnGap="6px"
+              px={3}
+              py="5px"
+              borderRadius="999px"
+              background="var(--tt-card, #fff)"
+              fontSize="13px"
+              fontWeight={600}
+              color="var(--tt-text, #5a5a66)"
+              transition="background 140ms ease"
+              _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
+            >
+              {isSelf
+                ? `Wearing "${wornTheme.name}" 🌈`
+                : tryingOn
+                  ? `Wearing "${wornTheme.name}" ✓ — take it off`
+                  : `Wearing "${wornTheme.name}" 🌈 — try it on`}
+            </Flex>
+          </Box>
+        )}
+
+        {isSelf && user?.temporary ? (
+          <Flex mt={4} columnGap={2} rowGap={2} flexWrap="wrap">
+            <Link to="/login">
+              <Button
+                size="sm"
+                color="white"
+                fontFamily="heading"
+                fontWeight="600"
+                background={RAINBOW}
+                backgroundSize="calc(100px + 200%)"
+                sx={{ animation: RAINBOW_ANIM }}
+                _hover={{ opacity: 0.9 }}
+                borderRadius="var(--tt-radius-md, 12px)"
+              >
+                {LOGIN_TO_CLAIM_LABEL}
+              </Button>
+            </Link>
+            <Link to="/register">
+              <Button
+                size="sm"
+                variant="outline"
+                borderColor="var(--tt-border, #ececef)"
+                _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
+                borderRadius="var(--tt-radius-md, 12px)"
+              >
+                Create account
+              </Button>
+            </Link>
+          </Flex>
+        ) : isSelf && user ? (
           <Flex mt={4} columnGap={2} rowGap={2} flexWrap="wrap">
             <Button
               size="sm"
@@ -551,6 +687,16 @@ export const ProfilePage = (props: ProfilePageProps) => {
             <Button
               size="sm"
               variant="outline"
+              onClick={() => navigate('/settings')}
+              borderColor="var(--tt-border, #ececef)"
+              _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
+              borderRadius="var(--tt-radius-md, 12px)"
+            >
+              All settings ⚙️
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={handleLogout}
               borderColor="var(--tt-border, #ececef)"
               _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
@@ -558,7 +704,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
             >
               Log out 🗝️
             </Button>
-            {!user.emailVerified && (
+            {!user.emailVerified && !user.temporary && (
               <Button
                 size="sm"
                 variant="outline"
@@ -572,34 +718,37 @@ export const ProfilePage = (props: ProfilePageProps) => {
               </Button>
             )}
           </Flex>
-        ) : (
-          <Text mt={4} fontSize="sm" color="var(--tt-muted, #9a9aa6)">
-            Say hi in the feed 👋
-          </Text>
-        )}
+        ) : null}
       </Box>
+
+      {/* contribution heatmap of this profile's viewer-visible things — renders
+      nothing until counts exist, so profiles with no visible activity keep
+      their current layout */}
+      {!temporaryProfile && <ActivityHeatmap username={profile.username} />}
 
       <Box mt={8}>
         <Flex mb={3} px={[4, 6]} alignItems="center" columnGap={2}>
           <Eyebrow>Posts</Eyebrow>
-          <Button
-            size="xs"
-            variant="outline"
-            marginLeft="auto"
-            fontWeight={600}
-            color={advancedFilters.open || appliedAdvanced ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
-            borderColor="var(--tt-border, #ececef)"
-            borderRadius="var(--tt-radius-md, 12px)"
-            background={advancedFilters.open ? 'var(--tt-surface-alt, #f5f5f7)' : 'var(--tt-card, #ffffff)'}
-            _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
-            leftIcon={<SlidersHorizontal size={12} />}
-            onClick={() => advancedFilters.toggle()}
-          >
-            {appliedAdvanced ? 'Advanced · on 🔬' : 'Advanced 🔬'}
-          </Button>
+          {!temporaryProfile && (
+            <Button
+              size="xs"
+              variant="outline"
+              marginLeft="auto"
+              fontWeight={600}
+              color={advancedFilters.open || appliedAdvanced ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
+              borderColor="var(--tt-border, #ececef)"
+              borderRadius="var(--tt-radius-md, 12px)"
+              background={advancedFilters.open ? 'var(--tt-surface-alt, #f5f5f7)' : 'var(--tt-card, #ffffff)'}
+              _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
+              leftIcon={<SlidersHorizontal size={12} />}
+              onClick={() => advancedFilters.toggle()}
+            >
+              {appliedAdvanced ? 'Advanced · on 🔬' : 'Advanced 🔬'}
+            </Button>
+          )}
         </Flex>
 
-        {advancedFilters.open && (
+        {!temporaryProfile && advancedFilters.open && (
           <Box mb={4}>
             <AdvancedFilters
               value={advancedFilters.draft}
@@ -624,13 +773,11 @@ export const ProfilePage = (props: ProfilePageProps) => {
           hasMore={Boolean(nextCursor)}
           onLoadMore={handleLoadMore}
           onPostChanged={handlePostChanged}
-          emptyLabel={
-            appliedAdvanced ? 'Nothing matched — loosen a filter, or try plain words ✨' : 'No posts yet 📭'
-          }
+					emptyLabel={appliedAdvanced ? 'Nothing matched — loosen a filter, or try plain words ✨' : 'No posts yet 📭'}
         />
       </Box>
 
-      {isSelf && user && <EditProfileModal open={editOpen} onClose={() => setEditOpen(false)} />}
+      {isSelf && user && !temporaryProfile && <EditProfileModal open={editOpen} onClose={() => setEditOpen(false)} />}
     </>
   );
 };

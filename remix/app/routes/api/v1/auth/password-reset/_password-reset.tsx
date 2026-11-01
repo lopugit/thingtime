@@ -1,5 +1,6 @@
 import { json, readJsonBody } from '~/api/http';
 
+import { resolveTrustedOrigin } from '~/api/utils/auth/appOrigin';
 import { shouldShowDevVerificationLink } from '~/api/utils/auth/devVerification';
 import { sendPasswordResetEmail } from '~/api/utils/auth/email';
 import { createPasswordReset } from '~/api/utils/auth/passwordResets';
@@ -25,7 +26,9 @@ export const action = async ({ request }: { request: Request }) => {
 
   const body = await readJsonBody(request, MAX_BODY_BYTES);
   const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-  const origin = new URL(request.url).origin;
+  // Trusted origin (APP_URL-first) — never the raw Host header, or a spoofed
+  // Host would redirect the single-use reset token to an attacker origin.
+  const origin = resolveTrustedOrigin(request);
 
   let resetLink: string | undefined;
   if (email) {

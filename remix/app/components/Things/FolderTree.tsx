@@ -1,0 +1,173 @@
+import React, { useState } from 'react';
+
+import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+
+import type { ThingsThing } from './thingsCore';
+import { isFolder, thingDisplayName, thingIcon } from './thingsCore';
+import type { ThingsItemHandlers } from './ThingsViews';
+import { ItemMenu, ItemSelection } from './ThingsViews';
+import { browseClickIntent, BROWSE_CONTROLS_SX } from './browseInteraction';
+
+// Collapsible folder tree — the desktop sidebar AND the Move dialog's picker
+// (pick mode). Data comes from the page's folderPages map (one listing per
+// folder, folders filtered out of it here); expanding a node asks the page to
+// load that folder if it hasn't been fetched yet.
+
+// Drag-and-drop wiring (sidebar only — the Move dialog picker passes none):
+// every node is a drop target for the page's item drag, null = the root row.
+export type FolderTreeDnd = {
+  // folder id currently hovered by a drag (null = root row, undefined = none)
+  dropTargetId: string | null | undefined;
+  onDragOver: (folderId: string | null, event: React.DragEvent) => void;
+  onDragLeave: (folderId: string | null) => void;
+  onDrop: (folderId: string | null, event: React.DragEvent) => void;
+};
+
+export type FolderTreeProps = {
+  // folder listing per key ('root' or folder shareId); undefined = not loaded
+  itemsFor: (folderId: string | null) => ThingsThing[] | undefined;
+  ensureLoaded: (folderId: string | null) => void;
+  currentFolderId: string | null;
+  onPick: (folderId: string | null) => void;
+  // ids that can't be picked (the selection being moved + its descendants are
+  // enforced server-side; disabling the exact ids here keeps the UI honest)
+  disabledIds?: Set<string>;
+  rootLabel?: string;
+  dnd?: FolderTreeDnd;
+  onNewFolder?: (parentId: string | null) => void;
+  // Browse-only controls; Move dialog pickers keep their existing selection.
+  handlers?: ThingsItemHandlers;
+};
+
+const dndProps = (folderId: string | null, dnd?: FolderTreeDnd) =>
+  dnd
+    ? {
+        onDragOver: (event: React.DragEvent) => dnd.onDragOver(folderId, event),
+        onDragLeave: () => dnd.onDragLeave(folderId),
+        onDrop: (event: React.DragEvent) => dnd.onDrop(folderId, event)
+      }
+    : {};
+
+const dndHighlight = (folderId: string | null, dnd?: FolderTreeDnd) =>
+  dnd && dnd.dropTargetId === folderId
+    ? { boxShadow: 'inset 0 0 0 2px var(--tt-accent, #f472b6)', background: 'var(--tt-accent-soft, rgba(244, 114, 182, 0.14))' }
+    : {};
+
+const TreeNode = ({
+  folder,
+  depth,
+  props
+}: {
+  folder: ThingsThing;
+  depth: number;
+  props: FolderTreeProps;
+}) => {
+  const [open, setOpen] = useState(false);
+  const children = (props.itemsFor(folder.id) || []).filter(isFolder);
+  const active = props.currentFolderId === folder.id;
+  const disabled = props.disabledIds?.has(folder.id) || false;
+
+  const toggle = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    const next = !open;
+    setOpen(next);
+    if (next) props.ensureLoaded(folder.id);
+  };
+
+  return (
+    <Box>
+      <Flex
+        alignItems="center"
+        background={active ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.08))' : 'transparent'}
+        {...dndProps(folder.id, props.dnd)}
+        {...dndHighlight(folder.id, props.dnd)}
+        borderRadius="8px"
+        cursor={disabled ? 'not-allowed' : 'pointer'}
+        gap={1}
+        data-tree-thing-id={folder.id}
+        role="group"
+        sx={props.handlers ? BROWSE_CONTROLS_SX : undefined}
+        onContextMenu={props.handlers ? event => props.handlers!.onItemContextMenu(folder, event) : undefined}
+        opacity={disabled ? 0.4 : 1}
+        paddingLeft={`${8 + depth * 14}px`}
+        paddingRight={2}
+        paddingY="4px"
+        userSelect="none"
+      >
+        <Box aria-label={open ? 'Collapse folder' : 'Expand folder'} as="button" onClick={toggle} type="button">
+          {open ? (
+            <ChevronDown color="var(--tt-faint, #b6b6c0)" size={13} />
+          ) : (
+            <ChevronRight color="var(--tt-faint, #b6b6c0)" size={13} />
+          )}
+        </Box>
+        {props.handlers && <ItemSelection thing={folder} handlers={props.handlers} />}
+        <Flex as="button" type="button" alignItems="center" gap={1} flex="1" minWidth={0} textAlign="left"
+          aria-expanded={open} aria-disabled={disabled} onClick={event => {
+            if (disabled) return;
+            const intent = props.handlers ? browseClickIntent(event) : 'open';
+            if (intent === 'select') { props.handlers!.onItemClick(folder, event); return; }
+            if (intent !== 'open') return;
+            props.onPick(folder.id);
+            if (!open) { setOpen(true); props.ensureLoaded(folder.id); }
+          }}>
+          <Text fontSize="13px">{thingIcon(folder)}</Text>
+          <Text flex="1" fontSize="13px" fontWeight={active ? 600 : 400} noOfLines={1} wordBreak="break-all">
+            {thingDisplayName(folder)}
+          </Text>
+        </Flex>
+        {props.handlers && <ItemMenu thing={folder} handlers={props.handlers} />}
+      </Flex>
+      {open && (
+        <Box>
+          {children.map((child) => (
+            <TreeNode key={child.id} depth={depth + 1} folder={child} props={props} />
+          ))}
+          {props.onNewFolder && <Button size="xs" variant="ghost" ml={`${30 + depth * 14}px`} my={1} onClick={() => props.onNewFolder?.(folder.id)}>New folder +</Button>}
+          {!props.onNewFolder && props.itemsFor(folder.id) && !children.length && (
+            <Text color="var(--tt-faint, #b6b6c0)" fontSize="11px" paddingLeft={`${30 + depth * 14}px`} paddingY="2px">
+              No subfolders
+            </Text>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+export const FolderTree = (props: FolderTreeProps) => {
+  const rootFolders = (props.itemsFor(null) || []).filter(isFolder);
+  const rootActive = props.currentFolderId === null;
+  return (
+    <Box>
+      <Flex
+        alignItems="center"
+        background={rootActive ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.08))' : 'transparent'}
+        {...dndProps(null, props.dnd)}
+        {...dndHighlight(null, props.dnd)}
+        borderRadius="8px"
+        cursor="pointer"
+        gap={2}
+        onClick={() => props.onPick(null)}
+        paddingX={2}
+        paddingY="4px"
+        userSelect="none"
+      >
+        <Text fontSize="13px">🏠</Text>
+        <Text fontSize="13px" fontWeight={rootActive ? 600 : 400}>
+          {props.rootLabel || 'All things'}
+        </Text>
+      </Flex>
+      {rootFolders.map((folder) => (
+        <TreeNode key={folder.id} depth={0} folder={folder} props={props} />
+      ))}
+      {props.onNewFolder && <Button size="xs" variant="ghost" ml={2} my={1} onClick={() => props.onNewFolder?.(null)}>New folder +</Button>}
+      {!props.onNewFolder && props.itemsFor(null) && !rootFolders.length && (
+        <Text color="var(--tt-faint, #b6b6c0)" fontSize="11px" paddingLeft={2} paddingY={1}>
+          No folders yet — make one with New 📁
+        </Text>
+      )}
+    </Box>
+  );
+};

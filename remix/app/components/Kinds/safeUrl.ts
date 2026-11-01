@@ -18,6 +18,52 @@ export const isSafeUrl = (value: string): boolean => {
 export const safeUrl = (value: unknown): string | undefined =>
 	typeof value === 'string' && isSafeUrl(value) ? value : undefined;
 
+// Does an already-protocol-screened url leave this site? Decided on the
+// RESOLVED url rather than a scheme prefix, because the URL parser folds `\`
+// into `/` for http(s): `/\evil.example` reads as site-relative but resolves to
+// another origin, so a prefix test would call it internal and navigate the
+// viewer's own tab off-site with the opener attached. Relative urls keep the
+// sentinel origin and stay internal; mailto:/tel: hand off to another app
+// rather than navigating, so they are not "external" for link-target purposes.
+export const isExternalHref = (value: unknown): boolean => {
+	if (typeof value !== 'string') return false;
+	try {
+		const url = new URL(value.trim(), SAFE_BASE);
+		if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+		return url.origin !== new URL(SAFE_BASE).origin;
+	} catch {
+		return false;
+	}
+};
+
+// Shared untrusted-content screening for BOTH thing renderers (Chakra + HTML),
+// so a new CSS-escape vector or handler-prop bypass is patched in ONE place
+// instead of drifting between two copied deny-lists.
+
+// Block CSS escape hatches anywhere a string value lands (backgroundImage can
+// carry url(…), sx/style carry whole blocks): javascript: URLs, expression(),
+// and @import. Returns true when the value is free of all three.
+export const isSafeCssText = (value: unknown): boolean => {
+	const text = String(value).toLowerCase();
+	return !text.includes('javascript:') && !text.includes('expression(') && !text.includes('@import');
+};
+
+// Event-handler prop screen (onClick, onError, …) — untrusted data must never
+// wire up a React/DOM handler.
+export const isEventHandlerProp = (key: string): boolean => /^on/i.test(key);
+
+// External links must drop the opener (reverse-tabnabbing): mutates the given
+// already-sanitized props object in place for any non-self target. Browsers
+// match target names case-insensitively ("_BLANK" still opens a new window),
+// and any NAMED target window also receives an opener, so everything except
+// the same-tab targets gets the rel.
+export const applyNoOpener = (props: Record<string, unknown>): void => {
+	if (typeof props.target !== 'string') return;
+	const target = props.target.toLowerCase();
+	if (target === '_self' || target === '_top' || target === '_parent' || target === '') return;
+	props.rel = 'noopener noreferrer';
+};
+
 // CSS `url("…")` value for backgroundImage, or undefined. Scheme-checked like
 // safeUrl, then every character that could terminate or escape the url("…")
 // string token — C0 control chars and whitespace (a raw newline ends a CSS

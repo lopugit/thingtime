@@ -7,6 +7,8 @@ import {
 
 import { decodeProtectedHeader, importSPKI, jwtVerify } from 'jose';
 
+import { PublicError, safeErrorText } from '../errors/safeError';
+
 export type CryptoStandard = 'ES256' | 'ES384' | 'RS256' | 'EdDSA';
 export type KeyEncoding = 'auto' | 'pem' | 'escaped-pem' | 'base64-pem' | 'base64url-pem' | 'jwk-json';
 export type TextEncoding = 'utf8' | 'base64' | 'base64url' | 'hex';
@@ -81,8 +83,6 @@ type VerifySignatureInput = KeyInput & {
 };
 
 type MatchKeyPairInput = KeyInput;
-
-const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 const base64UrlToBase64 = (value: string) => {
   const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
@@ -180,7 +180,7 @@ const resolvePublicPem = (input: KeyInput) => {
 
 const decodeSignature = (signature?: string, encoding: VerifySignatureInput['signatureEncoding'] = 'base64') => {
   const trimmed = signature?.trim();
-  if (!trimmed) throw new Error('Signature is required.');
+  if (!trimmed) throw new PublicError('Signature is required.');
 
   if (encoding === 'hex') return Buffer.from(trimmed, 'hex');
   if (encoding === 'base64url') return Buffer.from(base64UrlToBase64(trimmed), 'base64');
@@ -261,12 +261,12 @@ export const generateCryptoKeyPair = (input: GenerateInput = {}) => {
 
 export const verifyJwtInput = async (input: VerifyJwtInput) => {
   const token = input.token?.trim();
-  if (!token) throw new Error('JWT is required.');
+  if (!token) throw new PublicError('JWT is required.');
 
   try {
     const protectedHeader = decodeProtectedHeader(token);
     const alg = String(protectedHeader.alg || '');
-    if (!alg) throw new Error('JWT alg header is missing.');
+    if (!alg) throw new PublicError('JWT alg header is missing.');
 
     const verifyOptions = {
       algorithms: [alg],
@@ -274,7 +274,7 @@ export const verifyJwtInput = async (input: VerifyJwtInput) => {
     };
 
     if (alg.startsWith('HS') && !(input.secret?.trim() || process.env.JWT_SECRET)) {
-      throw new Error('HS JWT verification requires a secret.');
+      throw new PublicError('HS JWT verification requires a secret.');
     }
 
     const key = alg.startsWith('HS')
@@ -292,14 +292,14 @@ export const verifyJwtInput = async (input: VerifyJwtInput) => {
       issuedAt: payload.iat ? new Date(payload.iat * 1000).toISOString() : null
     };
   } catch (err) {
-    return { valid: false, error: errorMessage(err) };
+    return { valid: false, error: safeErrorText(err, 'crypto: verify-jwt', 'JWT verification failed') };
   }
 };
 
 export const verifySignedMessageInput = (input: VerifySignatureInput) => {
   const standard = getStandard(input.standard);
   const publicPem = resolvePublicPem(input);
-  if (!publicPem) throw new Error('A public key or private key is required.');
+  if (!publicPem) throw new PublicError('A public key or private key is required.');
 
   const message = decodeText(input.message ?? '', input.messageEncoding || 'utf8');
   const signature = decodeSignature(input.signature, input.signatureEncoding);
@@ -318,7 +318,7 @@ export const matchKeyPairInput = (input: MatchKeyPairInput) => {
   const publicPem = normalizePublicPem(input.publicKey, input.publicKeyEncoding || input.keyEncoding);
 
   if (!privatePem || !publicPem) {
-    throw new Error('Both private and public keys are required.');
+    throw new PublicError('Both private and public keys are required.');
   }
 
   const derivedPublicDer = createPublicKey(createPrivateKey(privatePem)).export({ type: 'spki', format: 'der' });
