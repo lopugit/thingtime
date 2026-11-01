@@ -7,6 +7,7 @@ import { apiAdminErrorDetail, apiDiagnosticThingId, apiErrorMessage, hasUnknownM
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CARD_STYLES } from '~/theme/card';
+import { actionableAdoptionIssues, formatGenerationBytes, generationIndexRatio } from './migrationUiCore';
 
 type CollectionCensus = {
   collection: string;
@@ -24,6 +25,11 @@ type CollectionGeneration = {
   docs: number;
   current: boolean;
   stale: boolean;
+  // storage census (older servers omit these — render as unknown, never 0)
+  dataBytes?: number;
+  storageBytes?: number;
+  indexBytes?: number;
+  indexes?: number;
 };
 
 type Migration = {
@@ -153,6 +159,9 @@ export function MigrationsPanel() {
   );
 
   const busy = runningKey !== null;
+  const visibleAdoptionIssues = status
+    ? actionableAdoptionIssues(status.adoptionIssues, status.migrations)
+    : [];
 
   return (
     <Box as="section" id="database-migrations" minW={0} scrollMarginTop="112px">
@@ -201,7 +210,7 @@ export function MigrationsPanel() {
 
       {status ? (
         <Stack spacing={5}>
-          {status.adoptionIssues.length ? (
+          {visibleAdoptionIssues.length ? (
             <Box {...CARD_STYLES} borderColor="var(--tt-warning, #d69e2e)" p={4}>
               <Flex align="center" gap={2} mb={1}>
                 <Badge colorScheme="orange">adoption</Badge>
@@ -209,7 +218,7 @@ export function MigrationsPanel() {
                   Legacy collections not yet adopted
                 </Text>
               </Flex>
-              {status.adoptionIssues.map((issue) => (
+              {visibleAdoptionIssues.map((issue) => (
                 <Text color="var(--tt-text, #5a5a66)" fontFamily="mono" fontSize="xs" key={issue} mt={1}>
                   {issue}
                 </Text>
@@ -275,17 +284,21 @@ export function MigrationsPanel() {
                 Storage generations
               </Heading>
               <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" mt={1}>
-								Every physical collection on the server. Stale generations are what drop-stale-collection-generations removes once nothing needs them.
+								Every physical collection on the server with its storage census. Stale generations are what drop-stale-collection-generations removes once nothing needs them; an index total far above the document bytes means rebuild-things-indexes has storage to reclaim.
               </Text>
             </Box>
             <Box overflowX="auto">
-              <Table minW="640px" size="sm">
+              <Table minW="880px" size="sm">
                 <Thead>
                   <Tr>
                     <Th>Physical collection</Th>
                     <Th>Collection</Th>
                     <Th>Generation</Th>
                     <Th isNumeric>Docs</Th>
+                    {/* bytes, not a count — `Docs` beside it is the count */}
+                    <Th isNumeric>Doc bytes</Th>
+                    <Th isNumeric>On disk</Th>
+                    <Th isNumeric>Index bytes · count</Th>
                     <Th>Status</Th>
                   </Tr>
                 </Thead>
@@ -305,6 +318,24 @@ export function MigrationsPanel() {
                       </Td>
                       <Td fontFamily="mono" fontSize="xs" isNumeric>
                         {generation.docs}
+                      </Td>
+                      <Td fontFamily="mono" fontSize="xs" isNumeric whiteSpace="nowrap">
+                        {formatGenerationBytes(generation.dataBytes)}
+                      </Td>
+                      <Td fontFamily="mono" fontSize="xs" isNumeric whiteSpace="nowrap">
+                        {formatGenerationBytes(generation.storageBytes)}
+                      </Td>
+                      <Td fontFamily="mono" fontSize="xs" isNumeric whiteSpace="nowrap">
+                        {formatGenerationBytes(generation.indexBytes)}
+                        {typeof generation.indexes === 'number' ? ` · ${generation.indexes}` : ''}
+                        {(() => {
+                          const ratio = generationIndexRatio(generation);
+                          return ratio !== null && ratio > 8 && (generation.indexBytes ?? 0) > 64 * 1024 * 1024 ? (
+                            <Badge colorScheme="orange" ml={2}>
+                              {ratio === Infinity ? '∞' : `${Math.round(ratio)}×`} docs
+                            </Badge>
+                          ) : null;
+                        })()}
                       </Td>
                       <Td>
                         {generation.current ? (

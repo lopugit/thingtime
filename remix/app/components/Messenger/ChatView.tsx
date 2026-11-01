@@ -1,3 +1,5 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
+import { subscribeBackgroundRefresh } from '~/hooks/backgroundRefresh';
 import React from 'react';
 import { Box, Button, Flex, Input, Spinner } from '@chakra-ui/react';
 
@@ -5,12 +7,16 @@ import { useLopu } from '../Lopu/useLopu';
 import { hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { Composer } from './Composer';
+import { AgentLiveActivity } from './AgentLiveActivity';
 import { EmojiUploadModal } from './EmojiUploadModal';
 import { MessageList } from './MessageList';
 import { emitMessengerRefresh, mergeEmojiMap, pushCustomRecent, readEmojiMap, readMessages, writeMessages } from './messengerCache';
 import { getUserDisplayName } from '~/utils/userIdentity';
 import {
   chatDisplayName,
+	externalSourceAvatar,
+	isLiveAiSource,
+	isLopuAiSource,
   memberDisplayName,
   type ChatMember,
   type ChatMessage,
@@ -21,6 +27,8 @@ import {
 } from './messengerTypes';
 import type { MessengerApi } from './useMessengerApi';
 import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
+import { useAgentSession } from './useAgentSession';
+import type { AgentSendMode } from './AgentComposerControls';
 
 const ACTIVE_POLL_MS = 4000;
 
@@ -39,6 +47,9 @@ const dedupeNewestFirst = (lists: ChatMessage[][]): ChatMessage[] => {
 
 export type ChatViewProps = {
   api: MessengerApi;
+  // Hidden embedded views retain drafts without polling or marking unread data.
+  active?: boolean;
+  onAccessRevoked?: () => void;
   chatSummary: ChatSummary;
   mode: MessengerMode;
   onBack?: () => void;
@@ -50,12 +61,16 @@ export type ChatViewProps = {
 // visibility-aware poll for fresh pages, optimistic sends and reactions with
 // per-item reconcile, Slack thread panel, and read-receipt advancement.
 export const ChatView = (props: ChatViewProps) => {
-  const { chatSummary, mode } = props;
+  const { chatSummary, mode, active = true } = props;
   const chatId = chatSummary.id;
   const user = useCurrentUser();
   const userId = user?.id || null;
   const lopu = useLopu();
   const api = props.api;
+  const onAccessRevoked = React.useRef(props.onAccessRevoked);
+  onAccessRevoked.current = props.onAccessRevoked;
+	const liveSource = isLiveAiSource(chatSummary.externalSource) ? chatSummary.externalSource : null;
+	const agent = useAgentSession(userId, liveSource, props.onChatsChanged);
 
   const [messages, setMessages] = React.useState<ChatMessage[]>(() => readMessages(userId, chatId));
   const [members, setMembers] = React.useState<ChatMember[]>(chatSummary.members || []);
@@ -70,6 +85,8 @@ export const ChatView = (props: ChatViewProps) => {
   const [uploadOpen, setUploadOpen] = React.useState(false);
   const [editingTopic, setEditingTopic] = React.useState(false);
   const [topicDraft, setTopicDraft] = React.useState('');
+	const [agentMode, setAgentMode] = React.useState<AgentSendMode>('queue');
+	const [interruptingAgent, setInterruptingAgent] = React.useState(false);
 
   const seqRef = React.useRef(0);
   const readMarkRef = React.useRef<string | null>(null);
@@ -78,7 +95,19 @@ export const ChatView = (props: ChatViewProps) => {
   const hasPagedRef = React.useRef(false);
   const emojiFetchRef = React.useRef<Set<string>>(new Set());
   const messagesRef = React.useRef(messages);
+	const lastAgentRefreshRef = React.useRef(0);
   messagesRef.current = messages;
+
+	React.useEffect(() => {
+		if (agentMode === 'steer' && !agent.controls.canSteer) setAgentMode('queue');
+	}, [agent.controls.canSteer, agentMode]);
+
+	React.useEffect(() => {
+		if (!liveSource || agent.state.sequence <= lastAgentRefreshRef.current) return;
+		if (agent.state.status !== 'completed' && agent.state.status !== 'interrupted' && agent.state.status !== 'failed') return;
+		lastAgentRefreshRef.current = agent.state.sequence;
+		props.onChatsChanged();
+	}, [agent.state.sequence, agent.state.status, liveSource, props]);
 
   const myMember = members.find((m) => m.userId === userId) || null;
   const pendingRequest = (chatSummary.myMember?.state || myMember?.state) === 'pending';
@@ -103,6 +132,7 @@ export const ChatView = (props: ChatViewProps) => {
 
   // initial load + 4s poll while visible
   React.useEffect(() => {
+    if (!active) return;
     let cancelled = false;
     const seq = ++seqRef.current;
     const load = async () => {
@@ -115,24 +145,22 @@ export const ChatView = (props: ChatViewProps) => {
       } catch (err: any) {
         if (cancelled) return;
         setLoading(false);
-        lopu({ title: err?.error || 'Could not load this chat 😞', status: 'error' });
+        if ([401, 403, 404].includes(Number(err?.status))) {
+          setMessages([]); setMembers([]); setThreadRoot(null); setNextCursor(null);
+          writeMessages(userId, chatId, []);
+          onAccessRevoked.current?.();
+          return;
+        }
+        if (!messagesRef.current.length) lopu({ title: err?.error || 'Could not load this chat 😞', status: 'error' });
       }
     };
-    void load();
-    const interval = window.setInterval(() => {
-      if (document.visibilityState !== 'visible') return;
-      void load();
-    }, ACTIVE_POLL_MS);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void load();
-    };
-    document.addEventListener('visibilitychange', onVisible);
+    const unsubscribe = subscribeBackgroundRefresh(`messenger-messages:${userId}:${chatId}`, load, ACTIVE_POLL_MS);
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
+      unsubscribe();
     };
-  }, [api, applyPage, chatId, lopu]);
+  // The optional revocation callback is read through the latest props ref.
+  }, [active, api, applyPage, chatId, lopu, userId]);
 
   // custom emoji palette for this chat (community set + personal set)
   React.useEffect(() => {
@@ -156,7 +184,7 @@ export const ChatView = (props: ChatViewProps) => {
   // the server, deduped here) — this is what clears the unread badge. Pending
   // requests never leave receipts: "seen" must not leak before accept.
   React.useEffect(() => {
-    if (pendingRequest) return;
+    if (!active || pendingRequest) return;
     const newest = messages.find((m) => !m.id.startsWith('pending-'));
     if (!newest || readMarkRef.current === newest.id) return;
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
@@ -165,7 +193,7 @@ export const ChatView = (props: ChatViewProps) => {
 			.markRead({ chatId, messageId: newest.id })
 			.then(() => props.onChatsChanged())
 			.catch(() => {});
-  }, [api, chatId, messages, pendingRequest, props]);
+  }, [active, api, chatId, messages, pendingRequest, props]);
 
   // reaction chips reference emojis by id with { name, animated } only —
   // fetch the image bytes once per unknown id and cache them
@@ -206,6 +234,7 @@ export const ChatView = (props: ChatViewProps) => {
 		requestId: string;
 		attachmentIds: string[];
 		attachments: PublicAttachment[];
+		agentMode?: AgentSendMode;
 	}): Promise<boolean> => {
 		const { text, requestId, attachmentIds, attachments } = submission;
     if (editing) {
@@ -227,6 +256,23 @@ export const ChatView = (props: ChatViewProps) => {
         return false;
       }
     }
+		if (liveSource) {
+			if (attachments.length) {
+				lopu({ title: 'This desktop connector does not support attachments yet.', status: 'info' });
+				return false;
+			}
+			try {
+				await agent.send({ text, requestId, mode: submission.agentMode || agentMode });
+				return true;
+			} catch (err: any) {
+				if (hasUnknownMutationOutcome(err)) {
+					lopu({ title: 'That agent message may already be queued. Retry safely to confirm it.', status: 'info' });
+					throw err;
+				}
+				lopu({ title: err?.error || err?.message || 'Thingtime could not reach that desktop chat.', status: 'error' });
+				return false;
+			}
+		}
     const reply = replyTo;
     const localId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const optimistic: ChatMessage = {
@@ -355,7 +401,11 @@ export const ChatView = (props: ChatViewProps) => {
   };
 
   const title = chatDisplayName({ ...chatSummary, members }, userId);
-  const canEditTopic = mode === 'slack' && chatSummary.chatType === 'channel' && (myMember?.role === 'owner' || myMember?.role === 'admin');
+  const canEditTopic =
+    !chatSummary.externalSource &&
+    mode === 'slack' &&
+    chatSummary.chatType === 'channel' &&
+    (myMember?.role === 'owner' || myMember?.role === 'admin');
   const communityEmojiScope = chatSummary.communityId;
 
   return (
@@ -370,6 +420,11 @@ export const ChatView = (props: ChatViewProps) => {
         <Box minWidth={0} flex={1}>
           <Box fontWeight={700} fontSize="15px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
             {title}
+            {chatSummary.externalSource ? (
+              <Box as="span" fontSize="10px" fontWeight={600} color="var(--tt-muted, #777782)" marginLeft={2}>
+                {externalSourceAvatar(chatSummary.externalSource).glyph} {chatSummary.externalSource.label}
+              </Box>
+            ) : null}
           </Box>
           {mode === 'slack' && chatSummary.chatType === 'channel' ? (
             editingTopic ? (
@@ -424,6 +479,25 @@ export const ChatView = (props: ChatViewProps) => {
         </Box>
       ) : null}
 
+      {chatSummary.externalSource ? (
+        <Box
+          paddingX={3}
+          paddingY="6px"
+          fontSize="11px"
+          textAlign="center"
+          background="var(--tt-surface-alt, #f7f7f9)"
+          color="var(--tt-muted, #777782)"
+          borderBottom="1px solid var(--tt-border-light, #f3f3f5)"
+          whiteSpace="normal"
+        >
+					{isLopuAiSource(chatSummary.externalSource)
+						? 'A conversation with Lopu, the Thingtime assistant 🦄'
+						: liveSource
+							? `Live with ${liveSource.label} on your computer. Messages here are sent to that desktop session; completed responses sync back to Thingtime.`
+							: `Imported read-only from ${chatSummary.externalSource.label}. Reactions, threads and replies stay in Thingtime.`}
+        </Box>
+      ) : null}
+
       {/* messages + optional thread panel */}
       <Flex flex={1} minHeight={0}>
         <Flex direction="column" flex={1} minWidth={0}>
@@ -451,8 +525,31 @@ export const ChatView = (props: ChatViewProps) => {
               onUploadEmoji={() => setUploadOpen(true)}
             />
           )}
+					{liveSource ? (
+						<AgentLiveActivity
+							state={agent.state}
+							connected={agent.connected}
+							onApproval={async (approvalId, decision) => {
+								try {
+									await agent.respondToApproval(approvalId, decision);
+								} catch (err: any) {
+									lopu({ title: err?.error || err?.message || 'Approval response failed.', status: 'error' });
+									throw err;
+								}
+							}}
+						/>
+					) : null}
           <Composer
-            placeholder={`Message ${title}`}
+            targetId={chatId}
+						placeholder={
+							isLopuAiSource(chatSummary.externalSource)
+								? 'Ask Lopu anything 🦄'
+								: liveSource
+									? `Message ${liveSource.label} on your computer`
+									: chatSummary.externalSource
+										? `Reply in Thingtime about ${title}`
+										: `Message ${title}`
+						}
             pickerEmojis={pickerEmojis}
             replyTo={replyTo}
             onCancelReply={() => setReplyTo(null)}
@@ -460,10 +557,38 @@ export const ChatView = (props: ChatViewProps) => {
             onCancelEdit={() => setEditing(null)}
             onSend={send}
             onUploadEmoji={() => setUploadOpen(true)}
+						attachmentsSupported={!liveSource || liveSource.capabilities.includes('attachments')}
+						disabled={Boolean(liveSource && !liveSource.capabilities.includes('send-message'))}
+						disabledLabel="This desktop connector cannot send messages."
+						agentControls={
+							liveSource
+								? {
+										running: agent.controls.running,
+										mode: agentMode,
+										canQueue: agent.controls.canQueue,
+										canSteer: agent.controls.canSteer,
+										canInterrupt: agent.controls.canInterrupt,
+										queueDepth: agent.controls.queueDepth,
+										interrupting: interruptingAgent,
+										onModeChange: setAgentMode,
+										onInterrupt: () => {
+											if (interruptingAgent) return;
+											setInterruptingAgent(true);
+											void agent
+												.interrupt()
+												.catch((err: any) => {
+													lopu({ title: err?.error || err?.message || 'Could not stop that turn.', status: 'error' });
+												})
+												.finally(() => setInterruptingAgent(false));
+										}
+								  }
+								: undefined
+						}
           />
         </Flex>
         {threadRoot ? (
           <ThreadPanel
+            active={active}
             api={api}
             chatId={chatId}
             root={messages.find((m) => m.id === threadRoot.id) || threadRoot}
@@ -497,6 +622,7 @@ export const ChatView = (props: ChatViewProps) => {
 
 // Slack-style thread side panel: its own page + composer, one level deep.
 const ThreadPanel = ({
+  active,
   api,
   chatId,
   root,
@@ -509,6 +635,7 @@ const ThreadPanel = ({
   onUploadEmoji,
   onSent
 }: {
+  active: boolean;
   api: MessengerApi;
   chatId: string;
   root: ChatMessage;
@@ -536,12 +663,13 @@ const ThreadPanel = ({
   }, [api, chatId, root.id]);
 
   React.useEffect(() => {
+    if (!active) return;
     void load();
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void load();
+    const interval = activityInterval('timer:components/Messenger/ChatView:1', 'Chat View', () => {
+      if (document.visibilityState === 'visible') return load();
     }, ACTIVE_POLL_MS);
-    return () => window.clearInterval(interval);
-  }, [load]);
+    return () => clearActivityInterval(interval);
+  }, [active, load]);
 
   const reactInThread = async (message: ChatMessage, token: string) => {
     if (message.id === root.id) return onReact(message, token);
@@ -651,6 +779,7 @@ const ThreadPanel = ({
         />
       )}
       <Composer
+        targetId={root.id}
         placeholder="Reply in thread"
         pickerEmojis={pickerEmojis}
         replyTo={null}

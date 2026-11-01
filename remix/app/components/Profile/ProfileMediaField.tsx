@@ -1,3 +1,5 @@
+import { prepareProfileThumbnail, PROFILE_THUMBNAIL_CONTENT_TYPES } from './profileThumbnail';
+import { uploadFileTypes } from '../Attachments/attachmentFileTypes';
 import React from 'react';
 import { Box, Button, Flex, IconButton, Image, Input, Progress, Text } from '@chakra-ui/react';
 import { ImagePlus, Link2, RotateCcw, Trash2, X } from 'lucide-react';
@@ -8,6 +10,7 @@ import { useAttachmentUploads } from '~/components/Attachments/useAttachmentUplo
 import { useLopu } from '~/components/Lopu/useLopu';
 import { MediaAddTile, MediaGalleryGrid, MediaGalleryTile } from '~/components/Media/MediaGallery';
 import {
+	PROFILE_MEDIA_CONTENT_TYPES,
 	initialExternalProfileImageUrl,
 	isExternalProfileImageUrl,
 	isManagedProfileMediaUrl,
@@ -18,15 +21,19 @@ import {
 } from './profileMediaCore';
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
-const ACCEPTED_PROFILE_IMAGES = 'image/avif,image/gif,image/jpeg,image/png,image/webp';
 
 type ProfileMediaIntent = ProfileMediaMutation['kind'];
 
 export type ProfileMediaFieldProps = {
 	slot: ProfileMediaSlot;
+	/** For invite/signup forms whose account does not exist yet. */
+	storageMode?: 'attachment' | 'inline-thumbnail';
+	label?: string;
+	purpose?: 'subspace-icon' | 'subspace-banner';
 	ownerId: string;
 	savedUrl: string | null;
 	savedLinkedUrl: string | null;
+	privateUploadsEnabled?: boolean;
 	disabled?: boolean;
 	remainingBytes?: number | null;
 	storageStatus?: 'ready' | 'reconciling' | 'unavailable';
@@ -48,10 +55,14 @@ const statusText = (upload: ComposerAttachmentUpload | undefined): string | null
 };
 
 const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, ProfileMediaFieldProps>((props, ref) => {
-	const { slot, ownerId, savedUrl, savedLinkedUrl, disabled, remainingBytes, storageStatus, onChange } = props;
+	const { slot, ownerId, savedUrl, savedLinkedUrl, privateUploadsEnabled, disabled, remainingBytes, storageStatus, onChange } = props;
 	const lopu = useLopu();
-	const label = slot === 'avatar' ? 'Avatar' : 'Banner';
-	const purpose = slot === 'avatar' ? 'profile-avatar' : 'profile-banner';
+	const label = props.label || (slot === 'avatar' ? 'Avatar' : 'Banner');
+	const purpose = props.purpose || (slot === 'avatar' ? 'profile-avatar' : 'profile-banner');
+	const inlineThumbnail = props.storageMode === 'inline-thumbnail';
+	const fileTypes = uploadFileTypes(inlineThumbnail ? PROFILE_THUMBNAIL_CONTENT_TYPES : PROFILE_MEDIA_CONTENT_TYPES);
+	const uploadsNotGranted = !inlineThumbnail && privateUploadsEnabled === false;
+	const pickerDisabled = disabled || uploadsNotGranted;
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
 	const [baselineUrl, setBaselineUrl] = React.useState<string | null>(savedUrl);
 	const [baselineLinkedUrl, setBaselineLinkedUrl] = React.useState<string | null>(savedLinkedUrl);
@@ -88,9 +99,9 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 		ownerId,
 		onCleanupError,
 		onSelectionError,
-		false,
+		Boolean(props.purpose),
 		onCleanupDeferred,
-		{ purpose, maxFiles: 1, imageOnly: true, remainingBytes, storageStatus }
+		{ purpose, maxFiles: 1, imageOnly: true, remainingBytes, storageStatus, ...(inlineThumbnail ? { maxBytesPerFile: 10 * 1024 * 1024, allowedContentTypes: PROFILE_THUMBNAIL_CONTENT_TYPES, prepareLocalImage: prepareProfileThumbnail } : {}) }
 	);
 	const upload = uploads[0];
 
@@ -204,7 +215,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 		[markCommitted, remove, uploads]
 	);
 
-	const uploadLabel = statusText(upload);
+	const uploadLabel = inlineThumbnail && upload?.status === 'preparing' ? 'Preparing photo…' : statusText(upload);
 	const hasDisplayedMedia = Boolean(previewUrl) || intent === 'clear' || Boolean(upload);
 	const currentLabel =
 		intent === 'clear'
@@ -214,7 +225,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 			: baselineUrl
 			? isManagedProfileMediaUrl(baselineUrl)
 				? 'Saved privately in Thingtime'
-				: 'Public image URL'
+				: inlineThumbnail ? 'Invite photo' : 'Public image URL'
 			: 'No image selected';
 	const storageLabel =
 		storageStatus === 'reconciling'
@@ -231,7 +242,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 				<Flex width="100%" height="100%" alignItems="center" justifyContent="center" padding={3}>
 					<Image
 						src={previewUrl}
-						alt="Avatar preview"
+						alt={`${label} preview`}
 						boxSize="82%"
 						borderRadius="999px"
 						objectFit="cover"
@@ -242,7 +253,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 			) : (
 				<Image
 					src={previewUrl}
-					alt="Banner preview"
+					alt={`${label} preview`}
 					width="100%"
 					height="100%"
 					objectFit="cover"
@@ -266,17 +277,25 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 						{label} image
 					</Text>
 					<Text fontSize="11px" color={MUTED} whiteSpace="normal">
-						Private uploads count toward this account’s storage. {storageLabel}
+						{inlineThumbnail ? `${fileTypes.label} · up to 10 MB.` : `${fileTypes.label}. ${props.purpose ? 'Branding images are public and count toward your account’s storage.' : 'Private uploads count toward this account’s storage.'} ${storageLabel}`}
 					</Text>
 				</Box>
 			</Flex>
 
+			{uploadsNotGranted ? (
+				<Box border="1px solid var(--tt-border, #ececef)" borderRadius="var(--tt-radius-md, 12px)" background="var(--tt-surface, #fafafb)" padding={3}>
+					<Text fontSize="12px" color={MUTED} whiteSpace="normal">
+						🔐 {props.purpose ? 'Public branding uploads' : 'Private media uploads'} need admin approval during the beta. You can still use a public image URL, remove saved media, and clean up an existing draft.
+					</Text>
+				</Box>
+			) : null}
+
 			<input
 				ref={inputRef}
 				type="file"
-				accept={ACCEPTED_PROFILE_IMAGES}
+				accept={fileTypes.accept}
 				hidden
-				disabled={disabled}
+				disabled={pickerDisabled}
 				aria-label={`Choose ${label.toLowerCase()} image`}
 				onChange={(event) => {
 					choose(event.currentTarget.files);
@@ -358,7 +377,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 								marginTop={1.5}
 								variant="outline"
 								leftIcon={<ImagePlus size={14} />}
-								isDisabled={disabled}
+								isDisabled={pickerDisabled}
 								onClick={() => inputRef.current?.click()}
 							>
 								Replace media
@@ -367,7 +386,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 					) : (
 						<MediaAddTile
 							ariaLabel={`Add ${label.toLowerCase()} media`}
-							disabled={disabled}
+							disabled={pickerDisabled}
 							minHeight={slot === 'avatar' ? '150px' : '120px'}
 							onClick={() => inputRef.current?.click()}
 						>
@@ -381,7 +400,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 			</Box>
 
 			<Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap">
-				<Button
+				{!inlineThumbnail && <Button
 					type="button"
 					size="sm"
 					minHeight="44px"
@@ -392,8 +411,8 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 					aria-controls={`${slot}-external-image-panel`}
 					onClick={showExternal ? cancelExternal : beginExternal}
 				>
-					{showExternal ? 'Cancel public URL' : 'Use public image URL'}
-				</Button>
+					{showExternal ? 'Cancel URL' : 'Use URL instead'}
+				</Button>}
 				{(baselineUrl || upload || intent === 'external') && intent !== 'clear' ? (
 					<Button type="button" size="sm" minHeight="44px" variant="ghost" leftIcon={<Trash2 size={14} />} isDisabled={disabled} onClick={clearMedia}>
 						Remove {label.toLowerCase()}
@@ -438,7 +457,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 					>
 						{intent === 'external' && !externalValid
 							? 'Enter one full http(s) image URL without credentials or spaces.'
-							: 'Public image hosts can see viewers’ network requests. Thingtime uploads stay private in S3.'}
+							: props.purpose ? 'Branding images are public, including for private subspaces.' : 'Public image hosts can see viewers’ network requests. Thingtime uploads stay private in S3.'}
 					</Text>
 				</Flex>
 			) : null}

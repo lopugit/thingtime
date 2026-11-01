@@ -37,7 +37,8 @@ const FIELD_LABELS: Record<keyof TierQuotas, { label: string; unit: 'bytes' | 'c
   appStorageBytes: { label: 'Whole-app storage', unit: 'bytes' },
 	userStorageBytes: { label: 'Whole-account storage allowance', unit: 'bytes' },
   maxApps: { label: 'Max registered apps', unit: 'count' },
-  maxPats: { label: 'Max personal access tokens', unit: 'count' }
+  maxPats: { label: 'Max personal access tokens', unit: 'count' },
+  speedTestsPerHour: { label: 'Speed tests per hour', unit: 'count' }
 };
 
 const MB = 1024 * 1024;
@@ -49,7 +50,8 @@ const emptyOverrides = (): OverrideState => ({
   appStorageBytes: { mode: 'inherit', value: '' },
   userStorageBytes: { mode: 'inherit', value: '' },
   maxApps: { mode: 'inherit', value: '' },
-  maxPats: { mode: 'inherit', value: '' }
+  maxPats: { mode: 'inherit', value: '' },
+  speedTestsPerHour: { mode: 'inherit', value: '' }
 });
 
 export const tierLabel = (id: string, catalog = SUBSCRIPTION_TIER_CATALOG): string => {
@@ -138,7 +140,7 @@ export const SubscriptionEditorModal = ({
     catalog.find((entry) => entry.id === tier) ??
     catalog[0] ??
     SUBSCRIPTION_TIER_CATALOG[0];
-  const visibleFields: Array<keyof TierQuotas> = subjectType === 'app' ? ['appStorageBytes'] : ['userStorageBytes', 'maxApps', 'maxPats'];
+  const visibleFields: Array<keyof TierQuotas> = subjectType === 'app' ? ['appStorageBytes'] : ['userStorageBytes', 'maxApps', 'maxPats', 'speedTestsPerHour'];
 
   const save = async () => {
     if (loadError) return;

@@ -1,0 +1,35 @@
+name: Signed Electron PR Release
+
+# Trigger-only listener. The privileged implementation is pinned to the
+# protected github-actions branch, so a pull request can never supply its own
+# signing, notarization, or publishing steps.
+on:
+  pull_request_target:
+    types: [labeled, reopened, synchronize]
+    paths:
+      - electron/**
+      - MCP/**
+      - macos/**
+      - remix/**
+      - .github/workflows/electron-pr-release.yml
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Existing same-repository PR number to sign and publish
+        required: true
+        type: string
+
+# Reusable workflows cannot elevate permissions. The protected worker needs a
+# release token and live PR metadata, but it independently enforces the exact
+# owner/same-repository/desktop-release gate before it checks out any PR code.
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/electron-pr-release.yml@github-actions
+    with:
+      pr_number: ${{ inputs.pr_number || '' }}
+      triggering_event: ${{ github.event_name }}
+    secrets: inherit

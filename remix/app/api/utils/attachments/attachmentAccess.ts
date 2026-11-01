@@ -1,10 +1,15 @@
+import { linkedSubspaceId, subspaceMessagingAccess } from '../messenger/subspaceAccess';
+import { withFoundPostGrant } from '../things/foundPosts';
+import { subspaceAttachmentTargetAllows } from '../subspaces/subspaceMediaCore';
 import { ObjectId } from 'mongodb';
 
 import { getHomeThingsCollection, getUsersCollection } from '../mongodb/collections';
-import { ACL_ALL, ACL_INHERIT, ACL_OWNER, aclAllows, aclFromVisibility, type ThingVisibility } from '../../../schemas/registry';
+import { relationshipLookupFilter } from '../mongodb/relationshipLookup';
+import { ACL_ALL, ACL_INHERIT, ACL_OWNER, aclFromVisibility, type ThingVisibility } from '../../../schemas/registry';
+import { withThingLink, canView, canViewInherited, type ThingDoc, type Viewer } from '../things/things';
 import type { AttachmentPurpose, ProfileAttachmentSlot } from './attachmentCore';
 
-export type AttachmentAccessViewer = { id: string; username?: string | null } | null;
+export type AttachmentAccessViewer = (NonNullable<Viewer> & { isAdmin?: boolean; sharedRoot?: string }) | null;
 
 type AttachmentTargetAclDoc = {
 	shareId: string;
@@ -13,6 +18,7 @@ type AttachmentTargetAclDoc = {
 	targetId?: unknown;
 	acl?: unknown;
 	visibility?: ThingVisibility;
+	linkKey?: string | null;
 };
 
 export type AttachmentAccessDocument = {
@@ -35,22 +41,23 @@ type ProfileAttachmentTargetDoc = {
 };
 
 export const attachmentTargetAclAllows = (doc: AttachmentTargetAclDoc | null, viewer: AttachmentAccessViewer): boolean => {
+	// exactly a top-level post OR a webpage (builder saves bind post-purpose
+	// media to page things) — anything else fails closed
 	if (
 		!doc ||
 		!Array.isArray(doc.thingtime) ||
 		doc.thingtime.length !== 1 ||
-		doc.thingtime[0] !== 'post' ||
+		(doc.thingtime[0] !== 'post' && doc.thingtime[0] !== 'webpage') ||
 		(doc.targetId !== undefined && doc.targetId !== null)
 	) {
 		return false;
 	}
-	if (viewer?.id === doc.ownerId) return true;
 	const acl =
 		Array.isArray(doc.acl) && doc.acl.length && doc.acl.every((entry) => typeof entry === 'string')
 			? (doc.acl as string[])
 			: aclFromVisibility(doc.visibility) || [ACL_OWNER];
 	if (acl.includes(ACL_INHERIT)) return false;
-	return aclAllows(acl, viewer, doc.ownerId);
+	return canView({ ...doc, acl } as ThingDoc, withThingLink(viewer, doc.shareId));
 };
 
 export const profileAttachmentTargetAllows = (attachment: AttachmentAccessDocument, target: ProfileAttachmentTargetDoc | null): boolean => {
@@ -85,6 +92,7 @@ export const profileAttachmentTargetAllows = (attachment: AttachmentAccessDocume
 };
 
 type AttachmentTargetAccessDependencies = {
+	memberFilter: (key: string) => Promise<Record<string, unknown>>;
 	getThings: typeof getHomeThingsCollection;
 	getUsers: typeof getUsersCollection;
 };
@@ -92,46 +100,28 @@ type AttachmentTargetAccessDependencies = {
 const exactThingtime = (value: unknown, expected: readonly string[]): boolean =>
 	Array.isArray(value) && value.length === expected.length && expected.every((entry, index) => value[index] === entry);
 
-const attachmentRootAclAllows = (doc: AttachmentTargetAclDoc | null, viewer: AttachmentAccessViewer): boolean => {
-	if (!doc || !doc.shareId || !doc.ownerId || !Array.isArray(doc.thingtime) || !doc.thingtime.length) return false;
-	if (doc.targetId !== undefined && doc.targetId !== null) return false;
-	if (viewer?.id === doc.ownerId) return true;
-	const acl =
-		Array.isArray(doc.acl) && doc.acl.length && doc.acl.every((entry) => typeof entry === 'string')
-			? (doc.acl as string[])
-			: aclFromVisibility(doc.visibility) || [ACL_OWNER];
-	if (acl.includes(ACL_INHERIT)) return false;
-	return aclAllows(acl, viewer, doc.ownerId);
-};
-
 const canViewCommentAttachment = async (
 	things: Awaited<ReturnType<typeof getHomeThingsCollection>>,
 	viewer: AttachmentAccessViewer,
 	attachment: AttachmentAccessDocument
 ): Promise<boolean> => {
-	let targetId = attachment.targetId;
-	if (!targetId) return false;
-	const visited = new Set<string>();
-	for (let depth = 0; depth < 64; depth += 1) {
-		if (visited.has(targetId)) return false;
-		visited.add(targetId);
-		const target = (await things.findOne({ shareId: targetId } as any, {
-			projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1 }
-		})) as AttachmentTargetAclDoc | null;
-		if (!target) return false;
-		const isComment = exactThingtime(target.thingtime, ['comment']) || exactThingtime(target.thingtime, ['post', 'comment']);
-		if (!isComment) return attachmentRootAclAllows(target, viewer);
-		if (depth === 0 && target.ownerId !== attachment.ownerId) return false;
-		if (typeof target.targetId !== 'string' || !target.targetId) return false;
-		targetId = target.targetId;
-	}
-	return false;
+	if (!attachment.targetId) return false;
+	const lookup = async (id: string): Promise<ThingDoc | null> => (await things.findOne({ shareId: id } as any, {
+		projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1, linkKey: 1, moderation: 1, subspacePrivate: 1, 'crystal.subspaceId': 1, 'crystal.linkKeyDigest': 1 }
+	})) as ThingDoc | null;
+	const target = await lookup(attachment.targetId);
+	if (!target || target.ownerId !== attachment.ownerId ||
+		!(exactThingtime(target.thingtime, ['comment']) || exactThingtime(target.thingtime, ['post', 'comment']))) return false;
+	// Comments can target media as well as posts/replies. Follow the canonical
+	// inheritance chain through either kind, preserving cycle and audience gates.
+	return canViewInherited(target, withThingLink(viewer, target.shareId), lookup);
 };
 
 const canViewMessageAttachment = async (
 	things: Awaited<ReturnType<typeof getHomeThingsCollection>>,
 	viewer: AttachmentAccessViewer,
-	attachment: AttachmentAccessDocument
+	attachment: AttachmentAccessDocument,
+	memberFilter: AttachmentTargetAccessDependencies['memberFilter']
 ): Promise<boolean> => {
 	if (!viewer?.id || !attachment.targetId) return false;
 	const message = (await things.findOne({ shareId: attachment.targetId } as any, {
@@ -147,13 +137,23 @@ const canViewMessageAttachment = async (
 	) {
 		return false;
 	}
+  const chat = await things.findOne({ thingtime: 'chat', shareId: message.targetId } as any);
+  if (!chat) return false;
+  if ((chat as any).crystal?.communityId) {
+    const community = await things.findOne({ thingtime: 'community', shareId: (chat as any).crystal.communityId } as any);
+    if (!community) return false;
+    if (linkedSubspaceId(community)) {
+      const access = await subspaceMessagingAccess(things, community, viewer.id);
+      if (!access?.allowed) return false;
+    }
+  }
 	const memberKey = `${message.targetId}:${viewer.id}`;
 	const member = await things.findOne(
 		{
 			thingtime: 'chat-member',
 			targetId: message.targetId,
 			ownerId: viewer.id,
-			'crystal.memberKey': memberKey,
+			...await memberFilter(memberKey),
 			'crystal.state': { $in: ['active', 'pending'] }
 		} as any,
 		{ projection: { shareId: 1 } }
@@ -164,7 +164,8 @@ const canViewMessageAttachment = async (
 const canViewEmojiAttachment = async (
 	things: Awaited<ReturnType<typeof getHomeThingsCollection>>,
 	viewer: AttachmentAccessViewer,
-	attachment: AttachmentAccessDocument
+	attachment: AttachmentAccessDocument,
+	memberFilter: AttachmentTargetAccessDependencies['memberFilter']
 ): Promise<boolean> => {
 	if (!viewer?.id || !attachment.targetId) return false;
 	const emoji = (await things.findOne({ shareId: attachment.targetId } as any, {
@@ -180,12 +181,18 @@ const canViewEmojiAttachment = async (
 	}
 	if (emoji.targetId === null || emoji.targetId === undefined) return true;
 	if (typeof emoji.targetId !== 'string' || !emoji.targetId) return false;
+  const community = await things.findOne({ thingtime: 'community', shareId: emoji.targetId } as any);
+  if (!community) return false;
+  if (linkedSubspaceId(community)) {
+    const access = await subspaceMessagingAccess(things, community, viewer.id);
+    return !!access?.allowed;
+  }
 	const member = await things.findOne(
 		{
 			thingtime: 'community-member',
 			targetId: emoji.targetId,
 			ownerId: viewer.id,
-			'crystal.memberKey': `${emoji.targetId}:${viewer.id}`,
+			...await memberFilter(`${emoji.targetId}:${viewer.id}`),
 			'crystal.state': { $ne: 'left' }
 		} as any,
 		{ projection: { shareId: 1 } }
@@ -199,6 +206,7 @@ const canViewEmojiAttachment = async (
 // lookup, attachment aggregation, recursion, or caller-selected data plane.
 export const createCanViewHomeAttachmentTarget = (overrides: Partial<AttachmentTargetAccessDependencies> = {}) => {
 	const dependencies: AttachmentTargetAccessDependencies = {
+		memberFilter: (key) => relationshipLookupFilter('memberKey', key, { home: true }),
 		getThings: getHomeThingsCollection,
 		getUsers: getUsersCollection,
 		...overrides
@@ -207,6 +215,11 @@ export const createCanViewHomeAttachmentTarget = (overrides: Partial<AttachmentT
 		const targetId = attachment.targetId;
 		if (!targetId) return false;
 		const things = await dependencies.getThings();
+
+		if (attachment.attachmentPurpose === 'subspace-icon' || attachment.attachmentPurpose === 'subspace-banner') {
+			const target = await things.findOne({ shareId: targetId } as any, { projection: { shareId: 1, thingtime: 1, iconAttachmentId: 1, bannerAttachmentId: 1 } });
+			return subspaceAttachmentTargetAllows(attachment, target);
+		}
 
 		if (attachment.attachmentPurpose === 'profile') {
 			// Query by globally unique shareId first, then validate the exact canonical
@@ -241,20 +254,32 @@ export const createCanViewHomeAttachmentTarget = (overrides: Partial<AttachmentT
 			);
 		}
 
+		// Draft media stays private even if a corrupt row carries a wider ACL.
+        if (viewer?.id === attachment.ownerId && (attachment.attachmentPurpose === 'post' || attachment.attachmentPurpose === 'comment')) {
+          const draft = await things.findOne({ shareId: targetId, ownerId: viewer.id, thingtime: ['draft'], acl: [ACL_OWNER], draftDeleted: { $ne: true } } as any, { projection: { shareId: 1 } });
+          if (draft) return true;
+        }
+
 		if (attachment.attachmentPurpose === 'comment') {
 			return canViewCommentAttachment(things, viewer, attachment);
 		}
 		if (attachment.attachmentPurpose === 'message') {
-			return canViewMessageAttachment(things, viewer, attachment);
+			return canViewMessageAttachment(things, viewer, attachment, dependencies.memberFilter);
 		}
 		if (attachment.attachmentPurpose === 'emoji') {
-			return canViewEmojiAttachment(things, viewer, attachment);
+			return canViewEmojiAttachment(things, viewer, attachment, dependencies.memberFilter);
 		}
 		if (attachment.attachmentPurpose !== undefined && attachment.attachmentPurpose !== 'post') return false;
-		const target = (await things.findOne({ shareId: targetId, thingtime: 'post', targetId: null } as any, {
-			projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1 }
-		})) as AttachmentTargetAclDoc | null;
-		return attachmentTargetAclAllows(target, viewer);
+		// post-purpose media binds to top-level posts AND to webpages (builder
+		// saves) — both authorize by the target's own top-level ACL
+		const target = (await things.findOne(
+			{ shareId: targetId, thingtime: { $in: ['post', 'webpage'] }, targetId: null } as any,
+			{
+				projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1, linkKey: 1, moderation: 1, subspacePrivate: 1, 'crystal.subspaceId': 1 }
+			}
+		)) as AttachmentTargetAclDoc | null;
+		if (!target || attachmentTargetAclAllows(target, viewer)) return !!target;
+    return attachmentTargetAclAllows(target, await withFoundPostGrant(target as ThingDoc, viewer, async (shareId) => await things.findOne({ shareId } as any) as ThingDoc | null));
 	};
 };
 

@@ -35,6 +35,9 @@ export const action = async ({ request }: { request: Request }) => {
   if (password.length < 6) {
     return json({ ok: false, error: 'Password must be at least 6 characters' }, { status: 400 });
   }
+  if (Buffer.byteLength(password) > 4096) {
+    return json({ ok: false, error: 'Password must be at most 4096 UTF-8 bytes' }, { status: 400 });
+  }
 
   const consumed = await consumePasswordReset(token);
   if (consumed.ok === false) {

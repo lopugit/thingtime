@@ -3,11 +3,16 @@
 // submit) so error handling reads identically: `catch (err) { err?.error }`.
 import { useCallback, useMemo } from 'react';
 import { useAsyncFetcher } from '~/hooks/useAsyncFetcher';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 
-const getJson = async (url: string) => {
+import { getMessengerJson as getJson } from './messengerRequest';
+
+const postJson = async (url: string, body: unknown) => {
   const response = await fetch(url, {
+    method: 'POST',
     credentials: 'include',
-    headers: { Accept: 'application/json' }
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.ok === false) throw payload;
@@ -28,25 +33,32 @@ export const useMessengerApi = () => {
   const fetcher = useAsyncFetcher();
   const submit = fetcher.submit;
   const post = useCallback(
-    (action: string) => (data?: Record<string, unknown>) => submit(data || {}, { action }),
+    (action: string, feature?: string, minimumVersion = '1.0.1') => async (data?: Record<string, unknown>) => {
+      if (feature) await requireThingtimeCapability(feature, minimumVersion);
+      return submit(data || {}, { action });
+    },
     [submit]
   );
 
   return useMemo(
     () => ({
       listChats: () => getJson('/api/v1/chats'),
+      aiConnections: () => getJson('/api/v1/ai/connections'),
+      syncAiConnections: (batch: Record<string, unknown>) => postJson('/api/v1/ai/connections', batch),
       updates: () => getJson('/api/v1/chats/updates'),
       getChat: (id: string) => getJson(`/api/v1/chats/get${toQuery({ id })}`),
       createChat: post('/api/v1/chats'),
       updateChat: post('/api/v1/chats/update'),
       members: post('/api/v1/chats/members'),
       leaveChat: post('/api/v1/chats/leave'),
-      messages: (args: { chatId: string; cursor?: string | null; limit?: number; threadRootId?: string | null }) =>
-        getJson(`/api/v1/chats/messages${toQuery(args)}`),
-      sendMessage: post('/api/v1/chats/messages'),
-      editMessage: post('/api/v1/chats/messages/edit'),
+      messages: async (args: { chatId: string; cursor?: string | null; limit?: number; threadRootId?: string | null }) => {
+        await requireThingtimeCapability('api.chats-messages', '1.0.1');
+        return getJson(`/api/v1/chats/messages${toQuery(args)}`);
+      },
+      sendMessage: post('/api/v1/chats/messages', 'api.chats-messages'),
+      editMessage: post('/api/v1/chats/messages/edit', 'api.chats-messages-edit'),
       deleteMessage: post('/api/v1/chats/messages/delete'),
-      react: post('/api/v1/chats/react'),
+      react: post('/api/v1/chats/react', 'api.chats-react', '1.0.3'),
       markRead: post('/api/v1/chats/read'),
       requests: () => getJson('/api/v1/chats/requests'),
       respondRequest: post('/api/v1/chats/requests'),
