@@ -388,27 +388,46 @@ final class SystemMetricsService {
 
   private func gpuUtilization() -> Double? {
     if let cachedGPU, Date().timeIntervalSince(cachedGPU.sampledAt) < 2 { return cachedGPU.utilization }
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/sbin/ioreg")
-    process.arguments = ["-r", "-c", "IOAccelerator", "-d", "1"]
-    let output = Pipe()
-    process.standardOutput = output
-    process.standardError = Pipe()
-    let utilization: Double?
-    do {
-      try process.run()
-      process.waitUntilExit()
-      guard process.terminationStatus == 0 else {
-        cachedGPU = (Date(), nil)
-        return nil
-      }
-      let text = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-      utilization = Self.gpuUtilization(fromIORegistry: text)
-    } catch {
-      utilization = nil
-    }
+    let text = Self.processOutput(
+      executable: "/usr/sbin/ioreg", arguments: ["-r", "-c", "IOAccelerator", "-d", "1"]
+    )
+    let utilization = text.flatMap(Self.gpuUtilization(fromIORegistry:))
     cachedGPU = (Date(), utilization)
     return utilization
+  }
+
+  /// Drain stdout while the child runs: IORegistry output can exceed a pipe's
+  /// capacity, so waiting for exit first can deadlock both the app and child.
+  nonisolated static func processOutput(
+    executable: String, arguments: [String], timeout: TimeInterval = 2
+  ) -> String? {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = arguments
+    let output = Pipe()
+    process.standardOutput = output
+    process.standardError = FileHandle.nullDevice
+    do {
+      try process.run()
+      let expired = DispatchSemaphore(value: 0)
+      let deadline = DispatchWorkItem {
+        guard process.isRunning else { return }
+        expired.signal()
+        process.terminate()
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.25) {
+          if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        }
+      }
+      DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: deadline)
+      let data = output.fileHandleForReading.readDataToEndOfFile()
+      process.waitUntilExit()
+      deadline.cancel()
+      try? output.fileHandleForReading.close()
+      guard expired.wait(timeout: .now()) == .timedOut, process.terminationStatus == 0 else { return nil }
+      return String(decoding: data, as: UTF8.self)
+    } catch {
+      return nil
+    }
   }
 
   static func gpuUtilization(fromIORegistry text: String) -> Double? {

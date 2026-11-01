@@ -24,8 +24,9 @@ export const writeThingsLocation = (params: URLSearchParams, state: ThingsLocati
   return next;
 };
 
-export const thingBrowseHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>, search = '') => {
-  if (!isFolder(thing)) return thingOpenHref(thing, 'things');
+export const thingBrowseHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal' | 'author'>>, search = '', viewerId?: string | null) => {
+  const href = thingOpenHref(thing, 'things', viewerId);
+  if (href.startsWith('/builder') || !isFolder(thing)) return href;
   const next = new URLSearchParams(search);
   next.set('folder', thing.id);
   for (const key of ['q', 'preview', 'device']) next.delete(key);

@@ -44,7 +44,7 @@ fn service_processes_correlated_requests_and_survives_invalid_json() {
     let second: Value = serde_json::from_str(&second).expect("second JSON");
     assert_eq!(second["id"], "status-1");
     assert_eq!(second["ok"], true);
-    assert_eq!(second["result"]["schemaVersion"], 3);
+    assert_eq!(second["result"]["schemaVersion"], 4);
 
     writeln!(
         stdin,

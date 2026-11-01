@@ -45,6 +45,29 @@ test('hidden tabs poll slowly and immediately catch up on return', async () => {
   await f.advance(2000); f.document.visibilityState = 'visible'; f.document.dispatchEvent(new Event('visibilitychange'));
   await f.flush(); assert.equal(calls, 3);
 });
+test('offline connectivity hints allow first load and foreground probes without background polling', async () => {
+  const f = fixture(); let calls = 0;
+  f.offline();
+  const off = f.refresh.subscribe('local-embeds', () => { calls++; });
+  await f.flush(); assert.equal(calls, 1, 'a reachable local API gets an initial request');
+  await f.advance(60_000); assert.equal(calls, 1, 'offline background polling remains paused');
+  f.window.dispatchEvent(new Event('focus'));
+  f.window.dispatchEvent(new Event('pageshow'));
+  await f.flush(); assert.equal(calls, 2, 'foreground revalidation probes once despite the connectivity hint');
+  await f.advance(60_000); assert.equal(calls, 2);
+  f.online(); f.window.dispatchEvent(new Event('online'));
+  await f.flush(); assert.equal(calls, 3);
+  off(); assert.equal(f.timers.size, 0);
+});
+test('a deferred subscription still waits before its first offline probe', async () => {
+  const f = fixture(); let calls = 0;
+  f.offline();
+  const off = f.refresh.subscribe('deferred-local', () => { calls++; }, 5000, false);
+  await f.flush(); assert.equal(calls, 0);
+  await f.advance(5000); assert.equal(calls, 1);
+  await f.advance(5000); assert.equal(calls, 1);
+  off(); assert.equal(f.timers.size, 0);
+});
 test('slow requests never overlap and a return during a request catches up once', async () => {
   const f = fixture(); let calls = 0, resolve!: () => void;
   const off = f.refresh.subscribe('chat', () => { calls++; return new Promise<void>(r => { resolve = r; }); }, 3000);

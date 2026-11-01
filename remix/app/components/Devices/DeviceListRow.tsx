@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { browseClickIntent, BROWSE_CONTROLS_SX } from '../Things/browseInteraction';
 
 import { Box, Flex, Text } from '@chakra-ui/react';
 import { ChevronRight, Laptop, Lock, Watch as WatchIcon } from 'lucide-react';
@@ -13,19 +14,21 @@ export type DeviceListRowProps = {
 	pendingCommandCount?: number;
 	pendingApprovalCount?: number;
 	now?: number;
+	controls?: React.ReactNode;
 	onSelect: (deviceId: string) => void;
 	onOpen?: (deviceId: string) => void;
 	onContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 };
 
 export const DeviceListRow = memo(
-	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect, onOpen, onContextMenu }: DeviceListRowProps) => (
+	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect, onOpen, onContextMenu, controls }: DeviceListRowProps) => (
+		<Box position="relative" role="group" sx={BROWSE_CONTROLS_SX}>
 		<Flex
 			_focusVisible={{ boxShadow: 'inset 0 0 0 2px var(--tt-accent, #f472b6)' }}
 			_hover={{ background: 'var(--tt-surface-hover, #f7f7f8)' }}
 			alignItems="center"
 			aria-label={`Open ${device.name}`}
-			title={onOpen ? 'Double-click or press Enter to browse saved files. Right-click for device settings.' : undefined}
+			title={onOpen ? 'Click or press Enter to browse saved files. Select with the checkbox or modifier-click; right-click for device settings.' : undefined}
 			aria-pressed={selected}
 			as="button"
 			background={selected ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.08))' : 'transparent'}
@@ -34,12 +37,17 @@ export const DeviceListRow = memo(
 			gap={3}
 			minHeight="66px"
 			minWidth={0}
-			onClick={(event) => { if (onOpen && (event.detail === 0 || window.matchMedia('(pointer: coarse)').matches)) onOpen(device.id); else onSelect(device.id); }}
-				onDoubleClick={() => onOpen?.(device.id)}
+			onClick={(event) => {
+				const intent = browseClickIntent(event);
+				if (intent === 'select' || (intent === 'open' && !onOpen)) onSelect(device.id);
+				else if (intent === 'open') onOpen?.(device.id);
+			}}
 				onKeyDown={(event) => { if (onOpen && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpen(device.id); } }}
 			onContextMenu={(event) => onContextMenu?.(device.id, event)}
 			paddingX={{ base: 3, md: 4 }}
 			paddingY={2.5}
+			paddingRight={controls ? 20 : undefined}
+			sx={controls ? { '@media (hover: none), (pointer: coarse)': { paddingRight: '112px' } } : undefined}
 			textAlign="left"
 			transition="background 120ms ease"
 			type="button"
@@ -81,6 +89,8 @@ export const DeviceListRow = memo(
 
 			<ChevronRight aria-hidden color="var(--tt-faint, #a1a1aa)" size={17} />
 		</Flex>
+			{controls}
+		</Box>
 	)
 );
 DeviceListRow.displayName = 'DeviceListRow';

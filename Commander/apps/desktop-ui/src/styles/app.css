@@ -425,6 +425,7 @@
   line-height: 1.1;
 }
 .footer-index-progress {
+  min-width: 0;
   max-width: 330px;
   overflow: hidden;
   color: var(--text);
@@ -2800,7 +2801,7 @@
   }
   .search-hint,
   .result-kind,
-  .launcher-footer > span:not(.connection-dot):not(.footer-error) {
+  .launcher-footer > span:not(.connection-dot):not(.footer-error):not(.footer-index-progress):not(.footer-spacer) {
     display: none;
   }
   .actions-panel {

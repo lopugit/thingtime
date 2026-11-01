@@ -25,6 +25,10 @@ export interface TtThemeColors {
   accent: string
   accentTint: string
   accentContrast: string
+  /** Control focus border and the two ends of its soft gradient halo. */
+  focusBorder: string
+  focusGlowStart: string
+  focusGlowEnd: string
   link: string
   positive: string
   positiveSoft: string
@@ -71,6 +75,9 @@ export interface TtThemeGeneral {
   radiusScale: number
   /** Hairline border width in px for app chrome (Prism 1, Fable 2). */
   borderWidth: number
+  /** Focus halo softness in px and strength (0 disables the glow). */
+  focusGlowBlur: number
+  focusGlowOpacity: number
   /** Shadow language: soft (Prism) or hard offset (Fable). */
   shadow: 'soft' | 'hard'
   /** Master switch for decorative motion (rainbow panning, bobbing). */
@@ -179,6 +186,9 @@ export const THINGTIME_THEME: TtTheme = {
     accent: 'hotpink',
     accentTint: '#fff5fa',
     accentContrast: '#ffffff',
+    focusBorder: '#d63384',
+    focusGlowStart: '#ff69b4',
+    focusGlowEnd: '#a555e8',
     link: '#2f8fd6',
     positive: '#2f8f4f',
     positiveSoft: 'rgba(88, 202, 112, 0.14)',
@@ -201,6 +211,8 @@ export const THINGTIME_THEME: TtTheme = {
   general: {
     radiusScale: 1,
     borderWidth: 1,
+    focusGlowBlur: 14,
+    focusGlowOpacity: 0.24,
     shadow: 'soft',
     motion: true,
     animSpeed: 200,
@@ -238,6 +250,8 @@ export const FABLE_THEME: TtTheme = {
   general: {
     radiusScale: 0,
     borderWidth: 2,
+    focusGlowBlur: 14,
+    focusGlowOpacity: 0.24,
     shadow: 'hard',
     motion: true,
     animSpeed: 120,
@@ -339,9 +353,9 @@ export const resolveTheme = (
 ): TtTheme => {
   const out: TtTheme = {
     name: base.name,
-    colors: { ...base.colors, rainbow: [...base.colors.rainbow] as TtThemeColors['rainbow'] },
+    colors: { ...THINGTIME_THEME.colors, ...base.colors, rainbow: [...base.colors.rainbow] as TtThemeColors['rainbow'] },
     fonts: { ...base.fonts },
-    general: { ...base.general },
+    general: { ...THINGTIME_THEME.general, ...base.general },
     // older stored themes predate the windows section — fill from defaults
     windows: { ...THINGTIME_THEME.windows, ...(base.windows || {}) },
   }
@@ -383,6 +397,8 @@ export const resolveTheme = (
   if (general && typeof general === 'object') {
     out.general.radiusScale = clampNumber(general.radiusScale, 0, 2.5, out.general.radiusScale)
     out.general.borderWidth = clampNumber(general.borderWidth, 1, 4, out.general.borderWidth)
+    if (typeof general.focusGlowBlur === 'number' && Number.isFinite(general.focusGlowBlur)) out.general.focusGlowBlur = Math.max(0, general.focusGlowBlur)
+    out.general.focusGlowOpacity = clampNumber(Number.isFinite(general.focusGlowOpacity) ? general.focusGlowOpacity : undefined, 0, 1, out.general.focusGlowOpacity)
     if (general.shadow === 'soft' || general.shadow === 'hard') out.general.shadow = general.shadow
     if (typeof general.motion === 'boolean') out.general.motion = general.motion
     out.general.animSpeed = clampNumber(general.animSpeed, 0, 2000, out.general.animSpeed)
@@ -462,6 +478,12 @@ export const themeToCssVars = (theme: TtTheme): Record<string, string> => {
     '--tt-accent': c.accent,
     '--tt-accent-tint': c.accentTint,
     '--tt-accent-contrast': c.accentContrast,
+    '--tt-focus-border': c.focusBorder || THINGTIME_THEME.colors.focusBorder,
+    '--tt-focus-glow-start': c.focusGlowStart || THINGTIME_THEME.colors.focusGlowStart,
+    '--tt-focus-glow-end': c.focusGlowEnd || THINGTIME_THEME.colors.focusGlowEnd,
+    '--tt-focus-glow-blur': `${g.focusGlowBlur ?? THINGTIME_THEME.general.focusGlowBlur}px`,
+    '--tt-focus-glow-opacity': String(g.focusGlowOpacity ?? THINGTIME_THEME.general.focusGlowOpacity),
+    '--tt-focus-shadow': '-4px 0 var(--tt-focus-glow-blur) color-mix(in srgb, var(--tt-focus-glow-start) calc(var(--tt-focus-glow-opacity) * 100%), transparent), 4px 0 var(--tt-focus-glow-blur) color-mix(in srgb, var(--tt-focus-glow-end) calc(var(--tt-focus-glow-opacity) * 100%), transparent)',
     '--tt-link': c.link,
     '--tt-positive': c.positive,
     '--tt-positive-soft': c.positiveSoft,

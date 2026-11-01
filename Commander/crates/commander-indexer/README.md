@@ -110,8 +110,8 @@ total-machine CPU, and 512 MiB RAM. Supported ranges are 1–64 threads/tasks,
 1–256 open directories, 5–100% CPU, and 32–131072 MiB RAM. Omitted
 `resourceLimits` receive the defaults for backwards compatibility.
 
-Schema 3 upgrades existing databases transactionally and changes the FTS update
-trigger to run only when an indexed name changes. Scheduled reconciliations can
+Schema 3 introduced a transactional upgrade that changes the FTS update
+trigger to run only when an indexed name changes; schema 4 preserves that behavior. Scheduled reconciliations can
 still advance each record generation and remove disappeared paths without
 rewriting unchanged trigram rows.
 
@@ -172,3 +172,31 @@ cancels it. The Rust `capture()` convenience API remains finite.
 This is a capture-scoped change feed, not a watcher seeded from a previously
 sealed inventory. Explicit stop defines the end of observation; the protocol
 does not establish a filesystem-wide atomic snapshot.
+
+
+### Incremental metadata refresh (schema 4)
+
+`IndexConfiguration.changedPaths` optionally supplies absolute changed subtrees. The walker starts at each original
+source root and prunes unrelated branches, so parent Git ignores, custom rules, hidden items and opaque package
+boundaries still apply. Deleted and renamed paths are removed atomically only inside those subtrees. Full-source
+refresh timestamps are retained after a partial update, so frequent events cannot postpone scheduled reconciliation.
+`pruneSourcePrefixes` may accompany partial updates when `sources` lists every currently active source; this removes
+disconnected roots. Empty sources are permitted only with an explicit prune namespace.
+
+Schema 4 stores reference-counted unique path/kind counters and per-source counts with insert/delete triggers.
+Repeated status reads and incremental refreshes do not count the whole record table. Its one-time migration is
+serialized and rechecks the schema under the writer lock; `serve --reader` skips that migration and serves the old
+committed snapshot independently. Normal UPSERTs change metadata/generation, never path/kind identity. macOS Data
+volume aliases are folded to the public root path and the root walker skips the duplicate Data-volume traversal.
+
+The optional `settingsFingerprint` is saved for successfully reconciled namespaces and returned as
+`IndexStatus.configurationFingerprints`. The local `catalogue` operation accepts `kinds`, `sourcePrefix`, and optional
+`sourceIds` to enumerate only active application sources; `sourceIds: []` means no sources. The Node client's
+`catalogue(kinds, prefix, ids)` uses that operation; its unscoped form retains the existing query behavior.
+
+
+A query reader may use `readPolicy` with an `IndexConfiguration` to constrain a legacy snapshot to current sources
+and current ignore/hidden/Git/existence policy. Filtering inspects only returned candidates and uses indexed
+path/kind membership checks plus a bounded parent-rule cache; it never sweeps the index or replaces its SQL plan.
+It may underfill a legacy result page after removing ineligible candidates. Set the policy to null when a verified
+current fingerprint is available. A scoped reader refuses index operations; lookups apply the same eligibility rule.

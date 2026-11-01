@@ -14,7 +14,7 @@ const read = (...segments: string[]) => readFileSync(resolve(feedDir, ...segment
 test('PostCard shares canonical URLs for hidden and mixed audiences', () => {
   assert.match(read('PostCard.tsx'), /<PostThingMenu/);
   assert.match(read('PostThingMenu.tsx'), /<PersistedThingMenu[^>]*initialThing=\{post\}/s);
-  assert.match(read('../Thingtime/ContextMenu/PersistedThingMenu.tsx'), /thingEntityLink\(href, window.location.origin, thing, user\?\.id, sharedAccess.key\)/);
+  assert.match(read('../Thingtime/ContextMenu/PersistedThingMenu.tsx'), /thingEntityLink\(permalink, window.location.origin, thing, user\?\.id, sharedAccess.key\)/);
   for (const visibility of ['custom', 'hidden']) {
     const thing = { visibility, author: { id: 'owner' }, linkKey: 'test & + / key' };
     const url = thingEntityLink('/post/test', 'https://thingtime.test', thing, 'owner');

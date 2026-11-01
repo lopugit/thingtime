@@ -1,3 +1,4 @@
+import { isBuilderThing, withBuilderThingKind } from '~/schemas/builderThing';
 import { useAccountDraft } from '~/drafts/useAccountDraft';
 import { DraftSaveStatus } from '~/drafts/DraftPicker';
 import React from 'react';
@@ -12,12 +13,12 @@ import { openThingHistory } from '~/components/Timeline/TimelineHost';
 import { useTimelineSession } from '~/timeline/TimelineProvider';
 
 type DefinitionThing = { id: string; author?: { id: string }; thingtime: string[]; crystal: Record<string, any>; updatedAt: string; timelineHeadId?: string };
-export function ThingDefinitionEditor(props: { id: string; onClose: () => void; onSaved?: (thing: DefinitionThing) => void }) {
+export function ThingDefinitionEditor(props: { id: string; onClose: () => void; onSaved?: (thing: DefinitionThing) => void; requireBuilder?: boolean }) {
  const user = useCurrentUser();
  const timeline = useTimelineSession();
- return <Editor key={`${timeline.identity}:${props.id}`} {...props} actor={user?.id} />;
+ return <Editor key={`${timeline.identity}:${user?.id || ''}:${props.id}`} {...props} actor={user?.id} />;
 }
-function Editor({ id, actor, onClose, onSaved }: React.ComponentProps<typeof ThingDefinitionEditor> & { actor?: string }) {
+function Editor({ id, actor, onClose, onSaved, requireBuilder }: React.ComponentProps<typeof ThingDefinitionEditor> & { actor?: string }) {
  const api = useApi();
  const apiRef = React.useRef(api); apiRef.current = api;
  const [thing, setThing] = React.useState<DefinitionThing | null>(null);
@@ -51,12 +52,13 @@ function Editor({ id, actor, onClose, onSaved }: React.ComponentProps<typeof Thi
   let cancelled = false;
   void apiRef.current.v1.things.get({ id }).then((response: any) => {
    if (cancelled) return;
-   if (!response?.ok || !response.thing) throw new Error(response?.error || 'Could not open this definition');
+   if (!response?.ok || response.thing?.id !== id) throw new Error(response?.error || 'Could not open this definition');
    if (!actor || response.thing.author?.id !== actor) throw new Error('Save a private copy before editing this definition.');
+   if (requireBuilder && !isBuilderThing(response.thing)) throw new Error('This Thing has no saved Builder definition. Open its Thing data instead.');
    setThing(response.thing); if (!restored.current) { setDraftBase(response.thing.updatedAt); setSource(JSON.stringify(response.thing.crystal, null, 2)); }
   }).catch((failure: Error) => { if (!cancelled) setError(failure.message); });
   return () => { cancelled = true; active.current = false; };
- }, [id, actor]);
+ }, [id, actor, requireBuilder]);
  let parsed: any = null, parseError = '';
  try { if (source) parsed = JSON.parse(source); } catch { parseError = 'The source contains invalid JSON.'; }
  const staleDraft = !!thing && restored.current && draftBase !== thing.updatedAt;
@@ -82,11 +84,11 @@ function Editor({ id, actor, onClose, onSaved }: React.ComponentProps<typeof Thi
    await accountDraft.flush();
    const draftEventId = await draft.flush();
    if (!active.current) return;
-   const response = await apiRef.current.v1.things.update({ id, crystal: parsed, replaceCrystal: true, expectedUpdatedAt: draftBase, expectedActor: actor });
+   const response = await apiRef.current.v1.things.update({ id, thingtime: withBuilderThingKind(thing.thingtime, thing.crystal), crystal: parsed, replaceCrystal: true, expectedUpdatedAt: draftBase, expectedActor: actor });
    if (!response?.ok) throw new Error(response?.error || 'Could not save the definition');
    await draft.release(draftEventId);
    const readback = await apiRef.current.v1.things.get({ id });
-   if (!readback?.ok || !readback.thing) throw new Error('Saved, but readback failed. Reopen the definition to check it.');
+   if (!readback?.ok || readback.thing?.id !== id || readback.thing.author?.id !== actor) throw new Error('Saved, but readback failed. Reopen the definition to check it.');
    if (!active.current) return;
    await accountDraft.clear().catch(() => {}); onSaved?.(readback.thing); onClose();
   } catch (failure: any) { if (active.current) setError(failure?.error || failure?.message || 'Could not save'); }

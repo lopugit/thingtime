@@ -33,8 +33,8 @@ export const useMessengerApi = () => {
   const fetcher = useAsyncFetcher();
   const submit = fetcher.submit;
   const post = useCallback(
-    (action: string, feature?: string) => async (data?: Record<string, unknown>) => {
-      if (feature) await requireThingtimeCapability(feature, '1.0.1');
+    (action: string, feature?: string, minimumVersion = '1.0.1') => async (data?: Record<string, unknown>) => {
+      if (feature) await requireThingtimeCapability(feature, minimumVersion);
       return submit(data || {}, { action });
     },
     [submit]
@@ -58,7 +58,7 @@ export const useMessengerApi = () => {
       sendMessage: post('/api/v1/chats/messages', 'api.chats-messages'),
       editMessage: post('/api/v1/chats/messages/edit', 'api.chats-messages-edit'),
       deleteMessage: post('/api/v1/chats/messages/delete'),
-      react: post('/api/v1/chats/react', 'api.chats-react'),
+      react: post('/api/v1/chats/react', 'api.chats-react', '1.0.3'),
       markRead: post('/api/v1/chats/read'),
       requests: () => getJson('/api/v1/chats/requests'),
       respondRequest: post('/api/v1/chats/requests'),

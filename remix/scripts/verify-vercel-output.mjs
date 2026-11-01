@@ -85,6 +85,21 @@ for (const host of ['https://maps.googleapis.com', 'https://maps.gstatic.com'])
 	if (!appScriptSources.includes(host)) throw new Error('Missing Maps SDK host: ' + host);
 for (const host of ['https://maps.googleapis.com', 'https://mapsresources-pa.googleapis.com'])
 	if (!getDirectiveSources(prodCsp, 'connect-src').includes(host)) throw new Error('Missing Maps service host: ' + host);
+for (const host of ['https://api.mapbox.com', 'https://events.mapbox.com'])
+	if (!getDirectiveSources(prodCsp, 'connect-src').includes(host)) throw new Error('Missing Mapbox service host: ' + host);
+if (appScriptSources.includes('https://api.mapbox.com')) throw new Error('Native Mapbox SDK must load from the bundled application assets.');
+
+// The loader names a fixed versioned same-origin path. Verify the deployed
+// bytes are the exact npm distribution rather than a missing or stale copy.
+const mapboxVersion = readJson('node_modules/mapbox-gl/package.json').version;
+if (mapboxVersion !== '3.30.0') throw new Error('Mapbox SDK package and saved map loader versions differ.');
+for (const file of ['mapbox-gl.js', 'mapbox-gl.css']) {
+	const source = readFileSync(join('node_modules/mapbox-gl/dist', file));
+	const deployedPath = join('.vercel/output/static/vendor/mapbox-gl', `v${mapboxVersion}`, file);
+	if (!existsSync(deployedPath) || createHash('sha256').update(readFileSync(deployedPath)).digest('hex') !== createHash('sha256').update(source).digest('hex')) {
+		throw new Error(`Mapbox SDK asset missing or changed: ${file}`);
+	}
+}
 
 // Every executable script must be external and same-origin. The policy has no
 // inline hash/nonce allowance, so an inline bootstrap would be present in the
@@ -320,7 +335,8 @@ if (mcpLabHeadersIndex < cspHeadersIndex || mcpLabHeadersIndex > spaIndex) {
 for (const route of routes) {
 	const csp = route.headers?.['Content-Security-Policy'];
 	const isolatedSdk = route.src === '^/library/sdk\\.html$' && csp === librarySdkCsp;
-	if (typeof csp === 'string' && csp.includes('unsafe-eval') && csp !== designBundlesCsp && !isolatedSdk) {
+	if (typeof csp === 'string' && csp.includes('wasm-unsafe-eval') && !(route.src === '^/assets/mediaWorker-[A-Za-z0-9_-]+\\.js$' && csp === mediaWorkerCsp)) throw new Error('WebAssembly compilation permission must stay scoped to the fixed media worker.');
+	if (typeof csp === 'string' && getDirectiveSources(csp, 'script-src').includes("'unsafe-eval'") && csp !== designBundlesCsp && !isolatedSdk) {
 		throw new Error(`Vercel output CSP re-introduces 'unsafe-eval' outside isolated design/SDK documents (route ${route.src}).`);
 	}
 }

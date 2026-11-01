@@ -893,6 +893,12 @@ export interface IndexingStatus {
   available: boolean;
   running: IndexScope[];
   totalRecords: number;
+  /** Latest measured committed file/folder snapshot plus the enabled command/application catalogue; live observations may precede this count. */
+  searchableRecords?: number;
+  /** True when measured counters apply to the current policy and roots; ordinary pending changes retain the last measured snapshot. */
+  countsCurrent?: boolean;
+  /** Oldest successful full refresh across active indexes. */
+  lastIndexedAtMs?: number;
   databaseSizeBytes: number;
   kinds: IndexKindStatus[];
   commands: {

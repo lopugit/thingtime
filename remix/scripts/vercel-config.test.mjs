@@ -40,7 +40,9 @@ test('emitted Web Platform routes prevent stale compiler reuse and keep document
 	assert.ok(routes.indexOf(media) < routes.findIndex(route => route.handle === 'filesystem'));
 	assert.match(mediaWorkerCsp, /connect-src 'none'/);
 	assert.match(mediaWorkerCsp, /worker-src 'none'/);
-	assert.ok(!mediaWorkerCsp.includes('unsafe-eval'));
+	assert.ok(!mediaWorkerCsp.includes("'unsafe-eval'"));
+	assert.match(mediaWorkerCsp, /script-src 'self' 'wasm-unsafe-eval'/);
+	assert.ok(!prodCsp.includes('wasm-unsafe-eval'));
 	const draft = routes.find(route => route.src === '^/draft-preview(?:/.*)?$');
 	assert.equal(draft.headers['Content-Security-Policy'], draftPreviewCsp);
 	assert.equal(draft.headers['Cache-Control'], 'no-store');
@@ -115,9 +117,13 @@ test('native Maps can load under the deployed policy without broad script or eva
 			'https://maps.googleapis.com',
 			'https://mapsresources-pa.googleapis.com',
 			'https://maps.gstatic.com',
-			'https://csi.gstatic.com'
+			'https://csi.gstatic.com',
+			'https://api.mapbox.com',
+			'https://events.mapbox.com'
 		])
 			assert(cspSources(policy, 'connect-src').includes(host));
+		assert(!cspSources(policy, 'script-src').includes('https://api.mapbox.com'));
+		assert(cspSources(policy, 'worker-src').includes('blob:'));
 	}
 });
 

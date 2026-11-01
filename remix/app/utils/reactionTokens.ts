@@ -20,11 +20,6 @@ const ALL_EMOJI_CHARS =
 // (⃣ lets keycap sequences like 1️⃣ still count).
 const HAS_REAL_EMOJI = /[\p{Extended_Pictographic}\p{Regional_Indicator}⃣]/u;
 
-// One token holds at most this many distinct emoji (grapheme clusters); the
-// code-point cap is a cheap guard against pathological joiner spam.
-export const MAX_REACTION_EMOJIS = 12;
-const MAX_REACTION_CODEPOINTS = 80;
-
 const graphemeSegmenter =
   typeof Intl !== 'undefined' && typeof (Intl as any).Segmenter === 'function'
     ? new (Intl as any).Segmenter(undefined, { granularity: 'grapheme' })
@@ -32,11 +27,16 @@ const graphemeSegmenter =
 
 // Split a token into its individual emoji (grapheme clusters) for rendering /
 // counting. Falls back to code-point spread where Intl.Segmenter is absent.
-export const splitEmojis = (token: string): string[] => {
-  if (graphemeSegmenter) {
-    return Array.from(graphemeSegmenter.segment(token), (s: any) => s.segment);
+export const splitEmojis = (token: string, limit = Infinity): string[] => {
+  if (!(limit > 0)) return [];
+  const result: string[] = [];
+  // Decorative consumers can stop the lazy iterator without segmenting and
+  // allocating every emoji in a large token. This never limits saved input.
+  for (const part of graphemeSegmenter ? graphemeSegmenter.segment(token) : token) {
+    result.push(typeof part === 'string' ? part : part.segment);
+    if (result.length >= limit) break;
   }
-  return Array.from(token);
+  return result;
 };
 
 // Return the trimmed token if it is a valid emoji-only reaction, else null.
@@ -46,11 +46,9 @@ export const sanitizeReactionToken = (raw: unknown): string | null => {
   if (typeof raw !== 'string') return null;
   const token = raw.trim();
   if (!token) return null;
-  if (Array.from(token).length > MAX_REACTION_CODEPOINTS) return null;
   if (token.includes('.') || token.startsWith('$') || /\s/.test(token)) return null;
   if (!ALL_EMOJI_CHARS.test(token)) return null;
   if (!HAS_REAL_EMOJI.test(token)) return null;
-  if (splitEmojis(token).length > MAX_REACTION_EMOJIS) return null;
   return token;
 };
 

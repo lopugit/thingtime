@@ -41,10 +41,15 @@ import XCTest
         let (root, bookmark, entry) = try fixture()
         // A canonical alias is detected on case-sensitive test filesystems.
         let alias = root.appendingPathComponent("FILE")
-        if !FileManager.default.fileExists(atPath: alias.path) {
-            try Data("alias".utf8).write(to: alias)
+        do {
+            // Simulator lookup and exclusive creation can disagree about case aliases.
+            // Exclusive creation protects the original on case-insensitive hosts.
+            try Data("alias".utf8).write(to: alias, options: .withoutOverwriting)
             XCTAssertThrowsError(try MobileFolderBulkReader.read(bookmark: bookmark, expected: entry))
             try FileManager.default.removeItem(at: alias)
+        } catch CocoaError.fileWriteFileExists {
+            // Independent case aliases cannot be constructed on this filesystem.
+            XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("file")), Data(repeating: 42, count: 131_073))
         }
         try FileManager.default.removeItem(at: root.appendingPathComponent("file"))
         try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("file"), withDestinationURL: root)

@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { createServer, type Server } from 'node:http';
+import { createFolderHostFetch } from '~/fileSync/folderHostFetch.client';
 import { afterEach, beforeEach, test } from 'node:test';
 import { createThingtimeCapabilityChecker } from './requireCapability.client';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './capabilityContract';
@@ -118,4 +120,125 @@ test('owned-plan clients negotiate each new operation and reject pre-admission o
       response.mock.restore();
     }
   }
+});
+
+
+test('theme saves refuse stale manifests then retry compatible focus-setting support', async (t) => {
+  const { THEME_CAPABILITY_REQUIREMENTS } = await import('../../../theme/capabilities');
+  let version = '1.1.0';
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ schemaVersion: 1, origin: 'https://thingtime.test', features: { 'api.themes': { version } } }));
+  const check = createThingtimeCapabilityChecker();
+  await assert.rejects(check('api.themes', THEME_CAPABILITY_REQUIREMENTS['api.themes']), /incompatible/);
+  version = '1.2.1';
+  await check('api.themes', THEME_CAPABILITY_REQUIREMENTS['api.themes']);
+});
+
+test('selected-origin changes fetch a new manifest and late old reads cannot evict it', async (t) => {
+  let releaseOld!: (value: Response) => void;
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    calls++;
+    if (calls === 1) return new Promise<Response>(resolve => { releaseOld = resolve; });
+    return Response.json({ ...manifest(), origin: 'https://selected.test' });
+  });
+  const check = createThingtimeCapabilityChecker();
+  const old = check('api.lopu-reminders', '1.1.0');
+  await check('api.lopu-reminders', '1.1.0', 'https://selected.test');
+  releaseOld(Response.json({ ...manifest(), origin: 'https://wrong.test' }));
+  await assert.rejects(old, /incompatible/);
+  await check('api.lopu-reminders', '1.1.0', 'https://selected.test');
+  assert.equal(calls, 2);
+});
+
+
+test('native scoped discovery reaches the selected HTTP API, never the bundled UI manifest', async (t) => {
+  const nativeFetch = globalThis.fetch;
+  let bundledRequests = 0, selectedRequests = 0;
+  const start = async (server: Server) => {
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    t.after(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); });
+    return `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  };
+  let selectedOrigin = '';
+  const selected = createServer((request, response) => {
+    assert.equal(request.url, THINGTIME_CAPABILITY_MANIFEST_PATH); selectedRequests++;
+    assert.equal(request.headers.cookie, undefined, 'Public discovery must not receive account cookies');
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ ...manifest(), origin: selectedOrigin }));
+  });
+  selectedOrigin = await start(selected);
+  let uiOrigin = '';
+  uiOrigin = await start(createServer((_request, response) => {
+    bundledRequests++; response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ ...manifest(), origin: uiOrigin }));
+  }));
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin: uiOrigin } } });
+  const destinations: string[] = [];
+  const browserFetch: typeof fetch = async (target, init) => {
+    const url = new URL(String(target), uiOrigin); destinations.push(url.href);
+    return nativeFetch(url, init);
+  };
+  t.mock.method(globalThis, 'fetch', browserFetch);
+  let active = true;
+  const host = createFolderHostFetch({ origin: selectedOrigin, localOrigin: uiOrigin, ownerId: 'synthetic-owner',
+    signal: new AbortController().signal, check: () => { if (!active) throw Error('Account changed'); }, fetch: browserFetch });
+  const transport = { fetch: host, currentOrigin: () => { if (!active) throw Error('Account changed'); return selectedOrigin; } };
+  const check = createThingtimeCapabilityChecker();
+  await check('api.lopu-reminders', '1.1.0', selectedOrigin, transport);
+  await check('api.lopu-reminders', '1.1.0', selectedOrigin, transport);
+  assert.equal(selectedRequests, 1); assert.equal(bundledRequests, 0);
+  assert.deepEqual(destinations, [selectedOrigin + THINGTIME_CAPABILITY_MANIFEST_PATH]);
+  active = false;
+  await assert.rejects(check('api.lopu-reminders', '1.1.0', selectedOrigin, transport), /Account changed/);
+  assert.equal(selectedRequests, 1, 'A stale scope must be rejected even on a cached manifest');
+  // Explicit-origin callers without a native adapter also reach that public
+  // origin, rather than comparing a local bundle manifest with a foreign one.
+  await createThingtimeCapabilityChecker()('api.lopu-reminders', '1.1.0', selectedOrigin);
+  assert.equal(selectedRequests, 2); assert.equal(bundledRequests, 0);
+});
+
+test('scoped discovery combines caller cancellation with its deadline and permits a fresh retry', async (t) => {
+  let requested!: () => void;
+  const received = new Promise<void>(resolve => { requested = resolve; });
+  let calls = 0;
+  const caller = new AbortController();
+  const transport = {
+    currentOrigin: () => 'https://selected.test',
+    signal: caller.signal,
+    fetch: (async (target, init) => {
+      assert.equal(String(target), 'https://selected.test' + THINGTIME_CAPABILITY_MANIFEST_PATH);
+      assert.equal(init?.credentials, 'omit'); assert.equal(init?.redirect, 'error');
+      calls++;
+      if (calls > 1) return Response.json({ ...manifest(), origin: 'https://selected.test' });
+      requested();
+      return new Promise<Response>((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true }));
+    }) as typeof fetch
+  };
+  const check = createThingtimeCapabilityChecker();
+  const interrupted = assert.rejects(check('api.lopu-reminders', '1.1.0', 'https://selected.test', transport), /abort/i);
+  await received; caller.abort(); await interrupted;
+  await check('api.lopu-reminders', '1.1.0', 'https://selected.test', { ...transport, signal: undefined });
+  assert.equal(calls, 2);
+});
+
+
+test("an immediate remount never inherits the previous caller's aborted discovery", async () => {
+  let calls = 0;
+  const cancelled = new AbortController();
+  const transport = {
+    currentOrigin: () => 'https://selected.test',
+    fetch: (async (_target, init) => {
+      calls++;
+      if (calls > 1) return Response.json({ ...manifest(), origin: 'https://selected.test' });
+      return new Promise<Response>((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true }));
+    }) as typeof fetch
+  };
+  const check = createThingtimeCapabilityChecker();
+  const old = assert.rejects(check('api.lopu-reminders', '1.1.0', 'https://selected.test', { ...transport, signal: cancelled.signal }), /abort/i);
+  cancelled.abort();
+  // Deliberately do not await the aborted promise: React can remount first.
+  await check('api.lopu-reminders', '1.1.0', 'https://selected.test', transport);
+  await old;
+  await check('api.lopu-reminders', '1.1.0', 'https://selected.test', transport);
+  assert.equal(calls, 2, 'Late old failure must preserve the successful remount cache');
 });

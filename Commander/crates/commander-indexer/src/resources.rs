@@ -403,9 +403,9 @@ fn effective_resource_limits(
     logical_cpus: usize,
 ) -> EffectiveResourceLimits {
     let logical_cpus = logical_cpus.max(1);
-    // ignore 0.4.25 is pinned. Its parallel worker exhausts one ReadDir before
-    // opening the next, so one active worker owns at most one directory handle.
-    // Taking the strictest of these limits therefore enforces every ceiling.
+    // These are ceilings, not a requirement to populate every worker. Search
+    // indexing streams bounded-depth chunks with one producer; backup capture
+    // may use the permitted pool. Both respect the directory-handle ceiling.
     let worker_threads = limits
         .max_threads
         .min(limits.max_parallelism)

@@ -73,6 +73,29 @@ export const runDelegatedAction = async (params: {
 export const REFRESH_ACTION = '$refresh';
 export const INSTALL_ACTION = '$install';
 
+/** Keyboard parity for named fields in Component and expanded page forms. */
+export const clickTtActionForEnter = (event: React.KeyboardEvent, requireFieldset = false): void => {
+	const field = event.target as HTMLInputElement;
+	if (field.closest('[data-tt-native-control], [data-tt-native-upload]')) return;
+	if (
+		event.key !== 'Enter' ||
+		event.nativeEvent.isComposing ||
+		field.tagName !== 'INPUT' ||
+		['checkbox', 'radio', 'range', 'button', 'file'].includes(field.type)
+	) return;
+	const fieldset = field.closest('fieldset');
+	if (requireFieldset && !fieldset) return;
+	const group = fieldset || event.currentTarget as HTMLElement;
+	const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
+	if (!submit) return;
+	const action = submit.getAttribute('data-tt-action');
+	const inputs = submit.getAttribute('data-tt-action-inputs') || '';
+	if (action !== LOCAL_UI_ACTION || /"op":"search"/.test(inputs)) {
+		event.preventDefault();
+		submit.click();
+	}
+};
+
 // A result that carries a `message` string narrates itself in the toast —
 // "You caught PIKACHU!" beats "38ms · 4 ops" on an app page. `title` and
 // `status` are honoured the same way; everything else keeps the run summary.
@@ -91,7 +114,7 @@ export const toastFromResult = (
 	return { title: title || (status === 'error' ? 'Hmm 🧯' : '⚡ Done ✓'), description: message || fallback.description, status };
 };
 
-export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler; onLocal?: (inputs: Record<string, unknown>) => void; onPending?: (action: string | null) => void; onResult?: (outcome: { action: string; ok: boolean; result: unknown; error: string | null }) => void }) => {
+export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler; onLocal?: (inputs: Record<string, unknown>) => void; onPending?: (action: string | null) => void; onResult?: (outcome: { action: string; ok: boolean; result: unknown; error: string | null }) => void; fallbackGroup?: (control: HTMLElement, boundary: HTMLElement) => HTMLElement }) => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
@@ -108,6 +131,8 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 	resultRef.current = options?.onResult;
 	const pendingRef = React.useRef(options?.onPending);
 	pendingRef.current = options?.onPending;
+	const fallbackGroupRef = React.useRef(options?.fallbackGroup);
+	fallbackGroupRef.current = options?.fallbackGroup;
 	const busyRef = React.useRef(false);
 	const mountedRef = React.useRef(true);
 	React.useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
@@ -145,7 +170,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 					if (input && typeof input === 'object' && !Array.isArray(input)) {
 						const wrapper = event.currentTarget as HTMLElement;
 						const fieldset = control.closest('fieldset') as HTMLElement | null;
-						const group = fieldset && wrapper.contains(fieldset) ? fieldset : wrapper;
+						const group = fieldset && wrapper.contains(fieldset) ? fieldset : fallbackGroupRef.current?.(control, wrapper) || wrapper;
 						if (input.op === 'query' && input.form === true) {
 							const invalid = Array.from(group.querySelectorAll<HTMLInputElement>('input, select, textarea')).find((field) => !field.checkValidity());
 							if (invalid) { invalid.reportValidity(); return; }
@@ -186,7 +211,8 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			// component can hold several independent forms), else the whole
 			// component root. Fields win over static inputs, including explicit
 			// empty text; excluded or missing fields preserve static inputs.
-			const group = (control.closest('fieldset') as HTMLElement | null) || (event.currentTarget as HTMLElement);
+			const boundary = event.currentTarget as HTMLElement;
+			const group = (control.closest('fieldset') as HTMLElement | null) || fallbackGroupRef.current?.(control, boundary) || boundary;
 			if (group.querySelector('[data-tt-upload-blocking="true"]')) {
 				lopuRef.current({ title: 'Finish adding your file', description: 'Wait for the upload, then choose Use file before running this form.', status: 'info' });
 				return;

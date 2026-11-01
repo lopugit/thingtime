@@ -4,14 +4,25 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { claimWorkspace, developmentEnvironment, prepareWorkspace, retainedWorkspace, stopWorkspace, workspaceEnvironment } from './dev-workspace.mjs';
 
 const electronDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
-const electronExecutable = require('electron');
 const { stopOwnedProcessGroup } = require('../lib/local-runtime.cjs');
 if (process.platform === 'win32') throw new Error('Parallel desktop development currently requires POSIX process groups.');
 const stagedWebDir = path.join(electronDir, 'dist', 'web');
 const stagedAiDir = path.join(electronDir, 'dist', 'ai');
+const workspaceArg = process.argv.find(value => value.startsWith('--workspace='));
+const workspace = workspaceArg ? retainedWorkspace(workspaceArg.slice('--workspace='.length)) : null;
+if (process.argv.includes('--prepare-only') && !workspace) throw new Error('--prepare-only requires a named --workspace.');
+if (process.argv.includes('--stop-workspace')) {
+	if (!workspace) throw new Error('--stop-workspace requires a named --workspace.');
+	await stopWorkspace(workspace);
+	console.log(`Stopped owned development processes; retained state: ${workspace.root}`);
+	process.exit(0);
+}
+const electronExecutable = workspace && process.argv.includes('--use-staged') && !process.argv.includes('--prepare-only')
+	? path.join(workspace.runtime, 'Contents/MacOS/Electron') : require('electron');
 
 function runScript(name) {
 	const result = spawnSync(process.execPath, [path.join(electronDir, 'scripts', name)], {
@@ -24,23 +35,29 @@ function runScript(name) {
 }
 
 const inspectorArg = process.argv.find(value => value.startsWith('--inspect-ui='));
-const inspectorPort = inspectorArg ? Number(inspectorArg.slice('--inspect-ui='.length)) : null;
+const inspectorPort = inspectorArg ? Number(inspectorArg.slice('--inspect-ui='.length)) : workspace?.inspectorPort;
 if (inspectorArg && (!Number.isSafeInteger(inspectorPort) || inspectorPort < 1024 || inspectorPort > 65535)) throw new Error('Choose an unused nonprivileged UI inspection port.');
-const launchArgs = ['.', ...(inspectorPort ? [`--remote-debugging-port=${inspectorPort}`, '--remote-debugging-address=127.0.0.1'] : [])];
+const launchArgs = [workspace?.source || '.', ...(inspectorPort ? [`--remote-debugging-port=${inspectorPort}`, '--remote-debugging-address=127.0.0.1'] : [])];
 
 let profilePath;
 let processesStopped = true;
+let releaseWorkspace;
 try {
+	if (workspace) releaseWorkspace = await claimWorkspace(workspace);
 	if (!process.argv.includes('--use-staged')) runScript('build-web.mjs');
 	runScript('verify-web-build.mjs');
-	profilePath = await mkdtemp(path.join(os.tmpdir(), 'thingtime-desktop-dev-'));
+	if (workspace && (!process.argv.includes('--use-staged') || process.argv.includes('--prepare-only'))) await prepareWorkspace(workspace, electronDir, electronExecutable);
+	if (process.argv.includes('--prepare-only')) {
+		console.log(`Retained development app ready: ${workspace.app}`);
+	} else {
+	profilePath = workspace?.profile || await mkdtemp(path.join(os.tmpdir(), 'thingtime-desktop-dev-'));
 	console.log(`Starting unsigned Thingtime Dev with isolated profile ${profilePath}`);
 	let requestedRestart = false;
 	let stopping = false;
 	let child;
 	let escalationTimer;
 	let groupCleanup;
-	const cleanup = () => (groupCleanup ||= stopOwnedProcessGroup(child?.pid));
+	const cleanup = () => (groupCleanup ||= workspace ? stopWorkspace(workspace) : stopOwnedProcessGroup(child?.pid));
 	const forwardSignal = () => {
 		stopping = true;
 		// Give Electron's before-quit hook time to release the DB authority and
@@ -58,18 +75,23 @@ try {
 			if (stopping) break;
 			requestedRestart = false;
 			groupCleanup = null;
-			child = spawn(electronExecutable, launchArgs, {
-				cwd: electronDir,
+			child = spawn(workspace ? path.join(workspace.runtime, 'Contents/MacOS/Electron') : electronExecutable, launchArgs, {
+				cwd: workspace?.source || electronDir,
 				detached: true,
 				env: {
-					...process.env,
+					...(workspace ? developmentEnvironment() : process.env),
+					...(workspace ? await workspaceEnvironment(workspace) : {}),
 					THINGTIME_DESKTOP_PARALLEL_DEV: '1',
+					...(workspace ? { THINGTIME_DESKTOP_DEV_NAME: `Thingtime Dev ${workspace.name}` } : {}),
 					THINGTIME_DESKTOP_DEV_PROFILE: profilePath,
 					THINGTIME_NODE_ALLOW_DEV_REGISTRATION: '0'
 				},
-				stdio: ['inherit', 'inherit', 'inherit', 'ipc']
+				// Local console email can contain synthetic verification links.
+				// Retained development logs keep diagnostics, never that content.
+				stdio: workspace ? ['ignore', 'ignore', 'inherit', 'ipc'] : ['inherit', 'inherit', 'inherit', 'ipc']
 			});
 			processesStopped = false;
+			if (workspace) await releaseWorkspace.recordChild(child.pid);
 			child.on('message', (message) => {
 				if (message?.type === 'thingtime-dev-restart') requestedRestart = true;
 			});
@@ -84,6 +106,7 @@ try {
 				escalationTimer = null;
 				await cleanup();
 				processesStopped = true;
+				if (workspace) await releaseWorkspace.recordChild(null);
 			}
 			if (result.code !== 0 && result.signal !== 'SIGINT' && result.signal !== 'SIGTERM')
 				throw new Error(`Thingtime Dev exited with ${result.signal || result.code}`);
@@ -93,9 +116,12 @@ try {
 		process.off('SIGTERM', forwardSignal);
 		clearTimeout(escalationTimer);
 	}
+	}
 } finally {
 	if (!processesStopped) {
 		console.error(`Preserved development profile and bundles because process shutdown was not verified: ${profilePath}`);
+	} else if (workspace) {
+		console.log(`Retained development app, profile and resources: ${workspace.root}`);
 	} else {
 		if (profilePath) await rm(profilePath, { force: true, recursive: true });
 		await rm(stagedWebDir, { force: true, recursive: true });
@@ -104,4 +130,5 @@ try {
 		await rm(path.join(electronDir, 'dist', 'database'), { force: true, recursive: true });
 		console.log('Removed the Thingtime Dev profile and staged web/AI bundles.');
 	}
+	if (processesStopped) await releaseWorkspace?.();
 }

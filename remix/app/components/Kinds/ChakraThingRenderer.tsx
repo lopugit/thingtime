@@ -8,6 +8,7 @@ import { ComponentAttachments, ComponentMedia } from '../Builder/ComponentAttach
 import { ComponentMap } from '../Builder/ComponentMap';
 import { ComponentDialog, ComponentForm, ComponentCountdown } from '../Builder/NativeComponentControls';
 import { ComponentUpload } from '../Builder/ComponentUpload';
+import { ComponentDisplayOnly } from '../Builder/NativeComponentControls';
 import React from 'react';
 import { mapRenderMediaProps } from '../Sharing/renderMediaCore';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
@@ -245,7 +246,7 @@ export const isChakraThingNode = (value: unknown): value is ChakraThingNode =>
 	!Array.isArray(value) &&
 	(typeof (value as { chakra?: unknown }).chakra === 'string' || (value as { type?: unknown }).type === 'chakra');
 
-type RenderState = { count: number; mediaUrl: (url: string) => string };
+type RenderState = { displayOnly?: boolean; count: number; mediaUrl: (url: string) => string };
 
 const renderNode = (node: ChakraThingNode, key: number, depth: number, state: RenderState): React.ReactNode => {
 	if (state.count >= MAX_NODES || depth > MAX_DEPTH) return null;
@@ -258,6 +259,7 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 	if (!node || typeof node !== 'object' || Array.isArray(node)) return null;
 
 	const name = typeof node.chakra === 'string' ? node.chakra : 'Box';
+	if (name === 'IntegrationExample' && state.displayOnly) return <Text key={key}>Integration examples are available on the interactive page.</Text>;
 	if (name === 'IntegrationExample')
 		return (
 			<React.Suspense key={key} fallback={<Text>Integration example</Text>}>
@@ -312,6 +314,7 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 	}
 
 	const props = mapRenderMediaProps(sanitizeProps(node.props), state.mediaUrl);
+	if (state.displayOnly) { delete props['data-tt-action']; delete props['data-tt-action-inputs']; }
 	for (const field of URL_PROPS) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
 
 	if (CHILDLESS_COMPONENTS.has(name)) {
@@ -333,6 +336,6 @@ const renderChildren = (children: ChakraThingNode[] | ChakraThingNode | undefine
 };
 
 export const ChakraThingRenderer = ({ node }: { node: ChakraThingNode }) => {
-	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl() };
+	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl(), displayOnly: React.useContext(ComponentDisplayOnly) };
 	return <>{renderNode(node, 0, 0, state)}</>;
 };

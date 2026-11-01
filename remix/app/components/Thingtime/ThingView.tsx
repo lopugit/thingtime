@@ -5,6 +5,8 @@ import { Subject } from 'rxjs';
 import { isKindSafeForUntrusted, resolveKindRender } from '../Kinds';
 import type { KindRenderer, PollRenderPollContext } from '../Kinds';
 import { Thingtime } from './Thingtime';
+import { ThingRenderComponent } from './ThingRenderComponent';
+import { hasRenderComponent } from './renderComponentCore';
 import { useThingtime } from './useThingtime';
 
 import { ThingtimeContext } from '~/Providers/ThingtimeProvider';
@@ -238,17 +240,20 @@ export const ThingView = (props: ThingViewProps) => {
 	const { thing, label, compact, poll } = props;
 	const { events } = useThingtime();
 
+	const explicitComponent = hasRenderComponent(thing);
+
 	// resolve the renderer AND its adapted value in one pass (the registry
 	// cascades render: → kind → structural match, returning the first that
 	// actually adapts)
 	const resolved = React.useMemo<{ renderer: KindRenderer; value: unknown } | null>(
-		() => resolveKindRender(thing),
-		[thing]
+		() => explicitComponent ? null : resolveKindRender(thing),
+		[thing, explicitComponent]
 	);
 
 	// only auto-render kinds vetted safe for untrusted (other users') data;
 	// everything else falls back to the sanitising native tree
-	const canRender = !!resolved && isKindSafeForUntrusted(resolved.renderer.kind);
+	const canRender = explicitComponent || (!!resolved && isKindSafeForUntrusted(resolved.renderer.kind));
+	const rendererTitle = explicitComponent ? 'Component' : resolved?.renderer.title || 'Thing';
 
 	// default to the rendered form when one is available ("render mode by
 	// default"); the corner icon flips to the native Thingtime view and back
@@ -276,12 +281,12 @@ export const ThingView = (props: ThingViewProps) => {
 		}
 	}, []);
 
-	if (rendered && resolved) {
-		const Component = resolved.renderer.render;
+	if (rendered) {
+		const Component = resolved?.renderer.render;
 		return (
 			<Box position="relative" maxWidth="100%">
-				<Component value={resolved.value} context={{ size: compact ? 'compact' : 'card', untrusted: true, ...(poll ? { poll } : {}) }} />
-				<CornerToggle rendered rendererTitle={resolved.renderer.title} onToggle={() => setShowRendered(false)} />
+				{explicitComponent ? <ThingRenderComponent thing={thing} /> : Component && resolved ? <Component value={resolved.value} context={{ size: compact ? 'compact' : 'card', untrusted: true, ...(poll ? { poll } : {}) }} /> : null}
+				<CornerToggle rendered rendererTitle={rendererTitle} onToggle={() => setShowRendered(false)} />
 			</Box>
 		);
 	}
@@ -307,8 +312,8 @@ export const ThingView = (props: ThingViewProps) => {
 					<SandboxedThingtime storeKey={storeKey} humanLabel={humanLabel} collapsed={collapsed} />
 				</LocalThingProvider>
 			</Box>
-			{canRender && resolved && (
-				<CornerToggle rendered={false} rendererTitle={resolved.renderer.title} onToggle={() => setShowRendered(true)} />
+			{canRender && (
+				<CornerToggle rendered={false} rendererTitle={rendererTitle} onToggle={() => setShowRendered(true)} />
 			)}
 		</Box>
 	);

@@ -1,11 +1,12 @@
+import { validatePasswordIcon, type PasswordIcon } from './icons';
 export const PASSWORD_ENTRY_KIND = 'password-manager-entry';
 export const PASSWORD_TYPES = ['login', 'password', 'api-key', 'secure-note', 'passkey-reference', 'passkey', 'credit-card', 'identity', 'document', 'software-license', 'bank-account', 'database', 'driver-license', 'outdoor-license', 'membership', 'passport', 'rewards', 'social-security-number', 'email-account', 'server', 'wireless-router', 'ssh-key', 'api-credential', 'medical-record', 'other'] as const;
 export const FIELD_TYPES = ['text', 'password', 'url', 'email', 'notes', 'totp', 'address', 'credit-card-number', 'credit-card-type', 'date', 'gender', 'menu', 'month-year', 'phone', 'reference', 'ssh-key', 'structured'] as const;
 export type PasswordType = typeof PASSWORD_TYPES[number];
 export type FieldType = typeof FIELD_TYPES[number];
 export type PasswordField = { id: string; label: string; type: FieldType; value: string; section?: string; concealed?: boolean; multiline?: boolean; structured?: boolean; sourcePath?: (string | number)[] };
-export type PasswordEntry = { title: string; passwordType: PasswordType; fields: PasswordField[]; onePassword?: string; onePasswordContext?: string; categoryId?: string; tags?: string[]; archived?: boolean; favorite?: boolean; importArchiveId?: string };
-export type PasswordMetadata = { id: string; title: string; passwordType: PasswordType; revision: number; updatedAt: string };
+export type PasswordEntry = { icon?: PasswordIcon; title: string; passwordType: PasswordType; fields: PasswordField[]; onePassword?: string; onePasswordContext?: string; categoryId?: string; tags?: string[]; archived?: boolean; favorite?: boolean; importArchiveId?: string };
+export type PasswordMetadata = { icon?: PasswordIcon; id: string; title: string; passwordType: PasswordType; revision: number; updatedAt: string };
 
 export const validPasswordId = (id: unknown): id is string => typeof id === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(id);
 export function emptyPasswordEntry(): PasswordEntry {
@@ -38,6 +39,7 @@ export function validatePasswordEntry(value: unknown): PasswordEntry {
     return { id: field.id, label: field.label.trim(), type: field.type, value: field.value, ...extra };
   });
   const result: PasswordEntry = { title: input.title.trim(), passwordType: input.passwordType, fields };
+  if (input.icon !== undefined) result.icon = validatePasswordIcon(input.icon);
   if (input.onePassword !== undefined) {
     if (typeof input.onePassword !== 'string') throw new Error('Invalid source item.');
     try { const parsed = JSON.parse(input.onePassword); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(); } catch { throw new Error('Invalid source item.'); }
