@@ -12,7 +12,7 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { ArrowRight, Boxes, Component, Gem, ServerCog, Shapes } from 'lucide-react';
+import { ArrowRight, Boxes, Component, Gem, ServerCog, Shapes, Sparkles } from 'lucide-react';
 import { Link as RouterLink } from 'react-router';
 
 import { apiEndpointDocs } from '~/docs/apiDocs';
@@ -23,6 +23,7 @@ import { designSystemEntries } from './design-system/entries';
 import { conceptEntries } from './concepts/entries';
 
 const referenceLinks = [
+  { label: 'Limitless MCP Lab', to: '/docs/mcp', detail: 'Live contract, five workflows, embedded review UI' },
   { label: 'API reference', to: '/docs/api', detail: `${apiEndpointDocs.length} endpoints with JSON -docs routes` },
   { label: 'Login with Thingtime', to: '/docs/embed', detail: 'Embed SDK, permission scopes, SSO userinfo' },
   { label: 'Thingtime Schemas', to: '/docs/schemas', detail: `${thingtimeSchemas.length} schemas across root, crystal, and collection kinds` },
@@ -66,6 +67,39 @@ export default function DocsIndex() {
         </Box>
 
         <SimpleGrid columns={{ base: 1 }} spacing={4}>
+          <Box
+            id="limitless-mcp-lab"
+            bg="var(--tt-card, #ffffff)"
+            border="1px solid"
+            borderColor="var(--tt-border, #ececef)"
+            borderRadius="var(--tt-radius-lg, 16px)"
+            boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
+            p={5}
+          >
+            <Flex align="center" gap={3} mb={4}>
+              <Icon as={Sparkles} boxSize={5} color="var(--tt-docs-accent, #008060)" />
+              <Heading as="h3" fontSize="lg">
+                Limitless MCP Lab
+              </Heading>
+            </Flex>
+            <Text color="var(--tt-text, #5a5a66)" fontSize="sm" lineHeight="1.6" mb={5}>
+              Explore the live MCP contract through five composable workflows, then interact with the exact shipped
+              review App using synthetic, non-mutating preview data.
+            </Text>
+            <Button
+              as={RouterLink}
+              to="/docs/mcp"
+              size="sm"
+              bg="var(--tt-docs-accent, #008060)"
+              borderRadius="var(--tt-radius-sm, 9px)"
+              color="white"
+              _hover={{ bg: 'var(--tt-docs-accent-hover, #006e52)' }}
+              rightIcon={<Icon as={ArrowRight} boxSize={4} />}
+            >
+              Open the lab
+            </Button>
+          </Box>
+
           <Box
             id="api-reference"
             bg="var(--tt-card, #ffffff)"

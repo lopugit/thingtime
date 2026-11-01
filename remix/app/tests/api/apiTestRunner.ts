@@ -2,21 +2,28 @@ export type ApiTestGroup =
   | 'admin'
   | 'algorithms'
   | 'apps'
+  | 'attachments'
   | 'auth'
   | 'crypto'
   | 'docs'
   | 'email'
+  | 'embed'
   | 'health'
   | 'lopu'
+  | 'lopu-recordings'
   | 'mongodb'
+  | 'notifications'
   | 'profile'
   | 'root'
   | 'schemas'
+  | 'social'
   | 'template'
   | 'themes'
   | 'things'
   | 'vercel'
-  | 'waitlist';
+  | 'waitlist'
+  | 'watch'
+  | 'webpages';
 
 export type ApiTestResultStatus = 'pass' | 'fail';
 
@@ -196,6 +203,10 @@ const redactPreviewValue = (value: unknown): unknown => {
           lowerKey.includes('token') ||
           lowerKey.includes('secret') ||
           lowerKey.includes('password') ||
+          lowerKey.includes('credential') ||
+          lowerKey === 'devicecode' ||
+          lowerKey === 'usercode' ||
+          lowerKey === 'verificationpath' ||
           lowerKey === 'authorization';
 
         return [key, isSensitive ? '[redacted]' : redactPreviewValue(entryValue)];

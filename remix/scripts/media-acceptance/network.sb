@@ -1,0 +1,5 @@
+(version 1)
+(allow default)
+(deny network-outbound)
+(allow network-outbound (remote tcp "localhost:18641"))
+(allow network-outbound (remote unix-socket))
