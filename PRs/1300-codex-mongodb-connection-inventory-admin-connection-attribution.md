@@ -24,6 +24,10 @@ published.
 ## Verification — 2 November 2026
 
 - 18 focused backend, 92 adjacent, 14 gateway, 5 collections and 7 UI tests pass.
+- CI caught the new protected kind missing from the built-in schema projection
+  pin. Added the pin and explicit JSON projection/protected-write regression;
+  all 292 schema tests and the 18 connection tests pass. The runtime schema
+  contract was already valid and did not require a behavioral change.
 - Raw TypeScript and ratchet: zero errors. Full lint: zero errors, 391 warnings.
 - Client and Nitro node-server builds pass.
 - Real API fixture: fresh disposable replica, independent synthetic identities

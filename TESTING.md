@@ -13553,6 +13553,8 @@ separate from deterministic discovery/lease tests.
   replica, synthetic accounts, two API runtimes and an isolated browser profile.
   It loads no production configuration; all product data goes through the API.
 - Verify both manifest generators and the built endpoint advertise 1.0.0.
+  Run `test:schemas` as well: the protected snapshot kind must remain in the
+  built-in projection table with a required JSON source and generic writes denied.
   Anonymous, ordinary-account and mismatched actor/origin reads must fail with
   private/no-store responses. Generic Things routes must refuse telemetry reads,
   forgeries and reserved IDs. Check home/custom isolation and credential redaction.
