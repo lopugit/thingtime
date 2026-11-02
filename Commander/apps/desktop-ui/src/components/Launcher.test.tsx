@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { BootstrapResponse, SearchHit, IndexingStatus } from '@commander/protocol';
 import { DEFAULT_SETTINGS } from '@commander/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommanderState } from '../hooks/useCommander.js';
+import * as nativeFileIcons from '../lib/nativeFileIcons.js';
 import { resetNativeFileIconSchedulerForTests } from '../lib/nativeFileIcons.js';
 import { beginWindowDrag, hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
 import { Launcher, indexSummary } from './Launcher.js';
@@ -767,5 +769,276 @@ describe('launcher index summary', () => {
   });
   it('shows a known count without implying a wait when its timestamp is unavailable', () => {
     expect(indexSummary({ ...status, searchableRecords: 42 })).toBe('42 searchable items');
+  });
+});
+
+describe('Launcher held-arrow navigation', () => {
+  const manyHits = Array.from({ length: 200 }, (_, index): SearchHit => ({
+    ...hits[0]!,
+    id: `command:${index}`,
+    title: `Result ${index}`,
+    score: 200 - index,
+  }));
+  function interactive(overrides: Partial<CommanderState> = {}) {
+    const commander = state({ hits: manyHits, ...overrides });
+    function Interactive({ changes = {} }: { changes?: Partial<CommanderState> }) {
+      const [selectedIndex, setSelectedIndex] = useState(commander.selectedIndex);
+      return <Launcher state={{ ...commander, selectedIndex, setSelectedIndex, ...changes }} />;
+    }
+    const view = render(<Interactive />);
+    return {
+      commander,
+      ...view,
+      update: (changes: Partial<CommanderState>) => view.rerender(<Interactive changes={changes} />),
+    };
+  }
+  const selected = () =>
+    screen.getAllByRole('option').findIndex((row) => row.getAttribute('aria-selected') === 'true');
+  const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms));
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    cleanup();
+    resetNativeFileIconSchedulerForTests();
+    vi.useRealTimers();
+  });
+
+  it('moves on the first event, preserves burst taps before a render, and Enter runs the newest cursor', async () => {
+    const { commander } = interactive();
+    act(() => {
+      for (let tap = 0; tap < 3; tap += 1) {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', cancelable: true }));
+        window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown' }));
+      }
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
+    });
+    expect(selected()).toBe(3);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(commander.executeCommand).toHaveBeenCalledWith('command:3', 'open-settings', 'settings');
+    advance(2_000);
+    expect(selected()).toBe(3);
+  });
+
+  it('accelerates from elapsed hold time without OS repeat events and stops exactly on release', () => {
+    interactive();
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    expect(selected()).toBe(1);
+    advance(179);
+    expect(selected()).toBe(1);
+    advance(1);
+    expect(selected()).toBe(2);
+    advance(420);
+    const early = selected();
+    advance(600);
+    const middle = selected();
+    advance(600);
+    const late = selected();
+    expect(middle - early).toBeGreaterThan(early - 1);
+    expect(late - middle).toBeGreaterThan(middle - early);
+    fireEvent.keyUp(window, { key: 'ArrowDown' });
+    advance(5_000);
+    expect(selected()).toBe(late);
+  });
+
+  it('ignores OS repeat events and reverses immediately without the old key release ending the new hold', () => {
+    interactive({ selectedIndex: 30 });
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    for (let repeat = 0; repeat < 10; repeat += 1)
+      fireEvent.keyDown(window, { key: 'ArrowDown', repeat: true });
+    expect(selected()).toBe(31);
+    advance(180);
+    expect(selected()).toBe(32);
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(selected()).toBe(31);
+    fireEvent.keyUp(window, { key: 'ArrowDown' });
+    advance(180);
+    expect(selected()).toBe(30);
+    fireEvent.keyUp(window, { key: 'ArrowUp' });
+    advance(2_000);
+    expect(selected()).toBe(30);
+  });
+
+  it.each(['blur', 'compositionstart', 'commander:launcher-opened', 'pointerdown'])(
+    'cancels a held arrow on %s and does not restart from a stray native repeat',
+    (event) => {
+      interactive();
+      fireEvent.keyDown(window, { key: 'ArrowDown' });
+      advance(300);
+      fireEvent(window, new Event(event));
+      const stopped = selected();
+      fireEvent.keyDown(window, { key: 'ArrowDown', repeat: true });
+      advance(2_000);
+      expect(selected()).toBe(stopped);
+    },
+  );
+
+  it('cancels when hidden, when focus enters toolbar controls, and on unmount', () => {
+    const view = interactive();
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    fireEvent(document, new Event('visibilitychange'));
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    advance(1_000);
+    expect(selected()).toBe(1);
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    screen.getByRole('button', { name: 'Open Commander Settings' }).focus();
+    advance(1_000);
+    expect(selected()).toBe(2);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Open Commander Settings' }), { key: 'ArrowDown' });
+    expect(selected()).toBe(2);
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    view.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    { query: 'different query' },
+    { hits: [manyHits[0]!, manyHits[1]!, manyHits[2]!, manyHits[3]!] },
+    { actionsOpen: true },
+    { activeView: 'emoji-symbols' as const },
+    { resultsStale: true },
+  ])('cancels when navigation scope changes: %#', (changes) => {
+    const view = interactive();
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    advance(300);
+    const stopped = selected();
+    view.update(changes);
+    advance(2_000);
+    expect(selected()).toBe(stopped);
+  });
+
+  it.each([
+    { metaKey: true },
+    { ctrlKey: true },
+    { altKey: true },
+    { shiftKey: true },
+    { isComposing: true },
+    { keyCode: 229 },
+  ])('preserves modified arrow and input composition ownership: %j', (event) => {
+    interactive();
+    const input = screen.getByRole('textbox');
+    expect(fireEvent.keyDown(input, { key: 'ArrowDown', ...event })).toBe(true);
+    advance(2_000);
+    expect(selected()).toBe(0);
+  });
+
+  it.each(['pin', 'context'])('stops mid-hold when the %s menu takes ownership', (menu) => {
+    const view = interactive({
+      hits: manyHits.map((hit) => ({ ...hit, path: `/tmp/${hit.id}`, kind: 'file' })),
+    });
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    advance(300);
+    const stopped = selected();
+    if (menu === 'pin') {
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Pin Commander window' }));
+    } else {
+      fireEvent.contextMenu(screen.getAllByRole('option')[stopped]!);
+    }
+    fireEvent.keyDown(window, { key: 'ArrowDown', repeat: true });
+    advance(2_000);
+    expect(selected()).toBe(stopped);
+    view.unmount();
+  });
+
+  it('keeps unrelated rows and their unresolved native icon requests mounted while selection moves', () => {
+    const cancels = new Map<string, ReturnType<typeof vi.fn>>();
+    const request = vi.spyOn(nativeFileIcons, 'requestNativeFileIcon').mockImplementation((path) => {
+      const cancel = vi.fn();
+      cancels.set(path, cancel);
+      return { promise: new Promise(() => undefined), cancel };
+    });
+    try {
+      interactive({
+        hits: manyHits.slice(0, 20).map((hit) => ({ ...hit, path: `/tmp/${hit.id}`, kind: 'file' })),
+      });
+      const untouched = cancels.get('/tmp/command:19')!;
+      for (let tap = 0; tap < 3; tap += 1) {
+        fireEvent.keyDown(window, { key: 'ArrowDown' });
+        fireEvent.keyUp(window, { key: 'ArrowDown' });
+      }
+      expect(selected()).toBe(3);
+      expect(request.mock.calls.filter(([path]) => path === '/tmp/command:19')).toHaveLength(1);
+      expect(untouched).not.toHaveBeenCalled();
+    } finally {
+      request.mockRestore();
+    }
+  });
+
+  it('clamps at both terminal rows, cancels removed results and never wraps or queues catch-up', () => {
+    const view = interactive({ hits: manyHits.slice(0, 3) });
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    advance(2_000);
+    expect(selected()).toBe(0);
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    advance(2_000);
+    expect(selected()).toBe(2);
+    expect(vi.getTimerCount()).toBe(0);
+    view.update({ hits: [manyHits[0]!] });
+    expect(selected()).toBe(0);
+    advance(2_000);
+    expect(selected()).toBe(0);
+    view.update({ hits: [] });
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    advance(2_000);
+    expect(screen.queryByRole('option')).toBeNull();
+  });
+
+  it('reveals an unchanged selection after its list viewport resizes and coalesces resize notifications', () => {
+    let notifyResize!: () => void;
+    const observer = { observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() };
+    vi.stubGlobal(
+      'ResizeObserver',
+      vi.fn(function (callback: ResizeObserverCallback) {
+        notifyResize = () => callback([], observer);
+        return observer;
+      }),
+    );
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      const view = interactive({ selectedIndex: 29 });
+      const list = screen.getByRole('listbox');
+      const selectedRow = screen.getAllByRole('option')[29]!;
+      expect(observer.observe).toHaveBeenCalledExactlyOnceWith(list);
+      scroll.mockClear();
+      // The selected row and index stay unchanged while the native viewport
+      // shrinks beneath it. Multiple layout notifications need only one reveal.
+      act(() => {
+        notifyResize();
+        notifyResize();
+        notifyResize();
+      });
+      expect(scroll).not.toHaveBeenCalled();
+      advance(16);
+      expect(selected()).toBe(29);
+      expect(scroll).toHaveBeenCalledExactlyOnceWith({ behavior: 'instant', block: 'nearest' });
+      expect(scroll.mock.contexts[0]).toBe(selectedRow);
+      act(() => notifyResize());
+      view.unmount();
+      advance(16);
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(observer.disconnect).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    }
+  });
+
+  it('scrolls the current row before paint with instant nearest positioning, including replaced rows', () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const view = interactive();
+    scroll.mockClear();
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    expect(scroll).toHaveBeenLastCalledWith({ behavior: 'instant', block: 'nearest' });
+    scroll.mockClear();
+    view.update({ hits: manyHits.slice(0, 10) });
+    expect(scroll).toHaveBeenCalledExactlyOnceWith({ behavior: 'instant', block: 'nearest' });
+    delete (Element.prototype as Partial<Element>).scrollIntoView;
   });
 });

@@ -96,7 +96,18 @@
 - [ ] Type a unique query and launch a command from its results. Hide and reopen with the global shortcut; verify the input is blank while the launched command appears first under History and its search term appears next as a separate full-width top-level result. Return reruns the command from its row and restores the query from the search-term row. Quit/relaunch Commander and verify both persist.
 - [ ] Create at least nine distinct search sessions. Verify only the newest eight appear initially, Show More expands the retained history, Show Less collapses it again, and arrow navigation keeps every revealed row visible.
 - [ ] With text in the search field, Command-A selects the complete query and typing replaces it; on Windows/Linux shells, repeat with Control-A.
-- [ ] Up/Down selection stays visible through the complete result list. Return runs the selected primary action.
+- [ ] Tap Up/Down rapidly: each press moves exactly one row immediately. Hold an arrow: repeat begins after 180ms,
+      ramps smoothly to 40 rows/second, and stops on release without jumps, overscroll or wrapping at either end.
+      Repeat with slow and fast macOS keyboard-repeat settings; system repeats must not add extra selection steps.
+      Verify History, Calculator and grouped results stay visible with instant nearest scrolling, including the last row.
+      Select a lower result in a tall launcher, then shrink it to its minimum size without pressing another arrow:
+      the same selected row must stay visible immediately, with no smooth-scroll delay or scroll/resize loop.
+      Press Return immediately after rapid arrows and verify the current highlighted primary action executes once.
+- [ ] During a held arrow, reverse direction, type a new query, replace/shrink results, move focus to Settings,
+      open Actions or a context/pin menu, open a bundled view, hide/reopen Commander and switch applications.
+      Selection must stop when ownership changes and must not resume from stray native repeat events.
+      Command/Control/Option/Shift arrows and IME composition retain their input editing/menu behavior.
+      Keep a native icon request unresolved while navigating: unrelated rows must not cancel/requeue their icons.
 - [ ] Hover a lower result, stop moving the pointer, then keep typing. The refreshed list resets to its first result; the stationary pointer must not steal selection until it moves again.
 - [ ] Type a new query and press Return immediately, before the search debounce settles. Commander must never execute an item left over from the previous query.
 - [ ] Command-K opens Actions for the selected item; Escape closes Actions before closing Commander.
@@ -259,7 +270,6 @@
 - [ ] Inspect every settings tab and the open Actions state at native window sizes.
 - [ ] Resize Settings to its minimum and a large desktop size; no clipping, overlap, or horizontal overflow.
 - [ ] Verify keyboard focus, VoiceOver labels, reduced motion, and high-contrast/dark appearance.
-
 
 ## Signed releases
 
