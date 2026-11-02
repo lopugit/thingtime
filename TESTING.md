@@ -5307,6 +5307,10 @@ halves.
 
 ## Commander desktop launcher
 
+- [ ] Follow `Commander/docs/TESTING.md` arrow navigation checks in the native app: single taps move one result,
+      held Up/Down accelerate with the selected row visible, and release, focus loss, query changes or menus stop
+      the gesture immediately. Rapid taps must not collapse into one move or restart native icon requests.
+
 - [ ] Follow `Commander/docs/TESTING.md` background-index checks: real create/rename/delete events, independent search
       during writes, correct unique enabled-source totals and full-refresh age, unplugged/removed roots across restart,
       settings fingerprint recovery and isolated development cleanup before the signed installed-app check.
