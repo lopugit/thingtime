@@ -1,5 +1,12 @@
 # Control-plane changelog
 
+## 2026-11-02 — Pass the existing team slug into prebuilt prepare
+
+- Map the protected environment’s `VERCEL_TEAM_SLUG` into authorization before
+  preview configuration reads it. Add a prepare-step regression so publication
+  job mappings cannot conceal a missing prepare input. No credentials or release
+  protection changed.
+
 ## 2026-10-30 — Remove orphan preview deployments
 
 - Extend protected scheduled and PR-close cleanup to legacy and ordinary branch

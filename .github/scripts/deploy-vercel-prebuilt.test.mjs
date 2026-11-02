@@ -8,6 +8,16 @@ import { publish, needsReleaseBuild, verifyAlias, verifyCanonicalGateway, compat
 
 import { gatewayMetadata, gatewayPolicy } from './environment-gateway-policy.mjs';
 
+test('prepare authorization receives every required Vercel project variable before publisher jobs', () => {
+  const yaml = readFileSync(new URL('../workflows/deploy-vercel-prebuilt.yml', import.meta.url), 'utf8');
+  const prepare = yaml.split('\n  prepare:\n')[1].split('\n  build:\n')[0];
+  assert.match(prepare, /environment: vercel-prebuilt-control/);
+  const authorization = prepare.split('- name: Authorize current branch and environment')[1].split('\n        run:')[0];
+  for (const name of ['VERCEL_TEAM_ID', 'VERCEL_TEAM_SLUG', 'VERCEL_PROJECT_ID', 'VERCEL_PROJECT_NAME']) {
+    assert.ok(authorization.split('\n').some(line => line.trim() === `${name}: $` + `{{ vars.${name} }}`), `Prepare must map ${name} from its protected environment`);
+  }
+});
+
 const custom = [{ id: 'env_develop', slug: 'develop', branchMatcher: { type: 'equals', pattern: 'develop' } }];
 test('a READY artifact still reconciles its aliases and status without rebuilding', () => {
   const plan = { sha: 'a'.repeat(40), branch: 'main', target: { slug: 'production', kind: 'production', id: '' } };

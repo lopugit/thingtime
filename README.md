@@ -749,3 +749,10 @@ selected environment and in the vault. The publisher independently fetches
 immutable source configuration for region/Fluid/production-cron settings and
 never executes product source. See the product README and VERCEL_DEPLOYMENTS.md
 for deployment receipts and the manual entry point.
+
+The prebuilt deployment prepare step maps `VERCEL_TEAM_ID`, `VERCEL_TEAM_SLUG`,
+`VERCEL_PROJECT_ID` and `VERCEL_PROJECT_NAME` from the existing protected
+`vercel-prebuilt-control` environment variables, just as publication does. Forks
+must supply their own identifiers there; no values belong in source. A variable
+being present in the GitHub environment does not make it a step environment
+variable without this explicit mapping.

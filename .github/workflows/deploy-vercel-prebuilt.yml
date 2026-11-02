@@ -58,6 +58,7 @@ jobs:
           THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEPLOY_TOKEN }}
           VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+          VERCEL_TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
           VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
           SOURCE_REF: ${{ inputs.source_ref }}
