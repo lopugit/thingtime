@@ -60,7 +60,12 @@ import ThingtimePasswordCore
     private var window: NSWindow?
     func applicationDidFinishLaunching(_ notification: Notification) {
         let content = VStack(alignment: .leading, spacing: 16) {
-            Text("Thingtime").font(.title).bold()
+            HStack(spacing: 12) {
+                if let url = Bundle.main.url(forResource: "ThingtimeTree", withExtension: "png"), let tree = NSImage(contentsOf: url) {
+                    Image(nsImage: tree).resizable().interpolation(.none).scaledToFit().frame(width: 40, height: 40).accessibilityHidden(true)
+                }
+                Text("Thingtime").font(.title).bold()
+            }
             Text("Open Passwords in the Thingtime desktop app and select Connect Password AutoFill. Then enable Thingtime in System Settings → General → AutoFill & Passwords.")
                 .fixedSize(horizontal: false, vertical: true)
             Button("Open Thingtime") {

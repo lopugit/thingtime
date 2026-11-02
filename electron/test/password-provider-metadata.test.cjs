@@ -4,16 +4,17 @@ const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const contract = import('../scripts/verify-password-provider.mjs');
-const info = (identifier = 'com.thingtime.passwords') => ({ CFBundleIdentifier: identifier, CFBundleDisplayName: 'Thingtime', CFBundleName: 'Thingtime', CFBundleShortVersionString: '1.0.6', CFBundleVersion: '7' });
+const info = (identifier = 'com.thingtime.passwords') => ({ CFBundleIdentifier: identifier, CFBundleDisplayName: 'Thingtime', CFBundleName: 'Thingtime', CFBundleIconFile: 'Thingtime.icns', CFBundleShortVersionString: '1.0.7', CFBundleVersion: '8' });
 
 test('packaged verification rejects stale host or provider branding and mismatched sibling builds', async () => {
  const { assertPasswordProviderMetadata } = await contract;
  const version = assertPasswordProviderMetadata(info(), 'com.thingtime.passwords');
- assert.equal(version,'1.0.6/7');
+ assert.equal(version,'1.0.7/8');
  assert.equal(assertPasswordProviderMetadata(info('com.thingtime.passwords.provider'), 'com.thingtime.passwords.provider',version), version);
  for (const field of ['CFBundleDisplayName','CFBundleName']) {
   assert.throws(()=>assertPasswordProviderMetadata({...info(),[field]:'Thingtime Passwords'}, 'com.thingtime.passwords'), /display name/);
  }
+ assert.throws(()=>assertPasswordProviderMetadata({...info(),CFBundleIconFile:'generic.icns'}, 'com.thingtime.passwords'), /tree app icon/);
  assert.throws(()=>assertPasswordProviderMetadata({...info(),CFBundleVersion:'4'}, 'com.thingtime.passwords', version), /versions must match/);
  assert.throws(()=>assertPasswordProviderMetadata(info('com.other'), 'com.thingtime.passwords'), /identifier mismatch/);
 });
@@ -41,7 +42,7 @@ test('browser adapter manifest, action and popup all display Thingtime without e
  assert.deepEqual(manifest.permissions,['storage','tabs','webNavigation','alarms']);
  assert.deepEqual(manifest.host_permissions,['https://*/*','http://localhost/*','http://127.0.0.1/*']);
  const popup=readFileSync(path.join(root,'popup.html'),'utf8');
- assert.match(popup,/<title>Thingtime<\/title>/); assert.match(popup,/<h1>Thingtime<\/h1>/);
+ assert.match(popup,/<title>Thingtime · Passkey workspace<\/title>/); assert.match(popup,/<h1>Thingtime<\/h1>/);
 });
 
 
@@ -49,10 +50,17 @@ test('host branding accepts its intentional raw basename only with complete Thin
  const {assertPasswordProviderMetadata}=await contract;
  const host={...info(),CFBundleDisplayName:'Thingtime Passwords'};
  const branding={hostName:'Thingtime Passwords',localizedInfo:{CFBundleDisplayName:'Thingtime',CFBundleName:'Thingtime'}};
- assert.equal(assertPasswordProviderMetadata(host,'com.thingtime.passwords',undefined,branding),'1.0.6/7');
+ assert.equal(assertPasswordProviderMetadata(host,'com.thingtime.passwords',undefined,branding),'1.0.7/8');
  for(const localizedInfo of [undefined,{}, {CFBundleDisplayName:'Thingtime'}, {CFBundleDisplayName:'Thingtime Passwords',CFBundleName:'Thingtime'}, {CFBundleDisplayName:'Thingtime',CFBundleName:'Wrong'}]) {
   assert.throws(()=>assertPasswordProviderMetadata(host,'com.thingtime.passwords',undefined,{...branding,localizedInfo}),/localization/);
  }
  assert.throws(()=>assertPasswordProviderMetadata(info(),'com.thingtime.passwords',undefined,branding),/display name/);
  assert.throws(()=>assertPasswordProviderMetadata(host,'com.thingtime.passwords',undefined,{...branding,hostName:'Renamed'}),/display name/);
+});
+
+test('native provider resources carry the official tree rather than a generic or invented icon',()=>{
+ const resources=path.resolve(__dirname,'../../macos/ThingtimePasswords/Resources');
+ const official=readFileSync(path.resolve(__dirname,'../../remix/public/branding/generated/icon/thingtime-icon-512x512.png'));
+ assert.deepEqual(readFileSync(path.join(resources,'ThingtimeTree.png')),official);
+ const icon=readFileSync(path.join(resources,'Thingtime.icns'));assert.equal(icon.toString('ascii',0,4),'icns');assert.equal(icon.readUInt32BE(4),icon.length);
 });

@@ -16,6 +16,8 @@ import UIKit
     @Published var status = ""
     @Published var choices: [Choice] = []
     @Published var retry: (() -> Void)?
+    @Published var cancelTitle = "Cancel"
+    @Published var registrationSummary: PasskeyRegistrationSummary?
     @Published var requestedSite = ""
     @Published var selectionSummary: PasswordPasskeySelectionSummary?
     @Published var requestDetailsExpanded = false
@@ -23,9 +25,20 @@ import UIKit
 }
 private struct ProviderView: View {
     @ObservedObject var model: ProviderViewModel
+    private var treeImage: Image? {
+        guard let url = Bundle.main.url(forResource: "ThingtimeTree", withExtension: "png") else { return nil }
+#if os(macOS)
+        return NSImage(contentsOf: url).map { Image(nsImage: $0) }
+#else
+        return UIImage(contentsOfFile: url.path).map { Image(uiImage: $0) }
+#endif
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(model.title).font(.title2).bold()
+            HStack(spacing: 12) {
+                if let treeImage { treeImage.resizable().interpolation(.none).scaledToFit().frame(width: 32, height: 32).accessibilityHidden(true) }
+                Text(model.title).font(.title2).bold()
+            }
             if !model.message.isEmpty { Text(model.message).font(.callout).fixedSize(horizontal: false, vertical: true) }
             if !model.status.isEmpty {
                 HStack(spacing: 8) {
@@ -49,12 +62,26 @@ private struct ProviderView: View {
                             }.font(.caption).fixedSize(horizontal: false, vertical: true).padding(.top, 6)
                         }
                     }
+                    if let summary = model.registrationSummary {
+                        DisclosureGroup("Registration request details", isExpanded: $model.requestDetailsExpanded) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Requested site: \(model.requestedSite)")
+                                Text("Account handle bytes: \(summary.userHandleBytes)")
+                                Text("Challenge hash bytes: \(summary.clientDataHashBytes)")
+                                Text("ES256 supported: \(summary.supportsES256 ? "yes" : "no")")
+                                Text("Site exclusions: \(summary.excludedCredentialCount)")
+                                Text("Catalog entries: \(summary.catalogEntries.map(String.init) ?? "not checked")")
+                                Text("Site matches: \(summary.siteMatches.map(String.init) ?? "not checked")")
+                                Text("Matched exclusions: \(summary.matchedExclusions.map(String.init) ?? "not checked")")
+                            }.font(.caption).fixedSize(horizontal: false, vertical: true).padding(.top, 6)
+                        }
+                    }
                     ForEach(model.choices) { choice in
                         Button(action: choice.select) { VStack(alignment: .leading) { Text(choice.title).bold(); Text(choice.detail).font(.caption) }.frame(maxWidth: .infinity, alignment: .leading).padding(8) }.disabled(model.busy)
                     }
                 } }
             }
-            HStack { Spacer(); Button("Cancel", action: model.cancel) }
+            HStack { Spacer(); Button(model.cancelTitle, action: model.cancel) }
         }.padding(24).frame(minWidth: 300, minHeight: 250)
     }
 }
@@ -114,6 +141,8 @@ private struct ProviderView: View {
         model.title = "Thingtime"
         model.busy = false; model.choices = []; model.retry = nil
         model.message = ""; model.status = ""
+        model.cancelTitle = "Cancel"; model.cancel = { [weak self] in self?.cancel() }
+        model.registrationSummary = nil
         model.requestedSite = ""; model.selectionSummary = nil; model.requestDetailsExpanded = false
     }
     private func cancel(_ code: ASExtensionError.Code = .userCanceled) {
@@ -142,6 +171,13 @@ private struct ProviderView: View {
                         // Keep pending material fenced to its original session
                         // until cancellation; a new ceremony must start afresh.
                         self.model.retry = nil; self.model.choices = []
+                    }
+                    if failure == .credentialExcluded {
+                        self.model.title = "Passkey already saved"
+                        self.model.cancelTitle = "Return to website"
+                        if #available(iOS 18, macOS 15, *) {
+                            self.model.cancel = { [weak self] in self?.cancel(.matchedExcludedCredential) }
+                        }
                     }
                     self.model.status = ""
                 }
@@ -278,7 +314,15 @@ private struct ProviderView: View {
     private func register(_ request: ASPasskeyCredentialRequest, identity: ASPasskeyCredentialIdentity) {
         perform { [weak self] current in
             guard let self else { return }
-            guard request.clientDataHash.count == 32, request.supportedAlgorithms.contains(.ES256) else { throw PasswordProviderError.unsupportedAlgorithm }
+            let excluded: [Data]
+            if #available(iOS 18, macOS 15, *) { excluded = request.excludedCredentials?.map(\.credentialID) ?? [] }
+            else { excluded = [] }
+            self.model.requestedSite = identity.relyingPartyIdentifier
+            self.model.registrationSummary = PasskeyRegistrationPolicy.summary(relyingParty: identity.relyingPartyIdentifier,
+                userHandleBytes: identity.userHandle.count, clientDataHashBytes: request.clientDataHash.count,
+                supportsES256: request.supportedAlgorithms.contains(.ES256), excludedCredentialIDs: excluded)
+            try PasskeyRegistrationPolicy.requireValidRequest(relyingParty: identity.relyingPartyIdentifier,
+                userHandle: identity.userHandle, clientDataHash: request.clientDataHash, supportsES256: request.supportedAlgorithms.contains(.ES256))
             let session = try PasswordSessionStore.load(), client = PasswordClient(account: session)
             if let priorSession = self.registrationSession {
                 try session.requireUnchanged(from: priorSession)
@@ -286,9 +330,11 @@ private struct ProviderView: View {
             try await self.authenticate(current, session: session)
             self.show(.vault)
             let catalog = try await client.catalog(); try self.verify(current, session: session)
-            if #available(iOS 18, macOS 15, *), let excluded = request.excludedCredentials {
-                guard !catalog.contains(where: { item in item.relyingParty == identity.relyingPartyIdentifier && item.credentialId.flatMap({ Data(base64URL: $0) }).map({ id in excluded.contains { $0.credentialID == id } }) == true }) else { throw PasswordProviderError.invalidCredential }
-            }
+            let summary = PasskeyRegistrationPolicy.summary(relyingParty: identity.relyingPartyIdentifier,
+                userHandleBytes: identity.userHandle.count, clientDataHashBytes: request.clientDataHash.count,
+                supportsES256: request.supportedAlgorithms.contains(.ES256), excludedCredentialIDs: excluded, catalog: catalog)
+            self.model.registrationSummary = summary
+            try PasskeyRegistrationPolicy.requireNoExcludedCredential(summary)
             // Retain the immutable payload and idempotency identity until this
             // system request ends, including a timeout after the server commits.
             if self.registrationAttempt == nil {

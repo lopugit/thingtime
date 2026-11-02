@@ -291,3 +291,22 @@ return an atomic origin/status pair, recheck the captured tuple and ignore older
 UI generations. `workspace.test.mjs` covers ownership/settings/races;
 `workspace-browser.mjs` exercises actual isolated Chrome windows and rendered tabs
 without real credentials. Package with `build:password-extension`.
+
+Registration policy and count-only diagnostics live in
+`PasskeyRegistrationPolicy.swift`; native excluded matches are terminal and
+return `matchedExcludedCredential` after explicit Return to website. Browser
+`BrowserPasskeyExcludedError` is the only terminal exclusion category;
+`browserProviderFailure` fences older operations while network errors retain
+retry. Cached registration attempts recheck exclusions before each write.
+`test:passwords:record-storage` reuses the disposable replica runner's
+`--password-records` mode and production API handlers to verify independent
+same-account vault records and owner/readback/retry boundaries; it makes no
+same-authenticator discoverable-credential claim.
+
+Password branding: `passwordBrandingBlocks.ts` supplies individually editable
+decorative tree blocks and heading-preserving migrations; `PasswordBrandMark.tsx`
+serves framework headers. Extension manifest/action icons and native host/appex
+ICNS/PNG resources derive from the canonical branding assets. Coverage:
+`passwordBranding.test.ts`, extension `branding.test.mjs`, native metadata tests,
+renderer gallery and optional actual-provider Chrome fixture in
+`workspace-browser.mjs` (synthetic API boundary, real component/action routing).
