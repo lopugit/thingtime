@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { prepareBrowserPasskeyRegistration } from './browserPasskey';
-import { loadProviderChoices, runProviderCeremony, validateProviderRequest, type BrowserProviderAttempt, type ProviderRequest } from './browserProviderCeremony';
-import { BROWSER_PROVIDER_BLOCKS } from '../components/Passwords/browserProviderBlocks';
+import { BrowserPasskeyExcludedError, prepareBrowserPasskeyRegistration } from './browserPasskey';
+import { loadProviderChoices, browserProviderFailure, runProviderCeremony, validateProviderRequest, type BrowserProviderAttempt, type ProviderRequest } from './browserProviderCeremony';
+import { BROWSER_PROVIDER_BLOCKS, migrateBrowserProviderRecoveryControls } from '../components/Passwords/browserProviderBlocks';
 import { settingsDocumentBlocks } from '../components/Settings/settingsDocument';
 import { validatePasswordEntry } from './model';
 
@@ -217,4 +217,62 @@ test('assertion catalog and both secret readbacks stay bound to the same verifie
   }, signal());
   assert.equal(result.id, registration.response.id);
   assert.deepEqual(operations, ['verify-passkey', 'catalog', 'read', 'read']);
+});
+
+test('a retained registration retry rechecks newly present exact-site exclusions before another write', async () => {
+  const request = create(), attempt: BrowserProviderAttempt = {};
+  request.publicKey.excludeCredentials = [{type: 'public-key', id: 'AQID'}];
+  let excludedPresent = false, saves = 0;
+  const vault = async (body: Record<string, any>) => {
+    if (body.operation === 'verify-passkey') return {verified: true, requestId: request.id, sessionBinding};
+    if (body.operation === 'catalog') return {catalog: excludedPresent ? [{id: 'existing', relyingParty: 'example.com', credentialId: 'AQID'}] : []};
+    if (body.operation === 'save') { saves++; throw new Error('Uncertain write'); }
+    throw new Error('Unexpected secret read');
+  };
+  await assert.rejects(runProviderCeremony(request, 'synthetic-only', '', vault, signal(), attempt), /Uncertain write/);
+  const retained = attempt.prepared;
+  excludedPresent = true;
+  await assert.rejects(runProviderCeremony(request, 'synthetic-only', '', vault, signal(), attempt), errorName('InvalidStateError'));
+  assert.equal(saves, 1); assert.equal(attempt.prepared, retained);
+});
+
+test('an existing exact-site exclusion refuses registration before any save or secret read', async () => {
+  const request = create(); request.publicKey.excludeCredentials = [{type: 'public-key', id: 'AQID'}];
+  const operations: string[] = [];
+  await assert.rejects(runProviderCeremony(request, 'synthetic-only', '', async body => {
+    operations.push(String(body.operation));
+    return body.operation === 'verify-passkey' ? {verified: true, requestId: request.id, sessionBinding}
+      : {catalog: [{id: 'existing', relyingParty: 'example.com', credentialId: 'AQID'}]};
+  }, signal()), errorName('InvalidStateError'));
+  assert.deepEqual(operations, ['verify-passkey', 'catalog']);
+});
+
+
+test('only current typed exclusion is terminal; stale failure and other InvalidStateErrors cannot close a new request', () => {
+  const first = {}, second = {};
+  assert.equal(browserProviderFailure(new BrowserPasskeyExcludedError(), first, second), null);
+  assert.equal(browserProviderFailure(new BrowserPasskeyExcludedError(), first, null), null);
+  const excluded = browserProviderFailure(new BrowserPasskeyExcludedError(), first, first);
+  assert.equal(excluded?.kind, 'excluded'); assert.ok(excluded?.message.includes('Keep your working passkey'));
+  assert.equal(browserProviderFailure(new Error('Temporary network failure'), first, first)?.kind, 'retryable');
+  assert.equal(browserProviderFailure(new DOMException('Changed session', 'InvalidStateError'), first, first)?.kind, 'retryable');
+});
+
+
+test('persisted legacy approval controls gain terminal guards without changing authored content or recreating deletions', () => {
+  const legacy = [{id: 'root', type: 'element', tag: 'section', children: [
+    {id: 'bp-retry', type: 'element', tag: 'button', text: 'My refresh text', css: {color: 'purple'}, props: {'data-extra': 'retained'}},
+    {id: 'bp-fallback', type: 'element', tag: 'button', text: 'My alternate provider', css: {padding: '19px'}},
+    {id: 'bp-cancel', type: 'element', tag: 'button', text: 'Cancel', css: {border: '2px solid green'}},
+  ]}] as any;
+  const before = structuredClone(legacy), migrated = migrateBrowserProviderRecoveryControls(legacy);
+  const controls = migrated[0].children!;
+  assert.deepEqual(legacy, before, 'Migration never mutates the saved document');
+  assert.equal((controls[0] as any).condition.arg, 'result.canRefresh'); assert.deepEqual(controls[0].children![0], before[0].children[0]);
+  assert.equal((controls[1] as any).condition.arg, 'result.canChooseProvider'); assert.deepEqual(controls[1].children![0], before[0].children[1]);
+  assert.equal((controls[2] as any).text, '{result.cancelLabel}'); assert.deepEqual(controls[2].css, before[0].children[2].css);
+  assert.deepEqual(migrateBrowserProviderRecoveryControls(migrated), migrated, 'Idempotent wrappers');
+  assert.deepEqual(migrateBrowserProviderRecoveryControls([]), [], 'Deleted controls stay deleted');
+  const custom = [{id: 'bp-cancel', type: 'element', tag: 'button', text: 'My close label', css: {fontSize: '22px'}}] as any;
+  assert.deepEqual(migrateBrowserProviderRecoveryControls(custom), custom, 'An authored cancel label is retained');
 });

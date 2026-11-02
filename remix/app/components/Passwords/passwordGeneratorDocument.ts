@@ -1,3 +1,4 @@
+import { passwordBrandingMigration } from './passwordBrandingBlocks';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 import { PASSWORD_PRESETS } from '~/passwords/generator';
 const node = (id: string, tag: string, text = '', props: Record<string, unknown> = {}, children?: WebpageBlock[], css?: Record<string, string>): WebpageBlock => ({ id: id.replace(/[A-Z]/g, char => `-${char.toLowerCase()}`), type: 'element', tag, text, props, ...(children ? { children } : {}), ...(css ? { css } : {}) } as unknown as WebpageBlock);
@@ -5,7 +6,8 @@ const action = (operation: string, inputs: Record<string, string> = {}) => ({ 'd
 const style = { width: '100%', 'min-width': '0', padding: '10px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', background: 'var(--tt-card, white)', color: 'inherit' };
 const field = (key: string, caption: string, type = 'text') => node(`generator-${key}-label`, 'label', '', {}, [node(`generator-${key}-caption`, 'span', caption), node(`generator-${key}`, 'input', '', { name: key, 'aria-label': caption, type, value: `{result.${key}}`, disabled: '{result.busy}', ...action('generator.setting', { key }), ...(type === 'number' ? { min: 1, step: 1 } : {}), autoComplete: 'off' }, undefined, style)], { display: 'grid', gap: '6px', 'min-width': '0' });
 const toggle = (key: string, caption: string) => node(`generator-${key}-label`, 'label', '', {}, [node(`generator-${key}`, 'input', '', { type: 'checkbox', name: key, checked: `{result.${key}}`, disabled: '{result.busy}', ...action('generator.setting', { key }) }), node(`generator-${key}-caption`, 'span', caption)], { display: 'flex', gap: '10px', 'align-items': 'center', 'min-height': '44px' });
-export const PASSWORD_GENERATOR_BLOCKS: WebpageBlock[] = [node('password-generator', 'fieldset', '', {}, [
+export const migratePasswordGeneratorBranding = passwordBrandingMigration('generator-title');
+const PASSWORD_GENERATOR_BLOCKS_DEFAULTS: WebpageBlock[] = [node('password-generator', 'fieldset', '', {}, [
   node('generator-title', 'legend', 'Password generator'),
   node('generator-intro', 'p', 'Generate securely on this device into the selected password field. No generated password is stored in this layout or generator settings.'),
   node('generator-target-label', 'label', 'Password field', { htmlFor: 'generator-target' }),
@@ -20,3 +22,4 @@ export const PASSWORD_GENERATOR_BLOCKS: WebpageBlock[] = [node('password-generat
   node('generator-feedback', 'p', '{result.notice}', { role: 'status', 'aria-live': 'polite' }, undefined, { 'overflow-wrap': 'anywhere', 'line-height': '1.6' }),
   node('generator-generate', 'button', '{result.buttonLabel}', { type: 'button', disabled: '{result.busy}', ...action('generator.generate') }, undefined, { ...style, cursor: 'pointer', 'min-height': '44px', 'font-weight': '600', 'white-space': 'normal' })
 ], { 'min-width': '0', display: 'grid', gap: '12px', padding: '14px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '10px' })];
+export const PASSWORD_GENERATOR_BLOCKS = migratePasswordGeneratorBranding(PASSWORD_GENERATOR_BLOCKS_DEFAULTS);

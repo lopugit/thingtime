@@ -1,3 +1,4 @@
+import { passwordBrandingMigration } from './passwordBrandingBlocks';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 const fieldCss = { padding: '8px 10px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', color: 'inherit', background: 'var(--tt-surface, white)', 'min-width': '0', 'box-sizing': 'border-box', font: 'inherit' };
 const el = (id: string, tag: string, text: string, props: Record<string, unknown> = {}, children?: WebpageBlock[], css?: Record<string, string>): WebpageBlock => ({ id, type: 'element', tag, ...(text ? { text } : {}), props, ...(children ? { children } : {}), ...(css ? { css } : {}) });
@@ -6,7 +7,8 @@ const action = (operation: string) => ({ 'data-tt-action': '$transient', 'data-t
 const button = (id: string, label: string, operation: string, disabled = '{icon.busy}') => el(id, 'button', '', { type: 'button', disabled, ...action(operation) }, [text(`${id}-label`, label)], { ...fieldCss, cursor: 'pointer', 'min-height': '44px' });
 const when = (id: string, arg: string, children: WebpageBlock[]): WebpageBlock => ({ id, type: 'condition', condition: { arg }, children });
 /** Layout only: icon URLs and file contents never enter a saved document. */
-export const passwordIconBlocks: WebpageBlock[] = [el('icon-fields', 'fieldset', '', {}, [
+export const migratePasswordIconBranding = passwordBrandingMigration('icon-heading');
+const passwordIconBlocks_DEFAULTS: WebpageBlock[] = [el('icon-fields', 'fieldset', '', {}, [
  el('icon-heading', 'legend', 'Entry icon'),
  el('icon-help', 'p', 'Upload an image, or choose an HTTPS URL. URL icons contact that website anonymously when displayed. Some sites block private loading; upload the image if that happens.'),
  el('icon-upload-label', 'label', '', {}, [text('icon-upload-text', 'Upload icon'), el('icon-upload', 'input', '', { type: 'file', name: 'icon-file', accept: '.png,.jpg,.jpeg,.webp,.gif,.ico', disabled: '{icon.cannotUpload}', 'aria-label': 'Upload entry icon', ...action('icon.upload') })], { display: 'grid', gap: '6px' }),
@@ -17,3 +19,4 @@ export const passwordIconBlocks: WebpageBlock[] = [el('icon-fields', 'fieldset',
  button('icon-remove', 'Remove icon', 'icon.remove', '{icon.cannotRemove}'),
  when('icon-error', 'icon.error', [el('icon-error-message', 'p', '{icon.error}', { role: 'alert' })])
 ], { display: 'grid', gap: '10px', 'min-width': '0', margin: '0', padding: '12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '10px' })];
+export const passwordIconBlocks = migratePasswordIconBranding(passwordIconBlocks_DEFAULTS);

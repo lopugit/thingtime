@@ -9,7 +9,8 @@ swift build --package-path "$ROOT/apple/Passwords" >/dev/null
 CORE_BUILD="$(swift build --package-path "$ROOT/apple/Passwords" --show-bin-path)"
 cat "$ROOT/apple/PasswordProvider/CredentialProviderViewController.swift" "$ROOT/apple/PasswordProvider/tests/render-preview.swift" > "$PREVIEW_DIR/ProviderPreview.swift"
 PREVIEW_APP="$PREVIEW_DIR/ThingtimeProviderPreview.app"
-mkdir -p "$PREVIEW_APP/Contents/MacOS"
+mkdir -p "$PREVIEW_APP/Contents/MacOS" "$PREVIEW_APP/Contents/Resources"
+cp "$ROOT/macos/ThingtimePasswords/Resources/ThingtimeTree.png" "$PREVIEW_APP/Contents/Resources/ThingtimeTree.png"
 cat > "$PREVIEW_APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

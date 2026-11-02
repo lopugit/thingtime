@@ -13642,3 +13642,35 @@ separate from deterministic discovery/lease tests.
 - Deployment order: product gateway API first, signed read and admin save/readback
   second, protected controller consumer last. A UI preview using the older
   gateway cannot establish the new backend's acceptance.
+
+
+### Passkey registration exclusion recovery (2026-11-02)
+
+- [ ] In the signed provider, a matching site's excluded saved credential shows
+  the specific already-saved explanation, no Retry and **Return to website**.
+  Expand Registration request details: requested RP, hash/handle byte lengths,
+  ES256, catalog/site/exclusion counts must match independent request evidence;
+  no IDs, handles, keys or session/account values appear. Cancel/new request clears
+  details. Test long RP and large counts in a narrow window with the return control reachable.
+- [ ] Return sends `matchedExcludedCredential` natively / `InvalidStateError` in
+  the browser to the original request; no automatic native fallback, new save or
+  password re-verification loop occurs. Browser non-exclusion network errors
+  retain retry, and a delayed old failure cannot terminate a new request.
+- [ ] Keep existing passkeys working. An absent/nonmatching exclusion does not
+  invent account-wide uniqueness; a foreign RP with the same bytes does not block.
+  Verify independent vault record IDs/readback separately from any site's support
+  for multiple discoverable credentials in one authenticator.
+- Run `swift test --package-path apple/Passwords`, focused browser passkey/ceremony
+  tests, and `pnpm --dir remix run test:passwords:record-storage` (owned disposable
+  replica, real API handlers). No existing Mongo or personal profile may be reused.
+- Compile/render the real native view with
+  `bash apple/PasswordProvider/tests/render-preview.sh --excluded --details --long-site --large-counts --width 300 --height 380`.
+  This is a synthetic view, not a credential operation. ImageRenderer does not
+  paint ScrollView contents reliably; inspect the actual owned preview window.
+
+### Password manager tree branding (2026-11-02)
+
+- [ ] Verify the official decorative tree beside the accessible Thingtime heading in extension workspace tabs, browser approval/idle/sign-in/terminal states, vault/import/export, generator, icon picker, passkey guide, native connection, settings and native host/provider. Inspect desktop and 375px layouts, long labels, expanded details and bottom controls.
+- [ ] Existing saved default layouts gain branding without replacing edited headings, styles, IDs or custom content. Deleting the migrated mark stays deleted; authored layouts without the known heading remain unchanged. Legacy provider retry/fallback controls obey terminal conditions without restoring deleted controls.
+- Run extension unit tests (including real ZIP icon inventory) and `test:passwords`; metadata tests validate host/extension ICNS and PNG packaging. Inspect native bundle icons independently of website-controlled account/passkey icons.
+- The isolated `browser-extension/test/workspace-browser.mjs --provider-ui-origin=<fixture-origin>` path uses `remix/scripts/password-provider.browser.html`: the actual provider component, content bridge, background routing, ceremony and transient actions run against explicitly synthetic in-memory API responses. Verify excluded create hides approval/refresh/fallback and clears password input, then explicit Return delivers bound InvalidStateError and focuses the original requester. This proves that action path, not real vault/site/OS acceptance. `password-branding.browser.html` is a separate renderer-only document gallery.

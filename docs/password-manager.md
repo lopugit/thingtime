@@ -334,3 +334,48 @@ control exercises generator presets, target selection, masked values, save/reloa
 icons and draft preservation. Use a task-owned isolated browser/profile with normal networking, inspect desktop and 390px layouts, and edit/save representative nested
 Builder blocks. This fixture is UI regression evidence, not live vault or native
 passkey acceptance. Run the real HTTP verifier separately.
+
+### Registration refusals and existing passkeys
+
+A site's `excludeCredentials` list is authoritative: an exact credential ID for
+the same relying party already in Thingtime refuses that registration before a
+new key or save. Thingtime keeps the working key. The native provider explains
+that this request cannot add another from the provider, shows **Return to website**
+instead of Retry, and returns Apple's `matchedExcludedCredential` error. Its
+optional **Registration request details** contains only the requested RP, byte
+lengths, ES256 support and catalog/exclusion counts; values are transient and
+cleared on a new request/cancel, never keys, handles or credential IDs.
+
+The browser adapter likewise treats only its own typed exclusion error as a
+terminal approval state: password/approval/refresh and other-provider actions
+cannot retry that request; **Return to website** returns `InvalidStateError` to
+the original bound requester. Network failures remain retryable and stale
+failures cannot terminate a replacement request. Retained-key retries recheck
+exclusions before writing, preserving the original key and write identity.
+
+The vault can retain independent record UUIDs with the same RP/user handle,
+including imported records, without overwriting another record. This is storage
+behavior, not a promise of multiple simultaneous discoverable mappings in one
+logical authenticator: WebAuthn defines that mapping by RP and user handle, and
+the site controls which registrations it accepts. Do not delete a working key,
+change a user handle, or ignore exclusions to create another. See
+[WebAuthn authenticator operations](https://www.w3.org/TR/webauthn-3/#sctn-authenticator-operations).
+
+`pnpm --dir remix run test:passwords:record-storage` uses the existing disposable
+replica runner and real registration/password route handlers. It proves two
+independent encrypted records, exact readback, preservation of the first record,
+idempotent retry and cross-account refusal. It does not test a real site's
+registration, OS discovery or browser transport. Native policy/material tests and
+an independent WebAuthn verifier cover refusal boundaries and signatures.
+
+### Official tree branding
+
+Password surfaces share the existing official pixel tree under
+`public/branding/generated/icon/`. Editable documents use
+`passwordBrandingBlocks.ts`; migrations preserve authored headings, styles and
+IDs, respect missing custom headings and do not recreate a deleted migrated mark.
+The tree is decorative beside visible accessible text; entry/site icons retain
+their meaning. Extension 0.2.1 packages valid 16/32/48/128px icons. Native
+1.0.7/build 8 packages the same tree and ICNS in both host and provider extension.
+System bundle icons are separate from website-controlled passkey/account artwork.
+The current iOS project has no shared PasswordProvider target/resource consumer.

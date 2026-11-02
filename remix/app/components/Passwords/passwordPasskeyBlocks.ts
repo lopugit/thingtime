@@ -1,3 +1,4 @@
+import { passwordBrandingMigration } from './passwordBrandingBlocks';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 
 const element = (id: string, tag: string, text: string, props: Record<string, unknown> = {}, children?: WebpageBlock[], css?: Record<string, string>): WebpageBlock =>
@@ -11,7 +12,8 @@ const button = (id: string, text: string, operation: string, props: Record<strin
   { padding: '10px 14px', 'min-height': '44px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', background: 'var(--tt-card, white)', color: 'inherit', cursor: 'pointer', 'white-space': 'normal' });
 
 /** Editable presentation only. Provider authority and connection state never persist in these blocks. */
-export const PASSWORD_PASSKEY_BLOCKS: WebpageBlock[] = [
+export const migratePasskeyBranding = passwordBrandingMigration('password-passkey-title');
+const PASSWORD_PASSKEY_BLOCKS_DEFAULTS: WebpageBlock[] = [
   element('section', 'section', '', { 'aria-label': 'Create a passkey' }, [
     element('title', 'h2', 'Passkeys', {}, undefined, { margin: '0', 'font-size': '18px', 'font-weight': '600' }),
     paragraph('summary', 'Create and save passkeys with Thingtime when a website or app asks you to register one.'),
@@ -49,6 +51,7 @@ export const PASSWORD_PASSKEY_BLOCKS: WebpageBlock[] = [
     ]),
   ], { border: '1px solid var(--tt-border, #e6e6eb)', 'border-radius': '12px', padding: '16px', 'font-size': '14px', background: 'var(--tt-card, white)', 'min-width': '0' }),
 ];
+export const PASSWORD_PASSKEY_BLOCKS = migratePasskeyBranding(PASSWORD_PASSKEY_BLOCKS_DEFAULTS);
 
 const LEGACY_PASSKEY_TEXT: Record<string, { tag: string; text: string }> = {
   'password-passkey-open': { tag: 'button', text: 'Create a passkey' },
@@ -101,7 +104,7 @@ export function migratePasswordPasskeyBlocks(blocks: WebpageBlock[]): WebpageBlo
     return [LEGACY_PASSKEY_TEXT[block.id], PRE_NATIVE_FIRST_TEXT[block.id], PRE_HOOK_DIAGNOSTIC_TEXT[block.id]].some(legacy =>
       legacy && block.type === 'element' && block.tag === legacy.tag && block.text === legacy.text);
   };
-  if (!nodes.some(matchesLegacy)) return blocks;
+  if (!nodes.some(matchesLegacy)) return migratePasskeyBranding(blocks);
   const defaults = new Map(passkeyNodes(PASSWORD_PASSKEY_BLOCKS).map(block => [block.id, block]));
   const ids = new Set(nodes.map(block => block.id));
   const additions = ['password-passkey-native-first', 'password-passkey-extension', 'password-passkey-extension-install']
@@ -118,5 +121,5 @@ export function migratePasswordPasskeyBlocks(blocks: WebpageBlock[]): WebpageBlo
     }
     return next;
   });
-  return visit(blocks);
+  return migratePasskeyBranding(visit(blocks));
 }

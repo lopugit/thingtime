@@ -49,6 +49,14 @@ final class ClientTests: XCTestCase {
         do { _ = try await client().read("fixture-record"); XCTFail("Expected network failure") }
         catch { XCTAssertEqual(error as? PasswordProviderError, .networkUnavailable) }
     }
+    func testMissingOrMismatchedReadbackIsAResponseFailureNotSiteEligibility() async throws {
+        for reply: [String: Any] in [["ok": true, "ownerId": "fixture-owner", "id": "fixture-record"],
+                                    ["ok": true, "ownerId": "fixture-owner", "id": "other-record", "entry": ["title": "Fixture", "passwordType": "login", "fields": []]]] {
+            PasswordTestProtocol.handler = { request in (200, request.url!.path.hasPrefix("/.well-known/") ? self.manifest : try JSONSerialization.data(withJSONObject: reply)) }
+            do { _ = try await client().read("fixture-record"); XCTFail("Expected malformed response refusal") }
+            catch { XCTAssertEqual(error as? PasswordProviderError, .invalidResponse) }
+        }
+    }
     func testCapabilityOriginMismatchDoesNotContinueToPasswordRoute() async throws {
         var paths: [String] = []
         PasswordTestProtocol.handler = { request in
@@ -91,4 +99,42 @@ final class ClientTests: XCTestCase {
             XCTAssertEqual(page, cursors.count)
         }
     }
+    func testIndependentRecordIDsKeepSameAccountKeysAndRetryReadbackSeparate() async throws {
+        let first = try PasskeyRegistrationAttempt(relyingParty: "registration.example.test", userHandle: Data([1, 2, 3]), username: "fixture")
+        let second = try PasskeyRegistrationAttempt(relyingParty: first.key.relyingParty, userHandle: first.key.userHandle, username: first.key.username)
+        var records: [String: [String: Any]] = [:], writeIDs: [String: String] = [:]
+        PasswordTestProtocol.handler = { request in
+            if request.url!.path.hasPrefix("/.well-known/") { return (200, self.manifest) }
+            var bytes = request.httpBody ?? Data()
+            if let stream = request.httpBodyStream {
+                stream.open(); defer { stream.close() }
+                var buffer = [UInt8](repeating: 0, count: 1024)
+                while stream.hasBytesAvailable { let count = stream.read(&buffer, maxLength: buffer.count); if count <= 0 { break }; bytes.append(contentsOf: buffer.prefix(count)) }
+            }
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+            XCTAssertEqual(body["expectedOwnerId"] as? String, "fixture-owner")
+            let id = try XCTUnwrap(body["id"] as? String), operation = body["operation"] as? String
+            var reply: [String: Any] = ["ok": true, "ownerId": "fixture-owner"]
+            if operation == "save" {
+                let entry = try XCTUnwrap(body["entry"] as? [String: Any]), write = try XCTUnwrap(body["writeId"] as? String)
+                if let prior = records[id] { XCTAssertTrue(NSDictionary(dictionary: prior).isEqual(to: entry)); XCTAssertEqual(writeIDs[id], write) }
+                records[id] = entry; writeIDs[id] = write
+                reply["record"] = ["id": id, "title": entry["title"]!, "passwordType": "passkey", "revision": 1]
+            } else {
+                XCTAssertEqual(operation, "read"); reply["id"] = id; reply["entry"] = try XCTUnwrap(records[id])
+            }
+            return (200, try JSONSerialization.data(withJSONObject: reply))
+        }
+        let connection = try client()
+        for attempt in [first, second, first] {
+            _ = try await connection.save(attempt.key.entry, id: attempt.recordID, writeId: attempt.writeID)
+            let readback = try await connection.read(attempt.recordID)
+            XCTAssertTrue(try attempt.matches(readback))
+        }
+        XCTAssertEqual(records.count, 2)
+        let firstReadback = try await connection.read(first.recordID), secondReadback = try await connection.read(second.recordID)
+        XCTAssertTrue(try first.matches(firstReadback))
+        XCTAssertTrue(try second.matches(secondReadback))
+    }
+
 }
