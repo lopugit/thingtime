@@ -29,14 +29,22 @@ private final class CommanderPanel: NSPanel {
   }
 
   override func sendEvent(_ event: NSEvent) {
-    // A resize gesture is valid only while Commander is receiving its drag
-    // stream. Keyboard actions such as selecting an emoji with Return can
-    // arrive after a matching mouse-up was missed, so never let a stale resize
-    // session survive any non-drag input.
-    if resizeSession != nil, event.type != .leftMouseDragged {
-      let consumedMouseUp = event.type == .leftMouseUp
-      cancelResizeSession()
-      if consumedMouseUp { return }
+    if resizeSession != nil {
+      switch event.type {
+      case .leftMouseDragged, .cursorUpdate, .mouseEntered, .mouseExited,
+           .appKitDefined, .systemDefined, .applicationDefined, .periodic, .flagsChanged:
+        // Tracking and framework notifications can arrive between drag steps,
+        // including after setFrame moves a tracking boundary. A modifier change
+        // also leaves the held mouse gesture intact. Forward these normally.
+        break
+      default:
+        // A release or new input ends the gesture. Keep this stale-session
+        // guard for missed mouse-ups (for example, before Return selects an
+        // emoji), alongside the explicit window lifecycle cancellation hooks.
+        let consumedMouseUp = event.type == .leftMouseUp
+        cancelResizeSession()
+        if consumedMouseUp { return }
+      }
     }
 
     switch event.type {
