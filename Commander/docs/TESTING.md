@@ -122,7 +122,10 @@
 - [ ] Drag the launcher by its icon/header chrome; the window follows the pointer without moving focus into the search field.
 - [ ] Drag each launcher corner and edge inward and outward in default and compact modes. Verify native resize cursors
       appear, the panel follows the pointer down to its mode-specific minimum, and content remains usable without an
-      opaque outer rectangle.
+      opaque outer rectangle. Keep the mouse held after the first small movement, cross cursor/tracking boundaries,
+      change Shift, and reverse direction: resizing must continue beyond the first pixel until release. Run the native
+      passive-event dispatch regression to cover cursor, enter/exit, framework and modifier notifications between drag
+      steps; endpoint-only automated drags do not establish that interleaved-event behavior.
 - [ ] While resizing, trigger an emoji insertion or press Return to paste from Commander’s Emoji & Symbols picker,
       release the mouse, press Escape, change focus, hide, or close the launcher. The resize session must cancel
       immediately, so later pointer movement cannot resize the panel. In
