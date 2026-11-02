@@ -1,5 +1,15 @@
 # Control-plane regression checklist
 
+## Prebuilt prepare environment (2026-11-02)
+
+- Run `node --test .github/scripts/deploy-vercel-prebuilt.test.mjs`; the prepare
+  authorization step must map both team identifiers and both project identifiers
+  from its existing protected environment. Later publish mappings cannot satisfy
+  this regression. Keep the product build job secret-free.
+- After reviewed controller rollout, rerun the existing protected deployment and
+  verify prepare passes before claiming publication. No credentials, environment
+  values or protection settings need changing.
+
 ## Orphan Vercel deployment cleanup (2026-10-30)
 
 - Run `node --test .github/scripts/preview-gateway-source.test.mjs .github/scripts/orphan-preview-cleanup.test.mjs .github/scripts/deploy-vercel-prebuilt.test.mjs`
