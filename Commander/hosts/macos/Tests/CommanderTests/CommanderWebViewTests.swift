@@ -263,6 +263,108 @@ final class CommanderWebViewTests: XCTestCase {
     )
   }
 
+  func testCustomResizeContinuesAcrossPassiveEventsUntilMouseUp() throws {
+    let ready = DaemonReady(
+      type: "ready", protocolVersion: 1, port: 1, url: "http://127.0.0.1:1",
+      sessionToken: "test-session", nativeToken: "test-native", pid: 1
+    )
+    let bridge = CommanderNativeBridge(
+      ready: ready, keychain: KeychainStore(), loginItem: LaunchAtLoginService(),
+      showLauncher: {}, hideLauncher: {}, showSettings: { _ in },
+      updateHotKeys: { _, _ in }, updateMenuBar: { _ in }, updateWindowMode: { _ in }
+    )
+    let controller = LauncherPanelController(ready: ready, bridge: bridge)
+    let panel = controller.panelForTesting
+    defer { controller.shutdown() }
+
+    func mouseEvent(_ type: NSEvent.EventType, at screenLocation: NSPoint) throws -> NSEvent {
+      try XCTUnwrap(NSEvent.mouseEvent(
+        with: type, location: panel.convertPoint(fromScreen: screenLocation),
+        modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber,
+        context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+      ))
+    }
+    func passiveEvent(_ type: NSEvent.EventType) throws -> NSEvent {
+      switch type {
+      case .cursorUpdate, .mouseEntered, .mouseExited:
+        return try XCTUnwrap(NSEvent.enterExitEvent(
+          with: type, location: .zero, modifierFlags: [], timestamp: 0,
+          windowNumber: panel.windowNumber, context: nil, eventNumber: 0,
+          trackingNumber: 0, userData: nil
+        ))
+      case .flagsChanged:
+        return try XCTUnwrap(NSEvent.keyEvent(
+          with: type, location: .zero, modifierFlags: .shift, timestamp: 0,
+          windowNumber: panel.windowNumber, context: nil, characters: "",
+          charactersIgnoringModifiers: "", isARepeat: false, keyCode: 56
+        ))
+      default:
+        return try XCTUnwrap(NSEvent.otherEvent(
+          with: type, location: .zero, modifierFlags: [], timestamp: 0,
+          windowNumber: panel.windowNumber, context: nil, subtype: 0, data1: 0, data2: 0
+        ))
+      }
+    }
+    let passiveTypes: [NSEvent.EventType] = [
+      .cursorUpdate, .mouseEntered, .mouseExited, .appKitDefined,
+      .systemDefined, .applicationDefined, .periodic, .flagsChanged,
+    ]
+
+    for mode in [LauncherWindowMode.standard, .compact] {
+      controller.setWindowMode(mode)
+      // Exercise an edge and a corner through the panel's actual event dispatch;
+      // resize math alone cannot catch a session cancelled between drag events.
+      for corner in [false, true] {
+        let initialFrame = NSRect(origin: NSPoint(x: 100, y: 100), size: mode.size)
+        panel.setFrame(initialFrame, display: false)
+        let surface = initialFrame.insetBy(
+          dx: CommanderWebView.launcherSurfaceInset,
+          dy: CommanderWebView.launcherSurfaceInset
+        )
+        let start = corner
+          ? NSPoint(x: surface.minX, y: surface.minY)
+          : NSPoint(x: surface.maxX, y: surface.midY)
+        func screenLocation(_ distance: CGFloat) -> NSPoint {
+          NSPoint(
+            x: start.x + (corner ? -distance : distance),
+            y: start.y + (corner ? -distance : 0)
+          )
+        }
+        func assertFrame(_ distance: CGFloat, file: StaticString = #filePath, line: UInt = #line) {
+          let expected = corner
+            ? NSRect(
+              x: initialFrame.minX - distance, y: initialFrame.minY - distance,
+              width: initialFrame.width + distance, height: initialFrame.height + distance
+            )
+            : NSRect(
+              origin: initialFrame.origin,
+              size: NSSize(width: initialFrame.width + distance, height: initialFrame.height)
+            )
+          XCTAssertEqual(panel.frame, expected, file: file, line: line)
+        }
+
+        panel.sendEvent(try mouseEvent(.leftMouseDown, at: start))
+        panel.sendEvent(try mouseEvent(.leftMouseDragged, at: screenLocation(1)))
+        assertFrame(1)
+        for (index, type) in passiveTypes.enumerated() {
+          panel.sendEvent(try passiveEvent(type))
+          XCTAssertTrue(controller.resizeSessionActiveForTesting, "Cancelled by \(type)")
+          let distance = CGFloat((index + 1) * 8)
+          panel.sendEvent(try mouseEvent(.leftMouseDragged, at: screenLocation(distance)))
+          assertFrame(distance)
+        }
+        // Reverse direction during the same hold, then ensure release fences
+        // even an out-of-order dragged event from the completed gesture.
+        panel.sendEvent(try mouseEvent(.leftMouseDragged, at: screenLocation(-12)))
+        assertFrame(-12)
+        panel.sendEvent(try mouseEvent(.leftMouseUp, at: screenLocation(-12)))
+        XCTAssertFalse(controller.resizeSessionActiveForTesting)
+        panel.sendEvent(try mouseEvent(.leftMouseDragged, at: screenLocation(80)))
+        assertFrame(-12)
+      }
+    }
+  }
+
   func testCustomResizeCancelsOnInputLifecycleChangesIncludingReturnAndCanBeDisabled() throws {
     let ready = DaemonReady(
       type: "ready",

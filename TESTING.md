@@ -5342,7 +5342,9 @@ halves.
       intact, and decoded backslashes are not decoded a second time.
 
 - [ ] In General, turn custom resize handling off and verify AppKit's standard edge resizing works. Turn it back on,
-      begin a resize, then release the mouse, press Escape, change focus, hide, close, insert an emoji, or press
+      drag every edge and corner continuously beyond the first pixel, and reverse direction without releasing.
+      Hover/cursor updates must not interrupt the gesture; opposite edges remain anchored and minimum size holds.
+      Begin a resize, then release the mouse, press Escape, change focus, hide, close, insert an emoji, or press
       Return to paste from Commander’s Emoji & Symbols picker; later pointer movement must never continue resizing
       the launcher. Relaunch and verify the selected mode persists.
 - [ ] Launch the installed `~/Applications/Commander.app`, verify the signed
