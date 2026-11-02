@@ -77,7 +77,7 @@ function Fixture() {
       check(document.querySelectorAll('select[aria-label="Platform preset"]').length === 1, 'Entry editor mounted duplicate password generators');
       const draftTitle = document.getElementById('password-title') as HTMLInputElement;
       setControl(draftTitle, 'Synthetic retained draft'); await wait();
-      button('Create a passkey')!.click(); await wait();
+      button('Set up passkeys')!.click(); await wait();
       check(!!button('Close passkey guide'), 'Passkey guide did not expand');
       check((document.getElementById('password-title') as HTMLInputElement).value === 'Synthetic retained draft', 'Passkey guide discarded draft');
       button('Close passkey guide')!.click(); await wait(); setControl(draftTitle, title); await wait();

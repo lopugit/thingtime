@@ -6,7 +6,7 @@ import { TransientBlockHost, type TransientBlockActions } from '../Builder/Trans
 import { PasswordPasskeySetup } from '../Passwords/PasswordPasskeySetup';
 import { hasNativePasswordProvider } from '~/passwords/native.client';
 import { SettingsDocumentHost } from './SettingsDocumentHost';
-import { PASSWORD_MANAGER_SETTINGS_BLOCKS } from './passwordManagerSettingsBlocks';
+import { PASSWORD_MANAGER_SETTINGS_BLOCKS, migratePasswordSettingsBranding } from './passwordManagerSettingsBlocks';
 
 export function PasswordManagerSettings({ ownerId, onNavigate }: { ownerId: string; onNavigate?: () => void }) {
   const navigate = useNavigate();
@@ -23,7 +23,7 @@ export function PasswordManagerSettings({ ownerId, onNavigate }: { ownerId: stri
     'passwords.security': () => open('/settings/security#account-passkeys'),
   };
   return <Flex id="password-manager" direction="column" gap={4} minW={0}>
-    <SettingsDocumentHost documentKey="password-manager-settings" title="Password manager settings layout" defaultDocument={PASSWORD_MANAGER_SETTINGS_BLOCKS} scopeKey={ownerId}>
+    <SettingsDocumentHost documentKey="password-manager-settings" title="Password manager settings layout" defaultDocument={PASSWORD_MANAGER_SETTINGS_BLOCKS} migrateBlocks={migratePasswordSettingsBranding} scopeKey={ownerId}>
       {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={ownerId} scope={{}} actions={actions} enabled={!editing}>
         <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
       </TransientBlockHost>}

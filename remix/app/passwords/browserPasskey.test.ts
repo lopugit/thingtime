@@ -95,3 +95,22 @@ test('canonical binary fields, protocol user-handle constraint and malformed opt
   const snapshot = create(), normalized = validateBrowserPasskeyRequest(snapshot);
   snapshot.publicKey.user!.name = 'changed'; assert.equal(normalized.publicKey.user!.name, 'fixture');
 });
+
+test('independent vault material for the same RP/handle keeps both signatures intact absent an exclusion', async () => {
+  // Tests independent key records and exclusion policy, not multiple simultaneous
+  // discoverable mappings in one logical WebAuthn authenticator.
+  const first = await prepareBrowserPasskeyRegistration(create(), true, [], crypto);
+  const original = JSON.stringify(first.entry);
+  const second = await prepareBrowserPasskeyRegistration(create(), true, [first.entry], crypto);
+  assert.notEqual(first.response.id, second.response.id); assert.equal(JSON.stringify(first.entry), original);
+  for (const registration of [first, second]) {
+    const verified = await verifyRegistrationResponse({response: registration.response as any, expectedChallenge: challenge, expectedOrigin: create().origin, expectedRPID: 'example.com'});
+    assert.equal(verified.verified, true); if (!verified.registrationInfo) throw new Error('Missing verified credential');
+    const request = get(); request.publicKey.allowCredentials = [{type: 'public-key', id: registration.response.id}];
+    const assertion = await createBrowserPasskeyAssertion(registration.entry, request, true, crypto);
+    assert.equal((await verifyAuthenticationResponse({response: assertion as any, expectedChallenge: challenge, expectedOrigin: request.origin, expectedRPID: 'example.com', credential: verified.registrationInfo.credential})).verified, true);
+  }
+  const foreign = structuredClone(first.entry); foreign.fields.find(field => field.id === 'relyingParty')!.value = 'foreign.example.test';
+  const excluded = create(); excluded.publicKey.excludeCredentials = [{type: 'public-key', id: first.response.id}];
+  await prepareBrowserPasskeyRegistration(excluded, true, [foreign], crypto);
+});

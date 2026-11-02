@@ -67,6 +67,12 @@ edge cases live in `api/utils/migrations/migrations.ts`.
 
 System-kind rules (never bypass):
 
+- `mongodb-connection-snapshot` is server-minted home control telemetry with
+  `storageClass: "control"`, a system owner and no general read ACL. Only the
+  dedicated current-admin inventory endpoint projects it. Generic CRUD rejects
+  its kind and reserved ID prefix. It reuses the shared ephemeral TTL and
+  kind/creation indexes; expiry never deletes account content or refunds bytes.
+
 - `agent-reporting-binding` and `agent-reporting-operation` are protected,
   home-pinned `storageClass: "control"` Things. The reporting gateway alone
   writes their task bindings and relational retry receipts, using existing

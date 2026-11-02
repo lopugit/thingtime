@@ -21,6 +21,9 @@ export type SettingsDocumentHostProps = {
   layoutEditingDisabled?: boolean;
   /** View-only consumers render the saved document without layout management UI. */
   showLayoutControls?: boolean;
+  /** Keep the duplicate floating Lopu bubble off narrow control workspaces.
+   * The shared navigation opener and an already-open assistant remain available. */
+  clearMobileLaunchers?: boolean;
   /** Optional scoped legacy document, consulted only when no durable document exists. */
   loadFallbackDocument?: () => SettingsDocument | null;
   persistence?: 'account' | 'device';
@@ -69,7 +72,7 @@ function ScopedSettingsDocument(props: SettingsDocumentHostProps) {
     writable={props.persistence === 'device' || (!!user?.id && !!dataPlane && !user.temporary)} />;
 }
 
-function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', persistence = 'account', accountTransport, children, documentScope, writable, layoutEditingDisabled = false, showLayoutControls = true, loadFallbackDocument, migrateBlocks }: SettingsDocumentHostProps & {
+function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', persistence = 'account', accountTransport, children, documentScope, writable, layoutEditingDisabled = false, showLayoutControls = true, clearMobileLaunchers = false, loadFallbackDocument, migrateBlocks }: SettingsDocumentHostProps & {
   documentScope: Parameters<typeof settingsDocumentKey>[0]; writable: boolean;
 }) {
   const key = settingsDocumentKey(documentScope);
@@ -160,7 +163,7 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
     save, resetToDefault: async () => { update(defaults); return { ok: true }; },
     discardDraft: () => { revision.current++; setDocument(saved); }, refresh: () => setReload(value => value + 1)
   };
-  return <Box minW={0} data-settings-document={documentScope.documentKey}>
+  return <Box minW={0} data-settings-document={documentScope.documentKey} data-tt-mobile-control-workspace={clearMobileLaunchers ? true : undefined}>
     {showLayoutControls && <Flex gap={2} mb={2} align="center" flexWrap="wrap">
       <Button size="xs" variant="ghost" isDisabled={saveBusy || layoutEditingDisabled} onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : 'Edit layout'}</Button>
       {dirty && <Text fontSize="xs">Unsaved layout</Text>}

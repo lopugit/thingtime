@@ -111,7 +111,7 @@ public final class PasswordClient: @unchecked Sendable {
     public func read(_ id: String) async throws -> PasswordEntry {
         try await requireCapability()
         let reply = try await call(["operation": "read", "id": id])
-        guard reply.id == id, let entry = reply.entry else { throw PasswordProviderError.invalidCredential }
+        guard reply.id == id, let entry = reply.entry else { throw PasswordProviderError.invalidResponse }
         return entry
     }
     public func save(_ entry: PasswordEntry, id: String, writeId: String) async throws -> String {

@@ -1,6 +1,6 @@
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { passwordRequest } from './client';
-import { createBrowserPasskeyAssertion, prepareBrowserPasskeyRegistration, validateBrowserPasskeyRequest, type BrowserPasskeyRequest } from './browserPasskey';
+import { createBrowserPasskeyAssertion, prepareBrowserPasskeyRegistration, requireNoExcludedBrowserPasskey, BrowserPasskeyExcludedError, BROWSER_PASSKEY_EXCLUDED_MESSAGE, validateBrowserPasskeyRequest, type BrowserPasskeyRequest } from './browserPasskey';
 import { passwordFieldValue, validatePasswordEntry, type PasswordEntry } from './model';
 
 export type ProviderRequest = BrowserPasskeyRequest & { version: 1; id: string };
@@ -67,6 +67,7 @@ export async function runProviderCeremony(request: ProviderRequest, password: st
     { id: 'credentialId', label: 'Credential ID', type: 'text', value: value.credentialId! },
     { id: 'relyingParty', label: 'Website', type: 'text', value: value.relyingParty! },
   ] }));
+  requireNoExcludedBrowserPasskey(request, excluded);
   const prepared = attempt.prepared || await prepareBrowserPasskeyRegistration(request, true, excluded);
   attempt.prepared = prepared;
   signal.throwIfAborted();
@@ -87,4 +88,13 @@ export async function runProviderCeremony(request: ProviderRequest, password: st
 export async function ensureBrowserProvider(signal: AbortSignal) {
   await requireThingtimeCapability('api.passwords', '1.4.0');
   signal.throwIfAborted();
+}
+
+/** Only our closed exclusion category is terminal; stale operations cannot paint
+ * or terminate a replacement request. Other InvalidStateErrors stay distinct. */
+export function browserProviderFailure(error: unknown, operation: object, current: object | null): {kind: 'excluded' | 'retryable'; message: string} | null {
+  if (operation !== current) return null;
+  return error instanceof BrowserPasskeyExcludedError
+    ? {kind: 'excluded', message: BROWSER_PASSKEY_EXCLUDED_MESSAGE}
+    : {kind: 'retryable', message: error instanceof Error ? error.message : 'The passkey could not be completed.'};
 }

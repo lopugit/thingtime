@@ -1,7 +1,9 @@
+import { passwordBrandingMigration } from './passwordBrandingBlocks';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 
 /** Editable presentation only; live connection state is transient. */
-export const NATIVE_PASSWORD_CONNECTION_BLOCKS: WebpageBlock[] = [{
+export const migrateNativePasswordBranding = passwordBrandingMigration('password-native-title');
+const NATIVE_PASSWORD_CONNECTION_BLOCKS_DEFAULTS: WebpageBlock[] = [{
   id: 'password-native-connection', type: 'element', tag: 'section', props: { 'aria-label': 'Password AutoFill' },
   css: { 'min-width': '0', padding: '16px', border: '1px solid var(--tt-border, #e6e6eb)', 'border-radius': '12px', background: 'var(--tt-card, white)' },
   children: [
@@ -11,3 +13,4 @@ export const NATIVE_PASSWORD_CONNECTION_BLOCKS: WebpageBlock[] = [{
     { id: 'password-native-notice', type: 'condition', condition: { arg: 'result.hasNotice', equals: true }, children: [{ id: 'password-native-notice-text', type: 'element', tag: 'p', text: '{result.notice}', props: { role: 'status' }, css: { 'line-height': '1.6', 'overflow-wrap': 'anywhere' } }] },
   ],
 }] as unknown as WebpageBlock[];
+export const NATIVE_PASSWORD_CONNECTION_BLOCKS = migrateNativePasswordBranding(NATIVE_PASSWORD_CONNECTION_BLOCKS_DEFAULTS);
