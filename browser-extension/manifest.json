@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Thingtime",
   "description": "Opt in to use your Thingtime vault for website passkeys.",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "minimum_chrome_version": "111",
   "permissions": [
     "storage",
@@ -20,8 +20,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Thingtime",
-    "default_popup": "popup.html"
+    "default_title": "Thingtime"
   },
   "content_scripts": [
     {

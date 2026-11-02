@@ -1,6 +1,9 @@
 import {DEFAULT_ORIGIN, PROVIDER_PATH, safeOrigin, providerOrigin, senderOrigin, matchesDocument, validRequest, safeError, hookDiagnostics} from './protocol.js';
+import {createWorkspaceController, workspacePreferences, sameWorkspaceTarget} from './workspace.js';
 
 const pending = new Map();
+const workspace = createWorkspaceController(chrome, safeOrigin);
+chrome.action.onClicked.addListener(tab => { void workspace.open(tab).catch(() => {}); });
 const settings = async () => ({enabled: false, origin: DEFAULT_ORIGIN, ...await chrome.storage.local.get(['enabled', 'origin'])});
 const alarmName = id => `passkey:${id}`;
 const send = (tabId, documentId, message) => chrome.tabs.sendMessage(tabId, message, {documentId}).catch(() => null);
@@ -110,16 +113,25 @@ async function handle(message, sender, respond) {
     && (sender.frameId === undefined || sender.frameId === 0)
     && (sender.origin === undefined || sender.origin === chrome.runtime.getURL('').replace(/\/$/, ''));
   if (message?.action === 'state') { const config = await settings(); return respond({enabled: config.enabled === true, origin: config.origin}); }
+  if (message?.action === 'workspace-state' && internal) {
+    const [stored, target] = await Promise.all([chrome.storage.local.get('workspacePreferences'), workspace.target()]);
+    return respond({preferences: workspacePreferences(stored.workspacePreferences), target: target ? {origin: target.origin} : null});
+  }
+  if (message?.action === 'workspace-settings' && internal) {
+    const preferences = workspacePreferences(message.preferences);
+    await chrome.storage.local.set({workspacePreferences: preferences});
+    return respond({ok: true, preferences});
+  }
   if (message?.action === 'diagnostics' && internal) {
     try {
-      const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
-      if (!Number.isInteger(tab?.id)) return respond({available: false});
-      const frame = await chrome.webNavigation.getFrame({tabId: tab.id, frameId: 0});
-      const origin = safeOrigin(frame?.url);
-      if (!origin || !frame.documentId) return respond({available: false});
-      const value = await chrome.tabs.sendMessage(tab.id, {action: 'diagnostics-query'}, {documentId: frame.documentId});
-      if (!await currentDocument(tab.id, frame.documentId, origin)) return respond({available: false});
-      return respond(hookDiagnostics(value));
+      const target = await workspace.target();
+      if (!target) return respond({available: false, target: null});
+      const tab = {id: target.tabId}, frame = {documentId: target.documentId}, origin = target.origin;
+      const value = await chrome.tabs.sendMessage(tab.id, {action: 'diagnostics-query'}, {documentId: frame.documentId}).catch(() => ({available: false}));
+      if (!await currentDocument(tab.id, frame.documentId, origin)) return respond({available: false, target: null});
+      const latest = await workspace.target();
+      if (!sameWorkspaceTarget(latest, target)) return respond({available: false, target: null});
+      return respond({...hookDiagnostics(value), target: {origin}});
     } catch { return respond({available: false}); }
   }
 
@@ -139,10 +151,10 @@ async function handle(message, sender, respond) {
   }
   if (message?.action === 'native-fallback' && internal) {
     const request = pending.get(message.tabId);
-    if (request) await finish(request, {fallback: true}, {restoreFocus: true});
+    if (request && (!message.requestId || message.requestId === request.id)) await finish(request, {fallback: true}, {restoreFocus: true});
     return respond({ok: true});
   }
-  if (message?.action === 'status' && internal) return respond({requests: [...pending.values()].map(r => ({tabId: r.tabId, origin: r.origin}))});
+  if (message?.action === 'status' && internal) return respond({requests: [...pending.values()].map(r => ({tabId: r.tabId, requestId: r.id, origin: r.origin, type: r.type}))});
   if (message?.action === 'request') return start(message, sender, respond);
   if (message?.action === 'cancel') {
     const request = pending.get(sender.tab?.id);
