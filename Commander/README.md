@@ -296,6 +296,13 @@ to stop and remove this worktree's generated preview before final verification.
 The preview supplements the canonical signed installed-app acceptance checks.
 
 
+### Result navigation
+
+Up and Down move one result immediately on a tap. Holding an arrow accelerates through the list after a short
+delay, independently of the system keyboard repeat setting. Selection scrolls directly into view without a smooth
+scroll queue. Releasing the key, changing focus or query, or opening a menu ends the gesture; normal text-editing
+shortcuts and composition keep their existing behavior.
+
 ### Background search indexes and isolated development
 
 The launcher footer combines the latest measured committed file/folder snapshot with the enabled application and
