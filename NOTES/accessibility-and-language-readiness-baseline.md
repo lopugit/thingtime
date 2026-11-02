@@ -1,6 +1,6 @@
 # Accessibility and language-readiness baseline
 
-**Status:** Evidence note · grounded 2026-09-02 (Australia/Melbourne)
+**Status:** Evidence note · grounded 2026-09-02; integration evidence added 2026-11-02 (Australia/Melbourne)
 
 **Scope:** The public web shell, shared interaction foundations, settings,
 repository-owned test/CI contracts, and the path to multilingual UI. Native
@@ -49,6 +49,31 @@ foundation before promising broad access.
 | Language readiness is more than translating visible strings. | The shell language is fixed; UI copy is embedded across components; and no owned locale layer was found. Dates, numbers, plurals, sorting, search, user content, generated content, emails, API errors, metadata, and right-to-left layout therefore lack one documented product contract. | Medium-high. A source-string and formatting inventory is required before estimating migration size. |
 | Current planning names accessibility and i18n as adoption gates but does not yet make them executable. | The [trustworthy adoption roadmap](../PLAN/trustworthy-adoption-roadmap.md) requires keyboard, screen-reader, reduced-motion, narrow-screen, and target-locale success. Existing feature TODOs repeat local checks. Before this note, there was no dedicated evidence → plan → implementation epic for the shared foundation. | High. This note and its downstream artifacts close the planning gap, not the implementation gap. |
 | There was no open issue inventory to rely on. | `gh issue list --state open` returned zero open issues. The automation-owned PR remains planning-only. Absence of issues is not absence of barriers. | High for the query time. Refresh before triage or resourcing. |
+
+## Newer implementation evidence — 2026-11-02
+
+`origin/develop` at `2564aef235d4ef3e59804fd2db3b5889c049a14e` includes the
+Commander result-navigation change merged in [PR #1299](https://github.com/lopugit/thingtime/pull/1299)
+(source commit `c98f1d9dc7414c6d77dca2ba8fd5e231946e2f11`). The
+[`useResultNavigation.ts`](https://github.com/lopugit/thingtime/blob/2564aef235d4ef3e59804fd2db3b5889c049a14e/Commander/apps/desktop-ui/src/hooks/useResultNavigation.ts)
+hook moves one row immediately for each Up/Down press, owns the repeat clock
+for held keys, clamps at list boundaries, and stops on release or relevant
+focus, input, and result-scope changes. The
+[`Launcher.test.tsx`](https://github.com/lopugit/thingtime/blob/2564aef235d4ef3e59804fd2db3b5889c049a14e/Commander/apps/desktop-ui/src/components/Launcher.test.tsx)
+regressions cover rapid taps before render, held-key acceleration and release,
+reversal, clamping, result replacement, and scrolling the selected row before
+paint. The [Commander manual checklist](https://github.com/lopugit/thingtime/blob/2564aef235d4ef3e59804fd2db3b5889c049a14e/Commander/docs/TESTING.md)
+and root [TESTING.md](https://github.com/lopugit/thingtime/blob/2564aef235d4ef3e59804fd2db3b5889c049a14e/TESTING.md)
+add checks for operating-system repeat settings, IME and modifier behavior,
+focus changes, and immediate Enter activation.
+
+This is focused implementation and regression evidence on the integration
+branch, plus documented manual acceptance steps. It does not establish an
+installed-release result, completed manual run, screen-reader announcement
+behavior, or WCAG conformance. The broader journey and assistive-technology
+gates in [TODO 25](../TODO/claude-todo/25-accessibility-and-language-readiness.md)
+and its [roadmap](../PLAN/accessibility-and-language-readiness-roadmap.md)
+remain open.
 
 ## External reference points
 
