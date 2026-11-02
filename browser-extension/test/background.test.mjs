@@ -4,21 +4,23 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {webcrypto} from 'node:crypto';
 import * as protocol from '../protocol.js';
-const source = (await readFile(new URL('../background.js', import.meta.url), 'utf8')).replace(/^import[^\n]+\n/, '');
+import * as workspaceModule from '../workspace.js';
+const source = (await readFile(new URL('../background.js', import.meta.url), 'utf8')).replace(/^import[^\n]+\n/gm, '');
 const tick = async () => { for (let n = 0; n < 12; n++) await new Promise(resolve => setImmediate(resolve)); };
 function event() { const listeners = []; return {addListener: fn => listeners.push(fn), fire: (...args) => listeners.forEach(fn => fn(...args)), listeners}; }
 function setup(options = {}) {
   const frames = new Map([[1, {documentId: 'original', url: 'https://rp.example/login'}]]), removed = [], focused = [], sent = [], timers = new Set();
   const state = {enabled: true, origin: 'https://thingtime.com'}, session = options.session || {}, alarmValues = new Map();
+  session.workspaceTarget ||= {tabId: 1, windowId: 10, documentId: 'original', origin: 'https://rp.example'};
   let nextTab = 2, optionsOpened = 0;
-  const chrome = {runtime: {openOptionsPage: async () => { optionsOpened++; }, id: 'extension', getURL: path => `chrome-extension://extension/${path}`, onMessage: event()},
+  const chrome = {action: {onClicked: event()}, runtime: {openOptionsPage: async () => { optionsOpened++; }, id: 'extension', getURL: path => `chrome-extension://extension/${path}`, onMessage: event()},
     storage: {local: {get: async () => { if (options.settingsWait) await options.settingsWait; return state; }, set: async value => Object.assign(state, value)}, session: {get: async () => session, set: async value => Object.assign(session, value), remove: async key => { delete session[key]; }}},
     tabs: {query: async () => [{id:1}], get: async id => { const frame = frames.get(id); return frame ? {id, windowId: 10, url: frame.url, ...(options.pendingUrls?.has(id) ? {pendingUrl: options.pendingUrls.get(id)} : {})} : null; }, update: async (id, value) => { focused.push(['tab', id, value]); return {id, windowId: 10}; }, create: async ({url}) => { const id = nextTab++; frames.set(id, {documentId: 'provider', url}); return {id}; }, remove: async id => { removed.push(id); frames.delete(id); }, sendMessage: async (tabId, message, opts) => { sent.push({tabId, message, opts}); return {ok: true}; }, onRemoved: event(), onUpdated: event()},
     windows: {update: async (id, value) => { focused.push(['window', id, value]); return {id}; }},
     webNavigation: {getFrame: async ({tabId}) => frames.get(tabId), onCommitted: event()},
     alarms: {create: async (name, value) => alarmValues.set(name, value), clear: async name => alarmValues.delete(name), onAlarm: event()}};
   if (options.frames) for (const [id, frame] of options.frames) frames.set(id, frame);
-  vm.runInNewContext(source, {...protocol, chrome, URL, crypto: webcrypto, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timers.add(timer); return timer; }, clearTimeout});
+  vm.runInNewContext(source, {...protocol, ...workspaceModule, chrome, URL, crypto: webcrypto, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timers.add(timer); return timer; }, clearTimeout});
   const send = (message, sender) => new Promise(resolve => chrome.runtime.onMessage.listeners[0](message, sender, resolve));
   const sender = {frameId: 0, documentId: 'original', origin: 'https://rp.example', url: 'https://rp.example/login', tab: {id: 1, windowId: 10, url: 'https://rp.example/login'}};
   const provider = {frameId: 0, documentId: 'provider', origin: state.origin, url: `${state.origin}/passwords/provider`, tab: {id: 2, url: `${state.origin}/passwords/provider`}};
@@ -288,4 +290,41 @@ test('approval-page fallback and cancellation return to requester while backgrou
   assert.equal((await disabled.send(disabled.request,disabled.sender)).fallback,true);
   assert.deepEqual(disabled.focused,[]);assert.equal(disabled.frames.has(2),false);
  }finally{disabled.stop();}
+});
+
+test('workspace appearance persists independently of connection and refuses web callers',async()=>{
+ const e=setup();try{
+  const caller={id:'extension',url:'chrome-extension://extension/popup.html'};
+  const pendingRequest=e.send(e.request,e.sender);await tick();
+  assert.equal((await e.send({action:'workspace-settings',preferences:{width:1440,height:900,fontSize:24}},e.sender)).ok,false);
+  const result=await e.send({action:'workspace-settings',preferences:{width:1440,height:900,fontSize:24,extra:'discard'}},caller);
+  assert.equal(result.ok,true);assert.deepEqual({...e.state.workspacePreferences},{width:1440,height:900,fontSize:24});
+  assert.equal(e.state.enabled,true);assert.equal(e.state.origin,'https://thingtime.com');
+  const state=await e.send({action:'workspace-state'},caller);assert.deepEqual({...state.target},{origin:'https://rp.example'});
+  assert.deepEqual({...state.preferences},{width:1440,height:900,fontSize:24});
+  const status=await e.send({action:'status'},caller);assert.equal(status.requests.length,1);assert.equal(e.removed.length,0);
+  await e.send({action:'native-fallback',tabId:1,requestId:status.requests[0].requestId},caller);await pendingRequest;
+ }finally{e.stop();}
+});
+test('an old request card cannot fall back a newer request in the same tab',async()=>{
+ const e=setup();try{
+  const result=e.send(e.request,e.sender);await tick();
+  await e.send({action:'native-fallback',tabId:1,requestId:'stale-request'}, {id:'extension',url:'chrome-extension://extension/popup.html'});
+  assert.equal(e.removed.length,0);
+  const status=await e.send({action:'status'},{id:'extension',url:'chrome-extension://extension/popup.html'});
+  await e.send({action:'native-fallback',tabId:1,requestId:status.requests[0].requestId}, {id:'extension',url:'chrome-extension://extension/popup.html'});
+  assert.equal((await result).fallback,true);
+ }finally{e.stop();}
+});
+
+test('diagnostic reply for A is rejected after toolbar selects B',async()=>{
+ const e=setup();try{
+  let release;const reply=new Promise(resolve=>{release=resolve;});
+  e.chrome.tabs.sendMessage=async()=>reply;
+  const inspection=e.send({action:'diagnostics'},{id:'extension',url:'chrome-extension://extension/popup.html'});await tick();
+  e.frames.set(3,{documentId:'second',url:'https://second.test/'});
+  e.session.workspaceTarget={tabId:3,windowId:10,documentId:'second',origin:'https://second.test'};
+  release({available:true,hook:{installed:{get:true},current:{get:true},enabledSeen:true,fallbackReason:0}});
+  const result=await inspection;assert.equal(result.available,false);assert.equal(result.target,null);
+ }finally{e.stop();}
 });
