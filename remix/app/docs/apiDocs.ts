@@ -965,6 +965,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			{ status: 409, description: 'Account changed or edit is stale.', body: { ok: false, error: 'Reload before saving.' } }
 		]
 	}),
+  endpoint({
+    id: 'admin-mongodb-connections', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'admin',
+    title: 'MongoDB connection inventory', endpoint: '/api/v1/admin/mongodb/connections', methods: ['GET'],
+    summary: 'Private, cursor-paged application-pool attribution with optional selected-home-server aggregate connection counts.',
+    detail: 'Full first-party administrator authentication is required; service accounts and scoped PAT, app and device tokens are refused. Optional expected-origin and expected-actor headers fail closed on a changed API or account. Reuses existing application clients without visiting deployments or opening diagnostic clients. Returns whitelisted runtime identity, deployment origin/branch/commit/region, home/custom purpose, CMAP application pool socket counters, observation time and freshness. Custom endpoint addresses, credentials, user identities and commands are withheld. Snapshots publish during ordinary API requests at most once a minute and expire after 24 hours; stale counts are historical observations, never a live global total. Monitoring sockets, external clients and old runtimes remain unenumerated. serverStatus is bounded to 1500 ms and degrades explicitly when the tier or permissions refuse it; its totals refer to the selected home server, not the whole cluster. No currentOp, connection termination, deployment warming or polling is performed. Every response is private/no-store. Page size defaults to 50, with processing batches of up to 200 and a nextCursor for all remaining sources.',
+    auth: { mode: 'session', description: 'Full authenticated Thingtime administrator; scoped credentials cannot resolve a full user.' },
+    steps: ['Negotiate api.admin-mongodb-connections >=1.0.0.', 'GET a page; follow nextCursor on demand.', 'Read freshness and coverage before interpreting any socket count.'],
+    requestExamples: [{ name: 'Read connection sources', description: 'Full first-party administrator only.', method: 'GET', query: { limit: 50 } }],
+    responseExamples: [{ status: 200, description: 'Partial, explicitly scoped observations.', body: { ok: true, inventory: { sources: [], nextCursor: null, coverage: { complete: false, notes: [] } } } }]
+  }),
 	endpoint({
 		id: 'admin-peers',
 		group: 'admin',
