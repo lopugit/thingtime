@@ -98,10 +98,20 @@ const authData = async (crypto: Crypto, rp: string, attested: boolean) => join(a
 const field = (entry: PasswordEntry, id: string) => entry.fields.find(item => item.id === id)?.value ?? '';
 const credential = (id: string, response: BrowserPasskeyCredential['response']): BrowserPasskeyCredential => ({ id, rawId: id, type: 'public-key', authenticatorAttachment: 'platform', clientExtensionResults: {}, response });
 
+export const BROWSER_PASSKEY_EXCLUDED_MESSAGE = "This site already has a passkey saved in Thingtime and does not allow another from this provider for this request. Return to the site to use it or choose another option in its security settings. Keep your working passkey.";
+export class BrowserPasskeyExcludedError extends DOMException {
+  constructor() { super(BROWSER_PASSKEY_EXCLUDED_MESSAGE, 'InvalidStateError'); }
+}
+/** Recheck on every attempt, including retries with retained key material. */
+export function requireNoExcludedBrowserPasskey(request: BrowserPasskeyRequest, existingEntries: PasswordEntry[]): void {
+  const rp = relyingParty(request);
+  if (existingEntries.some(entry => entry.passwordType === 'passkey' && field(entry, 'relyingParty') === rp && request.publicKey.excludeCredentials?.some(item => item.id === field(entry, 'credentialId'))))
+    throw new BrowserPasskeyExcludedError();
+}
 export async function prepareBrowserPasskeyRegistration(input: BrowserPasskeyRequest, freshVerified: boolean, existingEntries: PasswordEntry[] = [], crypto: Crypto = globalThis.crypto): Promise<{ entry: PasswordEntry; response: BrowserPasskeyCredential }> {
   const request = validateBrowserPasskeyRequest(input); if (request.type !== 'create') return fail('TypeError', 'Expected passkey creation.'); confirmed(freshVerified);
   const rp = relyingParty(request), user = request.publicKey.user!;
-  if (existingEntries.some(entry => entry.passwordType === 'passkey' && field(entry, 'relyingParty') === rp && request.publicKey.excludeCredentials?.some(item => item.id === field(entry, 'credentialId')))) return fail('InvalidStateError', 'An excluded credential already exists.');
+  requireNoExcludedBrowserPasskey(request, existingEntries);
   const keys = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']) as CryptoKeyPair;
   const jwk = await crypto.subtle.exportKey('jwk', keys.privateKey);
   const idBytes = crypto.getRandomValues(new Uint8Array(32)), id = passkeyBase64url(idBytes);

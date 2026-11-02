@@ -4,7 +4,7 @@ import { ZipWriter, Uint8ArrayWriter, Uint8ArrayReader } from '@zip.js/zip.js';
 const source = new URL('../../browser-extension/', import.meta.url);
 const output = new URL('../public/downloads/thingtime-passwords-extension.zip', import.meta.url);
 const archive = new ZipWriter(new Uint8ArrayWriter());
-const files = (await readdir(source)).filter(name => /\.(?:js|mjs|html|css)$/.test(name) || name === 'manifest.json' || name === 'README.md').sort();
+const files = (await readdir(source)).filter(name => /\.(?:js|mjs|html|css|png)$/.test(name) || name === 'manifest.json' || name === 'README.md').sort();
 for (const name of files) await archive.add(name, new Uint8ArrayReader(await readFile(new URL(name, source))), { lastModDate: new Date('2026-01-01T00:00:00Z') });
 await mkdir(new URL('.', output), { recursive: true });
 await writeFile(output, await archive.close());

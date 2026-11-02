@@ -15,6 +15,7 @@ export function assertPasswordProviderMetadata(info, expectedIdentifier, expecte
   // branding in the actual bundled localization instead.
   if (info.CFBundleDisplayName !== (hostName || 'Thingtime') || info.CFBundleName !== 'Thingtime') throw new Error('Password provider display name must be Thingtime.');
   if (hostName && (localizedInfo?.CFBundleDisplayName !== 'Thingtime' || localizedInfo?.CFBundleName !== 'Thingtime')) throw new Error('Password provider host localization must display Thingtime.');
+  if (info.CFBundleIconFile !== 'Thingtime.icns') throw new Error('Password provider tree app icon must be declared.');
   const version = `${info.CFBundleShortVersionString}/${info.CFBundleVersion}`;
   if (!info.CFBundleShortVersionString || !info.CFBundleVersion || expectedVersion && version !== expectedVersion) throw new Error('Password provider host and extension versions must match.');
   return version;
@@ -31,6 +32,9 @@ export async function verifyPasswordProvider(app, { unsigned = false, teamIdenti
     const host = bundle === app;
     const branding = host ? { hostName: path.basename(bundle, '.app'), localizedInfo: plist(await readFile(path.join(bundle, 'Contents/Resources/en.lproj/InfoPlist.strings'))) } : {};
     sharedVersion = assertPasswordProviderMetadata(info, identifier, sharedVersion, branding);
+    const icon = await readFile(path.join(bundle, 'Contents/Resources/Thingtime.icns'));
+    const tree = await readFile(path.join(bundle, 'Contents/Resources/ThingtimeTree.png'));
+    if (icon.toString('ascii', 0, 4) !== 'icns' || icon.length < 8 || icon.readUInt32BE(4) !== icon.length || tree.toString('hex', 0, 8) !== '89504e470d0a1a0a') throw new Error('Password provider tree branding resources are missing or invalid.');
     run('/usr/bin/codesign', ['--verify', '--deep', '--strict', bundle]);
     if (unsigned) continue; // Ad-hoc builds exercise structure, not system permission.
     if (signingIdentity) {

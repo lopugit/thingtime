@@ -3,7 +3,7 @@ import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { TransientBlockHost, type TransientBlockActions } from '../Builder/TransientBlockHost';
 import { DEFAULT_GENERATOR_SETTINGS, PASSWORD_PRESETS, generatePassword, settingsForPreset, type GeneratorSettings, type PasswordPreset } from '~/passwords/generator';
-import { PASSWORD_GENERATOR_BLOCKS } from './passwordGeneratorDocument';
+import { PASSWORD_GENERATOR_BLOCKS, migratePasswordGeneratorBranding } from './passwordGeneratorDocument';
 export type PasswordGeneratorProps = { ownerId: string; origin: string; targets: Array<{ id: string; label: string }>; onGenerate: (password: string, fieldId: string) => void; disabled?: boolean };
 export function PasswordGenerator(props: PasswordGeneratorProps) {
   return <GeneratorSession key={JSON.stringify([props.origin, props.ownerId])} {...props} />;
@@ -79,7 +79,7 @@ function GeneratorSession({ ownerId, origin, targets, onGenerate, disabled = fal
   const preset = PASSWORD_PRESETS[settings.preset];
   // Only non-secret preferences and status enter the Builder binding scope.
   const scope = { result: { ...settings, busy: busy || disabled || !selectedTarget, targets, targetId: selectedId, notice: selectedTarget ? notice : 'Add a password field to generate a password.', guidance: preset.guidance, sources: preset.sources.map(url => ({ url })), buttonLabel: busy ? 'Generating…' : selectedTarget ? `Generate into ${selectedTarget.label || 'password field'}` : 'No password field available' } };
-  return <SettingsDocumentHost documentKey="password-generator" defaultDocument={PASSWORD_GENERATOR_BLOCKS} scopeKey={scopeKey} title="Password generator layout" layoutEditingDisabled={busy}>
+  return <SettingsDocumentHost documentKey="password-generator" defaultDocument={PASSWORD_GENERATOR_BLOCKS} migrateBlocks={migratePasswordGeneratorBranding} scopeKey={scopeKey} title="Password generator layout" layoutEditingDisabled={busy}>
     {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={scope} actions={actions} enabled={!editing} onError={() => setNotice('This generator control is unavailable. Restore the layout or try again.')}>
       <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} bare interactive={!editing} />
     </TransientBlockHost>}
