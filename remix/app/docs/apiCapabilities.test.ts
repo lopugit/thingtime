@@ -858,3 +858,15 @@ test('resource limits and CPU downloads negotiate only their semantic dependenci
     for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
   }
 });
+
+
+test('private MongoDB connection inventory is registered with matching independently versioned manifests', () => {
+  assert.equal(typeof routeModules['v1/admin/mongodb/connections'], 'function');
+  const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
+  const manifest = thingtimeCapabilityManifest('https://mongo-inventory.example');
+  assert.equal(legacy.features['api.admin-mongodb-connections'], '1.0.0');
+  assert.equal(manifest.features['api.admin-mongodb-connections'].version, '1.0.0');
+  assert.ok(manifest.operations.some(operation => operation.path === '/api/v1/admin/mongodb/connections' && operation.feature === 'api.admin-mongodb-connections' && operation.methods.includes('GET')));
+  for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), true);
+  for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+});

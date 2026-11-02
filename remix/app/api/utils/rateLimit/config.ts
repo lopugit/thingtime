@@ -270,6 +270,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // (POST /api/v1/admin/ai/models { id, enabled } | { seed } | { probe }) —
   // the seed is a batch write and the probe dials the providers (5 s cap
   // each); enforced fail-closed at the route
+  'admin.mongodb.connections': { limit: 30, windowMs: 60_000, enabled: true },
   'admin.ai.models': { limit: 30, windowMs: 60_000, enabled: true },
   // Thingtime.LopuChatDefaults singleton (GET public / POST admin) — a rare
   // interactive read/save; the public GET keys anonymous callers by IP and
