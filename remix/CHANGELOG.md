@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-02: Add editable admin MongoDB connection-source cards, canonical-client pool telemetry, private expiring runtime snapshots, explicit freshness and optional database-reported totals. Keep incomplete attribution visible and reuse existing clients without polling other deployments. [PR 1300 verification](../PRs/1300-codex-mongodb-connection-inventory-admin-connection-attribution.md). **Codex (AI)**
+
 - 2026-11-02: Expand the browser extension into a resizable, single-window workspace with Overview, Requests, Config and Help; persist opening size/text preferences and bind diagnostics to the toolbar-selected document with stale-read fencing.
 
 - 2026-10-30: Add retained, distinctly named Thingtime development app workspaces with independent dependencies, encrypted profiles, managed local replicas and process ownership. Development stays separate from the stable installed app; see [PR details](../PRs/codex-mongo-preview-cleanup-preview-retention.md#retained-development-app--30-october-2026). **Codex (AI)**

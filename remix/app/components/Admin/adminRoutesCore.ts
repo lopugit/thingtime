@@ -4,6 +4,7 @@ export const ADMIN_TABS = [
   { slug: 'moderation', label: 'Moderation' },
   { slug: 'tiers', label: 'Tiers' },
   { slug: 'ci-control', label: 'CI Control' },
+  { slug: 'mongodb-connections', label: 'MongoDB connections' },
   { slug: 'preview-retention', label: 'Preview retention' },
   { slug: 'external-integrations', label: 'External integrations' },
   { slug: 'marketing', label: 'Marketing' },

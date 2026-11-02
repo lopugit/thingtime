@@ -109,10 +109,12 @@ export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 export const STORAGE_PENDING_THINGTIME = 'storage-pending';
 export const STORAGE_RECOVERY_THINGTIME = 'storage-recovery';
 export const ERROR_LOG_THINGTIME = 'error-log';
+export const MONGODB_CONNECTION_SNAPSHOT_THINGTIME = 'mongodb-connection-snapshot';
+export const MONGODB_CONNECTION_SNAPSHOT_ID_PREFIX = 'mongodb-connection-snapshot-';
 export const ERROR_LOG_ID_PREFIX = 'error-log-';
 // One root expiry policy for disposable control Things; excludes content and
 // invitations whose expiry must perform cleanup/refunds before deletion.
-export const EPHEMERAL_CONTROL_THINGTIMES = ['migration-diagnostic', ERROR_LOG_THINGTIME] as const;
+export const EPHEMERAL_CONTROL_THINGTIMES = ['migration-diagnostic', ERROR_LOG_THINGTIME, MONGODB_CONNECTION_SNAPSHOT_THINGTIME] as const;
 export const MIGRATION_DIAGNOSTIC_THINGTIME = 'migration-diagnostic';
 export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
 
@@ -2398,6 +2400,15 @@ const serviceQuotaSchema: ThingtimeSchema = {
 	}
 };
 
+const mongodbConnectionSnapshotSchema: ThingtimeSchema = {
+  id: MONGODB_CONNECTION_SNAPSHOT_THINGTIME, version: 1, kind: 'crystal', collection: null,
+  title: 'MongoDB connection source snapshot', summary: 'Private server-minted CMAP telemetry for one runtime client.',
+  detail: 'Home-only protected control Thing, admin-only dedicated read, 24-hour shared root TTL. No URI, credentials, custom endpoint address, command or user data.',
+  createdVia: 'Canonical MongoClient CMAP instrumentation',
+  fields: [{ name: 'source', type: 'object', required: true, description: 'Whitelisted runtime, deployment and pool counters; historical observations never assert global live coverage.' }],
+  example: { source: { purpose: 'home', status: 'ready', pools: [] } }
+};
+
 const errorLogSchema: ThingtimeSchema = {
   id: ERROR_LOG_THINGTIME, version: 1, kind: 'crystal', collection: null,
   title: 'Error log', summary: 'A redacted server error, searchable by current admins in /things?logs=1.',
@@ -4291,6 +4302,7 @@ export const PROTECTED_THINGTIME = [
 	'service-quota',
   MIGRATION_DIAGNOSTIC_THINGTIME,
   ERROR_LOG_THINGTIME,
+  MONGODB_CONNECTION_SNAPSHOT_THINGTIME,
 	'moderationFlag',
   ...CI_CONTROL_THINGTIME,
   ...EXTERNAL_CONNECTION_THINGTIME,
@@ -4599,6 +4611,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
 	serviceQuotaSchema,
   migrationDiagnosticSchema,
   errorLogSchema,
+  mongodbConnectionSnapshotSchema,
   // the Lopu model catalog (protected, seeded by api/utils/ai/models.ts)
   aiModelSchema,
   // Lopu credits + usage accounting (protected, api/utils/lopu/accounting.ts)
