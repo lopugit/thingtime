@@ -72,7 +72,7 @@ import {
   MAX_TEXT_CHARS,
   MESSENGER_THINGTIME,
 	MIGRATION_DIAGNOSTIC_ID_PREFIX,
-  ERROR_LOG_ID_PREFIX, ERROR_LOG_THINGTIME,
+  ERROR_LOG_ID_PREFIX, ERROR_LOG_THINGTIME, MONGODB_CONNECTION_SNAPSHOT_ID_PREFIX, MONGODB_CONNECTION_SNAPSHOT_THINGTIME,
 	MIGRATION_DIAGNOSTIC_THINGTIME,
   POST_TYPES as REGISTRY_POST_TYPES,
   PROTECTED_THINGTIME,
@@ -1266,7 +1266,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
 		trimmed.startsWith(ACTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SUBSCRIPTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SERVICE_QUOTA_RESERVED_ID_PREFIX) ||
-		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) || trimmed.startsWith(ERROR_LOG_ID_PREFIX) ||
+		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) || trimmed.startsWith(ERROR_LOG_ID_PREFIX) || trimmed.startsWith(MONGODB_CONNECTION_SNAPSHOT_ID_PREFIX) ||
 		trimmed.startsWith(APP_STORAGE_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(EXTERNAL_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SEEDED_DATA_SUITE_RESERVED_ID_PREFIX) ||
@@ -3029,7 +3029,7 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
-	if ((thingtimeOf(doc).includes(FOUND_POST_KIND) || thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME))) return false;
+	if ((thingtimeOf(doc).includes(FOUND_POST_KIND) || thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME) || thingtimeOf(doc).includes(MONGODB_CONNECTION_SNAPSHOT_THINGTIME))) return false;
 	// Moderation-blocked things vanish from every ordinary read for everyone —
 	// owner included, same as blocked attachments. Admins review through the
 	// moderationFlag queue (which carries a bounded excerpt), never this path.

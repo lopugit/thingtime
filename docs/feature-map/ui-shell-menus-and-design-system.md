@@ -1,5 +1,12 @@
 # UI shell, menus and design system
 
+Admin MongoDB connections reuses the existing admin category/deep-link model and
+the private settings-document Builder host. `mongoConnectionInventoryBlocks.ts`
+contains editable search, freshness filter, metric, source-card and pool templates;
+`MongoConnectionInventory.tsx` supplies ephemeral authenticated observations.
+`mongodb-connections-acceptance.mjs` covers real data, desktop/mobile scrolling,
+expanded details and independent nested Builder edits with saved-Thing readback.
+
 The web app is Vite + React Router (non-framework mode) + Nitro; `entry.client.tsx`
 mounts with `createRoot`. Chakra UI primitives are wrapped by Thingtime's own
 components; reuse them instead of adding parallel versions.

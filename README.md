@@ -1505,6 +1505,14 @@ on the same document. Docs: `/docs/api` → things.
 
 ## MongoDB
 
+Administrators can inspect **Admin → MongoDB connections** at
+`/admin/mongodb-connections`, also available in Settings → Admin. Editable cards
+show instrumented runtime/deployment sources, pool lifecycle counts and freshness;
+database-reported totals are separate and may be unavailable on the selected tier.
+This uses the existing home MongoDB/auth configuration and admin allowlist, with
+no new provider secret or Vercel variable. See [connection inventory](docs/mongodb-connections.md)
+for privacy, attribution limits, fork setup and real-API verification.
+
 MongoDB powers database-backed API routes. Incomplete local or deployed servers
 return a configuration error; they do not silently forward to production. The
 installed desktop shell has its own explicit selected-API bridge. For one active

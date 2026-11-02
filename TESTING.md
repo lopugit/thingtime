@@ -13528,6 +13528,39 @@ separate from deterministic discovery/lease tests.
   account switches and unmount remove the map and its old token; attribution
   stays visible. A fixture or passing build is not a live provider result.
 
+### MongoDB connection inventory
+
+- Build the client and Nitro node server, then run
+  `MONGODB_CONNECTIONS_EVIDENCE_DIR=<private-output-directory> node remix/scripts/mongodb-connections-acceptance.mjs`.
+  `PLAYWRIGHT_MODULE`, `CHROMIUM_EXECUTABLE` and `THINGTIME_TEST_MONGOD` may select
+  installed test tools. Ports 19431–19435 must be free. The runner owns a fresh
+  replica, synthetic accounts, two API runtimes and an isolated browser profile.
+  It loads no production configuration; all product data goes through the API.
+- Verify both manifest generators and the built endpoint advertise 1.0.0.
+  Anonymous, ordinary-account and mismatched actor/origin reads must fail with
+  private/no-store responses. Generic Things routes must refuse telemetry reads,
+  forgeries and reserved IDs. Check home/custom isolation and credential redaction.
+- Compare real runtime source IDs, deployment labels, pools and observations
+  with the rendered cards. Handshakes are pending until ready; pool closure and
+  failed connection cleanup must not double count. Refresh, pagination and
+  filters must preserve correct loaded-source totals. Stale observations must
+  never be presented as a complete live database inventory; unavailable
+  aggregate counters stay unknown.
+- At desktop and 390px, scroll every affected page top to bottom, open source
+  details, exercise freshness/search, empty and error states, and verify keyboard
+  focus and no overflow. Edit a nested text, control and repeated-card field
+  independently in Builder, save, compare the private Thing and reload both Admin
+  and Settings placements. Switch accounts/origins during a delayed read and
+  ensure no earlier protected data paints.
+- On mobile, every Refresh hit target must remain unobscured. The duplicate
+  floating Lopu launcher hides only while the inventory workspace is visible;
+  the navigation opener remains keyboard accessible, and collapsing Settings
+  restores the launcher.
+- Production acceptance is separate: verify the exact deployed source, selected
+  gateway capability, authenticated live cards and actual aggregate availability.
+  Atlas email percentages, Vercel deployment counts and local fixtures do not
+  establish a current cluster-wide socket count or historical incident cause.
+
 ### Preview retention and PR liveliness
 
 - For retained native development, prepare a named workspace and verify its

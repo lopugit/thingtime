@@ -1,3 +1,4 @@
+import { MongoConnectionInventory } from './MongoConnectionInventory';
 import { PreviewRetentionSettings } from './PreviewRetentionSettings';
 import { SettingsSection } from '~/components/Settings/SettingsSection';
 import { LopuPromptSettings } from '~/components/Settings/LopuPromptSettings';
@@ -396,7 +397,7 @@ const AdminManager = () => {
 
 export const AdminPanel = ({ category = 'all' }: { category?: 'all' | 'ai-providers' | 'lopu' | 'access' }) => (
   <Flex flexDirection="column" gap={4} minW={0}>
-    {category === 'all' && <PreviewRetentionSettings />}
+    {category === 'all' && <><MongoConnectionInventory /><PreviewRetentionSettings /></>}
     {(category === 'all' || category === 'ai-providers') && (
       <>
     <PRConflictResolverModelWaterfallEditor />
