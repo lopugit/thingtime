@@ -5307,6 +5307,10 @@ halves.
 
 ## Commander desktop launcher
 
+- [ ] Follow `Commander/docs/TESTING.md` arrow navigation checks in the native app: single taps move one result,
+      held Up/Down accelerate with the selected row visible, and release, focus loss, query changes or menus stop
+      the gesture immediately. Rapid taps must not collapse into one move or restart native icon requests.
+
 - [ ] Follow `Commander/docs/TESTING.md` background-index checks: real create/rename/delete events, independent search
       during writes, correct unique enabled-source totals and full-refresh age, unplugged/removed roots across restart,
       settings fingerprint recovery and isolated development cleanup before the signed installed-app check.
@@ -10478,6 +10482,18 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 
 ## Password manager and native AutoFill
+
+- [ ] Browser workspace: toolbar opens one resizable window; rapid repeated clicks
+  focus it and update the website target. Apply saved size near a screen edge and
+  confirm the full window remains on that display. Overview, Requests, Config and Help work
+  with mouse and arrow/Home/End keyboard navigation. Save default dimensions/text
+  size, close/reopen and verify persistence; apply saved dimensions to this window.
+  Test every tab at desktop, 375px, landscape, 32px text, dark/reduced-motion and
+  scroll to the bottom without horizontal overflow. Appearance changes must not
+  change opt-in/origin or cancel an approval. Closed/moved/navigated targets cannot
+  be inspected; overlapping A→B reads must never paint A status beneath B's label.
+  Run `node browser-extension/test/workspace-browser.mjs --playwright <module>`
+  with a task-owned synthetic profile; preserve the emitted screenshot/result evidence.
 
 - [ ] Browser approval return: after successful verification, close only the
   owned approval tab and focus the exact requesting tab/window before response
