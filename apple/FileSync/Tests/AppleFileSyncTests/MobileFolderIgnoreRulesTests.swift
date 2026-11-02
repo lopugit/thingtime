@@ -20,7 +20,10 @@ final class MobileFolderIgnoreRulesTests: XCTestCase {
         if let input { try stdin.fileHandleForWriting.write(contentsOf: input); try stdin.fileHandleForWriting.close() }
         process.waitUntilExit(); return process.terminationStatus
     }
+    #endif
+
     func testConformanceWithGitCheckIgnoreIncludingByteWildcards() throws {
+        #if os(macOS)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("native-ignore-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -57,6 +60,9 @@ final class MobileFolderIgnoreRulesTests: XCTestCase {
                 XCTAssertEqual(rules.ignores(path, isDirectory: directory), status == 0, "rules=\(text.debugDescription), path=\(path.debugDescription), directory=\(directory)")
             }
         }
+        #else
+        throw XCTSkip("The live Git oracle requires macOS Process; shared fixture conformance still runs on iOS.")
+        #endif
     }
     #endif
 

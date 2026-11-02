@@ -40,6 +40,7 @@ export const QUICK_PAGES: (QuickRow & { keywords: string })[] = [
   { key: 'page:/themes', kind: 'page', label: 'Themes', href: '/themes', glyph: '🎨', keywords: 'appearance colors styling' },
   { key: 'page:/schemas', kind: 'page', label: 'Schemas', href: '/schemas', glyph: '🧬', keywords: 'shapes fields crystal types' },
   { key: 'page:/settings', kind: 'page', label: 'Settings', href: '/settings', glyph: '⚙️', keywords: 'account preferences tokens' },
+  { key: 'page:/passwords', kind: 'page', label: 'Passwords', href: '/passwords', glyph: '🔐', keywords: 'password manager vault login passkey autofill authenticator verification codes' },
   { key: 'page:/profile', kind: 'page', label: 'Profile', href: '/profile', glyph: '🌈', keywords: 'me my page account' },
   { key: 'page:/docs/api', kind: 'page', label: 'API docs', href: '/docs/api', glyph: '📚', keywords: 'reference endpoints developer documentation' }
 ];

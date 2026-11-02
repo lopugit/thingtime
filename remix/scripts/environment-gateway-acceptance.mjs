@@ -15,8 +15,9 @@ import { MongoClient } from 'mongodb';
 
 assert.equal(process.platform, 'darwin', 'Requires sandbox-exec; never run an unrestricted fallback.');
 const cwd = fileURLToPath(new URL('..', import.meta.url));
-const dir = await mkdtemp(join(tmpdir(), 'tt-environment-gateway-'));
-const ports = { alias: 19771, owner: 19772, follower: 19773, successor: 19774, db: 19775, trap: 19776, vite: 19777, hmr: 19778, dedicated: 19779, dedicatedDb: 19780 };
+const portBase = Number(process.env.THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE || 19771);
+assert.ok(Number.isSafeInteger(portBase) && portBase >= 1024 && portBase <= 65526, 'Choose a valid ten-port acceptance range.');
+const ports = Object.fromEntries(['alias', 'owner', 'follower', 'successor', 'db', 'trap', 'vite', 'hmr', 'dedicated', 'dedicatedDb'].map((key, offset) => [key, portBase + offset]));
 const origin = key => `http://127.0.0.1:${ports[key]}`;
 const children = [];
 let routeTo = 'owner', followerDials = 0;
@@ -25,6 +26,7 @@ for (const port of Object.values(ports)) {
   const socket = createTcpServer(); await new Promise((resolve, reject) => { socket.once('error', reject); socket.listen(port, '127.0.0.1', resolve); });
   await new Promise(resolve => socket.close(resolve));
 }
+const dir = await mkdtemp(join(tmpdir(), 'tt-environment-gateway-'));
 const policy = join(dir, 'network.sb');
 await writeFile(policy, `(version 1)(allow default)(deny network*)
 (allow network-bind (local unix-socket))

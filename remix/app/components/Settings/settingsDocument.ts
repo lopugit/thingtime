@@ -32,8 +32,12 @@ export function settingsDocumentBlocks(value: unknown): WebpageBlock[] {
         (typeof block.html === 'string' && /<\s*tt-/i.test(block.html)) ||
         (props && ['source', 'itemTemplate', 'render', 'template'].some(key => props[key] !== undefined)))
         throw new Error('Use intrinsic blocks and public display bindings inside settings.');
-      if (block.tag === 'input' && props && ['password', 'file'].includes(String(props.type)) &&
-        ['value', 'defaultValue', 'default-value'].some(key => props[key] !== undefined))
+      const privateControl = props?.['data-tt-private-control'] !== undefined;
+      if (props?.['data-tt-private-text'] !== undefined && (block.tag !== 'span' || Boolean(block.text) || Boolean(block.html) || Boolean((block.children as unknown[])?.length)))
+        throw new Error('Private text values cannot be saved in a settings layout.');
+      if (props && ((block.tag === 'input' && ['password', 'file'].includes(String(props.type))) || privateControl) &&
+        (['value', 'defaultValue', 'default-value', ...(privateControl ? ['checked', 'defaultChecked'] : [])].some(key => props[key] !== undefined) ||
+          (privateControl && (Boolean(block.text) || Boolean((block.children as unknown[])?.length)))))
         throw new Error('Private input values cannot be saved in a settings layout.');
       if (block.children !== undefined) visit(block.children);
       if (block.else !== undefined) visit(block.else);

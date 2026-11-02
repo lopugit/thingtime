@@ -11,6 +11,8 @@ struct DestinationPickerDrawer: View {
     let onClose: () -> Void
     let onWidgetSettings: () -> Void
     let onMail: () -> Void
+    let destinationSwitchError: String?
+    let onRetryDestination: () -> Void
 
     @State private var expandedDeploymentSectionIDs: Set<String>
 
@@ -24,7 +26,9 @@ struct DestinationPickerDrawer: View {
         onRefreshDeployments: @escaping () async -> Void,
         onClose: @escaping () -> Void,
         onWidgetSettings: @escaping () -> Void = {},
-        onMail: @escaping () -> Void = {}
+        onMail: @escaping () -> Void = {},
+        destinationSwitchError: String? = nil,
+        onRetryDestination: @escaping () -> Void = {}
     ) {
         self.deploymentSections = deploymentSections
         self.staticDestinations = staticDestinations
@@ -36,6 +40,8 @@ struct DestinationPickerDrawer: View {
         self.onClose = onClose
         self.onWidgetSettings = onWidgetSettings
         self.onMail = onMail
+        self.destinationSwitchError = destinationSwitchError
+        self.onRetryDestination = onRetryDestination
 
         let selectedSectionID = deploymentSections.first(where: { section in
             section.deployments.contains(where: { $0.id == selectedDestinationID })
@@ -76,6 +82,22 @@ struct DestinationPickerDrawer: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
+                    if let destinationSwitchError {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label(destinationSwitchError, systemImage: "exclamationmark.triangle")
+                                .font(.callout)
+                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Button("Retry destination switch", action: onRetryDestination)
+                                .frame(minHeight: 44)
+                                .accessibilityIdentifier("native-retry-destination-switch")
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                        .accessibilityIdentifier("native-destination-switch-error")
+                    }
+
                     ForEach(staticDestinations) { destination in
                         DestinationRow(
                             destination: destination,
