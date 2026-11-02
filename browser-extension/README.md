@@ -139,3 +139,47 @@ versions; Firefox is **not verified or packaged here**. Safari and OS-wide AutoF
 continue to use the native provider. Hook timing, pages that replace credential
 methods, enterprise restrictions and sites that demand native object identity can
 prevent interoperability; use the explicit native-provider choice in those cases.
+
+## Resizable browser workspace
+
+The toolbar opens one resizable Chrome popup **window**, rather than an action
+popup. Repeated clicks focus that window and bind Overview to the website document
+captured by the new click. Overview reports closed hook diagnostics; Requests
+shows pending approvals and an explicit native-provider action; Config keeps
+connection controls separate from appearance; Help explains setup and coexistence.
+Arrow keys, Home and End navigate the tabs. The existing options page uses the
+same interface, without guessing a website from its own foreground window.
+
+Config saves default width/height (960 × 760 pixels) and text size (16 pixels)
+locally. New windows fit these dimensions to their actual screen; **Apply size to
+this window** applies saved dimensions immediately. Manual resizing does not
+replace the defaults. Appearance edits never cancel active passkey requests or
+change opt-in/origin. Window dimensions must fit Chrome's signed 32-bit integer
+API; no smaller product limit is imposed. No permissions were added.
+
+Only the captured tab/window/document and origin live in session storage. A
+closed, moved or navigated target becomes unavailable until another toolbar
+click. Diagnostic results are bound to that target and fenced against older
+inspections; page options, credentials and completed-request history are absent.
+
+Run unit coverage with `node --test browser-extension/test/*.test.mjs`.
+Synthetic rendered acceptance uses an installed Playwright module and its Chrome
+for Testing binary:
+
+```sh
+node browser-extension/test/workspace-browser.mjs --playwright /absolute/path/to/playwright/index.mjs
+```
+
+This creates and removes its own profile, extension fixture and browser windows;
+no real account or credential is used. Screenshots/result JSON remain in the
+printed temporary evidence directory. It covers real Chrome window reuse,
+settings save/reload, all tabs at desktop/narrow/landscape widths, 32px dark-mode
+text, keyboard navigation and stale website targeting. The fixture imports the production window controller and calls it through actual
+Chrome APIs; it does not click the OS toolbar. Installed acceptance must still
+verify the real toolbar event and originating tab. This is UI acceptance, not
+proof of a relying party accepting a passkey.
+
+Chrome's [action documentation](https://developer.chrome.com/docs/extensions/reference/api/action)
+explains why `default_popup` is removed to receive toolbar clicks. Its
+[windows API](https://developer.chrome.com/docs/extensions/reference/api/windows)
+provides popup-window creation/focus/resize using the existing permissions.

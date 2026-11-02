@@ -112,7 +112,7 @@ and trusted tab/document checks live in `browser-extension/`; package with
 independent relying party; unit signatures and synthetic UI alone are insufficient.
 `Settings/passwordManagerSettingsBlocks.ts` and `PasswordManagerSettings.tsx`
 share `/settings/passwords`; Thingtime login passkeys remain in Security.
-The browser adapter popup's bounded per-document diagnostic handshake reports
+The browser adapter workspace's bounded per-document diagnostic handshake reports
 installed/current hooks, observed opt-in and closed fallback reasons. `content.js`
 projects page events before runtime transport; the background fences the active
 document and accepts diagnostic reads only from its own popup. These are untrusted
@@ -282,3 +282,12 @@ new policy reader; a UI-only preview forwarding to the old gateway cannot prove
 the new backend. See README “Preview cleanup policy” for defaults and rollout.
 Run `test:ci-control` (including the retention block-tree regression), `test:api-capabilities`, and Admin route tests. Manual
 coverage: TESTING.md “Preview retention and PR liveliness”.
+
+Browser workspace window ownership and captured website targeting live in
+`browser-extension/workspace.js`; `popup.html`/`popup.js`/`popup.css` provide the
+local extension capability UI. Toolbar clicks open/focus a single resizable
+window; Config persists appearance independently of credential routing. Diagnostics
+return an atomic origin/status pair, recheck the captured tuple and ignore older
+UI generations. `workspace.test.mjs` covers ownership/settings/races;
+`workspace-browser.mjs` exercises actual isolated Chrome windows and rendered tabs
+without real credentials. Package with `build:password-extension`.

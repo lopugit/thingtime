@@ -15,6 +15,7 @@ components; reuse them instead of adding parallel versions.
 
 | Concern | Path |
 | --- | --- |
+| Native Commander result navigation | `Commander/apps/desktop-ui/src/components/Launcher.tsx`, `hooks/useResultNavigation.ts`, and `components/ResultIcon.tsx`; precise taps, accelerated held arrows, immediate gesture cancellation and stable native icon requests. Regression and native acceptance: `Commander/docs/TESTING.md`. |
 | Native desktop View menu and Command/Control zoom input | `electron/main.cjs`, `electron/lib/window-zoom.cjs`; regression: `electron/test/window-zoom.test.cjs`, `pnpm --dir electron verify:window-zoom` (real Electron fixture) |
 | Thing context menu model (sections, actions, submenus, drill paths) | `app/components/Thingtime/ContextMenu/contextMenuModel.ts` |
 | Menu renderer, trigger, hover/right-click/pinned behaviour | `app/components/Thingtime/ContextMenu/ThingContextMenu.tsx`, `ThingContextMenuTrigger.tsx`, `useThingContextMenu.tsx` |
