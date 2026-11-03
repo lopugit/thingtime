@@ -112,3 +112,39 @@ test('server pool removal does not retire the client before topology rediscovery
   f.client.emit('topologyClosed', {});
   assert.equal(f.tracker.snapshot()[0].status, 'closed');
 });
+
+test('topology model is explicitly bounded by current servers, configured mode and client lifecycle', () => {
+  for (const [mode, factor] of [['poll', 1], ['stream', 2], ['auto', 2], ['load-balanced', 0]] as const) {
+    const tracker = createConnectionTracker();
+    const client = Object.assign(new EventEmitter(), { options: { serverMonitoringMode: mode, loadBalanced: mode === 'load-balanced' } });
+    const observation = tracker.track(client, 'home', 'thingtime-api');
+    client.emit('topologyDescriptionChanged', { newDescription: { servers: new Map([['secret.example:27017', {}], ['second:27017', {}]]) } });
+    assert.equal(tracker.snapshot()[0].monitoring?.socketsUpperBound, null, 'connecting is not live evidence');
+    observation.ready();
+    assert.deepEqual(tracker.snapshot()[0].monitoring, { mode, servers: 2, socketsUpperBound: 2 * factor, basis: 'topology-model' });
+    client.emit('topologyDescriptionChanged', { newDescription: { servers: new Map([['second:27017', {}]]) } });
+    assert.equal(tracker.snapshot()[0].monitoring?.socketsUpperBound, factor, 'removed servers cannot inflate model');
+    assert.ok(!JSON.stringify(tracker.snapshot()).includes('secret.example'));
+    observation.failed();
+    assert.equal(tracker.snapshot()[0].monitoring?.socketsUpperBound, null);
+    client.emit('topologyClosed', {});
+    assert.equal(tracker.snapshot()[0].monitoring?.socketsUpperBound, null);
+  }
+});
+
+test('feature attribution is allowlisted, once per request/client, concurrent-safe and independent of socket counts', async () => {
+  const { runWithMongoConnectionFeature } = await import('./connectionTracker');
+  const f = fixture();
+  await Promise.all(['auth', 'webpages', 'secret-user-and-query'].map(group => runWithMongoConnectionFeature(group, async () => {
+    await new Promise(resolve => setImmediate(resolve));
+    f.tracker.recordAccess(f.client);
+    f.tracker.recordAccess(f.client);
+  })));
+  f.tracker.recordAccess(f.client); // background work outside the dispatcher is unattributed
+  const source = f.tracker.snapshot()[0];
+  assert.deepEqual(source.featureUsage?.map(row => [row.feature, row.accesses]).sort(), [['auth', 1], ['builder', 1], ['other', 1]]);
+  assert.equal(source.totals.open, 0);
+  assert.ok(!JSON.stringify(source).includes('secret-user'));
+  source.featureUsage![0].accesses = 100;
+  assert.equal(f.tracker.snapshot()[0].featureUsage![0].accesses, 1, 'snapshot mutation cannot modify tracker');
+});

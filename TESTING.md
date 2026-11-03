@@ -13554,7 +13554,7 @@ separate from deterministic discovery/lease tests.
   installed test tools. Ports 19431–19435 must be free. The runner owns a fresh
   replica, synthetic accounts, two API runtimes and an isolated browser profile.
   It loads no production configuration; all product data goes through the API.
-- Verify both manifest generators and the built endpoint advertise 1.0.0.
+- Verify both manifest generators and the built endpoint advertise 1.1.0.
   Run `test:schemas` as well: the protected snapshot kind must remain in the
   built-in projection table with a required JSON source and generic writes denied.
   Anonymous, ordinary-account and mismatched actor/origin reads must fail with
@@ -13566,6 +13566,19 @@ separate from deterministic discovery/lease tests.
   filters must preserve correct loaded-source totals. Stale observations must
   never be presented as a complete live database inventory; unavailable
   aggregate counters stay unknown.
+- Group only identical deployment IDs; missing IDs must remain separate. Check
+  a deployment with multiple runtimes and clients, partial pagination, and stale,
+  closed and failed sources. Headline counts must include only ready current/recent
+  observations. Verify open = in-use + idle and the modeled upper end = open +
+  pending handshakes + monitoring allowance. Cover auto/stream, poll, load-balanced
+  and unknown/legacy evidence; no model may masquerade as a measured Atlas total.
+  Explain all-server versus selected-node scope and capacity versus current use.
+- Generate real requests through multiple registered feature domains and compare
+  the API evidence with human-readable feature labels. Count once per request per
+  shared client, including concurrent requests, and show lifetime scope/last-use
+  times. Never attribute an exclusive socket count to a feature or retain request
+  identities, paths, command bodies or custom hosts. Preserve custom saved layouts;
+  upgrade only normalized exact defaults and reopen disclosures after reload.
 - At desktop and 390px, scroll every affected page top to bottom, open source
   details, exercise freshness/search, empty and error states, and verify keyboard
   focus and no overflow. Edit a nested text, control and repeated-card field
