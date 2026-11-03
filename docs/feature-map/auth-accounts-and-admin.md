@@ -96,6 +96,12 @@ private draft API, editor recovery, account isolation and independent media copi
 
 ## Password manager
 
+The controlled `ThingFields.tsx` password rows opt into `CopyPasswordButton.tsx`
+only for non-passkey manager entries. Copy uses an already-authorized draft and
+browser Clipboard API with secret-free inline status; it never reads clipboard
+contents or logs/notifies the value. `scripts/password-copy.browser.html` checks
+exact synthetic writes, rejection/unavailability, masking and stale completions.
+
 `PasswordGenerator.tsx`, `PasswordIcon.tsx` and `PasswordPasskeySetup.tsx` compose
 editable settings blocks; secret output stays in the controlled entry draft.
 `passwords/generator.ts` owns WebCrypto/preset validation. `passwords/icons.ts`,
@@ -104,7 +110,7 @@ image loading and the separately sealed list projection. `test:passwords` covers
 these boundaries; `scripts/password-tools.browser.html` is an isolated synthetic
 UI fixture, not native-provider acceptance.
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.5.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.6.1 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -128,6 +134,14 @@ projects page events before runtime transport; the background fences the active
 document and accepts diagnostic reads only from its own popup. These are untrusted
 status hints, not authority or ceremony evidence; no request or identity fields
 are retained. Browser tests cover missing/replaced hooks, redaction and navigation.
+
+`passwords/websites.ts` supplies shared bare-host-to-HTTPS normalization for
+catalog hints and exact-origin fill verification. The browser fill client
+requires `api.passwords` 1.6.1; URL normalization is not an authorization grant.
+Extension 0.4.1 keeps the chooser inside active modal focus/accessibility scope
+and gives explicit website-reload recovery after extension replacement.
+`password-autofill-modal.browser.html` is a synthetic modal/runtime fixture;
+real signed-in fill and extension reload remain distinct acceptance checks.
 
 `NativePasswordConnection.tsx` and `nativePasswordConnectionBlocks.ts` supply the
 single editable device connection control shared by Password manager and Passwords
