@@ -59,6 +59,14 @@ Preserve exact redirect/origin checks, PKCE, one-use challenges and session
 revocation in every OAuth/SSO change; a browser "success" text alone never
 proves the host connected.
 
+`components/Account/AutoLoginPopup.tsx` starts browser-native FedCM on signed-out
+foreign origins. `ssoHub.ts` selects the explicit data authority before deployment
+metadata; its built-in origins in `ssoHubOrigins.mjs` are shared with the application
+`scripts/csp.mjs` policy. `test:vercel-config` verifies those exact origins in the
+emitted Vercel header. Custom client hub overrides do not grant CSP permission.
+The password extension forwards non-WebAuthn identity requests unchanged; its
+`test/fedcm-pass-through.test.mjs` covers success, refusal and disabled opt-in.
+
 ## Tests
 
 - `npm --prefix remix run test:auth-origin`, `test:auth-introspection`,
