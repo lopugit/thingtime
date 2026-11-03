@@ -128,6 +128,13 @@ test('two Google accounts coexist; the same identity in another Thingtime accoun
   assert.equal((await listConnections(user)).connections.length, 2);
   assert.equal((await resolveConnectionCredential(other, first.connection.id)).ok, false);
 });
+test('scope metadata retains every granted scope without truncating valid provider grants', async () => {
+  const scopes = Array.from({ length: 125 }, (_, index) => `scope-${index}`);
+  const linked = await upsertAccountAndLink(user, provider, account(), { ...tokens, scopes });
+  assert.ok(linked.ok);
+  assert.deepEqual(linked.connection.scopes, scopes);
+  assert.deepEqual((await listConnections(user)).connections[0].scopes, scopes);
+});
 test('reconnect is idempotent and preserves a refresh token omitted by the provider', async () => {
   const first = await upsertAccountAndLink(user, provider, account(), tokens);
   const again = await upsertAccountAndLink(user, provider, account(), { ...tokens, refreshToken: null, accessToken: 'renewed' });

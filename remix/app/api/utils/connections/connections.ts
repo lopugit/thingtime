@@ -136,7 +136,7 @@ const toPublicConnection = (linkDoc: any, accountDoc: any, provider: ConnectionP
   auth: provider?.oauth ? 'oauth2' : provider?.auth === 'credential' ? 'credential' : 'none',
   accountOnly: provider?.accountOnly === true,
   credentialStatus: !provider || provider.auth === 'none' ? 'public' : accountDoc?.ownerId === linkDoc?.ownerId && hasConnectionTokenEnvelope(accountDoc) ? 'connected' : 'reconnect',
-  scopes: Array.isArray(accountDoc?.crystal?.scopes) ? accountDoc.crystal.scopes.filter((scope: unknown) => typeof scope === 'string').slice(0, 100) : [],
+  scopes: Array.isArray(accountDoc?.crystal?.scopes) ? accountDoc.crystal.scopes.filter((scope: unknown) => typeof scope === 'string') : [],
   expiresAt: typeof accountDoc?.crystal?.expiresAt === 'string' ? accountDoc.crystal.expiresAt : null,
   account: {
     id: String(accountDoc?.shareId || linkDoc?.crystal?.accountId || ''),
