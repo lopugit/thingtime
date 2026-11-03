@@ -388,7 +388,7 @@ export function useApi() {
       passkeys: {
         list: useCallback(async () => getJson('/api/v1/auth/passkeys'), []),
         registerOptions: useCallback(
-          async (args: { password: string; signal?: AbortSignal }) => asyncFetcher.submit({ password: args?.password }, { action: '/api/v1/auth/passkeys/register-options', signal: args.signal }),
+          async (args: { password: string; verificationRequestId?:string; signal?: AbortSignal }) => asyncFetcher.submit({ password: args?.password, ...(args.verificationRequestId ? {verificationRequestId:args.verificationRequestId} : {}) }, { action: '/api/v1/auth/passkeys/register-options', signal: args.signal }),
           [asyncFetcher]
         ),
         register: useCallback(

@@ -183,7 +183,7 @@ test('every dependent operation carries the verified session binding and a retry
   const vault = async (body: Record<string, unknown>) => {
     seen.push(structuredClone(body));
     if (body.operation === 'verify-passkey') return { verified: true, requestId: request.id, sessionBinding };
-    assert.deepEqual(body.passkeySession, { requestId: request.id, binding: sessionBinding });
+    assert.deepEqual(body.passkeySession, { requestId: request.id, binding: sessionBinding, context: request.type==='create' ? attempt.context : (body.passkeySession as any).context });
     if (body.operation === 'catalog') return { catalog: [] };
     if (body.operation === 'save') {
       persisted = body.entry;
@@ -196,7 +196,7 @@ test('every dependent operation carries the verified session binding and a retry
   assert.equal(seen[0].passkeySession, undefined, 'Initial fresh verification has no earlier binding.');
   await runProviderCeremony(request, 'synthetic-only', '', vault, signal(), attempt);
   const verification = seen.filter(body => body.operation === 'verify-passkey');
-  assert.deepEqual(verification[1].passkeySession, { requestId: request.id, binding: sessionBinding });
+  assert.deepEqual(verification[1].passkeySession, { requestId: request.id, binding: sessionBinding, context: attempt.context });
   let dependent = 0;
   await assert.rejects(runProviderCeremony(request, 'synthetic-only', '', async body => {
     if (body.operation === 'verify-passkey') return { verified: true, requestId: request.id, sessionBinding: 'B'.repeat(43) };
@@ -208,10 +208,11 @@ test('every dependent operation carries the verified session binding and a retry
 test('assertion catalog and both secret readbacks stay bound to the same verified session', async () => {
   const registration = await prepareBrowserPasskeyRegistration(create(), true), request = get();
   const operations: string[] = [];
+  let approvedContext:unknown;
   const result = await runProviderCeremony(request, 'synthetic-only', 'selected', async body => {
     operations.push(String(body.operation));
-    if (body.operation === 'verify-passkey') return { verified: true, requestId: request.id, sessionBinding };
-    assert.deepEqual(body.passkeySession, { requestId: request.id, binding: sessionBinding });
+    if (body.operation === 'verify-passkey') {approvedContext=body.context;assert.equal((approvedContext as any).entryId,'selected');assert.equal((approvedContext as any).rp,'example.com');assert.equal((approvedContext as any).purpose,'get');assert.match((approvedContext as any).requestHash,/^[A-Za-z0-9_-]{43}$/);return { verified: true, requestId: request.id, sessionBinding };}
+    assert.deepEqual(body.passkeySession, { requestId: request.id, binding: sessionBinding, context: approvedContext });
     return body.operation === 'catalog' ? { catalog: [{ id: 'selected', relyingParty: 'example.com', credentialId: registration.response.id }] }
       : { entry: registration.entry, revision: 1 };
   }, signal());

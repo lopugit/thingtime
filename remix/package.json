@@ -186,6 +186,8 @@
     "test:environment-gateway:acceptance": "node scripts/environment-gateway-acceptance.mjs",
     "test:maps": "node --import tsx --test app/api/utils/maps/*.test.ts app/components/Builder/Maps/*.test.ts app/components/Builder/webpageConditionQuery.test.tsx",
     "test:maps-built": "node scripts/maps-built-smoke.mjs",
+    "test:passwords:verification-ui": "node --import tsx scripts/storage-recovery.integration.mts --password-verification --verification-ui",
+    "test:passwords:verification": "node --import tsx scripts/storage-recovery.integration.mts --password-verification",
     "test:passwords:record-storage": "node --import tsx scripts/storage-recovery.integration.mts --password-records"
   },
   "dependencies": {

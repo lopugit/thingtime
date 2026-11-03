@@ -15,10 +15,21 @@ export function assertPasswordProviderMetadata(info, expectedIdentifier, expecte
   // branding in the actual bundled localization instead.
   if (info.CFBundleDisplayName !== (hostName || 'Thingtime') || info.CFBundleName !== 'Thingtime') throw new Error('Password provider display name must be Thingtime.');
   if (hostName && (localizedInfo?.CFBundleDisplayName !== 'Thingtime' || localizedInfo?.CFBundleName !== 'Thingtime')) throw new Error('Password provider host localization must display Thingtime.');
-  if (info.CFBundleIconFile !== 'Thingtime.icns') throw new Error('Password provider tree app icon must be declared.');
+  if (!['Thingtime', 'Thingtime.icns'].includes(info.CFBundleIconFile) || info.CFBundleIconName !== 'Thingtime') throw new Error('Password provider tree app icon and compiled asset name must be declared.');
   const version = `${info.CFBundleShortVersionString}/${info.CFBundleVersion}`;
   if (!info.CFBundleShortVersionString || !info.CFBundleVersion || expectedVersion && version !== expectedVersion) throw new Error('Password provider host and extension versions must match.');
   return version;
+}
+
+export function assertPasswordProviderIconCatalog(renditions) {
+  // Checking the .icns alone misses the catalog used by system provider pickers.
+  // Verify actual compiled image renditions, not only an empty Assets.car file.
+  const icons = Array.isArray(renditions) ? renditions.filter(item => item.AssetType === 'Icon Image' && item.Name === 'Thingtime') : [];
+  for (const points of [16, 32, 128, 256, 512]) {
+    for (const scale of [1, 2]) {
+      if (!icons.some(icon => icon.Scale === scale && icon.PixelWidth === points * scale && icon.PixelHeight === points * scale)) throw new Error('Password provider compiled tree app icon is missing a required macOS rendition.');
+    }
+  }
 }
 
 export async function verifyPasswordProvider(app, { unsigned = false, teamIdentifier, signingIdentity } = {}) {
@@ -35,6 +46,7 @@ export async function verifyPasswordProvider(app, { unsigned = false, teamIdenti
     const icon = await readFile(path.join(bundle, 'Contents/Resources/Thingtime.icns'));
     const tree = await readFile(path.join(bundle, 'Contents/Resources/ThingtimeTree.png'));
     if (icon.toString('ascii', 0, 4) !== 'icns' || icon.length < 8 || icon.readUInt32BE(4) !== icon.length || tree.toString('hex', 0, 8) !== '89504e470d0a1a0a') throw new Error('Password provider tree branding resources are missing or invalid.');
+    assertPasswordProviderIconCatalog(JSON.parse(run('/usr/bin/assetutil', ['--info', path.join(bundle, 'Contents/Resources/Assets.car')])));
     run('/usr/bin/codesign', ['--verify', '--deep', '--strict', bundle]);
     if (unsigned) continue; // Ad-hoc builds exercise structure, not system permission.
     if (signingIdentity) {

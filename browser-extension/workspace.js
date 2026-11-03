@@ -25,6 +25,7 @@ export const sameWorkspaceTarget = (a, b) => !!a && !!b && ['tabId', 'windowId',
 export function createWorkspaceController(chrome, safeOrigin) {
   const url = chrome.runtime.getURL('popup.html');
   let queue = Promise.resolve();
+  let captureGeneration = 0;
   async function capture(tab) {
     if (!Number.isInteger(tab?.id) || !Number.isInteger(tab.windowId)) return null;
     const frame = await chrome.webNavigation.getFrame({tabId: tab.id, frameId: 0}).catch(() => null);
@@ -39,6 +40,7 @@ export function createWorkspaceController(chrome, safeOrigin) {
     return sameWorkspaceTarget(t, latest) && tab && !tab.pendingUrl && tab.windowId === t.windowId && frame?.documentId === t.documentId && safeOrigin(frame.url) === t.origin ? t : null;
   }
   function open(tab) {
+    captureGeneration++;
     // Serialize rapid toolbar clicks, including a suspended worker's first open.
     const captured = capture(tab);
     const operation = queue.catch(() => {}).then(async () => {
@@ -75,7 +77,7 @@ export function createWorkspaceController(chrome, safeOrigin) {
     queue = operation;
     return operation;
   }
-  return {open, target};
+  return {open, target, generation: () => captureGeneration};
 }
 
 /** UI reads can finish out of order; only the latest inspection may paint. */

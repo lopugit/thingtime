@@ -1,3 +1,4 @@
+import { VERIFICATION_WINDOWS } from '~/passwords/verificationPolicy';
 import { passwordBrandingMigration } from './passwordBrandingBlocks';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 const e = (id: string, tag: string, text = '', props: Record<string, unknown> = {}, children?: WebpageBlock[]): WebpageBlock => ({
@@ -28,7 +29,21 @@ export function migrateBrowserProviderRecoveryControls(blocks: WebpageBlock[]): 
   });
   return visit(blocks, new Set());
 }
-export const migrateBrowserProviderBranding = (blocks: WebpageBlock[]) => migrateBrowserProviderRecoveryControls(migrateBranding(blocks));
+export function migrateBrowserProviderVerification(blocks:WebpageBlock[]):WebpageBlock[] {
+  const exists = (items:WebpageBlock[]):boolean=>items.some(block=>block.id==='bp-verification-policy'||(block.children&&exists(block.children)));
+  if(exists(blocks))return blocks;
+  const visit=(items:WebpageBlock[]):WebpageBlock[]=>items.flatMap(block=>{
+    let current=block.children?{...block,children:visit(block.children)}:block;
+    if(['bp-password-label','bp-password'].includes(block.id))current=when(block.id+'-required','result.needsPassword',[current]);
+    return block.id==='bp-approve'?[e('verification-policy','section','',{},[
+      e('verification-label','label','Don’t ask for my Thingtime password for',{htmlFor:'browser-passkey-window'}),
+      e('verification-window','select','',{id:'browser-passkey-window',name:'verificationWindow',value:'{result.window}','data-tt-action':'$transient','data-tt-action-inputs':{operation:'provider.window'},disabled:'{result.busy}','aria-label':'Password confirmation interval'},VERIFICATION_WINDOWS.map(([id,label])=>e('window-'+id,'option',label,{value:id}))),
+      e('verification-help','p','{result.verificationHelp}'),
+    ]),current]:[current];
+  });
+  return visit(blocks);
+}
+export const migrateBrowserProviderBranding = (blocks: WebpageBlock[]) => migrateBrowserProviderVerification(migrateBrowserProviderRecoveryControls(migrateBranding(blocks)));
 const BROWSER_PROVIDER_BLOCKS_DEFAULTS: WebpageBlock[] = [e('main', 'section', '', { 'aria-label': 'Passkey approval' }, [
   e('heading', 'h1', '{result.title}'),
   e('intro', 'p', 'Review the website and account before continuing.'),

@@ -1,3 +1,5 @@
+import { PasswordVerificationSettings } from '../Passwords/PasswordVerificationSettings';
+import { passwordVerificationRequest } from '~/passwords/client';
 import React from 'react';
 import { Badge, Box, Button, Flex, Input, Text } from '@chakra-ui/react';
 
@@ -259,6 +261,11 @@ const AccountPasskeysManager = ({ userId }: { userId: string }) => {
 	const [addPassword, setAddPassword] = React.useState('');
 	const [addNickname, setAddNickname] = React.useState('');
 	const [addBusy, setAddBusy] = React.useState(false);
+  const [passwordRequired,setPasswordRequired]=React.useState(true);
+  React.useEffect(()=>{if(!adding)return; const controller=new AbortController();
+    const check=()=>void passwordVerificationRequest(userId,{operation:'verification-status',context:{purpose:'account-create',rp:window.location.hostname}},controller.signal).then(value=>{if(!controller.signal.aborted)setPasswordRequired(value.required);}).catch(()=>{if(!controller.signal.aborted)setPasswordRequired(true);});
+    check();window.addEventListener('thingtime:password-verification-changed',check);return()=>{controller.abort();window.removeEventListener('thingtime:password-verification-changed',check);};
+  },[adding,userId]);
 	const [listError, setListError] = React.useState(false);
 	const mounted = React.useRef(true);
 	React.useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -284,13 +291,14 @@ const AccountPasskeysManager = ({ userId }: { userId: string }) => {
 		refresh();
 	}, [refresh]);
 
-	const supported = passkeysSupported();
+	React.useEffect(()=>{const clear=()=>{cancelPasskey();setAddPassword('');setAdding(false);};window.addEventListener('thingtime:hide-vault-values',clear);return()=>window.removeEventListener('thingtime:hide-vault-values',clear);},[cancelPasskey]);
+  const supported = passkeysSupported();
 
 	const addPasskey = async () => {
-		if (!addPassword || addBusy) return;
+		if ((!addPassword && passwordRequired) || addBusy) return;
 		setAddBusy(true);
 		try {
-			const resp = await registerPasskey({ password: addPassword, nickname: addNickname || undefined });
+			const resp = await registerPasskey({ password: addPassword, verificationRequestId:crypto.randomUUID(), nickname: addNickname || undefined });
 			if (resp?.ok) {
 				lopu({
 					title: `Passkey added ✨`,
@@ -353,7 +361,8 @@ const AccountPasskeysManager = ({ userId }: { userId: string }) => {
 					background="var(--tt-surface-alt, #f5f5f7)"
 					borderRadius="var(--tt-radius-md, 12px)"
 				>
-					<Input
+          <Box width="100%"><PasswordVerificationSettings ownerId={userId} /></Box>
+					{passwordRequired && <Input
 						size="sm"
 						sx={{ ...inputSx, background: 'var(--tt-card, #ffffff)' }}
 						type="password"
@@ -365,7 +374,7 @@ const AccountPasskeysManager = ({ userId }: { userId: string }) => {
 						onKeyDown={(e) => {
 							if (e.key === 'Enter') addPasskey();
 						}}
-					/>
+					/>}
 					<Input
 						size="sm"
 						sx={{ ...inputSx, background: 'var(--tt-card, #ffffff)' }}
@@ -375,7 +384,7 @@ const AccountPasskeysManager = ({ userId }: { userId: string }) => {
 						placeholder="Nickname (optional)"
 						maxLength={64}
 					/>
-					<Button size="sm" onClick={addPasskey} isLoading={addBusy} isDisabled={!addPassword} loadingText="Follow your browser…">
+					<Button size="sm" onClick={addPasskey} isLoading={addBusy} isDisabled={passwordRequired && !addPassword} loadingText="Follow your browser…">
 						Create 🔑
 					</Button>
 					<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" width="100%">

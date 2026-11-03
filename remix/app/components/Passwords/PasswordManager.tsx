@@ -7,6 +7,8 @@ import { createPasswordBackup } from '~/passwords/backup.client';
 import { PasswordAttachments } from './PasswordAttachments';
 import { uploadPasswordFile } from '~/passwords/files.client';
 import { newPasswordFile, type PasswordFile } from '~/passwords/fileCrypto';
+import { PasswordPreviewList } from './PasswordPreviewList';
+import { PasswordVerificationSettings } from './PasswordVerificationSettings';
 import React from 'react';
 import { Box, Button, Checkbox, Flex, Heading, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Text } from '@chakra-ui/react';
 import { Link, useLocation } from 'react-router';
@@ -68,7 +70,7 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
     listAbort.current = controller; controllers.current.add(controller); setListLoading(true);
     const current = () => active.current && epoch === listEpoch.current && version === generation.current && !controller.signal.aborted;
     try {
-      const result = await passwordRequest(ownerId, undefined, controller.signal, next, search.trim());
+      const result = await passwordRequest(ownerId, undefined, controller.signal, next, search.trim(), true);
       if (!current()) return;
       setRecords(prev => next ? [...prev.filter(item => !result.entries.some((entry: PasswordMetadata) => entry.id === item.id)), ...result.entries] : result.entries);
       setCursor(result.nextCursor); setConfigured(result.configured); setSettledSearch(search);
@@ -182,12 +184,13 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   return <Box width="100%" maxWidth="1100px" mx="auto" px={{ base: 3, md: 6 }} py={6}>
     <Flex gap={3} alignItems="center" justifyContent="space-between" flexWrap="wrap"><Flex alignItems="center" gap={3}><PasswordBrandMark size={40} /><Box><Heading size="lg">Password manager</Heading><Text mt={1} color="var(--tt-muted)">Unlocked with your Thingtime session</Text></Box></Flex><Flex gap={2} flexWrap="wrap"><Button onClick={() => { clearAndRefresh(); setDraft({ id: crypto.randomUUID(), revision: 0, entry: emptyPasswordEntry() }); }} isDisabled={busy || configured === false}>Add password</Button><Button variant="outline" onClick={() => { clearAndRefresh(); setTransfer('import'); }}>Import</Button><Button variant="outline" onClick={() => { clearAndRefresh(); setTransfer('export'); }}>Export</Button><Button variant="ghost" onClick={clearAndRefresh}>Hide values</Button></Flex></Flex>
     {configured === false && <Text mt={4}>Password encryption needs deployment configuration before you can save entries.</Text>}
+    <Box mt={4}><PasswordVerificationSettings ownerId={ownerId} /></Box>
     <PasswordPasskeySetup ownerId={ownerId} nativeAvailable={nativeAvailable} />
     {error && <Text role="alert" color="red.600" mt={4}>{error}</Text>}
     <Flex gap={5} mt={6} alignItems="start" direction={{ base: 'column', md: 'row' }}>
       <Box width={{ base: '100%', md: draft ? '34%' : '100%' }} minWidth={0}>
-        <Flex gap={2} mb={3}><Input aria-label="Search passwords" placeholder="Search all password titles" value={search} onChange={event => changeSearch(event.target.value)} /><Select maxWidth="150px" aria-label="Sort passwords" value={sort} onChange={event => setSort(event.target.value)}><option value="title">Title</option><option value="updated">Recently edited</option></Select></Flex>
-        <Flex direction="column" gap={2}>{visible.map(record => <Box {...card} key={record.id} as="button" textAlign="left" width="100%" disabled={busy || iconBusy} onClick={() => read(record)}><Flex gap={3} alignItems="center"><PasswordEntryIcon ownerId={ownerId} entryId={record.id} icon={record.icon} /><Box minWidth={0}><Text fontWeight={600} overflowWrap="anywhere">{record.title}</Text><Text fontSize="sm" color="var(--tt-muted)">{record.passwordType.replace(/-/g, ' ')}</Text></Box></Flex></Box>)}</Flex>
+        <Flex gap={2} mb={3} direction={{base:'column',md:'row'}} alignItems={{base:'stretch',md:'center'}}><Input minWidth={0} flex={1} width="100%" aria-label="Search passwords" placeholder="Search all password titles" value={search} onChange={event => changeSearch(event.target.value)} /><Select maxWidth="150px" alignSelf={{base:'flex-end',md:'auto'}} aria-label="Sort passwords" value={sort} onChange={event => setSort(event.target.value)}><option value="title">Title</option><option value="updated">Recently edited</option></Select></Flex>
+        <PasswordPreviewList ownerId={ownerId} entries={visible} disabled={busy || iconBusy} onOpen={read} />
         {listLoading && <Text role="status" mt={3} fontSize="sm">{search.trim() ? 'Searching all password titles…' : 'Refreshing passwords…'}</Text>}
         {!listLoading && settledSearch === search && !visible.length && <Text py={5}>{search.trim() ? 'No matching password titles.' : 'Add a login, API key, secure note or authenticator.'}</Text>}
         {cursor && settledSearch === search && <Button mt={3} onClick={() => run(() => refresh(cursor))} isDisabled={listLoading || busy}>Load more</Button>}
@@ -204,6 +207,7 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
         <Thingtime thing={Object.fromEntries(draft.entry.fields.map(field => [field.id, field.value]))} mods={{ layout: 'fields', fields: draft.entry.fields.map(({ value: _value, ...field }) => field), sortable: true, removable: true, revealSecrets: true }} onChange={(values: Record<string, string>) => updateEntry({ ...draft.entry, fields: draft.entry.fields.map(field => ({ ...field, value: values[field.id] ?? '' })) })} onModsChange={(mods: ThingMods) => updateEntry({ ...draft.entry, fields: mods.fields.map(field => ({ ...draft.entry.fields.find(item => item.id === field.id), ...field, value: draft.entry.fields.find(item => item.id === field.id)?.value ?? '' })) })} />
         <Flex gap={2} flexWrap="wrap" mt={5}><Input flex="1 1 150px" aria-label="Custom field label" placeholder="Custom field label" value={customLabel} onChange={event => setCustomLabel(event.target.value)} /><Select flex="1 1 120px" aria-label="Custom field type" value={customType} onChange={event => setCustomType(event.target.value as FieldType)}>{FIELD_TYPES.map(type => <option key={type}>{type}</option>)}</Select><Button isDisabled={!customLabel.trim()} onClick={() => { updateEntry({ ...draft.entry, fields: [...draft.entry.fields, { id: crypto.randomUUID(), label: customLabel.trim(), type: customType, value: '' }] }); setCustomLabel(''); }}>Add custom field</Button></Flex>
         {draft.entry.passwordType !== 'passkey' && <PasswordGenerator key={`password-generator:${draft.id}`} ownerId={ownerId} origin={window.location.origin} targets={draft.entry.fields.filter(field => field.type === 'password').map(({ id, label }) => ({ id, label }))} disabled={busy || iconBusy} onGenerate={(value, fieldId) => setDraft(current => current?.id === draft.id && current.entry.passwordType !== 'passkey' ? { ...current, entry: { ...current.entry, fields: current.entry.fields.map(field => field.id === fieldId && field.type === 'password' ? { ...field, value } : field) } } : current)} />}
+        <PasswordVerificationSettings key={draft.id} ownerId={ownerId} entryWindow={draft.entry.verificationWindow ?? 'global'} onEntryChange={value=>updateEntry({...draft.entry,verificationWindow:value})} />
         <PasswordIconEditor ownerId={ownerId} entryId={draft.id} saved={draft.revision > 0} icon={draft.entry.icon} website={draft.entry.fields.find(field => field.type === 'url')?.value} disabled={busy} onBusyChange={setIconBusy} onChange={icon => setDraft(current => current?.id === draft.id ? { ...current, entry: { ...current.entry, icon } } : current)} />
         {draft.entry.onePassword && <PasswordSource entry={draft.entry} />}
         {draft.revision > 0 ? <PasswordAttachments key={`password-files:${draft.id}`} ownerId={ownerId} entryId={draft.id} /> : <Text mt={5} fontSize="sm">Save this entry to add attachments.</Text>}

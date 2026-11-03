@@ -1,4 +1,5 @@
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import type { VerificationContext } from './verificationPolicy';
 import { passwordRequest } from './client';
 import { createBrowserPasskeyAssertion, prepareBrowserPasskeyRegistration, requireNoExcludedBrowserPasskey, BrowserPasskeyExcludedError, BROWSER_PASSKEY_EXCLUDED_MESSAGE, validateBrowserPasskeyRequest, type BrowserPasskeyRequest } from './browserPasskey';
 import { passwordFieldValue, validatePasswordEntry, type PasswordEntry } from './model';
@@ -6,7 +7,7 @@ import { passwordFieldValue, validatePasswordEntry, type PasswordEntry } from '.
 export type ProviderRequest = BrowserPasskeyRequest & { version: 1; id: string };
 export type ProviderChoice = { id: string; title: string; username: string; relyingParty?: string; credentialId?: string };
 type Vault = (body: Record<string, unknown>, signal: AbortSignal, cursor?: string) => Promise<any>;
-export type BrowserProviderAttempt = { requestFingerprint?: string; sessionBinding?: string; prepared?: Awaited<ReturnType<typeof prepareBrowserPasskeyRegistration>>; id?: string; writeId?: string };
+export type BrowserProviderAttempt = { requestFingerprint?: string; sessionBinding?: string; prepared?: Awaited<ReturnType<typeof prepareBrowserPasskeyRegistration>>; id?: string; writeId?: string; context?: VerificationContext };
 export function validateProviderRequest(input: unknown): ProviderRequest {
   const value = input as ProviderRequest;
   if (value?.version !== 1 || typeof value.id !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(value.id)) throw new DOMException('Invalid passkey request.', 'DataError');
@@ -40,8 +41,12 @@ export async function runProviderCeremony(request: ProviderRequest, password: st
   const fingerprint = JSON.stringify(request);
   if (attempt.requestFingerprint && attempt.requestFingerprint !== fingerprint) throw new DOMException('The passkey request changed.', 'InvalidStateError');
   attempt.requestFingerprint = fingerprint;
-  const passkeySession = () => ({ requestId: request.id, binding: attempt.sessionBinding });
-  const verified = await vault({ operation: 'verify-passkey', requestId: request.id, password,
+  const requestHash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(fingerprint)))).map(value=>String.fromCharCode(value)).join('');
+  const context: VerificationContext = {purpose:request.type,rp:providerRp(request),entryId:request.type === 'get' ? selectedId : (attempt.id ||= crypto.randomUUID()),requestHash:btoa(requestHash).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')};
+  if (attempt.context && JSON.stringify(attempt.context) !== JSON.stringify(context)) throw new DOMException('The selected passkey changed. Start again.', 'InvalidStateError');
+  attempt.context = context;
+  const passkeySession = () => ({ requestId: request.id, binding: attempt.sessionBinding, context });
+  const verified = await vault({ operation: 'verify-passkey', requestId: request.id, password, context,
     ...(attempt.sessionBinding ? { passkeySession: passkeySession() } : {}) }, signal);
   password = '';
   signal.throwIfAborted();
@@ -86,7 +91,7 @@ export async function runProviderCeremony(request: ProviderRequest, password: st
   return prepared.response;
 }
 export async function ensureBrowserProvider(signal: AbortSignal) {
-  await requireThingtimeCapability('api.passwords', '1.4.0');
+  await requireThingtimeCapability('api.passwords', '1.5.0');
   signal.throwIfAborted();
 }
 

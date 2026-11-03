@@ -13685,8 +13685,9 @@ separate from deterministic discovery/lease tests.
   replica, real API handlers). No existing Mongo or personal profile may be reused.
 - Compile/render the real native view with
   `bash apple/PasswordProvider/tests/render-preview.sh --excluded --details --long-site --large-counts --width 300 --height 380`.
-  This is a synthetic view, not a credential operation. ImageRenderer does not
-  paint ScrollView contents reliably; inspect the actual owned preview window.
+  This is a synthetic view, not a credential operation. On macOS the harness
+  captures the laid-out NSHostingView; inspect the actual owned preview window
+  from top to bottom too. ImageRenderer alone omits NSScrollView contents.
 
 ### Password manager tree branding (2026-11-02)
 
@@ -13694,3 +13695,35 @@ separate from deterministic discovery/lease tests.
 - [ ] Existing saved default layouts gain branding without replacing edited headings, styles, IDs or custom content. Deleting the migrated mark stays deleted; authored layouts without the known heading remain unchanged. Legacy provider retry/fallback controls obey terminal conditions without restoring deleted controls.
 - Run extension unit tests (including real ZIP icon inventory) and `test:passwords`; metadata tests validate host/extension ICNS and PNG packaging. Inspect native bundle icons independently of website-controlled account/passkey icons.
 - The isolated `browser-extension/test/workspace-browser.mjs --provider-ui-origin=<fixture-origin>` path uses `remix/scripts/password-provider.browser.html`: the actual provider component, content bridge, background routing, ceremony and transient actions run against explicitly synthetic in-memory API responses. Verify excluded create hides approval/refresh/fallback and clears password input, then explicit Return delivers bound InvalidStateError and focuses the original requester. This proves that action path, not real vault/site/OS acceptance. `password-branding.browser.html` is a separate renderer-only document gallery.
+
+### Password confirmation preferences and device trust — 2026-11-03
+
+- Run `pnpm --dir remix run test:passwords` and `test:passkeys`; run
+  `pnpm --dir remix run test:passwords:verification` explicitly. The latter starts
+  its own disposable replica, uses real registration/login/password handlers,
+  synthetic credentials, and cleans up its database/processes. Verify Never
+  across logout/new login, off→on invalidation, entry Always over global Never,
+  exact selected item/origin/purpose, device Forget, and account-passkey final
+  registration versus a lock during the ceremony. Unit tests additionally pause
+  cross-session Forget, final reads/expiry and pre-insert revocation.
+- `test:passwords:verification-ui` adds the actual manager/provider components in
+  a separate Chrome process against that disposable API. Set
+  `THINGTIME_TEST_PLAYWRIGHT_MODULE=<installed-playwright>/index.mjs` and, when
+  reusing binaries, `PLAYWRIGHT_BROWSERS_PATH=<browser-binary-cache>`. It reserves
+  loopback 18090 only while running and closes its browser/server afterward.
+  Verify desktop/narrow, long and missing legacy username subtitles, complete
+  scrolling, saved preference reload, explicit Never enrollment, then a new
+  approval without another account password. This is isolated API/UI evidence,
+  not Google, production or signed OS-provider acceptance.
+- In Builder, edit the global checkbox/label/dropdown independently and the saved
+  card's title/username/type/icon independently. Save/reload the layout; authored
+  text/styles/deleted controls must survive migrations. Inspect per-entry Use
+  global/Always and Security's shared control. No password/proof may enter saved
+  blocks, Action history, local settings cache or screenshots.
+- In the final signed native app, inspect the actual OS picker tree icon and
+  localized Thingtime name. Valid .icns/asset-catalog structure alone does not
+  prove picker rendering. Preserve the physical host filename and raw/localized
+  bundle-name contract. At small provider heights, scroll the full excluded
+  message and collapsed/expanded Registration request details while Return stays
+  reachable. OS user verification must still run when reuse is off, unsupported
+  or unavailable.
