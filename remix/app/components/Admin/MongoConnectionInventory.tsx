@@ -4,7 +4,7 @@ import { WebpageBlocksRenderer } from '~/components/Builder/WebpageBlocksRendere
 import { TransientBlockHost, type TransientBlockActions } from '~/components/Builder/TransientBlockHost';
 import { MONGO_CONNECTION_INVENTORY_BLOCKS, migrateMongoInventoryBlocks } from './mongoConnectionInventoryBlocks';
 import type { MongoConnectionInventory as Inventory } from '~/mongodb/connectionInventory';
-import { presentMongoSources, presentMongoDeployments, mergeMongoInventory } from './mongoConnectionInventoryPresentation';
+import { presentMongoSources, presentMongoDeployments, presentMongoCoverageNotes, mergeMongoInventory } from './mongoConnectionInventoryPresentation';
 import { useApi } from '~/hooks/useApi';
 import { createFolderHostFetch } from '~/fileSync/folderHostFetch.client';
 import { useDataPlane } from '~/hooks/useDataPlane';
@@ -75,7 +75,7 @@ const InventoryView = ({ scope }: { scope: { expectedActor: string; expectedApiO
   serverSummary: totals?.serverCurrent == null ? 'Unavailable — database-reported connection count was not returned' : `${totals.serverCurrent} current connections · ${totals.serverAvailable ?? 'unknown'} available · ${totals.serverTotalCreated ?? 'unknown'} created since server start`,
   serverNote: inventory?.server.note || 'Database aggregate is separate from instrumented pools.',
   observedSummary: totals ? `${totals.observedOpen} observed open across loaded snapshots · ${totals.observedCheckedOut} checked out · ${totals.freshSources} fresh sources · ${totals.staleSources} stale sources` : '',
-  notes: (inventory?.coverage.notes || []).map(text => ({ text }))
+  notes: presentMongoCoverageNotes(inventory?.coverage.notes || [])
  };
  const scopeKey = JSON.stringify([expectedActor, expectedApiOrigin]);
  return <SettingsDocumentHost clearMobileLaunchers documentKey="mongodb-connections" title="MongoDB connections layout" defaultDocument={MONGO_CONNECTION_INVENTORY_BLOCKS} migrateBlocks={migrateMongoInventoryBlocks} scopeKey={scopeKey} accountTransport={accountTransport}>
