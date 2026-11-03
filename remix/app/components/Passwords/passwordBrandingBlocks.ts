@@ -32,3 +32,18 @@ export const passwordBrandingMigration = (headingId: string) => (blocks: Webpage
   };
   return visit(blocks);
 };
+
+/** Repair only the shipped subtitle color. Authored colors, structure, content,
+ * and deleted blocks remain user-owned; hierarchy comes from size and weight. */
+export const migratePasswordPreviewContrast = (blocks: WebpageBlock[]): WebpageBlock[] => {
+  let changed = false;
+  const next = blocks.map(block => {
+    const children = block.children ? migratePasswordPreviewContrast(block.children) : undefined;
+    const repair = (block.id === 'pp-username' || block.id === 'pp-type') && block.type === 'element'
+      && block.css?.color === 'var(--tt-muted, #6b7280)';
+    if (!repair && children === block.children) return block;
+    changed = true;
+    return { ...block, ...(repair ? { css: { ...block.css, color: 'inherit' } } : {}), ...(children ? { children } : {}) };
+  });
+  return changed ? next : blocks;
+};
