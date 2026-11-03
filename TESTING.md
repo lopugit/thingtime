@@ -1949,6 +1949,17 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Login with Thingtime anywhere (federated hints + SSO handoff + FedCM)
 
+- [ ] On a signed-out immutable preview with the development data authority,
+      Chrome's FedCM config request targets `https://dev.thingtime.com` and is
+      permitted by the page's `connect-src`; production-authority previews use
+      `https://thingtime.com`. Check the actual response header, not extension
+      error history. `test:vercel-config` checks the emitted header and both
+      built-in authorities. The extension's `fedcm-pass-through.test.mjs`
+      verifies unchanged identity options, returned credentials and browser
+      rejections, with no passkey bridge request or retry. A custom hub override
+      never widens CSP; its FedCM flow needs an explicitly compatible deployment
+      policy, while the manual sign-in fallback remains available.
+
 - [ ] Commander desktop OAuth: from the signed macOS Commander app, open
       Thingtime login and complete consent in the system browser. The callback
       must reach only Commander’s exact `127.0.0.1` loopback origin, exchange
