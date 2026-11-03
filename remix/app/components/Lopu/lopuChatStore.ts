@@ -333,9 +333,11 @@ const reconcileProviderId = (requested: string | null | undefined, _providers: L
 // drops the server continuation the viewer asked for. The fallback is the device
 // preference, never the chat that happened to be open before: a conversation
 // that states its own placement wins for itself and must not leak to the next.
-// `hydrateLopuStore` passes its own value: `state` still holds the previous
-// account while the next one is being built, and placement must not cross it.
-const keepManagement = (management: LopuManagement | null | undefined = state.managementDefault): { management?: LopuManagement } =>
+// The source is always named at the call site and never defaulted: a default
+// parameter also fires for an absent value, so `hydrateLopuStore` — which runs
+// while `state` still holds the previous account — would silently refill the
+// next viewer's settings from the previous one's placement.
+const keepManagement = (management: LopuManagement | null | undefined): { management?: LopuManagement } =>
 	management ? { management } : {};
 
 /** Report the device execution-placement preference (settings.lopu.management).
@@ -560,7 +562,7 @@ export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 		// Execution placement is a device preference, not a per-chat credential:
     // it must survive hydration even when account defaults supply the AI choice.
     managementDefault: settingsCache?.management ?? null,
-    settings: reconcileLopuSettings({ ...keepManagement(settingsCache?.management), ...(aiDefaults || settingsCache || defaults), accessMode: 'ask' }, models, defaults, null)
+    settings: reconcileLopuSettings({ ...keepManagement(settingsCache?.management ?? null), ...(aiDefaults || settingsCache || defaults), accessMode: 'ask' }, models, defaults, null)
 	};
 	scheduleEmit();
 	return state;
@@ -731,7 +733,7 @@ export const selectLopuChat = (chatId: string | null, options?: { silent?: boole
 	const fromChat = settingsFromChat(chat);
 	// Existing/legacy chats never inherit a different conversation's credential.
   const requested = chatId
-    ? { ...keepManagement(), ...EMPTY_SETTINGS, ...fromChat }
+    ? { ...keepManagement(state.managementDefault), ...EMPTY_SETTINGS, ...fromChat }
     : { ...state.settings, ...state.aiDefaults, accessMode: 'ask' as const };
   const settings = reconcileLopuSettings(requested, state.models, state.defaults, knownVaultProviders());
 	const next = { activeChatId: chatId, settings };
@@ -748,7 +750,7 @@ export const selectLopuChat = (chatId: string | null, options?: { silent?: boole
 export const createLopuChat = async (args?: { title?: string }): Promise<{ ok: boolean; chat?: LopuChatSummary; error?: string }> => {
 	if (!client) return { ok: false, error: 'Lopu is not connected yet' };
 	const chosen = state.activeChatId && state.aiDefaults
-		? reconcileLopuSettings({ ...keepManagement(), ...state.aiDefaults }, state.models, state.defaults, knownVaultProviders())
+		? reconcileLopuSettings({ ...keepManagement(state.managementDefault), ...state.aiDefaults }, state.models, state.defaults, knownVaultProviders())
 		: state.settings;
 	chatWrites++;
 	try {

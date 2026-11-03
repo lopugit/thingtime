@@ -842,6 +842,23 @@ test('hydration never restores plan admission hints and never shares provider me
     assert.equal(getLopuStoreSnapshot().vaultProviders[0].id, 'chatgpt-plan-cached');
     assert.equal(getLopuStoreSnapshot().vaultProviders[0].planChatEligible, undefined);
     hydrateLopuStore('other'); assert.deepEqual(getLopuStoreSnapshot().vaultProviders, []);
+    // Execution placement is this device's preference for this viewer. A cached
+    // placement is restored for the account that saved it, and an account that
+    // saved none starts without one — never with the previous viewer's.
+    storage.set('tt-lopu-settings-placed', JSON.stringify({ model: null, effort: null, speed: null, providerId: null, management: 'server' }));
+    resetLopuStoreForTests(); hydrateLopuStore('placed');
+    assert.equal(getLopuStoreSnapshot().managementDefault, 'server');
+    assert.equal(getLopuStoreSnapshot().settings.management, 'server');
+    hydrateLopuStore('unplaced');
+    assert.equal(getLopuStoreSnapshot().managementDefault, null);
+    assert.equal(getLopuStoreSnapshot().settings.management, undefined);
+    // the same crossing through the live preference rather than the cache
+    resetLopuStoreForTests(); hydrateLopuStore('reporter');
+    setLopuManagementDefault('server');
+    assert.equal(getLopuStoreSnapshot().settings.management, 'server');
+    hydrateLopuStore('next-viewer');
+    assert.equal(getLopuStoreSnapshot().managementDefault, null);
+    assert.equal(getLopuStoreSnapshot().settings.management, undefined);
   } finally { (globalThis as any).window = previous; resetLopuStoreForTests(); }
 });
 
