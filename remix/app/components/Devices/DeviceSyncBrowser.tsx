@@ -1,3 +1,4 @@
+import { DeviceSyncResources } from './DeviceSyncResources';
 import React from 'react';
 import { Box, Flex } from '@chakra-ui/react';
 import { useApi } from '~/hooks/useApi';
@@ -11,6 +12,8 @@ import { deviceSyncOverviewBlocks } from './deviceSyncBlocks';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { SettingsSection } from '../Settings/SettingsSection';
 import { DesktopFolderAccess } from './DesktopFolderAccess';
+import { RemoteDeviceSync } from './RemoteDeviceSync';
+import { getElectronBridge } from '~/utils/electronBridge';
 import { deviceSyncPageHref } from './deviceNavigation';
 import { deviceSyncFolders, deviceSyncedFilesHref, type DeviceSyncFolder } from './deviceSyncNavigation';
 
@@ -25,7 +28,7 @@ export function DeviceSyncBrowser({ deviceId }: { deviceId: string }) {
 	const ownerId = user?.id || '',
 		allowed = !!ownerId && !user?.temporary && user?.accountKind === 'user' && plane === 'home' && !identity.pending;
 	const key = JSON.stringify([typeof window === 'undefined' ? 'server' : window.location.origin, ownerId, plane, deviceId, identity.generation]);
-	return <DeviceSyncBrowserContent key={key} {...{ deviceId, ownerId, allowed, scopeKey: key, apiRef }} generation={identity.generation} />;
+	return <><DeviceSyncResources key={key + ":resources"} {...{ deviceId, ownerId, allowed }} /><DeviceSyncBrowserContent key={key} {...{ deviceId, ownerId, allowed, scopeKey: key, apiRef }} generation={identity.generation} /></>;
 }
 function DeviceSyncBrowserContent({
 	deviceId,
@@ -150,19 +153,22 @@ export function DeviceSyncPanel({
 	ownedDeviceIds?: readonly string[];
 }) {
 	const [managing, setManaging] = React.useState(false);
+	const [visited, setVisited] = React.useState(false);
+	const bridge = getElectronBridge();
+	const local = bridge?.platform === 'darwin' && !!bridge.folderSyncRequest && pairedDeviceIds.includes(deviceId);
 	return (
 		<Box minWidth={0}>
 			<DeviceSyncBrowser deviceId={deviceId} />
-			{ownerId && pairedDeviceIds.includes(deviceId) && ownedDeviceIds.includes(deviceId) ? (
+			{ownerId && ownedDeviceIds.includes(deviceId) ? (
 				<SettingsSection
 					eyebrow="Manage sync connections"
 					description="Folders, progress, exclusions and resource limits for this device."
 					open={managing}
-					onToggle={setManaging}
+					onToggle={open => { setManaging(open); if (open) setVisited(true); }}
 				>
-					{managing ? (
-						<DesktopFolderAccess ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={pairedDeviceIds} ownedDeviceIds={ownedDeviceIds} />
-					) : null}
+					{visited && local ? (
+						<DesktopFolderAccess showResourceSummary={false} active={managing} ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={pairedDeviceIds} ownedDeviceIds={ownedDeviceIds} />
+					) : visited ? <RemoteDeviceSync showResourceSummary={false} active={managing} ownerId={ownerId} deviceId={deviceId} /> : null}
 				</SettingsSection>
 			) : null}
 		</Box>

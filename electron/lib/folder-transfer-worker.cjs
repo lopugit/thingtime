@@ -44,7 +44,7 @@ const timer = setInterval(() => { if (requests.size) sample(); }, 250); timer.un
 process.on('disconnect', () => { requests.forEach(c => c.abort()); process.exit(0); });
 process.on('message', async message => {
     if (message.kind === 'authority-reply') { approvals.get(message.ticket)?.(message); return; }
-    if (message.kind === 'policy') { governor.setLimits(message.policy); return; }
+    if (message.kind === 'policy') { governor.setLimits(message.policy); governor.totalBytesPerSecond = message.totalBytesPerSecond; return; }
     if (message.kind === 'sample') { governor.sample(message.scope, message.percent); return; }
     if (message.kind === 'cancel') { requests.get(message.id)?.abort(); return; }
     if (!['put', 'hash', 'get'].includes(message.kind)) return;

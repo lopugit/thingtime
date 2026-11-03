@@ -1,7 +1,8 @@
+import { deviceResourceKey, deviceSyncGovernor, readDeviceSyncResourcePolicy } from './deviceResourcePolicy';
 import { activityManager } from '~/activity/activityManager';
 import { fileSyncDownloadRequirements } from './signedDownloadTarget';
 import { createSyncProgressCache } from './syncProgressCache';
-import { SyncResourceGovernor, type SyncResourceStatus } from './resourceGovernor';
+import { type SyncResourceStatus } from './resourceGovernor';
 import { readCloudIndexChanges } from './cloudIndexChanges.client';
 import { readNativeIndexChanges } from './streamingIndex';
 import { SyncConditionsWait } from './foregroundSyncContext';
@@ -102,12 +103,13 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			};
 			stopCleanup.install(saveStop); check();
 			if (adapter.platform === 'macos') releaseWindow = await holdDesktopSyncWindow(adapter.bridge); check();
-			const resources = reviewed.configuration.resourceLimits ? new SyncResourceGovernor(reviewed.configuration.resourceLimits) : undefined;
+			const resourceKey = deviceResourceKey(binding.origin, binding.ownerId, binding.deviceId);
+			const resources = deviceSyncGovernor(resourceKey, reviewed.configuration.resourceLimits);
 			let nativeResources: SyncResourceStatus | undefined;
-			const host = await createNativeSyncHost({ ...(resources ? { resourcePolicy: { resourceLimits: resources.limits, resourceScope: reviewed.id, observe: (value: SyncResourceStatus) => { nativeResources = value; resources.observe(value); } } } : {}), ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal, assertCurrent: check });
+			const host = await createNativeSyncHost({ ...(resources ? { resourcePolicy: { resourceLimits: reviewed.configuration.resourceLimits, resourceScope: reviewed.id, deviceResourceLimits: () => readDeviceSyncResourcePolicy(resourceKey), observe: (value: SyncResourceStatus) => { nativeResources = value; resources.observe(value); } } } : {}), ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal, assertCurrent: check });
 			if (host.origin() !== binding.origin) throw Error('The selected sync server changed.');
 			await host.requireCapability('api.things', reviewed.configuration.resourceLimits ? '1.39.0' : reviewed.configuration.ignoreRules ? '1.38.0' : '1.36.0');
-			if (resources) await host.requireCapability('api.file-sync-batches', '1.2.0');
+			if (reviewed.configuration.resourceLimits) await host.requireCapability('api.file-sync-batches', '1.2.0');
 			const downloadRequirements = fileSyncDownloadRequirements(reviewed.configuration);
 			for (const [feature, minimum] of Object.entries(downloadRequirements)) await host.requireCapability(feature, minimum);
 			if (Object.keys(downloadRequirements).length && !supportsNativeCloudStaging(host.capabilities)) throw Error('Update Thingtime before using a CPU target for downloads. This connection requires scoped native signed-range downloads.');
@@ -171,6 +173,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			disposeProgressCache = progressCache.dispose;
 			const publish = (progress: Parameters<typeof update>[0]['progress']) => {
 				check(); if (!progress) return;
+				progress = { ...progress, statisticsObservedAt: Date.now() };
 				if (resources) progress = { ...progress, resources: nativeResources ?? resources.status() };
 				update({ progress });
 				progressCache.write(progress);

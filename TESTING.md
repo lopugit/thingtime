@@ -108,6 +108,10 @@ checks apply to the current head; dated passing counts below are history.
 
 ## Agent browsers and editable tasks
 
+- [ ] Retain an acceptance fixture using its canonical keeper: verify immediate real renewal, matching descriptor/socket/lease directory, correct live relay and keeper PIDs, future lease expiry and unchanged bounded deadline before account work. Crossed paths or renewal errors must record failed status and stop without retry; a deadline stops only the verified task relay.
+
+- [ ] In the isolated acceptance viewer, fill a non-secret password sentinel, Select all, then type its replacement; verify exact equality, Backspace and Tab through the retained browser. A refused selection or failed frame must clear pending text and disable all input until explicit Refresh frame succeeds; no following edit may append silently. Verify vault-backed browser logout/login before native pairing.
+
 - [ ] Install the task suite, create a task, add/complete todos and append progress;
       compare the rendered records with API readback and reload both pages.
 - [ ] Exercise browser install, cancellation, duplication, exclusive claims,
@@ -5542,8 +5546,10 @@ halves.
 - [ ] In dedicated mode, confirm the deployment executes its own backend,
       advertises `gateway: null`, owns its pools, and refuses relayed traffic.
       Point a proxy worker at that dedicated alias and verify it fails closed.
-- [ ] Run the gateway suite with each bundled connection policy. Mode-specific
-      fixtures must select their mode explicitly, and runtime overrides must win
+- [ ] Run `test:environment-gateway` with each bundled connection policy, and
+      with an explicitly selected proxy policy, independently. Mode-specific and
+      alias-ownership fixtures must select their intended mode explicitly so
+      machine/build defaults cannot change them, and runtime overrides must win
       over either bundled default, so an opt-in branch can pass the same checks.
 - [ ] Verify unknown connection-mode values and incomplete gateway settings fail
       closed; Vercel defaults to proxy while a local/self-hosted server without
@@ -8463,6 +8469,25 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
+- [ ] Credential defaults: choose a catalog model and a saved ChatGPT connection
+      in Settings → Lopu; reload. Existing chats retain their override; new chats
+      use the device/account defaults. Another owner sees no previous choice.
+- [ ] In each composer gear, switch between two saved connections and Thingtime
+      credits. Compare the saved chat readback and actual provider receipt;
+      model/endpoint/billing labels match the selected connection. Revoked or
+      removed credentials never silently spend credits. Cold deep links and
+      background sends use the target conversation's choice.
+- [ ] Change a choice immediately before sending, refuse a save, queue rapid
+      selections and switch accounts while saving. Requests wait for saves;
+      a refusal cancels that send and stale responses cannot overwrite newer
+      choices or another account. Regression coverage: `test:lopu-ui`.
+- [ ] At desktop and 390px, scroll defaults and open chat settings top to bottom;
+      select credentials/models, reopen and reload. Edit nested label/control
+      blocks with Builder, save, reload and confirm credential actions still
+      work. Synthetic isolated fixture: `scripts/lopu-credentials.browser.html`
+      and `scripts/check-lopu-credentials-browser.cjs` (container-only).
+
+
 - [ ] GPT-6 Astra: choose provider-default, High and Max reasoning; only Low/Medium/High/Extra high/Max are offered, never None/Minimal/Ultra. On an authorized deployment, verify a plain reply and a harmless read-only tool round trip, keeping the selected model and effort. Native calls must use Responses with `store:false`; encrypted reasoning stays server-side and failed requests never retry with weaker reasoning. Reload to confirm saved model choices and terminal replies. Public catalogue 1.5.1 and reply 1.19.3 must agree in both manifests.
 
 - [ ] Action discovery: inspect an owned server/browser Action in Ask mode;
@@ -10811,6 +10836,13 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ### Cloud sync transport and interrupted execution
 
+- [ ] Refuse a file upload for an account without private-upload approval. The
+  retained run reports `403; upload-start; private_uploads_not_approved` without
+  exposing response text, paths or account details, and does not automatically
+  retry a policy refusal. Distinguish origin refusals and unknown responses;
+  cancellation/account changes must still take precedence. Provision approved
+  disposable upload accounts through the existing admin API before positive
+  byte-transfer acceptance; never bypass the approval gate.
 - [ ] Run `test:file-sync`: close/reopen IndexedDB after an accepted commit loses
   its response; resume with the same pinned folder/file identity and confirm that
   no source is opened and no bytes are uploaded again.
@@ -11443,6 +11475,12 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [x] Long names and content IDs fit 390px and 1280px browser layouts without overflow.
 - [x] Real API acceptance: serialized restore replay, original/current byte hashes,
   permission failures and canonical Timeline snapshots (`file-versions.integration.mts`).
+- [x] Joined Mac adapter + real HTTP acceptance: edit a native file, select its
+  original Timeline version, lose the accepted restore reply and retry exactly,
+  restart the native adapter, then sync and independently hash original local and
+  cloud bytes. Verify one restore event, stable File identity and no additional
+  transfers after convergence (`mac-file-sync.integration.mts`, paged/large-file
+  lane). This test uses injected picker/consent; it does not verify installed UI.
 - [x] Installed Android History/export/restore acceptance (checkpoints below).
 - [ ] Installed iOS and Mac History/download/restore acceptance; local device
   retained-version browsing and content-ID search across folders.
@@ -13458,6 +13496,108 @@ separate from deterministic discovery/lease tests.
 
 ## Device sync browsing and collapsed settings — 2026-10-22
 
+### Browser management and remote execution — 2026-10-23
+
+- [x] Native pairing capability bound regression (2026-10-26): bind and verify
+  the signature of a 65-capability claim, reject 129 capabilities and malformed
+  identifiers. Native normalization must match the backend's 128-entry limit.
+  The signed installed helper must also complete pairing on a fully equipped
+  Mac; a successful server prepare or native approval alone is insufficient.
+
+- Installed checkpoint, 2026-10-25: 331 Electron tests passed; canonical
+  Developer ID build/install and installed signature passed with an unchanged
+  designated requirement. Existing account and paused Home state survived.
+  After recovering a stuck native menu, the real macOS folder chooser granted
+  only the synthetic two-file fixture through the embedded Node app. Actual
+  browser-to-device transfer, recovery and window-close checks remain open;
+  see the PR 1216 note for the precise evidence boundary.
+- [x] Native folder selection: verify the exact synthetic directory and child
+  names in the macOS chooser, select it, then independently confirm the new
+  native root. Preserve the absent Home grant, paused state and existing draft.
+- [x] Private acceptance relay regressions: reject foreign/path-bearing origins,
+  incorrect Host headers and expired/released ownership. Keep generated test
+  credentials private and write bounded failure diagnostics with exclusive
+  owner-only permissions. Full suite: `node --test electron/test/*.test.cjs`.
+- [x] `node_middleware` regression: serve a fixture with the packaged entry's
+  export shape through the canonical desktop listener. Check real HTTP health
+  and static assets, and ensure exceptions return redacted errors. Actual
+  packaged-backend acceptance is tracked separately below.
+- [x] Actual packaged-backend readiness: the immutable image rendered its client
+  and passed manifest checks on the shared private loopback origin. Browser and
+  backend preflight confirmed no external routes and refused IPv4/IPv6 egress.
+  Every local Docker COPY input is staged and allowlisted; 13 focused tests pass.
+- [ ] Opt-in isolated upload fixture: rebuild the immutable image, launch the
+  relay with the exact disposable username as fourth argument and register that
+  user in the bound browser. Verify canonical admin bootstrap registration
+  precedes its supervised API-only restart, ordinary launches remain unchanged,
+  and network preflight rejects the option outside isolation. Check the actual
+  test user's `/api/v1/auth/me`: full user, non-admin, private uploads enabled,
+  public uploads withheld. Wrong targets, API errors and timeout must fail closed;
+  no bootstrap credentials/session/signing material may appear in output. Run
+  `node --test electron/test/agent-browser-application.test.cjs`. This prerequisite
+  does not prove native pairing, transferred bytes or active window continuity.
+- [ ] Run the same-browser/backend installed acceptance in
+  `docs/installed-sync-acceptance.md`. Verify the enforced network boundary,
+  disposable full-account registration, genuine installed Node pairing, actual
+  byte hashes and restoration of the original endpoint/session before cleanup.
+- [ ] Acceptance viewer: run `node --test electron/test/acceptance-viewer.test.cjs`;
+  exercise the actual local GUI against its bound isolated tab at port 28671.
+  Verify masked credential entry clears on submission/focus loss, off-origin
+  input is refused, frames/clicks/keyboard/scroll/mobile viewport work, and
+  quitting removes only its private viewer profile while retaining the relay.
+  Keep other controllers idle during credential entry. Unit boundaries alone
+  do not prove sign-in or installed-device sync.
+- [x] Electron viewer startup regression: recognize the explicit script when
+  Electron owns `require.main`, keep imports side-effect free, and launch the
+  actual installed Electron binary to verify that the GUI appears. The focused
+  suite passes 11 tests; actual disposable full-account registration through
+  the viewer also passed. This does not prove installed native file transfer.
+- [ ] On the signed Mac, negotiate the selected origin through the actual
+  desktop folder host. Confirm `api.devices-sync-control` survives its
+  allowlisted projection so the remote worker can start. Missing/malformed
+  versions and foreign-origin manifests must still fail closed. Run
+  `node --test electron/test/folder-sync.test.cjs` for this boundary regression.
+- [ ] Build from a fresh worktree with missing Remix dependencies. The canonical
+  Electron build must repair them before staging the mail/database resources,
+  without manual dependency copying or weakening the signed build checks.
+- [ ] In a fresh browser without an Electron bridge or local pairing, open an
+  owned device's dedicated sync page and expand Manage sync connections. Verify
+  saved connections, all configuration fields, drafts and revision-conflict
+  recovery at desktop and narrow mobile widths. Reload a saved change.
+- [ ] Disconnect the target device. Existing unchanged folder bindings remain
+  editable; changing a device root requires live verification. Keep saved data
+  visible and distinguish offline/timeout from an empty list or successful job.
+- [ ] Run the updated installed app on the paired device and use another
+  browser/computer to request folder selection, add a connection, start/pause/
+  resume a transfer, change an automatic interval and review live progress.
+  Native selection/permission dialogs must appear on the target device. Closing
+  the browser must leave device-owned work running; reconnect and inspect it.
+- [ ] Exercise remote conflict review, paged progress/coverage, upload priority
+  revision conflicts and recoverable file restoration. Verify current native
+  state against the browser and confirm that file bytes remain on the native
+  transfer path.
+- [ ] Sign out, switch accounts/origins/storage and revoke pairing during
+  pending requests. Old callbacks must not mutate the new view, and foreign,
+  temporary, app, Character and scoped-token callers must be refused. Repeated
+  request IDs must not replay native operations; crashed claims expire.
+- [ ] Edit nested remote headings, buttons and repeated connection fields in
+  Builder, save/reload, then exercise their live bindings. Run
+  `node remix/scripts/test-remote-device-sync-ui.mjs` for synthetic browser
+  regressions; record installed-device acceptance separately.
+
+- [ ] Folder sync cards start collapsed on desktop and phone. Only the selected
+  folder exposes its settings; optional details remain collapsed. Enter valid
+  and temporarily invalid form values, switch cards, collapse the parent, then
+  reopen: drafts, interval and unsaved upload priorities must survive without
+  saving or starting transfers. Hidden progress viewers must stop their work.
+  Edit the title and disclosure control independently in Builder.
+- [ ] On the signed Mac, verify a selected ordinary folder displays its actual
+  absolute source path. Explicitly save a new connection with no destination:
+  confirm private Folder Things reproduce that hierarchy and retries reuse the
+  same IDs. Existing destinations must never be moved. Denied/stale bookmarks,
+  Photos, missing location capability and older remote servers must not invent
+  paths or gain parent-directory access. Keep the existing Home connection paused.
+
 - [ ] In grid, list and columns, single-click or Enter/Space opens a device’s saved cloud folders; modifier-click or its hover/focus checkbox selects it. Its three-dot hover/focus menu and right-click open device actions. Touch shows both controls. The context menu offers synced files, full settings and quick settings.
 - [ ] Compare saved roots with private file-sync configuration records for the active owner/device. Opening an offline device must not start a transfer or grant filesystem access; cloud-folder descendants use ordinary Things permissions.
 - [ ] Fresh drawer and settings page start with every section collapsed. Verify the drawer Close and expand-to-page buttons have separate 44px targets and both work. Open File sync & backup, live filesystem and long sections on desktop/mobile, scroll top to bottom, and check focus, overflow and reduced motion. Legacy version-1 expansion flags reset once while width survives; explicit version-2 choices remain respected.
@@ -13525,7 +13665,12 @@ separate from deterministic discovery/lease tests.
   cursors and cancels pending reads on account change/unmount.
 
 - Device sync correction: a fresh dedicated sync page keeps Manage sync connections collapsed; the Thing page exposes Parent paths with raw Thing data switched off. Explicit scanning remains required.
+
 # Prebuilt-only Vercel deployments (2026-10-23)
+
+- The sync coalescing change-storm regression waits for the actual trailing read
+  with a bounded test timeout; it must not assume a busy runner schedules it
+  before a separate five-millisecond timer.
 
 - Run `node --test scripts/vercel-root-flow.test.mjs`: all source-build ignore
   decisions skip, remote source compilation refuses, and symlinks survive
@@ -13540,6 +13685,11 @@ separate from deterministic discovery/lease tests.
   stable domains. Inspect the source-build controls and confirm no native Git
   link or source deploy hook remains. A repeated unchanged request must skip
   compilation. Keep production runtime charges distinct from build charges.
+
+### Noninteractive Mac adapter transfer regression — 2026-10-29
+
+- Run the three-test command in `docs/installed-sync-acceptance.md#noninteractive-native-regression-lane` without opening the installed app or approving a pairing popup. Require independent SHA-256 equality for native reads and published writes, staging offset preserved across adapter restart, one injected test approval, idempotent publication, exact saved-approval fences and explicit backup cancellation/restart.
+- Keep synthetic cloud-byte fixture evidence separate from `test:files:mac-paged` real HTTP transfers and signed installed pairing/permission/window-close acceptance. Never add a shipped autoapproval switch or modify the user's pairing store to make this lane pass.
 
 ## Editable Mapbox maps and route planning
 
@@ -13780,6 +13930,18 @@ separate from deterministic discovery/lease tests.
   AA on their actual light/dark card backgrounds.
 
 
+### Mac symlinks and collapsed connection progress — 2026-11-03
+
+- [x] Preserve opaque relative, absolute, broken, looping and non-UTF8 link targets through native scan/read and cloud metadata; distinguish an ordinary file containing the same bytes. Do not follow a link or a symlink ancestor outside the selected grant.
+- [x] Run AppleFileSync with the freshly built real Commander indexer and an explicitly selected disposable FAT volume: 133 tests passed, no skips. Exercise native links, target-encoding fallback, ordinary-file/link replacement, lost final replies, restart, interruption after displacement, concurrent writers and Trash/restore. Dispose only the owned image after checks.
+- [x] Verify actual atomic-exchange semantics using owned probe inodes before replacement. macOS msdosfs can report success for RENAME_SWAP while discarding the displaced entry. Unsupported or incorrect exchange uses a durable, exclusive two-step replacement that can temporarily leave the destination name absent; it retains the prior inode and refuses an intervening writer.
+- [x] A fallback is inert `thingtime-symbolic-link-fallback-v1` JSON with `originalKind`, exact `symbolicLink` metadata and `former-symbolic-link` tags. Automatic recognition requires a matching native receipt; an arbitrary same-shaped user file is not activated. Permission, disk-full and generic I/O errors do not silently trigger fallback.
+- [x] Desktop History Save As preserves raw link targets or an explicit portable fallback. Run `node --test electron/test/file-export.test.cjs electron/test/file-export-link-publisher.test.cjs`; the optional `THINGTIME_FILE_EXPORT_FAT_TEST_DIRECTORY` must name an owned mounted test volume. All 18 checks passed with the actual FAT fixture enabled, including full Save As, non-UTF8 encoding refusal, a renamed ancestor, immutable metadata/bytes, existing names, cancellation, account/origin changes, child disconnect and concurrent-writer preservation. On FAT, an interrupted fallback copy retains its verified private candidate and reports that the folder must be checked before retry; it never deletes an uncertain final name. The short-lived publisher pins the chosen directory as its working directory. Normal v1.0 exports remain compatible; tagged exports require fileExportVersion 1.1 and api.files 1.9.
+- [x] A real HTTP/native round trip preserves symbolic-link metadata through durable inventory and run-journal reopen, regular/link transitions with identical bytes, lost replies, process restart and Timeline restore. Links use scalar file writes; current bulk digest contracts must not admit tagged links.
+- [x] Per-connection progress uses separate exact upload/download byte totals and confirmed operation counts. Normal read-only legacy journal calls do not initiate migration. Resume migration is coalesced, paged, cancellable and fenced by revision/instance; stale file callbacks cannot increase the durable percentage or reduce unconfirmed bytes.
+- [ ] Final installed acceptance: compare native link target bytes, per-folder directions/rates, device aggregate measurements and Timeline restore with independent local/cloud evidence. Keep Home paused and DJ DODA automatic sync off. Production must advertise the required link/device-control capabilities before dependent work starts.
+
+- Signed Mac build prerequisites: verify a missing or incomplete `electron-builder` is repaired once with the exact pinned pnpm and frozen lockfile before web/native resource builds begin. A healthy install must not reinstall; failed or ineffective repair must stop immediately. `electron/test/build-dependencies.test.cjs` covers the boundary.
 ### Password preview Website icons
 
 - Save two Website/URL fields: first missing/broken icon, second usable public

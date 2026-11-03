@@ -16,7 +16,7 @@ import {
 } from './reconcile';
 import { parseCloudInventoryNode, type CloudInventoryNode } from './cloudInventory';
 
-export const UPLOAD_BATCH_REQUIREMENTS = { 'api.file-sync-batches': '1.2.1' } as const;
+export const UPLOAD_BATCH_REQUIREMENTS = { 'api.file-sync-batches': '1.3.0' } as const;
 export const UPLOAD_BATCH_FILES = 256;
 export const UPLOAD_BATCH_FILE_BYTES = 256 * 1024;
 export const UPLOAD_BATCH_BYTES = 32 * 1024 * 1024;
@@ -99,6 +99,7 @@ const invalid = () => Error('Invalid immutable upload batch.');
 export const eligibleUploadBatchEntry = (entry: SyncEntry): boolean =>
 	validSyncEntry(entry) &&
 	entry.kind === 'file' &&
+	entry.symbolicLink === undefined &&
 	entry.size > 0 &&
 	entry.size <= UPLOAD_BATCH_FILE_BYTES &&
 	entry.sha256 === null &&

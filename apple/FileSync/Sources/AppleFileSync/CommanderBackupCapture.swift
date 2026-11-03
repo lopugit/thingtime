@@ -14,6 +14,7 @@ extension MobileFolderReader {
         let resourceLimits: Limits
         let resourceFeedback: Bool
         let cpuBudgetShares: Int
+        let scanBytesPerSecond: Double?
         struct Limits: Encodable {
             let maxThreads: Int, maxParallelism: Int, maxOpenDirectories: Int
             let maxCpuPercent: Int, maxMemoryMiB = 512
@@ -62,7 +63,7 @@ extension MobileFolderReader {
                 }
             }
             let request = CommanderRequest(streaming: streaming ? true : nil, root: String(cString: path), rootIdentity: "\(rootInfo.st_dev):\(rootInfo.st_ino)",
-                excludedPaths: exclusions, ignoreRules: rules.text, resourceLimits: .init(resourceLimits), resourceFeedback: resourceLimits != nil, cpuBudgetShares: resourceLimits?.cpuPercent == nil ? 1 : 3)
+                excludedPaths: exclusions, ignoreRules: rules.text, resourceLimits: .init(resourceLimits), resourceFeedback: resourceLimits != nil, cpuBudgetShares: resourceLimits?.cpuPercent == nil ? 1 : 3, scanBytesPerSecond: SyncScanContext.helperBytesPerSecond)
             var requestData = try JSONEncoder().encode(request); requestData.append(10)
             try input.fileHandleForWriting.write(contentsOf: requestData)
             if !streaming { try input.fileHandleForWriting.close() }
@@ -82,13 +83,23 @@ extension MobileFolderReader {
                     helperSequence += 1
                     guard let entry = event.entry else { throw Failure.storage }
                     _ = try components(entry.path)
+                    if try NativeSymbolicLinks.isWithinOwnedJournal(root, path: entry.path) { try ignored(); return }
                     let key = entry.path.precomposedStringWithCanonicalMapping.lowercased()
                     guard !exclusions.contains(where: { key == $0 || key.hasPrefix($0 + "/") }),
                           !rules.ignores(entry.path, isDirectory: entry.kind == "folder") else { throw Failure.storage }
                     do {
                         let current = try openPath(root, path: entry.path); defer { close(current) }
                         let stat = try info(current), type = stat.st_mode & S_IFMT
-                        guard stamp(stat) == entry.version, entry.id == "\(stat.st_dev):\(stat.st_ino)",
+                        if let bytes = try NativeSymbolicLinks.bytes(current) {
+                            let checked = try Self.entry(current, path: entry.path)
+                            // Native receipt provenance also recognizes an inert fallback
+                            // that the portable helper correctly sees as an ordinary file.
+                            guard stamp(stat) == entry.version, checked.id == entry.id,
+                                  type != S_IFLNK || (entry.symbolicLink == checked.symbolicLink && entry.fingerprint == checked.fingerprint),
+                                  checked.size == bytes.count else { throw Failure.changed }
+                            _ = try append(checked); return
+                        }
+                        guard entry.symbolicLink == nil, stamp(stat) == entry.version, entry.id == "\(stat.st_dev):\(stat.st_ino)",
                               (entry.kind == "folder" && type == S_IFDIR && entry.size == 0 && entry.sha256 == nil && entry.fingerprint == nil) ||
                               (entry.kind == "file" && type == S_IFREG && entry.size == stat.st_size && validCommanderDigest(entry)) else { throw Failure.changed }
                         _ = try append(entry)
@@ -97,6 +108,7 @@ extension MobileFolderReader {
                 case "skipped":
                     helperSequence += 1
                     guard let gap = event.gap else { throw Failure.storage }
+                    if let path = gap.path, (try? NativeSymbolicLinks.isWithinOwnedJournal(root, path: path)) == true { try ignored(); return }
                     let value = BackupGap(path: gap.path, reason: gap.reason, scope: gap.scope)
                     guard value.path == gap.path, value.reason == gap.reason, value.scope == gap.scope else { throw Failure.storage }
                     try skip(value)
