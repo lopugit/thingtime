@@ -1,0 +1,84 @@
+# Sharing and audiences
+
+Who may read a Thing is decided by its `acl` (v2) — `tt:all`, `tt:user`
+(owner only), `tt:userFriends`, `tt:userFamily`, `tt:hidden` (anyone with the
+canonical link), `tt:custom` + `tt:user/<name>[/comment|/write]` and
+`tt:group/<id>` grants, `tt:inherit` (children follow their target). Legacy
+`visibility` maps onto `acl` at read time.
+
+## Where the code lives
+
+| Concern | Path |
+| --- | --- |
+| ACL evaluation (`canView`, `canViewInherited`, `aclAllows`, inherit chains) | `app/api/utils/things/things.ts` |
+| Viewer shape and enrichment (`viewerOf`, `withFriendIds`, `withLinkKeys`, `withThingLink`) | `app/api/utils/things/things.ts` |
+| Hidden-post discovery receipts (anonymous browser identity) | `app/api/utils/things/foundPosts.ts`, `foundPostRequest.ts`, `app/hooks/foundPostIdentity.client.ts` |
+| ACL grammar, constants, `visibilityFromAcl`, `aclFromVisibility` | `app/schemas/registry.ts` |
+| Custom audiences UI (compose `tt:custom` ACLs) | `app/components/Feed/CustomAudienceModal.tsx` |
+| Audience labels, share paths (`sharePathForThing`, `thingPath`) | `app/components/Sharing/audienceCore.ts` |
+| Shared compositions (pages/components embedding media), collaborator writes | `app/api/utils/actions/sharedComposition.ts`, `compositionMediaCore.ts`, `forkCompositionCore.ts` |
+| Fork / private copy of shared Things | `app/components/Sharing/forkThingCore.ts`, `ForkSharedThingButton.tsx`, `app/routes/api/v1/things/fork` |
+| Shared-link context in the client (`key`, `sharedRoot`) | `app/components/Sharing/SharedMedia.tsx`, `sharedMediaCore.ts` |
+| Canonical link copying (never leaks legacy keys) | `app/components/Thingtime/ContextMenu/thingEntityLink.ts` |
+
+## Authorization helper
+
+- Single Thing reads: `findViewableThing(id, viewer)` — enriches friends,
+  applies `withThingLink` (knowing an unlisted Thing's canonical id is the read
+  capability) and `canViewInherited`.
+- Lists/pages: filter with `canViewInherited` per doc; never disclose a child
+  because its target is viewable when the child carries its own ACL.
+- Attachments: the target's ACL via `canViewHomeAttachmentTarget` (see
+  [attachments-and-media.md](attachments-and-media.md)).
+- Engagement on `tt:custom` Things needs the comment capability; shared editing
+  needs write. Saves are private bookmarks and exempt.
+
+## Decisions to respect
+
+- Canonical URLs authorize unlisted Things (PR #860): share controls emit the
+  plain permalink, never `?key=`. Legacy keyed URLs still work while the ACL
+  says hidden. Removing `tt:hidden` revokes anonymous access immediately.
+- Folder audience never leaks into folder contents; each child is judged on
+  its own inherited ACL.
+- A shared read-only action or page cannot mint grants from visitor input,
+  query values, labels or condition operands.
+- Private copies (`fork`) need fresh owned identities and rewritten media
+  bindings; copying a copy must work.
+
+## UI entry points
+
+- Post menu privacy submenu and hidden-link toast: `app/components/Feed/PostThingMenu.tsx`, `PostCard.tsx` (`handleVisibilityChange`).
+- `/things` share dialog (folder audience, optional recursive apply): `app/components/Things/ThingsDialogs.tsx` `ShareDialog`.
+- Audience chip text: `audienceDescription` in `audienceCore.ts`.
+
+## Tests
+
+- `npm --prefix remix run test:acl` (inherit chains), `test:feed`
+  (`hiddenLinkContract.test.ts`, audience stacking), `test:actions`
+  (shared compositions), `test:things`.
+- `TESTING.md`: "Post interactions & inherit chains", "Things page" (share
+  dialog), sharing sections under the attachments and webpages checklists.
+
+
+Branch visual previews use `webpages/componentPreview.ts`: caller-authored
+blocks never supply an inherited root audience. Resolution is batched under
+the actual viewer in the selected data plane; guessed private components
+return missing refs. Branch audience edits are version content, not a live
+sharing operation. See the visual branch checks in `TESTING.md`.
+
+
+Timeline page versions retain readable component definitions as owner-private
+`component-binding` events. Capture uses the same batched page resolver and
+inherited audience rules, then projects only id/crystal. It never borrows another
+owner's private Timeline, credentials, grants or hidden-link keys. A retained
+readable definition is a private point-in-time copy after source revocation;
+subsequent captures reevaluate access. `test:timeline:components` checks both
+retention and refused guessed private refs. Historical previews do not execute
+Actions or live data; they do not grant access to linked media or nested sources.
+
+
+Named-branch merge previews read only that owner's retained capture records,
+validate exact linked event/Thing identities, and never resolve current components
+as a historical fallback. Choosing a definition changes the private branch event's
+links, not live sharing or the source component. Preview Actions and sources
+stay inert. The ordinary owner/source fences apply to comparison and upload.

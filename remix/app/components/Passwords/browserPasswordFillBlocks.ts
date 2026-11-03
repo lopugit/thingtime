@@ -1,0 +1,15 @@
+import type {WebpageBlock} from '../Builder/webpageBlocks';
+import {passwordBrandingMigration} from './passwordBrandingBlocks';
+const e=(id:string,tag:string,text='',props:Record<string,unknown>={},children?:WebpageBlock[]):WebpageBlock=>({id:`vf-${id}`,type:'element',tag,props,...(text?{text}:{}),...(children?{children}:{}),css:{'margin-bottom':'12px','overflow-wrap':'anywhere','line-height':'1.5',...(tag==='label'?{display:'block',width:'100%'}:{}),...(tag==='section'?{display:'flex','flex-direction':'column',gap:'12px'}:{}),...(tag==='h1'?{'font-size':'28px','font-weight':'600'}:{}),...(['button','input'].includes(tag)?{padding:'12px',width:'100%',display:'block','box-sizing':'border-box','min-height':'44px',border:'1px solid var(--tt-border, #ddd)','border-radius':'10px',background:'var(--tt-card, white)',font:'inherit'}:{})}} as WebpageBlock);
+const condition=(id:string,path:string,children:WebpageBlock[]):WebpageBlock=>({id:`vf-${id}`,type:'condition',condition:{arg:path,equals:true},children} as unknown as WebpageBlock);
+const button=(id:string,text:string,action:string)=>e(id,'button',text,{type:'button','data-tt-action':'$transient','data-tt-action-inputs':{operation:action},disabled:'{result.busy}'});
+export const BROWSER_PASSWORD_FILL_BLOCKS=passwordBrandingMigration('vf-heading')([
+ e('root','section','',{'aria-label':'Thingtime password approval'},[
+ e('heading','h1','{result.title}'),e('site','p','{result.origin}'),e('account','p','{result.account}'),
+ condition('password-needed','result.required',[e('password-label','label','Verify with your Thingtime account password',{htmlFor:'vault-fill-password'}),e('password','input','',{id:'vault-fill-password',name:'password',type:'password',autoComplete:'current-password','aria-label':'Thingtime account password',disabled:'{result.busy}'})]),
+ condition('import','result.importing',[e('title-label','label','Name this authenticator',{htmlFor:'vault-import-title'}),e('title-input','input','',{id:'vault-import-title',name:'title',defaultValue:'{result.defaultTitle}','aria-label':'Authenticator name'}),e('website-label','label','Website (optional)',{htmlFor:'vault-import-website'}),e('website-input','input','',{id:'vault-import-website',name:'website',type:'url',placeholder:'https://example.com','aria-label':'Authenticator website'}),e('import-description','p','Review this local TOTP setup. Only Save stores it in your Thingtime vault; it never returns to the website.')]),
+ condition('error','result.hasError',[e('error-message','p','{result.error}',{role:'alert'})]),
+ e('privacy','p','{result.privacy}'),
+ button('approve','{result.approveLabel}','vault.approve'),button('cancel','Cancel','vault.cancel'),condition('preferences','result.canPreferences',[e('preferences-button','button','Password confirmation preferences',{type:'button','aria-expanded':'{result.preferencesOpen}','aria-controls':'vault-preferences','data-tt-action':'$transient','data-tt-action-inputs':{operation:'vault.preferences'}})]),
+ ])
+]);

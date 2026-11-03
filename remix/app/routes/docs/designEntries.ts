@@ -22,6 +22,20 @@ export const designKindColors: Record<DesignEntryKind, { bg: string; color: stri
 
 export const designEntries: DesignEntry[] = [
   {
+    slug: 'thingtime-history-timeline',
+    title: 'History timeline — /history and the contextual History panel',
+    kind: 'App',
+    summary: 'Design concept: one timeline of every change with the Thing card as it was, property diffs, and the message that explains why.',
+    notes: 'Interactive: Scope (Everything / This Thing / Page + related) × Look (List / Cards / Line / Frames) on one browser, filter chips, a 30-day scrubber, a detail panel (bottom sheet on phones), restore/undo/variation that only append, an offline → synced simulation, review-and-combine merge review, History settings; variations are lanes in every look. Fictional data.'
+  },
+  {
+    slug: 'thingtime-history-evolution',
+    title: 'Evolution view — one Thing, left to right',
+    kind: 'App',
+    summary: 'Design concept: the alternative history browser view — the Thing\'s cards over time, alternating above and below a spine that fills as you scrub or play; plus a classic Line look and a Frames filmstrip.',
+    notes: 'Cards look (default): the Thing rendered as of each version with an edit callout, cards alternating above/below a rainbow progress spine, later cards faded until reached, moments as dots, a dashed variation row, a minimap and Comfortable/Compact density. Line look (nodes on one line, labels alternating, quiet day axis) and Frames look (filmstrip with chips on the connectors); real-time vs even spacing; keyboard ←/→, Home/End, Space; compare any two versions. Fictional data.'
+  },
+  {
     slug: 'thingtime-algorithm-growth',
     title: 'Algorithm growth — raise your feed brain',
     kind: 'App',
