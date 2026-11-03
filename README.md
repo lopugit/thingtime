@@ -1534,8 +1534,11 @@ on the same document. Docs: `/docs/api` → things.
 
 Administrators can inspect **Admin → MongoDB connections** at
 `/admin/mongodb-connections`, also available in Settings → Admin. Editable cards
-show instrumented runtime/deployment sources, pool lifecycle counts and freshness;
-database-reported totals are separate and may be unavailable on the selected tier.
+group observed clients by deployment, showing in-use and idle application sockets,
+a clearly labeled monitoring/handshake model, and the API features using each
+shared client. Runtime and pool details explain concurrency and idle retention.
+Database-reported totals remain separate and may be unavailable on the selected tier;
+loaded observations and models are not an exhaustive live Atlas count.
 This uses the existing home MongoDB/auth configuration and admin allowlist, with
 no new provider secret or Vercel variable. See [connection inventory](docs/mongodb-connections.md)
 for privacy, attribution limits, fork setup and real-API verification.

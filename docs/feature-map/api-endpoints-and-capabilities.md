@@ -1,10 +1,13 @@
 # API endpoints and capabilities
 
-`api.admin-mongodb-connections` 1.0.0 registers the private administrator
+`api.admin-mongodb-connections` 1.1.0 registers the private administrator
 `GET /api/v1/admin/mongodb/connections` in the docs registry and Nitro map.
 The shared `useApi` client negotiates it against the selected origin. Its reply
 separates optional selected-server totals from paginated runtime/pool observations
-and explicitly declares incomplete coverage. Run `test:mongodb-connections`,
+and explicitly declares incomplete coverage. Optional monitoring topology models,
+pool retention settings and allowlisted cumulative request-feature use explain
+deployment costs without claiming measured monitoring or exclusive socket use.
+Run `test:mongodb-connections`,
 `test:api-capabilities` and `scripts/mongodb-connections-acceptance.mjs`; see
 [connection inventory](../mongodb-connections.md).
 
