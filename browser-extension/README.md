@@ -3,7 +3,8 @@
 On macOS, use the signed native Thingtime Password AutoFill provider first. Chrome
 can use the system provider without this extension. This optional browser adapter
 handles public WebAuthn requests through the existing Thingtime approval page; it
-does not communicate with the native host or fill password forms.
+does not communicate with the native host. Its explicit password-form flow is
+documented below.
 
 Unpacked Manifest V3 Chromium extension. It is **off by default**. Its action popup
 lets the user explicitly enable passkey interception, select their trusted Thingtime
@@ -78,8 +79,9 @@ objects and `instanceof PublicKeyCredential` is not promised. Native authenticat
 hardware/UV/attestation semantics cannot be synthesized by this extension.
 
 Host access to HTTPS websites is required to install the WebAuthn hook there. The
-extension does not scrape forms, autofill passwords, inspect cookies or read vault
-contents. Public challenges, credential IDs and signatures transit memory only.
+WebAuthn path does not inspect form values, cookies or vault contents. Public
+challenges, credential IDs and signatures transit memory only. The separate
+explicit password-form flow below uses its owned authenticated provider page.
 
 ## Provider page contract (version 1)
 
@@ -190,7 +192,7 @@ Saved accounts appear above the workspace tabs, with the saved username/email
 under each title. Matching hosts sort first; search also finds other saved
 accounts. Autofill stays unavailable for other hosts. Connect vault opens an
 owned first-party Thingtime popup; credentials are obtained only there through
-the negotiated `api.passwords` 1.5 confirmation/fill contract. The extension
+the negotiated `api.passwords` 1.6.1 confirmation/fill contract. The extension
 never reads a browser cookie or makes an authenticated cross-origin vault fetch.
 
 On supported top-level login forms, the tree chip appears at the top center and
@@ -201,6 +203,18 @@ refused; navigation, retargeting, changed field identities and account changes
 invalidate delivery. Config can disable account chips. Passkey approvals now use
 a dedicated resizable popup with the configured opening size/font; a returned
 request targets its original document/window, never another tab found by URL.
+
+The chooser remains within an active website modal's accessibility/focus scope,
+including transformed or clipped dialogs. Tab stays in the chooser and Escape
+closes it before the website handles its own Escape. If an already-open site
+retains an invalidated extension context after an update, it offers explicit
+**Reload website** guidance rather than a raw runtime error; reloading is never
+automatic and can discard unsaved site edits.
+
+Saved bare Website hosts mean HTTPS. Discovery may match a hostname, but the
+server still verifies the selected entry's exact saved HTTPS origin, including
+its port, with the live account/session and required approval. A host suggestion
+does not grant fill access. Wildcard or userinfo-bearing values are refused.
 
 The account catalog is allowlisted metadata held in memory while its owned
 provider document is live. Closing/locking that connection clears it. Passwords,

@@ -20,7 +20,18 @@
     if(action.origin!==location.origin||action.username||action.password||!['https:','http:'].includes(action.protocol))return null;
     return {form,password:passwords[0]||null,username:users[0]||null,actionOrigin:action.origin};
   }
-  function candidates(){return [...document.querySelectorAll('form')].map(inspect).filter(Boolean);}
+  const modalSelector='dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]';
+  function activeModal(){return [...document.querySelectorAll(modalSelector)].filter(visible).at(-1)||null;}
+  function placeHost(){
+    // Keep controls in the website's active modal accessibility/focus scope.
+    // A manual popover retains viewport positioning above transformed/clipped
+    // modal containers without modifying the website's styles or ARIA tree.
+    const parent=activeModal()||document.documentElement;
+    const popover=typeof host.showPopover==='function';
+    if(host.parentElement!==parent){if(popover&&host.matches(':popover-open'))host.hidePopover();parent.append(host);}
+    if(popover&&!host.matches(':popover-open'))host.showPopover();
+  }
+  function candidates(){return [...(activeModal()||document).querySelectorAll('form')].map(inspect).filter(Boolean);}
   function formId(form){let id=ids.get(form);if(!id){id=crypto.randomUUID();ids.set(form,id);forms.set(id,form);}return id;}
   function clearPanel(){panel?.remove();panel=null;if(!dead&&opener?.isConnected)opener.focus();opener=null;}
   async function choose(selected,trigger){
@@ -35,10 +46,15 @@
       status.textContent=list.length?'Choose an account. Thingtime never submits the form.':'No account is saved for this website. Search all accounts in the Thingtime workspace.';
       for(const entry of list){const b=document.createElement('button');b.className='account';const name=document.createElement('strong');name.textContent=entry.title||'Saved account';const sub=document.createElement('span');sub.textContent=entry.username||'No saved username';b.append(name,sub);b.addEventListener('click',async event=>{if(!event.isTrusted)return;b.disabled=true;status.textContent='Complete any required verification in Thingtime.';const filled=await chrome.runtime.sendMessage({action:'vault-fill',entryId:entry.id,formId:formId(selected.form)}).catch(()=>null);if(panel!==current)return;if(filled?.ok)clearPanel();else{status.textContent=filled?.error||'Autofill did not complete. Try again.';b.disabled=false;}});current.append(b);}
       const all=document.createElement('button');all.textContent='Open password workspace';all.addEventListener('click',event=>{if(event.isTrusted)void chrome.runtime.sendMessage({action:'vault-open-workspace'});});current.append(all);
-    }catch(error){if(panel===current)status.textContent=error.message;}
+    }catch(error){if(panel===current){
+      const stale=/extension context invalidated|receiving end does not exist|could not establish connection/i.test(String(error?.message));
+      status.textContent=stale?'Thingtime was updated or reloaded. Reload this website to reconnect.':'Open Thingtime from the toolbar to reconnect, then choose the account again.';
+      if(stale){const reload=document.createElement('button');reload.textContent='Reload website';reload.addEventListener('click',event=>{if(event.isTrusted)location.reload();});current.append(reload);}
+    }}
   }
   function render(){
     if(dead)return;
+    placeHost();
     for(const [id,form] of forms)if(!form.isConnected)forms.delete(id);
     const list=enabled?candidates():[],desired=new Map();
     if(list.length){desired.set('top',{value:list[0],field:null});for(const value of list)for(const field of [value.username,value.password].filter(Boolean))desired.set(field,{value,field});}
@@ -51,9 +67,10 @@
   }
   let scheduled=false;const schedule=()=>{if(!scheduled&&!dead){scheduled=true;requestAnimationFrame(()=>{scheduled=false;render();});}};
   const observer=new MutationObserver(schedule);
-  function start(){if(!document.documentElement)return;document.documentElement.append(host);observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['type','autocomplete','action','hidden','disabled','readonly']});schedule();}
+  function start(){if(!document.documentElement)return;if(typeof host.showPopover==='function'){host.popover='manual';host.style.cssText='margin:0;padding:0;border:0;background:transparent;overflow:visible;';}placeHost();observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['type','autocomplete','action','hidden','disabled','readonly','open','role','aria-modal','aria-hidden']});schedule();}
   if(document.documentElement)start();else document.addEventListener('DOMContentLoaded',start,{once:true});
-  window.addEventListener('scroll',schedule,{passive:true});window.addEventListener('resize',schedule);document.addEventListener('keydown',e=>{if(e.key==='Escape')clearPanel();});
+  window.addEventListener('scroll',schedule,{passive:true});window.addEventListener('resize',schedule);
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&panel){event.preventDefault();event.stopPropagation();clearPanel();}},true);
   const state=async()=>{try{const s=await chrome.runtime.sendMessage({action:'state'});enabled=s.autofillEnabled!==false;schedule();}catch{enabled=false;schedule();}};void state();chrome.storage.onChanged.addListener(state);
   document.addEventListener('thingtime:password-vault-ready',()=>void chrome.runtime.sendMessage({action:'vault-provider-ready'}).catch(()=>{}));
   document.addEventListener('thingtime:password-vault-response',event=>{const m=detail(event);if(m?.version!==1||m.id!==providerActive)return;providerActive=null;void chrome.runtime.sendMessage({...m,action:'vault-provider-response'}).catch(()=>{});});

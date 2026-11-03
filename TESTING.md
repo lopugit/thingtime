@@ -10500,6 +10500,37 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Browser autofill modal and reconnect: open a website's current-password
+  verification modal, then open Thingtime's inline chooser. Ensure it remains
+  visible, in the active dialog's accessibility scope, with Tab wrapping inside;
+  Escape closes only the chooser and returns to its opener. Selecting an account
+  never submits the site form. Replace/reload the extension, then open its chip
+  in an existing site tab: show safe reload guidance and an explicit Reload
+  website control, preserving unsaved fields until the user chooses to reload.
+  Check 1440px and 390px, long metadata, top-to-bottom scrolling, normal and
+  stale-context states. `scripts/password-autofill-modal.browser.html` provides
+  a disposable runtime mock over the canonical content script; it does not
+  prove a real vault fill or production extension update.
+- [ ] Saved Website normalization: a bare `thingtime.com` entry is discovered
+  for HTTPS and verified through the same normalizer. Exact subdomain and port
+  still apply at fill authorization; wildcard/userinfo/non-HTTPS/malformed values
+  cannot authorize it. Test missing/old/breaking capabilities and refuse fill
+  until `api.passwords` 1.6.1 is available. Confirm revoked or replaced sessions
+  and changed entries still reject the operation; no saved record is migrated.
+
+- [ ] Password copy: in an authorized synthetic entry, activate **Copy Password**
+  by mouse and keyboard while masked and shown. Verify the exact current draft
+  is written, the visibility state and edit/save state are unchanged, and only
+  secret-free status appears. Check multiple/custom password fields and empty
+  values. Deny clipboard access and test an unavailable Clipboard API: show a
+  safe error without the exception text or password, then retry successfully.
+  Mask/close/edit/switch entries while a write is pending: stale status must not
+  appear in the next draft. Passkey signing fields have no Copy control. Check
+  desktop and 390px top-to-bottom, long labels, failure wrapping and focus.
+  `scripts/password-copy.browser.html` exercises the actual shared fields
+  renderer with synthetic controlled drafts and exact-write/failure/fencing
+  regressions; it is not real vault or native-provider acceptance.
+
 - [ ] Browser workspace: toolbar opens one resizable window; rapid repeated clicks
   focus it and update the website target. Apply saved size near a screen edge and
   confirm the full window remains on that display. Overview, Requests, Config and Help work
