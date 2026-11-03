@@ -20,6 +20,7 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   file: ['name', 'trashed', 'content'],
   'password-manager-entry': ['title', 'passwordType', 'icon', 'fields'],
+  'password-verification-device': [], // Private device proofs never enter the public crystal projection.
   draft: [], // Private snapshots never enter the public schema projection.
   "timeline-snapshot-part": [],
   "timeline-branch": ["name"],
@@ -379,4 +380,15 @@ test('password icon projection remains optional and retains its typed source cho
     assert.equal(fields[name].type, 'string');
     assert.notEqual(fields[name].required, true, 'each source keeps its alternative field optional');
   }
+});
+
+test('password verification device is a protected zero-field marker with no public proof projection', () => {
+  const schema = crystalSchemas.find(schema => schema.id === 'password-verification-device')!;
+  assert.ok(PROTECTED_THINGTIME.includes('password-verification-device'));
+  assert.equal(isProtectedThingtime([schema.id]), true);
+  assert.equal(isProtectedThingtime(['data', schema.id]), true);
+  assert.equal(schema.collection, null);
+  const projected = projectBuiltinSchemaCrystal(schema);
+  assert.deepEqual(projected, { name: schema.title, description: schema.summary, fields: [] });
+  assert.equal(validateThingtimeCrystal(['schema'], projected).ok, true);
 });

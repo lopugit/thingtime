@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-03: Add the browser password workspace with account previews, explicit autofill, local QR scanning and exact popup return; shared timed/Never confirmation preferences and per-entry overrides; supported native verification reuse and tree/provider branding. OS-required verification remains enforced. [Release details](../PRs/1309-codex-password-verification-preferences-password-workspace.md). — Codex (AI).
+
 - 2026-11-03: Group the admin MongoDB overview by deployment, separating observed in-use/idle connections from modeled monitoring and handshake overhead. Explain warm runtimes, pool retention and cumulative API-feature use through editable details; preserve custom layouts and unknown telemetry. See [connection inventory](../docs/mongodb-connections.md) and [PR 1307 verification](../PRs/1307-codex-mongodb-deployment-overview-explain-mongodb-connections-by-deployment-and-api-feature.md). **Codex (AI)**
 
 - 2026-11-02: Reuse the official Thingtime tree across password manager, browser extension and native host/provider surfaces; preserve editable saved layouts, package extension 0.2.1 icons and native 1.0.7/build 8 resources, and cover actual excluded-registration return routing in isolated Chrome. Website-controlled passkey artwork remains independent. [Details](../PRs/codex-passkey-registration-save-tree-branding.md). **Codex (AI)**
