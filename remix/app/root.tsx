@@ -1,3 +1,4 @@
+import { BrowserExtensionAccountBridge } from './components/Passwords/BrowserExtensionAccountBridge';
 import { ThingDraftsProvider } from './drafts/ThingDrafts';
 import { NativeSyncBootstrap } from './fileSync/NativeSyncBootstrap';
 import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
@@ -141,6 +142,7 @@ export default function App() {
          <TimelineProvider>
          {mounted && !isAuthorizePopup ? <TimelineHost /> : null}
         <VisualSettingsHost />
+        {mounted ? <BrowserExtensionAccountBridge /> : null}
         <LopuPageTracker />
         <ThemeHost />
         {/* Mirrors settings.lopu.position into the cache useLopu reads at fire time. */}
