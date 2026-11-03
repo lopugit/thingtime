@@ -7,10 +7,18 @@ const action = (operation: string) => ({ 'data-tt-action': '$transient', 'data-t
 const button = (id: string, label: string, operation: string, disabled = '{icon.busy}') => el(id, 'button', '', { type: 'button', disabled, ...action(operation) }, [text(`${id}-label`, label)], { ...fieldCss, cursor: 'pointer', 'min-height': '44px' });
 const when = (id: string, arg: string, children: WebpageBlock[]): WebpageBlock => ({ id, type: 'condition', condition: { arg }, children });
 /** Layout only: icon URLs and file contents never enter a saved document. */
-export const migratePasswordIconBranding = passwordBrandingMigration('icon-heading');
+const brandIconHeading=passwordBrandingMigration('icon-heading');
+export const migratePasswordIconBranding=(blocks:WebpageBlock[]):WebpageBlock[]=>{
+ const branded=brandIconHeading(blocks);
+ const visit=(items:WebpageBlock[]):WebpageBlock[]=>{let changed=false;const next=items.map(block=>{
+  const children=block.children?visit(block.children):undefined;
+  const repair=block.id==='icon-help'&&block.type==='element'&&block.text==='Upload an image, or choose an HTTPS URL. URL icons contact that website anonymously when displayed. Some sites block private loading; upload the image if that happens.';
+  if(!repair&&children===block.children)return block;changed=true;return{...block,...(repair?{text:'Saved Website fields supply an automatic icon, trying them in order. Upload an image or choose an HTTPS icon URL to override it. Remove icon returns to automatic Website icons, then the Thingtime tree if none works. Public icon lookups are anonymous.'}:{}),...(children?{children}:{})};
+ });return changed?next:items;};return visit(branded);
+};
 const passwordIconBlocks_DEFAULTS: WebpageBlock[] = [el('icon-fields', 'fieldset', '', {}, [
  el('icon-heading', 'legend', 'Entry icon'),
- el('icon-help', 'p', 'Upload an image, or choose an HTTPS URL. URL icons contact that website anonymously when displayed. Some sites block private loading; upload the image if that happens.'),
+ el('icon-help', 'p', 'Saved Website fields supply an automatic icon, trying them in order. Upload an image or choose an HTTPS icon URL to override it. Remove icon returns to automatic Website icons, then the Thingtime tree if none works. Public icon lookups are anonymous.'),
  el('icon-upload-label', 'label', '', {}, [text('icon-upload-text', 'Upload icon'), el('icon-upload', 'input', '', { type: 'file', name: 'icon-file', accept: '.png,.jpg,.jpeg,.webp,.gif,.ico', disabled: '{icon.cannotUpload}', 'aria-label': 'Upload entry icon', ...action('icon.upload') })], { display: 'grid', gap: '6px' }),
  when('icon-save-first', 'icon.unsaved', [el('icon-save-note', 'p', 'Save this entry once before uploading an encrypted icon.')]),
  button('icon-url-toggle', 'Use URL instead', 'icon.show-url'),

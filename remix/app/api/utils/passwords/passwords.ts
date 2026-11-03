@@ -1,3 +1,4 @@
+import { passwordWebsiteOrigins } from '~/passwords/icons';
 import { openPasswordIcon, sealPasswordIcon } from './icons';
 import { deletePasswordFiles } from './files';
 import { BSON, ObjectId } from 'mongodb';
@@ -43,8 +44,8 @@ export async function listPasswords(ownerId: string, cursor?: string | null, que
   const entries = previews || page.some(doc=>doc.crystal.encryptedIcon) ? await withUserVaultKey(ownerId, key => page.map(doc => {
     const entry = previews ? validatePasswordEntry(JSON.parse(openVaultValue(ownerId, key, doc.shareId, 'secret', doc.crystal.encryptedValue, PASSWORD_STORAGE_DOCUMENT_BYTES))) : null;
     const username = entry ? passwordPreviewUsername(entry) : '';
-    const icon = openPasswordIcon(ownerId, key, doc.shareId, doc.crystal.encryptedIcon, PASSWORD_STORAGE_DOCUMENT_BYTES);
-    return { ...project(doc), ...(icon ? { icon } : {}), ...(username ? {username} : {}) };
+    const icon = openPasswordIcon(ownerId, key, doc.shareId, doc.crystal.encryptedIcon, PASSWORD_STORAGE_DOCUMENT_BYTES) || entry?.icon;
+    return { ...project(doc), ...(icon ? { icon } : {}), ...(username ? {username} : {}), ...(!icon && entry && passwordWebsiteOrigins(entry).length ? {websiteIcon:true} : {}) };
   })) : page.map(project);
   return { entries, nextCursor: docs.length > 50 ? pageCursor(docs[49]) : null };
 }

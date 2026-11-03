@@ -1,3 +1,5 @@
+import { passwordWebsiteOrigins } from '~/passwords/icons';
+import { resolveWebsiteIcon } from '~/api/utils/passwords/websiteIcons';
 import { passwordVerification } from '~/api/utils/passwords/verification';
 import { verificationContext } from '~/passwords/verificationPolicy';
 import { passwordPreviewUsername, passwordFieldValue } from '~/passwords/model';
@@ -15,7 +17,7 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 import { StorageMutationError } from '~/api/utils/storage/storageCore';
 import { PASSWORD_STORAGE_DOCUMENT_BYTES, PasswordManagerError, listPasswords, readPassword, savePassword, deletePassword, passwordCatalog, exportPasswordPage } from '~/api/utils/passwords/passwords';
 const headers = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization', 'Referrer-Policy': 'no-referrer' };
-const defaults = { passwordVerification, getCurrentUser, getAuthToken, ownerVaultConfigured, confirmCurrentPassword, enforceRateLimit, listPasswords, readPassword, savePassword, deletePassword, passwordCatalog, exportPasswordPage, passwordFileOperation };
+const defaults = { resolveWebsiteIcon, passwordVerification, getCurrentUser, getAuthToken, ownerVaultConfigured, confirmCurrentPassword, enforceRateLimit, listPasswords, readPassword, savePassword, deletePassword, passwordCatalog, exportPasswordPage, passwordFileOperation };
 // A per-ceremony public comparison value, never an authentication credential.
 // Domain separation and the request nonce prevent stable session tracking. The
 // high-entropy bearer token remains server-only and its revocation is checked by
@@ -114,6 +116,20 @@ export function createPasswordHandler(overrides: Partial<typeof defaults> = {}) 
         await checkPasskeySession();
         if ((await deps.getCurrentUser(request))?.id !== user.id) throw new PasswordManagerError(401, 'Your session ended.');
         return json({ok:true,ownerId:user.id, username:passwordPreviewUsername(saved.entry),password:passwordFieldValue(saved.entry,'password')}, {headers});
+      }
+      if (body.operation === 'website-icon') {
+        const record=await deps.readPassword(user.id,body.id);
+        if(!Number.isSafeInteger(body.revision)||body.revision!==record.revision)throw new PasswordManagerError(409,'This entry changed. Refresh its preview.');
+        const ended=new AbortController(),signal=AbortSignal.any([request.signal,AbortSignal.timeout(15_000),ended.signal]);
+        const authorize=async()=>{try{
+          if(await deps.getAuthToken(request)!==token||(await deps.getCurrentUser(request))?.id!==user.id)throw new PasswordManagerError(401,'Your session ended.');
+        }catch(error){ended.abort(error);throw error;}};
+        await authorize();
+        const image=record.entry.icon ? null : await deps.resolveWebsiteIcon(passwordWebsiteOrigins(record.entry),signal,undefined,authorize);
+        const current=await deps.readPassword(user.id,body.id);
+        if(current.revision!==record.revision)throw new PasswordManagerError(409,'This entry changed. Refresh its preview.');
+        if(await deps.getAuthToken(request)!==token||(await deps.getCurrentUser(request))?.id!==user.id)throw new PasswordManagerError(401,'Your session ended.');
+        return new Response(image?Uint8Array.from(image):null,{status:image?200:204,headers:{...headers,'X-Content-Type-Options':'nosniff','X-Thingtime-Owner-Id':user.id,...(image?{'Content-Type':'image/png'}:{})}});
       }
       if (body.operation === 'read' || body.operation === 'catalog' || body.operation === 'export') {
         const result = body.operation === 'export' ? await deps.exportPasswordPage(user.id, body.cursor) : body.operation === 'catalog' ? await deps.passwordCatalog(user.id, body.cursor) : await deps.readPassword(user.id, body.id);
