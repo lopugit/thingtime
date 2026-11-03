@@ -12,11 +12,13 @@ enum MacUploadBatchOperation {
     }
     private static func read(_ bookmark: Data, _ member: MacUploadBatchDescriptor.Member, _ sha: String? = nil) async throws -> MobileFolderBulkReader.Payload {
         let resources = MacSyncResources.current
+        let scan = SyncScanContext.current
         let task = Task.detached {
             try resources?.source.checkpoint()
-            let value: MobileFolderBulkReader.Payload
-            if let resources { value = try SyncResourceCpuContext.$current.withValue(resources.source) { try resources.source.measure { try MobileFolderBulkReader.read(bookmark: bookmark, expected: member.source, sha256: sha) } } }
-            else { value = try MobileFolderBulkReader.read(bookmark: bookmark, expected: member.source, sha256: sha) }
+            let value = try SyncScanContext.$current.withValue(scan) {
+                if let resources { return try SyncResourceCpuContext.$current.withValue(resources.source) { try resources.source.measure { try MobileFolderBulkReader.read(bookmark: bookmark, expected: member.source, sha256: sha) } } }
+                return try MobileFolderBulkReader.read(bookmark: bookmark, expected: member.source, sha256: sha)
+            }
             try resources?.source.checkpoint(); return value
         }
         return try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { task.cancel() })

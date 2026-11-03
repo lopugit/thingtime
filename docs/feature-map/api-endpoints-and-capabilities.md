@@ -1,5 +1,16 @@
 # API endpoints and capabilities
 
+`api.devices-sync-control` 1.1.0 adds `/api/v1/devices/sync-control` for the
+account browser and installed sync worker. `deviceSyncControl.ts` authenticates
+the owner and current device pairing, delivers an immutable request once, and
+accepts a result only from its claiming lease. Protected `device-sync-control`
+Things reuse the device queue/unique-key indexes, secure BinData payloads and
+shared control TTL; no new collection or index is introduced. File bytes and
+native grants remain on the device. Optional owner-private `roots[].sourcePath`
+location metadata survives the encrypted status result; it grants no ancestor
+access and never appears in a public manifest. Run `test:devices`, `test:api-capabilities`
+and `test:schemas`; see [browser device sync](../browser-device-sync.md).
+
 `api.admin-mongodb-connections` 1.1.0 registers the private administrator
 `GET /api/v1/admin/mongodb/connections` in the docs registry and Nitro map.
 The shared `useApi` client negotiates it against the selected origin. Its reply
@@ -523,6 +534,7 @@ the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
 
+
 ## Mapbox provider integration
 
 `POST /api/v1/maps` negotiates `api.maps` 1.0.0. `api/utils/maps/route.ts`
@@ -548,3 +560,21 @@ existing protected scheduler. Both manifests derive versions from apiDocs.ts.
 The dispatcher records allowlisted storage failure codes without logging response
 bodies. See [storage recovery](../storage-recovery.md) for transactional queue,
 worker, controller gates and the scheduled production monitor.
+
+## Environment gateway and index readiness
+
+The negotiated ingress contract and connection-mode policy are summarized at the
+top of this map. `app/api/utils/deployment/environmentGateway.ts` owns bounded discovery,
+admission and pool draining; `server/utils/environmentGateway.ts` validates
+origin-preserving signed relays before the normal route authorization path.
+`server/middleware/environment-gateway.ts`, the SPA fallback and capability
+handler retain local discovery/static serving while routing data operations.
+`mongodb/indexLifecycle.ts` and `indexMaintenance.mts` coordinate durable index
+readiness without blocking read-only authentication. Existing admin migration
+status/run contracts and Lopu background-task contracts carry their deliberate
+compatible patch versions in both generated manifests.
+
+Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
+the built `test:environment-gateway:acceptance` runner. See
+[the gateway runbook](../environment-api-gateway.md) for server settings,
+environment partitioning and outstanding live rollout acceptance.

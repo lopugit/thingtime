@@ -83,6 +83,8 @@ pub struct IndexResourceUsage {
     pub memory_checks: u64,
     pub active_worker_limit: usize,
     pub cpu_measurement_available: bool,
+    pub scan_bytes: u64,
+    pub resident_memory_bytes: Option<u64>,
 }
 
 pub(crate) struct ResourceGovernor {
@@ -99,6 +101,8 @@ pub(crate) struct ResourceGovernor {
     cancelled: AtomicBool,
     failure: Mutex<Option<String>>,
     cpu_window: Mutex<CpuWindow>,
+    scan_budget: Mutex<(Option<f64>, Instant)>,
+    scan_bytes: AtomicU64,
 }
 
 pub(crate) struct WorkerPermit<'a>(&'a ResourceGovernor);
@@ -130,6 +134,8 @@ impl ResourceGovernor {
             )
         })?);
         let governor = Self {
+            scan_budget: Mutex::new((None, started_wall)),
+            scan_bytes: AtomicU64::new(0),
             effective: effective_resource_limits(limits, logical_cpu_count()),
             cpu_share: cpu_share.max(1),
             active_workers: AtomicUsize::new(0),
@@ -153,6 +159,28 @@ impl ResourceGovernor {
         Ok(governor)
     }
 
+    pub(crate) fn record_scan(&self, bytes: usize) { self.scan_bytes.fetch_add(bytes as u64, Ordering::Relaxed); }
+    pub(crate) fn set_scan_rate(&self, rate: Option<f64>) {
+        self.scan_budget.lock().unwrap().0 = rate;
+    }
+    pub(crate) fn pace_scan(&self, count: usize, cancelled: &AtomicBool) -> Result<(), IndexerError> {
+        let mut remaining = count;
+        while remaining > 0 {
+            if cancelled.load(Ordering::Relaxed) { return Err(self.failure_error()); }
+            let mut gate = self.scan_budget.lock().unwrap();
+            let Some(rate) = gate.0 else { return Ok(()); };
+            let part = remaining.min((rate / 10.0).max(1.0) as usize);
+            let deadline = gate.1.max(Instant::now()) + Duration::from_secs_f64(part as f64 / rate);
+            gate.1 = deadline;
+            drop(gate);
+            while Instant::now() < deadline {
+                if cancelled.load(Ordering::Relaxed) { return Err(self.failure_error()); }
+                std::thread::sleep(deadline.saturating_duration_since(Instant::now()).min(Duration::from_millis(25)));
+            }
+            remaining -= part;
+        }
+        Ok(())
+    }
     pub(crate) fn effective(&self) -> &EffectiveResourceLimits {
         &self.effective
     }
@@ -214,6 +242,8 @@ impl ResourceGovernor {
             average_cpu_percent(cpu_time, elapsed, self.effective.logical_cpu_count);
         IndexResourceUsage {
             effective: self.effective.clone(),
+            scan_bytes: self.scan_bytes.load(Ordering::Relaxed),
+            resident_memory_bytes: memory_stats().and_then(|stats| u64::try_from(stats.physical_mem).ok()),
             cpu_time_ms: duration_ms(cpu_time),
             cpu_time_nanoseconds: u64::try_from(cpu_time.as_nanos()).unwrap_or(u64::MAX),
             wall_time_nanoseconds: u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX),
@@ -544,5 +574,22 @@ mod tests {
         let error = validate_resource_limits(&invalid).expect_err("zero threads must fail");
         assert_eq!(error.code, "invalid_configuration");
         assert!(error.message.contains("maxThreads"));
+    }
+}
+
+#[cfg(test)]
+mod sync_scan_budget_tests {
+    use super::*;
+    #[test]
+    fn backup_scan_rate_is_shared_between_workers_and_cancellable() {
+        let governor = ResourceGovernor::new(&IndexResourceLimits::default()).unwrap();
+        governor.set_scan_rate(Some(1000.0));
+        let started = Instant::now();
+        std::thread::scope(|scope| {
+            for _ in 0..2 { let g = &governor; scope.spawn(move || g.pace_scan(100, &AtomicBool::new(false)).unwrap()); }
+        });
+        assert!(started.elapsed() >= Duration::from_millis(190));
+        assert!(governor.pace_scan(100, &AtomicBool::new(true)).is_err());
+        governor.record_scan(200); assert_eq!(governor.snapshot().scan_bytes, 200);
     }
 }

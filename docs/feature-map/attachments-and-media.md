@@ -1,5 +1,10 @@
 # Attachments and media
 
+Cloud sync HTTP 403 diagnostics retain only the operation and a closed policy
+reason (upload approval, origin, account or credential-purpose refusal).
+`cloudTransport.test.ts` verifies redaction and terminal refusal behavior; a
+refusal never bypasses the ordinary attachment upload-approval gate.
+
 ## iOS incoming shares
 
 `iOS/ShareExtension` supplies the system Share target. `iOS/ShareSupport` owns

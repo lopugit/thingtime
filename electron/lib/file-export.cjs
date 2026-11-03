@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const { constants } = require('node:fs');
 const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
+const { fork } = require('node:child_process');
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
 const { readAccount, readCapabilities } = require('./folder-sync.cjs');
 const RANGE_BYTES = 2 * 1024 * 1024;
@@ -12,6 +13,41 @@ const HEX = /^[a-f0-9]{64}$/u;
 const unavailable = () => Error('Saving could not be verified. Check the selected folder before trying again.');
 const sameNode = (a, b) => a.dev === b.dev && a.ino === b.ino;
 const stamp = s => `${s.dev}:${s.ino}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`;
+function symbolicTarget(link, size) {
+    if (link === undefined) return undefined;
+    if (!link || Object.keys(link).length !== 2 || link.format !== 'posix-symlink-v1' || typeof link.targetBase64 !== 'string') throw unavailable();
+    const target = Buffer.from(link.targetBase64, 'base64');
+    if (!target.length || target.includes(0) || target.length !== size || target.toString('base64') !== link.targetBase64) throw unavailable();
+    return target;
+}
+function publishLink(parent, input, { signal, authorize } = {}) {
+    return new Promise((resolve, reject) => {
+        const child = fork(path.join(__dirname, 'file-export-link-publisher.cjs'), [], {
+            cwd: parent, env: { ELECTRON_RUN_AS_NODE: '1' }, execArgv: [], stdio: ['ignore', 'ignore', 'ignore', 'ipc']
+        });
+        let result, failed = false, hardTimeout;
+        const send = value => { if (child.connected) child.send(value, error => { if (error) failed = true; }); };
+        const cancel = () => send({ kind: 'cancel' });
+        signal?.addEventListener('abort', cancel, { once: true });
+        const timeout = setTimeout(() => {
+            failed = true; child.kill();
+            hardTimeout = setTimeout(() => child.kill('SIGKILL'), 1000); hardTimeout.unref?.();
+        }, 20000); timeout.unref?.();
+        const cleanup = () => { clearTimeout(timeout); clearTimeout(hardTimeout); signal?.removeEventListener('abort', cancel); };
+        child.once('error', () => { failed = true; if (!child.pid) { cleanup(); reject(unavailable()); } else child.kill(); });
+        child.on('message', async value => {
+            if (value?.kind === 'authority') {
+                let accepted = false;
+                try { signal?.throwIfAborted(); await authorize?.(); signal?.throwIfAborted(); accepted = true; } catch { }
+                send({ kind: 'authority-reply', ticket: value.ticket, accepted }); return;
+            }
+            if (value?.ok === true) result = value;
+        });
+        child.once('exit', code => { cleanup(); code === 0 && result && !failed ? resolve(result) : reject(unavailable()); });
+        send({ kind: 'publish', input });
+        if (signal?.aborted) cancel();
+    });
+}
 function validName(name) {
     return typeof name === 'string' && name.trim().length > 0 && Buffer.byteLength(name) <= 255 &&
         !/[\p{Cc}\p{Cf}\/\\:]/u.test(name) && name !== '.' && name !== '..';
@@ -57,8 +93,8 @@ async function verifyFile(file, content, check, links = 1n) {
 /** Save one retained version using the current renderer's cookie session. Paths,
  * credentials and file bytes never cross the preload bridge. No persistent grant. */
 class DesktopFileExport {
-    constructor({ context, choose, verifyAccount = readAccount, capabilities = readCapabilities, timeoutMs = 30 * 60_000 }) {
-        Object.assign(this, { context, choose, verifyAccount, capabilities, timeoutMs });
+    constructor({ context, choose, verifyAccount = readAccount, capabilities = readCapabilities, timeoutMs = 30 * 60_000, linkPublisher = publishLink }) {
+        Object.assign(this, { context, choose, verifyAccount, capabilities, timeoutMs, linkPublisher });
         this.generation = 0; this.active = null;
     }
     capture(event, input) {
@@ -82,6 +118,7 @@ class DesktopFileExport {
         if (this.active) throw Error('Another file is being saved. Finish or cancel it first.');
         if (!validName(input.name)) throw unavailable();
         validateContent(input.content);
+        symbolicTarget(input.symbolicLink, input.content.size);
         const s = { event, input: structuredClone(input), abort: new AbortController() };
         this.active = s;
         const timer = setTimeout(() => s.abort.abort(), this.timeoutMs); timer.unref?.();
@@ -98,9 +135,10 @@ class DesktopFileExport {
             check();
             if (!sameNode(await fs.lstat(parent, { bigint: true }), parentInfo) || !sameNode(await directory.stat({ bigint: true }), parentInfo)) throw unavailable();
         };
-        const content = s.input.content;
+        const content = s.input.content, target = symbolicTarget(s.input.symbolicLink, content.size);
         const receipt = saved => ({ requestId: s.input.requestId, ownerId: c.ownerId, origin: c.appOrigin,
-            attachmentId: content.attachmentId, version: content.version, size: content.size, saved });
+            attachmentId: content.attachmentId, version: content.version, size: content.size, saved,
+            ...(target ? { symbolicLink: s.input.symbolicLink } : {}) });
         const fetchContent = async params => {
             check();
             const response = await c.window.webContents.session.fetch(new URL('/api/v1/attachments/content?' + new URLSearchParams({ id: content.attachmentId, version: content.version, ...params }), c.appOrigin).href, {
@@ -118,6 +156,10 @@ class DesktopFileExport {
             await verify();
             const caps = await this.capabilities(c, AbortSignal.any([s.abort.signal, AbortSignal.timeout(20000)])); check();
             if (!/^1\.(?:1[4-9]|[2-9][0-9]|[1-9][0-9]{2,})\.\d+$/u.test(caps?.features?.['api.attachment-content']?.version ?? '')) throw unavailable();
+            if (target) {
+                const version = /^1\.(\d+)\.\d+$/.exec(caps?.features?.['api.files']?.version ?? '');
+                if (!version || Number(version[1]) < 9) throw unavailable();
+            }
             const selected = await this.choose(c.window, { title: 'Save this file version', defaultPath: s.input.name,
                 buttonLabel: 'Save version', properties: ['createDirectory', 'dontAddToRecent'] });
             await verify();
@@ -158,8 +200,23 @@ class DesktopFileExport {
                 offset += length;
             }
             await file.sync(); await verifyFile(file, content, check);
+            created = await file.stat({ bigint: true });
             await verify(); await currentParent();
             if (!sameNode(await fs.lstat(temporary, { bigint: true }), created)) throw unavailable();
+            if (target) {
+                const actual = Buffer.alloc(target.length); let offset = 0;
+                while (offset < actual.length) {
+                    const { bytesRead } = await file.read(actual, offset, actual.length - offset, offset);
+                    if (!bytesRead) throw unavailable(); offset += bytesRead;
+                }
+                if (!actual.equals(target)) throw unavailable();
+                const result = await this.linkPublisher(parent, { name: path.basename(destination),
+                    parent: { dev: String(parentInfo.dev), ino: String(parentInfo.ino) }, symbolicLink: s.input.symbolicLink },
+                    { signal: s.abort.signal, authorize: async () => { await verify(); await currentParent(); } });
+                await verify(); await currentParent();
+                if (!['symbolic-link', 'symbolic-link-fallback'].includes(result.representation) || result.targetSha256 !== createHash('sha256').update(target).digest('hex')) throw unavailable();
+                return { ...receipt(true), representation: result.representation };
+            }
             // Exclusive same-volume publication. Even a destination created while
             // downloading is never replaced; keep the verified result on later error.
             await fs.link(temporary, destination);
@@ -190,4 +247,4 @@ class DesktopFileExport {
         }
     }
 }
-module.exports = { DesktopFileExport, validateContent, verifyFile, RANGE_BYTES };
+module.exports = { DesktopFileExport, validateContent, verifyFile, RANGE_BYTES, publishLink };

@@ -165,3 +165,17 @@ test('Mac cancellation retains its request binding and sanitizes IPC errors', as
 			!error.message.includes('/private') && apiErrorMessage(error, 'fallback').includes('Check the selected folder'));
 	} finally { f.close(); }
 });
+
+test('tagged exports require native 1.1 and bind exact metadata plus actual/fallback representation', async () => {
+ const f=fixture(),symbolicLink={format:'posix-symlink-v1' as const,targetBase64:'Li4='},link={...file,symbolicLink,content:{...file.content,size:2}};
+ try {
+  await assert.rejects(exportFileVersion(scope,link,new AbortController().signal),/Update the native app/);assert.equal(f.messages.length,0);
+  Reflect.deleteProperty(window,'thingtimeNativeBridge');
+  let representation: string|undefined='symbolic-link';let receiptLink:any=symbolicLink;
+  window.thingtimeDesktop={platform:'darwin',fileExportVersion:'1.1.0',fileExportRequest:async request=>({...request,attachmentId:link.content.attachmentId,version:link.content.version,size:2,symbolicLink:receiptLink,representation,saved:true})};
+  assert.equal(await exportFileVersion(scope,link,new AbortController().signal),true);
+  representation='symbolic-link-fallback';assert.equal(await exportFileVersion(scope,link,new AbortController().signal),true);
+  representation=undefined;await assert.rejects(exportFileVersion(scope,link,new AbortController().signal),/verified/);
+  representation='symbolic-link';receiptLink={...symbolicLink,targetBase64:'Lw=='};await assert.rejects(exportFileVersion(scope,link,new AbortController().signal),/verified/);
+ }finally{f.close();}
+});

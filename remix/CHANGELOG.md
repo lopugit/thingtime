@@ -12,6 +12,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-10-29: Documented and verified popup-free native sync fixture acceptance, with focused byte/restart tests and separate signed installed UI acceptance gates.
+
 - 2026-10-22: Add immediate per-connection Pause/Resume with durable restart fences, coalesced status work and individually editable optional bandwidth, transfer/index concurrency and sync-only CPU ceilings. Legacy policy IDs remain compatible; new limits require negotiated configuration3/native support. Release acceptance pending. [Details](../PRs/1086-codex-sync-resource-controls-make-sync-pause-immediate-and-add-scoped-resource-controls.md). **Codex (AI)**
 
 - 2026-10-21: Keep eligible small-file batches running when a full preparation queue is refilled, preserve priority ancestry/receipt recovery at the actual preparation capacity, and add private bounded batch-result counts to the existing desktop timing log. Installed throughput remains unverified. [Details](../PRs/codex-sync-batch-full-queue.md). **Codex (AI)**
@@ -34,6 +36,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   above posts and in the sidebar. Message access follows live subspace membership;
   embedded Things retain their own access rules. Includes a retry-safe existing
   subspace migration and isolated acceptance harness. See [PR 1045](../PRs/1045-subspace-messages-views-and-moderated-embeds.md) for verification and rollout status. — Codex (AI)
+
+- 2026-10-20: Add editable Lopu AI defaults and per-chat credential settings, with saved connection endpoint/model labels and explicit Thingtime-credit selection. Preserve unavailable pins, isolate defaults from chat changes, persist AI choices immediately and fence cold-link/pending-save routing. See [PR 1070](../PRs/1070-lopu-credential-selection-add-lopu-defaults-and-per-chat-ai-credentials.md) for validation and remaining live acceptance. — Codex (AI)
 
 - 2026-10-19: Keep personal-plan chats on local management, make repeated verified provider selections idempotent, and align the floating header with plan eligibility. Added regressions for first sends, follow-ups, old-client background admission and revoked proofs. Reconcile completed Responses output items before executing tools; incomplete/conflicting output remains fail-closed (installed tool acceptance pending). — Codex (AI)
 
@@ -108,6 +112,62 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-11-03: Permit the exact built-in Thingtime and Dev Thingtime FedCM authorities in the shared application connection policy, keeping client selection and CSP origins together. Cover emitted Vercel headers and unchanged browser-extension identity forwarding; live browser acceptance remains pending. — Codex (AI)
 - 2026-11-03: Connect the browser password workspace to existing Thingtime sign-ins, add an account popup and account switching, and clear stale previews and requests across identity changes. Discover password icons from saved Website fields in order through an authenticated, revision-bound PNG adapter with public-address checks; preserve custom icons and editable cards. See [release verification](../PRs/1315-codex-password-website-icons-extension-accounts.md), [extension accounts](../docs/browser-extension-accounts.md) and [password manager](../docs/password-manager.md). — Codex (AI)
+- 2026-11-03: Add per-folder directional transfer summaries, shared device resource controls and lossless Mac symbolic-link sync/Timeline export with recoverable filesystem fallback. Source/fixture verification and installed/production acceptance are tracked separately in [PR #1216 notes](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md).
+
+- 2026-11-03: Verify native file edits through Timeline version selection, lost-reply restore replay and a restarted Mac adapter back to independently hashed local/cloud bytes. Keep signed installed UI and automatic scheduling acceptance separate. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+- 2026-10-27: Install merged PR 1216 source `48925abc`; strict/deep signature and unchanged designated requirement passed. DJ DODA resumed across the update and window reopen; Home remained paused with its source grant absent. Full synthetic acceptance still awaits fresh native pairing confirmation. Exact-commit preview returned HTTP 200; CI remains mixed, not green. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+- 2026-10-26: Add an explicit isolated installed-sync fixture bootstrap: canonical admin registration, one supervised API restart preserving its private database/session, and private-only upload approval for an exact UI-registered non-admin account. Ordinary launches retain existing behavior; real installed transfer acceptance remains separate. **Codex (AI)**
+
+- 2026-10-26: Replace expanded folder-sync panels and Home presets with generic,
+  individually editable folder cards. Preserve drafts across disclosure changes
+  while stopping hidden progress work. New Mac connections can retain their
+  authorized absolute source hierarchy as private Folder Things; existing
+  destinations stay unchanged. Native location metadata requires Mac 1.15.0
+  and, remotely, sync-control 1.1.0. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+- 2026-10-26: Report terminal cloud-sync 403 failures with bounded operation and
+  policy codes; add isolated-viewer refusal diagnostics with a single safe
+  preflight recovery. Document upload approval as a fixture prerequisite.
+  Native pairing, folder permissions and paused-state recovery passed; actual
+  transfers remain unverified. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+- 2026-10-26: Align the native Mac pairing capability limit with the server's
+  128-entry contract. Macs advertising 65 capabilities previously failed after
+  native approval and server preparation. Add signed-claim and rejection
+  regressions; installed acceptance remains in progress. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+- 2026-10-26: Add an opt-in native test viewer for the existing private sync
+  acceptance browser, with masked transient credential entry and fixed
+  origin/task/session/tab controls. [Acceptance runbook](../docs/installed-sync-acceptance.md).
+  Correct Electron 43 entry detection so the viewer opens; its 11 focused tests
+  and real disposable browser sign-in pass. Installed transfers remain a
+  separate acceptance check. **Codex (AI)**
+
+- 2026-10-25: Add a private browser/backend relay for signed-Mac sync acceptance,
+  with exact loopback authority, lease fencing and bounded private diagnostics.
+  Native folder selection now passes; end-to-end transfer acceptance remains
+  tracked separately. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+- 2026-10-25: Preserve the negotiated remote sync-control capability in the Mac
+  host and repair fresh-worktree dependencies before desktop resource staging.
+  Added native-host regression coverage. Installed acceptance is recorded in
+  [PR 1216](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+- 2026-10-23: Make owned-device folder sync settings available in web browsers,
+  including offline edits, and relay live folder access, transfer/automation,
+  conflict, recovery, progress and priority controls to the installed app.
+  Private leased requests preserve device-owned execution and account boundaries.
+  [Contract](../docs/browser-device-sync.md) and [PR 1216 validation](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+- 2026-10-26: Integrate the reviewed environment gateway and dedicated connection policy into develop while preserving newer develop changes. Built sandboxed API acceptance and contract tests pass; canonical-owner activation remains pending. [PR #1224 details](../PRs/1224-codex-gateway-develop-integration-environment-gateways-and-dedicated-policy.md). **Codex (AI)**
+
+- 2026-10-26: Add the server-only `THINGTIME_MONGODB_CONNECTION_MODE` override for `proxy` or opt-in `dedicated` MongoDB connections, with a branch-bundled default. Document the audited preview/develop database relationship, proposed gateway mapping and gradual pool draining; gateway activation remains pending. **Codex (AI)**
+
+- 2026-10-26: Forward public social cards and generated docs through the local Vite proxy; verify root docs GET/POST through the actual Vite server as well as built Nitro. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
+
+- 2026-10-26: Add explicit per-environment API gateway ownership, signed origin-preserving forwarding, safe pool draining and bounded shared index-plan readiness. Branch frontends use the selected environment backend; live alias acceptance remains pending, and older preview deployments may age out naturally. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
 
 - 2026-11-03: Give saved password card account/type subtitles the readable card foreground, preserving individually editable layouts and custom colors while upgrading the prior default subtitle color. — Codex (AI)
 
@@ -246,6 +306,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-10-26: Match custom drawer links and the final inline **➕ Add +** row to Thingtime navigation. Move menu layout editing into Settings and save the editable menu template as a private webpage Thing while retaining legacy device layouts. [Details](../PRs/1226-codex-drawer-renderable-row-match-the-final-add-drawer-row.md). **Codex (AI)**
 - 2026-10-26: Align shared native selects with Thingtime surfaces and radii; replace the black focus outline with a contrasting pink border and soft pink-to-violet glow. Theme Studio can customize both glow colours, softness and strength, including no glow. Add isolated desktop/mobile, light/dark and theme-editor save/reload coverage. **Codex (AI)**
+- 2026-10-26: Integrate the reviewed environment gateway and dedicated connection policy into develop while preserving newer develop changes. Built sandboxed API acceptance and contract tests pass; canonical-owner activation remains pending. [PR #1224 details](../PRs/1224-codex-gateway-develop-integration-environment-gateways-and-dedicated-policy.md). **Codex (AI)**
+
 - 2026-10-26: Add the server-only `THINGTIME_MONGODB_CONNECTION_MODE` override for `proxy` or opt-in `dedicated` MongoDB connections, with a branch-bundled default. Document the audited preview/develop database relationship, proposed gateway mapping and gradual pool draining; publisher implementation, gateway activation and live acceptance remain pending. [PR 1223 details](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
 - 2026-10-26: Eliminate existing TypeScript and ESLint errors, enforce a zero-error TypeScript baseline, and reject invalid compiler runs or baseline increases. Repair shared helper typing and behavior, complete unavailable MongoDB health responses, and emit parser-safe generated font data. [Static analysis audit](../docs/static-analysis-baselines.md); [validation and review boundary](../PRs/1228-codex-typescript-zero-baseline-fix-remaining-typescript-errors.md). **Codex (AI)**
 - 2026-10-26: Open Things, files and devices with one click; retain modifier/checkbox selection and add hover/focus action controls across browsing layouts and the folder tree. Added isolated real-API browser acceptance with file-byte verification. [Details](../PRs/1230-codex-things-single-click-open-things-and-files-with-one-click.md). — Codex (AI)
@@ -265,6 +327,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-10-23: Build Vercel production, custom environments and previews on GitHub
   Actions, upload only prebuilt output, and disable native source builds. Keep
   protected publisher credentials separate from product compilation.
+
+- 2026-10-23: Limit PR 1164 to reusable local-media and editable Builder primitives. Author compressor Pages/Components directly as saved Things; retain the legacy suite and fix capability-compatible file-sync assertions.
+
+### 2026-10-22 — General local compressor
+
+[PR 1164 validation and release notes](../PRs/1164-general-media-compressor-local-images-and-immediate-file-controls.md)
+
+- Add local image compression with bundled WASM codecs, transparency/animation safeguards and truthful size receipts alongside WebCodecs video compression.
+- Show file selection on load, keep the selected file while settings change, and support individually editable Builder elements authored directly as saved Things.
+- Version intrinsic media storage/resolve contracts and extend the isolated desktop/mobile browser regression; scope WebAssembly compilation permission to the network-disabled media worker.
+- 2026-10-23: Make the existing sync change-storm regression observe its trailing
+  read instead of racing a five-millisecond timer under CI load. **Codex (AI)**
+
+- 2026-10-23: Preserve the GitHub Actions prebuilt-only deployment migration on develop so future promotions keep native Vercel source builds disabled. See [PR #1206](https://github.com/lopugit/thingtime/pull/1206). **Codex (AI)**
 
 - 2026-10-22: Move device sync configuration off Things home into a dedicated
   device page; keep storage attachments and parent-linked records out of root,

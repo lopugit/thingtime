@@ -1,3 +1,4 @@
+import { LopuCredentialSettings } from './LopuCredentialSettings';
 import { chatAttachmentInput } from '../Attachments/chatAttachmentInput';
 import { LOPU_MAX_MESSAGE_CHARS } from './composerDictation';
 import { useLopuVisualViewport } from './useLopuVisualViewport';
@@ -279,7 +280,7 @@ export const LopuComposer = ({
 			? 'Enter to queue · Shift+Enter for a new line'
 			: 'Enter to send · Shift+Enter for a new line'
 		: 'Shift+Enter for a new line · ⌘Enter to send';
-	const showSettings = !hideSettings && (!!preferences || !!settingsContent);
+	const showSettings = !hideSettings;
 
 	return (
 		<Box className="lopuComposerWrap" minW={0} maxW="100%" sx={{ '&, & *': { boxSizing: 'border-box' } }}>
@@ -372,7 +373,7 @@ export const LopuComposer = ({
 					) : null}
 					<Flex align="center" gap={1.5} flexShrink={0} ml="auto">
 						{showSettings ? (
-							<Popover placement="top-end" isLazy strategy="fixed" gutter={8} modifiers={[{ name: "preventOverflow", options: { padding: 12 } }, { name: "flip", options: { padding: 12 } }]}>
+							<Popover placement="top-end" isLazy strategy="fixed" gutter={8} modifiers={[{ name: "preventOverflow", options: { padding: 12, altAxis: true, tether: false } }, { name: "flip", options: { padding: 12 } }]}>
 								<PopoverTrigger>
 									<Box as="span" display="inline-flex">
 										<IconButton label="Chat settings" size={iconSize}>
@@ -388,10 +389,11 @@ export const LopuComposer = ({
 									_focusVisible={{ outline: 'none', boxShadow: LOPU_UI.shadowPopover }}
 									aria-label="Chat settings"
 								>
-									<PopoverBody px={3} py={2} maxH="calc(100dvh - 24px)" overflowY="auto" overscrollBehavior="contain">
+									<PopoverBody px={3} py={2} maxH="min(70dvh, calc(100dvh - 24px))" overflowY="auto" overscrollBehavior="contain">
 										<Text as="span" display="block" sx={lopuEyebrowSx} pt={1} pb={1}>
 											This chat
 										</Text>
+										<LopuCredentialSettings value={settings} models={models} providers={vaultProviders || []} onChange={onSettingsChange} disabled={disabled || streaming} />
 										{preferences ? (
 											<>
                                                 <SettingsRow
