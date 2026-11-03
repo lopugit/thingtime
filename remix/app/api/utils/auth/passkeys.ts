@@ -1,3 +1,6 @@
+import type { VerificationContext } from '~/passwords/verificationPolicy';
+import { passwordVerification } from '../passwords/verification';
+import { getAuthToken } from './authCookie';
 import { createHash, randomUUID } from 'node:crypto';
 
 import {
@@ -57,7 +60,7 @@ import { PASSKEY_USER_VERIFICATION } from './webauthnPolicy';
 // another origin's ceremony.
 
 const RP_NAME = 'Thingtime';
-const MAX_PASSKEYS_PER_USER = 25;
+
 const MAX_NICKNAME_CHARS = 64;
 const MAX_DESCRIPTION_CHARS = 280;
 
@@ -335,12 +338,10 @@ export const finishVaultPasskeyVerification = async (
 
 export const startPasskeyRegistration = async (
 	user: PublicUser,
-	request: Request
+	request: Request,
+  verification?: {requestId:string;context:VerificationContext}
 ): Promise<PasskeyFail | { ok: true; options: Awaited<ReturnType<typeof generateRegistrationOptions>>; setCookies: string[] }> => {
 	const existing = await findPasskeyDocsForUser(user.id);
-	if (existing.length >= MAX_PASSKEYS_PER_USER) {
-		return fail(409, `You already have ${MAX_PASSKEYS_PER_USER} passkeys — delete one first`);
-	}
 
 	const { rpID, origin } = deriveWebAuthnParams(request);
 	// Exclude every current credential (revoked included) so the platform sheet
@@ -372,7 +373,7 @@ export const startPasskeyRegistration = async (
 		authenticatorSelection: { residentKey: 'required', userVerification: PASSKEY_USER_VERIFICATION }
 	});
 
-	return { ok: true, options, setCookies: await serializeRegistrationChallengeCookie({ challenge: options.challenge, userId: String(user.id), rpID, origin }, request) };
+	return { ok: true, options, setCookies: await serializeRegistrationChallengeCookie({ challenge: options.challenge, userId: String(user.id), rpID, origin, ...(verification ? {passwordVerification:verification} : {}) }, request) };
 };
 
 export type FinishPasskeyRegistrationInput = {
@@ -414,6 +415,14 @@ export const finishPasskeyRegistration = async ({
 		return fail(400, 'The passkey could not be verified — try again');
 	}
 
+	if (challenge.passwordVerification) {
+    const token = await getAuthToken(request);
+    if (!token) return fail(401, 'Your session ended.');
+    try {
+      const who = await passwordVerification.identity(user.id, origin, token);
+      await passwordVerification.require(request, who, challenge.passwordVerification.context, challenge.passwordVerification.requestId);
+    } catch { return fail(403, 'Your password confirmation ended. Start passkey setup again.'); }
+  }
 	if (!await consumePasskeyChallenge('reg', challenge.challenge)) return fail(400, 'This passkey setup expired — start again');
 
 	const info = verification.registrationInfo;
@@ -454,8 +463,15 @@ export const finishPasskeyRegistration = async ({
 
 	const things = await getThingsCollection();
 	try {
-		await things.insertOne(doc as any);
+		if (challenge.passwordVerification) {
+      const token=await getAuthToken(request);
+      if(!token)return fail(401,'Your session ended.');
+      const who=await passwordVerification.identity(user.id,origin,token);
+      await passwordVerification.commitAccountRegistration(request,who,challenge.passwordVerification.context,challenge.passwordVerification.requestId,session=>things.insertOne(doc as any,{session}));
+    } else await things.insertOne(doc as any);
 	} catch (err: any) {
+		// Approval failures are closed, not raw credential-bearing errors.
+    if(err?.status===401||err?.status===403||err?.status===409)return fail(err.status,'Your password confirmation ended. Start passkey setup again.');
 		// the multikey unique index caught a duplicate credential id
 		if (err?.code === 11000) return fail(409, 'This passkey is already registered');
 		throw err;

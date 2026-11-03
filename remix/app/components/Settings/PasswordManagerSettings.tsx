@@ -1,3 +1,4 @@
+import { PasswordVerificationSettings } from '../Passwords/PasswordVerificationSettings';
 import React from 'react';
 import { Flex } from '@chakra-ui/react';
 import { useNavigate } from 'react-router';
@@ -28,6 +29,7 @@ export function PasswordManagerSettings({ ownerId, onNavigate }: { ownerId: stri
         <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
       </TransientBlockHost>}
     </SettingsDocumentHost>
+    <PasswordVerificationSettings ownerId={ownerId} />
     <PasswordPasskeySetup ownerId={ownerId} nativeAvailable={nativeAvailable} />
   </Flex>;
 }

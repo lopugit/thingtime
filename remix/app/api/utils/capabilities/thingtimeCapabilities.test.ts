@@ -98,8 +98,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   const manifest = thingtimeCapabilityManifest('https://preview.example.test/path');
   assert.equal(manifest.origin, 'https://preview.example.test');
   assert.equal(manifest.schemaVersion, 1);
-  assert.equal(manifest.features['api.passwords']?.version, '1.4.0');
-  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.4.0');
+  assert.equal(manifest.features['api.passwords']?.version, '1.5.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.5.0');
   assert.equal(capabilitySatisfies('1.2.0', '1.3.0'), false);
   assert.equal(manifest.features['api.apps-public']?.version, '1.1.0');
   assert.equal(manifest.features['api.oauth-scopes']?.version, '1.1.0');
@@ -134,7 +134,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.admin-ci-credentials']?.version, '3.1.0');
   assert.equal(manifest.features['api.admin-ci-feature-stacks']?.version, '1.4.0');
   assert.equal(manifest.features['api.admin-ci-previews']?.version, '2.0.0');
-  assert.equal(manifest.features['api.auth-passkeys-register-options']?.version, '1.1.0');
+  assert.equal(manifest.features['api.auth-passkeys-register-options']?.version, '1.2.0');
   assert.equal(manifest.features['api.auth-passkeys-login-options']?.version, '1.1.0');
   assert.equal(manifest.features['api.email-config']?.version, '1.0.1');
   assert.equal(manifest.features['api.health-nitro']?.version, '1.3.0');
@@ -318,8 +318,8 @@ test('both manifests publish passkey concurrency and Apple association contracts
   const apiManifest = createApiCapabilitiesManifest();
   for (const operation of ['login-options', 'login', 'register-options', 'register']) {
     const feature = `api.auth-passkeys-${operation}`;
-    assert.equal(originManifest.features[feature]?.version, operation === 'login' ? '1.2.0' : '1.1.0');
-    assert.equal(apiManifest.features[feature], operation === 'login' ? '1.2.0' : '1.1.0');
+    assert.equal(originManifest.features[feature]?.version, operation === 'login-options' ? '1.1.0' : '1.2.0');
+    assert.equal(apiManifest.features[feature], operation === 'login-options' ? '1.1.0' : '1.2.0');
   }
   assert.equal(originManifest.features['api.apple-app-association']?.version, '1.0.0');
   assert.equal(apiManifest.features['api.apple-app-association'], '1.0.0');

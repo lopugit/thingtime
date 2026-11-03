@@ -35,6 +35,7 @@ private struct ProviderView: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            ScrollView { VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
                 if let treeImage { treeImage.resizable().interpolation(.none).scaledToFit().frame(width: 32, height: 32).accessibilityHidden(true) }
                 Text(model.title).font(.title2).bold()
@@ -49,7 +50,7 @@ private struct ProviderView: View {
             if let retry = model.retry {
                 Button("Try again", action: retry).disabled(model.busy)
             } else {
-                ScrollView { VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 10) {
                     if let summary = model.selectionSummary {
                         DisclosureGroup("Request details", isExpanded: $model.requestDetailsExpanded) {
                             VStack(alignment: .leading, spacing: 6) {
@@ -79,8 +80,9 @@ private struct ProviderView: View {
                     ForEach(model.choices) { choice in
                         Button(action: choice.select) { VStack(alignment: .leading) { Text(choice.title).bold(); Text(choice.detail).font(.caption) }.frame(maxWidth: .infinity, alignment: .leading).padding(8) }.disabled(model.busy)
                     }
-                } }
+                }
             }
+            }.frame(maxWidth: .infinity, alignment: .leading) }
             HStack { Spacer(); Button(model.cancelTitle, action: model.cancel) }
         }.padding(24).frame(minWidth: 300, minHeight: 250)
     }
@@ -196,7 +198,18 @@ private struct ProviderView: View {
     }
     private func authenticate(_ current: UUID, session: ProviderSession) async throws {
         show(.verification)
+        let duration = try await PasswordDeviceVerification.reuseDuration {
+            try await PasswordClient(account: session).deviceVerificationReuseAllowed()
+        }
+        // Preference reads can suspend. Never prompt or approve a request that
+        // changed identity, origin, session or cancellation while it was read.
+        try verify(current, session: session)
         let context = LAContext(); authentication = context
+        context.touchIDAuthenticationAllowableReuseDuration = duration
+        defer {
+            context.invalidate()
+            if authentication === context { authentication = nil }
+        }
         do {
             guard try await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Use your saved Thingtime credential") else { throw PasswordProviderError.cancelled }
         } catch let error as LAError {

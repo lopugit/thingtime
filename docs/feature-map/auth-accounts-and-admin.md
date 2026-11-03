@@ -94,7 +94,7 @@ image loading and the separately sealed list projection. `test:passwords` covers
 these boundaries; `scripts/password-tools.browser.html` is an isolated synthetic
 UI fixture, not native-provider acceptance.
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.4.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.5.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -103,7 +103,7 @@ intentionally bypasses general request diagnostics and automatic origin fallback
 so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
 `passwords/browserPasskey.ts` validates RP/origin/options and implements ES256;
-`browserProviderCeremony.ts` owns fresh `verify-passkey`, catalog selection,
+`browserProviderCeremony.ts` owns policy-checked `verify-passkey`, catalog selection,
 retry identity and durable readback. `BrowserPasswordProvider.tsx` serves
 `/passwords/provider` with editable `browserProviderBlocks.ts`. Chromium transport
 and trusted tab/document checks live in `browser-extension/`; package with
@@ -310,3 +310,12 @@ ICNS/PNG resources derive from the canonical branding assets. Coverage:
 `passwordBranding.test.ts`, extension `branding.test.mjs`, native metadata tests,
 renderer gallery and optional actual-provider Chrome fixture in
 `workspace-browser.mjs` (synthetic API boundary, real component/action routing).
+
+Password confirmation preferences: `passwords/verificationPolicy.ts` owns the
+closed duration/context policy; `api/utils/passwords/verification.ts` owns
+protected device proof and request/session/entry fences. `api.passwords`1.5 and
+account-registration1.2 are negotiated by the new clients. Shared editable
+`PasswordVerificationSettings.tsx` appears in the manager, Password manager
+settings, Security, and explicit fill approval. `PasswordPreviewList.tsx` provides
+editable safe username cards. See [the contract](../password-verification-preferences.md),
+`test:passwords:verification`, `test:passwords:verification-ui` and TESTING.md.
