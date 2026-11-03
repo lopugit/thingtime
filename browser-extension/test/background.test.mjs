@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {webcrypto} from 'node:crypto';
 import * as protocol from '../protocol.js';
+import * as accountModule from '../accounts.js';
 import * as vaultModule from '../vault.js';
 import * as workspaceModule from '../workspace.js';
 const source = (await readFile(new URL('../background.js', import.meta.url), 'utf8')).replace(/^import[^\n]+\n/gm, '');
@@ -21,7 +22,7 @@ function setup(options = {}) {
     webNavigation: {getFrame: async ({tabId}) => frames.get(tabId), onCommitted: event()},
     alarms: {create: async (name, value) => alarmValues.set(name, value), clear: async name => alarmValues.delete(name), onAlarm: event()}};
   if (options.frames) for (const [id, frame] of options.frames) frames.set(id, frame);
-  vm.runInNewContext(source, {...protocol, ...workspaceModule, ...vaultModule, chrome, URL, crypto: webcrypto, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timers.add(timer); return timer; }, clearTimeout});
+  vm.runInNewContext(source, {...protocol,...accountModule, ...workspaceModule, ...vaultModule, chrome, URL, crypto: webcrypto, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timers.add(timer); return timer; }, clearTimeout});
   const send = (message, sender) => new Promise(resolve => chrome.runtime.onMessage.listeners[0](message, sender, resolve));
   const sender = {frameId: 0, documentId: 'original', origin: 'https://rp.example', url: 'https://rp.example/login', tab: {id: 1, windowId: 10, url: 'https://rp.example/login'}};
   const provider = {frameId: 0, documentId: 'provider', origin: state.origin, url: `${state.origin}/passwords/provider`, tab: {id: 2, url: `${state.origin}/passwords/provider`}};
@@ -340,4 +341,7 @@ test('dedicated configured approval popup ignores an older same-site Meta-like w
  assert.equal((await e.send({action:'provider-response',version:1,id:request.id,response:{id:'stale'}},stale)).ok,false);
  await e.send({action:'provider-response',version:1,id:request.id,response:{id:'synthetic-success'}},e.provider);assert.equal((await pending).response.id,'synthetic-success');assert.deepEqual(e.focused.map(x=>[x[0],x[1]]),[['tab',1],['window',10]]);assert.equal(e.frames.has(77),true);
  }finally{e.stop();}
+});
+test('Lock only gates enabled Thingtime requests; disabled and own-origin WebAuthn keep native fallback',async()=>{
+ for(const mode of ['disabled','own-origin']){const e=setup({session:{accountLocked:true}});try{if(mode==='disabled')e.state.enabled=false;const sender=mode==='own-origin'?{...e.sender,origin:e.state.origin,url:e.state.origin+'/login',tab:{...e.sender.tab,url:e.state.origin+'/login'}}:e.sender;const result=await e.send(e.request,sender);assert.equal(result.fallback,true);assert.equal(e.sent.some(value=>value.message.action==='provider-request'),false);}finally{e.stop();}}
 });

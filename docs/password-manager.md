@@ -389,3 +389,44 @@ with individually editable title/subtitle/type/icon blocks. For native branding,
 verify the rendered signed OS picker: compiled icon resources are packaging
 checks, not evidence of the picker label/icon. The physical host filename and
 localized Thingtime display name remain stable.
+
+
+### Automatic Website preview icons
+
+Saved cards keep a manually selected/uploaded icon as the override. Without an
+explicit icon, the preview tries unconcealed HTTPS URL fields in saved order and
+uses the first usable site icon. An unavailable/broken first site does not block
+later Website fields. Existing records work without editing or resaving. Removing
+an override returns to automatic Website icons; when no usable image is found,
+the official Thingtime tree stays visible. The icon remains its own editable
+Builder block; deleting the preview icon block stops automatic lookups for that
+card layout. Custom icon help text and layouts survive the default-copy migration.
+The default editable image has a small white backplate inside its 32px footprint,
+so transparent dark marks remain visible in dark themes. Only the exact prior
+default icon style upgrades; authored backgrounds, styling and deletions survive.
+
+`api.passwords` 1.6 adds an optional `websiteIcon` boolean to preview metadata and
+`POST {operation:"website-icon",expectedOwnerId,id,revision}`. The response is a
+private/no-store sanitized PNG or 204; saved Website values never enter normal
+metadata, browser request URLs or logs. This operation rechecks the exact owner,
+live session and revision; it cannot reveal entry fields. Older password clients
+and ordinary 1.5 flows keep working; only automatic icon requests negotiate 1.6.
+
+Only public HTTPS origins participate: credentials, paths, queries and fragments
+are discarded (credential-bearing URLs are skipped). The server requests public
+site roots anonymously, follows only separately validated HTTPS redirects, and
+may use the public site's declared CDN icon or its `/favicon.ico`; it never sends
+vault domains to an unrelated favicon lookup service. DNS is resolved once,
+mixed/private/reserved answers fail closed, and each HTTPS socket pins that
+validated IP with normal hostname/TLS validation. Session checks fence every new
+lookup/dispatch and final response. A request already dispatched cannot be
+recalled after logout. Public sites can observe an anonymous server icon request.
+
+Raster signatures/decoders validate PNG/JPEG/GIF/WebP/ICO bytes. Self-contained
+SVG vector primitives are sanitized and rasterized without external images,
+fonts, scripts or file/network resource resolution; unrecognized/broken images
+fall back safely. Automatic probes use deadlines, bounded response/decode working
+sets and small thumbnails; these do not limit saved field lengths, entry counts
+or manually uploaded files. Visible-card requests share four worker slots and a
+short in-memory owner/API-origin/entry-revision cache, cleared when that account
+surface closes. No Website URL or image bytes are written into saved card layouts.

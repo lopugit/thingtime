@@ -22,7 +22,7 @@ if (!process.argv.includes('--child')) {
   const probe = socketServer(); probe.listen(0, '127.0.0.1'); await once(probe, 'listening');
   const port = (probe.address() as any).port; await new Promise<void>(resolve => probe.close(() => resolve()));
   await mkdir(join(dir, 'db'));
-  const env = { ...(process.env.THINGTIME_TEST_PLAYWRIGHT_MODULE?{THINGTIME_TEST_PLAYWRIGHT_MODULE:process.env.THINGTIME_TEST_PLAYWRIGHT_MODULE}:{}), ...(process.env.PLAYWRIGHT_BROWSERS_PATH?{PLAYWRIGHT_BROWSERS_PATH:process.env.PLAYWRIGHT_BROWSERS_PATH}:{}), PATH: process.env.PATH!, HOME: dir, TMPDIR: dir, NODE_ENV: 'test', THINGTIME_DATA_ENV: 'development',
+  const env = { ...(process.env.THINGTIME_EXTENSION_ACCOUNTS_UI?{THINGTIME_EXTENSION_ACCOUNTS_UI:process.env.THINGTIME_EXTENSION_ACCOUNTS_UI}:{}), ...(process.env.THINGTIME_TEST_PLAYWRIGHT_MODULE?{THINGTIME_TEST_PLAYWRIGHT_MODULE:process.env.THINGTIME_TEST_PLAYWRIGHT_MODULE}:{}), ...(process.env.PLAYWRIGHT_BROWSERS_PATH?{PLAYWRIGHT_BROWSERS_PATH:process.env.PLAYWRIGHT_BROWSERS_PATH}:{}), PATH: process.env.PATH!, HOME: dir, TMPDIR: dir, NODE_ENV: 'test', THINGTIME_DATA_ENV: 'development',
     MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${port}/thingtime?replicaSet=storage_recovery`, JWT_SECRET: randomBytes(48).toString('hex'), THINGTIME_USER_VAULT_KEY: randomBytes(32).toString('base64url') };
   const containerName = `tt-storage-recovery-${randomUUID()}`;
   const mongoArgs = ['--port', String(port), '--bind_ip', '127.0.0.1', '--replSet', 'storage_recovery', '--nounixsocket', '--wiredTigerCacheSizeGB', '0.25'];

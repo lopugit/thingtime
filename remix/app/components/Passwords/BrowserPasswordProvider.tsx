@@ -1,3 +1,4 @@
+import { BrowserExtensionAccounts } from './BrowserExtensionAccounts';
 import React from 'react';
 import { BrowserPasswordFillProvider } from './BrowserPasswordFillProvider';
 import { passwordVerificationRequest } from '~/passwords/client';
@@ -17,13 +18,10 @@ const emit = (name: string, detail: Record<string, unknown>) => document.dispatc
 
 export function BrowserPasswordProvider() {
   const user = useCurrentUser();
+  if (new URLSearchParams(window.location.search).get('view') === 'accounts') return <BrowserExtensionAccounts />;
   if (new URLSearchParams(window.location.search).get('view') === 'vault') return <BrowserPasswordFillProvider />;
   return <Box maxW="640px" mx="auto" px={{ base: 4, md: 6 }} pt="calc(var(--thingtime-safe-area-top, 0px) + 32px)" pb={8}>
-    {user && !user.temporary ? <ProviderSession key={user.id} ownerId={user.id} /> : <>
-      <Box display="flex" alignItems="center" gap={3}><PasswordBrandMark /><Text as="h1" fontSize="2xl" fontWeight={600}>Sign in to use your Thingtime passkeys</Text></Box>
-      <Text my={4}>Sign in to your account, then restart the passkey request on the website.</Text>
-      <Link to="/login">Sign in to Thingtime</Link>
-    </>}
+    {user && !user.temporary ? <ProviderSession key={user.id} ownerId={user.id} /> : <BrowserExtensionAccounts />}
   </Box>;
 }
 
@@ -81,6 +79,7 @@ function ProviderSession({ ownerId }: { ownerId: string }) {
       let input: ProviderRequest | undefined;
       try {
         input = detailOf(event);
+        if((input as any)?.expectedOwnerId&&(input as any).expectedOwnerId!==ownerId)throw Error('The selected Thingtime account changed.');
         const incoming = validateProviderRequest(input);
         const fontSize=(input as any)?.presentation?.fontSize;
         if(Number.isSafeInteger(fontSize)&&fontSize>0)document.documentElement.style.fontSize=`${fontSize}px`;
@@ -120,7 +119,7 @@ function ProviderSession({ ownerId }: { ownerId: string }) {
       if (live.current) { const current = live.current; live.current = null; current.controller.abort(); current.attempt = {}; emit('thingtime:password-provider-response', { id: current.request.id, error: { name: 'AbortError', message: 'The account or page changed.' } }); }
       clearPassword();
     };
-  }, [finish, refresh]);
+  }, [finish, refresh, ownerId]);
   const actions: TransientBlockActions = {
     'provider.window':({value})=>{setWindowChoice(verificationWindow(value));setConfirmation(previous=>({...previous,required:true}));},
     'provider.refresh': refresh,
