@@ -5,9 +5,11 @@ share `Admin/MongoConnectionInventory.tsx` and individually editable
 `mongoConnectionInventoryBlocks.ts` through `SettingsDocumentHost`.
 `GET /api/v1/admin/mongodb/connections` requires the current administrator,
 returns a private allowlisted projection, and negotiates
-`api.admin-mongodb-connections` 1.0.0. `mongodb/connectionTracker.ts` instruments
+`api.admin-mongodb-connections` 1.1.0. `mongodb/connectionTracker.ts` instruments
 the canonical cached clients; `mongodb/connectionInventory.ts` owns request-bound
-snapshot publication, pagination and optional aggregate diagnostics. See
+snapshot publication, pagination and optional aggregate diagnostics. Deployment
+cards distinguish recent application sockets from modeled monitoring overhead,
+and show allowlisted request-feature use without per-user or command data. See
 [the contract](../mongodb-connections.md) and TESTING.md's inventory checklist.
 
 Auth is an httpOnly cookie carrying a signed JWT (`jti`/`sub`/`exp`) plus a
