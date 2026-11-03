@@ -1,14 +1,18 @@
+import { runWithMongoConnectionFeature } from '../../../app/api/utils/mongodb/connectionTracker';
+import { publishMongoConnectionSnapshots } from '../../../app/api/utils/mongodb/connectionInventory';
 import { agentTestRefusal } from '../../../app/api/utils/agentTesting';
 import { actionDataRoutes } from '../../utils/actionDataRoutes';
 import { defineHandler } from 'nitro/h3';
 import { enforceExpectedActor } from '../../../app/api/utils/auth/expectedActor';
 import { getCurrentUser } from '../../../app/api/utils/auth/getCurrentUser';
 import { recordErrorLog, withErrorLogRequest } from '../../../app/api/utils/errors/errorLogs';
+import { storageFailureCode, storageFailureFromResponse } from '../../../app/api/utils/errors/storageFailure';
 
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/utils/mongodb/endpoint';
 import { enforceExpectedDataPlane } from '../../../app/api/utils/mongodb/dataPlane';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../../../app/api/utils/chatgpt/pluginCore';
 import { StorageMutationError } from '../../../app/api/utils/storage/storageCore';
+import { scheduleUserStorageRecovery } from '../../../app/api/utils/storage/userStorageRecovery';
 import { getApiFallbackOrigin, hasSelfHostedApiEnv, proxyApiRequestToFallback, selectedRuntimeSupportsPlan, shouldProxyApiToFallback, unavailableLocalApiResponse } from '../../utils/apiFallback';
 
 type RouteModule = {
@@ -18,12 +22,14 @@ type RouteModule = {
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
   ...actionDataRoutes,
+  'v1/maps': () => import('../../../app/routes/api/v1/maps/_maps'),
   'v1/devices/node/identity': () => import('../../../app/routes/api/v1/devices/node/identity/_identity'),
   'v1/devices/disconnect': () => import('../../../app/routes/api/v1/devices/disconnect/_disconnect'),
   'v1/files/batches': () => import('../../../app/routes/api/v1/files/batches/_batches'),
   'v1/files': () => import('../../../app/routes/api/v1/files/_files'),
   'v1/lopu/network': () => import('../../../app/routes/api/v1/lopu/network/_network'),
   'v1/lopu/tasks': () => import('../../../app/routes/api/v1/lopu/tasks/_tasks'),
+  'v1/admin/mongodb/connections': () => import('../../../app/routes/api/v1/admin/mongodb/connections/_connections'),
   'v1/admin/error-logs': () => import('../../../app/routes/api/v1/admin/error-logs/_error-logs'),
   'v1/integrations/ci/stack-completion': () => import('../../../app/routes/api/v1/integrations/ci/stack-completion/_stack-completion'),
   'v1/watch/recordings': () => import('../../../app/routes/api/v1/watch/recordings/_recordings'),
@@ -38,6 +44,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/webpages/seed-demos': () => import('../../../app/routes/api/v1/admin/webpages/seed-demos/_seed-demos'),
   'v1/admin/ci/automations': () => import('../../../app/routes/api/v1/admin/ci/automations/_automations'),
   'v1/admin/ci/dispatch': () => import('../../../app/routes/api/v1/admin/ci/dispatch/_dispatch'),
+  'v1/admin/ci/preview-retention': () => import('../../../app/routes/api/v1/admin/ci/preview-retention/_preview-retention'),
   'v1/admin/ci/previews': () => import('../../../app/routes/api/v1/admin/ci/previews/_previews'),
   'v1/admin/ci/stacks/chat': () => import('../../../app/routes/api/v1/admin/ci/stacks/chat/_chat'),
   'v1/integrations/ci/chat': () => import('../../../app/routes/api/v1/integrations/ci/chat/_chat'),
@@ -73,6 +80,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   [CHATGPT_OAUTH_RELAY_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/relay/_relay'),
   'v1/integrations/ci/route': () => import('../../../app/routes/api/v1/integrations/ci/route/_route'),
   'v1/integrations/ios-release': () => import('../../../app/routes/api/v1/integrations/ios-release/_ios-release'),
+  'v1/integrations/ci/preview-retention': () => import('../../../app/routes/api/v1/integrations/ci/preview-retention/_preview-retention'),
   'v1/integrations/ci/credentials': () => import('../../../app/routes/api/v1/integrations/ci/credentials/_credentials'),
   'v1/integrations/ci/progress': () => import('../../../app/routes/api/v1/integrations/ci/progress/_progress'),
   'v1/integrations/vercel/webhook': () => import('../../../app/routes/api/v1/integrations/vercel/webhook/_webhook'),
@@ -180,6 +188,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
 	'v1/watch/sync': () => import('../../../app/routes/api/v1/watch/sync/_sync'),
 	'v1/watch/things': () => import('../../../app/routes/api/v1/watch/things/_things'),
   'v1/agent-overview': () => import('../../../app/routes/api/v1/agent-overview/_agent-overview'),
+  'v1/agents/reporting': () => import('../../../app/routes/api/v1/agents/reporting/_reporting'),
   'v1/communities': () => import('../../../app/routes/api/v1/communities/_communities'),
   'v1/communities/get': () => import('../../../app/routes/api/v1/communities/get/_get'),
   'v1/communities/invites': () => import('../../../app/routes/api/v1/communities/invites/_invites'),
@@ -451,7 +460,8 @@ export default defineHandler(async (event) => {
     return jsonResponse({ ok: false, error: 'Lopu looked everywhere and found no such endpoint 🤷‍♂️' }, { status: 404 });
   }
 
-  return withErrorLogRequest('/api/' + path, method, async () => {
+  const { getApiDocByPath } = await import('../../../app/docs/apiDocs');
+  return runWithMongoConnectionFeature(getApiDocByPath(path)?.group, () => withErrorLogRequest('/api/' + path, method, async () => {
   try {
   const route = await loadModule();
   const handler = method === 'GET' || method === 'HEAD' ? route.loader : route.action;
@@ -483,15 +493,30 @@ export default defineHandler(async (event) => {
         const { startBackgroundTask } = await import('../../../app/api/utils/lopu/backgroundTasks');
         return startBackgroundTask(event.req, async request => normalizeResponse(await handler({ request })));
       }
-      return normalizeResponse(await handler({ request: event.req }));
+      try {
+        return normalizeResponse(await handler({ request: event.req }));
+      } finally {
+        // Source/queue transactions have finished before the recovery worker
+        // opens its own transaction. Durable jobs also survive a lost request.
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+          try {
+            const actor = await getCurrentUser(event.req);
+            if (actor) scheduleUserStorageRecovery(actor.id);
+          } catch { /* Scheduler discovery remains the durable fallback. */ }
+        }
+      }
     });
-    if (response.status >= 500 && path !== 'v1/admin/error-logs') await recordErrorLog(new Error('HTTP request returned a server error'), { source: 'http-response', status: response.status });
+    if (response.status >= 500 && path !== 'v1/admin/error-logs') {
+      const code = await storageFailureFromResponse(response);
+      await recordErrorLog(new Error(code ? 'Storage accounting requires recovery' : 'HTTP request returned a server error'), { source: code ? 'storage-accounting' : 'http-response', status: response.status, code });
+    }
     return response;
   } catch (err) {
     if (err instanceof Response) {
       return err;
     }
 		if (err instanceof StorageMutationError) {
+      if (err.status >= 500) await recordErrorLog(new Error('Storage accounting requires recovery'), { source: 'storage-accounting', status: err.status, code: storageFailureCode(err.message) ?? (err.code === 'storage_invariant' ? 'STORAGE_INVARIANT' : 'STORAGE_ACCOUNTING_UNAVAILABLE') });
 			return jsonResponse({ ok: false, error: err.message }, { status: err.status });
 		}
 
@@ -500,6 +525,12 @@ export default defineHandler(async (event) => {
   } catch (error) {
     if (!(error instanceof Response) && path !== 'v1/admin/error-logs') await recordErrorLog(error, { source: 'http-unhandled', status: 500 });
     throw error;
+  } finally {
+    // Request-bound telemetry only. Health/discovery and proxy returns do not
+    // warm clients or schedule polling; publication reuses an existing home pool.
+    if (!path.startsWith('v1/health') && !path.startsWith('v1/mongodb/status') && path !== 'v1/capabilities') {
+      try { await publishMongoConnectionSnapshots(); } catch { /* Telemetry must never replace an API response. */ }
+    }
   }
-  });
+  }));
 });

@@ -71,6 +71,10 @@ const directives = ({ dev = false } = {}) => ({
 		'https://mapsresources-pa.googleapis.com',
 		'https://maps.gstatic.com',
 		'https://csi.gstatic.com',
+		// The native map SDK and stylesheet are self-hosted by Vite. Mapbox GL JS
+		// fetches styles, tiles, glyphs and telemetry from these service origins.
+		'https://api.mapbox.com',
+		'https://events.mapbox.com',
 		// Dev only: Vite HMR websocket (separate port) + analytics debug beacons.
 		...(dev ? ['ws:', 'wss:', 'https://va.vercel-scripts.com'] : [])
 	],

@@ -1,3 +1,5 @@
+import { BUILDER_THING_KIND, withBuilderThingKind } from './builderThing';
+import { renderComponentDeclaration } from '../components/Thingtime/renderComponentDeclaration';
 import { validateMediaPipeline } from '../webPlatform/mediaPipeline';
 import { validateLiveSource } from './liveSources';
 import { fileSyncSchema, parseFileSyncConfiguration, FILE_SYNC_KIND } from '../fileSync/configuration';
@@ -30,7 +32,7 @@ import { isActionLookupProvider } from './actionLookups';
 // import-free, keeping the pure chain intact for the colocated
 // builtin-projection test.
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
-import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTokens.ts';
+import { sanitizeReactionToken } from '../utils/reactionTokens.ts';
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { blocksToText, isEditorJsDoc, isEditorJsDocSafeToEdit } from '../components/Editor/editorJsValue.ts';
 import { MAX_EXPRESSION_ARGS, catalogueSignature, isLambdaArg } from './actionExpressions.ts';
@@ -104,11 +106,15 @@ export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 
 // Protected operational Things created when an admin migration throws. The
 // prefix is reserved so generic callers cannot squat a future diagnostic URL.
+export const STORAGE_PENDING_THINGTIME = 'storage-pending';
+export const STORAGE_RECOVERY_THINGTIME = 'storage-recovery';
 export const ERROR_LOG_THINGTIME = 'error-log';
+export const MONGODB_CONNECTION_SNAPSHOT_THINGTIME = 'mongodb-connection-snapshot';
+export const MONGODB_CONNECTION_SNAPSHOT_ID_PREFIX = 'mongodb-connection-snapshot-';
 export const ERROR_LOG_ID_PREFIX = 'error-log-';
 // One root expiry policy for disposable control Things; excludes content and
 // invitations whose expiry must perform cleanup/refunds before deletion.
-export const EPHEMERAL_CONTROL_THINGTIMES = ['migration-diagnostic', ERROR_LOG_THINGTIME, 'device-sync-control'] as const;
+export const EPHEMERAL_CONTROL_THINGTIMES = ['migration-diagnostic', ERROR_LOG_THINGTIME, 'device-sync-control', MONGODB_CONNECTION_SNAPSHOT_THINGTIME] as const;
 export const MIGRATION_DIAGNOSTIC_THINGTIME = 'migration-diagnostic';
 export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
 
@@ -1174,7 +1180,7 @@ const reactionSchema: ThingtimeSchema = {
   summary: 'An emoji reaction to another thing — one thing per (user, target, token).',
   detail:
     'The emoji is an open-vocabulary token: a single emoji or a multi-emoji group typed as one ' +
-    `unit (up to ${MAX_REACTION_EMOJIS} emoji), validated emoji-only by the shared token helper. ` +
+    'unit, validated emoji-only by the shared token helper without an emoji-count limit. ' +
     'Users can hold several reaction things on one target; toggling a token they already have ' +
     'removes it. Reactions used to live embedded on post docs as an emoji → userIds map — the ' +
     'things v1→v2 migration explodes them into these.',
@@ -1184,11 +1190,7 @@ const reactionSchema: ThingtimeSchema = {
       name: 'emoji',
       type: 'string',
       required: true,
-      max: MAX_REACTION_EMOJIS,
-      // emoji count, NOT UTF-16 chars (every emoji is 2+ code units) — keeps
-      // the projection from publishing a maxLength that rejects legal tokens
-      maxUnit: 'emoji',
-      description: `The reaction token — one emoji or a multi-emoji group (max ${MAX_REACTION_EMOJIS} emoji, emoji-only).`
+      description: 'The complete emoji-only reaction token — one emoji or a multi-emoji group, without a character or emoji-count limit.'
     }
   ],
   example: { emoji: '🤣🤣🙌💀💦' }
@@ -2398,6 +2400,15 @@ const serviceQuotaSchema: ThingtimeSchema = {
 	}
 };
 
+const mongodbConnectionSnapshotSchema: ThingtimeSchema = {
+  id: MONGODB_CONNECTION_SNAPSHOT_THINGTIME, version: 1, kind: 'crystal', collection: null,
+  title: 'MongoDB connection source snapshot', summary: 'Private server-minted CMAP telemetry for one runtime client.',
+  detail: 'Home-only protected control Thing, admin-only dedicated read, 24-hour shared root TTL. No URI, credentials, custom endpoint address, command or user data.',
+  createdVia: 'Canonical MongoClient CMAP instrumentation',
+  fields: [{ name: 'source', type: 'object', required: true, description: 'Whitelisted runtime, deployment and pool counters; historical observations never assert global live coverage.' }],
+  example: { source: { purpose: 'home', status: 'ready', pools: [] } }
+};
+
 const errorLogSchema: ThingtimeSchema = {
   id: ERROR_LOG_THINGTIME, version: 1, kind: 'crystal', collection: null,
   title: 'Error log', summary: 'A redacted server error, searchable by current admins in /things?logs=1.',
@@ -2929,13 +2940,11 @@ const pushDeviceThingSchema: ThingtimeSchema = {
 // move path cycle-checks the ancestor chain. Organization is personal:
 // folderId only ever points at a folder the SAME owner holds, and folders
 // default private (organization structure is not content).
-export const MAX_FOLDER_NAME_CHARS = 120;
 export const MAX_FOLDER_ICON_CHARS = 32;
-export const MAX_FOLDER_DESCRIPTION_CHARS = 500;
 
 const folderSchema: ThingtimeSchema = {
   id: 'folder',
-  version: 1,
+  version: 2,
   kind: 'crystal',
   collection: null,
   title: 'Folder',
@@ -2948,9 +2957,12 @@ const folderSchema: ThingtimeSchema = {
     'they re-parent to the deleted folder’s parent. Folders default private (acl ["tt:user"]): ' +
     'how you organise your things is yours even when the things themselves are public.',
   fields: [
-    { name: 'name', type: 'string', required: true, max: MAX_FOLDER_NAME_CHARS, description: 'Folder display name.' },
+    { name: 'name', type: 'string', required: true, description: 'Folder display name.' },
     { name: 'icon', type: 'string', required: false, max: MAX_FOLDER_ICON_CHARS, description: 'Optional emoji shown instead of the default 📁.' },
-    { name: 'description', type: 'string', required: false, max: MAX_FOLDER_DESCRIPTION_CHARS, description: 'Optional note about what lives here.' }
+    { name: 'description', type: 'string', required: false, description: 'Optional note about what lives here.' },
+    { name: 'builderApp', type: 'boolean', required: false, description: 'Marks an owner-owned top-level folder as a Builder app workspace. Folder membership never grants access to its contents.' },
+    { name: 'iconUrl', type: 'string', required: false, description: 'Uploaded image URL or an explicit HTTPS fallback for the app icon.' },
+    { name: 'metadata', type: 'object', required: false, description: 'Owner-authored structured workspace metadata, validated with the ordinary data crystal codec.' }
   ],
   example: { name: 'Recipes', icon: '🍜', description: 'Everything I want to cook someday.' }
 };
@@ -4274,9 +4286,11 @@ export const DEVICE_CONTROL_THINGTIME = ['device-sync-control', 'device-command'
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
+  'agent-reporting-binding', 'agent-reporting-operation',
   'file',
   'mail-account', 'mail-folder', 'mail-message', 'mail-inbox', 'mail-operation',
-  'password-manager-entry',
+  'password-manager-entry', 'password-verification-device',
   'draft',
   // Moderator-managed references; only the subspace embeds endpoint writes them.
   'subspace-embed',
@@ -4306,6 +4320,7 @@ export const PROTECTED_THINGTIME = [
 	'service-quota',
   MIGRATION_DIAGNOSTIC_THINGTIME,
   ERROR_LOG_THINGTIME,
+  MONGODB_CONNECTION_SNAPSHOT_THINGTIME,
 	'moderationFlag',
   ...CI_CONTROL_THINGTIME,
   ...EXTERNAL_CONNECTION_THINGTIME,
@@ -4487,12 +4502,18 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
     createdVia: '/api/v1/mail', fields: [], example: {}
   })),
 
+  { id:'password-verification-device',version:1,kind:'crystal',collection:null,title:'Password verification device trust',summary:'Private server-owned device trust.',detail:'Opaque hashed device binding and scope live in protected Binary control-plane records. Only successful current-password confirmation enrolls trust. Generic reads, writes, sharing and Actions cannot access it.',createdVia:'/api/v1/passwords',fields:[],example:{} },
   { id: 'password-manager-entry', version: 2, kind: 'crystal', collection: null, title: 'Password manager entry',
     summary: 'An encrypted, private credential with ordered custom fields.',
     detail: 'Created only through the password manager API. The title, password type, ordered fields and field types form an extensible document; field values are encrypted together with the account vault key. Generic Thing CRUD, search, sharing and history cannot disclose the entry. The Thing fields mod supplies sectioned and typed field editors. Imported source JSON, account/vault attributes, flags, tags, and password history are encrypted alongside the fields; private encrypted files are relational attachment Things.',
     createdVia: '/api/v1/passwords', fields: [
       { name: 'title', type: 'string', required: true, description: 'Entry title.' },
       { name: 'passwordType', type: 'enum', required: true, values: [...PASSWORD_TYPES], description: 'Credential category. Native passkeys hold encrypted signing material.' },
+      { name: 'icon', type: 'object', required: false, description: 'Explicit uploaded password file or HTTPS URL choice. Sealed separately for private list presentation; never inferred from secret fields.', children: [
+        { name: 'kind', type: 'enum', required: true, values: ['url', 'attachment'], description: 'Selected image source.' },
+        { name: 'url', type: 'string', required: false, description: 'HTTPS image URL without credentials; loaded anonymously only after explicit selection.' },
+        { name: 'fileId', type: 'string', required: false, description: 'Owned ready password attachment bound to this entry.' }
+      ] },
       { name: 'fields', type: 'array', required: true, children: [
         { name: 'id', type: 'string', required: true, description: 'Stable field id.' },
         { name: 'label', type: 'string', required: true, description: 'Field label.' },
@@ -4553,6 +4574,12 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   shareSchema,
   dataSchema,
   {
+    id: BUILDER_THING_KIND, version: 1, kind: 'crystal', collection: null,
+    title: 'Builder Thing', summary: 'Content authored through the Thingtime Builder.',
+    detail: 'Composable authorship metadata alongside a content schema. It does not change content validation, rendering, ownership or access. Legacy Builder kinds remain recognizable without a migration.',
+    fields: [], example: {}
+  },
+  {
     id: 'scheduled-task-run', version: 1, kind: 'crystal', collection: null,
     title: 'Scheduled task run', summary: 'An owner-private, editable run note linked to its task by targetId.',
     requiresTarget: true,
@@ -4603,6 +4630,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
 	serviceQuotaSchema,
   migrationDiagnosticSchema,
   errorLogSchema,
+  mongodbConnectionSnapshotSchema,
   // the Lopu model catalog (protected, seeded by api/utils/ai/models.ts)
   aiModelSchema,
   // Lopu credits + usage accounting (protected, api/utils/lopu/accounting.ts)
@@ -5856,7 +5884,7 @@ const sanitizeWebpageBlock = (
 	if (type === 'element' || type === 'collection' || type === 'condition') {
 		if (type === 'element') {
 			const tag = typeof raw.tag === 'string' ? raw.tag.toLowerCase() : 'div';
-			if (!HTML_ALLOWED_TAGS.has(tag) || (tag.startsWith('tt-') && tag !== 'tt-media-pipeline')) return fail(400, 'Element blocks require a safe HTML tag');
+			if (!HTML_ALLOWED_TAGS.has(tag) || (tag.startsWith('tt-') && !['tt-media-pipeline', 'tt-mapbox', 'tt-form', 'tt-select', 'tt-style', 'tt-change'].includes(tag))) return fail(400, 'Element blocks require a safe HTML tag');
 			if (tag === 'tt-media-pipeline') {
 				try { validateMediaPipeline((raw.props as any)?.pipeline); } catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid media pipeline'); }
 			}
@@ -7022,7 +7050,6 @@ const sanitizeFeedAlgorithmCrystal = (input: Record<string, unknown>): { ok: tru
 const sanitizeFolderCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   if (!name) return fail(400, 'Folder name is required');
-  if (name.length > MAX_FOLDER_NAME_CHARS) return fail(400, `Folder name is too long (max ${MAX_FOLDER_NAME_CHARS})`);
   const crystal: Record<string, unknown> = { name };
   if (input.icon !== undefined && input.icon !== null) {
     if (typeof input.icon !== 'string' || input.icon.trim().length > MAX_FOLDER_ICON_CHARS) {
@@ -7031,10 +7058,25 @@ const sanitizeFolderCrystal = (input: Record<string, unknown>): { ok: true; crys
     if (input.icon.trim()) crystal.icon = input.icon.trim();
   }
   if (input.description !== undefined && input.description !== null) {
-    if (typeof input.description !== 'string' || input.description.trim().length > MAX_FOLDER_DESCRIPTION_CHARS) {
-      return fail(400, `Folder description is too long (max ${MAX_FOLDER_DESCRIPTION_CHARS})`);
-    }
+    if (typeof input.description !== 'string') return fail(400, 'Folder description must be text');
     if (input.description.trim()) crystal.description = input.description.trim();
+  }
+  if (input.builderApp !== undefined) {
+    if (input.builderApp !== true && input.builderApp !== false) return fail(400, 'builderApp must be a boolean');
+    if (input.builderApp) crystal.builderApp = true;
+  }
+  if (input.iconUrl !== undefined && input.iconUrl !== null) {
+    if (typeof input.iconUrl !== 'string') return fail(400, 'Folder icon URL must be text');
+    const iconUrl = input.iconUrl.trim();
+    if (iconUrl && !/^https:\/\/[^\s]+$/i.test(iconUrl) && !/^\/api\/v1\/attachments\/content\?id=[A-Za-z0-9_-]+$/.test(iconUrl))
+      return fail(400, 'Folder icon URL must be HTTPS or an uploaded Thingtime image');
+    if (iconUrl) crystal.iconUrl = iconUrl;
+  }
+  if (input.metadata !== undefined && input.metadata !== null) {
+    if (typeof input.metadata !== 'object' || Array.isArray(input.metadata)) return fail(400, 'Folder metadata must be an object');
+    const validated = sanitizeDataValue(input.metadata, { path: 'metadata', depth: 2 });
+    if (validated.ok === false) return validated;
+    crystal.metadata = validated.value;
   }
   return { ok: true, crystal };
 };
@@ -7112,25 +7154,28 @@ export const validateThingtimeCrystal = (
     if (!ids.includes(id)) ids.push(id);
   }
 
+  const contentIds = ids.filter(id => id !== BUILDER_THING_KIND);
+  if (!contentIds.length) return fail(400, 'builder-thing requires a content schema');
+
   // Free-form 'data' crystals stand alone. Combining data with a typed schema
   // would let arbitrary keys ride past that schema's whitelist (verified:
   // ["post","data"] smuggled non-post fields into the stored crystal), so the
   // open shape and the closed shapes never share one thing.
-  if (ids.includes('data') && ids.length > 1) {
+  if (contentIds.includes('data') && contentIds.length > 1) {
     return fail(400, 'data crystals stand alone — publish a separate data thing and link it via targetId or tags');
   }
 
   // Folders are pure organization: combining them with a content schema would
   // make a doc that is both a container and content (and would let e.g.
   // ["post","folder"] ride the folder sanitizer past the post whitelist).
-  if (ids.includes('folder') && ids.length > 1) {
+  if (contentIds.includes('folder') && contentIds.length > 1) {
     return fail(400, 'folder things stand alone — put content IN the folder via folderId instead');
   }
 
   const input = crystal && typeof crystal === 'object' && !Array.isArray(crystal) ? (crystal as Record<string, unknown>) : {};
   const merged: Record<string, unknown> = {};
   let requiresTarget = false;
-  for (const id of ids) {
+  for (const id of contentIds) {
     const schema = getThingtimeSchema(id)!;
     if (schema.requiresTarget) requiresTarget = true;
     const sanitizer = crystalSanitizers[id];
@@ -7140,7 +7185,7 @@ export const validateThingtimeCrystal = (
       // refuse with the real reason instead of pretending they don't exist.
       return fail(403, `${id} things are managed by their own endpoints`);
     }
-		const sanitized = sanitizer(input, ids, options);
+		const sanitized = sanitizer(input, contentIds, options);
     if (sanitized.ok === false) return sanitized;
     Object.assign(merged, sanitized.crystal);
   }
@@ -7153,5 +7198,27 @@ export const validateThingtimeCrystal = (
     if (title.length > 300) return fail(400, 'Thing title is too long (max 300)');
     if (title) merged.title = title;
   }
-  return { ok: true, thingtime: ids, crystal: merged, requiresTarget };
+  // Presentation is common metadata, never a way around a typed content
+  // allowlist. Keep explicit null as an unavailable renderer (not permission
+  // to infer one); PATCH omission preserves the existing declaration, while a
+  // replacement crystal may omit it. This pointer grants no Component access.
+  if (Object.prototype.hasOwnProperty.call(input, 'renderComponent')) {
+    if (input.renderComponent === null) merged.renderComponent = null;
+    else {
+      const declaration = renderComponentDeclaration(input);
+      if (!declaration || declaration.kind === 'invalid') return fail(400, 'renderComponent must reference a Component id or embed a render template');
+      if (declaration.kind === 'reference') {
+        const id = declaration.id.trim();
+        if (/[$\s/\\]/.test(id)) return fail(400, 'renderComponent.id must be a Thing id');
+        merged.renderComponent = { id };
+      } else {
+        // Inline definitions use the same canonical Component sanitizer as
+        // saved Components, including the render/argument/source safety gates.
+        const component = sanitizeComponentCrystal({ name: 'Thing presentation', ...declaration.component });
+        if (component.ok === false) return component;
+        merged.renderComponent = component.crystal;
+      }
+    }
+  }
+  return { ok: true, thingtime: withBuilderThingKind(ids, merged), crystal: merged, requiresTarget };
 };

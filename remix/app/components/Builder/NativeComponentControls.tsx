@@ -8,6 +8,9 @@ import { countdownDuration, countdownRemaining } from './nativeControlClock';
 import { formCompletionMatches } from './nativeControlForm';
 
 export const NativeControlsEnabled = React.createContext(false);
+// Static Thing render Components may display sanitized markup but never mount
+// programs or inherit a surrounding page's delegated Action controls.
+export const ComponentDisplayOnly = React.createContext(false);
 export const ComponentLocalControl = React.createContext<((input: Record<string, unknown>) => void) | null>(null);
 // Menu dialogs live beside the hidden popover, within the same authored scope.
 export const ComponentDialogHost = React.createContext<{ element: HTMLElement; restoreFocus: () => void } | null>(null);

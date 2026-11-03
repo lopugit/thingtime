@@ -16,6 +16,12 @@ enum MobileBridgeTestReadiness {
                 controller.view = webView
                 window.rootViewController = controller
                 window.makeKeyAndVisible()
+                // A hosted suite can leave its scene inactive between tests.
+                // Ask UIKit to foreground that same session; require() still
+                // fails unless the real application/origin prerequisites arrive.
+                if scene.activationState != .foregroundActive {
+                    UIApplication.shared.requestSceneSessionActivation(scene.session, userActivity: nil, options: nil)
+                }
                 return window
             }
             try await Task.sleep(nanoseconds: 20_000_000)

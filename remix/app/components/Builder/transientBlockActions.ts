@@ -9,6 +9,14 @@ export const TRANSIENT_BLOCK_BOUNDARY = 'data-tt-transient-boundary';
 export const isTransientBlockTarget = (target: Element | null): boolean =>
 	!!target?.closest?.(`[${TRANSIENT_BLOCK_BOUNDARY}]`);
 
+/** Capture only this adapter's own controls. Native React controls and nested
+ * adapters must receive their target handlers without an outer capture stop. */
+export function transientControlForTarget(root: Element, target: Element | null): HTMLElement | null {
+	const control = target?.closest?.<HTMLElement>('[data-tt-action]');
+	return control && root.contains(control) && control.closest(`[${TRANSIENT_BLOCK_BOUNDARY}]`) === root &&
+		control.getAttribute('data-tt-action') === TRANSIENT_BLOCK_ACTION ? control : null;
+}
+
 export type TransientBlockInvocation = {
 	inputs: Readonly<Record<string, string | number | boolean>>;
 	value: string | boolean | undefined;

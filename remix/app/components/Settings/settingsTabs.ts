@@ -7,6 +7,7 @@ export const SETTINGS_TABS = [
 	{ id: 'appearance', label: 'Appearance' },
 	{ id: 'notifications', label: 'Notifications' },
 	{ id: 'security', label: 'Security' },
+	{ id: 'passwords', label: 'Password manager' },
 	{ id: 'connections', label: 'Connections' },
 	{ id: 'lopu', label: 'Lopu' },
 	{ id: 'ai-waterfalls', label: 'AI waterfalls' },
@@ -21,6 +22,7 @@ export function resolveSettingsTab(value?: string | null, hash = ''): SettingsTa
 	if (knownTab) return value as SettingsTab;
 	// Keep existing section bookmarks and links working after introducing tabs.
 	if (hash === '#ai-waterfalls') return 'ai-waterfalls';
+	if (hash === '#password-manager') return 'passwords';
 	if (hash === '#secure-vault') return 'security';
 	if (hash === '#lopu' || hash === '#lopu-instructions') return 'lopu';
 	if (hash === '#lopu-accounts' || hash === '#lopu-base-prompt') return 'admin';

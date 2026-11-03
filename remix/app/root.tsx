@@ -18,6 +18,7 @@ import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
 import { TimelineHost } from './components/Timeline/TimelineHost';
 import { TimelineProvider } from './timeline/TimelineProvider';
+import { BUILDER_OVERLAY_CHROME_CSS } from './components/Builder/BuilderOverlayHost';
 import { DevKit } from './components/DevKit/DevKit';
 import { ElectronBridgeHost } from './components/Electron/ElectronBridgeHost';
 import { NativeBridgeHost } from './components/NativeBridge/NativeBridgeHost';
@@ -70,7 +71,8 @@ export default function App() {
   const { envFromCookie, titlePrefix } = rootData;
   const { pathname, search, hash } = useLocation();
   const isStandalonePage = pathname.startsWith('/t/');
-  const isAuthorizePopup = isStandalonePage || pathname === '/invite' || pathname === '/authorize' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
+  const isPasswordSurface = pathname === '/passwords' || pathname === '/settings/passwords';
+  const isAuthorizePopup = isStandalonePage || pathname === '/invite' || pathname === '/authorize' || pathname === '/passwords/provider' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
   React.useLayoutEffect(() => bindTransferIdentity(rootIdentity, rootData.user?.id, rootData.clientIdentityGeneration),
@@ -130,6 +132,7 @@ export default function App() {
       <GlobalStyles />
       <style>{`
         ${PAGE_VIEWPORT_CSS}
+        ${BUILDER_OVERLAY_CHROME_CSS}
         html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [data-testid="site-edit-pill"],
         html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [class~="tt.devKit"],
         html[data-lopu-sheet="open"] [data-testid="site-edit-pill"] { z-index: ${LOPU_WINDOW_Z - 1} !important; }
@@ -153,7 +156,7 @@ export default function App() {
             surface with their own chrome, so the app shell (nav, drawer trigger,
             DevKit bubble, Main's footer + its 900px spacer) stays out of it. */}
         <div id="lopuPageViewport">
-        {isAuthorizePopup ? null : <DevKit />}
+        {isAuthorizePopup || isPasswordSurface ? null : <DevKit />}
         {isAuthorizePopup ? null : <Nav />}
         <div id="lopuPageScroll">
         {isAuthorizePopup ? (
@@ -171,7 +174,7 @@ export default function App() {
         {isAuthorizePopup ? null : <DrawerSystem />}
         </div>
         {/* 🦄 Lopu: global floating launcher + draggable chat window (hidden on /lopu). */}
-        {mounted && !isAuthorizePopup ? <LopuHost /> : null}
+        {mounted && !isAuthorizePopup && !isPasswordSurface ? <LopuHost /> : null}
         {/* ⌘K quick switcher — global palette; renders nothing until opened. */}
         {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
         {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}

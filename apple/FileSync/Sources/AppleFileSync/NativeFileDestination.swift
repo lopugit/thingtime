@@ -8,6 +8,23 @@ enum NativeFileDestination {
     typealias Entry = MobileFolderReader.Entry
     typealias Failure = MobileFolderStore.Failure
     static func identity(_ info: stat) -> String { "\(info.st_dev):\(info.st_ino)" }
+    /// Older simulator host kernels reject RESOLVE_BENEATH before doing any work.
+    /// On those kernels, validated relative paths (no absolute paths, dot segments
+    /// or links) retain the same beneath boundary with NOFOLLOW_ANY. Never retry
+    /// without the no-follow or atomic exclusion/swap protections.
+    static func rename(_ fromFD: Int32, _ from: String, _ toFD: Int32, _ to: String, flags: UInt32,
+                       syscall: (Int32, String, Int32, String, UInt32) -> Int32 = { renameatx_np($0, $1, $2, $3, $4) }) throws {
+        _ = try MobileFolderReader.components(from)
+        _ = try MobileFolderReader.components(to)
+        guard fromFD >= 0, toFD >= 0,
+              try MobileFolderReader.info(fromFD).st_mode & S_IFMT == S_IFDIR,
+              try MobileFolderReader.info(toFD).st_mode & S_IFMT == S_IFDIR,
+              flags == UInt32(RENAME_EXCL) || flags == UInt32(RENAME_SWAP) else { throw Failure.invalid }
+        let protectedFlags = flags | UInt32(RENAME_NOFOLLOW_ANY)
+        if syscall(fromFD, from, toFD, to, protectedFlags | UInt32(RENAME_RESOLVE_BENEATH)) == 0 { return }
+        guard errno == EINVAL else { throw Failure.changed }
+        guard syscall(fromFD, from, toFD, to, protectedFlags) == 0 else { throw Failure.changed }
+    }
     static func rootIdentity(bookmark: Data) throws -> String {
         var stale = false
         let url = try FolderBookmark.resolve(bookmark, stale: &stale)

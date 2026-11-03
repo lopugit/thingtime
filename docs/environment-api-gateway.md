@@ -121,15 +121,30 @@ deployment, **not one process or socket**, and does not change the Atlas tier.
 
 ## Rollout and environment mapping
 
-The intended public mapping is production/main → `thingtime.com` with gateway
-environment `production` → production database; custom develop/develop →
-`dev.thingtime.com` with environment `develop` → development database; and
-standard previews → controlled `master.previews.thingtime.com` with environment
-`preview` → development database. The latest configuration audit confirmed that
-custom develop and previews currently use the same development cluster, separate
-from the production cluster. The `master.previews.thingtime.com` alias has not
-yet been created or verified, and gateway activation across these origins is
-pending. Do not treat the proposed mapping as proof of live gateway operation.
+The intended mapping separates the logical gateway environment from Vercel's
+credential target:
+
+| Deployment | Source | Vercel credential target | Gateway environment and origin | Database |
+| --- | --- | --- | --- | --- |
+| Production owner | Current `main` | Production | `production` / `https://thingtime.com` | Production |
+| Preview master owner | Current `main`, separately built for preview | Standard preview | `preview` / `https://master.previews.thingtime.com` | Development |
+| Ordinary PR preview | Exact PR head | Existing custom develop target | `preview` / `https://master.previews.thingtime.com` | Development |
+| Develop owner | Current `develop` | Custom develop | `develop` / `https://dev.thingtime.com` | Development |
+
+Ordinary PR deployments retain their existing Vercel credential scope. The
+protected publisher overrides only their gateway environment, origin and relay
+secret, using the exact preview-scoped secret. It does not copy all standard
+preview settings onto PR code: the two targets contain different sensitive
+settings. The historical `pr-N.previews.dev.thingtime.com` alias naming does not
+select the backend; the explicit gateway configuration does. Dedicated PRs
+retain that same credential target and run their own handlers against its
+configured development database.
+
+The latest configuration audit confirmed that custom develop and previews use
+the same development cluster, separate from production. The
+`master.previews.thingtime.com` alias has not yet been created or verified, and
+gateway activation across these origins is pending. Do not treat the intended
+mapping as proof of live gateway operation.
 Preserve existing data/authentication assignments unless an explicit data
 migration is authorized.
 
@@ -192,6 +207,17 @@ deployment to its stable environment alias. Keep its previous immutable
 identity for rollback. Dedicated deployments can still use a shared environment
 database; independent gateway identities do not create database isolation.
 
+The protected prebuilt publisher lives on the canonical `github-actions`
+controller branch. A fork using this workflow must allow that exact protected
+branch in the `vercel-prebuilt-control` GitHub environment's deployment branch
+policies, alongside the existing intended callers. Preserve its reviewers,
+protection mode and other restrictions; do not allow arbitrary branch patterns
+to make a dispatch pass. A `build_only` dispatch creates separate artifacts for
+production and the preview master without publishing either. Verify the
+controller commit, source commit, target and artifact digest before bootstrap.
+The publisher forces canonical owners to `proxy`; keep the connection mode
+unset at project scope so each ordinary branch can use its bundled opt-in.
+
 For new deployments, scope Mongo credentials according to the selected
 connection mode and environment. Changing credentials on existing previews is
 an optional, separately assessed rollout choice; it is not required to finish
@@ -202,7 +228,19 @@ record observed status rather than claiming all old code is fenced. Strong
 enforcement across arbitrary code requires platform-level credential/network
 separation, potentially a dedicated backend project.
 
-Before moving an alias, negotiate `api.lopu-background-tasks` 1.3.2 and inspect
+For a first gateway activation, an audited legacy deployment can retain its
+in-flight work. Verify its immutable source has no active gateway settings,
+that Workflow steps invoke the original deployment's local handlers, and that
+the selected database, public origin and task scope stay unchanged. Preserve
+that deployment, its credentials, executor acknowledgments and shared
+conversation locks. In this case moving the alias does not fence or cancel the
+legacy callbacks. Public task counts cannot prove zero reservations, and old
+deployments can still hold direct MongoDB connections. Record the old deployment
+and source identities and this acceptance boundary before activation. Stop if
+the old owner has gateway settings or any of those assumptions cannot be verified.
+
+Before promoting a replacement for an already configured gateway owner,
+negotiate `api.lopu-background-tasks` 1.3.2 and inspect
 authenticated `GET /api/v1/lopu/tasks` for running server-managed roots and
 reservations. This is account/data-scope bounded, not a global fleet census.
 Drain those continuations or stop them through the normal owned-task control

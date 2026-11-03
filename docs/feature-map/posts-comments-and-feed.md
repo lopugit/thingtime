@@ -1,5 +1,11 @@
 # Posts, comments and feed
 
+Typed Posts and comments retain explicit `crystal.renderComponent` metadata.
+The root declaration takes precedence over legacy nested `crystal.thing` in
+`PostInteractiveThing`; the linked embed still reads its Component through its
+own ACL. See [the presentation contract](api-endpoints-and-capabilities.md)
+for validation, versions and regression checks.
+
 Posts are `post` Things; comments share the post schema
 (`thingtime: ['post', 'comment']`, `targetId` = parent) so every comment is
 reactable and has a `/post/:id` permalink. Reactions, saves, votes and views are
@@ -19,6 +25,8 @@ relational children aggregated on read (`FUNDAMENTALS.md` §3).
 | Composer (Editor.js rich text, attachments, tags, audience) | `app/components/Feed/PostComposer.tsx`, `app/components/Editor/*` |
 | Lists and pages | `app/components/Feed/PostList.tsx`, `Feed.tsx`, `app/routes/feed.tsx`, `post.tsx`, `media.tsx`, `explore.tsx` |
 | Reaction overlays and thread cache (optimistic rendering) | `app/components/Feed/reactionOverlay.ts`, `threadCache.ts`, `useFeedEngagement.ts` |
+| Emoji picker, retained input and personal quick reactions | `app/components/Emoji/EmojiPicker.tsx`, `useRecentReactions.tsx`, `reactionPickerState.ts`; `PostCard.tsx` shares them across posts/comments |
+| Messenger reaction chips and retained emoji input | `app/components/Messenger/MessageRow.tsx`, `MessengerEmojiPicker.tsx`, `Composer.tsx`; shared `Emoji/useEmojiPickerDraft.ts` scopes drafts to identity and message/chat/thread |
 | Subspaces (communities) moderation on posts | `app/api/utils/subspaces/*`, `app/components/Subspaces/*` |
 
 ## Authorization helper
@@ -67,6 +75,22 @@ projection or changes target permissions.
   `test:hooks` (payload shaping).
 - `TESTING.md`: "Post interactions & inherit chains", "Post views", poll and
   up/down sections, "Post and comment attachments".
+- `test:feed` includes reaction token/schema, recent ordering and identity-scope
+  regressions. `test:emoji-picker-acceptance` exercises long combinations,
+  dismissal/reopening, nine quick recents and real post/comment reaction readback
+  in an isolated API/browser environment at desktop and mobile sizes. It also
+  checks Messenger Chats/Spaces reaction readback, full wrapping chips, dismissal
+  drafts and composer insertion; `test:messenger` covers its API contracts.
+
+Reaction combinations share `utils/reactionTokens.ts` across feed, Messenger
+and the canonical reaction schema. `api.things-react` 1.2.1,
+`api.chats-react` 1.0.3, `api.things` 1.46.2, `api.things-update` 1.15.1 and
+`api.schemas` 1.1.1 remove the obsolete token-length caps. Emoji-only grammar,
+ACLs, storage accounting and request transport validation remain enforced.
+The custom input survives popover dismissal per account/origin/database/target;
+the quick popup supplements defaults with nine unique recent tokens. Server
+snapshots retain current server order, including other-device use; delayed
+older replies cannot displace newer confirmed selections.
 
 ## Account drafts and templates
 
@@ -99,7 +123,30 @@ protected relational `subspace-embed` Thing. Readers must pass the subspace gate
 and the referenced Thing's independent ACL on every load. Embedding never
 changes an audience or shares a hidden link secret.
 
+`PostInteractiveThing` delegates ordinary data Things to the shared `ThingView`.
+Human-facing data declares `renderComponent: { id: "<saved Component Thing ID>" }`
+or embeds the canonical Component crystal directly, for example
+`renderComponent: { render: { tag: "p", children: ["{text}"] } }`.
+`ThingRenderComponent` reads a referenced Component through the normal Things
+API and its independent ACL, then uses the existing Component argument/template
+resolver and inert HTML/Chakra renderers. Bindings receive the displayed data
+(also available as `thing`), defaults and saved arguments. Sources and Actions
+do not execute in this display context. Saved Component/Webpage Things retain
+their existing editable definitions and rendering paths.
+
+An explicit declaration takes priority over legacy kind rendering, including
+when invalid or inaccessible; it never falls back to a type alias. The data
+inspector is a deliberate toggle. Identity changes fence pending reads, and
+focus/visibility refreshes recheck referenced Component access. The containing
+Thing does not grant access to its renderer or dependencies. Preserve data,
+ownership and audiences when assigning renderers to older Things.
+`TransientBlockHost` captures only its own transient Action controls, allowing
+the embedded Thing's native view toggle and nested controls to receive events.
+
 Run `test:subspaces`, `test:messenger`, `test:feed`, `test:api-capabilities`, then
 `test:subspace-messages-acceptance` against the built server. The latter creates
 its own OS-fenced disposable replica and real API fixtures; `--ui` additionally
 checks desktop/mobile rendering and saved controls.
+The feed suite includes `thingRenderComponent.test.ts`; the acceptance harness
+covers saved/embedded render declarations, exact saved content and both embed
+placements with rendered/data views and reload.

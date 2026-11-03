@@ -55,11 +55,13 @@ const QUICK_BLOCKS: Array<{ key: string; icon: string; label: string; make: (exi
 export const BlockInsertMenu = (props: {
 	allowedBlockTypes?: readonly WebpageBlockType[];
 	anchor: HTMLElement;
+	/** Host-document click point for a context command on a large/scaled block. */
+	anchorPoint?: { x: number; y: number };
 	existingIds: Set<string>;
 	onPick: (pick: InsertPick) => void;
 	onClose: () => void;
 }) => {
-	const { anchor, existingIds, onPick, onClose, allowedBlockTypes } = props;
+	const { anchor, anchorPoint, existingIds, onPick, onClose, allowedBlockTypes } = props;
  const allowed = (type: WebpageBlockType) => !allowedBlockTypes || allowedBlockTypes.includes(type);
 	const [query, setQuery] = React.useState('');
 	const [entries, setEntries] = React.useState<BrowseEntry[]>([]);
@@ -72,7 +74,11 @@ export const BlockInsertMenu = (props: {
 	// keeps the anchored popover: open whichever way has more room, never grow
 	// past the viewport.
 	const sheet = typeof window !== 'undefined' && window.innerWidth < 640;
-	const rect = builderRect(anchor);
+	const rect = anchorPoint ? {
+		left: Math.max(8, Math.min(anchorPoint.x, window.innerWidth - 8)),
+		top: Math.max(8, Math.min(anchorPoint.y, window.innerHeight - 8)),
+		bottom: Math.max(8, Math.min(anchorPoint.y, window.innerHeight - 8)), width: 0
+	} : builderRect(anchor);
 	const width = 300;
 	const left = Math.max(8, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - 8));
 	const spaceBelow = window.innerHeight - rect.bottom - 12;

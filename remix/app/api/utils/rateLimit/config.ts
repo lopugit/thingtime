@@ -270,6 +270,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // (POST /api/v1/admin/ai/models { id, enabled } | { seed } | { probe }) —
   // the seed is a batch write and the probe dials the providers (5 s cap
   // each); enforced fail-closed at the route
+  'admin.mongodb.connections': { limit: 30, windowMs: 60_000, enabled: true },
   'admin.ai.models': { limit: 30, windowMs: 60_000, enabled: true },
   // Thingtime.LopuChatDefaults singleton (GET public / POST admin) — a rare
   // interactive read/save; the public GET keys anonymous callers by IP and
@@ -323,6 +324,12 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
 	// User Secure Vault writes are rare and credential-sensitive; voice replies
 	// can spend a user-supplied provider quota, so both fail closed at routes.
   'library.request': { limit: 20, windowMs: 60_000, enabled: true },
+  // Provider calls for the editable route planner. Suggestions need headroom
+  // for ordinary typing; optimized routes are costlier and have a smaller cap.
+  'maps.suggest': { limit: 120, windowMs: 60_000, enabled: true },
+  'maps.optimize': { limit: 20, windowMs: 60_000, enabled: true },
+  'maps.browser-config': { limit: 60, windowMs: 60_000, enabled: true },
+  'maps.request': { limit: 60, windowMs: 60_000, enabled: true },
 	'lopu.vault': { limit: 60, windowMs: 60_000, enabled: true },
 	'lopu.voiceReply': { limit: 30, windowMs: 60_000, enabled: true },
 	// Paired device mesh. Pairing creates credentials and therefore fails

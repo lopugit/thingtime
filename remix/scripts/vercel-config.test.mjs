@@ -117,9 +117,13 @@ test('native Maps can load under the deployed policy without broad script or eva
 			'https://maps.googleapis.com',
 			'https://mapsresources-pa.googleapis.com',
 			'https://maps.gstatic.com',
-			'https://csi.gstatic.com'
+			'https://csi.gstatic.com',
+			'https://api.mapbox.com',
+			'https://events.mapbox.com'
 		])
 			assert(cspSources(policy, 'connect-src').includes(host));
+		assert(!cspSources(policy, 'script-src').includes('https://api.mapbox.com'));
+		assert(cspSources(policy, 'worker-src').includes('blob:'));
 	}
 });
 

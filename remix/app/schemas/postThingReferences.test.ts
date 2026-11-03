@@ -37,3 +37,14 @@ test('generic display titles survive typed sanitization without altering existin
   assert.equal(validateThingtimeCrystal(['folder'], { name: 'Original', title: { unsafe: true } }).ok, false);
   assert.equal(validateThingtimeCrystal(['folder'], { name: 'Original', title: 'x'.repeat(301) }).ok, false);
 });
+
+test('Builder app metadata stays an owner folder crystal and rejects executable or malformed values', () => {
+  const valid = validateThingtimeCrystal(['folder'], { name: 'Routes', builderApp: true, description: 'Journeys', iconUrl: '/api/v1/attachments/content?id=icon_1', metadata: { release: 2, flags: { map: true } } });
+  assert.equal(valid.ok, true);
+  if (valid.ok) assert.deepEqual(valid.crystal, { name: 'Routes', description: 'Journeys', builderApp: true, iconUrl: '/api/v1/attachments/content?id=icon_1', metadata: { release: 2, flags: { map: true } } });
+  assert.equal(validateThingtimeCrystal(['folder'], { name: 'Routes', builderApp: 'true' }).ok, false);
+  assert.equal(validateThingtimeCrystal(['folder'], { name: 'Routes', iconUrl: 'javascript:alert(1)' }).ok, false);
+  assert.equal(validateThingtimeCrystal(['folder'], { name: 'Routes', metadata: [] }).ok, false);
+  assert.equal(validateThingtimeCrystal(['folder'], { name: 'Routes', metadata: { constructor: { prototype: { x: true } } } }).ok, false);
+  assert.equal(validateThingtimeCrystal(['folder'], { name: 'Long app '.repeat(30), builderApp: true, description: 'A'.repeat(800) }).ok, true);
+});

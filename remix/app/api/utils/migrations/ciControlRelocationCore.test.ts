@@ -279,7 +279,7 @@ test('rebuild goes one index at a time: twin, drop, recreate from the live defin
 
 test('at the 64-index cap a unique rebuild refuses before dropping its constraint', async () => {
   const actions: string[] = [];
-  const definitions = [{ name: '_id_', key: { _id: 1 } }, { name: 'shareId_1', key: { shareId: 1 }, unique: true }];
+  const definitions: Array<{ name: string; key: Record<string, number>; unique?: boolean }> = [{ name: '_id_', key: { _id: 1 } }, { name: 'shareId_1', key: { shareId: 1 }, unique: true }];
   for (let i = 0; i < 62; i += 1) definitions.push({ name: `filler_${i}`, key: { [`f${i}`]: 1 } });
   const collection = {
     async indexes() {

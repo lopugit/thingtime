@@ -45,7 +45,7 @@ const removeBurst = (burst: ActiveBurst): void => {
  */
 export const leadingEmoji = (text: unknown): string | null => {
 	if (typeof text !== 'string') return null;
-	const first = splitEmojis(text.trim())[0] || '';
+	const first = splitEmojis(text.trim(), 1)[0] || '';
 	return /[\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(first) ? first : null;
 };
 
@@ -88,8 +88,8 @@ export const splashEmoji = (emoji: string, anchor?: Element | null): void => {
 	].join(';');
 
 	const burst: ActiveBurst = { root, timer: 0, pending: 0 };
-	const emojis = splitEmojis(token);
 	const count = MIN_PARTICLES + Math.floor(Math.random() * (MAX_PARTICLES - MIN_PARTICLES + 1));
+	const emojis = splitEmojis(token, count);
 
 	for (let i = 0; i < count; i++) {
 		const span = document.createElement('span');

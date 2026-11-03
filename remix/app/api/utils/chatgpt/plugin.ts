@@ -1,3 +1,4 @@
+import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../capabilities/capabilityContract';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 import { json, redirect } from '~/api/http';
@@ -309,8 +310,8 @@ const validateCredential = async (endpoint: string, token: string): Promise<Resu
     return { ok: false, status: 401, error: 'That credential is not a live Thingtime personal access token' };
   }
   const scopes = Array.isArray(payload.token?.scopes) ? payload.token.scopes.filter((value): value is string => typeof value === 'string') : [];
-  if (!scopes.some((scope) => scope === 'things' || scope === 'things.read')) {
-    return { ok: false, status: 403, error: 'That personal access token needs at least the things.read scope' };
+  if (!scopes.some((scope) => scope === 'things' || scope === 'things.read' || scope === 'agents.report')) {
+    return { ok: false, status: 403, error: 'That personal access token needs things.read or the independent agents.report scope' };
   }
   return {
     ok: true,
@@ -919,6 +920,34 @@ const boundedStringList = (value: unknown, max = 100): string[] | null => {
 const accountScopeCovers = (account: ChatGptConnection, required: string): boolean =>
   account.scopes.some((scope) => scope === required || required.startsWith(`${scope}.`));
 
+const AGENT_REPORTING_REQUIREMENTS = {
+  'api.agent-reporting': '1.0.0',
+  'api.auth-characters': '1.0.0',
+  'api.agent-overview': '2.0.0'
+} as const;
+
+// Negotiate afresh on each call: deployment changes and a repaired manifest must
+// never remain hidden behind an earlier rejection or a different account origin.
+const requireAgentReporting = async (account: ChatGptConnection): Promise<Result<true>> => {
+  if (!accountScopeCovers(account, 'agents.report')) {
+    return { ok: false, status: 403, error: 'The selected Thingtime token needs the independent agents.report scope. Existing things access does not include it. Authorize agents.report once in Advanced connection settings and reconnect; no scope is upgraded automatically.' };
+  }
+  const result = await endpointRequest(account.endpoint, account.token, THINGTIME_CAPABILITY_MANIFEST_PATH);
+  if (result.ok === false) return result;
+  const manifest = asRecord(result.value);
+  if (manifest?.schemaVersion !== 1 || manifest.origin !== account.endpoint) {
+    return { ok: false, status: 409, error: 'Agent reporting requires a valid capability manifest bound to the selected Thingtime origin' };
+  }
+  const features = asRecord(manifest.features);
+  for (const [feature, minimum] of Object.entries(AGENT_REPORTING_REQUIREMENTS)) {
+    const version = asRecord(features?.[feature])?.version;
+    if (typeof version !== 'string' || !capabilitySatisfies(version, minimum)) {
+      return { ok: false, status: 409, error: `Agent reporting requires ${feature} ${minimum} at the selected origin` };
+    }
+  }
+  return { ok: true, value: true };
+};
+
 const requiredScopeForOperation = (operation: LimitlessMutationOperation): string =>
   operation.action === 'create' ? 'things.create' : operation.action === 'update' ? 'things.update' : 'things.delete';
 
@@ -1124,6 +1153,46 @@ type ChatGptMcpToolName = keyof typeof CHATGPT_MCP_TOOL_FEATURES;
 const protectedThingtimeTool = <T extends Record<string, unknown> & { name: ChatGptMcpToolName }>(tool: T) => protectedTool(tool);
 const loginThingtimeTool = <T extends Record<string, unknown> & { name: 'login_thingtime' }>(tool: T) => loginTool(tool);
 
+const agentTaskIdentityProperties = {
+  accountId: { type: 'string', description: 'Exact connected account ID; origin comes only from that connection.' },
+  externalTaskId: { type: 'string', minLength: 1, description: 'Stable chat/task identity, reused across restarts.' }
+};
+const agentReportActionNames = ['createProject', 'createTask', 'updateTask', 'updateWorkItem', 'createAgent', 'addTodo', 'completeTodo', 'addProgress', 'askQuestion', 'answerQuestion', 'recordMeasurements', 'recordTokenUsage', 'recordProgressPercent', 'recordStartTime', 'recordEndTime', 'readOverview'] as const;
+const reportingTools = [
+  protectedThingtimeTool({
+    name: 'prepare_thingtime_agent_task', title: 'Prepare private agent task reporting',
+    description: 'Reuse or prepare a distinct task Character and binding to the existing private saved workspace. Requires independent agents.report authorization and compatible selected-origin capabilities. Standing authorization for private task lifecycle reporting permits this bounded operation without repeat confirmation. Never falls back to the public owner identity or creates replacement workspace schemas.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['externalTaskId', 'displayName', 'workspace'], properties: {
+      ...agentTaskIdentityProperties, displayName: { type: 'string', minLength: 1 }, parentExternalTaskId: { type: 'string', minLength: 1, description: 'Optional stable parent task identity in this same owner/origin/workspace. The server derives exact private parent/project links and read grants; arbitrary parent IDs are not accepted.' },
+      workspace: { type: 'object', additionalProperties: false, required: ['pages', 'schemas', 'actions'], properties: {
+        subspaceId: { type: 'string' }, subspaceSlug: { type: 'string' },
+        pages: { type: 'object', additionalProperties: false, required: ['overview', 'taskDetail'], properties: { overview: { type: 'string' }, taskDetail: { type: 'string' } } },
+        schemas: { type: 'object', additionalProperties: false, required: ['project', 'task', 'agent', 'todo', 'progress', 'question'], properties: Object.fromEntries(['project', 'task', 'agent', 'todo', 'progress', 'question'].map((key) => [key, { type: 'string' }])) },
+        actions: { type: 'object', additionalProperties: false, properties: Object.fromEntries(agentReportActionNames.map((key) => [key, { type: 'string' }])) }
+      } }
+    } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+  }),
+  protectedThingtimeTool({
+    name: 'get_thingtime_agent_task', title: 'Read private agent task binding',
+    description: 'Read the existing private task binding by stable task identity. Requires agents.report and origin-bound capability negotiation. Returns safe Character/workspace/record IDs without credentials or private ownership links.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['externalTaskId'], properties: { ...agentTaskIdentityProperties, recordIds: { type: 'array', uniqueItems: true, items: { type: 'string' }, description: 'Optional exact IDs of this task Character’s private workspace Data Things for independent ACL-checked readback.' } } },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+  }),
+  protectedThingtimeTool({
+    name: 'report_thingtime_agent_task', title: 'Report private agent task progress',
+    description: 'Invoke one registered saved workspace reporting Action through the bound task Character. Reuse requestId and immutable inputs after uncertain completion. Standing authorization permits private lifecycle updates without repeat confirmation; generic mutation and security confirmations remain unchanged. No arbitrary Action ID, route, URL or public identity fallback is accepted.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['externalTaskId', 'requestId', 'actionName', 'inputs'], properties: { ...agentTaskIdentityProperties, requestId: { type: 'string', format: 'uuid' }, actionName: { type: 'string', enum: agentReportActionNames }, inputs: { type: 'object' } } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+  }),
+  protectedThingtimeTool({
+    name: 'coordinate_thingtime_agent_task', title: 'Maintain private agent coordination post',
+    description: 'Create or update this task’s single private coordination post as its distinct Character in the bound existing Thingtime Agents subspace. Reuses the stable task post and immutable requestId; requires an explicit renderComponent definition or saved Component reference. Standing private coordination authorization permits this bounded operation without repeat confirmation. Cannot select arbitrary subspaces, public identity, Actions or routes.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['externalTaskId', 'requestId', 'title', 'text', 'renderComponent'], properties: { ...agentTaskIdentityProperties, requestId: { type: 'string', format: 'uuid' }, title: { type: 'string', minLength: 1 }, text: { type: 'string', minLength: 1 }, renderComponent: { type: 'object', description: 'Explicit embedded Component definition or saved Component reference supported by the canonical renderer.' } } },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+  })
+];
+
 export const thingtimeToolDefinitions = [
   loginThingtimeTool({
     name: 'login_thingtime',
@@ -1160,6 +1229,7 @@ export const thingtimeToolDefinitions = [
     inputSchema: { type: 'object', additionalProperties: false, properties: { accountId: { type: 'string' } } },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
   }),
+  ...reportingTools,
   protectedThingtimeTool({
     name: 'get_thingtime_thing',
     title: 'Get Thingtime Thing by ID',
@@ -1396,6 +1466,42 @@ export const callThingtimeTool = async (name: string, args: Record<string, unkno
   if (!account) return { error: 'Unknown Thingtime account id' };
   let upstream: Result<unknown>;
   switch (name) {
+    case 'prepare_thingtime_agent_task':
+    case 'get_thingtime_agent_task':
+    case 'report_thingtime_agent_task':
+    case 'coordinate_thingtime_agent_task': {
+      const externalTaskId = stringValue(args.externalTaskId);
+      if (!externalTaskId) return { error: 'externalTaskId is required', status: 400 };
+      const ready = await requireAgentReporting(account);
+      if (ready.ok === false) return { error: ready.error, status: ready.status };
+      const operation = name === 'prepare_thingtime_agent_task' ? 'prepare' : name === 'get_thingtime_agent_task' ? 'get' : name === 'coordinate_thingtime_agent_task' ? 'coordinate' : 'report';
+      let fields: Record<string, unknown> = {};
+      if (operation === 'prepare') {
+        const displayName = stringValue(args.displayName);
+        const workspace = asRecord(args.workspace);
+        if (!displayName || !workspace) return { error: 'displayName and workspace are required', status: 400 };
+        const parentExternalTaskId = args.parentExternalTaskId === undefined ? undefined : stringValue(args.parentExternalTaskId);
+        if (parentExternalTaskId === null) return { error: 'parentExternalTaskId must be a nonempty stable parent task identity', status: 400 };
+        fields = { displayName, workspace, ...(parentExternalTaskId === undefined ? {} : { parentExternalTaskId }) };
+      } else if (operation === 'coordinate') {
+        const requestId = stringValue(args.requestId, 128);
+        const title = typeof args.title === 'string' && args.title.trim() ? args.title : null;
+        const text = typeof args.text === 'string' && args.text.trim() ? args.text : null;
+        const renderComponent = asRecord(args.renderComponent);
+        if (!requestId || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId) || !title || !text || !renderComponent) return { error: 'A UUID-v4 requestId, title, text and explicit renderComponent object are required', status: 400 };
+        fields = { requestId, title, text, renderComponent };
+      } else if (operation === 'get' && args.recordIds !== undefined) {
+        if (!Array.isArray(args.recordIds) || !args.recordIds.every((id) => typeof id === 'string' && id.trim())) return { error: 'recordIds must be an array of exact Thing IDs', status: 400 };
+        fields = { recordIds: args.recordIds };
+      } else if (operation === 'report') {
+        const requestId = stringValue(args.requestId, 128);
+        const inputs = asRecord(args.inputs);
+        if (!requestId || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId) || !agentReportActionNames.includes(args.actionName as typeof agentReportActionNames[number]) || !inputs) return { error: 'A UUID-v4 requestId, registered actionName and inputs object are required', status: 400 };
+        fields = { requestId, actionName: args.actionName, inputs };
+      }
+      upstream = await endpointRequest(account.endpoint, account.token, '/api/v1/agents/reporting', { method: 'POST', body: { operation, origin: account.endpoint, externalTaskId, ...fields } });
+      break;
+    }
     case 'get_thingtime_profile':
       upstream = await endpointRequest(account.endpoint, account.token, '/api/v1/tokens/self');
       break;

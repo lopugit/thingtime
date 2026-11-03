@@ -99,6 +99,9 @@ async function readApplications(directory: string, remainingDepth: number): Prom
 }
 
 function applicationItem(applicationPath: string, fileName: string): SearchItem {
+  if (process.platform === 'darwin' && applicationPath.startsWith('/System/Volumes/Data/')) {
+    applicationPath = applicationPath.slice('/System/Volumes/Data'.length);
+  }
   const title = fileName.slice(0, -4);
   return {
     id: `app:${applicationPath}`,
