@@ -5344,6 +5344,10 @@ halves.
 - [ ] In General, turn custom resize handling off and verify AppKit's standard edge resizing works. Turn it back on,
       drag every edge and corner continuously beyond the first pixel, and reverse direction without releasing.
       Hover/cursor updates must not interrupt the gesture; opposite edges remain anchored and minimum size holds.
+      Slowly hover along each edge and corner, pause, then move between the border and nearby content: the resize
+      cursor must remain stable throughout the same band that accepts a drag. Repeat after resizing and switching
+      compact/default modes; text selection, header buttons and result actions must retain their normal cursors
+      and input. An endpoint-only automated drag does not establish hover-cursor stability.
       Begin a resize, then release the mouse, press Escape, change focus, hide, close, insert an emoji, or press
       Return to paste from Commander’s Emoji & Symbols picker; later pointer movement must never continue resizing
       the launcher. Relaunch and verify the selected mode persists.

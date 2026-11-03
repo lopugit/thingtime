@@ -199,9 +199,12 @@ links resolve to AI Providers or to Lopu for Lopu anchors. Browser regression:
 `Commander/hosts/macos/Sources/Commander/Windows/LauncherPanelController.swift`
 owns the launcher's native edge/corner resize gesture. Passive cursor and tracking
 events must preserve that gesture; release, deliberate input and lifecycle changes
-end it. `CommanderWebView.swift` supplies edge hit testing, anchored frame geometry
-and cursor regions. Regression coverage is in `CommanderWebViewTests.swift`, with
-continuous native drag acceptance in `Commander/docs/TESTING.md`.
+end it. `CommanderLauncherContentView.swift` places eight native resize handles
+above WebKit; their bounded regions also drive panel hit testing so the hover
+cursor and drag target agree. Central content remains owned by WebKit.
+`CommanderWebView.swift` supplies anchored frame geometry. Regression coverage is
+in `CommanderWebViewTests.swift`, with native hover/drag acceptance in
+`Commander/docs/TESTING.md`.
 
 The desktop launcher gear reuses `builtin:settings` / `open-settings` in
 `Commander/apps/desktop-ui/src/components/Launcher.tsx`. `ProcessesPanel.tsx`
