@@ -1,6 +1,6 @@
 # Thingtime extension accounts and Website icons
 
-Branch: `codex/password-website-icons`; integrated main: `edbf282dda4d46b4ce2dc375ca744cb4cf0ee571`.
+PR: [#1315](https://github.com/lopugit/thingtime/pull/1315). Branch: `codex/password-website-icons`; integrated main: `edbf282dda4d46b4ce2dc375ca744cb4cf0ee571`.
 
 The extension now discovers the current browser’s signed-in Thingtime roster and redacted saved accounts from a live first-party document on the exact configured origin. No website selection is needed to list passwords. Explicit sign-in/add/switch uses the existing first-party account switcher in an owned popup; switching also changes this browser’s Thingtime web tabs. Account cookies and session identifiers never leave that origin. Background/workspace metadata remains in memory; persisted values are preferences, a connection Lock and nonsecret owned routing/epoch values.
 
