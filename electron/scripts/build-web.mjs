@@ -95,6 +95,10 @@ function runRemixScript(script, options = {}) {
   run(pnpmRunner.command, [...pnpmRunner.args, '--dir', remixDir, 'run', script], options);
 }
 
+// Mail and database staging resolve packages from Remix before its build runs.
+// Repair fresh-worktree dependency links through the shared preflight first.
+run(process.execPath, [path.join(remixDir, 'scripts/ensure-dependencies.js')]);
+
 // MCP has its own npm lockfile and is not part of the Remix pnpm workspace.
 // Install it from that lockfile before the expensive web build, including in a
 // fresh worktree where MCP/node_modules is intentionally absent.

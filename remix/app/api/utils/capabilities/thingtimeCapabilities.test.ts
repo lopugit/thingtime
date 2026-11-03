@@ -98,8 +98,11 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   const manifest = thingtimeCapabilityManifest('https://preview.example.test/path');
   assert.equal(manifest.origin, 'https://preview.example.test');
   assert.equal(manifest.schemaVersion, 1);
-  assert.equal(manifest.features['api.passwords']?.version, '1.5.0');
-  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.5.0');
+  assert.equal(manifest.features['api.passwords']?.version, '1.6.1');
+  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.6.1');
+  assert.equal(capabilitySatisfies('1.6.1', '1.6.1'), true);
+  assert.equal(capabilitySatisfies('1.6.2', '1.6.1'), true);
+  for (const version of [undefined, '1.6.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.6.1'), false);
   assert.equal(capabilitySatisfies('1.2.0', '1.3.0'), false);
   assert.equal(manifest.features['api.apps-public']?.version, '1.1.0');
   assert.equal(manifest.features['api.oauth-scopes']?.version, '1.1.0');
@@ -534,7 +537,7 @@ test('object-only empty finalization corrections remain compatible with shipped 
 
 test('sync upload provenance clients require compatible contracts on the selected origin', () => {
  const manifest = thingtimeCapabilityManifest('https://provenance.test');
- for (const [feature, required, old] of [['api.attachment-uploads', '1.7.0', '1.6.2'], ['api.things', '1.46.2', '1.39.1'], ['api.files', '1.8.1', '1.8.0'], ['api.file-sync-batches', '1.2.1', '1.2.0']]) {
+ for (const [feature, required, old] of [['api.attachment-uploads', '1.7.0', '1.6.2'], ['api.things', '1.46.2', '1.39.1'], ['api.files', '1.9.0', '1.8.1'], ['api.file-sync-batches', '1.3.0', '1.2.1']]) {
   assert.equal(manifest.features[feature].version, required);
   assert.equal(capabilitySatisfies(old, required), false);
   assert.equal(capabilitySatisfies('2.0.0', required), false);

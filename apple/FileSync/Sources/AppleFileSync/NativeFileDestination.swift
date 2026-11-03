@@ -36,6 +36,13 @@ enum NativeFileDestination {
     }
     static func verifyContent(_ file: Int32, source: Entry) throws {
         let before = try MobileFolderReader.info(file)
+        if let link = source.symbolicLink {
+            let bytes = try link.target()
+            guard try NativeSymbolicLinks.bytes(file) == bytes, source.kind == "file", source.size == bytes.count,
+                  source.fingerprint == NativeSymbolicLinks.fingerprint(bytes), source.sha256 == nil else { throw Failure.changed }
+            return
+        }
+        guard try NativeSymbolicLinks.bytes(file) == nil else { throw Failure.changed }
         if source.kind == "file" {
             guard before.st_mode & S_IFMT == S_IFREG, before.st_nlink == 1, before.st_size == source.size else { throw Failure.changed }
             if let expected = source.fingerprint {
@@ -58,7 +65,7 @@ enum NativeFileDestination {
     }
     static func entry(_ info: stat, source: Entry) -> Entry {
         Entry(path: source.path, id: "\(info.st_dev):\(info.st_ino)", version: MobileFolderReader.stamp(info), kind: source.kind,
-              size: source.size, sha256: source.sha256, fingerprint: source.fingerprint)
+              size: source.size, sha256: source.sha256, fingerprint: source.fingerprint, symbolicLink: source.symbolicLink)
     }
     static func coordinated<T>(bookmark: Data, path: String, work: (Int32, Int32) throws -> T) throws -> T {
         let parts = try MobileFolderReader.components(path)
@@ -68,6 +75,7 @@ enum NativeFileDestination {
         let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
         let root = open(url.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard root >= 0 else { throw Failure.unavailable }; defer { close(root) }
+        guard try !NativeSymbolicLinks.isWithinOwnedJournal(root, path: path) else { throw Failure.invalid }
         let rootIdentity = try Self.identity(MobileFolderReader.info(root))
         let target = parts.reduce(url) { $0.appendingPathComponent($1) }
         var result: Result<T, Error>?, error: NSError?
@@ -104,8 +112,6 @@ enum NativeFileDestination {
             let next = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
             guard next >= 0 else { throw Failure.unavailable }; close(parent); parent = next
         }
-        let file = openat(parent, parts.last!, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
-        if file < 0 { if errno == ENOENT { return nil }; throw Failure.unavailable }
-        return file
+        return try NativeSymbolicLinks.openEntry(parent, name: parts.last!, absent: true)
     }
 }

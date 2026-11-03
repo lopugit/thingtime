@@ -14,7 +14,7 @@ document.addEventListener('thingtime:password-provider-request',event=>{const r=
 window.fetch=async(input,init)=>{
  init?.signal?.throwIfAborted();const url=new URL(input instanceof Request?input.url:String(input),location.origin);
  if(url.origin!==location.origin)return Response.json({ok:false},{status:403});
- if(url.pathname==='/.well-known/thingtime-capabilities.json')return Response.json({schemaVersion:1,origin:location.origin,features:Object.fromEntries(['api.passwords','api.things','api.webpages-resolve','api.actions-run','api.mongodb-endpoint'].map(feature=>[feature,{version:feature==='api.passwords'?'1.5.0':'1.99.0'}]))});
+ if(url.pathname==='/.well-known/thingtime-capabilities.json')return Response.json({schemaVersion:1,origin:location.origin,features:Object.fromEntries(['api.passwords','api.things','api.webpages-resolve','api.actions-run','api.mongodb-endpoint'].map(feature=>[feature,{version:feature==='api.passwords'?'1.6.1':'1.99.0'}]))});
  if(url.pathname==='/api/v1/webpages/resolve')return Response.json({ok:false},{status:404});
  if(url.pathname==='/api/v1/passwords'&&init?.body){
   const body=JSON.parse(String(init.body));if(body.expectedOwnerId!==ownerId)return Response.json({ok:false},{status:403});fixture.operations.push(body.operation);

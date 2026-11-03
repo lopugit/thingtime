@@ -1,3 +1,5 @@
+import { symbolicLinkBytes, symbolicLinkFingerprint } from '../../../fileSync/symbolicLink';
+import { equalContentFingerprints } from '../../../fileSync/contentFingerprint';
 import { parseFileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { createHash } from 'node:crypto';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
@@ -19,7 +21,7 @@ const failure = (status: number, error: string) => ({ ok: false as const, status
 const conflict = (message: string): never => { throw new StorageMutationError(409, 'storage_conflict', message); };
 const identity = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value);
 const publicFile = (doc: any): CloudFile => parseCloudFile({ id: doc.shareId, revision: doc.timelineHeadId,
-	name: doc.crystal?.name, folderId: doc.folderId ?? null, trashed: doc.crystal?.trashed, content: doc.crystal?.content });
+	name: doc.crystal?.name, folderId: doc.folderId ?? null, trashed: doc.crystal?.trashed, content: doc.crystal?.content, ...(doc.crystal?.symbolicLink === undefined ? {} : { symbolicLink: doc.crystal.symbolicLink }) });
 const snapshot = (doc: any, requestHash: string | null) => ({ adapter: CLOUD_FILE_ADAPTER, version: 1,
 	value: { ...publicFile(doc), requestHash } });
 
@@ -108,6 +110,7 @@ export function createCloudFileService(overrides: Partial<{
 				const verified = await deps.fingerprint({ id: ownerId }, input.attachmentId);
 				if (verified.ok === false) return verified;
 				if (verified.version !== input.contentVersion) conflict('File bytes changed before commit');
+				if (input.symbolicLink && (symbolicLinkBytes(input.symbolicLink).byteLength !== verified.size || !equalContentFingerprints(await symbolicLinkFingerprint(input.symbolicLink), verified.fingerprint))) conflict('Symbolic link metadata does not match its verified target bytes');
 				return await deps.transaction(async session => {
 					const before = await owned(things, ownerId, input.id, session);
 					const saved = await receipt(things, ownerId, input.id, input.operationId, session, retained); if (saved) return replay(saved);
@@ -132,7 +135,7 @@ export function createCloudFileService(overrides: Partial<{
 						...(attachment.targetId == null ? { targetId: { $in: [null] } } : { targetId: input.id }) },
 						{ $set: { targetId: input.id, parentId: input.id, folderId: null, acl: ['tt:inherit'], updatedAt: now, fileBindingToken: eid } }, { session });
 					if (bound.matchedCount !== 1) conflict('File upload changed before publication');
-					const crystal = { name: input.name, trashed: input.trashed, content: { attachmentId: verified.id, version: verified.version, size: verified.size, fingerprint: verified.fingerprint } };
+					const crystal = { name: input.name, trashed: input.trashed, ...(input.symbolicLink ? { symbolicLink: input.symbolicLink } : {}), content: { attachmentId: verified.id, version: verified.version, size: verified.size, fingerprint: verified.fingerprint } };
 					const next: any = { ...(before ?? {}), shareId: input.id, ownerId, thingtime: [CLOUD_FILE_KIND], schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
 						crystal, extended: null, tags: [], acl: ['tt:user'], targetId: null, folderId: input.folderId, timelineHeadId: eid,
 						storageClass: 'content', storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION, createdAt: before?.createdAt ?? now, updatedAt: now };

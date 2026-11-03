@@ -444,3 +444,12 @@ test('resource policy negotiates native support, binds connection scope and cons
  assert.deepEqual(sent.resourceLimits, resourcePolicy.resourceLimits); assert.equal(sent.resourceScope, 'connection');
  assert.equal(observed.length, 1);
 });
+
+test('device-wide runner budgets require both current native access and scanner contracts', async () => {
+ const resourcePolicy = { resourceScope: 'connection', deviceResourceLimits: () => ({ transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 }), observe() {} };
+ for (const capabilities of [ { platform: 'macos', fileAccessVersion: '1.15.0', fileResourceLimitsVersion: '1.1.0' }, { platform: 'macos', fileAccessVersion: '1.16.0', fileResourceLimitsVersion: '1.0.0' } ]) {
+  const f = fixture(); f.patch({ capabilities, conditions: { network: 'wifi', charging: true } }); await assert.rejects(f.create(resourcePolicy), /device-wide sync resource limits/);
+ }
+ const f = fixture(); f.patch({ capabilities: { platform: 'macos', fileAccessVersion: '1.16.0', fileResourceLimitsVersion: '1.1.0' }, conditions: { network: 'wifi', charging: true } });
+ const host = await f.create(resourcePolicy); await host.request('owner', { action: 'list' }, f.lifetime.signal);
+});

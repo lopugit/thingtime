@@ -27,7 +27,7 @@ export type CloudSyncPortInput = {
 	localTarget?: LocalSyncTarget;
 	/** Validated saved root for older runs without per-operation roots. */
 	cloudRootId?: string;
-	progress?: (path: string, bytes: number, total: number) => void;
+	progress?: (path: string, bytes: number, total: number, direction?: 'upload' | 'download') => void;
 	transfer?: (activity: TransferActivity) => void;
 };
 const defaultRuntime = (input: CloudSyncPortInput): CloudTransportRuntime => ({ currentScope: input.currentScope,
@@ -147,7 +147,7 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 				check();
 				if (source && !input.localTarget!.reportsTransferBytes) input.transfer?.({ direction: 'download', bytes: null });
 				const staged = await input.localTarget!.stage(structuredClone(operation), { ...scope }, source,
-					(bytes, received) => { check(); input.transfer?.({ direction: 'download', bytes }); input.progress?.(m.path, received, m.source.size); });
+					(bytes, received) => { check(); input.transfer?.({ direction: 'download', bytes }); input.progress?.(m.path, received, m.source.size, 'download'); });
 				check();
 				validateLocalStage(staged, operation, scope);
 				if (source) await source.verify!();
@@ -160,7 +160,7 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 			if (isCloudFolderWrite(write)) return await createCloudFolderTransport(runtime, write, input.signal).apply();
 			const source = operation.mutation.kind === 'copy' ? await input.openSource(operation.mutation.source) : undefined;
 			return await fileTransport(runtime, write, input.signal).apply(source,
-				(bytes, total) => input.progress?.(operation.mutation.path, bytes, total),
+				(bytes, total) => input.progress?.(operation.mutation.path, bytes, total, 'upload'),
 				bytes => { check(); input.transfer?.({ direction: 'upload', bytes }); });
 			} finally { release?.(); }
 		}

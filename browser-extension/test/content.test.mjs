@@ -10,7 +10,7 @@ function setup(reply){
  const chrome={runtime:{sendMessage:async()=>({enabled:true}),onMessage:{addListener:fn=>{receive=fn;}}},storage:{onChanged:{addListener:()=>{}}}};
  document.addEventListener('thingtime:extension-diagnostics-query',()=>{if(reply!==undefined)document.dispatchEvent(new CustomEvent('thingtime:extension-diagnostics',{detail:JSON.stringify(reply)}));});
  vm.runInNewContext(source,{window,document,chrome,CustomEvent,setTimeout,clearTimeout});
- return ()=>new Promise(resolve=>{assert.equal(receive({action:'diagnostics-query'},{},resolve),true);});
+ const query=()=>new Promise(resolve=>{assert.equal(receive({action:'diagnostics-query'},{},resolve),true);});query.receive=()=>receive;return query;
 }
 test('content diagnostics strip page-controlled strings, options and identifiers before runtime transport',async()=>{
  const query=setup({version:1,installed:{get:true,create:'private'},current:{get:true,create:true},enabledSeen:'private',fallbackReason:'private',publicKey:{challenge:'private'},id:'private',cookie:'private'});
@@ -21,3 +21,5 @@ test('content diagnostics strip page-controlled strings, options and identifiers
 test('content bridge reports absent main hook after one bounded query',async()=>{
  const query=setup();assert.deepEqual(JSON.parse(JSON.stringify(await query())),{available:true,hook:null});
 });
+
+test('general content listener does not steal the asynchronous account bridge reply',()=>{const query=setup();let replies=0;assert.equal(query.receive()({action:'accounts-discover',nonce:'request'},{},()=>replies++),false);assert.equal(replies,0);});
