@@ -5344,6 +5344,10 @@ halves.
 - [ ] In General, turn custom resize handling off and verify AppKit's standard edge resizing works. Turn it back on,
       drag every edge and corner continuously beyond the first pixel, and reverse direction without releasing.
       Hover/cursor updates must not interrupt the gesture; opposite edges remain anchored and minimum size holds.
+      Slowly hover along each edge and corner, pause, then move between the border and nearby content: the resize
+      cursor must remain stable throughout the same band that accepts a drag. Repeat after resizing and switching
+      compact/default modes; text selection, header buttons and result actions must retain their normal cursors
+      and input. An endpoint-only automated drag does not establish hover-cursor stability.
       Begin a resize, then release the mouse, press Escape, change focus, hide, close, insert an emoji, or press
       Return to paste from Commander’s Emoji & Symbols picker; later pointer movement must never continue resizing
       the launcher. Relaunch and verify the selected mode persists.
@@ -13574,7 +13578,7 @@ separate from deterministic discovery/lease tests.
   installed test tools. Ports 19431–19435 must be free. The runner owns a fresh
   replica, synthetic accounts, two API runtimes and an isolated browser profile.
   It loads no production configuration; all product data goes through the API.
-- Verify both manifest generators and the built endpoint advertise 1.0.0.
+- Verify both manifest generators and the built endpoint advertise 1.1.0.
   Run `test:schemas` as well: the protected snapshot kind must remain in the
   built-in projection table with a required JSON source and generic writes denied.
   Anonymous, ordinary-account and mismatched actor/origin reads must fail with
@@ -13586,6 +13590,22 @@ separate from deterministic discovery/lease tests.
   filters must preserve correct loaded-source totals. Stale observations must
   never be presented as a complete live database inventory; unavailable
   aggregate counters stay unknown.
+- Group only identical deployment IDs; missing IDs must remain separate. Check
+  a deployment with multiple runtimes and clients, partial pagination, and stale,
+  closed and failed sources. Headline counts must include only ready current/recent
+  observations. Verify open = in-use + idle and the modeled upper end = open +
+  pending handshakes + monitoring allowance. Cover auto/stream, poll, load-balanced
+  and unknown/legacy evidence; no model may masquerade as a measured Atlas total.
+  Explain all-server versus selected-node scope and capacity versus current use.
+  Open Coverage and measurement details: its headline explanation must exclude
+  stale/closed/failed historical sources while separately retaining the raw
+  loaded-snapshot summary scope; custom coverage text and saved layouts survive.
+- Generate real requests through multiple registered feature domains and compare
+  the API evidence with human-readable feature labels. Count once per request per
+  shared client, including concurrent requests, and show lifetime scope/last-use
+  times. Never attribute an exclusive socket count to a feature or retain request
+  identities, paths, command bodies or custom hosts. Preserve custom saved layouts;
+  upgrade only normalized exact defaults and reopen disclosures after reload.
 - At desktop and 390px, scroll every affected page top to bottom, open source
   details, exercise freshness/search, empty and error states, and verify keyboard
   focus and no overflow. Edit a nested text, control and repeated-card field
@@ -13685,8 +13705,9 @@ separate from deterministic discovery/lease tests.
   replica, real API handlers). No existing Mongo or personal profile may be reused.
 - Compile/render the real native view with
   `bash apple/PasswordProvider/tests/render-preview.sh --excluded --details --long-site --large-counts --width 300 --height 380`.
-  This is a synthetic view, not a credential operation. ImageRenderer does not
-  paint ScrollView contents reliably; inspect the actual owned preview window.
+  This is a synthetic view, not a credential operation. On macOS the harness
+  captures the laid-out NSHostingView; inspect the actual owned preview window
+  from top to bottom too. ImageRenderer alone omits NSScrollView contents.
 
 ### Password manager tree branding (2026-11-02)
 
@@ -13694,3 +13715,44 @@ separate from deterministic discovery/lease tests.
 - [ ] Existing saved default layouts gain branding without replacing edited headings, styles, IDs or custom content. Deleting the migrated mark stays deleted; authored layouts without the known heading remain unchanged. Legacy provider retry/fallback controls obey terminal conditions without restoring deleted controls.
 - Run extension unit tests (including real ZIP icon inventory) and `test:passwords`; metadata tests validate host/extension ICNS and PNG packaging. Inspect native bundle icons independently of website-controlled account/passkey icons.
 - The isolated `browser-extension/test/workspace-browser.mjs --provider-ui-origin=<fixture-origin>` path uses `remix/scripts/password-provider.browser.html`: the actual provider component, content bridge, background routing, ceremony and transient actions run against explicitly synthetic in-memory API responses. Verify excluded create hides approval/refresh/fallback and clears password input, then explicit Return delivers bound InvalidStateError and focuses the original requester. This proves that action path, not real vault/site/OS acceptance. `password-branding.browser.html` is a separate renderer-only document gallery.
+
+### Password confirmation preferences and device trust — 2026-11-03
+
+- Run `pnpm --dir remix run test:passwords` and `test:passkeys`; run
+  `pnpm --dir remix run test:passwords:verification` explicitly. The latter starts
+  its own disposable replica, uses real registration/login/password handlers,
+  synthetic credentials, and cleans up its database/processes. Verify Never
+  across logout/new login, off→on invalidation, entry Always over global Never,
+  exact selected item/origin/purpose, device Forget, and account-passkey final
+  registration versus a lock during the ceremony. Unit tests additionally pause
+  cross-session Forget, final reads/expiry and pre-insert revocation.
+- `test:passwords:verification-ui` adds the actual manager/provider components in
+  a separate Chrome process against that disposable API. Set
+  `THINGTIME_TEST_PLAYWRIGHT_MODULE=<installed-playwright>/index.mjs` and, when
+  reusing binaries, `PLAYWRIGHT_BROWSERS_PATH=<browser-binary-cache>`. It reserves
+  loopback 18090 only while running and closes its browser/server afterward.
+  Verify desktop/narrow, long and missing legacy username subtitles, complete
+  scrolling, saved preference reload, explicit Never enrollment, then a new
+  approval without another account password. This is isolated API/UI evidence,
+  not Google, production or signed OS-provider acceptance.
+- In Builder, edit the global checkbox/label/dropdown independently and the saved
+  card's title/username/type/icon independently. Save/reload the layout; authored
+  text/styles/deleted controls must survive migrations. Inspect per-entry Use
+  global/Always and Security's shared control. No password/proof may enter saved
+  blocks, Action history, local settings cache or screenshots.
+- In the final signed native app, inspect the actual OS picker tree icon and
+  localized Thingtime name. Valid .icns/asset-catalog structure alone does not
+  prove picker rendering. Preserve the physical host filename and raw/localized
+  bundle-name contract. At small provider heights, scroll the full excluded
+  message and collapsed/expanded Registration request details while Return stays
+  reachable. OS user verification must still run when reuse is off, unsupported
+  or unavailable.
+
+- Password card account identification contrast: check username/email, missing-value
+  fallback and type subtitles at desktop and 375px widths in light/dark themes.
+  Measure computed foreground against the card background (normal text >=4.5:1),
+  including an existing saved default layout after reload. Long usernames must wrap
+  without overflow. Confirm each subtitle stays separately editable; exact old
+  default muted colors upgrade, while authored colors/text/styles and deleted
+  subtitle blocks survive save/reload. Extension account subtitles must also meet
+  AA on their actual light/dark card backgrounds.

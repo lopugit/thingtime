@@ -9,7 +9,7 @@ through global Thing state, local caches, editor history or request diagnostics.
 
 ## Storage and access
 
-`api.passwords` 1.4.0 uses the home data plane. GET returns 50 metadata records
+`api.passwords` 1.5.0 uses the home data plane. GET returns 50 metadata records
 at a time. Optional `q` searches all owned title metadata before pagination using
 a case-insensitive literal substring (outer whitespace is ignored). Keep the same
 query on subsequent pages; restart without a cursor when it changes. Field values
@@ -152,20 +152,20 @@ Password AutoFill provider; Chrome can use it without a Thingtime browser extens
 The optional opt-in [Chromium extension](../browser-extension/README.md)
 relays that website's registration or sign-in to `/passwords/provider` at the
 user-selected trusted Thingtime origin. Each approval shows the website, RP domain
-and account, requires fresh Thingtime password verification, and uses encrypted
+and account, applies the current Thingtime password-confirmation preference, and uses encrypted
 vault storage. Registration completes only after exact saved-credential readback;
 assertions revalidate the session and unchanged credential before returning.
 Retries retain the same immutable request and write identity. Cancellation,
 navigation, account changes and expired requests discard pending authority.
 
 `verify-passkey` returns the request's UUID and a non-secret `sessionBinding`
-after fresh password verification. Every subsequent catalog, read and save in
-that ceremony sends `passkeySession: { requestId, binding: sessionBinding }`.
+after fresh password verification or an active server-validated device approval. New 1.5 clients send the exact purpose/RP/entry context, and every subsequent catalog, read and save in
+that ceremony sends `passkeySession: { requestId, binding: sessionBinding, context }`.
 The API binds this comparison value to the selected Thingtime origin, account,
 request and exact authenticated session, and rechecks live revocation before
 returning. Replacing a session for the same account invalidates the pending
 ceremony. An uncertain-write retry preserves its original binding, credential
-and write identity and requires fresh password verification again. The binding
+and write identity and rechecks the current verification policy. Legacy 1.4 clients still confirm freshly. The binding
 is not a bearer credential and reveals no authentication token or session ID.
 Readback compares complete entries through the canonical password-entry
 validator, preserving exact signing-key, user-handle, RP and credential values
@@ -379,3 +379,13 @@ their meaning. Extension 0.2.1 packages valid 16/32/48/128px icons. Native
 1.0.7/build 8 packages the same tree and ICNS in both host and provider extension.
 System bundle icons are separate from website-controlled passkey/account artwork.
 The current iOS project has no shared PasswordProvider target/resource consumer.
+
+Password confirmation timing, durable account/origin/device Never trust,
+per-entry overrides, explicit forgetting, native reuse boundaries and the 1.5 API
+are documented in [Password confirmation preferences](password-verification-preferences.md).
+Existing entry reads retain their authenticated-session behavior. Private preview
+cards now expose only safe canonical username/email text, including old records,
+with individually editable title/subtitle/type/icon blocks. For native branding,
+verify the rendered signed OS picker: compiled icon resources are packaging
+checks, not evidence of the picker label/icon. The physical host filename and
+localized Thingtime display name remain stable.

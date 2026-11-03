@@ -183,3 +183,47 @@ Chrome's [action documentation](https://developer.chrome.com/docs/extensions/ref
 explains why `default_popup` is removed to receive toolbar clicks. Its
 [windows API](https://developer.chrome.com/docs/extensions/reference/api/windows)
 provides popup-window creation/focus/resize using the existing permissions.
+
+## Password workspace, explicit autofill and local QR (0.3)
+
+Saved accounts appear above the workspace tabs, with the saved username/email
+under each title. Matching hosts sort first; search also finds other saved
+accounts. Autofill stays unavailable for other hosts. Connect vault opens an
+owned first-party Thingtime popup; credentials are obtained only there through
+the negotiated `api.passwords` 1.5 confirmation/fill contract. The extension
+never reads a browser cookie or makes an authenticated cross-origin vault fetch.
+
+On supported top-level login forms, the tree chip appears at the top center and
+inside username/password fields. Click it, choose an account, and complete any
+required Thingtime verification. Only the selected account is filled, with no
+extension-triggered submit. Cross-origin frames and off-origin form actions are
+refused; navigation, retargeting, changed field identities and account changes
+invalidate delivery. Config can disable account chips. Passkey approvals now use
+a dedicated resizable popup with the configured opening size/font; a returned
+request targets its original document/window, never another tab found by URL.
+
+The account catalog is allowlisted metadata held in memory while its owned
+provider document is live. Closing/locking that connection clears it. Passwords,
+private keys, account/device proofs, image bytes and decoded TOTP secrets are
+never written to extension storage. Screen QR scanning opens the browser's
+explicit screen/tab chooser and stops capture tracks immediately after taking
+one frame. Upload processing also stays local. A decoded TOTP setup is saved
+only after review in the owned Thingtime page; its optional website is explicit,
+not inferred from whichever tab happened to be selected. FIDO device-pairing QR
+codes are not TOTP secrets and do not perform passkey authentication here.
+
+Build the runnable adapter with `pnpm --dir remix run build:password-extension`
+and extract `remix/public/downloads/thingtime-passwords-extension.zip` before
+Load unpacked. The source folder is build input: `qr.js` is generated into the
+ZIP from the canonical web QR decoder, not maintained as a second decoder or
+checked-in vendor bundle. The permission inventory is unchanged. Browser screen
+sharing consent is requested only by Scan, not at startup.
+
+Run `node --test browser-extension/test/*.test.mjs` for transport/race/packaging
+checks. `test/workspace-browser.mjs --playwright <absolute-playwright-module>
+--provider-ui-origin=http://127.0.0.1:<fixture-port>` exercises the actual adapter,
+component/action path and local image decoding with disposable synthetic data.
+QR PNGs under `test/fixtures/` encode a public RFC 6238 test vector, not a user
+credential. Fixture API responses are not proof of real server authorization,
+OS acceptance or a site's login outcome; those require separate integration and
+installed-release checks.

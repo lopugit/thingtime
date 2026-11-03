@@ -14,6 +14,8 @@
 	<string>6.0</string>
 	<key>CFBundleIconFile</key>
 	<string>Thingtime.icns</string>
+	<key>CFBundleIconName</key>
+	<string>Thingtime</string>
 	<key>CFBundleName</key>
 	<string>Thingtime</string>
 	<key>CFBundlePackageType</key>

@@ -2,10 +2,12 @@
 
 Admin MongoDB connections reuses the existing admin category/deep-link model and
 the private settings-document Builder host. `mongoConnectionInventoryBlocks.ts`
-contains editable search, freshness filter, metric, source-card and pool templates;
+contains editable search, freshness filter, metric, deployment, feature, runtime
+and pool templates, with progressively disclosed details;
 `MongoConnectionInventory.tsx` supplies ephemeral authenticated observations.
 `mongodb-connections-acceptance.mjs` covers real data, desktop/mobile scrolling,
 expanded details and independent nested Builder edits with saved-Thing readback.
+Only exact previous defaults migrate; custom saved layouts are preserved.
 
 The web app is Vite + React Router (non-framework mode) + Nitro; `entry.client.tsx`
 mounts with `createRoot`. Chakra UI primitives are wrapped by Thingtime's own
@@ -199,9 +201,12 @@ links resolve to AI Providers or to Lopu for Lopu anchors. Browser regression:
 `Commander/hosts/macos/Sources/Commander/Windows/LauncherPanelController.swift`
 owns the launcher's native edge/corner resize gesture. Passive cursor and tracking
 events must preserve that gesture; release, deliberate input and lifecycle changes
-end it. `CommanderWebView.swift` supplies edge hit testing, anchored frame geometry
-and cursor regions. Regression coverage is in `CommanderWebViewTests.swift`, with
-continuous native drag acceptance in `Commander/docs/TESTING.md`.
+end it. `CommanderLauncherContentView.swift` places eight native resize handles
+above WebKit; their bounded regions also drive panel hit testing so the hover
+cursor and drag target agree. Central content remains owned by WebKit.
+`CommanderWebView.swift` supplies anchored frame geometry. Regression coverage is
+in `CommanderWebViewTests.swift`, with native hover/drag acceptance in
+`Commander/docs/TESTING.md`.
 
 The desktop launcher gear reuses `builtin:settings` / `open-settings` in
 `Commander/apps/desktop-ui/src/components/Launcher.tsx`. `ProcessesPanel.tsx`

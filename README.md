@@ -1507,8 +1507,11 @@ on the same document. Docs: `/docs/api` → things.
 
 Administrators can inspect **Admin → MongoDB connections** at
 `/admin/mongodb-connections`, also available in Settings → Admin. Editable cards
-show instrumented runtime/deployment sources, pool lifecycle counts and freshness;
-database-reported totals are separate and may be unavailable on the selected tier.
+group observed clients by deployment, showing in-use and idle application sockets,
+a clearly labeled monitoring/handshake model, and the API features using each
+shared client. Runtime and pool details explain concurrency and idle retention.
+Database-reported totals remain separate and may be unavailable on the selected tier;
+loaded observations and models are not an exhaustive live Atlas count.
 This uses the existing home MongoDB/auth configuration and admin allowlist, with
 no new provider secret or Vercel variable. See [connection inventory](docs/mongodb-connections.md)
 for privacy, attribution limits, fork setup and real-API verification.
@@ -6717,3 +6720,15 @@ Local acceptance for this change used the task-owned dev stack at
 `http://127.0.0.1:18210` with a disposable replica at `127.0.0.1:17343`.
 A public Funnel was intentionally not provisioned for this disposable admin
 fixture; the isolated local acceptance environment is stopped after testing.
+
+### Password confirmation/device trust checks
+
+[Password confirmation preferences](docs/password-verification-preferences.md)
+use the existing account sessions, vault encryption and protected Things; no new
+secret/environment variable or database index is required. Run
+`pnpm --dir remix run test:passwords:verification` for its disposable API replica.
+The opt-in `test:passwords:verification-ui` also requires an installed Playwright
+module (`THINGTIME_TEST_PLAYWRIGHT_MODULE=<absolute-path>/index.mjs`) and a browser
+binary cache (`PLAYWRIGHT_BROWSERS_PATH=<absolute-cache-path>` when needed). It
+uses its own synthetic sign-in, browser process/profile and loopback18090/18091,
+then closes them; never point this fixture at a personal profile or database.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { WebpageBlock } from '~/components/Builder/webpageBlocks';
-import { PASSWORD_BRAND_ICON, passwordBrandingMigration } from '~/components/Passwords/passwordBrandingBlocks';
+import { PASSWORD_BRAND_ICON, passwordBrandingMigration, migratePasswordPreviewContrast } from '~/components/Passwords/passwordBrandingBlocks';
 import { BROWSER_PROVIDER_BLOCKS } from '~/components/Passwords/browserProviderBlocks';
 import { PASSWORD_GENERATOR_BLOCKS } from '~/components/Passwords/passwordGeneratorDocument';
 import { PASSWORD_PASSKEY_BLOCKS } from '~/components/Passwords/passwordPasskeyBlocks';
@@ -23,4 +23,17 @@ test('branding migration preserves authored text and styling, is idempotent, and
  branded[0].children![0].children!.shift();assert.strictEqual(migrate(branded),branded);assert.equal(nodes(branded).filter(x=>x.tag==='img').length,0);
  const custom=[{id:'custom',type:'element',tag:'p',text:'Author layout without known heading'}] as WebpageBlock[];assert.strictEqual(migrate(custom),custom);
  assert.equal(before[0].children!.length,1);
+});
+
+test('subtitle repair preserves authored layouts, custom colors, deleted fields and input identity',()=>{
+ const old={id:'pp-username',type:'element',tag:'span',text:'My account: {item.usernameLabel}',css:{color:'var(--tt-muted, #6b7280)','font-weight':'600'}} as WebpageBlock;
+ const custom={id:'pp-type',type:'element',tag:'span',text:'Custom type',css:{color:'rebeccapurple'}} as WebpageBlock;
+ const unrelated={...old,id:'authored-subtitle'};
+ const before=[{id:'custom-container',type:'element',tag:'section',children:[old,custom,unrelated]}] as WebpageBlock[];
+ const repaired=migratePasswordPreviewContrast(before),children=repaired[0].children!;
+ assert.equal(children[0].text,old.text);assert.equal(children[0].css?.['font-weight'],'600');
+ assert.equal(children[0].css?.color,'inherit');assert.equal(old.css?.color,'var(--tt-muted, #6b7280)');
+ assert.strictEqual(children[1],custom);assert.strictEqual(children[2],unrelated);
+ assert.strictEqual(migratePasswordPreviewContrast(repaired),repaired);
+ const deleted=[{...before[0],children:[custom]}];assert.strictEqual(migratePasswordPreviewContrast(deleted),deleted);
 });

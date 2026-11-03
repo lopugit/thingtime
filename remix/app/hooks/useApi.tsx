@@ -388,7 +388,7 @@ export function useApi() {
       passkeys: {
         list: useCallback(async () => getJson('/api/v1/auth/passkeys'), []),
         registerOptions: useCallback(
-          async (args: { password: string; signal?: AbortSignal }) => asyncFetcher.submit({ password: args?.password }, { action: '/api/v1/auth/passkeys/register-options', signal: args.signal }),
+          async (args: { password: string; verificationRequestId?:string; signal?: AbortSignal }) => asyncFetcher.submit({ password: args?.password, ...(args.verificationRequestId ? {verificationRequestId:args.verificationRequestId} : {}) }, { action: '/api/v1/auth/passkeys/register-options', signal: args.signal }),
           [asyncFetcher]
         ),
         register: useCallback(
@@ -529,7 +529,7 @@ export function useApi() {
         []
       ),
       mongodbConnections: useCallback(async (args: { cursor?: string; limit?: number }, scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.admin-mongodb-connections', '1.0.0', scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        await requireThingtimeCapability('api.admin-mongodb-connections', '1.1.0', scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
         return getJson(`/api/v1/admin/mongodb/connections${toQuery(args)}`, { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal });
       }, [getJson]),
       ciPreviewRetention: useCallback(async (scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
