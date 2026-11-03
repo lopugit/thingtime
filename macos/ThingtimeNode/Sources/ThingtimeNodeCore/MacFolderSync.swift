@@ -5,8 +5,8 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.14.0"
-    private static let supportedActions: Set<String> = ["validate-folder-batch", "upload-batch", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
+    public static let version = "1.17.0"
+    private static let supportedActions: Set<String> = ["validate-folder-batch", "upload-batch", "resources", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
@@ -32,6 +32,7 @@ public final class MacFolderSync {
         let trash: MobileSyncTrash.Request?; let restore: MobileSyncTrash.Restore?; let cursor: String?
         let batch: JSONValue?
         let resourceLimits: SyncResourceLimits?; let resourceScope: String?
+        let deviceResourceLimits: DeviceSyncResourcePolicy?
         let remainingMs: Int?
     }
     private let origin: URL
@@ -52,6 +53,7 @@ public final class MacFolderSync {
     private var resourceStates: [String: MacSyncResources] = [:]
     private var active: RequestTask?
     private var streamWaiter: RequestTask?
+    private var resourceRequest: RequestTask?
 
     /// One task-owned scanner, 64 KiB read buffers, existing eight-capture disk
     /// retention and a 24-hour execution lifetime. Transport failures do not
@@ -207,7 +209,7 @@ public final class MacFolderSync {
             do {
                 let prepared = try await self.worker(metered: false) {
                     try inventories.prepareBackup(scope, id: id, generation: progress.status().generation, bookmark: grant.bookmark,
-                        excludedPaths: exclusions, ignoreRules: rules, resourceLimits: r.resourceLimits, resourceUsage: { resources?.update($0) }, sourceCpuMeter: resources?.source, ignored: { progress.ignored($0) }, progress: { entries, skipped in progress.update(entries, skipped) })
+                        excludedPaths: exclusions, ignoreRules: rules, resourceLimits: inventories.supportsResourceGovernance ? resources?.policy : r.resourceLimits, resourceUsage: { resources?.update($0) }, sourceCpuMeter: resources?.source, ignored: { progress.ignored($0) }, progress: { entries, skipped in progress.update(entries, skipped) })
                 }
                 preparedCapture = prepared
                 try Task.checkCancellation()
@@ -291,7 +293,7 @@ public final class MacFolderSync {
                 guard let self else { return }
                 do {
                     try self.checkBackupAuthority(scope: scope, grant: grant, started: started)
-                    try await self.worker(metered: false) { try inventories.runStream(scope, id: id, bookmark: grant.bookmark, excludedPaths: exclusions, ignoreRules: rules, resourceLimits: r.resourceLimits, resourceUsage: { resources?.update($0) }, sourceCpuMeter: resources?.source, control: control, wake: { wake.signal() }) }
+                    try await self.worker(metered: false) { try inventories.runStream(scope, id: id, bookmark: grant.bookmark, excludedPaths: exclusions, ignoreRules: rules, resourceLimits: inventories.supportsResourceGovernance ? resources?.policy : r.resourceLimits, resourceUsage: { resources?.update($0) }, sourceCpuMeter: resources?.source, control: control, wake: { wake.signal() }) }
                     try await self.awaitBackupAuthorization(scope: scope, grant: grant, started: started)
                     try await self.worker { try inventories.finishStream(scope, id: id, bookmark: grant.bookmark, state: "complete") }
                 } catch {
@@ -360,7 +362,7 @@ public final class MacFolderSync {
 
     public func suspend() {
         backupJob?.task.cancel(); backupJob?.monitor.cancel(); streamJob?.task.cancel(); streamJob?.monitor.cancel(); streamJob?.wake.signal()
-        streamWaiter?.task.cancel(); streamJob?.wake.signal()
+        streamWaiter?.task.cancel(); streamJob?.wake.signal(); resourceRequest?.task.cancel()
         suspendRequest()
     }
     private func suspendRequest() {
@@ -426,10 +428,12 @@ public final class MacFolderSync {
         if r.action == "suspend" {
             if let active, active.id == r.requestId, active.owner == r.ownerId, active.device == r.deviceId { suspendRequest() }
             if let waiter = streamWaiter, waiter.id == r.requestId, waiter.owner == r.ownerId, waiter.device == r.deviceId { waiter.task.cancel(); streamJob?.wake.signal() }
+            if let resource = resourceRequest, resource.id == r.requestId, resource.owner == r.ownerId, resource.device == r.deviceId { resource.task.cancel() }
             return .object([:])
         }
         let waiting = r.action == "scan-changes"
-        guard waiting ? streamWaiter == nil : active == nil else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
+        let resourceControl = r.action == "resources" && r.rootId == nil
+        guard resourceControl ? resourceRequest == nil : (waiting ? streamWaiter == nil : active == nil) else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
         guard Self.supportedActions.contains(r.action) else { throw MobileFolderStore.Failure.invalid }
         guard (r.action == "read-range") == (stream != nil), (r.action == "stage-range") == (receive != nil), (r.action == "upload-batch") == (batchCallback != nil) else { throw MobileFolderStore.Failure.invalid }
         let task = Task {
@@ -442,42 +446,52 @@ public final class MacFolderSync {
                 }
             }
             do {
-                let resources: MacSyncResources?
-                if backupJob?.progress.status().state != "running", streamJob == nil {
-                    resourceStates = resourceStates.filter { ProcessInfo.processInfo.systemUptime - $0.value.lastUsed < 300 }
-                }
-                if let policy = r.resourceLimits, let key = r.resourceScope, r.action != "scan-cancel" {
-                    let identity = r.ownerId + "\u{0}" + r.deviceId + "\u{0}" + (r.rootId ?? "") + "\u{0}" + key
-                    if let saved = resourceStates[identity], saved.policy == policy { saved.lastUsed = ProcessInfo.processInfo.systemUptime; resources = saved }
-                    else { let created = MacSyncResources(policy); resourceStates[identity] = created; resources = created }
-                } else { resources = nil }
+                try await self.authorized(r)
+                let identity = r.ownerId + "\u{0}" + r.deviceId
+                let preferenceKey = "thingtime.sync.resources.v1." + (try JSONEncoder().encode([origin.absoluteString, r.ownerId, r.deviceId])).base64EncodedString()
+                let persisted = UserDefaults.standard.data(forKey: preferenceKey).flatMap { try? JSONDecoder().decode(DeviceSyncResourcePolicy.self, from: $0) }
+                let devicePolicy = r.deviceResourceLimits ?? persisted ?? DeviceSyncResourcePolicy()
+                try devicePolicy.validate()
+                if r.deviceResourceLimits != nil, persisted != devicePolicy { UserDefaults.standard.set(try JSONEncoder().encode(devicePolicy), forKey: preferenceKey) }
+                let effective = try SyncResourceLimits(cpuPercent: min(devicePolicy.cpuPercent, r.resourceLimits?.cpuPercent ?? 100))
+                let resources = resourceStates[identity] ?? MacSyncResources(effective, device: devicePolicy)
+                if r.rootId != nil || resources.devicePolicy != devicePolicy { try resources.configure(devicePolicy, connection: r.rootId == nil ? resources.policy : r.resourceLimits) }
+                resourceStates[identity] = resources
                 return try await MacSyncResources.$current.withValue(resources) {
-                    var result = try await self.execute(r, owner: owner, stream: stream, receive: receive, batchCallback: batchCallback, started: began)
-                    if let resources, case .object(var fields) = result { fields["resources"] = resources.snapshot(); result = .object(fields) }
+                    var result = try await SyncScanContext.$current.withValue(resources.scan) {
+                        try await SyncScanContext.$helperBytesPerSecond.withValue(devicePolicy.scanBytesPerSecond / 2) {
+                            try await self.execute(r, owner: owner, stream: stream, receive: receive, batchCallback: batchCallback, started: began)
+                        }
+                    }
+                    if case .object(var fields) = result { fields["resources"] = resources.snapshot(); result = .object(fields) }
                     return result
                 }
             }
             catch { failure = error; throw error }
         }
-        if waiting { streamWaiter = (r.requestId, r.ownerId, r.deviceId, task) }
+        if resourceControl { resourceRequest = (r.requestId, r.ownerId, r.deviceId, task) }
+        else if waiting { streamWaiter = (r.requestId, r.ownerId, r.deviceId, task) }
         else { active = (r.requestId, r.ownerId, r.deviceId, task) }
         let governedPayload = (r.action == "upload-batch" && (r.resourceLimits?.uploadBytesPerSecond != nil || r.resourceLimits?.cpuPercent != nil)) ||
             (["stage-finish", "publish"].contains(r.action) && r.resourceLimits?.cpuPercent != nil)
         let timeout = Task {
             if governedPayload { return }
             try await Task.sleep(for: .milliseconds(r.action == "validate-folder-batch" ? (r.remainingMs ?? 0) : (isBatch ? 180_000 : 270_000)))
-            if waiting { if streamWaiter?.id == r.requestId { streamWaiter?.task.cancel(); streamJob?.wake.signal() } }
+            if resourceControl { if resourceRequest?.id == r.requestId { resourceRequest?.task.cancel() } }
+            else if waiting { if streamWaiter?.id == r.requestId { streamWaiter?.task.cancel(); streamJob?.wake.signal() } }
             else if active?.id == r.requestId { suspendRequest() }
         }
         defer {
             timeout.cancel()
-            if waiting { if streamWaiter?.id == r.requestId { streamWaiter = nil } }
+            if resourceControl { if resourceRequest?.id == r.requestId { resourceRequest = nil } }
+            else if waiting { if streamWaiter?.id == r.requestId { streamWaiter = nil } }
             else if active?.id == r.requestId { active = nil }
         }
         return try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: {
             task.cancel()
             Task { @MainActor [weak self] in
-                if waiting { if self?.streamWaiter?.id == r.requestId { self?.streamWaiter?.task.cancel(); self?.streamJob?.wake.signal() } }
+                if resourceControl { if self?.resourceRequest?.id == r.requestId { self?.resourceRequest?.task.cancel() } }
+                else if waiting { if self?.streamWaiter?.id == r.requestId { self?.streamWaiter?.task.cancel(); self?.streamJob?.wake.signal() } }
                 else if self?.active?.id == r.requestId { self?.suspendRequest() }
             }
         })
@@ -520,10 +534,16 @@ public final class MacFolderSync {
     }
     private func worker<T: Sendable>(metered: Bool = true, _ work: @escaping @Sendable () throws -> T) async throws -> T {
         let resources = MacSyncResources.current
+        let scan = SyncScanContext.current, helperRate = SyncScanContext.helperBytesPerSecond
         let task = Task.detached {
             try Task.checkCancellation(); try resources?.source.checkpoint()
             let value: T
-            if let resources, metered { value = try SyncResourceCpuContext.$current.withValue(resources.source) { try resources.source.measure(work, admit: false) } } else { value = try work() }
+            value = try SyncScanContext.$current.withValue(scan) {
+                try SyncScanContext.$helperBytesPerSecond.withValue(helperRate) {
+                    if let resources, metered { return try SyncResourceCpuContext.$current.withValue(resources.source) { try resources.source.measure(work, admit: false) } }
+                    return try work()
+                }
+            }
             try resources?.source.checkpoint(); return value
         }
         return try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { task.cancel() })
@@ -531,13 +551,17 @@ public final class MacFolderSync {
     private func value<T: Encodable>(_ input: T) throws -> JSONValue { try JSONValue.from(input) }
 
     private func execute(_ r: Request, owner: FileSyncOwnerScope, stream: (@Sendable (Data) throws -> Void)?, receive: (@Sendable (Int) throws -> Data)?, batchCallback: (@Sendable (JSONValue, TimeInterval) async throws -> JSONValue)?, started: TimeInterval) async throws -> JSONValue {
-        try await authorized(r)
         var result: [String: JSONValue] = ["requestId": .string(r.requestId), "ownerId": .string(r.ownerId), "deviceId": .string(r.deviceId), "origin": .string(r.origin)]
         var inspectedGrant: MobileFolderStore.Grant?
         var checkedApproval: MobileFolderStore.WriteApproval?
-        if r.action == "context" {
-            var capabilities: [String: JSONValue] = ["fileAccessVersion": .string(Self.version), "fileStagingVersion": .string("1.1.0"), "filePublicationVersion": .string("1.2.0")]
-            if inventories.supportsResourceGovernance { capabilities["fileResourceLimitsVersion"] = .string("1.0.0") }
+        if r.action == "resources" {
+            result["roots"] = .array([])
+            result["deviceResourceLimits"] = try value(MacSyncResources.current?.devicePolicy ?? DeviceSyncResourcePolicy())
+            try await authorized(r)
+            return .object(result)
+        } else if r.action == "context" {
+            var capabilities: [String: JSONValue] = ["fileAccessVersion": .string(Self.version), "fileSymbolicLinksVersion": .string("1.0.0"), "fileStagingVersion": .string("1.1.0"), "filePublicationVersion": .string("1.2.0")]
+            if inventories.supportsResourceGovernance { capabilities["fileResourceLimitsVersion"] = .string("1.1.0") }
             capabilities["fileUploadBatchVersion"] = .string("1.0.0")
             capabilities["fileFolderBatchVersion"] = .string("1.0.0")
             if trash != nil, approveTrash != nil { capabilities["fileTrashVersion"] = .string(approveRestore == nil ? "1.1.1" : "1.2.1") }
@@ -850,7 +874,10 @@ public final class MacFolderSync {
             var row: [String: JSONValue] = ["id": .string(grant.id), "name": .string(grant.name)]
             if grant.sourceKind == "photos" {
                 row["sourceKind"] = .string("photos"); row["photoAccess"] = .string(photos.access())
-            } else { row["publicationVersion"] = .string("1.0.0") }
+            } else {
+                row["publicationVersion"] = .string("1.0.0")
+                if let sourcePath = try store.sourcePath(owner, id: grant.id) { row["sourcePath"] = .string(sourcePath) }
+            }
             return .object(row)
         })
         let response = JSONValue.object(result)

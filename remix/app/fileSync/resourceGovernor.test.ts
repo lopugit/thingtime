@@ -42,3 +42,17 @@ test('312.5-byte/s streams release first payload within250ms and preserve the ag
  const drain = async (reader: ReadableStreamDefaultReader<Uint8Array>) => { for (;;) { const next = await reader.read(); if (next.done) break; bytes += next.value.length; } };
  await Promise.all([drain(first), drain(second)]); assert.equal(bytes, 200); assert.ok(now >= 200 / 312.5 * 1000);
 });
+
+test('device budget shares uploads and downloads across connection governors without resetting byte debt', async () => {
+ let now = 0; const waits: number[] = [];
+ const shared = new SyncResourceGovernor({}, () => now, async ms => { waits.push(ms); now += ms; }, undefined, () => 625000);
+ const first = new SyncResourceGovernor({}, () => now, async ms => { now += ms; }, shared);
+ const second = new SyncResourceGovernor({}, () => now, async ms => { now += ms; }, shared);
+ await Promise.all([first.pace('upload', 62500), second.pace('download', 62500)]);
+ assert.equal(now, 200); assert.ok(waits.every(ms => ms <= 100));
+});
+test('device budget can change during a chunk wait and cancellation preserves other queued work', async () => {
+ let now = 0, cap = 625000;
+ const shared = new SyncResourceGovernor({}, () => now, async ms => { now += ms; cap = 312500; }, undefined, () => cap);
+ await shared.pace('download', 125000); assert.ok(now >= 300);
+});

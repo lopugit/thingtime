@@ -283,3 +283,15 @@ it verifies real native streaming, API authentication, cloud hashes, retained
 versions, local-deletion retention, restart and repeat convergence. It does not
 prove actual PhotoKit permission, installed signed-app selection or personal
 library behavior. Those require a separate explicit live acceptance session.
+
+
+### Owner-private source locations (Mac fileAccessVersion 1.15.0)
+
+Authorized folder-root responses optionally include `sourcePath`, the absolute
+POSIX location resolved from that owner's exact existing native bookmark.
+Clients negotiate Mac `fileAccessVersion` 1.15.0 before relying on this field.
+Unavailable or stale grants and Photos omit it. This is display/placement
+metadata, never an executable relative file path or a grant to any ancestor.
+The bookmark and current owner verification remain authoritative; no public
+capability manifest contains a physical path. Existing cloud destinations are
+not renamed, moved or migrated by this additive native response.

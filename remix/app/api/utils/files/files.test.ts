@@ -9,6 +9,7 @@ import { COLLECTION_SCHEMA_VERSIONS, isProtectedThingtime } from '../../../schem
 import { contentPartPlan } from '../../../fileSync/contentFingerprint';
 import { cloudFileSyncEntry, parseCloudFileCommit } from '../../../fileSync/cloudFile';
 function fixture() {
+ const verifiedFingerprints = new Map<string, any>();
  let docs = new Map<string, any>(), events = new Map<string, any>(), charged = 0, failAppend = false, fingerprints = 0, receiptReads = 0;
  const now = new Date('2026-10-17T00:00:00Z');
  const matches = (doc: any, filter: any) => Object.entries(filter).every(([k, v]: any) => {
@@ -23,7 +24,7 @@ function fixture() {
   transaction: async work => { const before = structuredClone({ docs, events, charged }); try { return await work({}); } catch (error) { docs = before.docs; events = before.events; charged = before.charged; throw error; } },
   fingerprint: async (_viewer, id) => { fingerprints++; const doc = docs.get(String(id)); if (!doc || doc.ownerId !== 'owner') return { ok: false, status: 404, error: 'missing' };
    return { ok: true, id: doc.shareId, version: attachmentContentVersion(doc.shareId, doc.objectKey, doc.objectVersionId), size: 2,
-    fingerprint: { algorithm: 'sha256-parts-v1', ...contentPartPlan(2), sha256: doc.shareId.endsWith('1') ? 'a'.repeat(64) : 'b'.repeat(64) } }; },
+    fingerprint: verifiedFingerprints.get(String(id)) ?? { algorithm: 'sha256-parts-v1', ...contentPartPlan(2), sha256: doc.shareId.endsWith('1') ? 'a'.repeat(64) : 'b'.repeat(64) } }; },
   entries: async (_things, _owner, ids) => { receiptReads++; assert.ok(ids.length<=128); return ids.filter(id => events.has(id)).map(id => ({ event: structuredClone(events.get(id)) } as any)); },
   append: async (_things, event) => { if (failAppend) throw Error('append failed'); events.set(event.id, structuredClone(event)); return { event } as any; },
   debit: async (_owner, bytes) => { charged += bytes; }, lockFolder: async () => null
@@ -33,7 +34,7 @@ function fixture() {
   attachmentState: 'ready', attachmentPurpose: 'file', attachmentEnvelopeVersion: 1, objectKey: 'objects/'+id, objectVersionId: 'version-'+id, objectSizeBytes: 2,
   storageClass: 'content', storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION, createdAt: now, updatedAt: now, ...patch };
   try { doc.sizeBytes = thingStorageSizeBytes(doc); } catch { doc.sizeBytes = 0; } docs.set(id, doc); return attachmentContentVersion(id, doc.objectKey, doc.objectVersionId); }
- return { service, upload, receiptReads: () => receiptReads, docs: () => docs, events: () => events, charged: () => charged, fingerprints: () => fingerprints, failAppend: (value = true) => { failAppend = value; } };
+ return { service, upload, setFingerprint: (id: string, value: any) => verifiedFingerprints.set(id, value), receiptReads: () => receiptReads, docs: () => docs, events: () => events, charged: () => charged, fingerprints: () => fingerprints, failAppend: (value = true) => { failAppend = value; } };
 }
 const input = (contentVersion: string) => ({ id: randomUUID(), operationId: randomUUID(), expectedRevision: null, name: 'fixture.bin', folderId: null, attachmentId: 'att1', contentVersion, trashed: false });
 test('stable identity, exact retries, retained versions, trash and restore share Timeline', async () => {
@@ -180,4 +181,19 @@ test('failed publication retains original sync provenance and rejects a differen
   assert.equal((await f.service.commit('owner', create)).ok, true);
   assert.deepEqual(f.docs().get('att1').attachmentFileSyncOrigin, origin);
   assert.equal(f.docs().get('att1').targetId, create.id);
+});
+
+test('link metadata must match verified ready attachment bytes and survives read, retention and restore', async () => {
+ const { symbolicLinkFingerprint } = await import('../../../fileSync/symbolicLink');
+ const { fileRestoreCommand, timelineFileVersion } = await import('../../../fileSync/fileVersions');
+ const f=fixture(), symbolicLink={format:'posix-symlink-v1' as const,targetBase64:'Li4='}, create={...input(f.upload('att1')),symbolicLink};
+ assert.equal((await f.service.commit('owner',create)).ok,false,'Metadata cannot claim unrelated ready bytes');assert.equal(f.docs().get('att1').targetId,undefined);
+ f.setFingerprint('att1',await symbolicLinkFingerprint(symbolicLink));
+ const first:any=await f.service.commit('owner',create);assert.equal(first.ok,true);assert.deepEqual(first.file.symbolicLink,symbolicLink);
+ assert.deepEqual((await f.service.read('owner',create.id) as any).file.symbolicLink,symbolicLink);
+ const ordinary:any=await f.service.commit('owner',{...create,symbolicLink:undefined,operationId:randomUUID(),expectedRevision:first.file.revision});assert.equal(ordinary.ok,true);assert.equal(ordinary.file.symbolicLink,undefined);
+ const restore=fileRestoreCommand(ordinary.file,first.file,randomUUID()), restored:any=await f.service.commit('owner',restore);assert.equal(restored.ok,true);assert.deepEqual(restored.file.symbolicLink,symbolicLink);
+ const event=f.events().get(restored.file.revision);assert.deepEqual(timelineFileVersion(event,'after')?.symbolicLink,symbolicLink);
+ const retained:any=await f.service.commit('owner',{...restore,kind:'retained-version',operationId:randomUUID(),expectedRevision:restored.file.revision});assert.equal(retained.ok,true);assert.deepEqual(timelineFileVersion(f.events().get(retained.file.revision),'after')?.symbolicLink,symbolicLink);
+ assert.equal((await f.service.commit('owner',{...restore,operationId:randomUUID(),expectedRevision:restored.file.revision,symbolicLink:{...symbolicLink,targetBase64:'Li4v'}})).ok,false,'Target-byte length mismatch must not publish');
 });

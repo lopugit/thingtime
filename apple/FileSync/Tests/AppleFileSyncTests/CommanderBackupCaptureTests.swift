@@ -215,10 +215,31 @@ final class CommanderBackupCaptureTests: XCTestCase {
         XCTAssertEqual(mkfifo(source.appendingPathComponent("pipe").path, 0o600), 0)
         let store = MobileFolderInventory(directory: base.appendingPathComponent("cache"), commanderIndexer: helper)
         let capture = try store.prepareBackup(scope, id: UUID().uuidString.lowercased(), generation: UUID().uuidString.lowercased(), bookmark: bookmark)
-        XCTAssertEqual(capture.coverage, "partial"); XCTAssertEqual(capture.totalEntries, 1); XCTAssertEqual(capture.totalSkipped, 3)
+        XCTAssertEqual(capture.coverage, "partial"); XCTAssertEqual(capture.totalEntries, 2); XCTAssertEqual(capture.totalSkipped, 2)
         try store.sealBackup(scope, capture: capture, bookmark: bookmark)
         let gaps = try store.readSkipped(scope, capture: capture, bookmark: bookmark, offset: 0).skipped
-        XCTAssertEqual(Set(gaps.map(\.reason.rawValue)), ["duplicate-identity", "symlink", "fifo"])
+        XCTAssertEqual(Set(gaps.map(\.reason.rawValue)), ["duplicate-identity", "fifo"])
+    }
+    func testRealRustLinkTargetsFallbackProvenanceAndOwnedJournalExclusion() throws {
+        let helper = try helper(), (base, source, bookmark, scope) = try fixture()
+        try NativeSymbolicLinks.$receiptDirectory.withValue(base.appendingPathComponent("receipts")) {
+            let root = open(source.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW); defer { close(root) }
+            try NativeSymbolicLinks.create(root, name: "broken", link: NativeSymbolicLink(target: Data("../missing".utf8)))
+            try NativeSymbolicLinks.create(root, name: "raw", link: NativeSymbolicLink(target: Data([0xff, 0x2f, 0x61])))
+            try NativeSymbolicLinks.create(root, name: "fallback", link: NativeSymbolicLink(target: Data("../fallback-target".utf8)), forceUnsupported: true)
+            XCTAssertEqual(mkdirat(root, ".thingtime-link-journal-fixture", 0o700), 0)
+            let journal = openat(root, ".thingtime-link-journal-fixture", O_RDONLY | O_DIRECTORY | O_NOFOLLOW); defer { close(journal) }
+            try NativeSymbolicLinks.register(journal, link: nil, journal: true)
+            try Data("must not upload retained bytes".utf8).write(to: source.appendingPathComponent(".thingtime-link-journal-fixture/retained"))
+            let expected = try MobileFolderReader.scan(bookmark: bookmark)
+            let store = MobileFolderInventory(directory: base.appendingPathComponent("inventory"), commanderIndexer: helper)
+            let capture = try store.prepareBackup(scope, id: UUID().uuidString.lowercased(), generation: UUID().uuidString.lowercased(), bookmark: bookmark)
+            XCTAssertEqual(capture.coverage, "full"); XCTAssertEqual(capture.totalSkipped, 0)
+            try store.sealBackup(scope, capture: capture, bookmark: bookmark)
+            let actual = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0).entries
+            XCTAssertEqual(actual.sorted { $0.path < $1.path }, expected.sorted { $0.path < $1.path })
+            XCTAssertEqual(Set(actual.map(\.path)), ["broken", "raw", "fallback"])
+        }
     }
     func testProcessFailureCannotSealOrBecomeEmptySuccess() throws {
         let (base, _, bookmark, scope) = try fixture()

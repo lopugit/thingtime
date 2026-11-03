@@ -22,6 +22,12 @@ always through `getThingsCollection()` / `getHomeThingsCollection()`, never a
 raw name). Folders are `folder` Things; containment is the child's `folderId`
 pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 
+Private `file-sync` configurations can be managed from any signed-in browser.
+The device sync screen keeps saved connection editing available offline and
+uses a protected, leased control channel for live device operations. Native
+grants and transfer journals stay on the target device. See
+[browser device sync](../browser-device-sync.md) for code paths and checks.
+
 ## Where the code lives
 
 | Concern | Path |
@@ -674,3 +680,33 @@ private managed content excluded by the ordinary library API are not covered.
 Incomplete scan/traversal status remains explicit. No new API contract or
 background indexing service is introduced. Unfiled files independently loads
 one page at a time and requires Load more for each subsequent page.
+
+
+Mac folder-grant location metadata uses `MacFolderSync` `fileAccessVersion`
+1.15.0 and `MobileFolderStore.sourcePath`. The owner-verified native response
+adds optional `roots[].sourcePath`, preserving the exact selected absolute POSIX
+location without granting ancestor access. `mobileFolders.client` validates it
+separately from root-relative file paths and exposes `supportsNativeSourcePaths`.
+Stale/unavailable bookmarks and Photos omit it. `MobileFolderTests` and
+`MacFolderSyncTests` cover owner isolation and continued rejection of absolute
+paths by file operations; `mobileFolders.client.test.ts` covers negotiation,
+correlation and malformed location metadata. This field does not change signed
+sync policy, existing cloud destination identities, or public manifests.
+
+Device-wide resource controls use `fileSync/remoteDeviceResources.client.ts` for
+one identity-qualified status session shared by overview and connection manager.
+`remoteSyncProtocol.ts` defines the rootless read/save contract, strict policy and
+measurement projections; client and worker require `api.devices-sync-control`
+1.2.0 plus native fileAccess 1.16.0 / fileResourceLimits 1.1.0. The existing paired
+mailbox retains ownership, leases and immutable saves. Focused protocol/client,
+worker, session and `deviceSyncControl` tests cover paused changes, no folder/job
+side effects, stale replies and shared polling. See browser-device-sync.md.
+
+POSIX symbolic-link metadata lives in `fileSync/symbolicLink.ts`; `SyncEntry`
+content/stamp equality includes link kind and exact raw target identity.
+`cloudFile.ts`, canonical `files/files.ts`, inventory projections and
+`fileVersions.ts` preserve it through uploads, retained history and guarded
+restore. `api.files` 1.9.0 / `api.file-sync-batches` 1.3.0 and native fileAccess
+1.17.0 / fileSymbolicLinks 1.0.0 are explicit requirements. Targets are never
+followed. Tests: `symbolicLink.test.ts`, canonical file/route suites and the
+isolated Mac paged HTTP lane described in mobile-file-sync.md.

@@ -105,7 +105,7 @@ test('production DesktopFolderSync handles256 members with one native operation 
                 assert.equal(options.credentials, 'omit'); assert.equal(options.redirect, 'error');
                 assert.equal(new URL(url).searchParams.get('partNumber'), '1');
                 assert.deepEqual(Object.keys(options.headers), ['x-amz-checksum-sha256']);
-                assert.equal(options.headers['x-amz-checksum-sha256'], createHash('sha256').update(options.body).digest('base64'));
+                assert.equal(options.headers['x-amz-checksum-sha256'], createHash('sha256').update(Buffer.from(await new Response(options.body).arrayBuffer())).digest('base64'));
                 await new Promise(setImmediate); return new Response(null, { status: 200 });
             } finally { active--; }
         }, diagnostic: row => rows.push(row) });

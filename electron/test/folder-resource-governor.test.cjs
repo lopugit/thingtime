@@ -133,3 +133,52 @@ test('queued PUT and GET resolve fresh targets only after child transfer admissi
         assert.equal(refreshed, 2); assert.deepEqual(paths, ['/first', '/fresh-put', '/fresh-get']);
     } finally { unblock(); server.close(); await once(server, 'close'); }
 });
+
+test('device-global governor covers legacy connections and combines upload and download tickets', async () => {
+ const { governorFor, deviceLimits } = require('../lib/folder-resource-governor.cjs');
+ const context = { apiOrigin: 'https://sync-test.example', ownerId: 'resource-test-owner' };
+ const first = governorFor({ deviceId: 'test-device', rootId: 'first' }, context);
+ const second = governorFor({ deviceId: 'test-device', rootId: 'second' }, context);
+ assert.equal(first, second); assert.equal(first.totalBytesPerSecond, 625000); assert.equal(first.policy.cpuPercent, 15);
+ assert.notEqual(first, governorFor({ deviceId: 'other-device', rootId: 'first' }, context));
+ assert.throws(() => deviceLimits({ transferBytesPerSecond: 0, scanBytesPerSecond: 625000, cpuPercent: 15 }));
+ let now = 0;
+ const g = new ResourceGovernor({}, () => now, async ms => { now += ms; }); g.totalBytesPerSecond = 625000;
+ await Promise.all([g.pace('upload', 62500, new AbortController().signal), g.pace('download', 62500, new AbortController().signal)]);
+ assert.equal(now, 200); assert.equal(g.next.download, 0);
+});
+test('device total budget reaches the real dedicated transport worker', async () => {
+ let received = 0;
+ const server = createServer(async (request, response) => { for await (const chunk of request) received += chunk.length; response.end(); });
+ server.listen(0, '127.0.0.1'); await once(server, 'listening');
+ try {
+  const g = new ResourceGovernor({ cpuPercent: 100, transferConcurrency: 2 }); g.totalBytesPerSecond = 625000;
+  const target = new URL('http://127.0.0.1:' + server.address().port), start = performance.now();
+  await Promise.all([1, 2].map(() => governedFetch(g, globalThis.fetch, target, { signal: AbortSignal.timeout(5000), headers: {}, body: Buffer.alloc(62500) })));
+  assert.equal(received, 125000); assert.ok(performance.now() - start >= 190);
+ } finally { server.close(); await once(server, 'close'); }
+});
+
+test('queued connection policy cannot raise an active stricter connection ceiling', async () => {
+ const g = new ResourceGovernor({ uploadBytesPerSecond: 1000, cpuPercent: 5 });
+ const release = await g.acquire(new AbortController().signal);
+ g.setLimits({ cpuPercent: 15 });
+ assert.equal(g.policy.uploadBytesPerSecond, 1000); assert.equal(g.policy.cpuPercent, 5);
+ release(); g.setLimits({ cpuPercent: 15 });
+ assert.equal(g.policy.uploadBytesPerSecond, undefined); assert.equal(g.policy.cpuPercent, 15);
+});
+
+test('saving a device cap notifies the active dedicated worker without resetting its reservations', { timeout: 12000 }, async () => {
+ const { governorFor } = require('../lib/folder-resource-governor.cjs');
+ let received = 0, firstByte; const first = new Promise(resolve => { firstByte = resolve; });
+ const server = createServer(async (request, response) => { for await (const chunk of request) { received += chunk.length; firstByte(); } response.end(); });
+ server.listen(0, '127.0.0.1'); await once(server, 'listening');
+ try {
+  const context = { apiOrigin: 'https://live-budget.example', ownerId: 'live-budget-owner' }, deviceResourceLimits = { transferBytesPerSecond: 1000, scanBytesPerSecond: 625000, cpuPercent: 100 };
+  const g = governorFor({ deviceId: 'live-device', rootId: 'connection', deviceResourceLimits }, context), start = performance.now();
+  const transfer = governedFetch(g, globalThis.fetch, new URL('http://127.0.0.1:' + server.address().port), { signal: AbortSignal.timeout(10000), headers: {}, body: Buffer.alloc(2000) });
+  await first;
+  assert.equal(governorFor({ action: 'resources', deviceId: 'live-device', deviceResourceLimits: { ...deviceResourceLimits, transferBytesPerSecond: 500 } }, context), g);
+  await transfer; assert.equal(received, 2000); assert.ok(performance.now() - start >= 3400, 'active worker retained its previous speed instead of receiving IPC policy');
+ } finally { server.close(); await once(server, 'close'); }
+});

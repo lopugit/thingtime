@@ -24,7 +24,7 @@ export function isNativeSyncAdapterCurrent(adapter: NativeSyncAdapter) {
 /** Uses the current native session, never a copied credential or a UI lifetime.
  * iOS is pinned to its WebView origin; the Mac adapter verifies its selected API. */
 export async function createNativeSyncHost(input: {
-	resourcePolicy?: { resourceLimits: import('./configuration').FileSyncResourceLimits; resourceScope: string; observe(value: import('./resourceGovernor').SyncResourceStatus): void };
+	resourcePolicy?: { resourceLimits?: import('./configuration').FileSyncResourceLimits; deviceResourceLimits?: () => import('./deviceResourcePolicy').DeviceSyncResourcePolicy; resourceScope: string; observe(value: import('./resourceGovernor').SyncResourceStatus): void };
 	adapter: NativeSyncAdapter; ownerId: string; deviceId: string; signal: AbortSignal; assertCurrent(): void;
 }): Promise<FolderHost> {
 	const origin = window.location.origin;
@@ -59,7 +59,7 @@ export async function createNativeSyncHost(input: {
 			check();
 			if (ownerId !== input.ownerId) throw Error('The sync account changed.');
 			const combined = AbortSignal.any([input.signal, signal]); combined.throwIfAborted();
-			const governed = 'rootId' in request && input.resourcePolicy ? { ...request, resourceLimits: input.resourcePolicy.resourceLimits, resourceScope: input.resourcePolicy.resourceScope } : request;
+			const governed = 'rootId' in request && input.resourcePolicy ? { ...request, ...(input.resourcePolicy.resourceLimits ? { resourceLimits: input.resourcePolicy.resourceLimits, resourceScope: input.resourcePolicy.resourceScope } : {}), ...(input.resourcePolicy.deviceResourceLimits ? { deviceResourceLimits: input.resourcePolicy.deviceResourceLimits() } : {}) } : request;
 			const result = await requestMobileFolders(ownerId, governed, combined, progress, background);
 			if (result.resources) input.resourcePolicy?.observe(result.resources);
 			check(); combined.throwIfAborted(); return result;

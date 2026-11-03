@@ -1,3 +1,4 @@
+import { DeviceSyncResources } from './DeviceSyncResources';
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { Box, Button, FormControl, FormLabel, Select, Text } from '@chakra-ui/react';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -14,12 +15,16 @@ export function DesktopFolderAccess({
 	ownerId,
 	pairedDeviceIds,
 	ownedDeviceIds,
-	deviceId: selectedDeviceId
+	deviceId: selectedDeviceId,
+	active = true,
+ showResourceSummary = true
 }: {
 	ownerId: string;
 	pairedDeviceIds: readonly string[];
 	ownedDeviceIds: readonly string[];
 	deviceId?: string;
+	active?: boolean;
+ showResourceSummary?: boolean;
 }) {
 	const user = useCurrentUser(),
 		dataPlane = useDataPlane();
@@ -39,6 +44,8 @@ export function DesktopFolderAccess({
 	if (!candidates.length) return null;
 	return (
 		<DeviceFolders
+			active={active}
+   showResourceSummary={showResourceSummary}
 			key={JSON.stringify([ownerId, candidates, identity.generation])}
 			ownerId={ownerId}
 			candidates={candidates}
@@ -46,11 +53,12 @@ export function DesktopFolderAccess({
 		/>
 	);
 }
-function DeviceFolders({ ownerId, candidates, generation }: { ownerId: string; candidates: string[]; generation: number }) {
+function DeviceFolders({ ownerId, candidates, generation, active, showResourceSummary }: { ownerId: string; candidates: string[]; generation: number; active: boolean; showResourceSummary: boolean }) {
 	const [choice, setChoice] = useState('');
 	const deviceId = candidates.length === 1 ? candidates[0] : candidates.includes(choice) ? choice : '';
 	return (
 		<Box border="1px solid var(--tt-border, #ececef)" borderRadius="12px" padding={4} minWidth={0}>
+   {showResourceSummary && deviceId ? <DeviceSyncResources ownerId={ownerId} deviceId={deviceId} allowed={active} /> : null}
 			<Text fontWeight={700} fontSize="14px">
 				Folders on this Mac
 			</Text>
@@ -66,11 +74,11 @@ function DeviceFolders({ ownerId, candidates, generation }: { ownerId: string; c
 					</Select>
 				</FormControl>
 			) : null}
-			{deviceId ? <VerifiedFolders key={deviceId} ownerId={ownerId} deviceId={deviceId} generation={generation} /> : null}
+			{deviceId ? <VerifiedFolders active={active} key={deviceId} ownerId={ownerId} deviceId={deviceId} generation={generation} /> : null}
 		</Box>
 	);
 }
-function VerifiedFolders({ ownerId, deviceId, generation }: { ownerId: string; deviceId: string; generation: number }) {
+function VerifiedFolders({ ownerId, deviceId, generation, active }: { ownerId: string; deviceId: string; generation: number; active: boolean }) {
 	const task = useSyncExternalStore(nativeSyncTasks.subscribe, nativeSyncTasks.read, nativeSyncTasks.read);
 	let taskHost: FolderHost | undefined;
 	if (task?.scope.ownerId === ownerId && task.scope.deviceId === deviceId && task.scope.dataPlane === 'home') {
@@ -105,7 +113,7 @@ function VerifiedFolders({ ownerId, deviceId, generation }: { ownerId: string; d
 			});
 		return () => controller.abort();
 	}, [ownerId, deviceId, generation, attempt, taskHost]);
-	if (taskHost || host) return <MobileFolderAccess ownerId={ownerId} deviceId={deviceId} host={taskHost ?? host} />;
+	if (taskHost || host) return <MobileFolderAccess active={active} ownerId={ownerId} deviceId={deviceId} host={taskHost ?? host} />;
 	return (
 		<Box marginTop={2}>
 			<Text fontSize="12px" role={error ? 'alert' : undefined}>
