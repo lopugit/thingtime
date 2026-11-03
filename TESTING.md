@@ -10518,6 +10518,14 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   until `api.passwords` 1.6.1 is available. Confirm revoked or replaced sessions
   and changed entries still reject the operation; no saved record is migrated.
 
+- [ ] Password editor rerenders: start a fresh login draft, type into Title and
+  Password one character at a time, focus and blur its fields, and refresh the
+  metadata list. Keep exactly one fields editor and one control per field; no
+  orphan/plain inputs, repeated rows or duplicate React key warnings. Switch
+  entries and confirm reveal/copy state does not cross entry identities. Run
+  the actual-manager `scripts/password-tools.browser.html` regression in addition
+  to the isolated fields fixture. Its keyboard/focus/Copy assertions cover the
+  real PasswordManager → Thingtime wrapper → ThingFields path.
 - [ ] Password copy: in an authorized synthetic entry, activate **Copy Password**
   by mouse and keyboard while masked and shown. Verify the exact current draft
   is written, the visibility state and edit/save state are unchanged, and only
