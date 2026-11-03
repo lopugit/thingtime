@@ -7,9 +7,19 @@ editor, with ordered fields, masked secrets and extensible custom fields. The
 ordinary Thing tree is unchanged; controlled field mods do not persist values
 through global Thing state, local caches, editor history or request diagnostics.
 
+Password fields in an open entry have an explicit **Copy** control. Copy writes
+that field's current draft value to the browser clipboard without revealing it,
+saving an edit, or recording a notification/history event. Empty values cannot
+be copied. Success and clipboard refusal use secret-free inline status. The
+control requires the ordinary authorized entry read; it adds no retrieval API
+or verification bypass. Native passkey entries do not enable copying signing
+fields. The shared fields renderer enables this only with `copyPasswords`.
+Clipboard contents are left to the user and operating system; the application
+never reads them or schedules a later clipboard overwrite.
+
 ## Storage and access
 
-`api.passwords` 1.5.0 uses the home data plane. GET returns 50 metadata records
+`api.passwords` 1.6.1 uses the home data plane. GET returns 50 metadata records
 at a time. Optional `q` searches all owned title metadata before pagination using
 a case-insensitive literal substring (outer whitespace is ignored). Keep the same
 query on subsequent pages; restart without a cursor when it changes. Field values
@@ -21,6 +31,17 @@ temporary accounts and internal Action identities are not vault sessions.
 `catalog` returns names, usernames, exact HTTPS domains and public passkey
 identifiers for native and browser-provider selection; passwords, TOTP seeds and signing keys are
 excluded. Responses are private/no-store. The browser provider and optional native bridge reuse this catalog without exposing signing keys.
+
+Autofill interprets a saved bare Website host such as `thingtime.com` as
+`https://thingtime.com`, through the same normalizer for catalog discovery and
+selected-entry verification. Explicit HTTPS URLs keep their exact origin,
+including non-default ports and subdomains. Catalog host matches are discovery
+hints; final fill still requires the exact saved HTTPS origin, live session,
+selected entry and current verification grant. Wildcards, userinfo, whitespace,
+backslashes, scheme-relative values and non-HTTPS URLs cannot authorize fill.
+No records are rewritten and no browser credential or signing-key access is added.
+The browser fill client negotiates this compatible correction at `api.passwords`
+1.6.1 before using it.
 
 Field contents are AES-256-GCM encrypted with a random account data key, using
 owner, key ID, record ID and purpose as authenticated data. The key is wrapped

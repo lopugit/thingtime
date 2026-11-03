@@ -1,4 +1,5 @@
 import { passwordWebsiteOrigins } from '~/passwords/icons';
+import { passwordWebsiteOrigins as passwordAutofillOrigins } from '~/passwords/websites';
 import { openPasswordIcon, sealPasswordIcon } from './icons';
 import { deletePasswordFiles } from './files';
 import { BSON, ObjectId } from 'mongodb';
@@ -67,9 +68,7 @@ export async function passwordCatalog(ownerId: string, cursor?: string | null) {
   const page = await exportPasswordPage(ownerId, cursor);
   const catalog = page.entries.map(({ id, entry }) => {
     const value = (id: string) => entry.fields.find(field => field.id === id)?.value || '';
-    const domains = [...new Set(entry.fields.filter(field => field.type === 'url').flatMap(field => {
-      try { const url = new URL(field.value); return url.protocol === 'https:' && !url.username && !url.password && url.hostname.length <= 253 ? [url.hostname.toLowerCase()] : []; } catch { return []; }
-    }))];
+    const domains = [...new Set(passwordAutofillOrigins(entry.fields).map(origin => new URL(origin).hostname.toLowerCase()))];
     return { id, title: entry.title, username: passwordPreviewUsername(entry), domains,
       fillEligible: isPasswordFillEntry(entry), hasPassword: entry.passwordType !== 'passkey' && !!value('password'), hasTotp: entry.fields.some(field => field.type === 'totp' && field.value),
       ...(entry.passwordType === 'passkey' ? { relyingParty: value('relyingParty'), credentialId: value('credentialId'), userHandle: value('userHandle') } : {}) };
