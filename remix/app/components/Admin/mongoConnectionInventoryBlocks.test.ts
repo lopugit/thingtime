@@ -3,7 +3,7 @@ import test from 'node:test';
 import { MONGO_CONNECTION_INVENTORY_BLOCKS, migrateMongoInventoryBlocks } from './mongoConnectionInventoryBlocks';
 import { settingsDocumentBlocks } from '../Settings/settingsDocument';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
-import { safeDeploymentUrl, presentMongoSources, presentMongoDeployments, mergeMongoInventory } from './mongoConnectionInventoryPresentation';
+import { safeDeploymentUrl, presentMongoSources, presentMongoDeployments, presentMongoCoverageNotes, mergeMongoInventory } from './mongoConnectionInventoryPresentation';
 import type { MongoConnectionSource, MongoConnectionInventory } from '~/mongodb/connectionInventory';
 const flatten = (blocks: WebpageBlock[]): WebpageBlock[] => blocks.flatMap(block => [block, ...flatten(block.children || [])]);
 test('inventory fields remain independently editable in saved repeated templates', () => {
@@ -77,4 +77,27 @@ test('feature coverage distinguishes unknown, empty and mixed usage and shows la
 test('zero pool limits describe unlimited capacity and no idle expiry', () => {
  const source = deploymentSource('one'); source.pools = [{ id: 'pool', address: 'db:27017', status: 'ready', open: 3, checkedOut: 1, pending: 0, created: 3, closed: 0, cleared: 0, maxPoolSize: 0, minPoolSize: 0, maxIdleTimeMS: 0 }];
  const pool = presentMongoDeployments([source])[0].rows[0].poolRows[0]; assert.match(pool.state, /maximum pool size unlimited/); assert.match(pool.settings, /No idle expiry/);
+});
+
+
+test('coverage explains deployment historical exclusions while preserving raw summaries and custom layouts', () => {
+ const legacyScope = 'Counts below sum the sources on this page at their observation times, including stale snapshots; they are not a live database or deployment total.';
+ const notes = [legacyScope, 'A storage-read warning must remain visible.'];
+ const presented = presentMongoCoverageNotes(notes);
+ assert.match(presented[0].text, /Deployment headline counts include only current or recent ready client observations/);
+ assert.match(presented[0].text, /Stale, closed and failed sources are historical and excluded/);
+ assert.match(presented[0].text, /raw loaded-snapshot totals retain historical observations/);
+ assert.match(presented[0].text, /Neither is a live database total/);
+ assert.equal(presented[1].text, notes[1]);
+ assert.deepEqual(notes, [legacyScope, 'A storage-read warning must remain visible.'], 'API notes are not mutated');
+ const ready = deploymentSource('ready');
+ const stale = deploymentSource('stale', { freshness: 'stale' });
+ const page = { sources: [ready, stale], totals: { observedOpen: 6, observedCheckedOut: 2 }, coverage: { complete: false, notes } } as MongoConnectionInventory;
+ assert.equal(presentMongoDeployments(page.sources)[0].open, '3');
+ assert.equal(mergeMongoInventory(null, page, false).totals.observedOpen, 6, 'legacy raw totals still include stale snapshots');
+ const custom = structuredClone(MONGO_CONNECTION_INVENTORY_BLOCKS);
+ const coverage = flatten(custom).find(block => block.id === 'mongo-coverage-note')!;
+ coverage.text = 'Custom coverage explanation';
+ assert.equal(migrateMongoInventoryBlocks(custom), custom, 'custom saved blocks are not migrated');
+ assert.equal(coverage.text, 'Custom coverage explanation');
 });

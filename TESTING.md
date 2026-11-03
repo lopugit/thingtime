@@ -13577,6 +13577,9 @@ separate from deterministic discovery/lease tests.
   pending handshakes + monitoring allowance. Cover auto/stream, poll, load-balanced
   and unknown/legacy evidence; no model may masquerade as a measured Atlas total.
   Explain all-server versus selected-node scope and capacity versus current use.
+  Open Coverage and measurement details: its headline explanation must exclude
+  stale/closed/failed historical sources while separately retaining the raw
+  loaded-snapshot summary scope; custom coverage text and saved layouts survive.
 - Generate real requests through multiple registered feature domains and compare
   the API evidence with human-readable feature labels. Count once per request per
   shared client, including concurrent requests, and show lifetime scope/last-use

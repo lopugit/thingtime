@@ -74,3 +74,10 @@ export function presentMongoDeployments(sources: MongoConnectionSource[], query 
   };
  });
 }
+
+/** Explain deployment headlines without changing the legacy raw-snapshot contract. */
+export function presentMongoCoverageNotes(notes: readonly string[]) {
+ const legacySnapshotScope = 'Counts below sum the sources on this page at their observation times, including stale snapshots; they are not a live database or deployment total.';
+ const deploymentScope = 'Deployment headline counts include only current or recent ready client observations from loaded snapshots. Stale, closed and failed sources are historical and excluded from those counts. Separate raw loaded-snapshot totals retain historical observations. Neither is a live database total.';
+ return notes.map(text => ({ text: text === legacySnapshotScope ? deploymentScope : text }));
+}
