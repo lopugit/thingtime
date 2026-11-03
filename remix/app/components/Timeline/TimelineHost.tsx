@@ -8,6 +8,8 @@ import { HistoryMessageComposer } from './TimelineMessages';
 import type { LocalTimelineRow } from '../../timeline/localStore';
 import { COMPONENT_BINDING_PREFIX } from '../../timeline/componentBindings';
 import { TimelinePagePreview } from './TimelinePagePreview';
+import { TimelineFileVersions } from './TimelineFileVersions';
+import { CLOUD_FILE_ADAPTER } from '../../fileSync/cloudFile';
 import { historyStorageForThing, timelineFolderHref, type TimelineStorage } from '../../timeline/storageScope';
 import { TimelineStorageProvider, useTimelineSession, useSelectedTimelineSession } from '../../timeline/TimelineProvider';
 import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from '../../timeline/snapshotParts';
@@ -166,7 +168,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 									Clear comparison
 								</Button>
 							) : null}
-							{selected.mode !== 'effect' && selected.after !== null && selectedRow?.status === 'accepted' ? (
+							{selected.mode !== 'effect' && selected.after !== null && selected.after.adapter !== CLOUD_FILE_ADAPTER && selectedRow?.status === 'accepted' ? (
 								// Enabled for split-snapshot versions and deleted Things too: the server resolves both sides and the
 								// parser accepts a null `current`. The preview costs a POST (timeline.write budget) and applies nothing.
 								now.preview ? (
@@ -227,6 +229,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 							</Box>
 						) : null}
 						<TimelinePagePreview key={`page-preview:${timeline.identity}:${selected.id}`} event={selected} />
+						<TimelineFileVersions key={`file-versions:${timeline.identity}:${selected.id}`} event={selected} onApplied={() => void timeline.refresh()} />
 						{now.preview ? (
 							<TimelineCompareNow preview={now.preview} />
 						) : (

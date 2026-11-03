@@ -8,7 +8,7 @@ export function PasswordBridgeHost() {
   const ownerId = user?.id, temporary = user?.temporary;
   React.useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
-    const sync = () => { clearTimeout(timer); timer = setTimeout(() => { if (hasNativePasswordProvider()) nativePasswordProvider(ownerId && !temporary ? 'sync' : 'disconnect', ownerId).catch(() => {}); }, 150); };
+    const sync = () => { clearTimeout(timer); timer = setTimeout(() => { if (hasNativePasswordProvider()) nativePasswordProvider('sync', ownerId && !temporary ? ownerId : undefined).catch(() => {}); }, 150); };
     const events = ['thingtime:native-bridge-ready', 'thingtime:passwords-changed', 'focus'];
     sync(); events.forEach(event => window.addEventListener(event, sync));
     return () => { clearTimeout(timer); events.forEach(event => window.removeEventListener(event, sync)); };

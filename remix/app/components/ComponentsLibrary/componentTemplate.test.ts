@@ -1,3 +1,4 @@
+import { elapsedClockActive } from './elapsedTime';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -526,4 +527,28 @@ test('deferred templates consume the same expansion budget as other saved values
 	const output = resolveTemplate({ ttRepeat: { count: 24, node: { ttTemplate: { tag: 'div', children: ['x'.repeat(MAX_RESOLVED_CHARS)] } } } });
 	assert.ok(countChars(output) <= MAX_RESOLVED_CHARS);
 	assert.ok(countValues(output) <= MAX_RESOLVED_VALUES + 10);
+});
+
+test('elapsed formatter uses reported start/end values and the scoped live clock', () => {
+ const format = { ttFormat: { kind: 'elapsed', arg: 'item.startedAt', endArg: 'item.endedAt' } };
+ const start = Date.parse('2026-10-19T00:00:00Z');
+ const live = (offset: number, item = { startedAt: start, endedAt: null as number | null }) => resolveTemplate(format, { item, clock: { now: start + offset } });
+ assert.equal(live(0), '00:00:00');
+ assert.equal(live(1_000), '00:00:01');
+ assert.equal(live(90_061_000), '1d 01:01:01');
+ assert.equal(live(9_000, { startedAt: start, endedAt: start + 2_000 }), '00:00:02');
+ assert.equal(live(10_000, { startedAt: start, endedAt: start + 2_000 }), '00:00:02');
+ assert.equal(live(-1_000), 'Not reported');
+ assert.equal(resolveTemplate(format, { item: { startedAt: null, endedAt: null } }), 'Not reported');
+ assert.equal(resolveTemplate(format, { item: { startedAt: 'invalid', endedAt: null } }), 'Not reported');
+ assert.equal(resolveTemplate(format, { item: { startedAt: start, endedAt: 'invalid' } }), 'Not reported');
+ assert.equal(resolveTemplate(format, { item: { startedAt: 0, endedAt: 0 } }), '00:00:00');
+});
+
+
+test('only a valid running measurement activates the authored block clock', () => {
+ for (const start of [null, undefined, '', 'invalid', NaN, Infinity, false, {}]) assert.equal(elapsedClockActive(start, null), false);
+ assert.equal(elapsedClockActive(0, null), true);
+ assert.equal(elapsedClockActive('2026-10-19T00:00:00Z', undefined), true);
+ for (const end of [0, '2026-10-19T00:00:01Z', 'invalid', false]) assert.equal(elapsedClockActive(0, end), false);
 });

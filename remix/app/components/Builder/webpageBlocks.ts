@@ -1,12 +1,7 @@
-// Client-side types + PURE tree operations for the block-based site builder.
-// The server-side write gate (sanitizeWebpageCrystal in schemas/registry.ts)
-// is the authority on shape and caps — everything here mirrors it for
-// optimistic editing and must stay within those bounds (120 blocks, depth 8,
-// 48KB serialized). Blocks never carry markup: component blocks reference
-// component things resolved through /api/v1/webpages/resolve and drawn by the
-// sanitising allowlist renderers, one budget per block.
+// Client types and pure block-tree operations. The server validates each block;
+// pages have no arbitrary block-count or nesting-depth product limit.
 
-export type WebpageBlockType = 'component' | 'container' | 'text' | 'native' | 'media' | 'html';
+export type WebpageBlockType = 'component' | 'container' | 'text' | 'native' | 'media' | 'html' | 'element' | 'collection' | 'condition';
 export type WebpageContainerDirection = 'column' | 'row' | 'grid';
 export type WebpageTextStyle = 'body' | 'heading' | 'eyebrow';
 export type WebpageBlockAlign = 'start' | 'center' | 'end' | 'stretch';
@@ -16,10 +11,10 @@ export interface WebpageBlockSource {
 	action: string;
 	// scalar inputs; string values may carry {arg} and {query.<name>} tokens
 	inputs?: Record<string, string | number | boolean>;
-	// 'load' (default) refetches after every control run; 'manual' only on
-	// load; 'interval' also every intervalMs (5s–1h, default 15s)
-	refresh?: 'load' | 'manual' | 'interval';
+	// 'live' subscribes to a capability-negotiated same-origin stream.
+	refresh?: 'load' | 'manual' | 'interval' | 'live';
 	intervalMs?: number;
+	stream?: { path: string; feature: string; minimumVersion: string };
 }
 
 export interface WebpageBlock {
@@ -44,6 +39,9 @@ export interface WebpageBlock {
 	// text: rendered element override (h1…h6/p/span/…) + rich WYSIWYG HTML
 	// (render-side sanitised through the allowlist renderer — never trusted raw)
 	tag?: string;
+	props?: Record<string, unknown>;
+	condition?: Record<string, unknown>;
+	format?: Record<string, unknown>;
 	html?: string;
 	// text: optional link target (https / site-relative / mailto: / tel:) —
 	// the text renders as an anchor, so a styled text block IS a button
@@ -73,8 +71,8 @@ export interface WebpageCrystal {
 	blocks: WebpageBlock[];
 }
 
-export const MAX_BLOCKS = 120;
-export const MAX_BLOCK_DEPTH = 8;
+export const MAX_BLOCKS = Number.POSITIVE_INFINITY;
+export const MAX_BLOCK_DEPTH = Number.POSITIVE_INFINITY;
 
 // A tree address: the block id path from the root list to the block.
 export type BlockPath = string[];
@@ -124,6 +122,12 @@ export const findParentId = (blocks: WebpageBlock[], id: string, parentId: strin
 	return undefined;
 };
 
+/** Ordinary child insertion must not create invisible content inside DOM
+ * leaves or controls with a specialised option/value grammar. */
+export const canAddBlockChildren = (block: WebpageBlock): boolean =>
+	['container', 'collection', 'condition'].includes(block.type) ||
+	(block.type === 'element' && !['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr', 'select', 'option', 'textarea'].includes((block.tag || 'div').toLowerCase()) && block.props?.transparent !== true);
+
 const mapTree = (blocks: WebpageBlock[], fn: (list: WebpageBlock[], parentId: string | null) => WebpageBlock[]): WebpageBlock[] => {
 	const walk = (list: WebpageBlock[], parentId: string | null): WebpageBlock[] =>
 		fn(list, parentId).map((block) =>
@@ -139,13 +143,69 @@ export const insertBlock = (
 	containerId: string | null,
 	index: number,
 	block: WebpageBlock
-): WebpageBlock[] =>
-	mapTree(blocks, (list, parentId) => {
-		if (parentId !== containerId) return list;
+): WebpageBlock[] => {
+	const insert = (list: WebpageBlock[]) => {
 		const next = [...list];
 		next.splice(Math.max(0, Math.min(index, next.length)), 0, block);
 		return next;
-	});
+	};
+	if (containerId === null) return insert(blocks);
+	const target = findBlock(blocks, containerId);
+	if (!target || !canAddBlockChildren(target)) return blocks;
+	const visit = (list: WebpageBlock[]): WebpageBlock[] => list.map(entry => entry.id === containerId
+		? { ...entry, children: insert(entry.children || []) }
+		: entry.children ? { ...entry, children: visit(entry.children) } : entry);
+	return visit(blocks);
+};
+
+export type BlockInsertDirection = 'above' | 'below' | 'left' | 'right';
+
+/** Insert on a visual axis without changing the layout of unrelated siblings.
+ * A matching flex parent already supplies that axis. Otherwise a small local
+ * wrapper gives the selected block and its new neighbour the requested relation.
+ * Resolve the target at commit time so an open picker never uses stale indices. */
+export const insertBlockRelative = (
+	blocks: WebpageBlock[],
+	targetId: string,
+	direction: BlockInsertDirection,
+	block: WebpageBlock
+): WebpageBlock[] => {
+	const target = findBlock(blocks, targetId);
+	const parentId = findParentId(blocks, targetId);
+	const existing = collectBlockIds(blocks);
+	const incomingIds = collectBlockIds([block]);
+	if (!target || parentId === undefined || [...incomingIds].some(id => existing.has(id))) return blocks;
+	const horizontal = direction === 'left' || direction === 'right';
+	const desired = horizontal ? 'row' : 'column';
+	const before = direction === 'above' || direction === 'left';
+	const parent = parentId === null ? null : findBlock(blocks, parentId);
+	// Both direct siblings and local wrappers change this parent's children.
+	// Preserve specialised DOM grammars instead of bypassing insertBlock's guard.
+	if (parentId !== null && (!parent || !canAddBlockChildren(parent))) return blocks;
+	const display = parent?.css?.display;
+	const flexDirection = parent?.css?.['flex-direction'] || (parent?.type === 'container' ? parent.direction || 'column' : undefined);
+	const compatible = parentId === null ? !horizontal :
+		(!display || display === 'flex' || display === 'inline-flex') &&
+		(parent?.type === 'container' || display === 'flex' || display === 'inline-flex') &&
+		(flexDirection === desired || flexDirection === `${desired}-reverse`);
+	if (compatible) {
+		const siblings = parent ? parent.children || [] : blocks;
+		const index = siblings.findIndex((sibling) => sibling.id === targetId);
+		const reverse = flexDirection === `${desired}-reverse`;
+		return insertBlock(blocks, parentId, index + (before !== reverse ? 0 : 1), block);
+	}
+	collectBlockIds([block], existing);
+	const wrapper: WebpageBlock = {
+		id: newBlockId('box', existing), type: 'container', direction: desired, gap: 4,
+		...(target.align ? { align: target.align } : {}),
+		...(target.maxWidth !== undefined ? { maxWidth: target.maxWidth } : {}),
+		css: { 'min-width': '0', ...(horizontal ? { width: '100%' } : {}) },
+		children: before ? [block, target] : [target, block]
+	};
+	const replace = (list: WebpageBlock[]): WebpageBlock[] => list.map((entry) => entry.id === targetId ? wrapper :
+		entry.children ? { ...entry, children: replace(entry.children) } : entry);
+	return replace(blocks);
+};
 
 export const removeBlock = (blocks: WebpageBlock[], id: string): WebpageBlock[] =>
 	mapTree(blocks, (list) => list.filter((block) => block.id !== id));
@@ -170,7 +230,7 @@ export const moveBlock = (
 		if (containerId === id) return blocks;
 		if (moving.children && findBlock(moving.children, containerId)) return blocks;
 		const target = findBlock(blocks, containerId);
-		if (!target || target.type !== 'container') return blocks;
+		if (!target || !canAddBlockChildren(target)) return blocks;
 	}
 	const sourceParent = findParentId(blocks, id, null);
 	let insertIndex = index;
@@ -185,22 +245,7 @@ export const moveBlock = (
 
 // Wrap a block IN PLACE inside a new container (Figma's "wrap in frame"):
 // the wrapper takes the block's slot, the block becomes its only child.
-// Only containers can hold children in the block model, so the wrapper is
-// always a container of the given direction. Depth beyond the server cap is
-// rejected at save — the gate stays the authority.
-const subtreeDepth = (block: WebpageBlock): number =>
-	1 + (block.children?.length ? Math.max(...block.children.map(subtreeDepth)) : 0);
-
-const depthOf = (blocks: WebpageBlock[], id: string, depth = 1): number | null => {
-	for (const block of blocks) {
-		if (block.id === id) return depth;
-		if (block.children) {
-			const hit = depthOf(block.children, id, depth + 1);
-			if (hit !== null) return hit;
-		}
-	}
-	return null;
-};
+// A container supplies the requested layout axis without changing the target.
 
 export const wrapBlock = (
 	blocks: WebpageBlock[],
@@ -209,10 +254,6 @@ export const wrapBlock = (
 ): WebpageBlock[] => {
 	const target = findBlock(blocks, id);
 	if (!target) return blocks;
-	// the wrapper adds one level — refuse when that would breach the server's
-	// depth cap (callers surface the refusal; the gate stays the authority)
-	const depth = depthOf(blocks, id) ?? 1;
-	if (depth + subtreeDepth(target) > MAX_BLOCK_DEPTH) return blocks;
 	const wrapper: WebpageBlock = {
 		id: newBlockId('box', collectBlockIds(blocks)),
 		type: 'container',
@@ -305,6 +346,9 @@ export const defaultHtmlBlock = (existing: Set<string>): WebpageBlock => ({
 
 // Human label for the boundary chip / tree rows.
 export const blockLabel = (block: WebpageBlock): string => {
+	if (block.type === 'element') return `${block.tag || 'element'} · ${block.text || block.props?.alt || block.props?.name || ''}`.slice(0, 70);
+	if (block.type === 'collection') return `List · ${block.props?.label || 'Records'}`;
+	if (block.type === 'condition') return `${block.condition?.negate ? 'Otherwise' : 'When'} ${block.condition?.arg || ''}`;
 	if (block.type === 'component') return block.component || 'component';
 	if (block.type === 'container') return `${block.direction || 'column'}${block.type === 'container' && block.direction === 'grid' && block.columns ? ` ×${block.columns}` : ''}`;
 	if (block.type === 'text') return block.style === 'heading' ? 'heading' : block.style === 'eyebrow' ? 'eyebrow' : 'text';
@@ -312,3 +356,24 @@ export const blockLabel = (block: WebpageBlock): string => {
 	if (block.type === 'html') return 'html';
 	return `native · ${block.native || '?'}`;
 };
+
+export function requiresEditableBlockContract(blocks: WebpageBlock[]): boolean {
+ const pending = [...blocks];
+ while (pending.length) {
+  const block = pending.pop()!;
+  if (['element','collection','condition'].includes(block.type) || (block.source && block.type !== 'component')) return true;
+  if (block.children) pending.push(...block.children);
+ }
+ return false;
+}
+
+/** New intrinsic element boundaries accepted by the saved Webpage writer. */
+export function requiresEditableIntrinsicContract(blocks: WebpageBlock[]): boolean {
+ const pending = [...blocks];
+ while (pending.length) {
+  const block = pending.pop()!;
+  if (block.type === 'element' && ['tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-mapbox'].includes(block.tag || '')) return true;
+  if (block.children) pending.push(...block.children);
+ }
+ return false;
+}

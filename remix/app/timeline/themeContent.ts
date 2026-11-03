@@ -3,13 +3,18 @@ import type { TimelineSnapshot } from './contract.ts';
 
 export const THEME_CONTENT_ADAPTER = 'theme-content';
 // Versioned allowlist, deliberately independent of future theme defaults.
-const fields = {
+const versionOneFields = {
 	colors: ['ink', 'text', 'muted', 'faint', 'border', 'borderLight', 'surface', 'surfaceAlt', 'surfaceHover', 'card', 'pageBg', 'accent', 'accentTint', 'accentContrast', 'link', 'positive', 'positiveSoft', 'danger', 'warning', 'rainbow', 'darkBg', 'darkChrome', 'darkBorder', 'darkText', 'darkMuted', 'darkAccent'],
 	fonts: ['heading', 'body', 'mono', 'display'],
 	general: ['radiusScale', 'borderWidth', 'shadow', 'motion', 'animSpeed', 'iconStyle', 'thingsBadgePadding', 'thingsBadgeCustomPadding'],
 	windows: ['closeColor', 'minimiseColor', 'maximiseColor', 'closeRadius', 'minimiseRadius', 'maximiseRadius']
 } as const;
-const numbers = new Set(['radiusScale', 'borderWidth', 'animSpeed', 'closeRadius', 'minimiseRadius', 'maximiseRadius']);
+const fields = {
+	...versionOneFields,
+	colors: [...versionOneFields.colors, 'focusBorder', 'focusGlowStart', 'focusGlowEnd'],
+	general: [...versionOneFields.general, 'focusGlowBlur', 'focusGlowOpacity']
+} as const;
+const numbers = new Set(['focusGlowBlur', 'focusGlowOpacity', 'radiusScale', 'borderWidth', 'animSpeed', 'closeRadius', 'minimiseRadius', 'maximiseRadius']);
 const object = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
 const own = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
 const text = (value: unknown, max: number): value is string => typeof value === 'string' && value.length <= max;
@@ -25,12 +30,12 @@ export type ThemeContentValue = {
 
 /** Explicit approved projection. Never spread a protected crystal or add
  * missing token defaults: historical partial themes retain their exact tokens. */
-export function themeContentSnapshot(input: unknown): TimelineSnapshot {
+export function themeContentSnapshot(input: unknown, version: 1 | 2 = 2): TimelineSnapshot {
 	if (!object(input) || !object(input.crystal) || !text(input.crystal.name, 60) || !object(input.crystal.theme)) invalid();
 	const source = input.crystal.theme;
 	const theme: Record<string, JsonValue> = {};
 	if (own(source, 'name')) { if (!text(source.name, 60)) invalid(); theme.name = source.name; }
-	for (const [section, keys] of Object.entries(fields)) {
+	for (const [section, keys] of Object.entries(version === 1 ? versionOneFields : fields)) {
 		if (!own(source, section)) continue;
 		if (!object(source[section])) invalid();
 		const tokens: Record<string, JsonValue> = {};
@@ -55,16 +60,16 @@ export function themeContentSnapshot(input: unknown): TimelineSnapshot {
 	}
 	if (!Array.isArray(input.tags) || input.tags.length > 512 || input.tags.some(tag => !text(tag, 200)) ||
 		!['private', 'public'].includes(input.visibility) || (input.folderId !== null && !text(input.folderId, 200))) invalid();
-	return { adapter: THEME_CONTENT_ADAPTER, version: 1,
+	return { adapter: THEME_CONTENT_ADAPTER, version,
 		value: copyBoundedJson({ crystal, tags: input.tags, visibility: input.visibility, folderId: input.folderId }, budget, 'Theme history') };
 }
 
 /** Storage exemption is available only to the exact approved versioned shape.
  * Client drafts are still fully metered by the enclosing Timeline policy. */
 export function themeContentValue(snapshot: TimelineSnapshot): ThemeContentValue {
-	if (snapshot.adapter !== THEME_CONTENT_ADAPTER || snapshot.version !== 1) invalid();
+	if (snapshot.adapter !== THEME_CONTENT_ADAPTER || (snapshot.version !== 1 && snapshot.version !== 2)) invalid();
 	const value = copyBoundedJson(snapshot.value, budget, 'Theme history');
-	const projected = themeContentSnapshot(value as ThemeContentValue);
+	const projected = themeContentSnapshot(value as ThemeContentValue, snapshot.version);
 	if (JSON.stringify(projected.value) !== JSON.stringify(value)) invalid();
 	return value as ThemeContentValue;
 }

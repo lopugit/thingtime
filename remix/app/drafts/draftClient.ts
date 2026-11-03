@@ -11,11 +11,11 @@ export async function draftRequest<T = { ok: true; draft: AccountDraft }>(
 	input?: Record<string, unknown>,
 	query?: Record<string, string>
 ): Promise<T> {
-	await requireThingtimeCapability('api.drafts', '1.0.0');
+	await requireThingtimeCapability('api.drafts', '1.1.0');
 	const response = await fetch(`/api/v1/drafts${query ? `?${new URLSearchParams(query)}` : ''}`, {
 		credentials: 'include',
 		method: input ? 'POST' : 'GET',
-		headers: { 'Content-Type': 'application/json', [EXPECTED_ACTOR_HEADER]: actor },
+		headers: { 'Content-Type': 'application/json', [EXPECTED_ACTOR_HEADER]: actor, 'X-Thingtime-Character': actor },
 		...(input ? { body: JSON.stringify({ ...input, expectedActor: actor }) } : {}),
 		signal: AbortSignal.timeout(['instantiate', 'from-post', 'recover'].includes(String(input?.operation)) ? 120_000 : 20_000)
 	});

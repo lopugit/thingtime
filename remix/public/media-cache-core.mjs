@@ -15,11 +15,16 @@ export function managedUrl(request, origin) {
 	const url = new URL(request.url);
 	return request.method === 'GET' &&
 		!request.headers.has('Authorization') &&
+		!request.headers.has('X-Thingtime-Expected-Actor') &&
+		!request.headers.has('X-Thingtime-Expected-Data-Plane') &&
+		request.cache !== 'no-store' &&
 		request.credentials !== 'omit' &&
 		url.origin === origin &&
 		url.pathname === '/api/v1/attachments/content' &&
 		url.searchParams.has('id') &&
-		!url.searchParams.has('cache')
+		// Version-pinned sync ranges and fingerprint JSON must reach the API
+		// unchanged, including its actor guards and version response headers.
+		!['cache', 'range', 'fingerprint', 'version', 'offset', 'length'].some((key) => url.searchParams.has(key))
 		? url
 		: null;
 }

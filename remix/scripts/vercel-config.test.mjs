@@ -34,13 +34,20 @@ test('emitted Web Platform routes prevent stale compiler reuse and keep document
 	await fs.writeFile(join(output, 'functions/__server.func/.vc-config.json'), '{}');
 	execFileSync(process.execPath, [join(repositoryRoot, 'remix/scripts/patch-vercel-output.mjs')], { cwd: root, stdio: 'pipe' });
 	const { routes } = JSON.parse(await fs.readFile(join(output, 'config.json'), 'utf8'));
+	const applicationHeaders = routes.find(route => route.src === '/(?:.*)' && route.continue === true);
+	for (const hub of ['https://thingtime.com', 'https://dev.thingtime.com']) {
+		assert(cspSources(applicationHeaders.headers['Content-Security-Policy'], 'connect-src').includes(hub), `Emitted application policy must allow the FedCM authority ${hub}`);
+	}
+	assert.ok(routes.indexOf(applicationHeaders) < routes.findIndex(route => route.handle === 'filesystem'));
 	const media = routes.find(route => route.src === '^/assets/mediaWorker-[A-Za-z0-9_-]+\\.js$');
 	assert.equal(media.headers['Content-Security-Policy'], mediaWorkerCsp);
 	assert.equal(media.headers['Cross-Origin-Resource-Policy'], 'same-origin');
 	assert.ok(routes.indexOf(media) < routes.findIndex(route => route.handle === 'filesystem'));
 	assert.match(mediaWorkerCsp, /connect-src 'none'/);
 	assert.match(mediaWorkerCsp, /worker-src 'none'/);
-	assert.ok(!mediaWorkerCsp.includes('unsafe-eval'));
+	assert.ok(!mediaWorkerCsp.includes("'unsafe-eval'"));
+	assert.match(mediaWorkerCsp, /script-src 'self' 'wasm-unsafe-eval'/);
+	assert.ok(!prodCsp.includes('wasm-unsafe-eval'));
 	const draft = routes.find(route => route.src === '^/draft-preview(?:/.*)?$');
 	assert.equal(draft.headers['Content-Security-Policy'], draftPreviewCsp);
 	assert.equal(draft.headers['Cache-Control'], 'no-store');
@@ -100,6 +107,16 @@ const cspSources = (csp, name) =>
 		.find((s) => s.startsWith(name + ' '))
 		.split(/\s+/)
 		.slice(1);
+test('FedCM can reach the built-in production and preview authorities without broadening other directives', () => {
+	for (const policy of [prodCsp, devCsp]) {
+		const connections = cspSources(policy, 'connect-src');
+		for (const hub of ['https://thingtime.com', 'https://dev.thingtime.com']) {
+			assert(connections.includes(hub), `Missing FedCM authority ${hub}`);
+			for (const directive of ['script-src', 'frame-src', 'form-action']) assert(!cspSources(policy, directive).includes(hub));
+		}
+		for (const forbidden of ['*', 'https:', 'https://*.thingtime.com', 'https://*.vercel.app']) assert(!connections.includes(forbidden));
+	}
+});
 test('native Maps can load under the deployed policy without broad script or eval exceptions', () => {
 	const scripts = cspSources(prodCsp, 'script-src');
 	assert.deepEqual(scripts, [
@@ -115,9 +132,13 @@ test('native Maps can load under the deployed policy without broad script or eva
 			'https://maps.googleapis.com',
 			'https://mapsresources-pa.googleapis.com',
 			'https://maps.gstatic.com',
-			'https://csi.gstatic.com'
+			'https://csi.gstatic.com',
+			'https://api.mapbox.com',
+			'https://events.mapbox.com'
 		])
 			assert(cspSources(policy, 'connect-src').includes(host));
+		assert(!cspSources(policy, 'script-src').includes('https://api.mapbox.com'));
+		assert(cspSources(policy, 'worker-src').includes('blob:'));
 	}
 });
 

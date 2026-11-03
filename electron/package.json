@@ -1,6 +1,6 @@
 {
 	"name": "thingtime-electron",
-	"version": "0.1.0",
+	"version": "0.1.2",
 	"private": true,
 	"description": "Thingtime desktop app shell for the Remix/Nitro web app.",
 	"main": "main.cjs",
@@ -22,13 +22,18 @@
 		"install:local": "node scripts/install-local-app.mjs",
 		"start": "electron .",
 		"test": "node --test test/**/*.test.cjs",
+		"verify:window-zoom": "node scripts/test-window-zoom.mjs",
+		"verify:folder-sync-host": "node scripts/test-folder-sync-host.mjs",
+		"verify:folder-upload-native": "node scripts/test-folder-upload-native.mjs",
 		"verify:native": "node scripts/verify-native-node.mjs",
 		"verify:release-shim": "node scripts/release-workflow-contract.cjs shim ../.github/workflows/electron-release.yml",
 		"verify:signed": "node scripts/verify-signed-app.mjs",
 		"verify:unsigned": "node scripts/verify-unsigned-app.mjs",
 		"verify:web": "node scripts/verify-web-build.mjs",
-		"build:passwords": "node scripts/build-native-passwords.mjs",
-		"build:mail": "node scripts/build-mail.mjs"
+		"verify:renderer-restart": "node scripts/verify-renderer-restart.mjs",
+		"build:mail": "node scripts/build-mail.mjs",
+		"build:database": "node scripts/build-database.mjs",
+		"build:passwords": "node scripts/build-native-passwords.mjs"
 	},
 	"build": {
 		"appId": "com.thingtime.desktop",
@@ -74,6 +79,13 @@
 				"filter": [
 					"**/*"
 				]
+			},
+			{
+				"from": "dist/database",
+				"to": "database",
+				"filter": [
+					"**/*"
+				]
 			}
 		],
 		"extraFiles": [
@@ -109,6 +121,7 @@
 				"Thingtime Passwords\\.app(?:/|$)"
 			],
 			"extendInfo": {
+				"NSPhotoLibraryUsageDescription": "Thingtime reads original photos and videos only after you choose a photo backup source. Uploads start when you configure and run that backup.",
 				"NSMicrophoneUsageDescription": "Thingtime uses your microphone when you start voice input for Lopu.",
 				"NSSpeechRecognitionUsageDescription": "Thingtime transcribes your speech for Lopu. macOS may use Apple servers when on-device recognition is unavailable."
 			}

@@ -1,12 +1,13 @@
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 // Deliberately bypasses useApi's diagnostics/history and origin fallback. The
 // current first-party session is the only credential; payloads stay in memory.
-async function requestOnce(ownerId: string, body?: Record<string, unknown>, signal?: AbortSignal, cursor?: string, query?: string) {
-  await requireThingtimeCapability('api.passwords', query === undefined ? '1.1.0' : '1.2.0');
+async function requestOnce(ownerId: string, body?: Record<string, unknown>, signal?: AbortSignal, cursor?: string, query?: string, previews = false) {
+  await requireThingtimeCapability('api.passwords', previews ? '1.5.0' : '1.3.0');
   signal?.throwIfAborted();
   const params = new URLSearchParams();
   if (cursor) params.set('cursor', cursor);
   if (query) params.set('q', query);
+  if(previews)params.set('previews','1');
   const response = await fetch(`/api/v1/passwords${params.size ? `?${params}` : ''}`, {
     method: body ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal,
     ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, expectedOwnerId: ownerId }) } : {})
@@ -20,9 +21,9 @@ async function requestOnce(ownerId: string, body?: Record<string, unknown>, sign
 }
 
 // Backpressure applies to file and export requests too, not only entry imports.
-export async function passwordRequest(ownerId: string, body?: Record<string, unknown>, signal?: AbortSignal, cursor?: string, query?: string) {
+export async function passwordRequest(ownerId: string, body?: Record<string, unknown>, signal?: AbortSignal, cursor?: string, query?: string, previews = false) {
   for (let attempt = 0; ; attempt++) {
-    try { return await requestOnce(ownerId, body, signal, cursor, query); }
+    try { return await requestOnce(ownerId, body, signal, cursor, query, previews); }
     catch (error: any) {
       if (error?.status !== 429 || attempt >= 3 || signal?.aborted) throw error;
       await new Promise<void>((resolve, reject) => {
@@ -33,4 +34,11 @@ export async function passwordRequest(ownerId: string, body?: Record<string, unk
       });
     }
   }
+}
+
+/** Additive device-confirmation protocol; never fall back to a legacy origin. */
+export async function passwordVerificationRequest(ownerId: string, body: Record<string, unknown>, signal: AbortSignal) {
+  await requireThingtimeCapability('api.passwords', '1.5.0');
+  signal.throwIfAborted();
+  return passwordRequest(ownerId, body, signal);
 }

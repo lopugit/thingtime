@@ -86,7 +86,7 @@ export const deviceScriptsSuite: BehaviourSuite = {
 											script: '{script}',
 											timeoutSeconds: '{timeoutSeconds}'
 										}),
-										k.link('Review approvals', '/devices')
+										k.link('Review approvals', '/things')
 									]),
 									k.field('Recipe name', k.input('recipeName', { value: 'My Mac script' })),
 									k.button(
@@ -304,10 +304,21 @@ export const deviceScriptsSuite: BehaviourSuite = {
 			name: 'Device scripts',
 			blocks: (ctx, refs) => [
 				{
-					id: ctx.id('workbench'),
-					type: 'component',
-					component: refs.component('workbench'),
-					source: { action: refs.actionKey('devices'), refresh: 'interval', intervalMs: 30000 }
+					id: ctx.id('shell'),
+					type: 'container',
+					direction: 'column',
+					align: 'center',
+					maxWidth: 800,
+					gap: 8,
+					css: { width: '100%', 'min-width': '0', padding: '28px 18px 80px' },
+					children: [
+						{
+							id: ctx.id('workbench'),
+							type: 'component',
+							component: refs.component('workbench'),
+							source: { action: refs.actionKey('devices'), refresh: 'interval', intervalMs: 30000 }
+						}
+					]
 				}
 			]
 		}

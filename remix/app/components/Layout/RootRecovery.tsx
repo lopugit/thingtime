@@ -1,6 +1,7 @@
 import { useRevalidator, useRouteError } from 'react-router';
 import { useBackgroundRefresh } from '../../hooks/useBackgroundRefresh';
 import { RootDataUnavailableError } from '../../utils/rootDataRecovery';
+import { DesktopConnectionRecovery } from '../Settings/DesktopConnectionRecovery';
 
 /** Deliberately outside account/theme providers: no old user content, error
  * payload, stack trace, URL query, or cached profile belongs on this screen. */
@@ -76,6 +77,7 @@ export const RootRecovery = ({ refreshing = false }: { refreshing?: boolean }) =
 						</button>
 					</div>
 				)}
+				{!refreshing && <DesktopConnectionRecovery />}
 			</section>
 		</main>
 	);

@@ -1,3 +1,4 @@
+import { lopuProviderManagement } from './continuationCore';
 import { createHash } from 'node:crypto';
 import { Binary } from 'mongodb';
 import { waitUntil } from '@vercel/functions';
@@ -6,6 +7,7 @@ import { resolvePublicOrigin } from '../auth/publicOrigin';
 import { backgroundTaskScopeFor as scopeFor } from './backgroundTaskScope';
 import { getCurrentUser } from '../auth/getCurrentUser';
 import { getHomeThingsCollection } from '../mongodb/collections';
+import { gatewayAuthority, getGatewaySettings, withGatewayWork } from '../deployment/environmentGateway';
 import { enforceRateLimit, rateLimitedResponseInit } from '../rateLimit/enforce';
 import { getLopuChat, persistLopuUserTurn } from '../messenger/lopuChats';
 import { checkpointToolResults } from './checkpointResults';
@@ -75,6 +77,28 @@ export const publicBackgroundTask = (row: any): AiBackgroundTask => ({
 });
 const stale = async (filter: any) => {
 	const things = await getHomeThingsCollection();
+  if (getGatewaySettings()) {
+    // Workflow callbacks are pinned to the build that scheduled them. A new
+    // owner never replays an uncertain part. Reconcile only after its saved
+    // deadline, and retain reservations until the old worker acknowledges.
+    const authority = await gatewayAuthority.current(true);
+    if (authority?.owner) {
+      const interrupted = await things.find({ ...filter, rootTaskId: { $exists: false },
+        workflowGatewayDeploymentId: { $exists: true, $ne: authority.settings.deploymentId },
+        'crystal.workflowStatus': 'running', deadlineAt: { $lt: new Date() } }, { projection: { shareId: 1 } }).sort({ createdAt: 1 }).limit(100).toArray();
+      for (const row of interrupted) {
+        await things.updateOne({ ...filter, shareId: row.shareId, 'crystal.workflowStatus': 'running' }, { $set: {
+          'crystal.stage': 'Gateway changed — review saved progress',
+          'crystal.error': 'The API gateway changed during server management. Saved output is kept. Review it before starting another task.',
+          updatedAt: new Date() } });
+        const { finalizeLopuWorkflow } = await import('./continuationFinalization.server');
+        const finished = await finalizeLopuWorkflow(row.shareId, 'needs-attention');
+        await things.updateOne({ ...filter, shareId: row.shareId }, { $set: { 'crystal.error': finished
+          ? 'The API gateway changed during server management. Saved output is kept. Review it before starting another task.'
+          : 'The API gateway changed. The conversation remains locked until the previous worker saves its final output and acknowledges completion. Review saved progress before continuing.' } });
+      }
+    }
+  }
  // Admission and worker claim race through this same cancellation/status fence.
  // A delayed scheduler delivery cannot execute a root reclaimed here.
  await things.updateMany({ ...filter, rootTaskId: { $exists: false }, 'crystal.management': 'server', 'crystal.workflowStatus': 'running', 'crystal.status': 'running', workerStarted: { $ne: true }, activeWorkerRequestId: { $exists: false }, deadlineAt: { $lt: new Date() } }, {
@@ -251,14 +275,16 @@ export const startBackgroundTask = async (request: Request, execute: (request: R
 	if (!limit.allowed) return json({ ok: false, error: 'Please wait before starting another background task.' }, rateLimitedResponseInit(limit));
 	const now = new Date();
 	let existingChatId: string | null = null;
+	let storedProviderId: string | null = null;
 	if (url.pathname === '/api/v1/lopu/chats/reply' && input?.chatId) {
 		const chat = await getLopuChat(user.id, input.chatId);
 		if (chat.ok === false) return fail(chat.error, chat.status);
 		existingChatId = input.chatId;
+		storedProviderId = chat.settings?.providerId ?? null;
 	}
 	const chatClaim = existingChatId && !internal ? new Binary(Buffer.from(`lopu-background-chat:${hash(`${user.id}:${scope}:${existingChatId}`)}`)) : null;
 	await stale({ ownerId: user.id, thingtime: AI_TASK_KIND, taskScope: scope });
-	const serverManaged = input?.management === 'server' && url.pathname === '/api/v1/lopu/chats/reply';
+	const serverManaged = lopuProviderManagement(input?.management, input?.providerId === undefined ? storedProviderId : input.providerId) === 'server' && url.pathname === '/api/v1/lopu/chats/reply';
  const row: any = {
 		...filter,
   ...(internal ? { rootTaskId: internal.rootTaskId, workerStarted: true } : {}),
@@ -325,7 +351,10 @@ export const startBackgroundTask = async (request: Request, execute: (request: R
 };
 
 // The durable workflow invokes this same drain after acquiring the task claim.
-export const executeBackgroundTask = async (request: Request, execute: (request: Request) => Promise<Response>, row: any, user: { id: string }, body?: string) => {
+export const executeBackgroundTask = (request: Request, execute: (request: Request) => Promise<Response>, row: any, user: { id: string }, body?: string) =>
+ withGatewayWork(() => executeBackgroundTaskWithLease(request, execute, row, user, body));
+
+const executeBackgroundTaskWithLease = async (request: Request, execute: (request: Request) => Promise<Response>, row: any, user: { id: string }, body?: string) => {
  const things = await getHomeThingsCollection();
  const filter = { shareId: row.shareId, ownerId: user.id, thingtime: AI_TASK_KIND, taskScope: row.taskScope };
  const existingChatId = row.targetId || null;

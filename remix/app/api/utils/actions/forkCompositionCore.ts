@@ -1,4 +1,4 @@
-import { storedComponentScope, type CompositionReference } from './sharedCompositionCore';
+import { storedComponentScope, visitStoredBlocks, blockActionTemplate, type CompositionReference } from './sharedCompositionCore';
 import { visitStoredTemplateActions } from '../../../components/ComponentsLibrary/componentTemplate';
 
 // Rewrite executable references, not arbitrary text containing an id. All
@@ -44,17 +44,20 @@ export const rewriteComposition = (
 			render(part, depth + 1);
 		if (node.ttMap?.values && typeof node.ttMap.values === 'object') Object.values(node.ttMap.values).forEach((child) => render(child, depth + 1));
 	};
-	const blocks = (items: any): void => {
-		if (!Array.isArray(items)) return;
-		for (const block of items) {
-			if (block?.type === 'component') {
-				field(block, 'component', 'component');
-				field(block.source, 'action', 'action');
-			}
-			if (block?.type === 'container') blocks(block.children);
-		}
-	};
-	if (kinds.includes('webpage')) blocks(crystal.blocks);
+	if (kinds.includes('webpage')) visitStoredBlocks(crystal.blocks,(block,scope) => {
+  if(block.type === 'component') field(block,'component','component');
+  field(block.source,'action','action');
+  if(block.type === 'collection') field(block.props?.source,'action','action');
+  if(block.type === 'element') visitStoredTemplateActions(blockActionTemplate(block),scope,(action,_node,raw) => {
+   const copied=map('action',action);
+   if(copied === action) return;
+   if(typeof block.props['data-tt-action'] === 'string' && !/[{}$]/.test(block.props['data-tt-action'])) block.props['data-tt-action']=copied;
+   else {
+    const refs=Array.isArray(block.props['data-tt-action-refs']) ? block.props['data-tt-action-refs'] : [];
+    block.props['data-tt-action-refs']=[[raw,copied],...refs.filter((entry:any)=>Array.isArray(entry)&&entry[0]!==raw)];
+   }
+  });
+ });
 	if (kinds.includes('component')) {
 		render(crystal.render);
 		field(crystal.source, 'action', 'action');

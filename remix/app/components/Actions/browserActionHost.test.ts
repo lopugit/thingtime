@@ -84,3 +84,26 @@ test('browser failures retain permission status for clearing revoked source data
  assert.equal(result.errorStatus, 403);
  assert.equal(result.result, null);
 });
+
+
+test('installed menu inventory preserves icon-bearing snapshots above the default response budget', async () => {
+ const { materializeSuite } = await import('../../schemas/behaviourSuites');
+ const { macMenuBarSuite } = await import('../../schemas/appSuites/macMenuBar');
+ const { ACTION_LIMIT_DEFAULTS } = await import('../../schemas/registry');
+ const program = materializeSuite(macMenuBarSuite, 'own').actions[0].crystal;
+ // This transport fixture models several Macs with inline thumbnail payloads;
+ // thumbnail validation is covered at the device projection boundary.
+ const payload = { ok: true, devices: Array.from({length:3}, (_,device) => ({id:`mac-${device}`,state:{menuBar:{items:Array.from({length:40}, (_,item)=>({id:`item-${item}`,program:'Example',iconDataUrl:'data:image/png;base64,'+'A'.repeat(4096)}))}}})) };
+ await assert.rejects(readActionResponse(Response.json(payload), ACTION_LIMIT_DEFAULTS.maxResultBytes, signal()), /byte budget/);
+ const negotiated:string[]=[];
+ const host=createBrowserActionHost(()=> 'actor', (async (url,init)=>{
+  assert.equal(String(url), '/api/v1/devices');
+  assert.equal(new Headers(init?.headers).get(EXPECTED_ACTOR_HEADER),'actor');
+  return Response.json(payload);
+ }) as typeof fetch, async(feature,version)=>{negotiated.push(`${feature}@${version}`);});
+ const result=await finishBrowserAction({ok:true,status:'prepared',execution:'browser',actionId:'inventory',viewer:{id:'actor'},inputs:{deviceId:''},program},host);
+ assert.equal(result.status,'ok',result.error);
+ assert.deepEqual(result.result,payload);
+ assert.ok(negotiated.includes('api.actions-run@1.8.0'));
+ assert.ok(negotiated.includes('api.devices@1.12.0'));
+});

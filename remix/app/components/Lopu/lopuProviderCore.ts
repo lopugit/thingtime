@@ -41,6 +41,7 @@ export type LopuVaultProvider = {
 	model: string | null;
 	endpointHost: string | null;
 	available: boolean;
+	planChatEligible?: true;
 	reason: string | null;
 	realtimeModels: LopuRealtimeModel[];
 };
@@ -78,6 +79,7 @@ export const normalizeLopuVaultProvider = (raw: unknown): LopuVaultProvider | nu
 		model: textOrNull(source.model, 160),
 		endpointHost: textOrNull(source.endpointHost, 253),
 		available: source.available !== false,
+		...(source.planChatEligible === true && source.available === true && id.startsWith('chatgpt-plan-') && textOrNull(source.model, 160) ? { planChatEligible: true as const } : {}),
 		reason: textOrNull(source.reason, 200),
 		realtimeModels: normalizeRealtimeModels(source.realtimeModels)
 	};
@@ -332,3 +334,9 @@ export const describeLopuChoice = (
 	if (choice.speed === 'fast') bits.push('Fast');
 	return bits.join(' · ');
 };
+
+/** Eligibility is a fresh catalog hint, never authority for a server turn. */
+export const selectedPlanChatEligible = (providers: LopuVaultProvider[], providerId: string | null | undefined): boolean =>
+  providers.some(provider => provider.id === providerId && provider.available && provider.planChatEligible === true);
+export const withoutPlanAdmissionHints = (providers: LopuVaultProvider[]): LopuVaultProvider[] =>
+  providers.map(({ planChatEligible: _hint, ...provider }) => provider);

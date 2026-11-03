@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createPinnedPnpmEnvironment } from './pinned-package-manager.mjs';
 import { productionSigningIdentity } from './production-signing-identity.mjs';
+import { ensureElectronBuildDependencies } from './ensure-build-dependencies.mjs';
 
 const electronDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronBuilder = path.join(electronDir, 'node_modules', '.bin', 'electron-builder');
@@ -91,6 +92,7 @@ const signingEnvironment = {
 
 const pinnedPnpm = await createPinnedPnpmEnvironment(packageManager, signingEnvironment);
 try {
+	ensureElectronBuildDependencies({ electronDir, packageManager, environment: pinnedPnpm.environment });
 	run('corepack', [packageManager, 'run', 'build:resources'], { env: pinnedPnpm.environment });
 	await rm(path.join(electronDir, 'release'), { force: true, recursive: true });
 	run(electronBuilder, ['--dir', '--mac', '--config.forceCodeSigning=true', `--config.mac.identity=${qualifier}`, '--config.mac.notarize=false'], {
@@ -102,7 +104,7 @@ try {
 
 const appPath = await builtAppPath();
 if (!appPath) throw new Error('electron-builder did not produce an unpacked Thingtime.app.');
-run(process.execPath, [path.join(electronDir, 'scripts', 'verify-signed-app.mjs'), '--mode', 'local', '--require-agent-browser', appPath], {
+run(process.execPath, [path.join(electronDir, 'scripts', 'verify-signed-app.mjs'), '--require-bundled-mongo', '--require-agent-browser', '--mode', 'local', appPath], {
 	env: signingEnvironment
 });
 console.log(`Signed local app built at ${appPath}`);

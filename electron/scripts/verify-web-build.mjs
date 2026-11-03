@@ -34,6 +34,8 @@ async function assertSelfContained(root) {
   }
 }
 
+const metadata = JSON.parse(await readFile(path.join(electronDir, 'dist', 'web', 'metadata.json'), 'utf8'));
+if (metadata.nitroPreset !== 'node_middleware') throw new Error('Desktop requires a node_middleware Nitro bundle.');
 await assertExists(serverEntry, 'Nitro server entry');
 await assertExists(indexHtml, 'Vite public index');
 await assertExists(aiConnectorBundle, 'AI desktop connector bundle');

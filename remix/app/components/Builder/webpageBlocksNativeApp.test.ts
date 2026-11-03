@@ -70,9 +70,9 @@ const chromeFor = (seamlessMode?: BuilderChrome['seamlessMode']): BuilderChrome 
 	onMove: () => {}
 });
 
-const renderPage = (props: { interactive?: boolean; chrome?: BuilderChrome | null; html?: string }) =>
+const renderPage = (props: { interactive?: boolean; chrome?: BuilderChrome | null; html?: string; blocks?: WebpageBlock[]; signedIn?: boolean }) =>
 	withDom(() => {
-		const blocks: WebpageBlock[] = [{ id: 'service-1', type: 'html', html: props.html ?? WORKSPACE_HTML }];
+		const blocks: WebpageBlock[] = props.blocks ?? [{ id: 'service-1', type: 'html', html: props.html ?? WORKSPACE_HTML }];
 		const element = React.createElement(
 			ChakraProvider,
 			null,
@@ -90,7 +90,7 @@ const renderPage = (props: { interactive?: boolean; chrome?: BuilderChrome | nul
 				})
 			})
 		);
-		const router = createMemoryRouter([{ id: 'root', path: '/', element }], { hydrationData: { loaderData: { root: { user: { id: 'owner' } } } } });
+		const router = createMemoryRouter([{ id: 'root', path: '/', element }], { hydrationData: { loaderData: { root: { user: props.signedIn === false ? null : { id: 'owner' } } } } });
 		try {
 			return renderToStaticMarkup(React.createElement(RouterProvider, { router }));
 		} finally {
@@ -148,4 +148,20 @@ test('the editor hint only appears for html blocks that carry a native app', () 
 	assert.equal(hasNativeApp('<tt-service-workspace/>'), true);
 	assert.equal(hasNativeApp('<tt-service-workspace-later></tt-service-workspace-later>'), false);
 	assert.deepEqual([...NATIVE_APP_TAGS], ['tt-service-workspace']);
+});
+
+test('expanded collections activate saved sources only on the live page', () => {
+	const blocks: WebpageBlock[] = [{
+		id: 'places-list', type: 'collection', tag: 'tt-collection',
+		props: { label: 'Favourite places', source: { action: 'read-places', inputs: {}, itemsPath: 'items' } },
+		children: [{ id: 'place-name', type: 'text', text: '{item.title}' }]
+	}];
+	// A signed-out live viewer receives the source access boundary rather than
+	// the silent empty success produced when NativeControlsEnabled is absent.
+	const live = renderPage({ blocks, interactive: true, signedIn: false });
+	assert.match(live, /Sign in to load these records/);
+	for (const chrome of [null, chromeFor('builder'), chromeFor('edit')]) {
+		const inert = renderPage({ blocks, interactive: chrome?.seamlessMode === 'edit', chrome, signedIn: false });
+		assert.doesNotMatch(inert, /Sign in to load these records/);
+	}
 });

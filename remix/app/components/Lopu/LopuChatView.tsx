@@ -702,10 +702,11 @@ export const LopuChatView = ({
 	const locked = !!chat.viewer.id && access.locked;
 	const lockReason = access.reason ?? 'unverified';
 	const viewerIsAdmin = chat.viewer.admin;
+	const planAvailable = chat.vaultProviders.some(provider => provider.available && provider.planChatEligible === true);
 	const status = locked
 		? lockReason === 'temporary'
 			? 'Create an account to chat'
-			: 'Invite-only — waiting for an admin to verify you'
+			: planAvailable ? 'Choose your ChatGPT plan to chat' : 'Invite-only — waiting for an admin to verify you'
 		: describeLopuStatusLine({
 				model: chat.settings.model,
 				effort: chat.settings.effort,
@@ -719,12 +720,12 @@ export const LopuChatView = ({
 	// a locked account that may still chat on its own provider keeps the model
 	// chip usable (only the field and Send are disabled) — picking a vault
 	// provider makes the turn BYO and unlocks the composer
-	const byoUnlock = locked && lockReason === 'unverified' && access.byoOnly;
+	const byoUnlock = locked && lockReason === 'unverified' && (access.byoOnly || planAvailable);
 	const composerPlaceholder = locked
 		? lockReason === 'temporary'
 			? 'Create an account to chat with Lopu'
 			: byoUnlock
-				? 'Lopu is invite-only for now — pick one of your own providers in the model chip to chat'
+				? planAvailable ? 'Choose your connected ChatGPT plan in the model picker to chat' : 'Lopu is invite-only for now — pick one of your own providers in the model chip to chat'
 				: 'Lopu is invite-only for now — an admin needs to verify your account'
 		: undefined;
 	const accountChip = chat.viewer.signedIn && !locked ? <LopuBalanceChip account={chat.account.account} byo={chat.byo} compact={compact} mobile={isMobile} /> : null;

@@ -1,3 +1,4 @@
+import { visitStoredBlocks } from './sharedCompositionCore';
 import { literalAttachmentId, mapCssMediaUrls, isRenderMediaStyleProp, mapStyleMediaUrls } from '../../../components/Sharing/renderMediaCore';
 import { visitAuthoredHtmlMedia } from './authoredHtmlMedia';
 import {
@@ -142,25 +143,23 @@ export const compositionAttachmentIds = (kinds: string[], crystal: Record<string
 		if (node.ttMap?.values && typeof node.ttMap.values === 'object')
 			Object.values(node.ttMap.values).forEach((child) => render(child, depth + 1, mode, scope));
 	};
-	const blocks = (nodes: any, depth = 0): void => {
-		if (!Array.isArray(nodes) || depth > 16) return;
-		for (const block of nodes) {
-			if (!block || typeof block !== 'object') continue;
-			if (++visited > 1600) return;
-			mapStyleMediaUrls(block.css, cssUrl);
-			if (block.type === 'media') url(block.src);
-			if (block.type === 'text') url(block.href);
-			if (block.type === 'text' || block.type === 'html') visitAuthoredHtmlMedia(block.html, url);
-			if (block.type === 'component' && typeof block.component === 'string') {
-				const component = options.component?.(block.component);
-				if (component) {
-					const args = block.args && typeof block.args === 'object' && !Array.isArray(block.args) ? block.args : {};
-					for (const id of compositionAttachmentIds(['component'], component, { args })) ids.add(id);
-				}
-			}
-			if (block.type === 'container') blocks(block.children, depth + 1);
-		}
-	};
+	const blocks = (nodes: unknown): void => visitStoredBlocks(nodes, (block,scope) => {
+   // Each validated block has its own render-expression budget. The page tree
+   // must never silently drop dependencies after an unrelated sibling.
+   visited = 0; propertyVisits = 0;
+   mapStyleMediaUrls(block.css,cssUrl);
+   if (block.type === 'media') url(block.src);
+   if (block.type === 'text') url(block.href);
+   if (block.type === 'text' || block.type === 'html') visitAuthoredHtmlMedia(block.html,url);
+   if (block.type === 'component' && typeof block.component === 'string') {
+    const component=options.component?.(block.component);
+    if(component) for(const id of compositionAttachmentIds(['component'],component,{args:block.args})) ids.add(id);
+   }
+   if(block.type === 'element') {
+    render({tag:block.tag,props:block.props});
+    render({tag:block.tag,props:block.props},0,'stored',scope);
+   }
+ });
 	if (kinds.includes('webpage')) {
 		blocks(crystal.blocks);
 		if (typeof crystal.previewBg === 'string') mapCssMediaUrls(crystal.previewBg, cssUrl);

@@ -17,11 +17,11 @@ export function CollectionSizeSelect({
 			<select
 				aria-label={`Show ${label}`}
 				value={value}
-				onChange={(event) => onChange(event.target.value === 'infinite' ? 'infinite' : (Number(event.target.value) as CollectionSize))}
+				onChange={(event) => onChange(event.target.value === 'all' ? 'all' : event.target.value === 'infinite' ? 'infinite' : (Number(event.target.value) as CollectionSize))}
 			>
 				{COLLECTION_SIZES.map((size) => (
 					<option key={size} value={size}>
-						{size === 'infinite' ? 'Infinite scrolling' : size}
+						{size === 'all' ? 'Show all' : size === 'infinite' ? 'Infinite scrolling' : size}
 					</option>
 				))}
 			</select>
@@ -43,6 +43,7 @@ export function CollectionList<T>({
 	size: externalSize,
 	onSizeChange,
 	hideSize = false,
+	hideCount = false,
 	hasMore = false,
 	loadMore,
 	loading = false,
@@ -61,6 +62,7 @@ export function CollectionList<T>({
 	size?: CollectionSize;
 	onSizeChange?: (size: CollectionSize) => void;
 	hideSize?: boolean;
+	hideCount?: boolean;
 	hasMore?: boolean;
 	loadMore?: () => Promise<unknown>;
 	loading?: boolean;
@@ -103,7 +105,7 @@ export function CollectionList<T>({
 	// pages must not hide a match in older comments/media. A failed page stops here.
 	React.useEffect(() => {
 		const needed = size === 'infinite' ? visible : page * window.pageSize;
-		if (hasMore && !loading && !error && (filtering || filtered.length < needed)) void requestMore();
+		if (hasMore && !loading && !error && (size === 'all' || filtering || filtered.length < needed)) void requestMore();
 	}, [hasMore, loading, error, filtering, filtered.length, size, visible, page, window.pageSize, requestMore]);
 	const more = window.end < filtered.length || hasMore;
 	const goToPage = (next: number) => {
@@ -193,14 +195,14 @@ export function CollectionList<T>({
 					</button>
 				)}
 			</div>
-			<div className="tt-collection-count" role="status" aria-live="polite">
+			{!hideCount && <div className="tt-collection-count" role="status" aria-live="polite">
 				{filtered.length
 					? `${window.start + 1}–${window.end} of ${filtered.length}${hasMore ? '+' : ''} results`
 					: loading || hasMore
 					? 'Looking for results…'
 					: '0 results'}
 				{filtering && hasMore && !error ? ' · Searching older records…' : ''}
-			</div>
+			</div>}
 			{filtered.length ? (
 				children(filtered.slice(window.start, window.end))
 			) : (
@@ -225,7 +227,7 @@ export function CollectionList<T>({
 					)}
 				</div>
 			) : (
-				(window.pages > 1 || hasMore) && (
+				size !== 'all' && (window.pages > 1 || hasMore) && (
 					<nav className="tt-collection-pagination" aria-label={`${label} pagination`}>
 						<button aria-label={`Previous page of ${label}`} disabled={window.page === 1} onClick={() => goToPage(window.page - 1)}>
 							Previous

@@ -63,3 +63,10 @@ Graph refresh: the local semantic proxy completed extraction but Graphify
 rejected unverified changelog shrink (13 to 8 nodes). The prior semantic graph
 is retained and the structural graph is refreshed; changed documentation is not
 claimed semantically current.
+
+Live installed acceptance found two integration failures: suite links used the
+nonexistent `/devices` page, and the desktop account bridge refused every
+expected-actor browser Action. Links now use `/things`; the desktop-only bridge
+forwards same-origin Actions with actor/database guards preserved for upstream
+enforcement. Vault reveal and incomplete web deployments remain fail-closed.
+Regression tests cover changed accounts, foreign origins and vault requests.

@@ -20,7 +20,8 @@ struct KeychainCredentialEnvironment: Equatable {
 }
 
 final class KeychainStore {
-  private let service = "com.thingtime.Commander"
+  private let service = CommanderDevelopmentEnvironment.enabled
+    ? Bundle.main.bundleIdentifier! : "com.thingtime.Commander"
 
   func store(token: String, issuer: String, clientID: String, accountID: String) throws {
     let data = Data(token.utf8)

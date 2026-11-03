@@ -1,3 +1,5 @@
+import { compressImage } from './imagePipeline';
+import { isImageFile } from './imageFiles';
 import {
 	Input,
 	Output,
@@ -25,8 +27,13 @@ self.onmessage = async (event: MessageEvent) => {
 	let conversion: Conversion | undefined;
 	try {
 		const file = event.data?.file;
-		if (!(file instanceof Blob) || !file.size) throw new Error('Choose a nonempty local video');
+		if (!(file instanceof Blob) || !file.size) throw new Error('Choose a nonempty local image or video');
 		const settings = validateMediaSettings(event.data.settings);
+		if (isImageFile({ type: file.type, name: event.data.name })) {
+			const result = await compressImage(file, settings, event.data.assets, typeof event.data.name === 'string' ? event.data.name : undefined);
+			self.postMessage({ type: 'complete', ...result });
+			return;
+		}
 		if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined')
 			throw new Error('This browser does not expose WebCodecs video encoding and decoding');
 		input = new Input({ source: new BlobSource(file), formats: [MP4, QTFF, WEBM, MATROSKA] });
@@ -107,7 +114,7 @@ self.onmessage = async (event: MessageEvent) => {
 		});
 	} catch (error) {
 		await conversion?.cancel().catch(() => {});
-		self.postMessage({ type: 'error', message: error instanceof Error ? error.message.slice(0, 700) : 'Media conversion failed' });
+		self.postMessage({ type: 'error', message: error instanceof Error ? (/@ (?:error|warning)\//.test(error.message) ? 'This image is damaged or its format is not supported by the local decoder. Try another image or output format.' : error.message.slice(0, 700)) : 'Media conversion failed' });
 	} finally {
 		input?.dispose();
 	}

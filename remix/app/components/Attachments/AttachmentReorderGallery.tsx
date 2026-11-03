@@ -1,3 +1,5 @@
+import { useCharacterScope } from '~/components/Characters/CharacterScope';
+import { characterMediaUrl } from '~/components/Characters/characterMedia';
 import React from 'react';
 import { Box, Flex, IconButton, Text } from '@chakra-ui/react';
 import { File as FileIcon, GripVertical, Trash2 } from 'lucide-react';
@@ -33,11 +35,12 @@ const gripLabel = (name: string, position: number, count: number) =>
 	`Reorder ${name} — position ${position} of ${count}. Drag, or use arrow keys to move.`;
 
 const AttachmentPreview = ({ attachment }: { attachment: PublicAttachment }) => {
+  const actor = useCharacterScope();
 	if (attachment.mediaKind === 'image') {
 		return (
 			<Box
 				as="img"
-				src={attachmentMediaSrc(attachment)}
+				src={characterMediaUrl(attachmentMediaSrc(attachment), actor?.id)}
 				alt=""
 				loading="lazy"
 				referrerPolicy="no-referrer"
@@ -51,7 +54,7 @@ const AttachmentPreview = ({ attachment }: { attachment: PublicAttachment }) => 
 	return (
 		<Box
 			as="video"
-			src={attachmentMediaSrc(attachment)}
+			src={characterMediaUrl(attachmentMediaSrc(attachment), actor?.id)}
 			aria-label={`Preview of ${attachmentDisplayName(attachment)}`}
 			width="100%"
 			height="100%"

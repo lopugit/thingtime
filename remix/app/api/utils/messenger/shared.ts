@@ -1,3 +1,6 @@
+import { isActiveMember, membershipOfDoc } from '../subspaces/gate';
+import { thingUniqueKeysFilter } from '../mongodb/uniqueKeys';
+import { linkedSubspaceId, subspaceMessagingAccess } from './subspaceAccess';
 // Shared plumbing for the messenger family (chats, communities, emojis,
 // follows). Everything here is a thing in `things` (FUNDAMENTALS §3):
 // messenger docs are private, quota-accounted user content (acl ["tt:user"])
@@ -121,6 +124,13 @@ export const getCommunityMemberDoc = async (communityId: string, userId: string)
 };
 
 export const communityRoleOf = async (communityId: string, userId: string): Promise<ChatRole | null> => {
+  const things = await getThingsCollection();
+  const community = await findThingByKind('community', communityId);
+  if (!community) return null;
+  if (linkedSubspaceId(community)) {
+    const access = await subspaceMessagingAccess(things, community, userId);
+    return access?.allowed ? access.role : null;
+  }
   const doc = await getCommunityMemberDoc(communityId, userId);
   const role = doc?.crystal?.role;
   return role === 'owner' || role === 'admin' || role === 'member' ? role : null;
@@ -133,6 +143,17 @@ export const communityMembersAmong = async (communityId: string, userIds: string
   const ids = Array.from(new Set(userIds.filter(Boolean)));
   if (!ids.length) return new Set();
   const things = await getThingsCollection();
+  const community = await findThingByKind('community', communityId);
+  if (!community) return new Set();
+  if (linkedSubspaceId(community)) {
+    const id = linkedSubspaceId(community)!;
+    const [subspace, members] = await Promise.all([
+      things.findOne({ thingtime: 'subspace', shareId: id, subspaceMediaDeleting: { $ne: true } } as any),
+      things.find({ thingtime: 'subspace-member', targetId: id, ...thingUniqueKeysFilter('subspaceMemberKey', ids.map(userId => `${id}:${userId}`)) } as any).toArray()
+    ]);
+    if (!subspace) return new Set();
+    return new Set(members.filter((doc: any) => isActiveMember(membershipOfDoc(doc))).map((doc: any) => String(doc.ownerId)));
+  }
   const docs = await things
     .find(
       { thingtime: 'community-member', ...await relationshipLookupFilter('memberKey', ids.map((id) => communityMemberKey(communityId, id))) } as any,

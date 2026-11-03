@@ -22,7 +22,11 @@ export const createBackgroundRefresh = (env: RefreshEnvironment) => {
   const run = async (job: Job, resume = false) => {
     if (!job.listeners.size) return;
     if (job.running) { if (resume) job.again = true; return; }
-    if (!env.online() || (resume && !visible()) || env.now() - job.last < 1000) { schedule(job); return; }
+    // Connectivity hints can report offline while a local origin is reachable.
+    // Probe on first load and foreground return; keep offline background polls
+    // paused and retain the existing throttle and in-flight request coalescing.
+    const canProbe = resume || job.last === -Infinity;
+    if ((!env.online() && !canProbe) || (resume && !visible()) || env.now() - job.last < 1000) { schedule(job); return; }
     if (job.timer !== undefined) env.clearTimer(job.timer);
     job.running = true;
     job.last = env.now();

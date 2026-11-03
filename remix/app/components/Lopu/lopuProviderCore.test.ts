@@ -158,3 +158,16 @@ test('direct voice needs a usable provider whose kind lists a realtime model; th
 	assert.equal(resolveDirectVoiceModel(grok, null)?.id, 'grok-voice-latest');
 	assert.equal(resolveDirectVoiceModel(VAULT[0], 'grok-voice-latest'), null);
 });
+
+test('plan admission hints require explicit availability and a selected plan model; cache copies drop authority', async () => {
+  const { selectedPlanChatEligible, withoutPlanAdmissionHints } = await import('./lopuProviderCore');
+  const raw = { id: 'chatgpt-plan-synthetic', model: 'model-one', available: true, planChatEligible: true };
+  const plan = normalizeLopuVaultProvider(raw)!;
+  assert.equal(selectedPlanChatEligible([plan], raw.id), true);
+  assert.equal(selectedPlanChatEligible([plan], 'other'), false);
+  for (const override of [{ available: false }, { available: undefined }, { planChatEligible: 'true' }, { id: 'ordinary-vault' }, { model: null }]) {
+    assert.equal(normalizeLopuVaultProvider({ ...raw, ...override })!.planChatEligible, undefined);
+  }
+  assert.equal(withoutPlanAdmissionHints([plan])[0].planChatEligible, undefined);
+  assert.equal(plan.planChatEligible, true, 'stripping a cache copy does not mutate fresh state');
+});

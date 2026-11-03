@@ -27,7 +27,7 @@ test('signed-out and reconnecting renders expose no history connection and canno
 test('home routing is explicit without changing canonical scope, and managed history keeps its folder location', () => {
 	assert.deepEqual(timelineRequestScope(home), { ownerId: 'user-1', dataPlane: 'home', storage: 'home' });
 	assert.deepEqual(timelineRequestScope({ ...home, dataPlane: 'custom-one' }), { ownerId: 'user-1', dataPlane: 'custom-one' });
-	for (const kind of ['theme', 'feed-algorithm', 'custom-emoji', 'chat-archive', 'attachment']) assert.equal(historyStorageForThing([kind]), 'home');
+	for (const kind of ['theme', 'feed-algorithm', 'custom-emoji', 'chat-archive', 'attachment', 'file']) assert.equal(historyStorageForThing([kind]), 'home');
 	for (const kinds of [undefined, [], ['component'], ['data'], ['timeline-event'], ['timeline-branch'], ['theme', 'data']]) assert.equal(historyStorageForThing(kinds), 'selected');
 	assert.equal(timelineFolderHref('timeline-folder-user-1', 'home'), '/things?folder=timeline-folder-user-1&historyStorage=home');
 	assert.equal(timelineFolderHref('timeline-folder-user-1', 'selected'), '/things?folder=timeline-folder-user-1');

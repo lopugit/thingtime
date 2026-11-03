@@ -35,6 +35,7 @@ import { AuthorFlairChip, PostCard } from '~/components/Feed/PostCard';
 import { PostList } from '~/components/Feed/PostList';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 import { SubspaceIcon } from './SubspaceCard';
+import { SubspaceEmbedsEditor } from './SubspaceEmbeddedThings';
 import { BanModal, RemoveModal, forgetModerationSubspace, type BanInput, type RemoveChoice } from './ModerationModals';
 import {
 	ACCESS_META,
@@ -79,7 +80,7 @@ const BORDER = '1px solid var(--tt-border, #ececef)';
 const RADIUS_MD = 'var(--tt-radius-md, 12px)';
 const RADIUS_LG = 'var(--tt-radius-lg, 16px)';
 
-const TABS = ['queue', 'requests', 'reports', 'members', 'banned', 'settings', 'rules', 'flairs', 'log'] as const;
+const TABS = ['queue', 'requests', 'reports', 'members', 'banned', 'settings', 'rules', 'flairs', 'log', 'embeds'] as const;
 type ModTab = (typeof TABS)[number];
 
 const Label = ({ children }: { children: React.ReactNode }) => (
@@ -1940,6 +1941,9 @@ export const SubspaceModPage = () => {
 							</TabPanel>
 							<TabPanel paddingX={0}>
 								<LogPanel slug={slug} />
+							</TabPanel>
+							<TabPanel paddingX={0}>
+								<SubspaceEmbedsEditor subspaceId={subspace.id} />
 							</TabPanel>
 						</TabPanels>
 					</Tabs>

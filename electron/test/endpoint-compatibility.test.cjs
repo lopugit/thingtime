@@ -117,3 +117,49 @@ test('the direct endpoint probe distinguishes an authenticated computers route f
 		await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 	}
 });
+
+test('custom local authority requires loopback and exact local runtime identity', async () => {
+	const identity = {
+		schemaVersion: 1,
+		id: 'desktop-fixture',
+		federationId: 'desktop-fixture',
+		kind: 'custom',
+		authorityOrigin: 'http://127.0.0.1:28631'
+	};
+	assert.equal(hasDeploymentDataEnvironment(identity), true);
+	assert.equal(hasDeploymentDataEnvironment({ ...identity, kind: 'production' }), false);
+	assert.equal(hasDeploymentDataEnvironment({ ...identity, authorityOrigin: 'http://remote.example' }), false);
+	assert.equal(hasDeploymentDataEnvironment({ ...identity, authorityOrigin: 'https://user:pass@example.test' }), false);
+	let authority;
+	let capabilitiesVersion = '1.2.0';
+	const server = http.createServer((_req, res) => {
+		res.setHeader('content-type', 'application/json');
+		res.end(
+			JSON.stringify({
+				ok: true,
+				schemaVersion: 1,
+				features: { 'api.capabilities': capabilitiesVersion, 'api.devices': '1.8.0' },
+				dataEnvironment: { ...identity, authorityOrigin: authority }
+			})
+		);
+	});
+	await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+	const origin = `http://127.0.0.1:${server.address().port}`;
+	authority = origin;
+	try {
+		for (const version of ['1.1.0', '1.1.9', '2.0.0']) {
+			capabilitiesVersion = version;
+			const result = await checkEndpointCompatibility({ endpointUrl: origin, origin, local: true });
+			assert.equal(result.status, 'incompatible', version);
+			assert.match(result.message, /api\.capabilities \^1\.2\.0/);
+		}
+		for (const version of ['1.2.0', '1.2.1', '1.3.0']) {
+			capabilitiesVersion = version;
+			assert.equal((await checkEndpointCompatibility({ endpointUrl: origin, origin, local: true })).status, 'compatible', version);
+		}
+		authority = 'http://127.0.0.1:28631';
+		assert.equal((await checkEndpointCompatibility({ endpointUrl: origin, origin, local: true })).status, 'incompatible');
+	} finally {
+		await new Promise((resolve) => server.close(resolve));
+	}
+});

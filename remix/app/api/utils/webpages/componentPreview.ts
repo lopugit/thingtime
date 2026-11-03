@@ -3,7 +3,7 @@ import { getCurrentUser } from '../auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '../rateLimit/enforce';
 import { mongoDataPlane } from '../mongodb/dataPlane';
 import { withFriendIds } from '../things/things';
-import { MAX_WEBPAGE_BLOCKS_BYTES, sanitizeWebpageBlocks } from '../../../schemas/registry';
+import { sanitizeWebpageBlocks } from '../../../schemas/registry';
 import { resolveBlockComponents } from './webpages';
 
 const headers = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization, x-tt-mongo-url' };
@@ -31,7 +31,7 @@ export function createDraftComponentsAction(overrides: Partial<typeof defaults> 
 			);
 		let body: any;
 		try {
-			body = await readJsonBody(request, MAX_WEBPAGE_BLOCKS_BYTES * 4);
+			body = await readJsonBody(request, 192 * 1024);
 		} catch (error) {
 			return reply({ ok: false, error: 'Invalid or oversized block draft' }, error instanceof Response ? error.status : 400);
 		}

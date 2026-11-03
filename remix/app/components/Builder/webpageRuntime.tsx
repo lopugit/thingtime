@@ -1,11 +1,12 @@
 import React from 'react';
+import { INVALID_PAGINATION_CURSOR, MAX_PAGINATION_CURSOR_CHARS, isPaginationCursorKey } from '~/schemas/paginationCursor';
+import { isTransientBlockTarget } from './transientBlockActions';
 import { parseActionJson } from '~/schemas/actionJsonInput';
 import { ComponentDragBoundary } from './ComponentDrag';
 import { pageRuntimeSearch } from './seamlessMode';
 import { SharedMediaProvider } from '../Sharing/SharedMedia';
 import { useLocation } from 'react-router';
 
-import { MAX_WEBPAGE_BLOCKS } from '~/schemas/registry';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 
@@ -50,6 +51,8 @@ export type WebpageRuntime = {
 	viewer: WebpageRuntimeViewer;
 	query: Record<string, string>;
 	version: number;
+	// Explicit Refresh/Retry requests, separate from completed control reports.
+	refreshVersion: number;
 	last: WebpageRuntimeLastRun | null;
 	installing: boolean;
 	// bump the version — every source-bound block refetches
@@ -79,6 +82,7 @@ const INERT_RUNTIME: WebpageRuntime = {
 	viewer: INERT_VIEWER,
 	query: {},
 	version: 0,
+	refreshVersion: 0,
 	last: null,
 	installing: false,
 	refresh: () => {},
@@ -105,7 +109,8 @@ const QUERY_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/;
 // oldest-first past a full page's worth of live blocks: the burst of loads for
 // one version is a single render pass, so no sibling can lose an entry it is
 // still waiting on, and the worst case past the cap is one duplicate request.
-export const MAX_SHARED_SOURCE_LOADS = MAX_WEBPAGE_BLOCKS;
+// Cache retention is independent of authored page size; eviction never removes blocks.
+export const MAX_SHARED_SOURCE_LOADS = 120;
 
 export const evictSharedLoads = <T,>(promises: Map<string, T>, max: number = MAX_SHARED_SOURCE_LOADS): void => {
 	// Map iterates in insertion order, so the first key is always the oldest
@@ -130,7 +135,11 @@ export const queryScopeOf = (search: string): Record<string, string> => {
 	let count = 0;
 	params.forEach((value, key) => {
 		if (key === 'key' || count >= MAX_QUERY_KEYS || !QUERY_KEY_PATTERN.test(key)) return;
-		out[key] = value.slice(0, MAX_QUERY_VALUE_CHARS);
+		// Opaque cursors must survive navigation byte-for-byte. Never turn an
+		// oversized token into a valid first-page request by silently dropping it.
+		out[key] = isPaginationCursorKey(key)
+			? value.length <= MAX_PAGINATION_CURSOR_CHARS ? value : INVALID_PAGINATION_CURSOR
+			: value.slice(0, MAX_QUERY_VALUE_CHARS);
 		count += 1;
 	});
 	return out;
@@ -160,6 +169,7 @@ export const WebpageRuntimeProvider = ({
 	const user = useCurrentUser();
 	const location = useLocation();
 	const [version, setVersion] = React.useState(0);
+	const [refreshVersion, setRefreshVersion] = React.useState(0);
 	const [lastRun, setLast] = React.useState<{ identity: object; search: string; run: WebpageRuntimeLastRun } | null>(null);
 	const [installing, setInstalling] = React.useState(false);
 	const onInstallRef = React.useRef(onInstall);
@@ -196,7 +206,10 @@ export const WebpageRuntimeProvider = ({
 		[pageId, linkKey]
 	);
 
-	const refresh = React.useCallback(() => setVersion((current) => current + 1), []);
+	const refresh = React.useCallback(() => {
+		setVersion((current) => current + 1);
+		setRefreshVersion((current) => current + 1);
+	}, []);
 	const report = React.useCallback(
 		(run: Omit<WebpageRuntimeLastRun, 'at'>) => {
 			setLast({ identity, search: runtimeSearch, run: { ...run, at: Date.now() } });
@@ -248,6 +261,7 @@ export const WebpageRuntimeProvider = ({
 			viewer,
 			query,
 			version,
+			refreshVersion,
 			last,
 			installing,
 			refresh,
@@ -265,6 +279,7 @@ export const WebpageRuntimeProvider = ({
 			viewer,
 			query,
 			version,
+			refreshVersion,
 			last,
 			installing,
 			refresh,
@@ -357,6 +372,7 @@ export const gatherFormFields = (root: HTMLElement | null): Record<string, unkno
 	if (!root) return out;
 	const fields = root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input[name], select[name], textarea[name]');
 	fields.forEach((field) => {
+		if (isTransientBlockTarget(field)) return;
 		const name = field.getAttribute('name') || '';
 		if (!name || !QUERY_KEY_PATTERN.test(name) || ['__proto__', 'constructor', 'prototype'].includes(name) || field.matches(':disabled')) return;
 		if (field.tagName === 'INPUT') {

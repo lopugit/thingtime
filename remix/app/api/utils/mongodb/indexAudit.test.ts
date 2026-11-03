@@ -18,7 +18,7 @@ test('unused emoji lookup retires without removing its protected uniqueness or l
   assert.ok(RETIRED_THINGS_INDEXES.includes('things_emoji_key_lookup'));
   assert.equal((RETIRED_THINGS_INDEXES as readonly string[]).includes('things_emoji_key_unique'), false);
   assert.equal(entries.find(({ name }) => name === 'uniqueKeys_1')?.options.unique, true);
-  assert.equal(summarizeThingIndexPlan(entries).total, 51); // Includes the service-workspace membership/record lookup.
+  assert.equal(summarizeThingIndexPlan(entries).total, 52); // Includes the modern owner/ID snapshot lookup.
   assert.deepEqual(entries.find(({ name }) => name === 'things_geo')?.keys, { geo: '2dsphere' });
   assert.deepEqual(entries.find(({ name }) => name === 'lopu_recording_due')?.keys, { thingtime: 1, nextRunAt: 1, shareId: 1 });
 });
@@ -53,6 +53,7 @@ test('invite expiry is home-only and never deletes escrow before its refund', as
    assert.equal(entries.some(({ name }) => ['error_log_recent', 'error_log_expires_at', 'migration_diagnostic_expires_at'].includes(name)), false);
    const ttl = entries.find(({ name }) => name === 'things_ephemeral_expires_at')!;
    assert.deepEqual(ttl.keys, { expiresAt: 1 });
-   assert.deepEqual(ttl.options.partialFilterExpression, { thingtime: { $in: ['migration-diagnostic', 'error-log'] } });
+   assert.deepEqual(ttl.options.partialFilterExpression, { thingtime: { $in: ['migration-diagnostic', 'error-log', 'device-sync-control', 'mongodb-connection-snapshot'] } });
    assert.equal(ttl.options.expireAfterSeconds, 0);
+   assert.equal(entries.filter(({ keys }) => Object.keys(keys).some(key => key.includes('connection'))).length, 0, 'connection telemetry adds no per-kind index');
  });

@@ -6,11 +6,7 @@
 	"outputDirectory": null,
 	"ignoreCommand": "node scripts/vercel-ignore-build.mjs",
 	"git": {
-		"deploymentEnabled": {
-			"**": false,
-			"main": true,
-			"develop": true
-		}
+		"deploymentEnabled": false
 	},
 	"regions": [
 		"syd1"

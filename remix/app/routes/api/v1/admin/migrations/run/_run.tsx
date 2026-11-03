@@ -4,6 +4,7 @@ import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import { captureMigrationFailureDiagnostic, migrationFailureResult } from '~/api/utils/migrations/migrationFailure';
 import { createMigrationDiagnostic, formatMigrationDiagnosticDetail } from '~/api/utils/migrations/migrationDiagnostics';
+import { withHomeIndexRecovery } from '~/api/utils/mongodb/collections';
 import { runMigration } from '~/api/utils/migrations/migrations';
 
 // POST /api/v1/admin/migrations/run — { migration: <id>, dryRun?, confirm? } —
@@ -16,6 +17,7 @@ export const action = async ({ request }: { request: Request }) =>
   const gate = await requireAdmin(request);
   if ('error' in gate) return json({ ok: false, error: gate.error.message }, { status: gate.error.status });
 
+  return withHomeIndexRecovery(async () => {
   const body: any = await readJsonBody(request, 64 * 1024);
 		const dryRun = body?.dryRun === true || body?.dryRun === 'true';
   // runMigration normally returns a structured failure. This final boundary
@@ -64,4 +66,5 @@ export const action = async ({ request }: { request: Request }) =>
     );
   }
   return json({ ok: true, migration: result.migration, report: result.report });
+  });
 	});

@@ -1,3 +1,5 @@
+import type { VerificationWindow } from '~/passwords/verificationPolicy';
+import { characterIdentity, type CharacterIdentity } from './characterCore';
 import type { UserVaultKeyRegistry } from './vaultKeys';
 import { randomUUID as lopuSettingsRevision } from 'node:crypto';
 import { LopuPromptConflictError, validateLopuInstructions, type LopuInstructionSettings } from '../lopu/promptSettingsCore';
@@ -77,6 +79,7 @@ export const profileAttachmentRefsForUserRoot = (
 
 // Safe shape returned to clients — never includes passwordHash.
 export type PublicUser = {
+  isCharacter?: boolean;
 	id: string;
 	ttid: string;
 	username: string;
@@ -182,6 +185,7 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		reconciledAt: source?.reconciledAt ? source.reconciledAt.toISOString() : null
 	};
 	return {
+		isCharacter: !!characterIdentity(user),
 		id: String(user._id),
 		ttid: user.ttid,
 		username: user.username,
@@ -2164,5 +2168,39 @@ export const setUserLopuInstructions = async (userId: string, instructions: unkn
     { $set: { 'meta.lopuInstructions': settings, updatedAt: new Date() } }
   );
   if (!legacy.matchedCount) throw new LopuPromptConflictError();
+  return settings;
+};
+
+// Character policy is private, home-plane state; only the owner management
+// service calls this CAS writer. Generic profile edits never accept it.
+export const setCharacterIdentity = async (userId: string, expectedOwner: string, next: CharacterIdentity) => {
+  const result = await mutateUserThingSecure(userId, secure => {
+    if (secure.meta?.character?.ownerId !== expectedOwner || next.ownerId !== expectedOwner) throw new Error('Character not found');
+    secure.meta!.character = next;
+  });
+  if (result !== 'mutated') throw new Error('Character update did not complete');
+};
+
+// Private password-confirmation preference; omitted from every public user projection.
+export const getUserPasswordVerification = async (userId: string): Promise<{window: VerificationWindow; revision:string|null;changedAt?:number;reuseRecentDeviceVerification:boolean;epoch:string|null}> => {
+  const thing=await(await getThingsCollection()).findOne({shareId:userId,thingtime:'user'} as any,{projection:{secure:1,passwordVerificationEpoch:1}});
+  const legacy=!thing&&ObjectId.isValid(userId)?await(await getUsersCollection()).findOne({_id:new ObjectId(userId)},{projection:{'meta.passwordVerification':1,passwordVerificationEpoch:1}}):null;
+  const stored=(thing?unpackSecure((thing as any).secure).meta:legacy?.meta)?.passwordVerification;
+  const {verificationWindow}=await import('~/passwords/verificationPolicy');
+  return {window:verificationWindow(stored?.window??'5m'),revision:stored?.revision??null,changedAt:stored?.changedAt??0,reuseRecentDeviceVerification:stored?.reuseRecentDeviceVerification===undefined?true:stored.reuseRecentDeviceVerification===true,epoch:(thing as any)?.passwordVerificationEpoch??legacy?.passwordVerificationEpoch??null};
+};
+
+export const setUserPasswordVerification = async (userId: string, window: VerificationWindow, expectedRevision: string | null, reuseRecentDeviceVerification=true) => {
+  const { verificationWindow } = await import('~/passwords/verificationPolicy');
+  const settings = { window: verificationWindow(window), revision: crypto.randomUUID(), changedAt: Date.now(),reuseRecentDeviceVerification };
+  const result = await mutateUserThingSecure(userId, secure => {
+    if ((secure.meta?.passwordVerification?.revision ?? null) !== expectedRevision) throw new Error('Password confirmation settings changed. Reload before saving.');
+    secure.meta ??= {}; secure.meta.passwordVerification = settings;
+  });
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (result === 'mutated') return settings;
+  if (!ObjectId.isValid(userId)) throw new Error('Password confirmation settings could not be saved.');
+  const legacy = await (await getUsersCollection()).updateOne({_id:new ObjectId(userId),'meta.passwordVerification.revision':expectedRevision} as any,{$set:{'meta.passwordVerification':settings,updatedAt:new Date()}});
+  if (!legacy.matchedCount) throw new Error('Password confirmation settings changed. Reload before saving.');
   return settings;
 };

@@ -9,6 +9,10 @@ export const lopuRecoveryFailures = (value: unknown) =>
 	Number.isSafeInteger(value) && Number(value) >= 0 ? Math.min(Number(value), LOPU_MAX_RECOVERY_FAILURES) : 0;
 export type LopuManagement = 'client' | 'server';
 export const lopuManagement = (value: unknown): LopuManagement => (value === 'server' ? 'server' : 'client');
+// Personal-plan credentials belong to the persistent runtime, which cannot run
+// inside Vercel Workflow. This is execution placement, never provider admission.
+export const lopuProviderManagement = (value: unknown, providerId: unknown): LopuManagement =>
+	typeof providerId === 'string' && providerId.startsWith('chatgpt-plan-') ? 'client' : lopuManagement(value);
 export const continuationContext = (context: any) =>
 	context
 		? {

@@ -244,8 +244,7 @@ final class DesktopChatRuntimeTests: XCTestCase {
             .appendingPathComponent("DesktopChatRuntimeRoute-\(UUID().uuidString)", isDirectory: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
         let backend = FakeDesktopChatCommanding()
-        let telemetry = DeviceTelemetryCollector()
-        telemetry.establishSessionActivityAfterApplicationLaunch()
+        let telemetry = TestDeviceTelemetry()
         let controller = ThingtimeNodeController(
             journal: try CommandJournal(fileURL: directory.appendingPathComponent("journal.json")),
             pairing: PairingManager(store: InMemoryDeviceCredentialStore()),
@@ -273,6 +272,20 @@ final class DesktopChatRuntimeTests: XCTestCase {
         XCTAssertTrue(replay.ok)
         let deliveredMessages = await backend.sent()
         XCTAssertEqual(deliveredMessages, ["From Thingtime"])
+        XCTAssertEqual(telemetry.snapshotReads, 0)
+        XCTAssertEqual(telemetry.sessionReads, 2)
+
+        telemetry.session = SessionTelemetry(isLocked: true, isOnConsole: true)
+        let locked = await controller.handleLeasedCommand(LeasedCommand(
+            commandID: "desktop-command-locked", leaseID: "lease-locked",
+            method: command.method, parameters: command.parameters,
+            leaseExpiresAt: .distantFuture, approvedForExecution: true
+        ))
+        XCTAssertEqual(locked.error?.code, ThingtimeNodeError.policyDenied("ignored").code)
+        let messagesAfterLock = await backend.sent()
+        XCTAssertEqual(messagesAfterLock, deliveredMessages)
+        XCTAssertEqual(telemetry.snapshotReads, 0)
+        XCTAssertEqual(telemetry.sessionReads, 3)
     }
 
     private func command(

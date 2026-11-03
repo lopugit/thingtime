@@ -13,6 +13,11 @@ import { mergeReactionOverlays } from '~/components/Feed/reactionOverlay';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 import { SubspaceIcon } from './SubspaceCard';
 import { useSubspacePrefs } from './useSubspacePrefs';
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { useSubspaceViewPrefs } from './useSubspaceViewPrefs';
+import { SubspaceViewControls } from './SubspaceViewControls';
+import { SubspaceEmbeddedThings } from './SubspaceEmbeddedThings';
+
 import {
 	ACCESS_META,
 	composerContextOf,
@@ -31,6 +36,8 @@ import {
 	type TopRange
 } from './subspaceTypes';
 
+const SubspaceMessagesPanel = React.lazy(() => import('./SubspaceMessagesPanel').then(module => ({ default: module.SubspaceMessagesPanel })));
+
 // /s/:slug — the subspace's home: banner + icon + name, join/leave, sort tabs
 // (hot/new/top/rising/controversial, top with a range), the composer locked
 // to this subspace (when the viewer may post), the post column, and the
@@ -45,7 +52,7 @@ const RADIUS_MD = 'var(--tt-radius-md, 12px)';
 const RADIUS_LG = 'var(--tt-radius-lg, 16px)';
 
 type CachedSubspace = { at: number; subspace: PublicSubspace; posts: PublicPost[]; sort: SubspaceFeedSort };
-const cacheKeyFor = (slug: string, viewerId: string | null | undefined) => `tt-subspace-${slug}-${viewerId || 'anon'}`;
+const cacheKeyFor = (slug: string, viewerId: string | null | undefined, plane: string | null) => `tt-subspace-v2-${JSON.stringify([plane, slug, viewerId || 'anon'])}`;
 
 const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 	<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
@@ -197,6 +204,7 @@ export const SubspaceSidebar = (props: { subspace: PublicSubspace; moderators: {
 					<Text as="span">🎂 {new Date(subspace.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</Text>
 				</Flex>
 			</SidebarCard>
+			<SubspaceEmbeddedThings subspaceId={subspace.id} region="sidebar" />
 			{subspace.rules.length > 0 && (
 				<SidebarCard title={`Rules · ${subspace.rules.length}`}>
 					<Flex as="ol" flexDirection="column" rowGap={2} paddingLeft={4} margin={0}>
@@ -262,6 +270,13 @@ export const SubspaceSidebar = (props: { subspace: PublicSubspace; moderators: {
 
 export const SubspacePage = () => {
 	const { slug = '' } = useParams();
+	const user = useCurrentUser();
+	const plane = useDataPlane();
+	// A fresh session boundary clears private feed and composers synchronously.
+	return <SubspacePageSession key={JSON.stringify([slug, user?.id, plane])} slug={slug} />;
+};
+
+const SubspacePageSession = ({ slug }: { slug: string }) => {
 	const api = useApi();
 	const user = useCurrentUser();
 	const lopu = useLopu();
@@ -271,7 +286,7 @@ export const SubspacePage = () => {
 	const sort: SubspaceFeedSort = sortParam && SUBSPACE_SORTS.some((entry) => entry.id === sortParam) ? sortParam : prefs.defaultSort;
 	const range = (searchParams.get('t') as TopRange | null) || 'all';
 
-	const cacheKey = cacheKeyFor(slug, user?.id);
+	const cacheKey = cacheKeyFor(slug, user?.id, useDataPlane());
 	const cached = React.useMemo(() => readLocalCache<CachedSubspace>(cacheKey), [cacheKey]);
 	const [subspace, setSubspace] = React.useState<PublicSubspace | null>(cached?.subspace || null);
 	const [moderators, setModerators] = React.useState<{ userId: string; profile: any; role: string }[]>([]);
@@ -282,6 +297,9 @@ export const SubspacePage = () => {
 	const [notFound, setNotFound] = React.useState(false);
 	const [membershipBusy, setMembershipBusy] = React.useState(false);
 	const [approvalBusy, setApprovalBusy] = React.useState(false);
+	const view = useSubspaceViewPrefs(subspace?.id || `slug:${slug}`);
+	const [messagesVisited, setMessagesVisited] = React.useState(view.prefs.mode === 'messages');
+	React.useEffect(() => { if (view.prefs.mode === 'messages') setMessagesVisited(true); }, [view.prefs.mode]);
 
 	const requestSeqRef = React.useRef(0);
 	const apiRef = React.useRef(api);
@@ -607,6 +625,8 @@ export const SubspacePage = () => {
 				<Flex columnGap={[4, 4, 6, 8]} rowGap={4} alignItems="flex-start" flexDirection={['column', 'column', 'column', 'row']}>
 					{/* main column — full width, no max */}
 					<Flex flexDirection="column" rowGap={3} flex="1" minWidth={0} width="100%">
+						{subspace && <SubspaceViewControls prefs={view.prefs} onChange={view.update} scopeKey={view.scopeKey} />}
+						<Flex flexDirection="column" rowGap={3} display={view.prefs.mode === 'posts' ? 'flex' : 'none'} data-testid="subspace-posts">
 						{/* sort tabs */}
 						<Flex alignItems="center" columnGap={1} rowGap={1} flexWrap="wrap" data-testid="subspace-sorts">
 							{SUBSPACE_SORTS.map((entry) => {
@@ -698,6 +718,8 @@ export const SubspacePage = () => {
 							</Flex>
 						)}
 
+						{subspace && !wall && <SubspaceEmbeddedThings subspaceId={subspace.id} region="feed" active={view.prefs.mode === 'posts'} />}
+
 						{wall ? (
 							<Flex flexDirection="column" alignItems="center" rowGap={2} paddingY={16} border="1px dashed var(--tt-border, #ececef)" borderRadius={RADIUS_LG} data-testid="subspace-wall">
 								<Text fontSize="3xl">{viewer?.pending ? '🙋' : '🔒'}</Text>
@@ -722,9 +744,17 @@ export const SubspacePage = () => {
 								hasMore={!!nextCursor}
 								onLoadMore={() => nextCursor && load({ cursor: nextCursor })}
 								onPostChanged={handlePostChanged}
+								expandAllComments={view.prefs.expandComments}
+								active={view.prefs.mode === 'posts'}
 								emptyLabel={subspace?.viewer.canPost ? 'Nothing here yet — start the first thread ✨' : 'Nothing here yet ✨'}
 							/>
 						)}
+						</Flex>
+						{(messagesVisited || view.prefs.mode === 'messages') && <Box display={view.prefs.mode === 'messages' ? 'block' : 'none'}>
+							{wall ? <Text role="status" fontSize="sm">{wall}</Text> : !user ? <Text fontSize="sm">Log in and join this subspace to read messages.</Text> : !subspace?.viewer.member || subspace.viewer.banned ? <Text fontSize="sm">Join this subspace to read messages.</Text> : <React.Suspense fallback={<Text role="status" fontSize="sm">Opening messages…</Text>}>
+								{subspace && <SubspaceMessagesPanel key={`${subspace.id}:${subspace.viewer.member}`} subspace={subspace} active={view.prefs.mode === 'messages'} />}
+							</React.Suspense>}
+						</Box>}
 					</Flex>
 
 					{/* sidebar — fixed rail, sticky under the nav on wide screens */}

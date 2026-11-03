@@ -23,3 +23,8 @@ test('infinite mode reveals cumulative batches without skipping earlier results'
 	assert.equal(collectionWindow(47, 'infinite', 4, 20).end, 20);
 	assert.equal(collectionWindow(47, 'infinite', 4, 60).end, 47);
 });
+
+test('Show all renders every result and resets stale pagination', () => {
+ assert.deepEqual(collectionWindow(2345, 'all', 99), { page: 1, pages: 1, start: 0, end: 2345, pageSize: 2345 });
+ assert.equal(collectionWindow(0, 'all', 3).pages, 1);
+});

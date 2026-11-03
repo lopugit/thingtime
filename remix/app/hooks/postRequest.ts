@@ -2,8 +2,12 @@ import { createApiFailure } from './apiFailure';
 
 // A mobile transport may never settle even after cancellation. Release the
 // composer after a deadline, but never interpret that as a rejected write.
-export const withPostRequestDeadline = async <T>(request: (signal: AbortSignal) => Promise<T>, timeoutMs = 30_000): Promise<T> => {
+export const withPostRequestDeadline = async <T>(request: (signal: AbortSignal) => Promise<T>, timeoutMs = 30_000, parentSignal?: AbortSignal): Promise<T> => {
+	parentSignal?.throwIfAborted();
 	const controller = new AbortController();
+	const abort = () => controller.abort(parentSignal?.reason);
+	if (parentSignal?.aborted) abort();
+	else parentSignal?.addEventListener('abort', abort, { once: true });
 	let timer: ReturnType<typeof setTimeout>;
 	const deadline = new Promise<never>((_, reject) => {
 		timer = setTimeout(() => {
@@ -13,5 +17,5 @@ export const withPostRequestDeadline = async <T>(request: (signal: AbortSignal) 
 		}, timeoutMs);
 	});
 	try { return await Promise.race([request(controller.signal), deadline]); }
-	finally { clearTimeout(timer!); }
+	finally { clearTimeout(timer!); parentSignal?.removeEventListener('abort', abort); }
 };

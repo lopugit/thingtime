@@ -205,7 +205,7 @@ export const LopuPage = (props: { mode?: LopuPageMode }) => {
 	const signedIn = !!user && !user.temporary;
 	// voice follows the store's current conversation (no chat id in its URL)
 	const chatId = mode === 'voice' ? (new URLSearchParams(search).get('chat') || undefined) : (routeChatId ?? undefined);
-	const chat = useLopuChat({ chatId });
+	const chat = useLopuChat({ chatId, surface: mode });
 
 	const [sidebarOpen, setSidebarOpen] = React.useState(readSidebarOpen);
 	const [sheetOpen, setSheetOpen] = React.useState(false);
@@ -243,7 +243,7 @@ export const LopuPage = (props: { mode?: LopuPageMode }) => {
 	// line says why; the conversations sidebar stays — history is the user's
 	const locked = signedIn && chat.account.access.locked;
 	const status = locked
-		? 'Invite-only — waiting for an admin to verify you'
+		? mode === 'chat' && chat.vaultProviders.some(provider => provider.available && provider.planChatEligible === true) ? 'Choose your ChatGPT plan to chat' : 'Invite-only — waiting for an admin to verify you'
 		: mode === 'voice' && voicePhase !== 'idle'
 			? lopuVoicePhaseLabel(voicePhase)
 			: mode === 'voice'

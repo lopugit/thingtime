@@ -1,5 +1,17 @@
 # Auth, accounts and admin
 
+MongoDB connection inventory: `/admin/mongodb-connections` and Settings → Admin
+share `Admin/MongoConnectionInventory.tsx` and individually editable
+`mongoConnectionInventoryBlocks.ts` through `SettingsDocumentHost`.
+`GET /api/v1/admin/mongodb/connections` requires the current administrator,
+returns a private allowlisted projection, and negotiates
+`api.admin-mongodb-connections` 1.1.0. `mongodb/connectionTracker.ts` instruments
+the canonical cached clients; `mongodb/connectionInventory.ts` owns request-bound
+snapshot publication, pagination and optional aggregate diagnostics. Deployment
+cards distinguish recent application sockets from modeled monitoring overhead,
+and show allowlisted request-feature use without per-user or command data. See
+[the contract](../mongodb-connections.md) and TESTING.md's inventory checklist.
+
 Auth is an httpOnly cookie carrying a signed JWT (`jti`/`sub`/`exp`) plus a
 revocable Mongo `sessions` document; Bearer tokens (PATs, service accounts,
 app tokens) serve API clients (`FUNDAMENTALS.md` §5). Identity and control-plane
@@ -47,6 +59,14 @@ Preserve exact redirect/origin checks, PKCE, one-use challenges and session
 revocation in every OAuth/SSO change; a browser "success" text alone never
 proves the host connected.
 
+`components/Account/AutoLoginPopup.tsx` starts browser-native FedCM on signed-out
+foreign origins. `ssoHub.ts` selects the explicit data authority before deployment
+metadata; its built-in origins in `ssoHubOrigins.mjs` are shared with the application
+`scripts/csp.mjs` policy. `test:vercel-config` verifies those exact origins in the
+emitted Vercel header. Custom client hub overrides do not grant CSP permission.
+The password extension forwards non-WebAuthn identity requests unchanged; its
+`test/fedcm-pass-through.test.mjs` covers success, refusal and disabled opt-in.
+
 ## Tests
 
 - `npm --prefix remix run test:auth-origin`, `test:auth-introspection`,
@@ -76,7 +96,21 @@ private draft API, editor recovery, account isolation and independent media copi
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
+The controlled `ThingFields.tsx` password rows opt into `CopyPasswordButton.tsx`
+only for non-passkey manager entries. Copy uses an already-authorized draft and
+browser Clipboard API with secret-free inline status; it never reads clipboard
+contents or logs/notifies the value. `scripts/password-copy.browser.html` checks
+exact synthetic writes, rejection/unavailability, masking and stale completions.
+
+`PasswordGenerator.tsx`, `PasswordIcon.tsx` and `PasswordPasskeySetup.tsx` compose
+editable settings blocks; secret output stays in the controlled entry draft.
+`passwords/generator.ts` owns WebCrypto/preset validation. `passwords/icons.ts`,
+`icons.client.ts` and `api/utils/passwords/icons.ts` own descriptors, anonymous
+image loading and the separately sealed list projection. `test:passwords` covers
+these boundaries; `scripts/password-tools.browser.html` is an isolated synthetic
+UI fixture, not native-provider acceptance.
+
+See [password-manager.md](../password-manager.md). `api.passwords` 1.6.1 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -86,10 +120,83 @@ so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
 Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 `iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
-Native provider implementation and signed release are tracked separately in
-[PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
-private catalog and negotiates an optional supported native bridge.
+`passwords/browserPasskey.ts` validates RP/origin/options and implements ES256;
+`browserProviderCeremony.ts` owns policy-checked `verify-passkey`, catalog selection,
+retry identity and durable readback. `BrowserPasswordProvider.tsx` serves
+`/passwords/provider` with editable `browserProviderBlocks.ts`. Chromium transport
+and trusted tab/document checks live in `browser-extension/`; package with
+`build:password-extension`, test with `test:password-extension` and
+`test:passwords`. Browser acceptance must use the real local API/vault and an
+independent relying party; unit signatures and synthetic UI alone are insufficient.
+`Settings/passwordManagerSettingsBlocks.ts` and `PasswordManagerSettings.tsx`
+share `/settings/passwords`; Thingtime login passkeys remain in Security.
+The browser adapter workspace's bounded per-document diagnostic handshake reports
+installed/current hooks, observed opt-in and closed fallback reasons. `content.js`
+projects page events before runtime transport; the background fences the active
+document and accepts diagnostic reads only from its own popup. These are untrusted
+status hints, not authority or ceremony evidence; no request or identity fields
+are retained. Browser tests cover missing/replaced hooks, redaction and navigation.
 
+`passwords/websites.ts` supplies shared bare-host-to-HTTPS normalization for
+catalog hints and exact-origin fill verification. The browser fill client
+requires `api.passwords` 1.6.1; URL normalization is not an authorization grant.
+Extension 0.4.1 keeps the chooser inside active modal focus/accessibility scope
+and gives explicit website-reload recovery after extension replacement.
+`password-autofill-modal.browser.html` is a synthetic modal/runtime fixture;
+real signed-in fill and extension reload remain distinct acceptance checks.
+
+`NativePasswordConnection.tsx` and `nativePasswordConnectionBlocks.ts` supply the
+single editable device connection control shared by Password manager and Passwords
+settings. `nativeConnection.ts` owns ephemeral status, refresh and identity fences;
+`native.client.ts` requires desktop `passwordsVersion` 1.1.0. Electron's
+`password-provider.cjs` calls the read-only host `--status` path, backed by
+`PasswordConnectionStatus.swift` owner/origin linkage. Status does not probe the
+network or assert OS AutoFill enablement. Bridge 1.2.0 reports local-origin
+incompatibility explicitly. `HostConnection.swift` gates automatic initial linking
+on OS provider enablement and an account/origin opt-out; matching links renew while
+foreign or independently linked companion connections stay untouched. The native
+host verifies the live catalog before saving and fences concurrent link changes.
+The canonical Electron installer updates the standalone and nested provider together. Older bridges require an app update;
+this checkout's iOS web-only path has no native-password bridge.
+Native provider implementation lives in `apple/Passwords` and
+`apple/PasswordProvider`. `ProviderFeedback.swift` owns closed progress/error text,
+request fencing and immutable registration retry identity; `PasswordClient.swift`
+classifies HTTP failures and walks complete cursor-based catalogs. The provider
+controller starts registration once after OS selection when its view is visible,
+preserving device authentication, cancellation, retry and session fences. The macOS host
+and provider display Thingtime while retaining installed bundle/Keychain identities.
+Packaged metadata verification rejects old branding and mismatched host/provider
+versions. The passkey guide puts the native macOS provider before the optional
+browser adapter, and exact-default migration preserves authored guide blocks.
+`IdentityIndexTests.swift` verifies passkey discovery without password URL fields
+and prevents treating ordinary password entries as passkeys. `CatalogSelection.swift`
+owns the real chooser filter; assertion requests require an exact RP and allowed
+credential ID and cannot fall through to password/OTP website matching.
+Empty assertion results expose an ephemeral **Request details** disclosure with
+the actual requested site and count-only selection summary, never credential or
+account/session values. Its counts use the same decoder and matching rules.
+Run `swift test --package-path apple/Passwords` and
+`bash apple/PasswordProvider/tests/render-preview.sh`; the latter renders the
+actual SwiftUI view with synthetic status only. Signed packaging and real device registration/sign-in
+remain separate acceptance checks; the web guide uses the existing native bridge.
+
+## Account content snapshots
+
+The internal owner inventory uses `backups/accountSnapshots.ts` and the shared
+`timeline/accountContent.ts` v1 contract for approved profile content and private
+preferences. It decodes bounded user BinData without exporting email, passwords,
+vault keys, credentials, permissions or security settings. Managed profile images
+must match the owner, exact slot and durable binding at the same database
+snapshot. The offline reader has no authority to write an account or sign in.
+`test:backups` covers independent recovery, exact preferences and malformed or
+foreign data refusal. `test:backups:account-profile` runs actual registration/profile/settings Request
+handlers against its own disposable replica and compares the internal snapshot
+with independent API readback. Its macOS OS network policy and preflight refuse
+connections outside its disposable loopback database, including redirects and
+direct IPs. It exercises explicit current-writer restoration,
+concurrent edits, source-vault removal and revoked authentication. HTTP/browser,
+managed profile-media restore and product restore orchestration remain separate gates.
+See [portable backups](../portable-backups.md#account-profile-content-and-private-preferences).
 
 ## AI provider model availability
 
@@ -143,3 +250,117 @@ deletes account/bootstrap/auth records atomically in the home DB. It cannot
 accept arbitrary target accounts. Delivery and migration audit records remain.
 
 OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpenAiCredential` through the existing admin credentials route and `PlatformCredentials.tsx`. It is same-origin, admin-only and create-only; `api.admin-ci-credentials` 3.1.0 is negotiated before use. The sole source is server `OPENAI_API_KEY`, and the destination is `OpenAI` / `OPENAI_THINGTIME_API_KEY`.
+
+
+## Local ChatGPT plan connections
+
+`ai/chatgptPlanProtocol.ts` validates dynamic registration, JWT identity, scopes, rotation and Responses restrictions. `chatgptPlanRuntime.ts` owns protected local credentials, loopback callbacks, one-use attempts, account/session/origin fences and per-account cancellation. The authenticated `ai/chatgpt-plan` route publishes redacted state only; `Settings/ChatGPTPlanSettings.tsx` negotiates its capability. Model discovery and Lopu use the existing provider path with strict saved plan pins and no billing fallback. See README ChatGPT plan usage, TESTING and `test:chatgpt-plan`. `chatgptPlanStorage.ts` encrypts owner/origin-scoped records in the account MongoDB and fences its single refresh authority. `chatgptPlanTransfer.ts` seals explicit moves to a destination-owned key. Electron `local-runtime.cjs` manages optional authenticated local Mongo and generated OS-protected secrets; API switching uses separate sessions and restart.
+## Characters
+
+Private MCP task delegation uses `api/utils/agents/reporting.ts`, the independent
+`agents.report` PAT scope, and `/api/v1/agents/reporting`. It revalidates the owner,
+Character, exact private workspace references and subspace membership. Protected
+binding/operation Things fence duplicate and ambiguous writes; the executor's
+server-only operation policy constrains saved Actions. See
+[setup, recovery and acceptance](../agent-reporting.md).
+
+See [Characters](../characters.md) for the settings, login modes, private ownership,
+admin lookup, session selection, agent coordination and acceptance runbook.
+`characterCore.ts`, `characterSession.ts`, `characters.ts` and
+`characterEntitlements.ts` extend the existing home-plane user/session/ledger paths.
+`resolveSessionUser` defaults to the authenticated principal for roster and
+credential callers; request authentication passes an explicit selection (or null
+for the session default). Never re-mint a principal session with an acting user ID.
+
+## Account storage recovery
+
+`storage/userStorage.ts` owns transactional admission and exact recovery;
+`storagePending.ts` validates the requested 100 MiB gross positive queue budget.
+`userStorageRecovery.ts` owns protected durable jobs, leases and bounded retries.
+The dispatcher triggers recovery after mutations; the existing protected
+`lopu/recordings/run` scheduler resumes it independently of provider jobs.
+`userStorageReadiness.ts` verifies ledger and source readiness. Run `test:storage`,
+`test:storage-recovery`, `test:error-logs`, `test:api-capabilities` and the
+replica integration. See [storage recovery](../storage-recovery.md).
+
+## Preview retention and PR liveliness
+
+`Admin → Preview retention` (`/admin/preview-retention`) and Settings → Admin
+share `Admin/PreviewRetentionSettings.tsx` and `previewRetentionSettingsBlocks.ts`.
+`SettingsDocumentHost`/`accountSettingsDocumentAdapter` save the private block
+layout through the existing Things API; `WebpageBlocksRenderer` supplies nested
+Builder selection and `TransientBlockHost` binds ordinary controls to scoped
+policy handlers. No opaque form slot or saved credential is used. Layout edits
+pause live operations and use the existing revision fence.
+`GET/POST /api/v1/admin/ci/preview-retention` requires the current admin and
+negotiated `api.admin-ci-preview-retention` 1.0.0. `ciControl/previewRetention.ts`
+reads the home settings singleton afresh and saves with a revision comparison;
+concurrent edits return 409. The signed, read-only controller endpoint is
+`POST /api/v1/integrations/ci/preview-retention`, capability
+`api.integration-ci-preview-retention` 1.0.0. `previewRetentionCore.ts` owns
+validation and safe defaults. Both manifests derive these explicit versions
+from `apiDocs.ts`; Nitro imports register both executable routes.
+
+The protected `github-actions` controller consumes the saved policy. It preserves
+deployments if policy discovery, authentication, reads or validation fail.
+The product API must roll out to the selected gateway origin before enabling the
+new policy reader; a UI-only preview forwarding to the old gateway cannot prove
+the new backend. See README “Preview cleanup policy” for defaults and rollout.
+Run `test:ci-control` (including the retention block-tree regression), `test:api-capabilities`, and Admin route tests. Manual
+coverage: TESTING.md “Preview retention and PR liveliness”.
+
+Browser workspace window ownership and captured website targeting live in
+`browser-extension/workspace.js`; `popup.html`/`popup.js`/`popup.css` provide the
+local extension capability UI. Toolbar clicks open/focus a single resizable
+window; Config persists appearance independently of credential routing. Diagnostics
+return an atomic origin/status pair, recheck the captured tuple and ignore older
+UI generations. `workspace.test.mjs` covers ownership/settings/races;
+`workspace-browser.mjs` exercises actual isolated Chrome windows and rendered tabs
+without real credentials. Package with `build:password-extension`.
+
+Registration policy and count-only diagnostics live in
+`PasskeyRegistrationPolicy.swift`; native excluded matches are terminal and
+return `matchedExcludedCredential` after explicit Return to website. Browser
+`BrowserPasskeyExcludedError` is the only terminal exclusion category;
+`browserProviderFailure` fences older operations while network errors retain
+retry. Cached registration attempts recheck exclusions before each write.
+`test:passwords:record-storage` reuses the disposable replica runner's
+`--password-records` mode and production API handlers to verify independent
+same-account vault records and owner/readback/retry boundaries; it makes no
+same-authenticator discoverable-credential claim.
+
+Password branding: `passwordBrandingBlocks.ts` supplies individually editable
+decorative tree blocks and heading-preserving migrations; `PasswordBrandMark.tsx`
+serves framework headers. Extension manifest/action icons and native host/appex
+ICNS/PNG resources derive from the canonical branding assets. Coverage:
+`passwordBranding.test.ts`, extension `branding.test.mjs`, native metadata tests,
+renderer gallery and optional actual-provider Chrome fixture in
+`workspace-browser.mjs` (synthetic API boundary, real component/action routing).
+
+Password confirmation preferences: `passwords/verificationPolicy.ts` owns the
+closed duration/context policy; `api/utils/passwords/verification.ts` owns
+protected device proof and request/session/entry fences. `api.passwords`1.5 and
+account-registration1.2 are negotiated by the new clients. Shared editable
+`PasswordVerificationSettings.tsx` appears in the manager, Password manager
+settings, Security, and explicit fill approval. `PasswordPreviewList.tsx` provides
+editable safe username cards. See [the contract](../password-verification-preferences.md),
+`test:passwords:verification`, `test:passwords:verification-ui` and TESTING.md.
+
+Browser extension accounts: `BrowserExtensionAccountBridge.tsx` projects the
+canonical `api.auth-accounts` roster into the selected first-party document;
+`BrowserExtensionAccounts.tsx` reuses Login and AccountSwitcher in an owned popup.
+`browser-extension/accounts.js` binds discovery to origin, document and identity
+generation, clears stale catalog/requests, and preserves explicit local Lock.
+No session cookie or token crosses the bridge. See
+[extension accounts](../browser-extension-accounts.md), extension account/content
+regressions and `password-extension-accounts.integration.ts` for real API and
+isolated browser acceptance.
+
+Password website icons: `api.passwords` 1.6 adds `website-icon` for an exact
+owner, entry and revision. `api/utils/passwords/websiteIcons.ts` discovers ordered
+public Website origins using anonymous, DNS-pinned fetches and PNG sanitization;
+`passwords/icons.client.ts` limits concurrent requests and scopes blob caches to
+origin/owner/revision. Explicit custom icons take precedence. The metadata list
+exposes an availability hint, not saved URLs. Cover route authorization, revoked
+sessions, redirects, malformed images, fallback order and editable-card rendering
+with the password icon tests and TESTING.md checklist.

@@ -308,3 +308,26 @@ test('admin provider policy validates booleans, persists explicit changes, and r
   assert.equal(synced.report[0].status,'failed');
   assert.ok(synced.models.length);
 });
+
+test('owned-plan text eligibility is an optional private catalog hint, absent for guests and service accounts', async () => {
+  let viewer: any = { id: 'owner', accountKind: 'user', temporary: false };
+  let planReads = 0;
+  const { loader } = createAiModelsHandlers({
+    getCurrentUser: async () => viewer, enforceRateLimit: async () => allowed,
+    listAiModels: async () => sampleList(), listVaultProviders: async () => [sampleVaultProvider()], vaultConfigured: () => true,
+    listPlanProviders: async (_request: Request, ownerId: string) => {
+      planReads++; assert.equal(ownerId, 'owner');
+      return [{ ...sampleVaultProvider(), id: 'chatgpt-plan-owned', planChatEligible: true }];
+    }
+  } as any);
+  const response = await loader({ request: new Request(publicEndpoint) });
+  const result = await response.json();
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  assert.equal(result.vaultProviders[0].planChatEligible, undefined);
+  assert.equal(result.vaultProviders[1].planChatEligible, true);
+  for (viewer of [null, { id: 'owner', temporary: true }, { id: 'owner', accountKind: 'service' }]) {
+    const result = await (await loader({ request: new Request(publicEndpoint) })).json();
+    assert.equal(result.vaultProviders.some((provider: any) => provider.planChatEligible), false);
+  }
+  assert.equal(planReads, 1);
+});

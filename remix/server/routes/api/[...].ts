@@ -1,16 +1,19 @@
-import { resolvePublicOrigin } from '../../../app/api/utils/auth/publicOrigin';
+import { runWithMongoConnectionFeature } from '../../../app/api/utils/mongodb/connectionTracker';
+import { publishMongoConnectionSnapshots } from '../../../app/api/utils/mongodb/connectionInventory';
 import { agentTestRefusal } from '../../../app/api/utils/agentTesting';
 import { actionDataRoutes } from '../../utils/actionDataRoutes';
 import { defineHandler } from 'nitro/h3';
 import { enforceExpectedActor } from '../../../app/api/utils/auth/expectedActor';
 import { getCurrentUser } from '../../../app/api/utils/auth/getCurrentUser';
 import { recordErrorLog, withErrorLogRequest } from '../../../app/api/utils/errors/errorLogs';
+import { storageFailureCode, storageFailureFromResponse } from '../../../app/api/utils/errors/storageFailure';
 
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/utils/mongodb/endpoint';
 import { enforceExpectedDataPlane } from '../../../app/api/utils/mongodb/dataPlane';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../../../app/api/utils/chatgpt/pluginCore';
 import { StorageMutationError } from '../../../app/api/utils/storage/storageCore';
-import { hasSelfHostedApiEnv, proxyApiRequestToFallback, shouldProxyApiToFallback, unavailableLocalApiResponse } from '../../utils/apiFallback';
+import { scheduleUserStorageRecovery } from '../../../app/api/utils/storage/userStorageRecovery';
+import { getApiFallbackOrigin, hasSelfHostedApiEnv, proxyApiRequestToFallback, selectedRuntimeSupportsPlan, shouldProxyApiToFallback, unavailableLocalApiResponse } from '../../utils/apiFallback';
 
 type RouteModule = {
   loader?: (args: { request: Request; params?: Record<string, string> }) => Promise<unknown> | unknown;
@@ -19,8 +22,14 @@ type RouteModule = {
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
   ...actionDataRoutes,
+  'v1/maps': () => import('../../../app/routes/api/v1/maps/_maps'),
+  'v1/devices/node/identity': () => import('../../../app/routes/api/v1/devices/node/identity/_identity'),
+  'v1/devices/disconnect': () => import('../../../app/routes/api/v1/devices/disconnect/_disconnect'),
+  'v1/files/batches': () => import('../../../app/routes/api/v1/files/batches/_batches'),
+  'v1/files': () => import('../../../app/routes/api/v1/files/_files'),
   'v1/lopu/network': () => import('../../../app/routes/api/v1/lopu/network/_network'),
   'v1/lopu/tasks': () => import('../../../app/routes/api/v1/lopu/tasks/_tasks'),
+  'v1/admin/mongodb/connections': () => import('../../../app/routes/api/v1/admin/mongodb/connections/_connections'),
   'v1/admin/error-logs': () => import('../../../app/routes/api/v1/admin/error-logs/_error-logs'),
   'v1/integrations/ci/stack-completion': () => import('../../../app/routes/api/v1/integrations/ci/stack-completion/_stack-completion'),
   'v1/watch/recordings': () => import('../../../app/routes/api/v1/watch/recordings/_recordings'),
@@ -35,6 +44,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/webpages/seed-demos': () => import('../../../app/routes/api/v1/admin/webpages/seed-demos/_seed-demos'),
   'v1/admin/ci/automations': () => import('../../../app/routes/api/v1/admin/ci/automations/_automations'),
   'v1/admin/ci/dispatch': () => import('../../../app/routes/api/v1/admin/ci/dispatch/_dispatch'),
+  'v1/admin/ci/preview-retention': () => import('../../../app/routes/api/v1/admin/ci/preview-retention/_preview-retention'),
   'v1/admin/ci/previews': () => import('../../../app/routes/api/v1/admin/ci/previews/_previews'),
   'v1/admin/ci/stacks/chat': () => import('../../../app/routes/api/v1/admin/ci/stacks/chat/_chat'),
   'v1/integrations/ci/chat': () => import('../../../app/routes/api/v1/integrations/ci/chat/_chat'),
@@ -70,6 +80,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   [CHATGPT_OAUTH_RELAY_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/relay/_relay'),
   'v1/integrations/ci/route': () => import('../../../app/routes/api/v1/integrations/ci/route/_route'),
   'v1/integrations/ios-release': () => import('../../../app/routes/api/v1/integrations/ios-release/_ios-release'),
+  'v1/integrations/ci/preview-retention': () => import('../../../app/routes/api/v1/integrations/ci/preview-retention/_preview-retention'),
   'v1/integrations/ci/credentials': () => import('../../../app/routes/api/v1/integrations/ci/credentials/_credentials'),
   'v1/integrations/ci/progress': () => import('../../../app/routes/api/v1/integrations/ci/progress/_progress'),
   'v1/integrations/vercel/webhook': () => import('../../../app/routes/api/v1/integrations/vercel/webhook/_webhook'),
@@ -82,6 +93,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
   'v1/ai/connections': () => import('../../../app/routes/api/v1/ai/connections/_connections'),
   'v1/ai/models/sync': () => import('../../../app/routes/api/v1/ai/models/sync/_sync'),
+  'v1/ai/chatgpt-plan': () => import('../../../app/routes/api/v1/ai/chatgpt-plan/_chatgpt-plan'),
   'v1/ai/models': () => import('../../../app/routes/api/v1/ai/models/_models'),
 	'v1/ai/waterfalls': () => import('../../../app/routes/api/v1/ai/waterfalls/_waterfalls'),
   'v1/ai/complete': () => import('../../../app/routes/api/v1/ai/complete/_complete'),
@@ -110,6 +122,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/attachments/uploads/abort': () => import('../../../app/routes/api/v1/attachments/uploads/abort/_abort'),
   'v1/attachments/uploads/complete': () => import('../../../app/routes/api/v1/attachments/uploads/complete/_complete'),
   'v1/attachments/uploads/parts': () => import('../../../app/routes/api/v1/attachments/uploads/parts/_parts'),
+  'v1/auth/characters': () => import('../../../app/routes/api/v1/auth/characters/_characters'),
   'v1/auth/accounts': () => import('../../../app/routes/api/v1/auth/accounts/_accounts'),
   'v1/auth/accounts/assume': () => import('../../../app/routes/api/v1/auth/accounts/assume/_assume'),
   'v1/auth/accounts/owned': () => import('../../../app/routes/api/v1/auth/accounts/owned/_owned'),
@@ -160,6 +173,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/chats/updates': () => import('../../../app/routes/api/v1/chats/updates/_updates'),
 	'v1/devices': () => import('../../../app/routes/api/v1/devices/_devices'),
 	'v1/devices/approvals': () => import('../../../app/routes/api/v1/devices/approvals/_approvals'),
+	'v1/devices/sync-control': () => import('../../../app/routes/api/v1/devices/sync-control/_sync-control'),
 	'v1/devices/commands': () => import('../../../app/routes/api/v1/devices/commands/_commands'),
 	'v1/devices/events': () => import('../../../app/routes/api/v1/devices/events/_events'),
 	'v1/devices/node/commands': () => import('../../../app/routes/api/v1/devices/node/commands/_commands'),
@@ -173,6 +187,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
 	'v1/watch/pairing': () => import('../../../app/routes/api/v1/watch/pairing/_pairing'),
 	'v1/watch/sync': () => import('../../../app/routes/api/v1/watch/sync/_sync'),
 	'v1/watch/things': () => import('../../../app/routes/api/v1/watch/things/_things'),
+  'v1/agent-overview': () => import('../../../app/routes/api/v1/agent-overview/_agent-overview'),
+  'v1/agents/reporting': () => import('../../../app/routes/api/v1/agents/reporting/_reporting'),
   'v1/communities': () => import('../../../app/routes/api/v1/communities/_communities'),
   'v1/communities/get': () => import('../../../app/routes/api/v1/communities/get/_get'),
   'v1/communities/invites': () => import('../../../app/routes/api/v1/communities/invites/_invites'),
@@ -259,6 +275,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/subspaces': () => import('../../../app/routes/api/v1/subspaces/_subspaces'),
   'v1/subspaces/delete': () => import('../../../app/routes/api/v1/subspaces/delete/_delete'),
   'v1/subspaces/feed': () => import('../../../app/routes/api/v1/subspaces/feed/_feed'),
+  'v1/subspaces/embeds': () => import('../../../app/routes/api/v1/subspaces/embeds/_embeds'),
   'v1/subspaces/get': () => import('../../../app/routes/api/v1/subspaces/get/_get'),
   'v1/subspaces/join': () => import('../../../app/routes/api/v1/subspaces/join/_join'),
   'v1/subspaces/leave': () => import('../../../app/routes/api/v1/subspaces/leave/_leave'),
@@ -388,38 +405,40 @@ export default defineHandler(async (event) => {
   }
 
   if (shouldProxyApiToFallback(event.req)) {
+    if (path === 'v1/ai/chatgpt-plan' && process.env.THINGTIME_DESKTOP_API_MODE !== 'remote') return jsonResponse({ ok: false, available: false, error: 'Choose a configured local or self-hosted account runtime for ChatGPT plan usage.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/mail/google/callback') return jsonResponse({ ok: false, error: 'Google callback requires this configured origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/integrations/ios-release') return jsonResponse({ ok: false, error: 'Configure iOS release delivery on this origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
-    // Fresh vault verification must stay on the selected deployment. Never
-    // forward passwords/assertions to a fallback origin or reveal its keys.
-    if (event.req.headers.has('X-Thingtime-Expected-Actor')) {
-      return jsonResponse({ ok: false, error: 'Browser Actions require a configured account environment at this origin' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+    // Vault re-verification stays on its configured origin, including when a
+    // browser Action supplies an expected-actor header.
+    if (path === 'v1/vault/reveal') {
+      return jsonResponse({ ok: false, error: 'Vault verification requires a configured local account environment' }, {
+        status: 503, headers: { 'Cache-Control': 'private, no-store, max-age=0', Pragma: 'no-cache' }
+      });
     }
-    if (path === 'v1/passwords' || path === 'v1/mail' || path === 'v1/mail/sync') {
+    // The installed shell uses the selected account API for browser Actions,
+    // just like its ordinary account requests. Preserve the actor/data-plane
+    // preconditions for the upstream dispatcher to enforce before any handler.
+    if (event.req.headers.has('X-Thingtime-Expected-Actor') || path === 'v1/passwords' || path === 'v1/mail' || path === 'v1/mail/sync' || path === 'v1/ai/chatgpt-plan') {
       // The installed desktop shell deliberately serves its UI on loopback and
       // pins the account API through its endpoint settings. Ordinary websites
       // and incomplete dev deployments must never silently forward vault data.
       const local = new URL(event.req.url);
-      const configured = process.env.THINGTIME_API_FALLBACK_ORIGIN || '';
+      const configured = getApiFallbackOrigin() || '';
       const desktop = process.env.THINGTIME_DESKTOP === '1' && local.hostname === '127.0.0.1';
       let upstream: URL | null = null;
       try { upstream = new URL(configured); } catch { /* fail closed */ }
-      if (!desktop || !upstream || upstream.protocol !== 'https:' || upstream.username || upstream.password)
+      if (!desktop || !upstream || upstream.username || upstream.password)
         return jsonResponse({ ok: false, error: 'Configure private account services on this deployment.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
-      if (event.req.headers.get('Sec-Fetch-Site') === 'cross-site' || (method !== 'GET' && event.req.headers.get('Origin') !== resolvePublicOrigin(event.req).origin))
+      if (event.req.headers.get('Sec-Fetch-Site') === 'cross-site' || (method !== 'GET' && event.req.headers.get('Origin') !== local.origin))
         return jsonResponse({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
-      // Nitro's lazy server request is not a native Undici Request. Preserve
-      // its public body interface and sanitize the copied upstream headers.
-      return proxyApiRequestToFallback(event.req, { stripForwardedOrigin: true });
+      if (path === 'v1/ai/chatgpt-plan' && !await selectedRuntimeSupportsPlan(configured, event.req.signal))
+        return jsonResponse({ ok: false, error: 'The selected API does not support portable ChatGPT plan connections. Update that runtime first.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
+      // Nitro's lazy request is not a native Request; preserve its body API
+      // while pinning the selected origin across asynchronous negotiation.
+      return proxyApiRequestToFallback(event.req, { expectedOrigin: configured, stripForwardedOrigin: true });
     }
     // Root data uses this same fallback. Forward its public database
     // precondition and selection unchanged for the upstream to enforce.
-    if (path === 'v1/vault/reveal') {
-      return jsonResponse({ ok: false, error: 'Vault verification requires a configured local account environment' }, {
-        status: 503,
-        headers: { 'Cache-Control': 'private, no-store, max-age=0', Pragma: 'no-cache' }
-      });
-    }
     return proxyApiRequestToFallback(event.req);
   }
 
@@ -441,7 +460,8 @@ export default defineHandler(async (event) => {
     return jsonResponse({ ok: false, error: 'Lopu looked everywhere and found no such endpoint 🤷‍♂️' }, { status: 404 });
   }
 
-  return withErrorLogRequest('/api/' + path, method, async () => {
+  const { getApiDocByPath } = await import('../../../app/docs/apiDocs');
+  return runWithMongoConnectionFeature(getApiDocByPath(path)?.group, () => withErrorLogRequest('/api/' + path, method, async () => {
   try {
   const route = await loadModule();
   const handler = method === 'GET' || method === 'HEAD' ? route.loader : route.action;
@@ -473,15 +493,30 @@ export default defineHandler(async (event) => {
         const { startBackgroundTask } = await import('../../../app/api/utils/lopu/backgroundTasks');
         return startBackgroundTask(event.req, async request => normalizeResponse(await handler({ request })));
       }
-      return normalizeResponse(await handler({ request: event.req }));
+      try {
+        return normalizeResponse(await handler({ request: event.req }));
+      } finally {
+        // Source/queue transactions have finished before the recovery worker
+        // opens its own transaction. Durable jobs also survive a lost request.
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+          try {
+            const actor = await getCurrentUser(event.req);
+            if (actor) scheduleUserStorageRecovery(actor.id);
+          } catch { /* Scheduler discovery remains the durable fallback. */ }
+        }
+      }
     });
-    if (response.status >= 500 && path !== 'v1/admin/error-logs') await recordErrorLog(new Error('HTTP request returned a server error'), { source: 'http-response', status: response.status });
+    if (response.status >= 500 && path !== 'v1/admin/error-logs') {
+      const code = await storageFailureFromResponse(response);
+      await recordErrorLog(new Error(code ? 'Storage accounting requires recovery' : 'HTTP request returned a server error'), { source: code ? 'storage-accounting' : 'http-response', status: response.status, code });
+    }
     return response;
   } catch (err) {
     if (err instanceof Response) {
       return err;
     }
 		if (err instanceof StorageMutationError) {
+      if (err.status >= 500) await recordErrorLog(new Error('Storage accounting requires recovery'), { source: 'storage-accounting', status: err.status, code: storageFailureCode(err.message) ?? (err.code === 'storage_invariant' ? 'STORAGE_INVARIANT' : 'STORAGE_ACCOUNTING_UNAVAILABLE') });
 			return jsonResponse({ ok: false, error: err.message }, { status: err.status });
 		}
 
@@ -490,6 +525,12 @@ export default defineHandler(async (event) => {
   } catch (error) {
     if (!(error instanceof Response) && path !== 'v1/admin/error-logs') await recordErrorLog(error, { source: 'http-unhandled', status: 500 });
     throw error;
+  } finally {
+    // Request-bound telemetry only. Health/discovery and proxy returns do not
+    // warm clients or schedule polling; publication reuses an existing home pool.
+    if (!path.startsWith('v1/health') && !path.startsWith('v1/mongodb/status') && path !== 'v1/capabilities') {
+      try { await publishMongoConnectionSnapshots(); } catch { /* Telemetry must never replace an API response. */ }
+    }
   }
-  });
+  }));
 });

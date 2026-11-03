@@ -89,10 +89,10 @@ export const usePasskeyAuth = () => {
 			}
 		}, opts?.signal), []);
 
-	const registerPasskey = React.useCallback((opts: { password: string; nickname?: string; description?: string }) =>
+	const registerPasskey = React.useCallback((opts: { password: string; verificationRequestId?:string; nickname?: string; description?: string }) =>
 		passkeyCeremonies.run(owner.current, false, async (signal) => {
 			await ensurePasskeyCapabilities('registration', signal);
-			const minted = await apiRef.current.v1.auth.passkeys.registerOptions({ password: opts.password, signal });
+			const minted = await apiRef.current.v1.auth.passkeys.registerOptions({ password: opts.password, verificationRequestId: opts.verificationRequestId, signal });
 			signal.throwIfAborted();
 			if (!minted?.ok) throw minted;
 			const attestation = await createPasskey(minted.options, signal);

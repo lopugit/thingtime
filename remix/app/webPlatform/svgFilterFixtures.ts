@@ -126,7 +126,7 @@ export function svgFilterRecipe(f: Feature): Recipe | null {
 	if (tag !== 'filter' && !defaults[tag]) return null;
 	if (!animated && type !== 'SVGFilterPrimitiveStandardAttributes' && !SVG_FILTER_RECEIVER_POLICY[type]) return null;
 	if (f.kind === 'constructor') return null;
-	const attrs =
+	const attrs: Record<string, string | number | boolean> =
 		tag === 'filter'
 			? { ...filterAttrs }
 			: { ...(!tag.startsWith('feFunc') && !light(tag) && tag !== 'feMergeNode' ? { ...region, result: 'selected' } : {}), ...defaults[tag] };

@@ -141,6 +141,7 @@ test('message attachment authorization requires the exact live message and an ac
 					if (filter.shareId === 'message-1') {
 						return { shareId: 'message-1', ownerId: 'author-1', thingtime: ['chat-message'], targetId: 'chat-1', crystal: {} };
 					}
+					if (filter.thingtime === 'chat' && filter.shareId === 'chat-1') return { shareId: 'chat-1', crystal: {} };
 					if (filter.thingtime === 'chat-member' && memberState && filter.ownerId === 'reader-1') {
 						assert.deepEqual(filter.uniqueKeys, thingUniqueKeyFilter('memberKey', 'chat-1:reader-1').uniqueKeys);
 						assert.equal(filter.targetId, 'chat-1');
@@ -181,6 +182,7 @@ test('custom emoji attachment authorization requires the exact emoji reference a
 							emojiAttachmentId: 'attachment-1'
 						};
 					}
+					if (filter.thingtime === 'community' && filter.shareId === 'community-1') return { shareId: 'community-1', crystal: {} };
 					if (filter.thingtime === 'community-member' && member) {
 						assert.deepEqual(filter.uniqueKeys, thingUniqueKeyFilter('memberKey', 'community-1:reader-1').uniqueKeys);
 						assert.equal(filter.targetId, 'community-1');

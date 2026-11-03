@@ -1,5 +1,10 @@
 # Remote file contract
 
+Persistent mobile file synchronization is in progress. See the
+[implementation and acceptance ledger](mobile-file-sync.md) for the mobile
+pairing contract, reconciliation core and remaining native work. The manual
+transfer behavior below remains the currently connected application path.
+
 The file browser adapts remote inode metadata into the existing Things views.
 It never persists a Mac path as a server filesystem path. Thingtime copies are
 private, quota-accounted attachment Things with immutable `attachmentPurpose:

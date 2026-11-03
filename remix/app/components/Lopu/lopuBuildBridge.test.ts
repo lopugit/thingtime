@@ -3,7 +3,7 @@ import { afterEach, beforeEach, test } from 'node:test';
 
 import { canAdoptSavedWebpage, isReadOnlyWebpageViewerRoute, isStaleWebpageLanding, mergeSavedWebpage, type ResolvedWebpage, type WebpageTarget } from '../Builder/useWebpage';
 import type { ComponentThingLike, ComponentsByRef } from '../Builder/WebpageBlocksRenderer';
-import { MAX_BLOCKS, collectBlockIds, countBlocks, findBlock, type WebpageBlock } from '../Builder/webpageBlocks';
+import { collectBlockIds, countBlocks, findBlock, type WebpageBlock } from '../Builder/webpageBlocks';
 import {
   applyLopuPartialComponent,
   applyLopuPartialPageOps,
@@ -334,8 +334,10 @@ test('applyPageOps: refused ops are reported and skipped, duplicate ids are rewr
   assert.equal(notString.errors.length, 3);
   assert.match(notString.errors[1], /^op 1: must be an object/);
 
-  const tooMany = applyPageOps([], [{ op: 'setBlocks', blocks: Array.from({ length: MAX_BLOCKS + 1 }, (_, i) => textBlock(`t-${i}`)) }]);
-  assert.match(tooMany.errors[0], /exceed/);
+  const largePage = applyPageOps([], [{ op: 'setBlocks', blocks: Array.from({ length: 121 }, (_, i) => textBlock(`t-${i}`)) }]);
+  assert.deepEqual(largePage.errors, []);
+  assert.equal(largePage.applied, 1);
+  assert.equal(countBlocks(largePage.blocks), 121, 'the bridge preserves pages beyond the former product cap');
 
   let deep: WebpageBlock = textBlock('leaf');
   for (let level = 0; level < 8; level += 1) deep = { id: `box-${level}`, type: 'container', children: [deep] };

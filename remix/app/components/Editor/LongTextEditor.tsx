@@ -645,6 +645,10 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 			const onRawInput = (event: Event) => saveEditorValue?.(event instanceof CustomEvent ? event.detail?.label : undefined);
 			holderRef.current?.addEventListener('input', onRawInput);
 			holderRef.current?.addEventListener('tt-editor-change', onRawInput);
+			// The editable DOM is visible before isReady and the initial history
+			// capture settle. Reconcile input typed during that interval, when both
+			// the raw listener and onChange's ready guard could have missed it.
+			saveEditorValue?.();
 			rawInputCleanupRef.current = () => {
 				holderRef.current?.removeEventListener('input', onRawInput);
 				holderRef.current?.removeEventListener('tt-editor-change', onRawInput);

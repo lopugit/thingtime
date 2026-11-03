@@ -61,6 +61,7 @@ import {
 	DEVICE_CONTROL_EVENT_MAX_COUNT,
 	DEVICE_CONTROL_EVENT_RETENTION_MS,
 	claimDevicePairing,
+	minimalPublicDevice,
 	deviceConnectorIsFresh,
 	newDeviceThing
 } from './devices.ts';
@@ -585,4 +586,26 @@ test('event cursors round-trip and malformed cursors fail closed', () => {
 	const value = { at: new Date('2026-08-18T00:00:00.000Z'), id: 'event-1' };
 	assert.deepEqual(decodeDeviceEventCursor(encodeDeviceEventCursor(value)), value);
 	assert.equal(decodeDeviceEventCursor('not-json'), null);
+});
+
+for (const platform of ['ios', 'android'] as const) {
+ test(`${platform} pairs with the existing descriptor and signed proof boundary`, () => {
+  const device = normalizeDeviceDescriptor({ name: 'My phone', platform, model: 'Phone', osVersion: '1', appVersion: '1' });
+  assert.ok(device); assert.equal(device.platform, platform);
+  const projected = minimalPublicDevice({ shareId: 'mobile', createdAt: new Date(), crystal: { ...device, credential: 'never-return' }, secure: 'never-return' });
+  assert.equal(projected.platform, platform);
+  assert.equal(JSON.stringify(projected).includes('never-return'), false);
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+  const claim = { pairingId: 'pair', pairingSecret: generatePairingSecret(), credential: generateDeviceCredential(),
+   publicKey: (publicKey.export({ format: 'der', type: 'spki' }) as Buffer).subarray(-32).toString('base64url'),
+   nonce: generateDevicePairingNonce(), serverNonce: generateDevicePairingNonce(), device, capabilities: [] };
+  const signature = sign(null, canonicalDevicePairingClaimBytes(claim), privateKey).toString('base64url');
+  assert.equal(verifyDevicePairingClaim(claim, signature), true);
+  assert.equal(verifyDevicePairingClaim({ ...claim, device: { ...device, platform: 'macos' } }, signature), false);
+  assert.equal(verifyDevicePairingClaim({ ...claim, capabilities: ['filesystem.v1'] }, signature), false);
+  assert.equal(normalizeDeviceDescriptor({ ...device, credential: 'secret' }), null);
+ });
+}
+test('unknown device platforms are still refused', () => {
+ for (const platform of ['', 'iOS', 'Android', 'browser', 'unknown', null]) assert.equal(normalizeDeviceDescriptor({ name: 'Phone', platform }), null);
 });

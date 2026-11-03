@@ -6,6 +6,7 @@ final class ThingtimeAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        NativeUploadBackgroundCoordinator.shared.activate()
         UNUserNotificationCenter.current().delegate = self
         ThingtimeNativeNotifications.shared.activate()
         return true

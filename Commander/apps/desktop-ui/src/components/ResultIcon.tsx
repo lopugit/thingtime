@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import type { SearchItemKind } from '@commander/protocol';
 import { cachedNativeFileIcon, requestNativeFileIcon } from '../lib/nativeFileIcons.js';
 import { CommanderIcon } from './CommanderIcon.js';
 
-export function ResultIcon({
+export const ResultIcon = memo(function ResultIcon({
   icon,
   kind,
   path,
@@ -56,4 +56,4 @@ export function ResultIcon({
       )}
     </span>
   );
-}
+});

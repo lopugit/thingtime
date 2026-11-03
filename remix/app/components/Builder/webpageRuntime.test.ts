@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { MAX_PAGINATION_CURSOR_CHARS, INVALID_PAGINATION_CURSOR } from '~/schemas/paginationCursor';
+import { buildOverview, OVERVIEW_ROLES, parseOverviewInput, type OverviewRole, type OverviewThing } from '~/api/utils/agents/overviewCore';
+import { localQueryHref } from '../Actions/localUiAction';
 
-import { MAX_SHARED_SOURCE_LOADS, evictSharedLoads, queryScopeOf, readSourceCache, sourceCacheKey, writeSourceCache } from './webpageRuntime';
+import { MAX_SHARED_SOURCE_LOADS, gatherFormFields, evictSharedLoads, queryScopeOf, readSourceCache, sourceCacheKey, writeSourceCache } from './webpageRuntime';
 
 // The bounds the page runtime puts on things it does not control: the
 // shared-load map (how many in-flight/settled source requests it may retain),
@@ -66,6 +69,31 @@ test('the query scope caps value length and key count', () => {
 	assert.equal(queryScopeOf(`?note=${long}`).note?.length, 200);
 	const many = Array.from({ length: 80 }, (_value, index) => `k${index}=${index}`).join('&');
 	assert.ok(Object.keys(queryScopeOf(`?${many}`)).length <= 32);
+});
+
+test('overview next-page cursors survive local navigation and query binding intact', () => {
+	const input = parseOverviewInput(new URLSearchParams('taskSchema=tasks&projectSchema=projects&agentSchema=agents&questionSchema=questions&progressSchema=progress&todoSchema=todos'));
+	const records = Object.fromEntries(OVERVIEW_ROLES.map(role => [role, []])) as Record<OverviewRole, OverviewThing[]>;
+	records.task = Array.from({ length: 55 }, (_, i) => ({ id: `task-${i}`, crystal: { title: String(i) } }));
+	const first = buildOverview(input, records, true, 'now');
+	assert.ok(first.nextCursor!.length > 200);
+	const href = localQueryHref('overview-page', { cursor: first.nextCursor });
+	assert.ok(href);
+	const scope = queryScopeOf(new URL(href, 'https://thingtime.test').search);
+	assert.equal(scope.cursor, first.nextCursor);
+	const next = buildOverview({ ...input, cursor: scope.cursor }, records, true, 'now');
+	assert.deepEqual(next.rows.map(row => row.id), ['task-50', 'task-51', 'task-52', 'task-53', 'task-54']);
+});
+
+test('pagination query values retain the transport budget and oversize stays an explicit refusal', () => {
+	const cursor = 'a'.repeat(MAX_PAGINATION_CURSOR_CHARS);
+	for (const key of ['cursor', 'todoCursor', 'progressCursor']) {
+		const href = localQueryHref('overview-page', { [key]: cursor });
+		assert.ok(href);
+		assert.equal(queryScopeOf(new URL(href, 'https://thingtime.test').search)[key], cursor);
+		assert.equal(localQueryHref('overview-page', { [key]: `${cursor}a` }), null);
+		assert.equal(queryScopeOf(`?${key}=${cursor}a`)[key], INVALID_PAGINATION_CURSOR);
+	}
 });
 
 // ── source cache: whose last result a page may paint ────────────────────────
@@ -196,4 +224,16 @@ test('typed JSON form fields decode once and reject invalid drafts before an Act
 		assert.deepEqual(gatherFormFields(form(JSON.stringify(value))), { program: value });
 	}
 	for (const value of ['', '{', 'x'.repeat(65537)]) assert.throws(() => gatherFormFields(form(value)), /Check the JSON/);
+});
+
+
+test('ordinary Actions cannot gather fields from nested transient settings hosts', () => {
+	const field = (name: string, privateHost: boolean) => ({
+		tagName: 'INPUT', type: 'text', value: privateHost ? 'synthetic-private-transfer-code' : 'public',
+		getAttribute: (key: string) => key === 'name' ? name : null,
+		matches: () => false,
+		closest: (selector: string) => privateHost && selector === '[data-tt-transient-boundary]' ? {} : null
+	});
+	const form = { querySelectorAll: () => [field('ordinary', false), field('destinationCode', true)] } as unknown as HTMLElement;
+	assert.deepEqual(gatherFormFields(form), { ordinary: 'public' });
 });

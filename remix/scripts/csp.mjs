@@ -22,6 +22,8 @@
 // img-src / media-src allow https:. Embeds render as link-out cards, never
 // iframes, so frame-src stays 'self' (docs design-bundle previews).
 
+import { FIRST_PARTY_SSO_HUB_ORIGINS } from '../app/components/Account/ssoHubOrigins.mjs';
+
 // The virtual-hosted S3 endpoint the signed part/content URLs use. Mirrors
 // api/utils/attachments/config.ts (getPrivateS3Config) without importing
 // server code into this build-time script.
@@ -52,6 +54,12 @@ const directives = ({ dev = false } = {}) => ({
 	'media-src': ["'self'", 'data:', 'blob:', 'https:'],
 	'connect-src': [
 		"'self'",
+		// AutoLoginPopup uses the selected data environment's first-party hub
+		// for FedCM even on foreign preview origins. Chrome checks its config
+		// and endpoint requests against this page's connect-src. Both built-in
+		// authorities can be selected independently of the deployment URL;
+		// custom hub overrides must still satisfy the deployed policy.
+		...FIRST_PARTY_SSO_HUB_ORIGINS,
 		// Opt-in incoming mail uses a token-paired loopback adapter. Keep this
 		// fixed origin; never permit arbitrary localhost ports or network hosts.
 		'http://127.0.0.1:17879',
@@ -71,6 +79,10 @@ const directives = ({ dev = false } = {}) => ({
 		'https://mapsresources-pa.googleapis.com',
 		'https://maps.gstatic.com',
 		'https://csi.gstatic.com',
+		// The native map SDK and stylesheet are self-hosted by Vite. Mapbox GL JS
+		// fetches styles, tiles, glyphs and telemetry from these service origins.
+		'https://api.mapbox.com',
+		'https://events.mapbox.com',
 		// Dev only: Vite HMR websocket (separate port) + analytics debug beacons.
 		...(dev ? ['ws:', 'wss:', 'https://va.vercel-scripts.com'] : [])
 	],
@@ -164,6 +176,6 @@ export const draftPreviewCsp = "default-src 'none'; script-src 'self'; style-src
 // Trusted secure-context WebCodecs worker. No authored scripts, child workers,
 // remote codec imports or network requests are permitted in this worker.
 export const mediaWorkerCsp = serialize({
- 'default-src': ["'none'"], 'script-src': ["'self'"],
+ 'default-src': ["'none'"], 'script-src': ["'self'", "'wasm-unsafe-eval'"],
  'connect-src': ["'none'"], 'worker-src': ["'none'"]
 });

@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { NativeControlsEnabled } from '../Builder/NativeComponentControls';
 import { WebpageRuntimeProvider, useWebpageRuntime } from '../Builder/webpageRuntime';
-import { ALLOWED_PROPS, HtmlThingRenderer, InteractiveWorkspace } from './HtmlThingRenderer.tsx';
+import { ALLOWED_PROPS, HtmlThingRenderer, HtmlBlockElement, InteractiveWorkspace } from './HtmlThingRenderer.tsx';
 import { ChakraThingRenderer } from './ChakraThingRenderer';
 
 // The prop allowlist IS the trust boundary for component things: a component
@@ -150,4 +150,13 @@ test('custom dialog close content uses the same sanitizing renderer', () => {
  assert.doesNotMatch(markup, /onclick/i);
  assert.match(markup, /<svg viewBox="0 0 24 24"><path d="M1 1L23 23"><\/path><\/svg>/);
  assert.doesNotMatch(markup, /onLoad|onload|alert\(1\)/);
+});
+
+test('editable images reuse bounded PNG thumbnails while arbitrary blob/data URLs remain inert',()=>{
+ const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jEM8AAAAASUVORK5CYII=';
+ const image=(src:string)=>renderToStaticMarkup(React.createElement(HtmlBlockElement,{tag:'img',attributes:{src}}));
+ assert.match(image(png),/src="data:image\/png;base64,/);
+ for(const src of ['blob:https://thingtime.example/arbitrary','data:text/html;base64,PHNjcmlwdD4=',png.replace('image/png','image/svg+xml'),'data:image/png;base64,AQID'])assert.doesNotMatch(image(src),/ src=/);
+ assert.doesNotMatch(renderToStaticMarkup(React.createElement(HtmlBlockElement,{tag:'a',attributes:{href:png},children:'Link'})),/ href=/);
+ const bytes=Buffer.from(png.slice(22),'base64');bytes.writeUInt32BE(65,16);assert.doesNotMatch(image('data:image/png;base64,'+bytes.toString('base64')),/ src=/);
 });

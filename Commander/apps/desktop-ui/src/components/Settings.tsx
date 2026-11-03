@@ -24,7 +24,7 @@ import { ExtensionsSettings } from './ExtensionsSettings.js';
 import { GeneralSettings } from './GeneralSettings.js';
 import { FullDiskAccessCard, IndexingSettings } from './IndexingSettings.js';
 import { SearchPreferencesSettings } from './SearchPreferencesSettings.js';
-import { beginWindowDrag } from '../lib/nativeBridge.js';
+import { beginTitlebarDrag } from '../lib/nativeBridge.js';
 
 const tabs: Array<{ id: SettingsTab; title: string; Icon: typeof Settings2 }> = [
   { id: 'general', title: 'General', Icon: Settings2 },
@@ -55,7 +55,7 @@ export function Settings({ state }: { state: CommanderState }) {
 
   return (
     <main className="settings-shell">
-      <header className="settings-titlebar" onMouseDown={beginWindowDrag}>
+      <header className="settings-titlebar" onMouseDown={beginTitlebarDrag}>
         <span className="commander-mark small" aria-hidden="true">
           ›_
         </span>

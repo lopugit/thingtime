@@ -1,7 +1,9 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import React from 'react';
 import { Box, Button, Flex, FormControl, FormLabel, Input, Text, Textarea } from '@chakra-ui/react';
 import { moveThingField, type ThingMods } from './thingMods';
 import { totpCode } from '~/passwords/totp';
+import { CopyPasswordButton } from './CopyPasswordButton';
 
 export function OneTimeCode({ value }: { value: string }) {
   const [result, setResult] = React.useState<{ code: string; remaining: number } | null>(null);
@@ -9,8 +11,8 @@ export function OneTimeCode({ value }: { value: string }) {
   React.useEffect(() => {
     let active = true;
     const update = () => totpCode(value).then(result => { if (active) { setResult(result); setInvalid(false); } }, () => { if (active) { setResult(null); setInvalid(true); } });
-    setResult(null); update(); const timer = window.setInterval(update, 1000);
-    return () => { active = false; window.clearInterval(timer); };
+    setResult(null); update(); const timer = activityInterval('timer:components/Thingtime/ThingFields:1', 'Live Thing fields', update, 1000);
+    return () => { active = false; clearActivityInterval(timer); };
   }, [value]);
   return <Text aria-live="off" fontFamily="monospace" fontSize="lg">{invalid ? 'Enter a valid TOTP secret or setup link' : result ? `${result.code} · ${result.remaining}s` : '—'}</Text>;
 }
@@ -20,8 +22,8 @@ export function ThingFields({ thing, mods, onChange, onModsChange }: {
   const [revealed, setRevealed] = React.useState<Record<string, boolean>>({});
   const clear = React.useCallback(() => setRevealed({}), []);
   React.useEffect(() => {
-    window.addEventListener('blur', clear); window.addEventListener('thingtime:hide-vault-values', clear); window.addEventListener('thingtime:mask-vault-values', clear);
-    return () => { window.removeEventListener('blur', clear); window.removeEventListener('thingtime:hide-vault-values', clear); window.removeEventListener('thingtime:mask-vault-values', clear); };
+    activityEvents(window, 'events:components/Thingtime/ThingFields', 'ThingFields').addEventListener('blur', clear); activityEvents(window, 'events:components/Thingtime/ThingFields', 'ThingFields').addEventListener('thingtime:hide-vault-values', clear); activityEvents(window, 'events:components/Thingtime/ThingFields', 'ThingFields').addEventListener('thingtime:mask-vault-values', clear);
+    return () => { activityEvents(window, 'events:components/Thingtime/ThingFields', 'ThingFields').removeEventListener('blur', clear); activityEvents(window, 'events:components/Thingtime/ThingFields', 'ThingFields').removeEventListener('thingtime:hide-vault-values', clear); activityEvents(window, 'events:components/Thingtime/ThingFields', 'ThingFields').removeEventListener('thingtime:mask-vault-values', clear); };
   }, [clear]);
   return <Flex className="thing thing-mod-fields" flexDirection="column" gap={4} minWidth={0} onKeyDown={event => {
     if ((event.metaKey || event.ctrlKey) && ['z', 'y'].includes(event.key.toLowerCase())) event.stopPropagation();
@@ -39,9 +41,10 @@ export function ThingFields({ thing, mods, onChange, onModsChange }: {
             {mods.removable && onModsChange && <Button size="xs" aria-label={`Remove ${field.label}`} onClick={() => onModsChange({ ...mods, fields: mods.fields.filter(item => item.id !== field.id) })}>×</Button>}
           </Flex>
         </Flex>
-        <Flex gap={2} alignItems="start">
+        <Flex gap={2} alignItems="start" flexWrap="wrap">
           <Box flex={1} minWidth={0}>{(field.type === 'notes' || field.multiline || ['address', 'structured', 'ssh-key'].includes(field.type)) && (!secret || revealed[field.id]) ? <Textarea {...props} rows={3} /> : <Input {...props} type={secret && !revealed[field.id] ? 'password' : 'text'} inputMode={field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : 'text'} />}</Box>
           {secret && mods.revealSecrets && <Button size="sm" aria-label={`${revealed[field.id] ? 'Hide' : 'Show'} ${field.label}`} onClick={() => setRevealed(prev => ({ ...prev, [field.id]: !prev[field.id] }))}>{revealed[field.id] ? 'Hide' : 'Show'}</Button>}
+          {mods.copyPasswords && field.type === 'password' && <CopyPasswordButton value={thing[field.id] ?? ''} label={field.label} />}
         </Flex>
         {field.type === 'totp' && thing[field.id] && <OneTimeCode value={thing[field.id]} />}
       </FormControl>;

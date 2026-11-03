@@ -1,3 +1,4 @@
+import { formatElapsedTime } from './elapsedTime';
 import { copiedMediaRefs, mapResolvedCopiedMedia } from '../Sharing/copiedMediaRefs';
 
 // Arg-template resolver for component things. A component's crystal.render is
@@ -392,7 +393,9 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 	if ('ttFormat' in template) {
 		const spec = isPlainObject(template.ttFormat) ? template.ttFormat : {};
 		const value = resolveScopeValue(argValue(scope, String(spec.arg)), budget);
-		return resolveScopeValue(formatValue(spec, value), budget);
+		return resolveScopeValue(spec.kind === 'elapsed'
+			? formatElapsedTime(value, typeof spec.endArg === 'string' ? argValue(scope, spec.endArg) : undefined, argValue(scope, 'clock.now') ?? Date.now())
+			: formatValue(spec, value), budget);
 	}
 	if ('ttMerge' in template) {
 		const parts = Array.isArray(template.ttMerge) ? template.ttMerge : [];

@@ -1,4 +1,5 @@
 import Foundation
+import AppleFileSync
 
 public struct NodeStatus: Codable, Equatable, Sendable {
     public let service: String
@@ -150,10 +151,11 @@ public actor ThingtimeNodeController {
         "desktop-chat.send"
     ]
 
+    private let folderSync: MacFolderSync?
     private let journal: CommandJournal
     private let pairing: PairingManager
     private let connector: ConnectorRuntime
-    private let telemetry: DeviceTelemetryCollector
+    private let telemetry: any DeviceTelemetryProviding
     private let actionExecutor: SafeActionExecutor
     private let controlPlaneClient: (any ControlPlaneClient)?
     private let desktopChat: DesktopChatRuntime?
@@ -161,14 +163,16 @@ public actor ThingtimeNodeController {
 
     public init(
         journal: CommandJournal,
+        folderSync: MacFolderSync? = nil,
         pairing: PairingManager,
         connector: ConnectorRuntime,
-        telemetry: DeviceTelemetryCollector,
+        telemetry: any DeviceTelemetryProviding,
         actionExecutor: SafeActionExecutor,
         controlPlaneClient: (any ControlPlaneClient)? = nil,
         desktopChat: DesktopChatRuntime? = nil,
         pairingScopeChanged: @escaping @Sendable (String?) async throws -> Void = { _ in }
     ) {
+        self.folderSync = folderSync
         self.journal = journal
         self.pairing = pairing
         self.connector = connector
@@ -177,6 +181,21 @@ public actor ThingtimeNodeController {
         self.controlPlaneClient = controlPlaneClient
         self.desktopChat = desktopChat
         self.pairingScopeChanged = pairingScopeChanged
+    }
+
+    public func handleLocalFolderSync(_ request: NodeRequest, stream: (@Sendable (Data) throws -> Void)? = nil, receive: (@Sendable (Int) throws -> Data)? = nil, batchCallback: (@Sendable (JSONValue, TimeInterval) async throws -> JSONValue)? = nil) async -> NodeResponse {
+        guard request.method == "folder-sync.request", let folderSync else {
+            return .failure(id: request.id, code: "unsupported_feature", message: "This node does not support local folder sync.")
+        }
+        do { return .success(id: request.id, result: try await folderSync.handle(request.parameters, stream: stream, receive: receive, batchCallback: batchCallback)) }
+        catch let error as MobileFolderStore.Failure { return .failure(id: request.id, code: "folder_unavailable", message: error.localizedDescription) }
+        catch is CancellationError { return .failure(id: request.id, code: "cancelled", message: "Folder access was cancelled.") }
+        catch where MacFolderSync.identityVerificationIsTransient(error) {
+            // Electron IPC preserves messages, but may drop custom Error fields.
+            // This fixed marker carries no upstream error text or private data.
+            return .failure(id: request.id, code: "folder_identity_retry", message: "[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.")
+        }
+        catch { return .failure(id: request.id, code: "folder_unavailable", message: "Folder access could not be verified. Check pairing, consent and the selected account.") }
     }
 
     public func handle(_ request: NodeRequest) async -> NodeResponse {
@@ -507,7 +526,7 @@ public actor ThingtimeNodeController {
             }
             payload["commandId"] = .string(command.commandID)
             if DesktopChatRuntime.supports(connectorID: connectorID) {
-                let device = await telemetry.snapshot()
+                let session = await telemetry.sessionSnapshot()
                 return NodeRequest(
                     id: requestID,
                     commandId: command.commandID,
@@ -517,7 +536,7 @@ public actor ThingtimeNodeController {
                         "operation": .string(command.method),
                         "payload": .object(payload),
                         "explicitlyApproved": .bool(command.approvedForExecution),
-                        "sessionLocked": .bool(device.session.isLocked)
+                        "sessionLocked": .bool(session.isLocked)
                     ])
                 )
             }
@@ -834,12 +853,12 @@ public actor ThingtimeNodeController {
         default:
             throw ThingtimeNodeError.invalidRequest("Unknown leased command kind.")
         }
-        let device = await telemetry.snapshot()
+        let session = await telemetry.sessionSnapshot()
         let envelope = ActionEnvelope(
             action: action,
             context: SafeActionContext(
                 origin: .remoteAccount,
-                sessionLocked: device.session.isLocked,
+                sessionLocked: session.isLocked,
                 userApproved: command.approvedForExecution
             )
         )

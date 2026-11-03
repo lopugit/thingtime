@@ -18,7 +18,9 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // Pinned projections. A diff here is a REVIEW PROMPT, not necessarily a bug:
 // a new registry field should appear (except a reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
-  'password-manager-entry': ['title', 'passwordType', 'fields'],
+  file: ['name', 'trashed', 'content', 'symbolicLink'],
+  'password-manager-entry': ['title', 'passwordType', 'icon', 'fields'],
+  'password-verification-device': [], // Private device proofs never enter the public crystal projection.
   draft: [], // Private snapshots never enter the public schema projection.
   "timeline-snapshot-part": [],
   "timeline-branch": ["name"],
@@ -32,12 +34,13 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "lopu-recording-job": [],
   "lopu-recording-reminder": [],
   "lopu-reminder": [],
-  "thing": ["shareId", "schemaVersion", "thingtime", "crystal", "geo", "extended", "ownerId", "sourceDeviceId", "acl", "targetId", "tags", "sizeBytes", "storageClass", "storageAccountingVersion", "attachmentEnvelopeVersion", "attachmentState", "objectSizeBytes", "objectKey", "objectVersionId", "attachmentRequestFingerprint", "attachmentPurpose", "passwordFileEnvelope", "passwordFileParent", "attachmentProfileSlot", "moderation", "subspaceMod", "subspacePrivate", "attachmentFinalizationLeaseId", "attachmentPartsIssuedAt", "attachmentObjectlessDelete", "attachmentMpuEmptyVerifiedAt", "uploadId", "attachmentExpiresAt", "expiresAt", "avatarAttachmentId", "bannerAttachmentId", "iconAttachmentId", "subspaceMediaDeleting", "emojiAttachmentId", "createdAt", "updatedAt"],
+  "thing": ["shareId", "schemaVersion", "thingtime", "crystal", "geo", "extended", "ownerId", "sourceDeviceId", "acl", "targetId", "tags", "sizeBytes", "storageClass", "storageAccountingVersion", "attachmentEnvelopeVersion", "attachmentState", "objectSizeBytes", "objectKey", "objectVersionId", "attachmentRequestFingerprint", "attachmentFileSyncOrigin", "attachmentPurpose", "passwordFileEnvelope", "passwordFileParent", "attachmentProfileSlot", "moderation", "subspaceMod", "subspacePrivate", "attachmentFinalizationLeaseId", "attachmentPartsIssuedAt", "attachmentObjectlessDelete", "attachmentMpuEmptyVerifiedAt", "uploadId", "attachmentExpiresAt", "expiresAt", "avatarAttachmentId", "bannerAttachmentId", "iconAttachmentId", "subspaceMediaDeleting", "emojiAttachmentId", "createdAt", "updatedAt"],
   "post": ["type", "text", "richText", "images", "listing", "thing", "title", "subspaceId", "flairId"],
   "attachment": ["name", "filenamePreview", "title", "description", "size", "contentType", "mediaKind", "detectedContentType"],
   "comment": ["text"],
   "reaction": ["emoji"],
   "share": [],
+  "builder-thing": [],
   "data": [],
   "scheduled-task-run": ["title", "chatId", "scheduledAt", "status", "notificationStatus"],
   "schema": ["name", "description", "fields", "forkOf", "render"],
@@ -50,11 +53,13 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "vote": ["optionIndex", "voteKey"],
   "updown": ["direction", "updownKey"],
   "subspace": ["slug", "name", "description", "access", "nsfw", "rules", "flairs", "userFlairs", "removalReasons", "userFlairSelfAssign", "allowCustomUserFlair", "branding"],
+  "subspace-embed": ["region", "thingId", "order"],
   "subspace-member": ["memberKey", "role", "approved", "banned", "banReason", "banUntil", "left", "pending", "approvalRequested", "userFlair"],
   "subspace-modlog": ["action", "postId", "userId", "reason", "detail"],
   "subspace-tombstone": ["slug", "subspaceId", "previousOwnerId", "deletedAt"],
   "subspace-report": ["postId", "commentId", "reason", "note", "status", "resolution", "resolvedById", "resolvedAt", "reportKey"],
-  "folder": ["name", "icon", "description"],
+  "file-sync": ["configurationVersion", "name", "deviceId", "localRootId", "remoteFolderId", "sourceKind", "mode", "paused", "propagateDeletes", "network", "chargingOnly", "excludedPaths", "resourceLimits", "ignoreRules"],
+  "folder": ["name", "icon", "description", "builderApp", "iconUrl", "metadata"],
   "app": ["clientId", "name", "origins", "nativeRedirectUris", "subscriptionTier", "subscriptionTierVersionId", "subscriptionTierVersion", "storageAllowanceBytes", "storageAllowanceOverrideBytes", "storageUsedBytes", "userStorageAllowanceBytes", "storageAccountingVersion"],
   "app-data": ["appId", "key", "value"],
   "subscription-tier": ["quotaKind", "tierId", "version", "status", "title", "tagline", "emoji", "bannerImageUrl", "sortOrder", "metered", "currency", "prices", "discountOverrides", "discounts", "discountFormulaVersion", "inclusions", "quotas", "sourceVersionId", "createdBy", "updatedBy", "publishedAt", "archivedAt"],
@@ -63,6 +68,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "app-storage": ["quotaKind", "appId", "usedBytes", "storageAllowanceBytes"],
   "service-quota": ["quotaKind", "quotaVersion", "key", "policy", "dayKey", "dailyUsed", "reservations", "permitIds", "releasedIds", "rollingPermits"],
   "migration-diagnostic": ["diagnosticVersion", "migrationId", "mode", "status", "outcome", "summary", "capturedAt"],
+  "mongodb-connection-snapshot": ["source"],
   "error-log": ["source", "message", "provider", "status", "code", "requestId", "route", "method", "providerType", "providerRequestId", "retryAfter", "attempt"],
   "ai-model": ["modelId", "label", "provider", "efforts", "speeds", "family", "enabled", "sortOrder", "contextWindow", "notes"],
   "account-invite": ["status", "amountMicros"],
@@ -100,6 +106,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "device-state": ["deviceStateKey", "revision", "stateHash", "snapshotHash", "state", "observedAt"],
   "device-connector": ["deviceConnectorKey", "revision", "connectorHash", "connector"],
   "device-command": ["deviceCommandKey", "requestId", "kind", "input", "requiresApproval", "approvalState", "status", "controlBytes", "inputTextHash", "inputRedactedAt", "expiresAt"],
+  "device-sync-control": ["requestId", "digest", "deviceCommandKey", "pairingHash", "status", "deadlineAt", "leaseHash"],
   "device-command-event": ["deviceEventKey", "deviceControlEventScopeKey", "liveControlEventScopeKey", "retainedBytes", "liveEventSequenceKey", "liveEventHash", "liveActivityHash", "eventType", "resourceId", "revision", "payload", "expiresAt"],
   "device-ai-live-state": ["deviceAiLiveStateKey", "connectorId", "sessionId", "lastSequence", "lastObservedAt"],
   "device-approval": ["deviceApprovalKey", "commandId", "requestId", "kind", "prompt", "status"],
@@ -143,6 +150,7 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 	assert.ok(PROTECTED_THINGTIME.includes('attachment'));
 	assert.ok(PROTECTED_THINGTIME.includes('app'));
 	assert.ok(PROTECTED_THINGTIME.includes('migration-diagnostic'));
+	assert.ok(PROTECTED_THINGTIME.includes('mongodb-connection-snapshot'));
 	assert.ok(PROTECTED_THINGTIME.includes('moderationFlag'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-pull-request'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-preview-policy'));
@@ -261,7 +269,7 @@ for (const schema of crystalSchemas) {
     assert.equal(validated.ok, true, `expected ok, got: ${JSON.stringify(validated)}`);
     if (validated.ok !== true) return;
 
-    assert.deepEqual(validated.thingtime, ['schema']);
+    assert.deepEqual(validated.thingtime, ['schema', 'builder-thing']);
     assert.equal(validated.crystal.name, schema.title);
     assert.deepEqual(fieldNames(validated.crystal), EXPECTED_PROJECTED_FIELDS[schema.id]);
     // Every concrete top-level field survives; open objects must not disappear
@@ -286,6 +294,19 @@ test('opaque native objects remain copyable bounded JSON, including the root cry
       assert.equal(fields.find(field => field.name === source.name)?.type, 'json', `${schema.id}.${source.name}`);
     }
   }
+});
+
+test('MongoDB snapshot schema projects its opaque source without granting generic data writes', () => {
+  const schema = crystalSchemas.find((entry) => entry.id === 'mongodb-connection-snapshot')!;
+  const projected = projectBuiltinSchemaCrystal(schema);
+  const validated = validateThingtimeCrystal(['schema'], projected);
+  assert.equal(validated.ok, true);
+  if (!validated.ok) return;
+  const source = (validated.crystal.fields as Array<Record<string, unknown>>).find((field) => field.name === 'source')!;
+  assert.equal(source.type, 'json');
+  assert.equal(source.required, true);
+  assert.equal(isProtectedThingtime([schema.id]), true);
+  assert.equal(validateThingtimeCrystal([schema.id], schema.example).ok, false, 'the dedicated runtime writer owns snapshot data');
 });
 
 test('schema extension headroom retains a total field-node limit', () => {
@@ -341,4 +362,34 @@ test('zero-field marker schemas are valid at the top level, but childless object
     fields: [{ name: 'shape', type: 'object', children: [] }]
   });
   assert.equal(childless.ok, false);
+});
+
+
+test('password icon projection remains optional and retains its typed source choices', () => {
+  const projected = projectBuiltinSchemaCrystal(crystalSchemas.find(schema => schema.id === 'password-manager-entry')!);
+  const validated = validateThingtimeCrystal(['schema'], projected);
+  assert.equal(validated.ok, true);
+  if (!validated.ok) return;
+  const icon = (validated.crystal.fields as Array<Record<string, any>>).find(field => field.name === 'icon')!;
+  assert.equal(icon.type, 'object');
+  assert.notEqual(icon.required, true, 'existing entries do not need an icon');
+  assert.deepEqual(icon.children.map((field: { name: string }) => field.name), ['kind', 'url', 'fileId']);
+  const fields = Object.fromEntries(icon.children.map((field: { name: string }) => [field.name, field]));
+  assert.equal(fields.kind.required, true);
+  assert.deepEqual(fields.kind.values, ['url', 'attachment']);
+  for (const name of ['url', 'fileId']) {
+    assert.equal(fields[name].type, 'string');
+    assert.notEqual(fields[name].required, true, 'each source keeps its alternative field optional');
+  }
+});
+
+test('password verification device is a protected zero-field marker with no public proof projection', () => {
+  const schema = crystalSchemas.find(schema => schema.id === 'password-verification-device')!;
+  assert.ok(PROTECTED_THINGTIME.includes('password-verification-device'));
+  assert.equal(isProtectedThingtime([schema.id]), true);
+  assert.equal(isProtectedThingtime(['data', schema.id]), true);
+  assert.equal(schema.collection, null);
+  const projected = projectBuiltinSchemaCrystal(schema);
+  assert.deepEqual(projected, { name: schema.title, description: schema.summary, fields: [] });
+  assert.equal(validateThingtimeCrystal(['schema'], projected).ok, true);
 });

@@ -1412,7 +1412,7 @@ export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpen
     const widgetRequest = new URLSearchParams(widgetLocation.search).get('widget');
     const widgetStarted = React.useRef<string | null>(null);
 
-	const chat = useLopuChat({ chatId });
+	const chat = useLopuChat({ chatId, surface: 'voice' });
 	const { settings, setProviderId, setTranscribe } = useLopuSettings();
 	const sendRef = React.useRef<((text: string) => Promise<import('./lopuChatStore').SendLopuResult | undefined>) | null>(null);
 	const submitDraftRef = React.useRef<(() => void) | null>(null);

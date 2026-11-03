@@ -346,3 +346,48 @@ test('default node lifecycle targets only the managed exact-label service and pl
 		rmSync(value.root, { force: true, recursive: true });
 	}
 });
+
+
+function makeCompanion(app, marker) {
+ const executable=path.join(app,'Contents','MacOS','Thingtime Passwords');
+ mkdirSync(path.dirname(executable),{recursive:true});
+ writeFileSync(path.join(app,'bundle-id.txt'),'com.thingtime.passwords');
+ writeFileSync(path.join(app,'marker.txt'),marker);
+ writeFileSync(executable,'#!/bin/sh\nexit 0\n',{mode:0o755});
+ return app;
+}
+
+test('installs the verified nested provider as the standalone companion with the same revision',async()=>{
+ const {installLocalApp}=await installerPromise; const value=fixture();
+ try {
+  makeCompanion(path.join(value.sourceApp,'Contents','Helpers','Thingtime Passwords.app'),'new-helper');
+  const companion=makeCompanion(path.join(value.targetDir,'Thingtime Passwords.app'),'old-helper');
+  const result=installLocalApp(installOptions(value.sourceApp,value.targetDir,{verifyCompanion:()=>{},companionRunningPids:()=>[]}));
+  assert.equal(result.targetCompanion,companion);
+  assert.equal(readFileSync(path.join(companion,'marker.txt'),'utf8'),'new-helper');
+  assert.equal(readFileSync(path.join(result.targetApp,'Contents','Helpers','Thingtime Passwords.app','marker.txt'),'utf8'),'new-helper');
+ } finally {rmSync(value.root,{recursive:true,force:true});}
+});
+
+test('restores both main and standalone apps when installed companion verification fails',async()=>{
+ const {installLocalApp}=await installerPromise; const value=fixture();
+ try {
+  makeCompanion(path.join(value.sourceApp,'Contents','Helpers','Thingtime Passwords.app'),'new-helper');
+  const companion=makeCompanion(path.join(value.targetDir,'Thingtime Passwords.app'),'old-helper');
+  const target=makeApp(value.targetDir,'com.thingtime.desktop','original');
+  assert.throws(()=>installLocalApp(installOptions(value.sourceApp,value.targetDir,{verifyCompanion:app=>{if(app===companion) throw new Error('companion verification failed');},companionRunningPids:()=>[]})),/companion verification failed/);
+  assert.equal(readFileSync(path.join(companion,'marker.txt'),'utf8'),'old-helper');
+  assert.equal(readFileSync(path.join(target,'marker.txt'),'utf8'),'original');
+ } finally {rmSync(value.root,{recursive:true,force:true});}
+});
+
+
+test('a failed companion rollback still restores the prior main app independently',async()=>{
+ const {rollbackAppReplacements}=await installerPromise;
+ const restored=[];
+ const failures=rollbackAppReplacements([
+  {target:'/companion',backup:'/companion-backup',installedMoved:true,backupMoved:true},
+  {target:'/main',backup:'/main-backup',installedMoved:true,backupMoved:true}
+ ],{remove:()=>{},rename:(backup,target)=>{if(target==='/companion') throw new Error('companion filesystem unavailable');restored.push([backup,target]);}});
+ assert.equal(failures.length,1);assert.deepEqual(restored,[['/main-backup','/main']]);
+});

@@ -2,10 +2,13 @@ import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { commanderCapabilityManifest } from './services/httpRoutes.js';
+import { LOGIN_REQUIREMENTS } from './services/loginRegistration.js';
 import { createCommanderServer, type CommanderServer } from './server.js';
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe('Commander daemon HTTP trust boundaries', () => {
@@ -21,6 +24,14 @@ describe('Commander daemon HTTP trust boundaries', () => {
     try {
       server = await createCommanderServer({ host: '127.0.0.1', port: 0, uiPath, platform: 'macos' });
       expect(server.token).not.toBe(server.nativeToken);
+
+      const publicShell = await fetch(`${server.url}/launcher.html`);
+      expect(publicShell.status).toBe(200);
+      expect(await publicShell.text()).toContain('Commander test');
+      const capabilities = await fetch(`${server.url}/.well-known/commander-capabilities.json`);
+      expect(capabilities.status).toBe(200);
+      expect(capabilities.headers.get('cache-control')).toBe('no-store');
+      expect(await capabilities.json()).toEqual(commanderCapabilityManifest(server.url));
 
       const health = await fetch(`${server.url}/healthz`);
       expect(health.status).toBe(200);
@@ -62,6 +73,35 @@ describe('Commander daemon HTTP trust boundaries', () => {
       });
       expect(uiRouteWithNativeToken.status).toBe(401);
 
+      let nativeRegistered = true;
+      const originalFetch = globalThis.fetch;
+      const registrationFetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = new URL(String(input));
+        if (url.pathname === '/.well-known/thingtime-capabilities.json')
+          return Response.json({
+            schemaVersion: 1,
+            origin: url.origin,
+            features: Object.fromEntries(
+              Object.entries(LOGIN_REQUIREMENTS).map(([key, version]) => [key, { version }]),
+            ),
+          });
+        if (
+          url.pathname === '/api/v1/apps/public' &&
+          !nativeRegistered &&
+          url.searchParams.get('redirect_uri') === 'com.thingtime.commander://oauth/callback'
+        )
+          return Response.json(
+            { ok: false, error: 'This desktop callback is not registered on the app' },
+            { status: 403 },
+          );
+        if (url.pathname === '/api/v1/apps/public')
+          return Response.json({
+            ok: true,
+            app: { clientId: url.searchParams.get('clientId') },
+            origin: url.searchParams.get('redirect_uri'),
+          });
+        return originalFetch(input, init);
+      });
       const login = await fetch(`${server.url}/api/accounts/login`, {
         method: 'POST',
         headers: { 'x-commander-session': server.token },
@@ -71,6 +111,17 @@ describe('Commander daemon HTTP trust boundaries', () => {
       expect(new URL(loginBody.authorizeUrl).searchParams.get('redirect_uri')).toBe(
         'com.thingtime.commander://oauth/callback',
       );
+      nativeRegistered = false;
+      const loopbackLogin = await fetch(`${server.url}/api/accounts/login`, {
+        method: 'POST',
+        headers: { 'x-commander-session': server.token },
+      });
+      expect(loopbackLogin.status).toBe(200);
+      const loopbackBody = (await loopbackLogin.json()) as { authorizeUrl: string };
+      expect(new URL(loopbackBody.authorizeUrl).searchParams.get('redirect_uri')).toBe(
+        `${server.url}/oauth/callback`,
+      );
+      registrationFetch.mockRestore();
 
       const malformedNativeCallback = await fetch(`${server.url}/api/native/oauth/callback`, {
         method: 'POST',
@@ -644,7 +695,7 @@ describe('Commander daemon HTTP trust boundaries', () => {
       await server?.close();
       await rm(temporary, { recursive: true, force: true });
     }
-  });
+  }, 30_000); // Full server lifecycle and full HTTP/security assertions, not a latency test.
 
   it('does not replay a stale cache frame across a live catalog revision', async () => {
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-stream-cache-test-'));

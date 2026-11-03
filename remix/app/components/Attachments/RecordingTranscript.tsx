@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import React from 'react';
 import { Box, Button, Text } from '@chakra-ui/react';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -38,7 +39,7 @@ export const TranscriptQuote = ({ text, compact = false }: { text: string; compa
 };
 
 let mountedReaders = 0;
-let refreshTimer: ReturnType<typeof setInterval> | undefined;
+let refreshTimer: number | undefined;
 const refresh = () => { if (document.visibilityState === 'visible') client.refreshAll(); };
 
 const OwnedRecordingTranscript = ({ ownerId, attachmentId, compact }: { ownerId: string; attachmentId: string; compact: boolean }) => {
@@ -50,15 +51,15 @@ const OwnedRecordingTranscript = ({ ownerId, attachmentId, compact }: { ownerId:
 	}, [ownerId, attachmentId, key]);
 	React.useEffect(() => {
 		if (mountedReaders++ === 0) {
-			window.addEventListener('focus', refresh);
-			document.addEventListener('visibilitychange', refresh);
-			refreshTimer = setInterval(refresh, 60_000);
+			activityEvents(window, 'events:components/Attachments/RecordingTranscript', 'RecordingTranscript').addEventListener('focus', refresh);
+			activityEvents(document, 'events:components/Attachments/RecordingTranscript', 'RecordingTranscript').addEventListener('visibilitychange', refresh);
+			refreshTimer = activityInterval('timer:components/Attachments/RecordingTranscript:1', 'Recording Transcript', refresh, 60_000);
 		}
 		return () => {
 			if (--mountedReaders === 0) {
-				clearInterval(refreshTimer);
-				window.removeEventListener('focus', refresh);
-				document.removeEventListener('visibilitychange', refresh);
+				clearActivityInterval(refreshTimer);
+				activityEvents(window, 'events:components/Attachments/RecordingTranscript', 'RecordingTranscript').removeEventListener('focus', refresh);
+				activityEvents(document, 'events:components/Attachments/RecordingTranscript', 'RecordingTranscript').removeEventListener('visibilitychange', refresh);
 			}
 		};
 	}, []);

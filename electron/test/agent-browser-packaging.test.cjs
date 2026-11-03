@@ -28,7 +28,7 @@ test('packaged validation rejects a missing shared driver, dependencies and runt
     await write(`app.asar/node_modules/${name}/index.js`, 'export default {};');
   }
   assert.throws(() => verifyAgentPackage(app, run), /agent-browser-runtime/);
-  for (const name of ['Dockerfile', 'runtime.cjs', 'application.cjs', 'browser-driver.cjs', 'package.json', 'package-lock.json', 'seccomp.json', 'install.mjs']) {
+  for (const name of ['Dockerfile', 'runtime.cjs', 'application.cjs', 'browser-driver.cjs', 'prepare-native.cjs', 'package.json', 'package-lock.json', 'seccomp.json', 'install.mjs']) {
     await write(`agent-browser-runtime/${name}`);
   }
   await write('agent-browser.mjs');

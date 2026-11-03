@@ -9,7 +9,7 @@ export function timelineRequestScope(scope: { ownerId: string; dataPlane: string
 /** These personal-library kinds use dedicated home writers. Timeline's own
  * records can live in either plane and must not be inferred from protection. */
 export function historyStorageForThing(thingtime?: readonly string[]): TimelineStorage {
-	return thingtime?.length === 1 && ['theme', 'feed-algorithm', 'custom-emoji', 'chat-archive', 'attachment'].includes(thingtime[0]) ? 'home' : 'selected';
+	return thingtime?.length === 1 && ['theme', 'feed-algorithm', 'custom-emoji', 'chat-archive', 'attachment', 'file'].includes(thingtime[0]) ? 'home' : 'selected';
 }
 
 export const timelineFolderHref = (folderId: string, storage: TimelineStorage) =>

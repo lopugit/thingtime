@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import React from 'react';
 import { useApi } from '../hooks/useApi';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -99,9 +100,9 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 			if (current?.verified) void current.sync.pushPending().then(count => { if (alive && active.current === current && count) window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }).catch(failure => { if (alive && active.current === current) void syncFailure(failure); });
 		};
 		const unlisten = storage === 'home' ? () => {} : listenTimelineScopeChange(() => { generation++; setEpoch(value => value + 1); forget(); stop(); setError(''); busy = false; void connect(true); });
-		window.addEventListener('online', refresh); window.addEventListener('focus', refresh); window.addEventListener(TIMELINE_CHANGED_EVENT, edited);
-		const timer = setInterval(refresh, 15_000); void connect(true);
-		return () => { alive = false; generation++; lease?.release(); lease = null; active.current = null; clearInterval(timer); unlisten(); window.removeEventListener('online', refresh); window.removeEventListener('focus', refresh); window.removeEventListener(TIMELINE_CHANGED_EVENT, edited); retry.current = async () => {}; redact.current = async () => {}; };
+		activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').addEventListener('online', refresh); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').addEventListener('focus', refresh); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').addEventListener(TIMELINE_CHANGED_EVENT, edited);
+		const timer = activityInterval('timer:timeline/TimelineProvider:1', 'Timeline updates', refresh, 15_000); void connect(true);
+		return () => { alive = false; generation++; lease?.release(); lease = null; active.current = null; clearActivityInterval(timer); unlisten(); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').removeEventListener('online', refresh); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').removeEventListener('focus', refresh); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').removeEventListener(TIMELINE_CHANGED_EVENT, edited); retry.current = async () => {}; redact.current = async () => {}; };
 	}, [user?.id, pool, storage, onDenied, expectedPlane]);
 	const scoped = timelineConnectionForViewer(connection, user?.id, expectedPlane);
 	return { storage, identity: JSON.stringify([user?.id ?? null, storage, epoch]), ownerId: user?.id ?? null, connection: scoped, error, retry: () => retry.current(), redact: failure => redact.current(failure) };

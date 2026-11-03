@@ -95,11 +95,16 @@ function runRemixScript(script, options = {}) {
   run(pnpmRunner.command, [...pnpmRunner.args, '--dir', remixDir, 'run', script], options);
 }
 
+// Mail and database staging resolve packages from Remix before its build runs.
+// Repair fresh-worktree dependency links through the shared preflight first.
+run(process.execPath, [path.join(remixDir, 'scripts/ensure-dependencies.js')]);
+
 // MCP has its own npm lockfile and is not part of the Remix pnpm workspace.
 // Install it from that lockfile before the expensive web build, including in a
 // fresh worktree where MCP/node_modules is intentionally absent.
 run(npmCommand, ['ci', '--prefix', mcpDir, '--no-audit', '--no-fund']);
 run(process.execPath, [path.join(electronDir, 'scripts/build-mail.mjs')]);
+run(process.execPath, [path.join(electronDir, 'scripts/build-database.mjs')]);
 
 await rm(stagedWebDir, { force: true, recursive: true });
 await rm(stagedAiDir, { force: true, recursive: true });
@@ -111,7 +116,7 @@ runRemixScript('build:client');
 runRemixScript('sync:nitro-template');
 runRemixScript('build:server', {
   env: {
-    NITRO_PRESET: 'node_server'
+    NITRO_PRESET: 'node_middleware'
   }
 });
 
@@ -146,7 +151,7 @@ await writeFile(
       desktopRelease: desktopReleaseMetadata.version ? desktopReleaseMetadata : null,
       gitBranch: readGitValue(['rev-parse', '--abbrev-ref', 'HEAD']),
       gitCommit: readGitValue(['rev-parse', 'HEAD']),
-      nitroPreset: 'node_server'
+      nitroPreset: 'node_middleware'
     },
     null,
     2

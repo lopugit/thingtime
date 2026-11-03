@@ -40,3 +40,17 @@ test('inventory preserves every item for paginated rendering', () => {
 	const items = Array.from({ length: 300 }, (_, i) => ({ ...row, id: `ax:42:${i}` }));
 	assert.equal(normalizeDeviceMenuBar({ ...snapshot, items })?.items.length, 300);
 });
+
+const icon = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6m0AAAAASUVORK5CYII=';
+test('owner projection carries safe PNG thumbnails and explicit provenance only',()=>{
+ const value=normalizeDeviceMenuBar({...snapshot,items:[{...row,iconDataUrl:icon,iconSource:'menu-bar'}]});
+ assert.equal(value?.items[0].iconDataUrl,icon);
+ assert.equal(value?.items[0].iconSource,'menu-bar');
+ for (const bad of [
+  {iconDataUrl:'https://remote.test/icon.png',iconSource:'application'},
+  {iconDataUrl:'data:image/svg+xml,<svg/>',iconSource:'menu-bar'},
+  {iconDataUrl:icon,iconSource:'desktop'},
+  {iconDataUrl:icon},
+  {iconSource:'application'}
+ ]) assert.equal(normalizeDeviceMenuBar({...snapshot,items:[{...row,...bad}]}),null);
+});

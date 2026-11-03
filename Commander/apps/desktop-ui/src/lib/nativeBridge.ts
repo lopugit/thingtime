@@ -73,3 +73,17 @@ export function beginWindowDrag(event: ReactMouseEvent<HTMLElement>): void {
   event.preventDefault();
   void nativeRequest('window.beginDrag').catch(() => undefined);
 }
+
+/** Double-click maximizes this native window; controls never start a drag. */
+export function beginTitlebarDrag(event: ReactMouseEvent<HTMLElement>): void {
+  if (
+    event.button !== 0 ||
+    (event.target instanceof Element &&
+      event.target.closest('input, button, a, select, textarea, [data-no-window-drag]'))
+  )
+    return;
+  if (event.detail === 2) {
+    event.preventDefault();
+    void nativeRequest('window.toggleMaximize').catch(() => undefined);
+  } else beginWindowDrag(event);
+}

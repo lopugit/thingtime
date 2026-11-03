@@ -1,4 +1,5 @@
-/** Owner-only native inventory; no executable input, image, or process arguments. */
+import { isPngThumbnail } from '../../../utils/pngThumbnail';
+/** Owner-only native inventory; no executable input or process arguments; optional 64px PNG status/app thumbnails. */
 export type DeviceMenuBarItem = {
 	id: string;
 	label: string | null;
@@ -15,6 +16,8 @@ export type DeviceMenuBarItem = {
 	height: number | null;
 	residentBytes: number | null;
 	cpuTimeSeconds: number | null;
+ iconDataUrl?: string | null;
+ iconSource?: 'menu-bar' | 'application' | null;
 };
 export type DeviceMenuBar = {
 	status: 'available' | 'partial' | 'locked' | 'collecting';
@@ -62,8 +65,11 @@ export function normalizeDeviceMenuBar(value: unknown): DeviceMenuBar | null {
 				'width',
 				'height',
 				'residentBytes',
-				'cpuTimeSeconds'
+				'cpuTimeSeconds', 'iconDataUrl', 'iconSource'
 			]) ||
+   (row.iconDataUrl != null && !isPngThumbnail(row.iconDataUrl)) ||
+   (row.iconSource != null && !['menu-bar', 'application'].includes(String(row.iconSource))) ||
+   (!!row.iconDataUrl !== !!row.iconSource) ||
 			typeof row.id !== 'string' ||
 			!row.id ||
 			ids.has(row.id) ||
@@ -88,7 +94,7 @@ export function normalizeDeviceMenuBar(value: unknown): DeviceMenuBar | null {
 			processId: row.processId as number,
 			source: row.source as DeviceMenuBarItem['source'],
 			...Object.fromEntries(
-				['label', 'bundleId', 'appPath', 'executablePath', 'visible', 'x', 'y', 'width', 'height', 'residentBytes', 'cpuTimeSeconds'].map((key) => [
+				['label', 'bundleId', 'appPath', 'executablePath', 'visible', 'x', 'y', 'width', 'height', 'residentBytes', 'cpuTimeSeconds', 'iconDataUrl', 'iconSource'].map((key) => [
 					key,
 					row[key] ?? null
 				])
