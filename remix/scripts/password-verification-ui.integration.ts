@@ -11,6 +11,7 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
  const origin='http://127.0.0.1:18090';
  const passwords=await load('routes/api/v1/passwords/_passwords.tsx'),things=await load('routes/api/v1/things/_things.tsx'),login=await load('routes/api/v1/login/_login.tsx'),resolvePage=await load('routes/api/v1/webpages/resolve/_resolve.tsx'),capabilities=await load('api/utils/capabilities/thingtimeCapabilities.ts');
  const longUser='long-username-'.repeat(18)+'@example.invalid';
+ const websiteId=crypto.randomUUID();await invoke({operation:'save',id:websiteId,writeId:crypto.randomUUID(),revision:0,entry:{title:'Website fallback fixture',passwordType:'login',fields:[{id:'username',label:'Username',type:'text',value:'website-fixture@example.invalid'},{id:'first',label:'Website',type:'url',value:'https://no-icon.example.invalid/private?token=synthetic'},{id:'second',label:'Website',type:'url',value:'https://github.com/private?token=synthetic'}]}});
  await invoke({operation:'save',id:crypto.randomUUID(),writeId:crypto.randomUUID(),revision:0,entry:{title:'Long username login',passwordType:'login',fields:[{id:'username',label:'Username',type:'text',value:longUser}]}});
  await invoke({operation:'save',id:crypto.randomUUID(),writeId:crypto.randomUUID(),revision:0,entry:{title:'No username fixture',passwordType:'secure-note',fields:[]}});
  let heldSettings:{enter:()=>void;gate:Promise<void>}|null=null,releaseHeld=()=>{};
@@ -48,6 +49,20 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
   await page.getByText('Isolated login',{exact:true}).waitFor();
   await page.getByText(longUser,{exact:true}).waitFor();await page.getByText('No username or email saved',{exact:true}).waitFor();
   await page.getByRole('checkbox',{name:'Reuse recent device verification'}).waitFor();
+  // Actual saved fields → owner API → anonymous public probe → decoded PNG →
+  // editable card image. No third-party favicon lookup or personal browser.
+  const websiteCard=page.getByRole('button',{name:/^Website fallback fixture /});await websiteCard.scrollIntoViewIfNeeded();
+  await websiteCard.locator('img').waitFor();try{await websiteCard.locator('img[src^="data:image/png;base64,"]').waitFor();}catch(error){await page.screenshot({path:`${output}/website-icon-failure.png`,fullPage:true});console.log('Icon render diagnostic',await websiteCard.locator('img').evaluate((img:HTMLImageElement)=>({src:img.getAttribute('src'),complete:img.complete,width:img.naturalWidth})));throw error;}
+  // Reconciliation may cancel a view's first request after headers. Compare the
+  // displayed thumbnail with a fresh, independently completed canonical API read.
+  const response=await context.request.post(origin+'/api/v1/passwords',{headers:{Origin:origin},data:{operation:'website-icon',expectedOwnerId:ownerId,id:websiteId,revision:1}});
+  assert.equal(response.status(),200,'Second saved Website supplies a real public icon');
+  const imageBytes=Buffer.from(await response.body());assert.ok(imageBytes.length>0,'Independent API response has image bytes');assert.equal(response.headers()['content-type'],'image/png');assert.equal(response.headers()['cache-control'],'private, no-store');
+  const expectedHash=Buffer.from(await crypto.subtle.digest('SHA-256',Uint8Array.from(imageBytes))).toString('hex');
+  const rendered=await websiteCard.locator('img').evaluate(async(img:HTMLImageElement)=>{await img.decode();const bytes=await(await fetch(img.src)).arrayBuffer();return{width:img.naturalWidth,height:img.naturalHeight,hash:Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),value=>value.toString(16).padStart(2,'0')).join('')};});
+  assert.deepEqual(rendered,{width:64,height:64,hash:expectedHash},'Actual displayed bytes match owner-bound icon response');
+  await writeFile(`${output}/website-icon.json`,JSON.stringify({...rendered,expectedHash,firstSiteFailed:true,secondSiteSucceeded:true}));await websiteCard.screenshot({path:`${output}/website-icon-desktop.png`});
+
   const contrast=async()=>{
    const values=await page.locator('[data-settings-document="password-preview-cards"] [data-block-id="pp-username"], [data-settings-document="password-preview-cards"] [data-block-id="pp-type"]').evaluateAll((elements:Element[])=>elements.map(element=>{
     const style=getComputedStyle(element);let parent:Element|null=element,background='';
@@ -111,7 +126,7 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
   // Recreate the previously shipped saved layout through the real writer.
   const savedPage=(await(await savedLayout).json()).thing;
   const previousBlocks=structuredClone(savedPage.crystal.blocks);
-  const restorePreviousColor=(blocks:any[])=>{for(const block of blocks){if(block.id==='pp-username'||block.id==='pp-type')block.css={...block.css,color:'var(--tt-muted, #6b7280)'};if(block.children)restorePreviousColor(block.children);}};
+  const restorePreviousColor=(blocks:any[])=>{for(const block of blocks){if(block.id==='pp-username'||block.id==='pp-type')block.css={...block.css,color:'var(--tt-muted, #6b7280)'};if(block.id==='pp-icon')block.css={width:'32px',height:'32px','object-fit':'contain','flex-shrink':'0'};if(block.children)restorePreviousColor(block.children);}};
   restorePreviousColor(previousBlocks);
   const previousLayout=await context.request.patch(origin+'/api/v1/things',{headers:{Origin:origin},data:{id:savedPage.id,expectedUpdatedAt:savedPage.updatedAt,crystal:{...savedPage.crystal,blocks:previousBlocks}}});assert.equal(previousLayout.status(),200);
 
@@ -120,6 +135,14 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
   await page.reload();await page.getByText('Account: fixture@example.invalid',{exact:true}).waitFor();
   assert.equal(await page.locator('[data-block-id="pp-icon"]').first().getAttribute('title'),'Credential icon');
   await applyTheme(THINGTIME_THEME);await contrast();await inspect('migrated-saved-layout-narrow');
+  const iconStyle=await page.locator('[data-block-id="pp-icon"]').first().evaluate((img:HTMLElement)=>({background:getComputedStyle(img).backgroundColor,padding:getComputedStyle(img).padding,width:img.getBoundingClientRect().width,height:img.getBoundingClientRect().height}));
+  assert.deepEqual(iconStyle,{background:'rgb(255, 255, 255)',padding:'3px',width:32,height:32},'Existing default icons gain a backplate within the same footprint');
+  const lastSaved=(await previousLayout.json()).thing,customBlocks=structuredClone(lastSaved.crystal.blocks);
+  const customizeIcons=(blocks:any[])=>{for(const block of blocks){if(block.id==='pp-icon')block.css={...block.css,background:'#f6e6ff',padding:'5px','border-radius':'6px','box-sizing':'border-box'};if(block.children)customizeIcons(block.children);}};customizeIcons(customBlocks);
+  const customSaved=await context.request.patch(origin+'/api/v1/things',{headers:{Origin:origin},data:{id:lastSaved.id,expectedUpdatedAt:lastSaved.updatedAt,crystal:{...lastSaved.crystal,blocks:customBlocks}}});assert.equal(customSaved.status(),200);
+  await page.reload();await page.waitForFunction(()=>{const icon=document.querySelector('[data-settings-document="password-preview-cards"] [data-block-id="pp-icon"]');return icon&&getComputedStyle(icon).backgroundColor==='rgb(246, 230, 255)';});
+  assert.equal(await page.locator('[data-block-id="pp-icon"]').first().evaluate((img:HTMLElement)=>getComputedStyle(img).padding),'5px','Saved authored icon style survives migration and reload');
+
   const preferences=page.locator('[data-settings-document="password-verification-default"]');
   await preferences.getByRole('button',{name:'Edit layout',exact:true}).click();
   await preferences.locator('[data-block-id="pv-reuse"]').last().click();

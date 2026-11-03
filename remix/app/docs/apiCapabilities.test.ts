@@ -736,13 +736,16 @@ test('range programs require the additive owned-boundary contract', () => {
 
  test('password manager registers its live route and version on both discovery manifests', () => {
   const doc = apiEndpointDocs.find(doc => doc.id === 'passwords');
-  assert.equal(doc?.featureVersion, '1.5.0');
+  assert.equal(doc?.featureVersion, '1.6.0');
   assert.deepEqual(doc?.methods, ['GET', 'POST']);
-  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.5.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.5.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.6.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.6.0');
   assert.equal(typeof routeModules['v1/passwords'], 'function');
   for (const version of ['1.5.0', '1.5.1', '1.6.0']) assert.equal(capabilitySatisfies(version, '1.5.0'), true);
   for (const version of [undefined, '1.4.0', '1.4.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.5.0'), false);
+  for (const version of ['1.6.0', '1.6.1', '1.7.0']) assert.equal(capabilitySatisfies(version, '1.6.0'), true);
+  for (const version of [undefined, '1.5.0', '1.5.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.6.0'), false);
+  assert.match(doc?.detail || '', /website-icon/);
   assert.match(doc?.detail || '', /verification-settings/);
   assert.match(doc?.detail || '', /reuseRecentDeviceVerification/);
  });

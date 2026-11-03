@@ -13747,3 +13747,72 @@ separate from deterministic discovery/lease tests.
   default muted colors upgrade, while authored colors/text/styles and deleted
   subtitle blocks survive save/reload. Extension account subtitles must also meet
   AA on their actual light/dark card backgrounds.
+
+
+### Password preview Website icons
+
+- Save two Website/URL fields: first missing/broken icon, second usable public
+  icon. Verify the second supplies the actual decoded image at desktop/narrow,
+  reload without resaving, and compare displayed bytes with the owner API image
+  response. Reorder Website fields and save; the new first usable site wins.
+- Keep an uploaded/manual icon as override; remove it and save to return to
+  automatic lookup. With no usable site, keep the tree. Edit the icon block
+  independently; deleting it must stop automatic lookups. Preserve custom help
+  text/styles through exact-old-default copy migration.
+- Concealed/secret/structured fields never participate. Preview JSON exposes only
+  the boolean hint, not Website values. Probe requests strip saved paths/queries;
+  credential-bearing URLs, private/mixed DNS, DNS failures and unsafe redirects
+  must not cause outbound private requests. Verify the socket lookup uses the
+  checked address with normal TLS identity and sends no cookies/auth/referrer.
+- Test a MIME-mislabelled SVG behind whitespace/XML/comments with external
+  file/network references. Only sanitized self-contained vectors may reach SVG
+  rendering; only admitted raster signatures may reach the raster decoder.
+- Hold a lookup, change entry revision/account/session or revoke while the
+  initial decrypted read waits: refuse stale image delivery and do not start any
+  next lookup after observed revocation. Shared same-entry requests must dedupe,
+  independent consumers must survive a peer cancellation, and old owner/origin/
+  revision caches must never paint into the new account. Ordinary1.5 operations
+  still work when automatic1.6 icon negotiation fails.
+- `test:passwords:verification-ui` adds an anonymous public-site icon case to its
+  disposable real API/isolated Chrome runner (no personal profile). Its public
+  HTTPS fixture requires normal network access; unit suites independently cover
+  deterministic failure order, safe decode and transport/session fences.
+
+- Loaded password card images must use the existing bounded PNG thumbnail wire
+  format through the ordinary editable HTML image block. Assert actual img src,
+  decoded dimensions and response-byte hash (not merely API success). Arbitrary
+  blob/data schemes remain rejected by generic saved markup; malformed signatures/dimensions and non-PNG
+  thumbnail sources are refused, and the adapter decoder rejects corrupt bytes. Browser decoding/cancellation and
+  account/origin/revision cleanup still fence transient image state.
+- In dark 375px and desktop/light views, inspect a transparent dark favicon on
+  the default light backplate. Its padded/radiused image stays 32px wide/high.
+  Reload an older saved default style, then save a custom background/padding:
+  migrate the unchanged default only and preserve the custom style on reload.
+
+### Browser extension account connection
+
+See [the account connection contract](docs/browser-extension-accounts.md) for
+the isolated real-API/browser command and the metadata-only session boundary.
+
+- Open the workspace with an existing Thingtime sign-in and no selected website.
+  Show its profile and saved accounts automatically; enable browsing and refresh
+  while leaving Autofill unavailable until a matching website is selected.
+- Start signed out, use Sign in and Add account through the inline canonical
+  account surface, then switch between two accounts and sign out of all accounts.
+  Keep the owned account route and explain that switching also changes the
+  browser's Thingtime web account. Never copy cookies or session tokens.
+- Delay account-change notifications and fail the new account's catalog request.
+  Clear the old owner's entries before showing the new profile; a same-owner
+  refresh failure may preserve its existing entries with a visible retry state.
+  Failed cold discovery must not leave a permanent loading state.
+- Lock, change the configured origin and restart the extension service worker.
+  Keep discovery, suggestions and approval admission locked until explicit Unlock.
+  Account changes must terminate pending website requests with a retryable message.
+- Use Return to Thingtime workspace from its owned popup. Focus the recorded
+  extension window only; do not select a guessed website tab. Retain the popup
+  when it is the only verified live catalog bridge, or when edits/password input
+  would be discarded. Repeat after service-worker restoration.
+- At desktop and narrow widths, scroll through all content and open the account
+  controls. In Builder, edit the heading and session notice independently, save
+  and reload. Preserve account controls, responsive layout and existing workspace
+  size/font preferences. Installed personal-profile acceptance is a separate check.

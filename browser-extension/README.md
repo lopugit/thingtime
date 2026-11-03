@@ -227,3 +227,13 @@ QR PNGs under `test/fixtures/` encode a public RFC 6238 test vector, not a user
 credential. Fixture API responses are not proof of real server authorization,
 OS acceptance or a site's login outcome; those require separate integration and
 installed-release checks.
+
+## Thingtime accounts
+
+Version 0.4 adds automatic discovery of already signed-in accounts on the exact
+Thingtime origin in Config. With no eligible open page, **Sign in** opens an owned
+Thingtime account window; **Add account** and **Switch account** reuse the existing
+first-party account switcher. Switching also changes this browser's Thingtime web
+tabs. **Lock** clears the extension connection without signing your account out. **Unlock** reuses its live session and preserves the configured verification policy.
+No account cookies or session tokens are copied into the extension. See
+[the account bridge contract](../docs/browser-extension-accounts.md).
