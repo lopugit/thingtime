@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {mkdir,readFile} from 'node:fs/promises';
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
+import {THINGTIME_THEME,MIDNIGHT_THEME,themeToCssVars} from '../app/theme/tokens';
 /** Real disposable API + actual components. Never attaches to a personal browser. */
 export async function runPasswordVerificationUI({vite,load,ownerId,username,password,invoke}:any){
  if(!process.env.THINGTIME_TEST_PLAYWRIGHT_MODULE)throw new Error('Set THINGTIME_TEST_PLAYWRIGHT_MODULE to the installed Playwright index.mjs; use PLAYWRIGHT_BROWSERS_PATH to reuse its browser binary cache.');
@@ -47,7 +48,22 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
   await page.getByText('Isolated login',{exact:true}).waitFor();
   await page.getByText(longUser,{exact:true}).waitFor();await page.getByText('No username or email saved',{exact:true}).waitFor();
   await page.getByRole('checkbox',{name:'Reuse recent device verification'}).waitFor();
-  await inspect('manager-desktop');
+  const contrast=async()=>{
+   const values=await page.locator('[data-settings-document="password-preview-cards"] [data-block-id="pp-username"], [data-settings-document="password-preview-cards"] [data-block-id="pp-type"]').evaluateAll((elements:Element[])=>elements.map(element=>{
+    const style=getComputedStyle(element);let parent:Element|null=element,background='';
+    while(parent){background=getComputedStyle(parent).backgroundColor;if(background!=='rgba(0, 0, 0, 0)'&&background!=='transparent')break;parent=parent.parentElement;}
+    return{foreground:style.color,background};
+   }));
+   const luminance=(color:string)=>{const rgb=color.match(/[\d.]+/g)!.slice(0,3).map(Number).map(value=>{const c=value/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;});return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;};
+   assert.ok(values.length>=4,'Rendered account and type subtitles measured');const measured=values.map(value=>{const a=luminance(value.foreground),b=luminance(value.background);return{...value,ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};});for(const value of measured)assert.ok(value.ratio>=4.5,JSON.stringify(value));return measured[0];
+  };
+  const applyTheme=async(theme:typeof THINGTIME_THEME)=>{await page.evaluate((vars:Record<string,string>)=>{for(const[key,value]of Object.entries(vars))document.documentElement.style.setProperty(key,value);document.body.style.color='var(--tt-text)';document.body.style.background='var(--tt-page-bg)';},themeToCssVars(theme));};
+  const contrastEvidence:unknown[]=[];
+  for(const[name,theme]of [['light',THINGTIME_THEME],['dark',MIDNIGHT_THEME]] as const){
+   await applyTheme(theme);for(const width of [1280,375]){await page.setViewportSize({width,height:812});contrastEvidence.push({theme:name,width,...await contrast()});await inspect(`manager-${name}-${width}`);}
+  }
+  await writeFile(`${output}/card-contrast.json`,JSON.stringify(contrastEvidence,null,2));
+  await applyTheme(THINGTIME_THEME);await page.setViewportSize({width:1280,height:900});await inspect('manager-desktop');
   await page.setViewportSize({width:375,height:812});await inspect('manager-narrow');
   await page.getByRole('combobox',{name:'Password confirmation interval',exact:true}).selectOption('never');
   await page.getByRole('button',{name:'Save preference',exact:true}).click();await page.getByText('Preference saved. Only a successful current password approval can enroll this device.').waitFor();
@@ -92,10 +108,18 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
   await page.getByRole('button',{name:'Close builder',exact:true}).click();
   const savedLayout=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/things'&&response.request().method()==='POST');
   await cards.getByRole('button',{name:'Save layout',exact:true}).click();assert.equal((await savedLayout).status(),200);
+  // Recreate the previously shipped saved layout through the real writer.
+  const savedPage=(await(await savedLayout).json()).thing;
+  const previousBlocks=structuredClone(savedPage.crystal.blocks);
+  const restorePreviousColor=(blocks:any[])=>{for(const block of blocks){if(block.id==='pp-username'||block.id==='pp-type')block.css={...block.css,color:'var(--tt-muted, #6b7280)'};if(block.children)restorePreviousColor(block.children);}};
+  restorePreviousColor(previousBlocks);
+  const previousLayout=await context.request.patch(origin+'/api/v1/things',{headers:{Origin:origin},data:{id:savedPage.id,expectedUpdatedAt:savedPage.updatedAt,crystal:{...savedPage.crystal,blocks:previousBlocks}}});assert.equal(previousLayout.status(),200);
+
   await cards.getByRole('button',{name:'Done editing layout',exact:true}).click();
   await page.getByText('Account: fixture@example.invalid',{exact:true}).waitFor();
   await page.reload();await page.getByText('Account: fixture@example.invalid',{exact:true}).waitFor();
   assert.equal(await page.locator('[data-block-id="pp-icon"]').first().getAttribute('title'),'Credential icon');
+  await applyTheme(THINGTIME_THEME);await contrast();await inspect('migrated-saved-layout-narrow');
   const preferences=page.locator('[data-settings-document="password-verification-default"]');
   await preferences.getByRole('button',{name:'Edit layout',exact:true}).click();
   await preferences.locator('[data-block-id="pv-reuse"]').last().click();
