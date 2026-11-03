@@ -384,7 +384,7 @@ test('password icon projection remains optional and retains its typed source cho
 
 test('password verification device is a protected zero-field marker with no public proof projection', () => {
   const schema = crystalSchemas.find(schema => schema.id === 'password-verification-device')!;
-  assert.ok(PROTECTED_THINGTIME.includes(schema.id));
+  assert.ok(PROTECTED_THINGTIME.includes('password-verification-device'));
   assert.equal(isProtectedThingtime([schema.id]), true);
   assert.equal(isProtectedThingtime(['data', schema.id]), true);
   assert.equal(schema.collection, null);
