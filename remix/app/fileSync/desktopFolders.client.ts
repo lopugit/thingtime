@@ -66,7 +66,7 @@ export async function createDesktopFolderHost(input: {
 	rendererOrigin(): string;
 	assertCurrent(): void;
 	fetch?: typeof fetch;
-	resourcePolicy?: { resourceLimits: import('./configuration').FileSyncResourceLimits; resourceScope: string; observe(value: import('./resourceGovernor').SyncResourceStatus): void };
+	resourcePolicy?: { resourceLimits?: import('./configuration').FileSyncResourceLimits; deviceResourceLimits?: () => import('./deviceResourcePolicy').DeviceSyncResourcePolicy; resourceScope: string; observe(value: import('./resourceGovernor').SyncResourceStatus): void };
 }): Promise<FolderHost> {
 	const invoke = input.bridge.folderSyncRequest,
 		ownerId = input.ownerId,
@@ -83,9 +83,9 @@ export async function createDesktopFolderHost(input: {
 		check();
 		signal.throwIfAborted();
 		const payload = structuredClone(request);
-		if ('rootId' in payload && input.resourcePolicy) Object.assign(payload, { resourceLimits: input.resourcePolicy.resourceLimits, resourceScope: input.resourcePolicy.resourceScope });
+		if ('rootId' in payload && input.resourcePolicy) Object.assign(payload, { ...(input.resourcePolicy.resourceLimits ? { resourceLimits: input.resourcePolicy.resourceLimits, resourceScope: input.resourcePolicy.resourceScope } : {}), ...(input.resourcePolicy.deviceResourceLimits ? { deviceResourceLimits: input.resourcePolicy.deviceResourceLimits() } : {}) });
 		const expected = { requestId: crypto.randomUUID(), ownerId, deviceId, ...(origin ? { origin } : {}) };
-		const pacedPayload = syncRequestHasPacing(payload.action, input.resourcePolicy?.resourceLimits ?? ('batch' in payload ? payload.batch.descriptor.configuration.configuration.resourceLimits : undefined));
+		const pacedPayload = syncRequestHasPacing(payload.action, input.resourcePolicy?.resourceLimits ?? ('batch' in payload ? payload.batch.descriptor.configuration.configuration.resourceLimits : undefined) ?? { uploadBytesPerSecond: 625000, downloadBytesPerSecond: 625000, cpuPercent: 15 });
 		const combined = AbortSignal.any([input.signal, signal, ...(pacedPayload ? [] : [AbortSignal.timeout(300_000)])]);
 		return await new Promise<any>((resolve, reject) => {
 			let dispatched = false;

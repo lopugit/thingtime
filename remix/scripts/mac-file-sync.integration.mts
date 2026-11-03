@@ -26,6 +26,8 @@ import { readCloudPathEntry } from '../app/fileSync/cloudPath.client';
 import { createCloudSyncPort } from '../app/fileSync/cloudSyncPort.client';
 import { fingerprintSource } from '../app/fileSync/contentFingerprint';
 import { capabilitySatisfies } from '../app/api/utils/capabilities/capabilityContract';
+import { parseTimelineEntry } from '../app/timeline/contract';
+import { timelineFileVersion, fileRestoreCommand, checkFileRestoreReceipt, fileContentId } from '../app/fileSync/fileVersions';
 import type { CloudTransportRuntime } from '../app/fileSync/cloudTransport';
 
 const { FolderStream } = createRequire(import.meta.url)('../../electron/lib/folder-stream.cjs');
@@ -615,6 +617,41 @@ try {
 		assert.ok(nativePages > 0 && cloudPages > 0);
 	}
 
+	// Join the real native edit and cloud publication paths to the exact same
+	// historical version/restore contract used by History. A cloud-only restore
+	// is insufficient: the next two-way pass must put those bytes back on disk.
+	assert.ok(capabilitySatisfies(manifest.features['api.timeline']?.version, '1.6.0'));
+	const originalLocal = oldInventory.nodes.find(node => node.path === 'local.bin');
+	assert.ok(originalLocal?.kind === 'file');
+	const currentLocal = (await inventory()).nodes.find(node => node.path === 'local.bin');
+	assert.ok(currentLocal?.kind === 'file');
+	const timeline = async (): Promise<import('../app/timeline/contract').TimelineEntry[]> => {
+		const result = await api('/api/v1/timeline?' + new URLSearchParams({ ownerId: fixture.userId, dataPlane: 'home', thingId: currentLocal.file.id }));
+		return result.entries.map(parseTimelineEntry);
+	};
+	const history = await timeline();
+	const historical = history.map(entry => timelineFileVersion(entry.event, 'after')).find(file => file?.revision === originalLocal.file.revision);
+	assert.ok(historical, 'The original native upload must be a selectable Timeline file version');
+	assert.ok(history.some(entry => timelineFileVersion(entry.event, 'after')?.revision === currentLocal.file.revision), 'The later edit must appear in the same file Timeline');
+	assert.equal(historical.id, currentLocal.file.id);
+	assert.notEqual(fileContentId(historical), fileContentId(currentLocal.file));
+	const restore = fileRestoreCommand(currentLocal.file, historical, randomUUID());
+	loseCloud = true;
+	await assert.rejects(api('/api/v1/files', restore), /Lost accepted cloud commit/);
+	const historyRestoreReceipt = await api('/api/v1/files', JSON.parse(JSON.stringify(restore)));
+	assert.equal(historyRestoreReceipt.replayed, true);
+	await checkFileRestoreReceipt(historyRestoreReceipt.file, restore, historical, fixture.userId);
+	assert.equal((await timeline()).filter(entry => entry.event.operationId === restore.operationId).length, 1, 'Lost restore reply must not duplicate Timeline publication');
+	await stopNative(); journal.close(); journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange); await startNative();
+	await run();
+	const afterHistoryRestore = await verifyBytes({ 'local.bin': localBytes, 'remote.bin': editedRemote });
+	assert.equal(afterHistoryRestore.find(node => node.path === 'local.bin')!.id, historical.id);
+	assert.equal(afterHistoryRestore.find(node => node.path === 'local.bin')!.revision, historyRestoreReceipt.file.revision);
+	const transfersAfterRestore = { ...counts };
+	await run();
+	assert.deepEqual(await verifyBytes({ 'local.bin': localBytes, 'remote.bin': editedRemote }), afterHistoryRestore);
+	assert.deepEqual(counts, transfersAfterRestore, 'A converged historical restore must not upload, stage or publish again');
+
     // Fresh path observations distinguish a missing name from an old object's
     // missing id. Recreate the same nested path with two new stable identities.
     const pathProbe = 'path-check-' + randomUUID(), probeIds: string[] = [];
@@ -741,6 +778,9 @@ try {
 				'stable-convergence',
 				'independent-replacements',
 				'retained-cloud-versions',
+				'native-edit-timeline-history-and-restore',
+				'lost-history-restore-reply-exact-replay',
+				'history-restore-download-after-native-restart',
 				'fresh-cloud-path-replacement-and-alias-checks',
 				'revocation'
 			],

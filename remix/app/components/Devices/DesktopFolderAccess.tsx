@@ -1,3 +1,4 @@
+import { DeviceSyncResources } from './DeviceSyncResources';
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { Box, Button, FormControl, FormLabel, Select, Text } from '@chakra-ui/react';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -15,13 +16,15 @@ export function DesktopFolderAccess({
 	pairedDeviceIds,
 	ownedDeviceIds,
 	deviceId: selectedDeviceId,
-	active = true
+	active = true,
+ showResourceSummary = true
 }: {
 	ownerId: string;
 	pairedDeviceIds: readonly string[];
 	ownedDeviceIds: readonly string[];
 	deviceId?: string;
 	active?: boolean;
+ showResourceSummary?: boolean;
 }) {
 	const user = useCurrentUser(),
 		dataPlane = useDataPlane();
@@ -42,6 +45,7 @@ export function DesktopFolderAccess({
 	return (
 		<DeviceFolders
 			active={active}
+   showResourceSummary={showResourceSummary}
 			key={JSON.stringify([ownerId, candidates, identity.generation])}
 			ownerId={ownerId}
 			candidates={candidates}
@@ -49,11 +53,12 @@ export function DesktopFolderAccess({
 		/>
 	);
 }
-function DeviceFolders({ ownerId, candidates, generation, active }: { ownerId: string; candidates: string[]; generation: number; active: boolean }) {
+function DeviceFolders({ ownerId, candidates, generation, active, showResourceSummary }: { ownerId: string; candidates: string[]; generation: number; active: boolean; showResourceSummary: boolean }) {
 	const [choice, setChoice] = useState('');
 	const deviceId = candidates.length === 1 ? candidates[0] : candidates.includes(choice) ? choice : '';
 	return (
 		<Box border="1px solid var(--tt-border, #ececef)" borderRadius="12px" padding={4} minWidth={0}>
+   {showResourceSummary && deviceId ? <DeviceSyncResources ownerId={ownerId} deviceId={deviceId} allowed={active} /> : null}
 			<Text fontWeight={700} fontSize="14px">
 				Folders on this Mac
 			</Text>

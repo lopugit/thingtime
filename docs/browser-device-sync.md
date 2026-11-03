@@ -99,3 +99,23 @@ metadata. It does not enter public manifests or grant parent-directory access.
 Clients must keep it separate from executable root-relative file paths. Missing
 metadata leaves an explicit cloud destination choice available; existing saved
 connection destinations are never automatically moved or retargeted.
+
+### Device-wide resource status and policy
+
+Control contract `api.devices-sync-control` 1.2.0 adds rootless
+`{ action: "resources", operation: "read" }` and
+`{ action: "resources", operation: "save", deviceResourceLimits }` commands.
+Policy contains positive `transferBytesPerSecond` and `scanBytesPerSecond`,
+plus integer `cpuPercent` from 1 to 100. The selected Mac requires
+`fileAccessVersion` 1.16.0 and `fileResourceLimitsVersion` 1.1.0. These commands
+work while connections are paused, require current owner/device authorization,
+and neither grant filesystem roots nor start transfers. Saves retain one
+immutable request identity across uncertain replies.
+
+The existing status heartbeat supplies optional `resourceUsage` with the
+selected device's policy and current measurements. The overview and connection
+manager share one coalesced, paged session qualified by account, origin, device
+and identity generation. It stops while hidden or unused and discards old
+identity measurements. Missing CPU, memory or throughput measurements stay
+unavailable; a viewing browser's preferences are never saved as remote policy.
+Older origins retain ordinary 1.0.0 controls and optional 1.1.0 source paths.

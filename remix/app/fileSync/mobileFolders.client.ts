@@ -1,3 +1,4 @@
+import { parseDeviceSyncResourcePolicy } from './deviceResourcePolicy';
 import { syncRequestHasPacing, parseSyncResourceStatus, type SyncResourceStatus } from './resourceGovernor';
 import { parseNativeFolderBatchResult } from './folderBatch';
 import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './streamingIndex';
@@ -48,12 +49,12 @@ export type MobileFolder = {
 export type MobileStageRequest = { scope: SyncScope; rootId: string; operation: SyncOperation };
 export type MobileTrashRequest = MobileStageRequest & LocalTrashContext;
 export type MobileWriteApproval = { scope: SyncScope; configurationRevision: string; configurationHash: string; allowTrash?: boolean };
-export type FolderRequest = { resourceLimits?: import('./configuration').FileSyncResourceLimits; resourceScope?: string } & (
+export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePolicy').DeviceSyncResourcePolicy; resourceLimits?: import('./configuration').FileSyncResourceLimits; resourceScope?: string } & (
 	| { action: 'validate-folder-batch'; rootId: string; batch: Omit<import('./folderBatch').NativeFolderBatchInput, 'remainingMs'>; remainingMs: number }
 	| { action: 'upload-batch'; rootId: string; batch: import('./uploadBatch').NativeUploadBatchInput }
 	| { action: 'upload-file'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
-	| { action: 'list' | 'choose' | 'conditions' | 'prepare-upload' }
+	| { action: 'list' | 'choose' | 'conditions' | 'resources' | 'prepare-upload' }
 	| { action: 'remove'; rootId: string }
 	| { action: 'scan'; rootId: string; excludedPaths?: string[]; ignoreRules?: string }
 	| { action: 'scan-stream'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; ignoreRules?: string; capturePolicy: 'one-way-supported' }
@@ -89,6 +90,7 @@ export type FolderRequest = { resourceLimits?: import('./configuration').FileSyn
 	  }
 );
 export type FolderResult = {
+	deviceResourceLimits?: import('./deviceResourcePolicy').DeviceSyncResourcePolicy;
 	resources?: SyncResourceStatus;
 	uploadedBatch?: import('./uploadBatch').NativeUploadBatchResult;
 	validatedFolderBatch?: import('./folderBatch').NativeFolderBatchResult;
@@ -342,6 +344,7 @@ export function parseMobileFolderResult(
 		}))
 	};
 	if (payload.resources !== undefined) result.resources = parseSyncResourceStatus(payload.resources);
+	if (request.action === 'resources' && payload.deviceResourceLimits !== undefined) result.deviceResourceLimits = parseDeviceSyncResourcePolicy(payload.deviceResourceLimits);
 	if (request.action === 'validate-folder-batch') {
 		if (payload.rootId !== request.rootId || request.rootId !== request.batch.descriptor.configuration.configuration.localRootId) throw Error('Folder batch source root changed.');
 		result.validatedFolderBatch = parseNativeFolderBatchResult(payload.validatedFolderBatch, { ...request.batch, remainingMs: request.remainingMs });

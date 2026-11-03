@@ -131,6 +131,16 @@ try {
    await page.getByRole('button', { name: 'Pause sync', exact: true }).first().click();
    await page.waitForFunction(() => window.remoteSyncFixture.state().status.task?.active === false);
    await page.screenshot({ path: join(evidence, `${label}-remote-paused.png`), fullPage: true });
+   await page.getByText('Device resource targets', { exact: true }).click();
+   await page.getByRole('spinbutton', { name: 'CPU target (%)', exact: true }).fill('12');
+   await page.getByRole('button', { name: 'Save device targets', exact: true }).click();
+   await page.waitForFunction(() => window.remoteSyncFixture.state().status.resourceUsage.deviceResourceLimits.cpuPercent === 12);
+   state = await page.evaluate(() => window.remoteSyncFixture.state());
+   assert.equal(state.status.task.active, false, 'saving selected-device policy must not resume paused sync');
+   assert.equal(state.commands.filter(command => command.action === 'resources' && command.operation === 'save').length, 1);
+   assert.deepEqual(await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('tt-device-sync-resources-v1:'))), [], 'remote policy must never become a viewer-local preference');
+   await page.screenshot({ path: join(evidence, `${label}-remote-resource-policy.png`), fullPage: true });
+   await page.getByText('Device resource targets', { exact: true }).click();
    const recovery = page.locator('summary').filter({ hasText: /^Recover device files$/ }).locator('..');
    await recovery.locator('summary').first().click();
    await recovery.getByRole('combobox', { name: 'Device folder', exact: true }).selectOption('local-documents');

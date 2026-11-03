@@ -10949,6 +10949,12 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [x] Long names and content IDs fit 390px and 1280px browser layouts without overflow.
 - [x] Real API acceptance: serialized restore replay, original/current byte hashes,
   permission failures and canonical Timeline snapshots (`file-versions.integration.mts`).
+- [x] Joined Mac adapter + real HTTP acceptance: edit a native file, select its
+  original Timeline version, lose the accepted restore reply and retry exactly,
+  restart the native adapter, then sync and independently hash original local and
+  cloud bytes. Verify one restore event, stable File identity and no additional
+  transfers after convergence (`mac-file-sync.integration.mts`, paged/large-file
+  lane). This test uses injected picker/consent; it does not verify installed UI.
 - [x] Installed Android History/export/restore acceptance (checkpoints below).
 - [ ] Installed iOS and Mac History/download/restore acceptance; local device
   retained-version browsing and content-ID search across folders.

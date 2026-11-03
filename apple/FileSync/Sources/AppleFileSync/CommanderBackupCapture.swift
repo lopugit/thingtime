@@ -14,6 +14,7 @@ extension MobileFolderReader {
         let resourceLimits: Limits
         let resourceFeedback: Bool
         let cpuBudgetShares: Int
+        let scanBytesPerSecond: Double?
         struct Limits: Encodable {
             let maxThreads: Int, maxParallelism: Int, maxOpenDirectories: Int
             let maxCpuPercent: Int, maxMemoryMiB = 512
@@ -62,7 +63,7 @@ extension MobileFolderReader {
                 }
             }
             let request = CommanderRequest(streaming: streaming ? true : nil, root: String(cString: path), rootIdentity: "\(rootInfo.st_dev):\(rootInfo.st_ino)",
-                excludedPaths: exclusions, ignoreRules: rules.text, resourceLimits: .init(resourceLimits), resourceFeedback: resourceLimits != nil, cpuBudgetShares: resourceLimits?.cpuPercent == nil ? 1 : 3)
+                excludedPaths: exclusions, ignoreRules: rules.text, resourceLimits: .init(resourceLimits), resourceFeedback: resourceLimits != nil, cpuBudgetShares: resourceLimits?.cpuPercent == nil ? 1 : 3, scanBytesPerSecond: SyncScanContext.helperBytesPerSecond)
             var requestData = try JSONEncoder().encode(request); requestData.append(10)
             try input.fileHandleForWriting.write(contentsOf: requestData)
             if !streaming { try input.fileHandleForWriting.close() }

@@ -113,3 +113,13 @@ test('source locations roundtrip only in encrypted owner/device/pairing-bound st
  f.credentials[0].jti = 'new-pairing';
  assert.equal((await f.call({ action: 'read', requestId: 'request' })).ok, false);
 });
+
+test('resource policy commands remain owner/device/lease bound and reject malformed measurements', async () => {
+ const f = fixture(), deviceResourceLimits = { transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 };
+ await f.enqueue('resource', { action: 'resources', operation: 'save', deviceResourceLimits });
+ assert.equal((await f.call({ action: 'poll' }, 'foreign') as any).status, 404);
+ const { command } = await f.call({ action: 'poll' }) as any;
+ assert.equal((await f.call({ action: 'complete', requestId: 'resource', leaseId: command.leaseId, result: { deviceResourceLimits, roots: ['grant'] } }) as any).status, 400);
+ const result = await f.call({ action: 'complete', requestId: 'resource', leaseId: command.leaseId, result: { deviceResourceLimits } }) as any;
+ assert.deepEqual(result.result, { deviceResourceLimits });
+});

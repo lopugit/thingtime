@@ -1,3 +1,4 @@
+import { DeviceSyncResources } from './DeviceSyncResources';
 import React from 'react';
 import { Box, Flex } from '@chakra-ui/react';
 import { useApi } from '~/hooks/useApi';
@@ -27,7 +28,7 @@ export function DeviceSyncBrowser({ deviceId }: { deviceId: string }) {
 	const ownerId = user?.id || '',
 		allowed = !!ownerId && !user?.temporary && user?.accountKind === 'user' && plane === 'home' && !identity.pending;
 	const key = JSON.stringify([typeof window === 'undefined' ? 'server' : window.location.origin, ownerId, plane, deviceId, identity.generation]);
-	return <DeviceSyncBrowserContent key={key} {...{ deviceId, ownerId, allowed, scopeKey: key, apiRef }} generation={identity.generation} />;
+	return <><DeviceSyncResources key={key + ":resources"} {...{ deviceId, ownerId, allowed }} /><DeviceSyncBrowserContent key={key} {...{ deviceId, ownerId, allowed, scopeKey: key, apiRef }} generation={identity.generation} /></>;
 }
 function DeviceSyncBrowserContent({
 	deviceId,
@@ -166,8 +167,8 @@ export function DeviceSyncPanel({
 					onToggle={open => { setManaging(open); if (open) setVisited(true); }}
 				>
 					{visited && local ? (
-						<DesktopFolderAccess active={managing} ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={pairedDeviceIds} ownedDeviceIds={ownedDeviceIds} />
-					) : visited ? <RemoteDeviceSync active={managing} ownerId={ownerId} deviceId={deviceId} /> : null}
+						<DesktopFolderAccess showResourceSummary={false} active={managing} ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={pairedDeviceIds} ownedDeviceIds={ownedDeviceIds} />
+					) : visited ? <RemoteDeviceSync showResourceSummary={false} active={managing} ownerId={ownerId} deviceId={deviceId} /> : null}
 				</SettingsSection>
 			) : null}
 		</Box>

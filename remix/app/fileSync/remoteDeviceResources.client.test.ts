@@ -1,0 +1,29 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { createRemoteDeviceStatusSession } from './remoteDeviceResources.client';
+const policy = { transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 };
+const status = { version: 1 as const, deviceId: 'device', observedAt: '2026-11-03T00:00:00.000Z', roots: [], rootsReady: false, jobs: [], task: null,
+ capabilities: { platform: 'macos', fileAccessVersion: '1.16.0', fileResourceLimitsVersion: '1.1.0' }, resourceUsage: { deviceResourceLimits: policy } };
+test('overview and manager share a coalesced heartbeat; save selected-device policy while paused', async () => {
+ let reads = 0, saves = 0, visible = true, onVisibility = () => {}, active = true;
+ const session = createRemoteDeviceStatusSession({ origin: 'https://device.test', ownerId: 'owner', deviceId: 'device', visible: () => visible,
+  assertCurrent: () => { if (!active) throw Error('identity changed'); }, subscribeVisibility: fn => { onVisibility = fn; return () => {}; },
+  createClient: () => ({ send: async (command: any) => {
+   if (command.action === 'resources') { saves++; return { deviceResourceLimits: command.deviceResourceLimits }; }
+   reads++; return command.cursor ? { ...status, resourceUsage: undefined } : { ...status, nextCursor: '32' };
+  } }) as any });
+ const releaseOverview = session.retain(), releaseManager = session.retain();
+ await Promise.all([session.refresh(), session.refresh()]);
+ assert.equal(reads, 2); assert.deepEqual(session.read().status?.resourceUsage, { deviceResourceLimits: policy });
+ assert.deepEqual(await session.save({ ...policy, cpuPercent: 12 }), { ...policy, cpuPercent: 12 }); assert.equal(saves, 1);
+ assert.deepEqual(session.read().status?.resourceUsage?.deviceResourceLimits, { ...policy, cpuPercent: 12 });
+ visible = false; onVisibility(); await session.refresh(); assert.equal(reads, 2);
+ active = false; await assert.rejects(session.save(policy), /identity changed/); releaseOverview(); releaseManager();
+});
+test('identity invalidation fences late replies and removes prior measurements', async () => {
+ let finish!: (value: any) => void;
+ const session = createRemoteDeviceStatusSession({ origin: 'https://device.test', ownerId: 'owner', deviceId: 'device', visible: () => true, assertCurrent() {},
+  createClient: () => ({ send: () => new Promise(resolve => { finish = resolve; }) }) as any });
+ const release = session.retain(), pending = session.refresh(); session.invalidate(); finish(status); await pending;
+ assert.equal(session.read().status, null); assert.equal(session.read().online, false); release();
+});

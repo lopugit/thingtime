@@ -1,4 +1,6 @@
+import { useRemoteDeviceSyncStatus } from '~/fileSync/remoteDeviceResources.client';
 import type { TransferSpeedDraftState } from './TransferSpeedTrackers';
+import { DeviceSyncResources } from './DeviceSyncResources';
 import { SyncEditorPlacement } from './SyncEditorPlacement';
 import type { UploadPriorityDraftState } from './SyncUploadPriorities';
 import { supportsNativeSourcePaths, validNativeSourcePath } from '~/fileSync/mobileFolders.client';
@@ -12,7 +14,7 @@ import { readStampedCache, writeStampedCache, pruneCacheNamespace } from '~/hook
 import { rootIdentity } from '~/utils/rootIdentity';
 import { createRemoteSyncClient, negotiateRemoteSourcePaths } from '~/fileSync/remoteSyncClient.client';
 import { type RemoteSyncStatus, type RemoteSyncCommand, validateRemoteSyncCommand } from '~/fileSync/remoteSyncProtocol';
-import { type FolderResult, type MobileFolder, supportsMobileTrashRecovery, supportsNativeFileVersions } from '~/fileSync/mobileFolders.client';
+import { type FolderResult, supportsMobileTrashRecovery, supportsNativeFileVersions } from '~/fileSync/mobileFolders.client';
 import { type SavedFileSyncConfiguration, readOwnedFileSyncConfiguration } from '~/fileSync/configuredPlan';
 import { newFileSyncConfiguration, FILE_SYNC_RESOURCE_REQUIREMENTS } from '~/fileSync/configuration';
 import { fileSyncDownloadRequirements } from '~/fileSync/signedDownloadTarget';
@@ -47,16 +49,15 @@ function Controls({ documentKey, title, blocks, scopeKey, scope, actions, onErro
 
 /** The enclosing device view verifies ownership. This boundary also removes
  * protected state synchronously when the signed-in identity or storage changes. */
-export function RemoteDeviceSync({ ownerId, deviceId, active = true }: { ownerId: string; deviceId: string; active?: boolean }) {
+export function RemoteDeviceSync({ ownerId, deviceId, active = true, showResourceSummary = true }: { ownerId: string; deviceId: string; active?: boolean; showResourceSummary?: boolean }) {
 	const user = useCurrentUser(), dataPlane = useDataPlane();
 	const identity = useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
 	if (user?.id !== ownerId || user.temporary || user.isCharacter || user.accountKind !== 'user' || dataPlane !== 'home' || identity.pending || typeof window === 'undefined') return null;
 	const scope = { origin: window.location.origin, ownerId, deviceId, dataPlane };
-	return <RemoteConnections active={active} key={`${configurationDraftKey(scope)}:${identity.generation}`} scope={scope} generation={identity.generation} />;
+	return <>{showResourceSummary && <DeviceSyncResources ownerId={ownerId} deviceId={deviceId} allowed={active} />}<RemoteConnections active={active} key={`${configurationDraftKey(scope)}:${identity.generation}`} scope={scope} generation={identity.generation} /></>;
 }
 
 function RemoteConnections({ scope, generation, active }: { scope: ConfigurationEditorScope; generation: number; active: boolean }) {
-	const visible = useRef(active); visible.current = active;
 	const api = useApi(), apiRef = useRef(api); apiRef.current = api;
 	const lifetime = useRef(new AbortController());
 	const operationSequence = useRef(0);
@@ -93,11 +94,8 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 	const [connectionCursor, setConnectionCursor] = useState<string | null>(null), [folderCursor, setFolderCursor] = useState<string | null>(null);
 	const [loaded, setLoaded] = useState(false), [busy, setBusy] = useState(false), busyRef = useRef(false);
 	const [error, setError] = useState(''), [notice, setNotice] = useState('');
-	const [status, setStatus] = useState<RemoteSyncStatus | null>(null), [online, setOnline] = useState(false), [checking, setChecking] = useState(false);
-	const [deviceError, setDeviceError] = useState('');
+	const { status, online, checking, error: deviceError, refresh: refreshStatus } = useRemoteDeviceSyncStatus(scope, active);
 	const [sourcePathsReady, setSourcePathsReady] = useState(false);
-	const statusController = useRef<AbortController | null>(null);
-	const refreshAgain = useRef(false);
 	const [intervals, setIntervals] = useState<Record<string, number>>({});
 	const [detailsId, setDetailsId] = useState<string | null>(null);
 	const [pausingId, setPausingId] = useState<string | null>(null);
@@ -140,39 +138,16 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 			setFolders(previous => [...new Map([...(cursor ? previous : []), ...accepted].map(row => [row.id, row])).values()]); setFolderCursor(result.nextCursor ?? null);
 		}
 	};
-	const refreshStatus = async () => {
-		if (lifetime.current.signal.aborted) return;
-		if (statusController.current) { refreshAgain.current = true; return; }
-		const controller = new AbortController(); statusController.current = controller; setChecking(true);
-		try {
-			let cursor: string | undefined, snapshot: RemoteSyncStatus | undefined;
-			const cursors = new Set<string>(), roots = new Map<string, MobileFolder>(), jobs = new Map<string, RemoteSyncStatus['jobs'][number]>();
-			do {
-				const value = await client.send<RemoteSyncStatus>({ action: 'status', ...(cursor ? { cursor } : {}) }, { signal: controller.signal, timeoutMs: 12_000 }); check();
-				if (value?.version !== 1 || value.deviceId !== scope.deviceId || !Array.isArray(value.roots) || !Array.isArray(value.jobs) || !Number.isFinite(Date.parse(value.observedAt)) ||
-					value.roots.some(root => !root || typeof root.id !== 'string' || typeof root.name !== 'string' || (root.sourcePath !== undefined && (!validNativeSourcePath(root.sourcePath) || root.sourceKind === 'photos'))) || value.jobs.some(job => !job || typeof job.connectionId !== 'string') ||
-					(value.nextCursor !== undefined && (typeof value.nextCursor !== 'string' || cursors.has(value.nextCursor)))) throw Error('The device returned an invalid sync status.');
-				for (const root of value.roots) roots.set(root.id, root);
-				for (const job of value.jobs) jobs.set(job.connectionId, job);
-				snapshot = value; cursor = value.nextCursor; if (cursor) cursors.add(cursor);
-			} while (cursor);
-			setStatus({ ...snapshot!, roots: [...roots.values()], jobs: [...jobs.values()] }); setOnline(true); setDeviceError('');
-		} catch (cause) { if (!lifetime.current.signal.aborted && !controller.signal.aborted) { setOnline(false); setDeviceError(cause instanceof Error ? cause.message : 'Device unavailable. Saved settings remain editable.'); } }
-		finally { if (statusController.current === controller) { statusController.current = null; if (!lifetime.current.signal.aborted) { setChecking(false); if (refreshAgain.current) { refreshAgain.current = false; void refreshStatus(); } } } }
-	};
 	useEffect(() => {
 		if (lifetime.current.signal.aborted) lifetime.current = new AbortController();
 		const effectSignal = lifetime.current.signal;
 		void negotiateRemoteSourcePaths().then(available => { if (!effectSignal.aborted) { check(); setSourcePathsReady(available); } }).catch(() => { if (!effectSignal.aborted) setSourcePathsReady(false); });
 		void run(async () => { await load('connections'); await load('folders'); });
-		let timer: ReturnType<typeof setTimeout>;
-		const poll = async () => { if (effectSignal.aborted) return; if (visible.current && document.visibilityState === 'visible') await refreshStatus(); if (!effectSignal.aborted) timer = setTimeout(poll, 10_000); };
-		void poll();
 		const changed = (event: StorageEvent) => { if (event.key === key || event.key === null) { setDraftReady(false); setStorageError('This draft changed in another tab. Reload this page before saving.'); } };
 		window.addEventListener('storage', changed);
 		// Invalidate the latest operation, including operations started after setup.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		return () => { lifetime.current.abort(); ++operationSequence.current; busyRef.current = false; statusController.current?.abort(); statusController.current = null; clearTimeout(timer); window.removeEventListener('storage', changed); };
+		return () => { lifetime.current.abort(); ++operationSequence.current; busyRef.current = false; window.removeEventListener('storage', changed); };
 		// Scope and generation are the mounted component identity.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);

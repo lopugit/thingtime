@@ -53,8 +53,8 @@ async function pair(viewer) {
 try {
   const endpoint = '/api/v1/devices/sync-control';
   const publicManifest = await request('/.well-known/thingtime-capabilities.json');
-  assert.equal(publicManifest.value.features['api.devices-sync-control'].version, '1.1.0');
-  assert.equal((await request('/api/v1/capabilities')).value.features['api.devices-sync-control'], '1.1.0');
+  assert.equal(publicManifest.value.features['api.devices-sync-control'].version, '1.2.0');
+  assert.equal((await request('/api/v1/capabilities')).value.features['api.devices-sync-control'], '1.2.0');
   assert.equal((await request(endpoint + '-docs')).value.docs.id, 'devices-sync-control');
   assert.equal((await request(endpoint, { action: 'poll', deviceId: 'device' })).response.status, 401);
   const owner = await register(), foreign = await register(), deviceId = await pair(owner);
@@ -74,6 +74,14 @@ try {
   assert.equal(complete.response.headers.get('Cache-Control'), 'private, no-store');
   assert.equal((await post({ action: 'enqueue', requestId, command: { action: 'status' } })).value.status, 'complete');
   assert.equal((await post({ action: 'enqueue', requestId, command: { action: 'pause', connectionId: 'changed' } })).response.status, 409);
+  const resourceId = randomUUID(), deviceResourceLimits = { transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 };
+  assert.equal((await post({ action: 'enqueue', requestId: resourceId, command: { action: 'resources', operation: 'save', deviceResourceLimits } })).value.status, 'pending');
+  const resourceClaim = (await post({ action: 'poll' })).value.command;
+  assert.equal(resourceClaim.id, resourceId);
+  assert.deepEqual(resourceClaim.command, { action: 'resources', operation: 'save', deviceResourceLimits });
+  assert.equal((await post({ action: 'complete', requestId: resourceId, leaseId: resourceClaim.leaseId, result: { deviceResourceLimits, roots: ['grant'] } })).response.status, 400);
+  assert.equal((await post({ action: 'complete', requestId: resourceId, leaseId: resourceClaim.leaseId, result: { deviceResourceLimits } })).value.status, 'complete');
+  assert.deepEqual((await request(endpoint + '?' + new URLSearchParams({ deviceId, requestId: resourceId }), undefined, owner)).value.result, { deviceResourceLimits });
   const queued = await Promise.all(Array.from({ length: 24 }, () => post({ action: 'enqueue', requestId: randomUUID(), command: { action: 'status' } })));
   assert.equal(queued.filter(result => result.response.status === 200).length, 16, 'Real transactions serialize queue backpressure');
   assert.equal(queued.filter(result => result.response.status === 429).length, 8);

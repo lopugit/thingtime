@@ -4,7 +4,7 @@ import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { getHomeThingsCollection, getSessionsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { thingUniqueKeyFilter, thingUniqueKeys } from '../mongodb/uniqueKeys';
 import { insertAccountedThing } from '../storage/accountedThings';
-import { validateRemoteSyncCommand, REMOTE_SYNC_RESULT_BYTES } from '~/fileSync/remoteSyncProtocol';
+import { validateRemoteSyncCommand, parseRemoteSyncResources, REMOTE_SYNC_RESULT_BYTES } from '~/fileSync/remoteSyncProtocol';
 
 export const DEVICE_SYNC_CONTROL_KIND = 'device-sync-control';
 export const DEVICE_SYNC_REQUEST_MS = 120_000;
@@ -98,8 +98,17 @@ export function createDeviceSyncControlService(overrides: Partial<Dependencies> 
         { sort: { createdAt: 1, shareId: 1 }, returnDocument: 'after', includeResultMetadata: false });
       return { ok: true as const, command: row ? { id: row.crystal.requestId, command: payload(row).command, leaseId, expiresAt: new Date(row.crystal.deadlineAt).toISOString() } : null };
     }
+    const completionFilter = { ...identity, 'crystal.pairingHash': pairingHash, 'crystal.status': 'processing', 'crystal.leaseHash': hash(input.leaseId), 'crystal.deadlineAt': { $gt: now } };
+    const claimed = await things.findOne(completionFilter);
+    if (claimed && 'result' in input) {
+      const command = payload(claimed).command;
+      try {
+        if (command?.action === 'resources') input = { ...input, result: parseRemoteSyncResources(input.result) };
+        else if (command?.action === 'status' && input.result?.resourceUsage !== undefined) parseRemoteSyncResources(input.result.resourceUsage);
+      } catch { return fail(400, 'Invalid device resource response'); }
+    }
     const result = 'error' in input ? { error: input.error } : { result: input.result };
-    const row = await things.findOneAndUpdate({ ...identity, 'crystal.pairingHash': pairingHash, 'crystal.status': 'processing', 'crystal.leaseHash': hash(input.leaseId), 'crystal.deadlineAt': { $gt: now } },
+    const row = await things.findOneAndUpdate(completionFilter,
       { $set: { 'crystal.status': 'error' in input ? 'error' : 'complete', secure: encode(result), updatedAt: now } },
       { returnDocument: 'after', includeResultMetadata: false });
     if (row) return publicDeviceSyncControl(row, now);

@@ -1,6 +1,6 @@
 'use strict';
 
-const { governorFor, limits: resourceLimits } = require('./folder-resource-governor.cjs');
+const { governorFor, limits: resourceLimits, deviceLimits } = require('./folder-resource-governor.cjs');
 const { stageFolderDownload } = require('./folder-download.cjs');
 const { uploadFolderPart, uploadRetry, retryableUploadFailure } = require('./folder-upload.cjs');
 const { validateFolderBatchInput, validateFolderBatchReply } = require('./folder-validate-batch.cjs');
@@ -10,7 +10,7 @@ const { stageRangeMetadata } = require('./folder-stream.cjs');
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
 const { randomUUID } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
-const ACTIONS = new Set(['validate-folder-batch', 'upload-batch', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-download', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
+const ACTIONS = new Set(['validate-folder-batch', 'upload-batch', 'resources', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-download', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
 const supportsBatchPages = version => {
     const parts = typeof version === 'string' && version.length <= 32 && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(version);
     return !!parts && parts[1] === '1' && Number.isSafeInteger(Number(parts[2])) && Number.isSafeInteger(Number(parts[3])) && Number(parts[2]) >= 10;
@@ -227,6 +227,7 @@ class DesktopFolderSync {
         if (!input || typeof input !== 'object' || Array.isArray(input) || !UUID.test(input.requestId) ||
             !identifier(input.ownerId) || !identifier(input.deviceId) || !ACTIONS.has(input.action) ||
             (input.action !== 'context' && !(input.action === 'suspend' && input.origin === undefined) && input.origin !== apiOrigin) || Buffer.byteLength(JSON.stringify(stageRangeMetadata(input))) > (input.action === 'validate-folder-batch' ? 524_288 : input.action === 'upload-batch' ? 600_000 : 131_072)) throw unavailable();
+        if (input.deviceResourceLimits !== undefined) deviceLimits(input.deviceResourceLimits);
         if (input.resourceLimits !== undefined) {
             if (!input.rootId || typeof input.resourceScope !== 'string' || !input.resourceScope || input.resourceScope.length > 512 || !Object.keys(resourceLimits(input.resourceLimits)).length) throw unavailable();
         }
@@ -325,7 +326,7 @@ class DesktopFolderSync {
         let outcome = 'failed', endReply;
         const lane = input.action === 'scan-changes' ? 'streamWaiter' : 'active';
         const state = { context, folderDeadline: input.action === 'validate-folder-batch' ? this.now() + input.remainingMs : null, input: structuredClone(input), abort: new AbortController(), dispatched: false, lane, phase: 'admission' };
-        const policy = state.input.resourceLimits;
+        const policy = state.input.resourceLimits ?? { cpuPercent: 15, uploadBytesPerSecond: 625000, downloadBytesPerSecond: 625000 };
         const governedPayload = policy && ((['upload-part', 'upload-batch'].includes(input.action) && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||
             (input.action === 'stage-download' && (policy.downloadBytesPerSecond || policy.cpuPercent)) ||
             (['stage-finish', 'publish'].includes(input.action) && policy.cpuPercent));
@@ -340,7 +341,7 @@ class DesktopFolderSync {
         };
         let governor;
         const nativeRequest = (request, extra = {}) => timing.measure('native', async () => {
-            const governed = request.rootId === state.input.rootId && state.input.resourceLimits ? { ...request, resourceLimits: state.input.resourceLimits, resourceScope: state.input.resourceScope } : request;
+            const governed = { ...request, ...(request.rootId === state.input.rootId && state.input.resourceLimits ? { resourceLimits: state.input.resourceLimits, resourceScope: state.input.resourceScope } : {}), ...(state.input.deviceResourceLimits ? { deviceResourceLimits: state.input.deviceResourceLimits } : {}) };
             const reply = await this.requestNative('folder-sync.request', governed, { ...extra, signal: extra.signal ?? state.abort.signal });
             if (governor && reply?.resources?.version === 1) governor.observeNative(reply.resources);
             return reply;

@@ -5,6 +5,9 @@ import type { SyncProgressDescriptor } from './progressProjection';
 import type { SpeedReading } from './transferSpeed';
 import { validSyncPath } from './reconcile';
 import { validateRemoteSyncDetailsCommand, type RemoteSyncDetailsCommand } from './remoteSyncDetails';
+import { parseDeviceSyncResourcePolicy, type DeviceSyncResourcePolicy } from './deviceResourcePolicy';
+import { parseSyncResourceStatus, type SyncResourceStatus } from './resourceGovernor';
+import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
 /** A control channel, never a file transport. Bytes, native grants and journals
  * remain on the paired device. Only the existing management operations cross it. */
@@ -14,6 +17,8 @@ export type RemoteFolderRequest = Extract<FolderRequest, { action: 'remove' | 'v
 	{ action: 'trash-inspect'; rootId: string; trash: MobileTrashRequest };
 export type RemoteSyncCommand =
 	| { action: 'status'; cursor?: string }
+	| { action: 'resources'; operation: 'read' }
+	| { action: 'resources'; operation: 'save'; deviceResourceLimits: DeviceSyncResourcePolicy }
 	| { action: 'folders'; request: RemoteFolderRequest }
 	| { action: 'start'; connectionId: string; expectedUpdatedAt: string; intervalMs?: number }
 	| { action: 'pause'; connectionId: string }
@@ -22,6 +27,7 @@ export type RemoteSyncCommand =
 
 export type RemoteSyncStatus = {
 	version: 1; deviceId: string; observedAt: string; roots: MobileFolder[]; rootsReady: boolean; rootsObservedAt?: string; capabilities: FolderCapabilities; nextCursor?: string;
+	resourceUsage?: RemoteSyncResources;
 	jobs: { connectionId: string; state: 'runnable' | 'scheduled' | 'paused' | 'attention' | 'complete'; intervalMs?: number; nextRunAt?: number; retryAt?: number }[];
 	task: null | { connectionId: string; active: boolean; stopping?: boolean; status?: 'running' | 'paused' | 'error' | 'complete'; waiting?: boolean;
 		progress: ForegroundSyncProgress & { message?: string }; transferRates?: { upload: SpeedReading; download: SpeedReading };
@@ -30,6 +36,10 @@ export type RemoteSyncStatus = {
 };
 
 export const REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS = { 'api.devices-sync-control': '1.1.0' } as const;
+export const REMOTE_SYNC_RESOURCE_REQUIREMENTS = { 'api.devices-sync-control': '1.2.0' } as const;
+export type RemoteSyncResources = { deviceResourceLimits: DeviceSyncResourcePolicy; resources?: SyncResourceStatus };
+export const supportsRemoteResourceControls = (capabilities: FolderCapabilities | undefined) => capabilities?.platform === 'macos' &&
+	capabilitySatisfies(capabilities.fileAccessVersion ?? '', '1.16.0') && capabilitySatisfies(capabilities.fileResourceLimitsVersion ?? '', '1.1.0');
 
 export const REMOTE_SYNC_COMMAND_BYTES = 64 * 1024;
 // Native metadata pages already permit 1 MiB; preserve those pages plus their
@@ -40,9 +50,28 @@ const object = (value: unknown): value is Record<string, unknown> => !!value && 
 const exact = (value: Record<string, unknown>, keys: string[]) => Object.keys(value).every(key => keys.includes(key));
 const invalid = () => Error('Invalid remote sync command.');
 
+export function parseRemoteSyncResources(value: unknown): RemoteSyncResources {
+	if (!object(value) || !exact(value, ['deviceResourceLimits', 'resources']) || !object(value.deviceResourceLimits) ||
+		!exact(value.deviceResourceLimits, ['transferBytesPerSecond', 'scanBytesPerSecond', 'cpuPercent'])) throw Error('Invalid device resource response.');
+	const deviceResourceLimits = parseDeviceSyncResourcePolicy(value.deviceResourceLimits);
+	if (value.resources === undefined) return { deviceResourceLimits };
+	const metrics = value.resources;
+	const optional = ['currentUploadBytesPerSecond', 'currentDownloadBytesPerSecond', 'transferBytesPerSecond', 'scanBytesPerSecond', 'scanBytes', 'scanElapsedSeconds', 'memoryBytes', 'measuredAt'];
+	if (!object(metrics) || !exact(metrics, ['version', 'cpuPercent', 'cpuStatus', 'effectiveTransferConcurrency', 'effectiveIndexingConcurrency', 'uploadBytesPerSecond', 'downloadBytesPerSecond', ...optional]) ||
+		optional.some(key => metrics[key] !== undefined && metrics[key] !== null && (typeof metrics[key] !== 'number' || !Number.isFinite(metrics[key]) || Number(metrics[key]) < 0))) throw Error('Invalid device resource response.');
+	return { deviceResourceLimits, resources: parseSyncResourceStatus(metrics) };
+}
+
 export function validateRemoteSyncCommand(value: unknown): RemoteSyncCommand {
 	if (!object(value) || new TextEncoder().encode(JSON.stringify(value)).byteLength > REMOTE_SYNC_COMMAND_BYTES) throw invalid();
 	switch (value.action) {
+		case 'resources':
+			if (value.operation === 'read') { if (!exact(value, ['action', 'operation'])) throw invalid(); }
+			else if (value.operation === 'save') {
+				if (!exact(value, ['action', 'operation', 'deviceResourceLimits'])) throw invalid();
+				parseRemoteSyncResources({ deviceResourceLimits: value.deviceResourceLimits });
+			} else throw invalid();
+			break;
 		case 'status': if (!exact(value, ['action', 'cursor']) || (value.cursor !== undefined && (typeof value.cursor !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value.cursor) || !Number.isSafeInteger(Number(value.cursor))))) throw invalid(); break;
 		case 'start':
 			if (!exact(value, ['action', 'connectionId', 'expectedUpdatedAt', 'intervalMs']) || !id(value.connectionId) ||

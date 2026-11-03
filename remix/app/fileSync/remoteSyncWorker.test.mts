@@ -120,3 +120,20 @@ test('older server or native versions strip optional paths while status and fold
   assert.equal(sessionOld.roots[0].sourcePath, roots[0].sourcePath);
  }
 });
+
+test('resources use owner/device authorization while paused, without folders or jobs; status samples once', async () => {
+ snapshot = null; started = null; const requests: any[] = [], negotiations: string[] = [], authorizations: any[] = [];
+ const policy = { transferBytesPerSecond: 500000, scanBytesPerSecond: 400000, cpuPercent: 12 };
+ const resources = { version: 1, cpuPercent: null, cpuStatus: 'unavailable', effectiveTransferConcurrency: 1, effectiveIndexingConcurrency: 1, memoryBytes: 1000, measuredAt: 100 };
+ const resourceHost = { ...host, capabilities: { platform: 'macos', fileAccessVersion: '1.16.0', fileResourceLimitsVersion: '1.1.0' },
+  requireCapability: async (_f: string, v: string) => { negotiations.push(v); }, authorizeDevice: async (...args: any[]) => { authorizations.push(args.slice(0,2)); },
+  request: async (owner: string, request: any) => { assert.equal(owner, 'owner'); requests.push(request); return { roots: [], deviceResourceLimits: policy, resources }; } };
+ const c = { ...context, host: resourceHost }, s = { ...session, host: resourceHost };
+ const result = await executeRemoteSyncCommand({ action: 'resources', operation: 'save', deviceResourceLimits: policy }, c, s);
+ const { deviceResourceKey, readDeviceSyncResourcePolicy } = await import('./deviceResourcePolicy');
+ assert.deepEqual(readDeviceSyncResourcePolicy(deviceResourceKey(scope.origin, 'owner', 'device')), policy, 'Active selected-device hosts must not overwrite remotely accepted policy with stale renderer preferences');
+ assert.deepEqual(result, { deviceResourceLimits: policy, resources }); assert.equal(started, null); assert.deepEqual(requests, [{ action: 'resources', deviceResourceLimits: policy }]); assert.deepEqual(authorizations, [['owner','device']]);
+ const page: any = await executeRemoteSyncCommand({ action: 'status' }, c, s); assert.deepEqual(page.resourceUsage, result);
+ await executeRemoteSyncCommand({ action: 'status', cursor: '32' }, c, s); assert.equal(requests.length, 2); assert.ok(negotiations.includes('1.2.0'));
+ await assert.rejects(executeRemoteSyncCommand({ action: 'resources', operation: 'read' }, { ...c, host: { ...resourceHost, capabilities: { ...resourceHost.capabilities, fileResourceLimitsVersion: '1.0.0' } } }, s), /Update the selected Mac/);
+});

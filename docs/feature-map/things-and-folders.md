@@ -635,3 +635,12 @@ Stale/unavailable bookmarks and Photos omit it. `MobileFolderTests` and
 paths by file operations; `mobileFolders.client.test.ts` covers negotiation,
 correlation and malformed location metadata. This field does not change signed
 sync policy, existing cloud destination identities, or public manifests.
+
+Device-wide resource controls use `fileSync/remoteDeviceResources.client.ts` for
+one identity-qualified status session shared by overview and connection manager.
+`remoteSyncProtocol.ts` defines the rootless read/save contract, strict policy and
+measurement projections; client and worker require `api.devices-sync-control`
+1.2.0 plus native fileAccess 1.16.0 / fileResourceLimits 1.1.0. The existing paired
+mailbox retains ownership, leases and immutable saves. Focused protocol/client,
+worker, session and `deviceSyncControl` tests cover paused changes, no folder/job
+side effects, stale replies and shared polling. See browser-device-sync.md.

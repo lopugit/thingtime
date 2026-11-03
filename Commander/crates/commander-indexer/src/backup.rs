@@ -42,6 +42,8 @@ pub struct Request {
     pub resource_feedback: bool,
     #[serde(default = "default_cpu_shares")]
     pub cpu_budget_shares: usize,
+    #[serde(default)]
+    pub scan_bytes_per_second: Option<f64>,
 }
 
 fn default_cpu_shares() -> usize {
@@ -234,10 +236,12 @@ fn observe(
             let wanted = (buffer.len() as u64)
                 .min(size - offset)
                 .min(part_size - in_part) as usize;
+            governor.pace_scan(wanted, cancelled).map_err(|_| "cancelled")?;
             let n = file.read(&mut buffer[..wanted]).map_err(|_| "unreadable")?;
             if n == 0 {
                 return Err("changed");
             }
+            governor.record_scan(n);
             part.update(&buffer[..n]);
             offset += n as u64;
             in_part += n as u64;
@@ -321,6 +325,8 @@ fn capture_inner(
         &request.resource_limits,
         request.cpu_budget_shares,
     )?);
+    if request.scan_bytes_per_second.is_some_and(|rate| !rate.is_finite() || rate <= 0.0) { return Err(failure("invalid_configuration")); }
+    governor.set_scan_rate(request.scan_bytes_per_second);
     let source = IndexSource {
         id: "backup".into(),
         root: request.root.clone(),

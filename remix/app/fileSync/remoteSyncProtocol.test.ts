@@ -27,3 +27,14 @@ test('remote control envelope preserves the existing one MiB native metadata pag
 	const page = { roots: [], trashPage: { items: [{ metadata: 'x'.repeat(1024 * 1024) }], nextCursor: null } };
 	assert.ok(new TextEncoder().encode(JSON.stringify({ ok: true, status: 'complete', result: page })).byteLength < REMOTE_SYNC_RESULT_BYTES);
 });
+
+test('rootless device resource controls have exact keys and positive policy bounds', async () => {
+ const { parseRemoteSyncResources } = await import('./remoteSyncProtocol');
+ const policy = { transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 };
+ assert.deepEqual(validateRemoteSyncCommand({ action: 'resources', operation: 'read' }), { action: 'resources', operation: 'read' });
+ assert.deepEqual(validateRemoteSyncCommand({ action: 'resources', operation: 'save', deviceResourceLimits: policy }), { action: 'resources', operation: 'save', deviceResourceLimits: policy });
+ for (const patch of [{ rootId: 'grant' }, { ownerId: 'foreign' }, { start: true }]) assert.throws(() => validateRemoteSyncCommand({ action: 'resources', operation: 'read', ...patch }));
+ for (const bad of [{ ...policy, cpuPercent: 0 }, { ...policy, cpuPercent: 15.5 }, { ...policy, transferBytesPerSecond: 0 }, { ...policy, secret: 'x' }]) assert.throws(() => validateRemoteSyncCommand({ action: 'resources', operation: 'save', deviceResourceLimits: bad }));
+ assert.throws(() => parseRemoteSyncResources({ deviceResourceLimits: policy, roots: [] }));
+ assert.deepEqual(parseRemoteSyncResources({ deviceResourceLimits: policy }), { deviceResourceLimits: policy });
+});

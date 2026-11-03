@@ -4,7 +4,9 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { Box, ChakraProvider } from '@chakra-ui/react';
 import { SyncFolderCard } from '../app/components/Devices/SyncFolderCard';
 import { DeviceSyncPanel } from '../app/components/Devices/DeviceSyncBrowser';
-import { thingtimeCapabilityManifest } from '../app/api/utils/capabilities/thingtimeCapabilities';
+import { apiEndpointDocs } from '../app/docs/apiDocs';
+// Browser fixture uses the canonical registry, without importing server gateway runtime.
+const fixtureCapabilities = (origin: string) => ({ schemaVersion: 1, origin, features: Object.fromEntries(apiEndpointDocs.map(doc => [`api.${doc.id}`, { version: doc.featureVersion ?? '1.0.0' }])) });
 import type { RemoteSyncStatus } from '../app/fileSync/remoteSyncProtocol';
 
 // This fixture has no native bridge, credentials, file access or real backend.
@@ -20,7 +22,7 @@ let rows: any[] = JSON.parse(localStorage.getItem('remote-sync-fixture-rows') ||
  { id: 'other-owner-sync', thingtime: ['file-sync'], author: { id: 'another-owner' }, acl: ['tt:user'], updatedAt: '2026-10-23T00:00:00.000Z', crystal: { ...configuration, name: 'Other owner private sync' } }
 ];
 const initialStatus = (): RemoteSyncStatus => ({ version: 1, deviceId, observedAt: new Date().toISOString(),
- roots: [{ id: 'local-documents', name: 'Documents on Mac', sourcePath: '/Users/example/Documents on Mac' }], rootsReady: true, capabilities: { platform: 'macos', fileAccessVersion: '1.15.0', fileTrashVersion: '1.2.0', fileVersionsVersion: '1.0.0', fileStagingVersion: '1.0.0', filePublicationVersion: '1.2.0' }, jobs: [], task: null });
+ roots: [{ id: 'local-documents', name: 'Documents on Mac', sourcePath: '/Users/example/Documents on Mac' }], rootsReady: true, capabilities: { platform: 'macos', fileAccessVersion: '1.16.0', fileResourceLimitsVersion: '1.1.0', fileTrashVersion: '1.2.0', fileVersionsVersion: '1.0.0', fileStagingVersion: '1.0.0', filePublicationVersion: '1.2.0' }, jobs: [], task: null, resourceUsage: { deviceResourceLimits: { transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 }, resources: { version: 1, cpuPercent: 3, cpuStatus: 'measured', effectiveTransferConcurrency: 1, effectiveIndexingConcurrency: 1, currentUploadBytesPerSecond: 1000, currentDownloadBytesPerSecond: 2000, scanBytesPerSecond: 3000, memoryBytes: 1048576, measuredAt: Date.now() } } });
 let status = initialStatus(), offline = true, failure: string | null = null, writes = 0, holdNextStart = false;
 let priorities = { revision: 0, paths: [] as string[] };
 const commands: any[] = [], replies = new Map<string, any>();
@@ -40,7 +42,7 @@ window.fetch = async (input, init) => {
  init?.signal?.throwIfAborted();
  const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
  if (url.origin !== location.origin) throw Error('Fixture rejected external network');
- if (url.pathname === '/.well-known/thingtime-capabilities.json') return json(thingtimeCapabilityManifest(url.origin));
+ if (url.pathname === '/.well-known/thingtime-capabilities.json') return json(fixtureCapabilities(url.origin));
  if (url.pathname === '/api/v1/webpages/resolve') return json({ ok: false }, 404);
  if (url.pathname === '/api/v1/devices') return json({ ok: true, devices: [{ id: deviceId, name: 'My Mac', platform: 'macos', pairingStatus: 'paired' }] });
  const headers = new Headers(init?.headers);
@@ -56,7 +58,9 @@ window.fetch = async (input, init) => {
   if (offline) reply = { ok: true, status: 'error', error: 'This device is offline. Saved settings remain available.' };
   else if (failure) { reply = { ok: true, status: 'error', error: failure }; failure = null; }
   else {
-   if (command.action === 'start') {
+   if (command.action === 'resources') {
+    if (command.operation === 'save') status.resourceUsage = { ...status.resourceUsage!, deviceResourceLimits: command.deviceResourceLimits };
+   } else if (command.action === 'start') {
     const saved = rows.find(r => r.id === command.connectionId);
     if (!saved || saved.crystal.deviceId !== deviceId || saved.updatedAt !== command.expectedUpdatedAt)
      return json({ ok: false, error: 'Saved connection changed. Refresh settings.' }, 409);
@@ -69,7 +73,7 @@ window.fetch = async (input, init) => {
     if (command.expectedRevision !== priorities.revision) return json({ ok: false, error: 'Priority revision changed' }, 409);
     priorities = { revision: priorities.revision + 1, paths: command.paths };
    }
-   reply = { ok: true, status: 'complete', result: command.action === 'folders' ? { roots: status.roots } : command.action === 'status' ? snapshot() :
+   reply = { ok: true, status: 'complete', result: command.action === 'resources' ? status.resourceUsage : command.action === 'folders' ? { roots: status.roots } : command.action === 'status' ? snapshot() :
     command.action === 'details' ? {} : command.action === 'priorities' ? structuredClone(priorities) : { accepted: true } };
    if (command.action === 'start' && holdNextStart) {
     holdNextStart = false; heldStarts.add(requestId); reply = { ok: true, status: 'processing' };

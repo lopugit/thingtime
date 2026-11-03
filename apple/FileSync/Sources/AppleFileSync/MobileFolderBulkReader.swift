@@ -52,8 +52,9 @@ public enum MobileFolderBulkReader {
             while count < output.count {
                 try Task.checkCancellation()
                 let wanted = min(65_536, output.count - count)
+                try SyncScanContext.current?.pace(wanted)
                 let n = output.withUnsafeMutableBytes { pread(fd, $0.baseAddress!.advanced(by: count), wanted, off_t(count)) }
-                guard n > 0 else { throw MobileFolderStore.Failure.changed }; count += n
+                guard n > 0 else { throw MobileFolderStore.Failure.changed }; SyncScanContext.current?.record(n); count += n
             }
             let current = try MobileFolderReader.openPath(root, path: expected.path); defer { close(current) }
             guard try MobileFolderReader.stamp(MobileFolderReader.info(fd)) == expected.version,

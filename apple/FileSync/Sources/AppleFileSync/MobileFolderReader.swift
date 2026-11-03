@@ -165,8 +165,10 @@ public struct MobileFolderReader {
             try Task.checkCancellation()
             try SyncResourceCpuContext.chunk {
                 let wanted = Int(min(Int64(buffer.count), size - offset, partSize - inPart))
+                try SyncScanContext.current?.pace(wanted)
                 let n = pread(fd, &buffer, wanted, off_t(offset))
                 guard n > 0 else { throw Failure.changed }
+                SyncScanContext.current?.record(n)
                 part.update(data: Data(buffer.prefix(n))); offset += Int64(n); inPart += Int64(n)
                 if inPart == partSize || offset == size { composite.update(data: Data(part.finalize())); part = SHA256(); inPart = 0 }
             }

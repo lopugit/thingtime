@@ -9,7 +9,8 @@ import { holdDesktopSyncWindow } from './desktopSyncWindow.client';
 import { createFolderHostFetch } from './folderHostFetch.client';
 import { executeRemoteSyncDetails } from './remoteSyncDetails.client';
 import type { SyncScope } from './reconcile';
-import { REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, REMOTE_SYNC_RESULT_BYTES, validateRemoteSyncCommand, type RemoteSyncCommand, type RemoteSyncStatus } from './remoteSyncProtocol';
+import { deviceResourceKey, readDeviceSyncResourcePolicy, saveDeviceSyncResourcePolicy } from './deviceResourcePolicy';
+import { REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, REMOTE_SYNC_RESOURCE_REQUIREMENTS, REMOTE_SYNC_RESULT_BYTES, validateRemoteSyncCommand, parseRemoteSyncResources, supportsRemoteResourceControls, type RemoteSyncCommand, type RemoteSyncStatus } from './remoteSyncProtocol';
 
 export const REMOTE_SYNC_REQUIREMENTS = { 'api.devices-sync-control': '1.0.0' } as const;
 // One bounded, host/owner/device/origin-scoped optional negotiation. A short
@@ -70,6 +71,20 @@ export async function executeRemoteSyncCommand(command: RemoteSyncCommand, conte
 	context.check();
 	const { host, ownerId, deviceId, generation, signal } = context;
 	switch (command.action) {
+		case 'resources': {
+			await host.requireCapability('api.devices-sync-control', REMOTE_SYNC_RESOURCE_REQUIREMENTS['api.devices-sync-control']); context.check();
+			if (!supportsRemoteResourceControls(host.capabilities)) throw Error('Update the selected Mac and its scanner to manage device resource limits.');
+			await host.authorizeDevice(ownerId, deviceId, signal); context.check();
+			const result = await host.request(ownerId, { action: 'resources', ...(command.operation === 'save' ? { deviceResourceLimits: command.deviceResourceLimits } : {}) }, signal); context.check();
+			if (result.roots.length) throw Error('The resource request returned unexpected folder access.');
+			const accepted = parseRemoteSyncResources({ deviceResourceLimits: result.deviceResourceLimits, ...(result.resources ? { resources: result.resources } : {}) });
+			// This code runs on the selected device. Its already-running hosts read
+			// this shared policy before chunks; stale renderer preferences must not
+			// overwrite a policy accepted through remote management.
+			const key = deviceResourceKey(host.origin(), ownerId, deviceId);
+			if (JSON.stringify(readDeviceSyncResourcePolicy(key)) !== JSON.stringify(accepted.deviceResourceLimits)) saveDeviceSyncResourcePolicy(key, accepted.deviceResourceLimits);
+			return accepted;
+		}
 		case 'status': {
 			const scope = context.scope('remote-sync-status');
 			const journal = await openSyncJournal();
@@ -103,6 +118,12 @@ export async function executeRemoteSyncCommand(command: RemoteSyncCommand, conte
 						download: task.transferSeries.read({ direction: 'download', unit: 'Mbps', windowMs: 5000 }) } } : {}),
 					...(task.pagedReview ? { review: { id: reviewId(task.pagedReview), view: structuredClone(task.pagedReview.getSnapshot()) } } : {}) } : null
 			};
+			// The existing status heartbeat carries one current device-wide sample.
+			// No folder grants or transfer admission are needed, including paused jobs.
+			if (!command.cursor && supportsRemoteResourceControls(host.capabilities)) {
+				try { snapshot.resourceUsage = parseRemoteSyncResources(await executeRemoteSyncCommand({ action: 'resources', operation: 'read' }, context, session)); }
+				catch { context.check(); /* Older origins/native failures leave measurements explicitly unavailable. */ }
+			}
 			return snapshot;
 		}
 		case 'folders': {

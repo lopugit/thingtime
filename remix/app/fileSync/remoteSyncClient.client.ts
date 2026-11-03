@@ -1,6 +1,6 @@
 import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
 import { requireThingtimeCapability } from '../api/utils/capabilities/requireCapability.client';
-import { REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, validateRemoteSyncCommand, type RemoteSyncCommand } from './remoteSyncProtocol';
+import { REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, REMOTE_SYNC_RESOURCE_REQUIREMENTS, validateRemoteSyncCommand, type RemoteSyncCommand } from './remoteSyncProtocol';
 
 /** Optional display contract: older origins keep ordinary controls and explicit
  * destination selection. Callers recheck their identity after awaiting this. */
@@ -37,6 +37,7 @@ export function createRemoteSyncClient(input: {
 	};
 	const forget = (requestId: string, key = receiptKey) => { if (pending(key)?.requestId === requestId) storage().removeItem(key); };
 	const mutating = (command: RemoteSyncCommand) => ['start', 'pause', 'review'].includes(command.action) ||
+		(command.action === 'resources' && command.operation === 'save') ||
 		(command.action === 'priorities' && command.operation === 'save') ||
 		(command.action === 'folders' && ['choose', 'remove', 'trash-restore-reviewed', 'version-restore-reviewed'].includes(command.request.action));
 	const check = (signal: AbortSignal) => { input.signal.throwIfAborted(); signal.throwIfAborted(); input.assertCurrent(); };
@@ -67,7 +68,7 @@ export function createRemoteSyncClient(input: {
 			const signal = AbortSignal.any([input.signal, timeout, ...(options.signal ? [options.signal] : [])]);
 			try {
 				check(signal);
-				try { await (input.requireCapability ?? requireThingtimeCapability)('api.devices-sync-control', '1.0.0'); }
+				try { await (input.requireCapability ?? requireThingtimeCapability)('api.devices-sync-control', command.action === 'resources' ? REMOTE_SYNC_RESOURCE_REQUIREMENTS['api.devices-sync-control'] : '1.0.0'); }
 				catch { throw Error('Remote sync needs an updated, reachable Thingtime server. Saved settings are still available.'); }
 				check(signal);
 				if (mutating(command)) {

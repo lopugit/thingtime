@@ -5,7 +5,7 @@ const path = require('node:path');
 const children = new WeakMap();
 function transferProcess(governor) {
     let state = children.get(governor);
-    if (state) { state.child.send({ kind: 'policy', policy: governor.policy }); return state; }
+    if (state) { state.child.send({ kind: 'policy', policy: governor.policy, totalBytesPerSecond: governor.totalBytesPerSecond }); return state; }
     // Electron's executable supports Node mode; use a minimal environment and
     // private IPC. No owner cookies or app tokens are copied into the child.
     const child = fork(path.join(__dirname, 'folder-transfer-worker.cjs'), [], {
@@ -27,7 +27,7 @@ function transferProcess(governor) {
         if (message.kind === 'reply') state.pending.get(message.id)?.(message);
     });
     child.on('exit', () => { children.delete(governor); clearTimeout(state.idle); for (const finish of [...state.pending.values()]) finish({ error: 'transport' }); });
-    child.send({ kind: 'policy', policy: governor.policy }); return state;
+    child.send({ kind: 'policy', policy: governor.policy, totalBytesPerSecond: governor.totalBytesPerSecond }); return state;
 }
 async function governedFetch(governor, fetchUpload, target, options, check = () => {}) {
     if (!governor) {

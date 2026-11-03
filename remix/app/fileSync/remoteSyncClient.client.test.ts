@@ -101,3 +101,16 @@ test('optional source locations negotiate separately while older origins retain 
   assert.equal(feature, 'api.devices-sync-control'); assert.equal(version, '1.1.0');
  }), true);
 });
+
+test('resource saves require control 1.2 and recover the exact accepted command without replay', async () => {
+ const input = base(), policy = { transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 }; let posts = 0;
+ const old = createRemoteSyncClient({ ...input, requireCapability: async (_feature, minimum) => { assert.equal(minimum, '1.2.0'); throw Error('old'); }, fetch: async () => { posts++; return reply({}); } });
+ await assert.rejects(old.send({ action: 'resources', operation: 'save', deviceResourceLimits: policy })); assert.equal(posts, 0);
+ const client = createRemoteSyncClient({ ...input, requireCapability: async (_feature, minimum) => { assert.equal(minimum, '1.2.0'); }, fetch: async (_url, init) => {
+  if (init.method === 'POST') { posts++; throw Error('Lost accepted policy save'); }
+  return reply({ ok: true, status: 'complete', result: { deviceResourceLimits: policy } });
+ } });
+ const command = { action: 'resources' as const, operation: 'save' as const, deviceResourceLimits: policy };
+ await assert.rejects(client.send(command));
+ assert.deepEqual(await client.send(command), { deviceResourceLimits: policy }); assert.equal(posts, 1); assert.equal(input.storage.data.size, 0);
+});

@@ -713,6 +713,18 @@ final class MacFolderSyncTests: XCTestCase {
         }
     }
 
+    func testDeviceResourceSettingsAreRootlessPersistedAndDeviceBound() async throws {
+        let service = try service()
+        let policy: JSONValue = .object(["transferBytesPerSecond": .number(625000), "scanBytesPerSecond": .number(625000), "cpuPercent": .number(15)])
+        let result = try await service.handle(request("resources", ["deviceResourceLimits": policy])).decode([String: JSONValue].self)
+        XCTAssertEqual(result["deviceResourceLimits"], policy)
+        XCTAssertEqual(result["roots"], .array([]))
+        let reopened = try self.service()
+        let readback = try await reopened.handle(request("resources")).decode([String: JSONValue].self)
+        XCTAssertEqual(readback["deviceResourceLimits"], policy)
+        do { _ = try await service.handle(request("resources", ["deviceId": .string("other-device")])); XCTFail("wrong device accepted") } catch {}
+        do { _ = try await service.handle(request("resources", ["deviceResourceLimits": .object(["transferBytesPerSecond": .number(0), "scanBytesPerSecond": .number(625000), "cpuPercent": .number(15)])])); XCTFail("zero rate accepted") } catch {}
+    }
     func testContextAndUnknownConditionsUseTheSharedFolderContract() async throws {
         let service = try service()
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
@@ -720,7 +732,7 @@ final class MacFolderSyncTests: XCTestCase {
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
         XCTAssertNotNil(context["conditions"])
         XCTAssertNotNil(context["roots"])
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.15.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0", "fileUploadBatchVersion": "1.0.0", "fileFolderBatchVersion": "1.0.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.16.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0", "fileUploadBatchVersion": "1.0.0", "fileFolderBatchVersion": "1.0.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }
