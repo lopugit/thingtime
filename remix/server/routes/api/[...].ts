@@ -1,3 +1,4 @@
+import { runWithMongoConnectionFeature } from '../../../app/api/utils/mongodb/connectionTracker';
 import { publishMongoConnectionSnapshots } from '../../../app/api/utils/mongodb/connectionInventory';
 import { agentTestRefusal } from '../../../app/api/utils/agentTesting';
 import { actionDataRoutes } from '../../utils/actionDataRoutes';
@@ -458,7 +459,8 @@ export default defineHandler(async (event) => {
     return jsonResponse({ ok: false, error: 'Lopu looked everywhere and found no such endpoint 🤷‍♂️' }, { status: 404 });
   }
 
-  return withErrorLogRequest('/api/' + path, method, async () => {
+  const { getApiDocByPath } = await import('../../../app/docs/apiDocs');
+  return runWithMongoConnectionFeature(getApiDocByPath(path)?.group, () => withErrorLogRequest('/api/' + path, method, async () => {
   try {
   const route = await loadModule();
   const handler = method === 'GET' || method === 'HEAD' ? route.loader : route.action;
@@ -529,5 +531,5 @@ export default defineHandler(async (event) => {
       try { await publishMongoConnectionSnapshots(); } catch { /* Telemetry must never replace an API response. */ }
     }
   }
-  });
+  }));
 });

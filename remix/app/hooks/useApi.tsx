@@ -529,7 +529,7 @@ export function useApi() {
         []
       ),
       mongodbConnections: useCallback(async (args: { cursor?: string; limit?: number }, scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.admin-mongodb-connections', '1.0.0', scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        await requireThingtimeCapability('api.admin-mongodb-connections', '1.1.0', scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
         return getJson(`/api/v1/admin/mongodb/connections${toQuery(args)}`, { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal });
       }, [getJson]),
       ciPreviewRetention: useCallback(async (scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {

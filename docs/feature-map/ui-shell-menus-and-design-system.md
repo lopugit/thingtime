@@ -2,10 +2,12 @@
 
 Admin MongoDB connections reuses the existing admin category/deep-link model and
 the private settings-document Builder host. `mongoConnectionInventoryBlocks.ts`
-contains editable search, freshness filter, metric, source-card and pool templates;
+contains editable search, freshness filter, metric, deployment, feature, runtime
+and pool templates, with progressively disclosed details;
 `MongoConnectionInventory.tsx` supplies ephemeral authenticated observations.
 `mongodb-connections-acceptance.mjs` covers real data, desktop/mobile scrolling,
 expanded details and independent nested Builder edits with saved-Thing readback.
+Only exact previous defaults migrate; custom saved layouts are preserved.
 
 The web app is Vite + React Router (non-framework mode) + Nitro; `entry.client.tsx`
 mounts with `createRoot`. Chakra UI primitives are wrapped by Thingtime's own

@@ -127,3 +127,21 @@ test('publication deadline settles a request and prevents a late acquisition fro
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(writes, 0);
 });
+
+test('legacy snapshots keep absent model and feature evidence unknown; new evidence has a closed projection', () => {
+  const input: any = makeSource();
+  delete input.monitoring; delete input.featureUsage;
+  let source = projectConnectionSource(input, now, input.runtimeId)!;
+  assert.equal(source.monitoring, undefined);
+  assert.equal(source.featureUsage, undefined);
+  input.monitoring = { mode: 'poll', servers: 3, socketsUpperBound: 999, secret: 'never-return' };
+  input.featureUsage = [{ feature: 'auth', accesses: 4, lastUsedAt: new Date(now).toISOString(), user: 'never-return' }, { feature: 'secret-user', accesses: 10, lastUsedAt: new Date(now).toISOString() }];
+  input.pools[0].minPoolSize = 0; input.pools[0].maxIdleTimeMS = 60000;
+  source = projectConnectionSource(input, now, input.runtimeId)!;
+  assert.equal(source.monitoring?.socketsUpperBound, 3);
+  assert.deepEqual(source.featureUsage, [{ feature: 'auth', accesses: 4, lastUsedAt: new Date(now).toISOString() }]);
+  assert.equal(source.pools[0].maxIdleTimeMS, 60000);
+  assert.ok(!JSON.stringify(source).includes('never-return'));
+  input.status = 'closed';
+  assert.equal(projectConnectionSource(input, now, input.runtimeId)!.monitoring?.socketsUpperBound, null);
+});
