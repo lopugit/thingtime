@@ -12,6 +12,7 @@ import {
 	hydrateLopuStore,
 	loadLopuChats,
 	loadLopuMessages,
+	lopuChatsCacheKey,
 	lopuMessagesCacheKey,
 	loadLopuModels,
 	reconcileLopuSettings,
@@ -21,6 +22,8 @@ import {
 	setLopuSettings,
   setLopuAiDefaults,
   createLopuChat,
+  renameLopuChat,
+  deleteLopuChat,
 	type AiModelPublic,
 	type LopuApiClient,
 	type LopuVaultProvider
@@ -331,11 +334,11 @@ test('send carries providerId in the reply body and a vault meta names the provi
 	assert.equal(turn?.meta?.providerLabel, 'Acme proxy');
 	const chat = snapshot.chats.find((entry) => entry.id === 'chat-1');
 	assert.equal(chat?.lopu?.providerId, 'vp-1');
-	// an unknown provider never reaches the wire — the current one stays
+	// an unavailable explicit choice cancels the send, without using the current one
 	calls.length = 0;
-	await sendLopuMessage('again', { settings: { providerId: 'ghost' } });
-	const kept = calls.find((call) => call.name === 'reply')?.args as { providerId?: string };
-	assert.equal(kept.providerId, 'vp-1');
+	const unavailable = await sendLopuMessage('again', { settings: { providerId: 'ghost' } });
+	assert.equal(unavailable.ok, false);
+	assert.equal(calls.some((call) => call.name === 'reply'), false);
 	assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1');
 	// clearing it is stated on the wire (the chat carries its own settings now,
 	// so a null must reach the server — it clears the pin the server holds)
@@ -940,5 +943,200 @@ test('sending waits for a credential save and a refusal prevents any billed requ
   complete({ ok: false, error: 'Connection revoked' });
   assert.equal((await sending).ok, false);
   assert.equal(fixture.calls.some(row => row.name === 'reply'), false);
+  resetLopuStoreForTests();
+});
+
+test('late chat creation cannot expose a previous account choice or cache across account switches', async () => {
+  const previousWindow = (globalThis as any).window;
+  const storage = new Map<string, string>();
+  (globalThis as any).window = { localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) }, dispatchEvent: () => {}, addEventListener: () => {}, removeEventListener: () => {} };
+  try {
+    for (const returnToOwner of [false, true]) {
+      storage.clear(); resetLopuStoreForTests(); hydrateLopuStore('creating-owner');
+      const fixture = fakeClient(); bindLopuApi(fixture.client); await loadLopuModels();
+      setLopuSettings({ providerId: 'vp-1' });
+      let finish!: (value: any) => void;
+      fixture.client.chats.create = () => new Promise(resolve => { finish = resolve; });
+      const pending = createLopuChat({ title: 'Private title' });
+      hydrateLopuStore('other-owner');
+      if (returnToOwner) hydrateLopuStore('creating-owner');
+      const before = getLopuStoreSnapshot();
+      const beforeStorage = new Map(storage);
+      finish({ ok: true, chat: { id: 'private-chat', name: 'Private title', lopu: { providerId: 'vp-1' } } });
+      const result = await pending;
+      assert.equal(result.ok, false, 'an old create must not navigate the current account');
+      assert.deepEqual(getLopuStoreSnapshot(), before);
+      assert.deepEqual(storage, beforeStorage);
+      assert.equal(storage.has(lopuChatsCacheKey('other-owner')), false);
+    }
+  } finally { (globalThis as any).window = previousWindow; resetLopuStoreForTests(); }
+});
+
+test('a rejected chat creation cannot change the new account gate or notices', async () => {
+  resetLopuStoreForTests(); resetLopuAccountForTests(); hydrateLopuStore('creating-owner');
+  const fixture = fakeClient(); bindLopuApi(fixture.client);
+  let reject!: (error: unknown) => void;
+  fixture.client.chats.create = () => new Promise((_resolve, fail) => { reject = fail; });
+  const pending = createLopuChat();
+  hydrateLopuStore('other-owner'); hydrateLopuAccount('other-owner');
+  const before = getLopuStoreSnapshot();
+  const beforeAccount = getLopuAccountSnapshot();
+  reject(Object.assign(new Error('Private account refusal'), { status: 402, data: { error: 'insufficient_credits' } }));
+  const result = await pending;
+  assert.equal(result.ok, false);
+  assert.match(result.error || '', /account changed/i);
+  assert.deepEqual(getLopuStoreSnapshot(), before);
+  assert.deepEqual(getLopuAccountSnapshot(), beforeAccount);
+  resetLopuStoreForTests(); resetLopuAccountForTests();
+});
+
+test('explicit unavailable send credentials never fall back to credits or another saved connection', async () => {
+  for (const baseProvider of [null, 'vp-1']) {
+    for (const requestedProvider of ['vp-off', 'chatgpt-plan-removed']) {
+      resetLopuStoreForTests(); hydrateLopuStore('explicit-owner');
+      const fixture = fakeClient(); bindLopuApi(fixture.client); await loadLopuModels();
+      setLopuSettings({ providerId: baseProvider });
+      const result = await sendLopuMessage('Keep this private', { settings: { providerId: requestedProvider } });
+      assert.equal(result.ok, false);
+      assert.match(result.error || '', /credential.*unavailable/i);
+      assert.equal(fixture.calls.some(row => row.name === 'reply' || row.name === 'chats.create'), false);
+      assert.equal(getLopuStoreSnapshot().settings.providerId, baseProvider);
+      assert.equal(getLopuStoreSnapshot().sending, false);
+    }
+  }
+  resetLopuStoreForTests();
+});
+
+test('late rename and delete results never restore another account chats, messages, or caches', async () => {
+  const previousWindow = (globalThis as any).window;
+  const storage = new Map<string, string>();
+  (globalThis as any).window = { localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) }, dispatchEvent: () => {}, addEventListener: () => {}, removeEventListener: () => {} };
+  try {
+    for (const operation of ['rename', 'delete'] as const) {
+      for (const failure of [false, true]) {
+        storage.clear(); resetLopuStoreForTests(); hydrateLopuStore('editing-owner');
+        const fixture = fakeClient({ chats: [{ id: 'private-chat', name: 'Private title', updatedAt: new Date().toISOString(), lopu: { providerId: 'vp-1' } }] });
+        bindLopuApi(fixture.client); await loadLopuChats(); selectLopuChat('private-chat');
+        let finish!: (value: any) => void, reject!: (error: unknown) => void;
+        const response = new Promise((resolve, fail) => { finish = resolve; reject = fail; });
+        fixture.client.chats.update = () => response;
+        fixture.client.chats.delete = () => response;
+        const pending = operation === 'rename' ? renameLopuChat('private-chat', 'Renamed private title') : deleteLopuChat('private-chat');
+        hydrateLopuStore('other-owner');
+        const before = getLopuStoreSnapshot(), beforeStorage = new Map(storage);
+        if (failure) reject(new Error('Private account failure'));
+        else finish({ ok: true, chat: { id: 'private-chat', name: 'Renamed private title' } });
+        const result = await pending;
+        assert.equal(result.ok, false);
+        assert.match(result.error || '', /account changed/i);
+        assert.deepEqual(getLopuStoreSnapshot(), before);
+        assert.deepEqual(storage, beforeStorage);
+      }
+    }
+  } finally { (globalThis as any).window = previousWindow; resetLopuStoreForTests(); }
+});
+
+test('a previous account pending write cannot block lists or release the current account write fence', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('creating-owner');
+  const first = fakeClient(); bindLopuApi(first.client);
+  let finishCreate!: (value: any) => void;
+  first.client.chats.create = () => new Promise(resolve => { finishCreate = resolve; });
+  const creating = createLopuChat();
+  hydrateLopuStore('other-owner');
+  const second = fakeClient({ chats: [{ id: 'other-chat', name: 'Other', updatedAt: new Date().toISOString(), lopu: { providerId: null } }] });
+  bindLopuApi(second.client); await loadLopuModels(); await loadLopuChats();
+  assert.equal(getLopuStoreSnapshot().chats[0]?.id, 'other-chat', 'the new account must load without waiting for the old write');
+  selectLopuChat('other-chat');
+  let finishChoice!: (value: any) => void;
+  second.client.chats.update = () => new Promise(resolve => { finishChoice = resolve; });
+  setLopuSettings({ providerId: 'vp-1' }); await flush();
+  finishCreate({ ok: true, chat: { id: 'private-chat', name: 'Private title' } }); await creating;
+  second.calls.length = 0; await loadLopuChats();
+  assert.equal(second.calls.some(row => row.name === 'chats.list'), false, 'the current account choice still fences stale list reads');
+  finishChoice({ ok: true }); await flush(); await loadLopuChats();
+  assert.equal(second.calls.some(row => row.name === 'chats.list'), true);
+  resetLopuStoreForTests();
+});
+
+test('rename completion preserves concurrent credentials and only rolls back its own title', async () => {
+  for (const failed of [false, true]) {
+    resetLopuStoreForTests(); hydrateLopuStore('concurrent-owner');
+    const fixture = fakeClient({ chats: [
+      { id: 'first', name: 'First', lopu: { providerId: null } },
+      { id: 'second', name: 'Second', lopu: { providerId: null } }
+    ] });
+    bindLopuApi(fixture.client); await loadLopuModels(); await loadLopuChats();
+    let finish!: (value: any) => void, reject!: (error: unknown) => void;
+    fixture.client.chats.update = (args) => args.title ? new Promise((resolve, fail) => { finish = resolve; reject = fail; }) : Promise.resolve({ ok: true });
+    const renaming = renameLopuChat('first', 'Renamed');
+    selectLopuChat('first'); setLopuSettings({ providerId: 'vp-1' }); await flush();
+    selectLopuChat('second'); setLopuSettings({ providerId: 'vp-1' }); await flush();
+    if (failed) reject(new Error('Rename failed'));
+    else finish({ ok: true, chat: { id: 'first', name: 'Renamed', lopu: { providerId: null } } });
+    await renaming;
+    const snapshot = getLopuStoreSnapshot();
+    assert.equal(snapshot.chats.find(chat => chat.id === 'first')?.name, failed ? 'First' : 'Renamed');
+    for (const id of ['first', 'second']) {
+      assert.equal(snapshot.chats.find(chat => chat.id === id)?.lopu?.providerId, 'vp-1');
+      selectLopuChat(id);
+      assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1', 'reopening must retain the confirmed personal credential');
+    }
+  }
+  resetLopuStoreForTests();
+});
+
+test('delete rollback preserves another chat updates, messages, and later selection', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('concurrent-owner');
+  const fixture = fakeClient({ chats: [
+    { id: 'first', name: 'First', lopu: { providerId: null } },
+    { id: 'second', name: 'Second', lopu: { providerId: null } }
+  ] });
+  bindLopuApi(fixture.client); await loadLopuModels(); await loadLopuChats(); selectLopuChat('first');
+  let reject!: (error: unknown) => void;
+  fixture.client.chats.delete = () => new Promise((_resolve, fail) => { reject = fail; });
+  const deleting = deleteLopuChat('first');
+  selectLopuChat('second'); setLopuSettings({ providerId: 'vp-1' }); await flush();
+  fixture.client.messages = async () => ({ ok: true, messages: [{ id: 'new-message', chatId: 'second', text: 'New message' }] });
+  await loadLopuMessages('second');
+  reject(new Error('Delete failed')); await deleting;
+  const snapshot = getLopuStoreSnapshot();
+  assert.equal(snapshot.activeChatId, 'second');
+  assert.equal(snapshot.chats.find(chat => chat.id === 'second')?.lopu?.providerId, 'vp-1');
+  assert.equal(snapshot.messages.second[0]?.id, 'new-message');
+  assert.equal(snapshot.chats.some(chat => chat.id === 'first'), true);
+  selectLopuChat('first'); selectLopuChat('second');
+  assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1');
+  resetLopuStoreForTests();
+});
+
+test('deleting the selected chat restores new-chat defaults instead of inheriting its credential', async () => {
+  for (const defaultProvider of [null, 'vp-2']) {
+    resetLopuStoreForTests(); hydrateLopuStore('delete-defaults-owner');
+    const fixture = fakeClient({ chats: [{ id: 'personal', name: 'Personal', lopu: { providerId: 'vp-1' } }] });
+    fixture.client.models = async () => ({ ok: true, models: MODELS, defaults: DEFAULTS, vaultProviders: [...VAULT, { ...VAULT[0], id: 'vp-2' }] });
+    bindLopuApi(fixture.client); await loadLopuModels(); await loadLopuChats();
+    setLopuAiDefaults({ providerId: defaultProvider, ...DEFAULTS }); selectLopuChat('personal');
+    assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1');
+    await deleteLopuChat('personal'); selectLopuChat(null);
+    await sendLopuMessage('A new conversation');
+    assert.equal((fixture.calls.find(row => row.name === 'reply')?.args as any).providerId, defaultProvider);
+  }
+  resetLopuStoreForTests();
+});
+
+test('failed selected-chat deletion restores its choice only before any later draft selection', async () => {
+  for (const chooseNewDefault of [false, true]) {
+    resetLopuStoreForTests(); hydrateLopuStore('delete-rollback-owner');
+    const fixture = fakeClient({ chats: [{ id: 'personal', name: 'Personal', lopu: { providerId: 'vp-1' } }] });
+    bindLopuApi(fixture.client); await loadLopuModels(); await loadLopuChats();
+    setLopuAiDefaults({ providerId: null, ...DEFAULTS }); selectLopuChat('personal');
+    let reject!: (error: unknown) => void;
+    fixture.client.chats.delete = () => new Promise((_resolve, fail) => { reject = fail; });
+    const deleting = deleteLopuChat('personal');
+    if (chooseNewDefault) setLopuSettings({ effort: 'low' });
+    reject(new Error('Delete failed')); await deleting;
+    assert.equal(getLopuStoreSnapshot().activeChatId, chooseNewDefault ? null : 'personal');
+    assert.equal(getLopuStoreSnapshot().settings.providerId, chooseNewDefault ? null : 'vp-1');
+  }
   resetLopuStoreForTests();
 });

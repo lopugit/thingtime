@@ -57,7 +57,9 @@ const api = async (req, res, url) => {
 					'api.webpages-resolve': '1.6.0',
 					'api.actions-run': '1.7.0',
 					'api.mongodb-endpoint': '1.1.0',
-					'api.things': '1.35.0',
+					// Editable settings saves require the actor/data-plane and
+					// revision fences implemented by this fixture below.
+					'api.things': '1.36.0',
 					'api.lopu-chats': '1.7.0',
 					'api.lopu-chats-update': '1.6.1',
 					'api.lopu-chats-reply': '1.19.2',
@@ -84,6 +86,12 @@ const api = async (req, res, url) => {
 		return page ? send({ ok: true, source: 'user', page }) : send({ ok: false }, 404);
 	}
 	if (path.endsWith('/things') && ['POST', 'PATCH'].includes(req.method)) {
+		if (req.headers['x-thingtime-expected-actor'] !== owner || req.headers['x-thingtime-expected-data-plane'] !== 'home')
+			return send({ ok: false }, 409);
+		const existing = fixturePages.get(body.crystal?.pageKey);
+		if (req.method === 'POST' && existing) return send({ ok: false }, 409);
+		if (req.method === 'PATCH' && (!existing || body.id !== existing.id || body.expectedUpdatedAt !== existing.updatedAt))
+			return send({ ok: false }, 409);
 		const page = { id: body.id || body.shareId, crystal: body.crystal, author: { id: owner }, updatedAt: new Date().toISOString(), acl: ['tt:user'] };
 		fixturePages.set(body.crystal.pageKey, page);
 		return send({ ok: true, thing: page });

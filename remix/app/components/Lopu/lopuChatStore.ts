@@ -208,6 +208,7 @@ const createInitialState = (): LopuStoreState => ({
 
 const SERVER_SNAPSHOT: LopuStoreState = createInitialState();
 let state: LopuStoreState = createInitialState();
+let chatSelectionRevision = 0;
 const listeners = new Set<() => void>();
 let client: LopuApiClient | null = null;
 const controllers = new Map<string, AbortController>();
@@ -241,6 +242,7 @@ const scheduleEmit = () => {
 
 const setState = (patch: Partial<LopuStoreState> | ((current: LopuStoreState) => Partial<LopuStoreState>)) => {
 	const next = typeof patch === 'function' ? patch(state) : patch;
+	if ('activeChatId' in next && next.activeChatId !== state.activeChatId) chatSelectionRevision++;
 	state = { ...state, ...next };
 	emit();
 };
@@ -391,6 +393,10 @@ const persistSettings = (userId: string | null, settings: LopuChatSettings) => {
 // the vault providers the reconciler may trust: null until the catalog has
 // been fetched at least once this session (a cached list still counts)
 const knownVaultProviders = (): LopuVaultProvider[] | null => (state.modelsLoaded || state.vault ? state.vaultProviders : null);
+const unavailableProviderChoice = (providerId: string | null | undefined): boolean => {
+  const providers = knownVaultProviders();
+  return !!providerId && !!providers && !providers.some(row => row.id === providerId && row.available);
+};
 
 // Serialize AI choices per conversation. Preserve the last confirmed choice
 // across a refusal, and fence responses against account changes and newer edits.
@@ -401,7 +407,7 @@ const persistChatProvider = (chatId: string, patch: Partial<LopuAiDefaults>, pre
   const entry = providerWrites.get(chatId) ?? { tail: Promise.resolve(), confirmed: aiDefaultsOnly(previous), revision: 0 };
   const revision = ++entry.revision;
   providerWrites.set(chatId, entry);
-  chatWrites++;
+  const finishWrite = beginChatWrite();
   entry.tail = entry.tail.catch(() => {}).then(async () => {
     if (generation !== accountGeneration) return;
     try {
@@ -424,7 +430,7 @@ const persistChatProvider = (chatId: string, patch: Partial<LopuAiDefaults>, pre
       throw error;
     }
   }).finally(() => {
-    chatWrites--;
+    finishWrite();
     if (entry.revision === revision && providerWrites.get(chatId) === entry) providerWrites.delete(chatId);
   });
   void entry.tail.catch(() => {});
@@ -435,7 +441,7 @@ const persistChatProvider = (chatId: string, patch: Partial<LopuAiDefaults>, pre
 // the picker never offers one, but a stale cache or a per-send override might.
 const mergeSettingsPatch = (patch: Partial<LopuChatSettings>, base = state.settings): LopuChatSettings => {
 	const vault = knownVaultProviders();
-  if (patch.providerId && vault && !vault.some(row => row.id === patch.providerId && row.available)) {
+  if (unavailableProviderChoice(patch.providerId)) {
     notice('That credential is unavailable. Refresh connections before choosing it.', { status: 'error' });
     return base;
   }
@@ -451,7 +457,7 @@ const accessWrites = new Map<string, Promise<void>>();
 const accessRevisions = new Map<string, number>();
 const persistChatAccess = (chatId: string, accessMode: LopuAccessMode) => {
   const api = client, owner = state.userId, generation = accountGeneration;
-  chatWrites++;
+  const finishWrite = beginChatWrite();
   const revision = (accessRevisions.get(chatId) ?? 0) + 1;
   accessRevisions.set(chatId, revision);
   const work = (accessWrites.get(chatId) ?? Promise.resolve()).catch(() => {}).then(async () => {
@@ -470,7 +476,7 @@ const persistChatAccess = (chatId: string, accessMode: LopuAccessMode) => {
       notice('Could not save chat access', { status: 'error', description: errorText(error, 'Please try again') });
     }
     throw error;
-  }).finally(() => { chatWrites--; });
+  }).finally(finishWrite);
   accessWrites.set(chatId, work);
   void work.catch(() => {});
 };
@@ -503,6 +509,7 @@ let accountGeneration = 0;
 export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 	if (state.hydrated && state.userId === userId) return state;
 	accountGeneration++;
+  chatWrites = 0;
   providerWrites.clear();
   accessWrites.clear(); accessRevisions.clear();
 	for (const controller of controllers.values()) controller.abort();
@@ -582,6 +589,13 @@ export const loadLopuModels = async (): Promise<void> => {
 };
 
 let chatWrites = 0;
+// A pending write belongs to the account generation that started it. Its
+// eventual completion cannot block or release a newer account's read fence.
+const beginChatWrite = (): (() => void) => {
+  const generation = accountGeneration;
+  chatWrites++;
+  return () => { if (generation === accountGeneration) chatWrites--; };
+};
 let chatsRead: { generation: number; promise: Promise<void> } | null = null;
 export const loadLopuChats = (options: { quiet?: boolean } = {}): Promise<void> => {
   if (chatsRead?.generation === accountGeneration) return chatsRead.promise;
@@ -707,6 +721,7 @@ export const selectLopuChat = (chatId: string | null, options?: { silent?: boole
   const settings = reconcileLopuSettings(requested, state.models, state.defaults, knownVaultProviders());
 	const next = { activeChatId: chatId, settings };
 	if (options?.silent) {
+		chatSelectionRevision++;
 		state = { ...state, ...next };
 		scheduleEmit();
 		return;
@@ -718,10 +733,12 @@ export const selectLopuChat = (chatId: string | null, options?: { silent?: boole
 
 export const createLopuChat = async (args?: { title?: string }): Promise<{ ok: boolean; chat?: LopuChatSummary; error?: string }> => {
 	if (!client) return { ok: false, error: 'Lopu is not connected yet' };
+  const api = client, ownerId = state.userId, generation = accountGeneration;
+  const accountChanged = () => generation !== accountGeneration || ownerId !== state.userId;
 	const chosen = state.activeChatId && state.aiDefaults ? reconcileLopuSettings(state.aiDefaults, state.models, state.defaults, knownVaultProviders()) : state.settings;
-	chatWrites++;
+	const finishWrite = beginChatWrite();
 	try {
-		const response = await client.chats.create({
+		const response = await api.chats.create({
 			...(args?.title ? { title: args.title } : {}),
       accessMode: state.activeChatId ? 'ask' : lopuAccessMode(state.settings.accessMode),
 			...(chosen.model ? { model: chosen.model } : {}),
@@ -729,15 +746,17 @@ export const createLopuChat = async (args?: { title?: string }): Promise<{ ok: b
 			...(chosen.speed ? { speed: chosen.speed } : {}),
 			...(chosen.providerId ? { providerId: chosen.providerId } : {})
 		});
+    if (accountChanged()) return { ok: false, error: 'The active account changed.' };
 		const chat: LopuChatSummary | null = response?.chat && typeof response.chat === 'object' ? response.chat : null;
 		if (!chat) return { ok: false, error: errorText(response, 'Could not start a chat') };
 		setState((current) => {
 			const chats = [chat, ...current.chats.filter((entry) => entry.id !== chat.id)];
-			writeChatsCache(current.userId, chats);
+			writeChatsCache(ownerId, chats);
 			return { chats, activeChatId: chat.id, settings: { ...chosen, accessMode: lopuAccessMode(chat.lopu?.accessMode) } };
 		});
 		return { ok: true, chat };
 	} catch (error) {
+    if (accountChanged()) return { ok: false, error: 'The active account changed.' };
 		// the access gate (unverified / no credits) is not an error to shout
 		// about: the surfaces flip to the locked state once the account refetches
 		const gate = gateFromError(error);
@@ -749,37 +768,45 @@ export const createLopuChat = async (args?: { title?: string }): Promise<{ ok: b
 		const message = errorText(error, 'Could not start a chat');
 		notice(message, { status: 'error' });
 		return { ok: false, error: message };
-	} finally { chatWrites--; }
+	} finally { finishWrite(); }
 };
 
 export const renameLopuChat = async (chatId: string, title: string): Promise<{ ok: boolean; error?: string }> => {
 	if (!client) return { ok: false, error: 'Lopu is not connected yet' };
+	const api = client, ownerId = state.userId, generation = accountGeneration;
+	const accountChanged = () => generation !== accountGeneration || ownerId !== state.userId;
 	const trimmed = title.trim().slice(0, 120);
 	if (!trimmed) return { ok: false, error: 'A name is required' };
-	chatWrites++;
-	const previous = state.chats;
+	const finishWrite = beginChatWrite();
+	const previous = state.chats.find(chat => chat.id === chatId);
+	const applyTitle = (title: string | undefined) => {
+		if (title === undefined) return;
+		setState(current => {
+			const chats = current.chats.map(entry => entry.id === chatId && entry.name === trimmed ? { ...entry, name: title } : entry);
+			writeChatsCache(ownerId, chats);
+			return { chats };
+		});
+	};
 	setState((current) => {
 		const chats = current.chats.map((chat) => (chat.id === chatId ? { ...chat, name: trimmed } : chat));
 		writeChatsCache(current.userId, chats);
 		return { chats };
 	});
 	try {
-		const response = await client.chats.update({ chatId, title: trimmed });
+		const response = await api.chats.update({ chatId, title: trimmed });
+		if (accountChanged()) return { ok: false, error: 'The active account changed.' };
+		if (response?.ok === false) throw response;
 		const chat: LopuChatSummary | null = response?.chat && typeof response.chat === 'object' ? response.chat : null;
-		if (chat) {
-			setState((current) => {
-				const chats = current.chats.map((entry) => (entry.id === chatId ? { ...entry, ...chat } : entry));
-				writeChatsCache(current.userId, chats);
-				return { chats };
-			});
-		}
+		// The response may predate concurrent credential/access changes.
+		applyTitle(chat?.name);
 		return { ok: true };
 	} catch (error) {
-		setState((current) => ({ chats: current.userId ? previous : current.chats }));
+		if (accountChanged()) return { ok: false, error: 'The active account changed.' };
+		applyTitle(previous?.name);
 		const message = errorText(error, 'Could not rename the chat');
 		notice(message, { status: 'error' });
 		return { ok: false, error: message };
-	} finally { chatWrites--; }
+	} finally { finishWrite(); }
 };
 
 // Archive only changes list visibility. Keep the selected transcript and any
@@ -792,7 +819,7 @@ export const archiveLopuChat = async (chatId: string, archived: boolean): Promis
 	const key = `${generation}:${chatId}`;
 	if (!previous || archivingChats.has(key)) return { ok: false, error: 'Conversation is unavailable or already updating' };
 	archivingChats.add(key);
-	chatWrites++;
+	const finishWrite = beginChatWrite();
 	const apply = (value: boolean) => {
 		if (generation !== accountGeneration) return;
 		const chats = state.chats.map(chat => chat.id === chatId ? { ...chat, lopu: { ...chat.lopu, archived: value } } : chat);
@@ -811,32 +838,50 @@ export const archiveLopuChat = async (chatId: string, archived: boolean): Promis
 		return { ok: false, error: message };
 	} finally {
 		archivingChats.delete(key);
-		chatWrites--;
+		finishWrite();
 	}
 };
 
 export const deleteLopuChat = async (chatId: string): Promise<{ ok: boolean; error?: string }> => {
 	if (!client) return { ok: false, error: 'Lopu is not connected yet' };
+	const api = client, ownerId = state.userId, generation = accountGeneration;
+	const accountChanged = () => generation !== accountGeneration || ownerId !== state.userId;
 	if (state.streamingId && state.turns[state.streamingId]?.chatId === chatId) abortLopuTurn();
-	chatWrites++;
+	const finishWrite = beginChatWrite();
 	const previous = state;
 	setState((current) => {
 		const chats = current.chats.filter((chat) => chat.id !== chatId);
 		writeChatsCache(current.userId, chats);
 		const messages = { ...current.messages };
 		delete messages[chatId];
-		return { chats, messages, activeChatId: current.activeChatId === chatId ? null : current.activeChatId };
+		return { chats, messages, ...(current.activeChatId === chatId ? {
+			activeChatId: null,
+			settings: reconcileLopuSettings({ ...EMPTY_SETTINGS, ...current.aiDefaults, accessMode: 'ask' }, current.models, current.defaults, knownVaultProviders())
+		} : {}) };
 	});
+	const removedSelectionRevision = chatSelectionRevision;
+	const settingsAfterDelete = state.settings;
 	try {
-		await client.chats.delete({ chatId });
-		writeLocalCache(lopuMessagesCacheKey(chatId), { at: Date.now(), messages: [] } satisfies MessagesCache);
+		const response = await api.chats.delete({ chatId });
+		if (accountChanged()) return { ok: false, error: 'The active account changed.' };
+		if (response?.ok === false) throw response;
+		writeLocalCache(lopuMessagesCacheKey(chatId, ownerId), { at: Date.now(), messages: [] } satisfies MessagesCache);
 		return { ok: true };
 	} catch (error) {
-		setState({ chats: previous.chats, messages: previous.messages, activeChatId: previous.activeChatId });
+		if (accountChanged()) return { ok: false, error: 'The active account changed.' };
+		setState(current => {
+			const chats = [...current.chats];
+			const index = previous.chats.findIndex(chat => chat.id === chatId);
+			if (index >= 0 && !chats.some(chat => chat.id === chatId)) chats.splice(Math.min(index, chats.length), 0, previous.chats[index]);
+			writeChatsCache(ownerId, chats);
+			const messages = { ...current.messages, ...(!current.messages[chatId] && previous.messages[chatId] ? { [chatId]: previous.messages[chatId] } : {}) };
+			const restoreSelection = previous.activeChatId === chatId && current.activeChatId === null && chatSelectionRevision === removedSelectionRevision && current.settings === settingsAfterDelete;
+			return { chats, messages, ...(restoreSelection ? { activeChatId: chatId, settings: previous.settings } : {}) };
+		});
 		const message = errorText(error, 'Could not delete the chat');
 		notice(message, { status: 'error' });
 		return { ok: false, error: message };
-	} finally { chatWrites--; }
+	} finally { finishWrite(); }
 };
 
 // ——— live-build bridge (design note §2.5) ————————————————————————————————
@@ -1183,6 +1228,13 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 	const targetChat = chatId ? state.chats.find(chat => chat.id === chatId) : null;
   const base = chatId && chatId !== state.activeChatId
     ? reconcileLopuSettings(settingsFromChat(targetChat), state.models, state.defaults, knownVaultProviders()) : state.settings;
+  // Refusing a stale picker/queued choice must cancel this send. Retaining the
+  // previous choice here could spend credits or disclose text to another provider.
+  if (unavailableProviderChoice(options.settings?.providerId)) {
+    const error = 'That credential is unavailable. Refresh connections before sending.';
+    notice(error, { status: 'error' });
+    return { ok: false, error, text: trimmed };
+  }
   const settings = mergeSettingsPatch(options.settings || {}, base);
 	if (!continuation && !options.chatId && options.settings && Object.keys(options.settings).length && !sameLopuSettings(settings, state.settings)) {
 		persistSettings(userId, settings);
