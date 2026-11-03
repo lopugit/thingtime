@@ -1,12 +1,35 @@
+import { passwordBrandingMigration } from './passwordBrandingBlocks';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 const e = (id: string, tag: string, text = '', props: Record<string, unknown> = {}, children?: WebpageBlock[]): WebpageBlock => ({
   id: `bp-${id}`, type: 'element', tag, text, props, children,
   css: { 'min-width': '0', 'overflow-wrap': 'anywhere', 'line-height': '1.5', ...(tag === 'h1' ? { 'font-size': '28px', 'font-weight': '600', 'line-height': '1.2' } : {}), ...(tag === 'section' ? { display: 'flex', 'flex-direction': 'column', gap: '12px' } : {}), ...(tag === 'button' || tag === 'input' || tag === 'select' ? { padding: '12px', 'min-height': '44px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', background: id === 'approve' ? '#18181b' : 'var(--tt-card, white)', color: id === 'approve' ? '#fff' : 'inherit', font: 'inherit' } : {}) },
 } as WebpageBlock);
 const when = (id: string, arg: string, children: WebpageBlock[]): WebpageBlock => ({ id: `bp-${id}`, type: 'condition', condition: { arg, equals: true }, children } as WebpageBlock);
-const button = (id: string, text: string, operation: string) => e(id, 'button', text, { type: 'button', disabled: '{result.busy}', 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation } });
+const button = (id: string, text: string, operation: string, disabled = '{result.busy}') => e(id, 'button', text, { type: 'button', disabled, 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation } });
 /** Every visible field is an editable block; secrets stay solely in transient DOM fields. */
-export const BROWSER_PROVIDER_BLOCKS: WebpageBlock[] = [e('main', 'section', '', { 'aria-label': 'Passkey approval' }, [
+const migrateBranding = passwordBrandingMigration('bp-heading');
+/** Add terminal-state policy around existing controls without restoring deleted
+ * controls or replacing authored text/styles/inputs. Repeated migration is inert. */
+export function migrateBrowserProviderRecoveryControls(blocks: WebpageBlock[]): WebpageBlock[] {
+  const used = new Set<string>();
+  const collect = (items: WebpageBlock[]) => { for (const block of items) { used.add(block.id); if (block.children) collect(block.children); } };
+  collect(blocks);
+  const wrapperID = (base: string) => { let id = base, n = 1; while (used.has(id)) id = `${base}-${++n}`; used.add(id); return id; };
+  const visit = (items: WebpageBlock[], guarded: Set<string>): WebpageBlock[] => items.map(original => {
+    const active = new Set(guarded);
+    const condition = original.type === 'condition' ? original.condition : undefined;
+    if (condition?.equals === true && typeof condition.arg === 'string') active.add(condition.arg);
+    let block = original.children ? { ...original, children: visit(original.children, active) } : original;
+    if (block.id === 'bp-cancel' && block.type === 'element' && block.tag === 'button' && block.text === 'Cancel') block = { ...block, text: '{result.cancelLabel}' };
+    const arg = block.id === 'bp-retry' ? 'result.canRefresh' : block.id === 'bp-fallback' ? 'result.canChooseProvider' : null;
+    return arg && !active.has(arg)
+      ? { id: wrapperID(block.id + '-registration-policy'), type: 'condition', condition: { arg, equals: true }, children: [block] } as WebpageBlock
+      : block;
+  });
+  return visit(blocks, new Set());
+}
+export const migrateBrowserProviderBranding = (blocks: WebpageBlock[]) => migrateBrowserProviderRecoveryControls(migrateBranding(blocks));
+const BROWSER_PROVIDER_BLOCKS_DEFAULTS: WebpageBlock[] = [e('main', 'section', '', { 'aria-label': 'Passkey approval' }, [
   e('heading', 'h1', '{result.title}'),
   e('intro', 'p', 'Review the website and account before continuing.'),
   e('site-label', 'strong', 'Requesting website'), e('site', 'p', '{result.origin}'),
@@ -25,7 +48,8 @@ export const BROWSER_PROVIDER_BLOCKS: WebpageBlock[] = [e('main', 'section', '',
   ]),
   when('busy', 'result.busy', [e('busy-text', 'p', 'Verifying and completing your request…', { role: 'status' })]),
   when('error', 'result.hasError', [e('error-text', 'p', '{result.error}', { role: 'alert' })]),
-  button('retry', 'Refresh saved passkeys', 'provider.refresh'),
-  button('fallback', 'Use another passkey provider', 'provider.fallback'),
-  button('cancel', 'Cancel', 'provider.cancel'),
+  when('can-refresh', 'result.canRefresh', [button('retry', 'Refresh saved passkeys', 'provider.refresh', '{result.refreshDisabled}')]),
+  when('other-provider', 'result.canChooseProvider', [button('fallback', 'Use another passkey provider', 'provider.fallback')]),
+  button('cancel', '{result.cancelLabel}', 'provider.cancel'),
 ])];
+export const BROWSER_PROVIDER_BLOCKS = migrateBrowserProviderBranding(BROWSER_PROVIDER_BLOCKS_DEFAULTS);

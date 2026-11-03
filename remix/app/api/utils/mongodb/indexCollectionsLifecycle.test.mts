@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { mock, test } from 'node:test';
 
 let custom = false;
@@ -54,9 +55,9 @@ const getDb = (uri: string, databaseName: string) => {
   }
   return databases.get(key);
 };
-class Client {
+class Client extends EventEmitter {
   readonly uri: string;
-  constructor(uri: string) { this.uri = uri; }
+  constructor(uri: string) { super(); this.uri = uri; }
   async connect() { connections++; }
   async close() {}
   db(name: string) { return getDb(this.uri, name); }

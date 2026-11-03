@@ -5342,7 +5342,9 @@ halves.
       intact, and decoded backslashes are not decoded a second time.
 
 - [ ] In General, turn custom resize handling off and verify AppKit's standard edge resizing works. Turn it back on,
-      begin a resize, then release the mouse, press Escape, change focus, hide, close, insert an emoji, or press
+      drag every edge and corner continuously beyond the first pixel, and reverse direction without releasing.
+      Hover/cursor updates must not interrupt the gesture; opposite edges remain anchored and minimum size holds.
+      Begin a resize, then release the mouse, press Escape, change focus, hide, close, insert an emoji, or press
       Return to paste from Commander’s Emoji & Symbols picker; later pointer movement must never continue resizing
       the launcher. Relaunch and verify the selected mode persists.
 - [ ] Launch the installed `~/Applications/Commander.app`, verify the signed
@@ -13564,6 +13566,41 @@ separate from deterministic discovery/lease tests.
   account switches and unmount remove the map and its old token; attribution
   stays visible. A fixture or passing build is not a live provider result.
 
+### MongoDB connection inventory
+
+- Build the client and Nitro node server, then run
+  `MONGODB_CONNECTIONS_EVIDENCE_DIR=<private-output-directory> node remix/scripts/mongodb-connections-acceptance.mjs`.
+  `PLAYWRIGHT_MODULE`, `CHROMIUM_EXECUTABLE` and `THINGTIME_TEST_MONGOD` may select
+  installed test tools. Ports 19431–19435 must be free. The runner owns a fresh
+  replica, synthetic accounts, two API runtimes and an isolated browser profile.
+  It loads no production configuration; all product data goes through the API.
+- Verify both manifest generators and the built endpoint advertise 1.0.0.
+  Run `test:schemas` as well: the protected snapshot kind must remain in the
+  built-in projection table with a required JSON source and generic writes denied.
+  Anonymous, ordinary-account and mismatched actor/origin reads must fail with
+  private/no-store responses. Generic Things routes must refuse telemetry reads,
+  forgeries and reserved IDs. Check home/custom isolation and credential redaction.
+- Compare real runtime source IDs, deployment labels, pools and observations
+  with the rendered cards. Handshakes are pending until ready; pool closure and
+  failed connection cleanup must not double count. Refresh, pagination and
+  filters must preserve correct loaded-source totals. Stale observations must
+  never be presented as a complete live database inventory; unavailable
+  aggregate counters stay unknown.
+- At desktop and 390px, scroll every affected page top to bottom, open source
+  details, exercise freshness/search, empty and error states, and verify keyboard
+  focus and no overflow. Edit a nested text, control and repeated-card field
+  independently in Builder, save, compare the private Thing and reload both Admin
+  and Settings placements. Switch accounts/origins during a delayed read and
+  ensure no earlier protected data paints.
+- On mobile, every Refresh hit target must remain unobscured. The duplicate
+  floating Lopu launcher hides only while the inventory workspace is visible;
+  the navigation opener remains keyboard accessible, and collapsing Settings
+  restores the launcher.
+- Production acceptance is separate: verify the exact deployed source, selected
+  gateway capability, authenticated live cards and actual aggregate availability.
+  Atlas email percentages, Vercel deployment counts and local fixtures do not
+  establish a current cluster-wide socket count or historical incident cause.
+
 ### Preview retention and PR liveliness
 
 - For retained native development, prepare a named workspace and verify its
@@ -13625,3 +13662,35 @@ separate from deterministic discovery/lease tests.
 - Deployment order: product gateway API first, signed read and admin save/readback
   second, protected controller consumer last. A UI preview using the older
   gateway cannot establish the new backend's acceptance.
+
+
+### Passkey registration exclusion recovery (2026-11-02)
+
+- [ ] In the signed provider, a matching site's excluded saved credential shows
+  the specific already-saved explanation, no Retry and **Return to website**.
+  Expand Registration request details: requested RP, hash/handle byte lengths,
+  ES256, catalog/site/exclusion counts must match independent request evidence;
+  no IDs, handles, keys or session/account values appear. Cancel/new request clears
+  details. Test long RP and large counts in a narrow window with the return control reachable.
+- [ ] Return sends `matchedExcludedCredential` natively / `InvalidStateError` in
+  the browser to the original request; no automatic native fallback, new save or
+  password re-verification loop occurs. Browser non-exclusion network errors
+  retain retry, and a delayed old failure cannot terminate a new request.
+- [ ] Keep existing passkeys working. An absent/nonmatching exclusion does not
+  invent account-wide uniqueness; a foreign RP with the same bytes does not block.
+  Verify independent vault record IDs/readback separately from any site's support
+  for multiple discoverable credentials in one authenticator.
+- Run `swift test --package-path apple/Passwords`, focused browser passkey/ceremony
+  tests, and `pnpm --dir remix run test:passwords:record-storage` (owned disposable
+  replica, real API handlers). No existing Mongo or personal profile may be reused.
+- Compile/render the real native view with
+  `bash apple/PasswordProvider/tests/render-preview.sh --excluded --details --long-site --large-counts --width 300 --height 380`.
+  This is a synthetic view, not a credential operation. ImageRenderer does not
+  paint ScrollView contents reliably; inspect the actual owned preview window.
+
+### Password manager tree branding (2026-11-02)
+
+- [ ] Verify the official decorative tree beside the accessible Thingtime heading in extension workspace tabs, browser approval/idle/sign-in/terminal states, vault/import/export, generator, icon picker, passkey guide, native connection, settings and native host/provider. Inspect desktop and 375px layouts, long labels, expanded details and bottom controls.
+- [ ] Existing saved default layouts gain branding without replacing edited headings, styles, IDs or custom content. Deleting the migrated mark stays deleted; authored layouts without the known heading remain unchanged. Legacy provider retry/fallback controls obey terminal conditions without restoring deleted controls.
+- Run extension unit tests (including real ZIP icon inventory) and `test:passwords`; metadata tests validate host/extension ICNS and PNG packaging. Inspect native bundle icons independently of website-controlled account/passkey icons.
+- The isolated `browser-extension/test/workspace-browser.mjs --provider-ui-origin=<fixture-origin>` path uses `remix/scripts/password-provider.browser.html`: the actual provider component, content bridge, background routing, ceremony and transient actions run against explicitly synthetic in-memory API responses. Verify excluded create hides approval/refresh/fallback and clears password input, then explicit Return delivers bound InvalidStateError and focuses the original requester. This proves that action path, not real vault/site/OS acceptance. `password-branding.browser.html` is a separate renderer-only document gallery.

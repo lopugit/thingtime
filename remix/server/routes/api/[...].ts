@@ -1,3 +1,4 @@
+import { publishMongoConnectionSnapshots } from '../../../app/api/utils/mongodb/connectionInventory';
 import { agentTestRefusal } from '../../../app/api/utils/agentTesting';
 import { actionDataRoutes } from '../../utils/actionDataRoutes';
 import { defineHandler } from 'nitro/h3';
@@ -27,6 +28,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/files': () => import('../../../app/routes/api/v1/files/_files'),
   'v1/lopu/network': () => import('../../../app/routes/api/v1/lopu/network/_network'),
   'v1/lopu/tasks': () => import('../../../app/routes/api/v1/lopu/tasks/_tasks'),
+  'v1/admin/mongodb/connections': () => import('../../../app/routes/api/v1/admin/mongodb/connections/_connections'),
   'v1/admin/error-logs': () => import('../../../app/routes/api/v1/admin/error-logs/_error-logs'),
   'v1/integrations/ci/stack-completion': () => import('../../../app/routes/api/v1/integrations/ci/stack-completion/_stack-completion'),
   'v1/watch/recordings': () => import('../../../app/routes/api/v1/watch/recordings/_recordings'),
@@ -520,6 +522,12 @@ export default defineHandler(async (event) => {
   } catch (error) {
     if (!(error instanceof Response) && path !== 'v1/admin/error-logs') await recordErrorLog(error, { source: 'http-unhandled', status: 500 });
     throw error;
+  } finally {
+    // Request-bound telemetry only. Health/discovery and proxy returns do not
+    // warm clients or schedule polling; publication reuses an existing home pool.
+    if (!path.startsWith('v1/health') && !path.startsWith('v1/mongodb/status') && path !== 'v1/capabilities') {
+      try { await publishMongoConnectionSnapshots(); } catch { /* Telemetry must never replace an API response. */ }
+    }
   }
   });
 });

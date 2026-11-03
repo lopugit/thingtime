@@ -41,6 +41,10 @@ public enum PasswordProviderPhase: String, CaseIterable, Sendable {
             return "Could not reach Thingtime. Check your connection and try again."
         case .conflict:
             return "The saved entry changed during this request. Retry here to confirm the same passkey; if it still fails, check the entry in Thingtime."
+        case .credentialExcluded:
+            return "This site already has a passkey saved in Thingtime and does not allow another from this provider for this request. Return to the site to use it or choose another option in its security settings. Keep your working passkey."
+        case .invalidRegistrationRequest:
+            return "This site's registration request has an invalid domain, account handle or challenge. Return to the website and start a new request."
         case .invalidCredential:
             return "This credential cannot be used for this site's request. Check the selected account and site in Thingtime."
         case .unsupportedAlgorithm:
@@ -70,7 +74,7 @@ public struct PasskeyRegistrationAttempt: Sendable {
         writeID = UUID().uuidString.lowercased()
     }
     public func matches(_ entry: PasswordEntry) throws -> Bool {
-        let confirmed = try PasskeyMaterial(entry: entry)
+        guard let confirmed = try? PasskeyMaterial(entry: entry) else { return false }
         return confirmed.credentialID == key.credentialID && confirmed.privateKey == key.privateKey && confirmed.relyingParty == key.relyingParty && confirmed.userHandle == key.userHandle
     }
 }

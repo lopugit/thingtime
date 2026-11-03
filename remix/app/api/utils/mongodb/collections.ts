@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { requireGatewayDatabaseAccess, registerGatewayDrain } from '../deployment/environmentGateway';
 import { INDEX_LIFECYCLE_ID, indexExecutionPolicy, type IndexExecutionOptions, budgetIndexCommands, indexPlanFingerprint, recordIndexPlan, runDurableIndexPlan, invalidateDurableIndexPlan } from './indexLifecycle';
 import { getMongoUri } from './config';
+import { mongoConnectionTracker } from './connectionTracker';
 import { getActiveMongoDbName, getActiveMongoUri, isCustomMongoEndpointActive } from './endpoint';
 import { getMongoDb } from './mongodb';
 import { COLLECTIONS, physicalCollectionName } from './collectionNames';
@@ -56,9 +57,11 @@ const getClientCachedFor = async (uri: string, isHome: boolean) => {
             socketTimeoutMS: 30000,
             appName: 'thingtime-api'
           }
-        : { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000 }
+        : { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000, appName: 'thingtime-api-custom' }
     );
-    await client.connect();
+    const observation = mongoConnectionTracker.track(client, isHome ? 'home' : 'custom', isHome ? 'thingtime-api' : 'thingtime-api-custom');
+    try { await client.connect(); observation.ready(); }
+    catch (error) { observation.failed(); throw error; }
     return client;
   })().catch((err) => {
     // don't cache a failed connection — let the next call retry
@@ -83,6 +86,15 @@ const getClientCachedFor = async (uri: string, isHome: boolean) => {
   }
 
   return entry;
+};
+
+// Observability may reuse a home client, but must never create or warm one.
+export const getExistingHomeMongoDb = async () => {
+  let cached: Promise<any> | undefined;
+  try { cached = clientCache.get(getMongoUri()); } catch { return null; }
+  if (!cached) return null;
+  await requireGatewayDatabaseAccess();
+  return (await cached).db('thingtime');
 };
 
 // A read-only snapshot for diagnostics. Do not use getThingtimeDb here: its
@@ -264,6 +276,17 @@ export const getHomeThingtimeDb = async () => {
     const value = target[property];
     return typeof value === 'function' ? value.bind(target) : value;
   } });
+};
+
+// Telemetry resolves the ordinary write-readiness barrier BEFORE the caller
+// checks its deadline. Returning an already admitted raw handle prevents the
+// generic mutation proxy from resuming a telemetry write after its deadline.
+// It can only reuse an existing home client and never borrows a custom plane.
+export const getExistingHomeConnectionSnapshotCollection = async () => {
+  const db = await getExistingHomeMongoDb();
+  if (!db) return null;
+  await requireHomeIndexWriteReadiness();
+  return db.collection(physicalCollectionName('things'));
 };
 
 // Active data-plane database: the home db — unless the request carries a

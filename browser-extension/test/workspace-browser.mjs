@@ -19,6 +19,8 @@ import {createWorkspaceController} from './workspace.js';
 import {safeOrigin} from './protocol.js';
 const testController=createWorkspaceController(chrome,safeOrigin);
 globalThis.fixtureFallbacks=[];
+globalThis.fixtureProviderReplies=[];
+chrome.runtime.onMessage.addListener(message=>{if(message?.action==='provider-response')globalThis.fixtureProviderReplies.push({id:message.id,errorName:message.error?.name});});
 chrome.runtime.onMessage.addListener((message,sender)=>{if(message?.action==='native-fallback'&&sender.url===chrome.runtime.getURL('popup.html'))globalThis.fixtureFallbacks.push({action:message.action,tabId:message.tabId,requestId:message.requestId});});
 globalThis.openFixtureWorkspace=async()=>{const [tab]=await chrome.tabs.query({url:'https://workspace-fixture.test/'});return testController.open(tab);};`);
 const profile = await mkdtemp(path.join(tmpdir(), 'thingtime-workspace-profile-'));
@@ -40,7 +42,11 @@ try {
  await page.waitForURL(`${extensionOrigin}/popup.html`);await page.getByText('Passkeys off',{exact:true}).waitFor();
  await page.getByText('https://workspace-fixture.test',{exact:true}).waitFor();
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const providerUIOrigin=process.argv.find(arg=>arg.startsWith('--provider-ui-origin='))?.slice('--provider-ui-origin='.length);
+ if(providerUIOrigin && !/^http:\/\/127\.0\.0\.1:\d+$/.test(providerUIOrigin))throw new Error('Use an explicit loopback origin for the synthetic actual-provider fixture');
  async function check(name) {
+  await page.locator('header img.mark').waitFor();
+  assert.equal(await page.locator('header img.mark').evaluate(image=>image.complete && image.naturalWidth===128 && image.getAttribute('alt')===''),true,`${name}: official decorative tree loads`);
   const dimensions=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));assert.ok(dimensions.scroll<=dimensions.width,`${name}: horizontal overflow`);
   await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));await page.screenshot({path:path.join(output,`${name}.png`),fullPage:true});await page.evaluate(()=>window.scrollTo(0,0));
  }
@@ -107,6 +113,20 @@ try {
  await site.waitForFunction(()=>window.fixtureReply?.value.error?.name==='AbortError');assert.equal((await site.evaluate(()=>window.fixtureReply)).focused,true);
  assert.equal(cancelled.provider.isClosed(),true);
  await page.bringToFront();await page.getByRole('button',{name:'Refresh requests'}).click();await page.getByText('No active passkey requests.',{exact:false}).waitFor();assert.equal(await page.locator('#request-count').textContent(),'0');
+ if(providerUIOrigin){
+  await page.bringToFront();await page.getByRole('tab',{name:'Config'}).click();await page.locator('#origin').fill(providerUIOrigin);await page.getByRole('button',{name:'Save connection',exact:true}).click();await page.getByText('Thingtime is enabled.',{exact:false}).waitFor();
+  const opening=context.waitForEvent('page');
+  await site.evaluate(()=>{window.fixtureReply=null;const id=crypto.randomUUID();window.fixtureOriginalId=id;document.addEventListener('thingtime:extension-response',function receive(event){const value=JSON.parse(event.detail);if(value.id!==id)return;document.removeEventListener('thingtime:extension-response',receive);window.fixtureReply={value,focused:document.hasFocus()};});document.dispatchEvent(new CustomEvent('thingtime:extension-request',{detail:JSON.stringify({version:1,id,type:'create',publicKey:{challenge:'AQID',rp:{id:'workspace-fixture.test',name:'Synthetic site'},user:{id:'BAUG',name:'fixture@example.test',displayName:'Synthetic account'},pubKeyCredParams:[{type:'public-key',alg:-7}],excludeCredentials:[{type:'public-key',id:'AQID'}],attestation:'none'}})}));});
+  const provider=await opening;await provider.waitForURL(`${providerUIOrigin}/passwords/provider`);provider.on('pageerror',e=>errors.push(e.message));
+  await provider.getByRole('button',{name:'Verify and save passkey',exact:true}).waitFor();await provider.getByLabel('Thingtime account password',{exact:true}).fill('synthetic-fixture-only');await provider.getByRole('button',{name:'Verify and save passkey',exact:true}).click();
+  await provider.getByRole('button',{name:'Return to website',exact:true}).waitFor();
+  assert.equal(await provider.getByRole('button',{name:'Refresh saved passkeys',exact:true}).count(),0);assert.equal(await provider.getByRole('button',{name:'Verify and save passkey',exact:true}).count(),0);assert.equal(await provider.getByRole('button',{name:'Use another passkey provider',exact:true}).count(),0);assert.equal(await provider.locator('input[type="password"]').count(),0);
+  const operations=await provider.evaluate(()=>window.passwordProviderFixture.operations);assert.deepEqual(operations,['catalog','verify-passkey','catalog']);assert.equal(await site.evaluate(()=>window.fixtureReply),null);
+  for(const width of [960,375]){await provider.setViewportSize({width,height:740});await provider.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));assert.ok(await provider.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await provider.screenshot({path:path.join(output,`actual-provider-terminal-${width}.png`),fullPage:true});}
+  const request=await provider.evaluate(()=>window.passwordProviderFixture.request);await provider.getByRole('button',{name:'Return to website',exact:true}).click();await site.waitForFunction(()=>window.fixtureReply?.value.error?.name==='InvalidStateError');const reply=await site.evaluate(()=>window.fixtureReply);assert.equal(reply.value.id,await site.evaluate(()=>window.fixtureOriginalId));assert.deepEqual(await worker.evaluate(()=>globalThis.fixtureProviderReplies.at(-1)),{id:request.id,errorName:'InvalidStateError'});assert.equal(reply.focused,true);assert.equal(provider.isClosed(),true);
+  await page.bringToFront();await page.getByRole('tab',{name:'Requests'}).click();await page.getByRole('button',{name:'Refresh requests'}).click();await page.getByText('No active passkey requests.',{exact:false}).waitFor();assert.equal(await page.locator('#request-count').textContent(),'0');
+  await page.getByRole('tab',{name:'Config'}).click();
+ }
  await page.setViewportSize({width:960,height:760});
  await page.getByRole('tab',{name:'Config'}).click();await page.locator('#enabled').uncheck();await page.locator('#origin').fill('https://thingtime.com');await page.getByRole('button',{name:'Save connection',exact:true}).click();await page.getByText('Thingtime is off.',{exact:false}).waitFor();
  // Viewport changes model resizing without touching the user's browser.
@@ -118,6 +138,6 @@ try {
  await page.getByRole('tab',{name:'Help'}).click();await check('help-dark-large-text');
  await site.goto('https://workspace-fixture.test/navigated');await page.getByRole('tab',{name:'Overview'}).click();await page.getByRole('button',{name:'Refresh status'}).click();await page.getByText('No current website selected.',{exact:false}).waitFor();
  assert.deepEqual(errors,[]);
- await writeFile(path.join(output,'result.json'),JSON.stringify({status:'pass',synthetic:true,checks:['screen fit','all tabs desktop/narrow/landscape','32px text dark/reduced-motion','keyboard tabs','appearance save/reload','stale document target','rendered active get/create requests via content bridge','exact fallback request identity','fallback/cancellation requester focus and request cleanup'],errors},null,2));
+ await writeFile(path.join(output,'result.json'),JSON.stringify({status:'pass',synthetic:true,checks:['screen fit','all tabs desktop/narrow/landscape','32px text dark/reduced-motion','keyboard tabs','appearance save/reload','stale document target','rendered active get/create requests via content bridge','exact fallback request identity','fallback/cancellation requester focus and request cleanup'],actualProviderFixture:providerUIOrigin?{status:'pass',syntheticAPI:true,checks:['actual component excluded create','no approval refresh or fallback','password input cleared','explicit return exact two-hop identity','requester focus and cleanup']}:null,errors},null,2));
  console.log(`Synthetic Chrome workspace acceptance passed. Evidence: ${output}`);
 } finally {await context?.close();await rm(profile,{recursive:true,force:true});await rm(extension,{recursive:true,force:true});}

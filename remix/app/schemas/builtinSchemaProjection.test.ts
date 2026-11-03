@@ -67,6 +67,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "app-storage": ["quotaKind", "appId", "usedBytes", "storageAllowanceBytes"],
   "service-quota": ["quotaKind", "quotaVersion", "key", "policy", "dayKey", "dailyUsed", "reservations", "permitIds", "releasedIds", "rollingPermits"],
   "migration-diagnostic": ["diagnosticVersion", "migrationId", "mode", "status", "outcome", "summary", "capturedAt"],
+  "mongodb-connection-snapshot": ["source"],
   "error-log": ["source", "message", "provider", "status", "code", "requestId", "route", "method", "providerType", "providerRequestId", "retryAfter", "attempt"],
   "ai-model": ["modelId", "label", "provider", "efforts", "speeds", "family", "enabled", "sortOrder", "contextWindow", "notes"],
   "account-invite": ["status", "amountMicros"],
@@ -147,6 +148,7 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 	assert.ok(PROTECTED_THINGTIME.includes('attachment'));
 	assert.ok(PROTECTED_THINGTIME.includes('app'));
 	assert.ok(PROTECTED_THINGTIME.includes('migration-diagnostic'));
+	assert.ok(PROTECTED_THINGTIME.includes('mongodb-connection-snapshot'));
 	assert.ok(PROTECTED_THINGTIME.includes('moderationFlag'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-pull-request'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-preview-policy'));
@@ -290,6 +292,19 @@ test('opaque native objects remain copyable bounded JSON, including the root cry
       assert.equal(fields.find(field => field.name === source.name)?.type, 'json', `${schema.id}.${source.name}`);
     }
   }
+});
+
+test('MongoDB snapshot schema projects its opaque source without granting generic data writes', () => {
+  const schema = crystalSchemas.find((entry) => entry.id === 'mongodb-connection-snapshot')!;
+  const projected = projectBuiltinSchemaCrystal(schema);
+  const validated = validateThingtimeCrystal(['schema'], projected);
+  assert.equal(validated.ok, true);
+  if (!validated.ok) return;
+  const source = (validated.crystal.fields as Array<Record<string, unknown>>).find((field) => field.name === 'source')!;
+  assert.equal(source.type, 'json');
+  assert.equal(source.required, true);
+  assert.equal(isProtectedThingtime([schema.id]), true);
+  assert.equal(validateThingtimeCrystal([schema.id], schema.example).ok, false, 'the dedicated runtime writer owns snapshot data');
 });
 
 test('schema extension headroom retains a total field-node limit', () => {

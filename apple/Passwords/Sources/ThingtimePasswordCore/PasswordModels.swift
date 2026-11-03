@@ -47,8 +47,9 @@ public struct ProviderSession: Codable, Equatable, Sendable {
 // server response, URLSession error, Keychain value or credential in diagnostics.
 public enum PasswordProviderError: Error, Equatable {
     case invalidSession, sessionChanged, sessionUnavailable, unavailable, invalidCredential, unsupportedAlgorithm, cancelled
+    case credentialExcluded, invalidRegistrationRequest
     case permissionDenied, conflict, rateLimited, serviceUnavailable, incompatibleService, networkUnavailable, invalidResponse
-    public var allowsRetryInCurrentRequest: Bool { self != .sessionChanged }
+    public var allowsRetryInCurrentRequest: Bool { ![.sessionChanged, .credentialExcluded, .invalidRegistrationRequest, .unsupportedAlgorithm].contains(self) }
 }
 extension Data {
     public var base64URL: String { base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "") }
