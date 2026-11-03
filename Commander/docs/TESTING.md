@@ -126,6 +126,13 @@
       change Shift, and reverse direction: resizing must continue beyond the first pixel until release. Run the native
       passive-event dispatch regression to cover cursor, enter/exit, framework and modifier notifications between drag
       steps; endpoint-only automated drags do not establish that interleaved-event behavior.
+- [ ] Hover without clicking along both sides of each visible launcher border and all four corners. Pause, move along
+      the border, and cross a corner: the resize cursor must remain stable and match the direction available on drag.
+      Repeat after default/compact changes and at minimum and wide/tall window sizes. Center links, text fields,
+      header/footer controls and file dragging must retain normal input and cursors. Disable custom resize handling:
+      its native handle views must stop intercepting hits and cursors. Run the loaded-WebKit native cursor regression
+      for sibling hit ownership, system cursor selection and relayout/invalidation; dispatched cursor updates and
+      endpoint drags do not substitute for this physical-hover check when automation lacks pointer movement.
 - [ ] While resizing, trigger an emoji insertion or press Return to paste from Commander’s Emoji & Symbols picker,
       release the mouse, press Escape, change focus, hide, or close the launcher. The resize session must cancel
       immediately, so later pointer movement cannot resize the panel. In

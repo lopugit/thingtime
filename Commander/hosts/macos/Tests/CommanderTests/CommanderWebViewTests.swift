@@ -153,11 +153,11 @@ final class CommanderWebViewTests: XCTestCase {
     XCTAssertTrue(panel.canBecomeKey)
     XCTAssertTrue(panel.canBecomeMain)
     XCTAssertEqual(panel.minSize, LauncherWindowMode.standard.minimumSize)
-    XCTAssertTrue(panel.contentView is CommanderWebView)
+    XCTAssertTrue(panel.contentView is CommanderLauncherContentView)
     XCTAssertEqual(panel.contentView?.layer?.backgroundColor?.alpha, 0)
     XCTAssertEqual(panel.contentView?.superview?.layer?.backgroundColor?.alpha, 0)
-    guard let webView = panel.contentView as? CommanderWebView else {
-      return XCTFail("Launcher content is not a CommanderWebView")
+    guard let webView = (panel.contentView as? CommanderLauncherContentView)?.webView else {
+      return XCTFail("Launcher content does not contain a CommanderWebView")
     }
     webView.layoutSubtreeIfNeeded()
     let maskBounds = (webView.layer?.mask as? CAShapeLayer)?.path?.boundingBox
@@ -261,6 +261,182 @@ final class CommanderWebViewTests: XCTestCase {
       ),
       NSRect(x: 100, y: 360, width: 520, height: 300)
     )
+  }
+
+  func testLauncherResizeBorderOwnsHitsAboveWebKitAndMatchesDragRegions() throws {
+    let ready = DaemonReady(
+      type: "ready", protocolVersion: 1, port: 1, url: "http://127.0.0.1:1",
+      sessionToken: "test-session", nativeToken: "test-native", pid: 1
+    )
+    let bridge = CommanderNativeBridge(
+      ready: ready, keychain: KeychainStore(), loginItem: LaunchAtLoginService(),
+      showLauncher: {}, hideLauncher: {}, showSettings: { _ in },
+      updateHotKeys: { _, _ in }, updateMenuBar: { _ in }, updateWindowMode: { _ in }
+    )
+    let controller = LauncherPanelController(ready: ready, bridge: bridge)
+    let panel = controller.panelForTesting
+    defer { controller.shutdown() }
+    let content = try XCTUnwrap(panel.contentView)
+    let webView = try XCTUnwrap(
+      ([content] + descendants(of: content)).first { $0 is CommanderWebView } as? CommanderWebView
+    )
+
+    for mode in [LauncherWindowMode.standard, .compact] {
+      controller.setWindowMode(mode)
+      for size in [mode.minimumSize, NSSize(width: 1463, height: 1406)] {
+        panel.setContentSize(size)
+        content.layoutSubtreeIfNeeded()
+        let inset: CGFloat = mode == .compact ? 12 : CommanderWebView.launcherSurfaceInset
+        let surface = content.bounds.insetBy(dx: inset, dy: inset)
+        // Probe both sides of each visible border, all corners, and points just
+        // outside the resize band. Native hit ownership must match drag entry.
+        var points = [NSPoint(x: surface.midX, y: surface.midY)]
+        for offset: CGFloat in [-11, -9, 0, 9, 11] {
+          points += [
+            NSPoint(x: surface.minX + offset, y: surface.midY),
+            NSPoint(x: surface.maxX + offset, y: surface.midY),
+            NSPoint(x: surface.midX, y: surface.minY + offset),
+            NSPoint(x: surface.midX, y: surface.maxY + offset),
+          ]
+        }
+        for x in [surface.minX - 9, surface.minX + 9, surface.maxX - 9, surface.maxX + 9] {
+          for y in [surface.minY - 9, surface.minY + 9, surface.maxY - 9, surface.maxY + 9] {
+            points.append(NSPoint(x: x, y: y))
+          }
+        }
+        for point in points where content.bounds.contains(point) {
+          let edges = CommanderWebView.resizeEdges(
+            at: point, frame: surface, handleWidth: CommanderWebView.resizeHandleWidth
+          )
+          let hit = try XCTUnwrap(content.hitTest(content.convert(point, to: content.superview)))
+          let webHit = hit === webView || hit.isDescendant(of: webView)
+          if edges.isEmpty {
+            XCTAssertTrue(webHit, "Content must retain normal WebKit hit ownership at \(point)")
+          } else {
+            XCTAssertFalse(webHit, "WebKit must not own the resize cursor at \(point)")
+          }
+        }
+        controller.setCustomWindowResizeHandling(false)
+        let borderPoint = NSPoint(x: surface.minX, y: surface.midY)
+        let disabledHit = try XCTUnwrap(content.hitTest(content.convert(borderPoint, to: content.superview)))
+        XCTAssertTrue(disabledHit === webView || disabledHit.isDescendant(of: webView))
+        controller.setCustomWindowResizeHandling(true)
+      }
+    }
+  }
+
+  func testNativeResizeCursorSurvivesLoadedWebKitContentAndLayout() async throws {
+    let ready = DaemonReady(
+      type: "ready", protocolVersion: 1, port: 1, url: "http://127.0.0.1:1",
+      sessionToken: "test-session", nativeToken: "test-native", pid: 1
+    )
+    let bridge = CommanderNativeBridge(
+      ready: ready, keychain: KeychainStore(), loginItem: LaunchAtLoginService(),
+      showLauncher: {}, hideLauncher: {}, showSettings: { _ in },
+      updateHotKeys: { _, _ in }, updateMenuBar: { _ in }, updateWindowMode: { _ in }
+    )
+    let controller = LauncherPanelController(ready: ready, bridge: bridge)
+    let panel = controller.panelForTesting
+    let content = try XCTUnwrap(panel.contentView as? CommanderLauncherContentView)
+    let webView = content.webView
+    let previousCursor = NSCursor.current
+    defer {
+      previousCursor.set()
+      webView.navigationDelegate = webView
+      controller.shutdown()
+    }
+    let loaded = expectation(description: "Real WebKit cursor fixture loaded")
+    let fixtureDelegate = CommanderCursorFixtureNavigationDelegate { loaded.fulfill() }
+    // Keep the fixture local to this view; production navigation restrictions
+    // remain unchanged. Loading real HTML builds WebKit's actual descendant and
+    // tracking hierarchy rather than substituting a fake content subview.
+    webView.navigationDelegate = fixtureDelegate
+    webView.loadHTMLString("""
+      <!doctype html><style>
+      html,body { margin:0; width:100%; height:100%; cursor:text }
+      a { position:absolute; left:40%; top:40%; cursor:pointer }
+      input { position:absolute; left:40%; top:60%; cursor:text }
+      </style><a id="link" href="#fixture">Fixture link</a><input id="field" value="editable">
+      """, baseURL: nil)
+    await fulfillment(of: [loaded], timeout: 10)
+    let fixtureState = try await webView.evaluateJavaScript("document.readyState") as? String
+    XCTAssertEqual(fixtureState, "complete")
+
+    for mode in [LauncherWindowMode.standard, .compact] {
+      controller.setWindowMode(mode)
+      panel.setContentSize(mode.minimumSize)
+      content.layoutSubtreeIfNeeded()
+      XCTAssertEqual(content.resizeHandles.count, 8)
+      let themeFrame = try XCTUnwrap(content.superview)
+      for handle in content.resizeHandles {
+        handle.updateTrackingAreas()
+        let point = NSPoint(x: handle.frame.midX, y: handle.frame.midY)
+        let target = try XCTUnwrap(themeFrame.hitTest(content.convert(point, to: themeFrame.superview)))
+        XCTAssertTrue(target === handle)
+        XCTAssertFalse(target.isDescendant(of: webView))
+        let cursorEvent = try XCTUnwrap(NSEvent.enterExitEvent(
+          with: .cursorUpdate, location: content.convert(point, to: nil),
+          modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber,
+          context: nil, eventNumber: 0, trackingNumber: 0, userData: nil
+        ))
+        NSCursor.iBeam.set()
+        target.cursorUpdate(with: cursorEvent)
+        XCTAssertTrue(NSCursor.current === handle.resizeCursor)
+        XCTAssertTrue(handle.trackingAreas.contains {
+          $0.owner as? CommanderResizeHandleView === handle && $0.options.contains(.cursorUpdate)
+        })
+        if #available(macOS 15.0, *) {
+          let expectedPosition: NSCursor.FrameResizePosition
+          switch handle.edges {
+          case [.left, .bottom]: expectedPosition = .bottomLeft
+          case [.right, .bottom]: expectedPosition = .bottomRight
+          case [.left, .top]: expectedPosition = .topLeft
+          case [.right, .top]: expectedPosition = .topRight
+          case .left: expectedPosition = .left
+          case .right: expectedPosition = .right
+          case .bottom: expectedPosition = .bottom
+          default: expectedPosition = .top
+          }
+          let expected = NSCursor.frameResize(position: expectedPosition, directions: .all)
+          XCTAssertEqual(handle.resizeCursor.image.tiffRepresentation, expected.image.tiffRepresentation)
+          XCTAssertEqual(handle.resizeCursor.hotSpot, expected.hotSpot)
+        }
+      }
+
+      // Let real WebKit style/layout changes and AppKit cursor invalidation
+      // settle, then verify ownership and cursor selection again after resizing.
+      _ = try await webView.evaluateJavaScript("document.body.style.cursor = 'pointer'")
+      panel.invalidateCursorRects(for: webView)
+      panel.setContentSize(NSSize(width: 1463, height: 1406))
+      content.layoutSubtreeIfNeeded()
+      await Task.yield()
+      let right = try XCTUnwrap(content.resizeHandles.first { $0.edges == .right })
+      let border = NSPoint(x: right.frame.midX, y: right.frame.midY)
+      XCTAssertTrue(themeFrame.hitTest(content.convert(border, to: themeFrame.superview)) === right)
+      NSCursor.pointingHand.set()
+      let update = try XCTUnwrap(NSEvent.enterExitEvent(
+        with: .cursorUpdate, location: content.convert(border, to: nil), modifierFlags: [], timestamp: 0,
+        windowNumber: panel.windowNumber, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil
+      ))
+      right.cursorUpdate(with: update)
+      XCTAssertTrue(NSCursor.current === right.resizeCursor)
+
+      for elementID in ["link", "field"] {
+        let state = try await webView.evaluateJavaScript("""
+          (() => { const e = document.getElementById('\(elementID)'); const r = e.getBoundingClientRect();
+          return { x:r.x+r.width/2, y:r.y+r.height/2, cursor:getComputedStyle(e).cursor }; })()
+          """) as? [String: Any]
+        let x = try XCTUnwrap(state?["x"] as? Double)
+        let y = try XCTUnwrap(state?["y"] as? Double)
+        XCTAssertEqual(state?["cursor"] as? String, elementID == "link" ? "pointer" : "text")
+        let nativePoint = NSPoint(x: x, y: webView.isFlipped ? y : webView.bounds.height - y)
+        let hit = try XCTUnwrap(themeFrame.hitTest(webView.convert(nativePoint, to: themeFrame.superview)))
+        XCTAssertTrue(hit === webView || hit.isDescendant(of: webView))
+      }
+      _ = try await webView.evaluateJavaScript("document.getElementById('field').focus()")
+      let activeID = try await webView.evaluateJavaScript("document.activeElement.id") as? String
+      XCTAssertEqual(activeID, "field")
+    }
   }
 
   func testCustomResizeContinuesAcrossPassiveEventsUntilMouseUp() throws {
@@ -626,8 +802,8 @@ final class CommanderWebViewTests: XCTestCase {
     )
     let controller = LauncherPanelController(ready: ready, bridge: bridge)
     let panel = controller.panelForTesting
-    guard let webView = panel.contentView as? CommanderWebView else {
-      return XCTFail("Launcher content is not a CommanderWebView")
+    guard let webView = (panel.contentView as? CommanderLauncherContentView)?.webView else {
+      return XCTFail("Launcher content does not contain a CommanderWebView")
     }
     let file = FileManager.default.temporaryDirectory
       .appendingPathComponent("commander-drag-session-\(UUID().uuidString).txt")
@@ -768,5 +944,16 @@ final class CommanderWebViewTests: XCTestCase {
 
   private func descendants(of view: NSView) -> [NSView] {
     view.subviews + view.subviews.flatMap(descendants)
+  }
+}
+
+@MainActor
+private final class CommanderCursorFixtureNavigationDelegate: NSObject, WKNavigationDelegate {
+  private let didLoad: () -> Void
+
+  init(didLoad: @escaping () -> Void) { self.didLoad = didLoad }
+
+  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    didLoad()
   }
 }
