@@ -1,3 +1,12 @@
+import {
+  ACTION_KEY_PATTERN,
+  DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS,
+  MAX_ACTION_KEY_CHARS,
+  MAX_WEBPAGE_SOURCE_INTERVAL_MS,
+  MIN_WEBPAGE_SOURCE_INTERVAL_MS
+} from '~/schemas/registry';
+
+import type { ThingSourceBinding } from '../Builder/liveComponent';
 import type { ComponentArgSpec } from './componentTemplate';
 import { sanitizeArgSpecs } from './componentTemplate';
 
@@ -161,4 +170,156 @@ export const collapseEntriesByFamily = (entries: BrowseComponentEntry[]): Compon
     sources.push(source);
   }
   return sources;
+};
+
+// ---------------------------------------------------------------------------
+// The dedicated page's trust ladder. Interactivity comes from OWNERSHIP or
+// platform curation, never from markup: the viewer's own thing is live with
+// no confirm; a system-seeded thing (no author — ownerId 'system' — AND the
+// reserved `component-` id prefix user creates refuse) is live behind the
+// confirm gate, and when its componentKey names a suite part (demo-/app-
+// slugs) that suite must resolve through the registry the caller injects;
+// anything else is a stranger's thing and stays inert.
+
+export const RESERVED_COMPONENT_ID_PREFIX = 'component-';
+const SUITE_SLUG_PATTERN = /^(demo|app)-/;
+
+export type ComponentTrust = 'owner' | 'seeded' | 'stranger';
+
+export const componentTrustFor = (
+  source: { id: string; componentKey: string | null; entry: Pick<BrowseComponentEntry, 'author'> },
+  viewerId: string | null | undefined,
+  suiteKeyOf: (componentKey: string) => string | null
+): { trust: ComponentTrust; suiteKey: string | null } => {
+  const authorId = source.entry.author?.id || null;
+  const suiteKey = source.componentKey ? suiteKeyOf(source.componentKey) : null;
+  if (viewerId && authorId === viewerId) return { trust: 'owner', suiteKey };
+  const systemOwned = !authorId && source.id.startsWith(RESERVED_COMPONENT_ID_PREFIX);
+  const suitePart = !!source.componentKey && SUITE_SLUG_PATTERN.test(source.componentKey);
+  if (systemOwned && (!suitePart || suiteKey)) return { trust: 'seeded', suiteKey };
+  return { trust: 'stranger', suiteKey };
+};
+
+// The design the page lands on: an explicit ?design= (a library, or a thing
+// id when a family holds two renditions of one library), else the entry the
+// URL key names — the viewer's OWN copy ahead of the seeded one, the way
+// /p/<pageKey> resolves an installed twin ahead of the platform page — else
+// the first by design rank.
+export const pickActiveSource = (
+  sources: ComponentCardSource[],
+  options: { design: string; key: string; viewerId: string | null | undefined }
+): ComponentCardSource | null => {
+  if (!sources.length) return null;
+  const own = (source: ComponentCardSource) => !!options.viewerId && source.entry.author?.id === options.viewerId;
+  if (options.design) {
+    const exact = sources.find((source) => source.id === options.design);
+    if (exact) return exact;
+    const byLibrary = sources.filter((source) => source.library === options.design);
+    if (byLibrary.length) return byLibrary.find(own) || byLibrary[0];
+  }
+  const keyed = sources.filter(
+    (source) => source.componentKey === options.key || source.familyKey === options.key || source.id === options.key
+  );
+  if (keyed.length) return keyed.find(own) || keyed[0];
+  return sources.find(own) || sources[0];
+};
+
+// A code-catalog component (a behaviour/app suite part materialised on the
+// client) as a browse entry, so the dedicated page can paint it before the
+// fetch lands — the house optimistic-render rule. Reconciled by the API.
+export const catalogEntryFrom = (shareId: string, crystal: Record<string, unknown>): BrowseComponentEntry => ({
+  id: shareId,
+  thingtime: ['component'],
+  author: null,
+  visibility: 'public',
+  acl: ['tt:all'],
+  targetId: null,
+  crystal,
+  tags: [],
+  createdAt: '',
+  updatedAt: '',
+  reactionCounts: {},
+  viewerReactions: [],
+  saved: false,
+  usageCount: 0
+});
+
+// ---------------------------------------------------------------------------
+// The page's DATA SOURCE binding lives in the URL (?source=<actionKey>
+// &refresh=manual|interval&interval=<ms>&inputs=<json>) so a bound page is
+// shareable and NEVER written to the thing. The values are exactly what a
+// webpage block's `source` carries (ThingSourceBinding) and the same gates
+// apply: an actionKey slug, a bounded interval, scalar inputs.
+
+export const SOURCE_PARAM_KEYS = ['source', 'refresh', 'interval', 'inputs'] as const;
+export type SourceRefreshMode = NonNullable<ThingSourceBinding['refresh']>;
+export const SOURCE_REFRESH_MODES: SourceRefreshMode[] = ['load', 'manual', 'interval'];
+const MAX_SOURCE_INPUT_KEYS = 32;
+const MAX_SOURCE_INPUT_CHARS = 4000;
+const SOURCE_INPUT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/;
+
+export const isSourceActionKey = (value: string): boolean =>
+  value.length > 0 && value.length <= MAX_ACTION_KEY_CHARS && ACTION_KEY_PATTERN.test(value);
+
+export const clampSourceInterval = (raw: unknown): number => {
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS;
+  return Math.max(MIN_WEBPAGE_SOURCE_INTERVAL_MS, Math.min(MAX_WEBPAGE_SOURCE_INTERVAL_MS, Math.round(value)));
+};
+
+export type SourceInputs = Record<string, string | number | boolean>;
+
+export const parseSourceInputsJson = (raw: string): { ok: true; inputs: SourceInputs | undefined } | { ok: false; error: string } => {
+  const text = (raw || '').trim();
+  if (!text) return { ok: true, inputs: undefined };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { ok: false, error: 'Inputs must be a JSON object' };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false, error: 'Inputs must be a JSON object' };
+  const inputs: SourceInputs = {};
+  let count = 0;
+  for (const [name, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!SOURCE_INPUT_KEY_PATTERN.test(name)) return { ok: false, error: `Input name “${name}” must be a simple identifier` };
+    if (typeof value === 'string') {
+      if (value.length > MAX_SOURCE_INPUT_CHARS) return { ok: false, error: `Input “${name}” is too long` };
+      inputs[name] = value;
+    } else if ((typeof value === 'number' && Number.isFinite(value)) || typeof value === 'boolean') {
+      inputs[name] = value;
+    } else {
+      return { ok: false, error: `Input “${name}” must be a string, number, or boolean` };
+    }
+    count += 1;
+    if (count > MAX_SOURCE_INPUT_KEYS) return { ok: false, error: `At most ${MAX_SOURCE_INPUT_KEYS} inputs` };
+  }
+  return { ok: true, inputs: count ? inputs : undefined };
+};
+
+export const parseSourceBindingParams = (params: URLSearchParams): ThingSourceBinding | null => {
+  const action = (params.get('source') || '').trim();
+  if (!isSourceActionKey(action)) return null;
+  const refreshRaw = params.get('refresh') || '';
+  const refresh = (SOURCE_REFRESH_MODES as string[]).includes(refreshRaw) ? (refreshRaw as SourceRefreshMode) : 'load';
+  const parsedInputs = parseSourceInputsJson(params.get('inputs') || '');
+  return {
+    action,
+    refresh,
+    ...(refresh === 'interval' ? { intervalMs: clampSourceInterval(params.get('interval')) } : {}),
+    ...(parsedInputs.ok && parsedInputs.inputs ? { inputs: parsedInputs.inputs } : {})
+  };
+};
+
+// A copy of `params` with the binding written (or, for null, cleared) — every
+// other param (design) survives.
+export const sourceBindingToParams = (params: URLSearchParams, binding: ThingSourceBinding | null): URLSearchParams => {
+  const next = new URLSearchParams(params);
+  for (const param of SOURCE_PARAM_KEYS) next.delete(param);
+  if (!binding || !isSourceActionKey(binding.action)) return next;
+  next.set('source', binding.action);
+  if (binding.refresh && binding.refresh !== 'load') next.set('refresh', binding.refresh);
+  if (binding.refresh === 'interval') next.set('interval', String(clampSourceInterval(binding.intervalMs)));
+  if (binding.inputs && Object.keys(binding.inputs).length) next.set('inputs', JSON.stringify(binding.inputs));
+  return next;
 };

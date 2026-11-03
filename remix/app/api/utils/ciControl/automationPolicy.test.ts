@@ -16,6 +16,7 @@ test('CI automation definitions are unique and default to GitHub-hosted compute'
   }
   assert.equal(CI_AUTOMATION_DEFINITIONS.find((definition) => definition.key === 'web-ci')?.vercelSupported, false);
   assert.equal(CI_AUTOMATION_DEFINITIONS.find((definition) => definition.key === 'electron-release')?.vercelSupported, false);
+  assert.equal(CI_AUTOMATION_DEFINITIONS.find((definition) => definition.key === 'feature-stack')?.vercelSupported, false);
 });
 
 test('CI automation validators reject arbitrary provider and workflow strings', () => {

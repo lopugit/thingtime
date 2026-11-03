@@ -109,18 +109,22 @@ export const MessageList = (props: MessageListProps) => {
       ) : null}
       {ordered.map((message, index) => {
         const prev = ordered[index - 1];
+        const authorKey = (entry: ChatMessage) =>
+          entry.externalSource
+            ? `${entry.externalSource.sourceId}:${entry.externalSource.role || 'unknown'}:${entry.externalSource.authorName || ''}`
+            : entry.authorId;
         const grouped =
           !!prev &&
           !prev.systemType &&
           !message.systemType &&
-          prev.authorId === message.authorId &&
+          authorKey(prev) === authorKey(message) &&
           new Date(message.createdAt).getTime() - new Date(prev.createdAt).getTime() < GROUP_WINDOW_MS;
         return (
           <MessageRow
             key={message.id}
             message={message}
             mode={props.mode}
-            isMine={message.authorId === viewerId}
+            isMine={message.externalSource ? message.externalSource.role === 'user' : message.authorId === viewerId}
             grouped={grouped}
             members={members}
             customEmojis={props.customEmojis}

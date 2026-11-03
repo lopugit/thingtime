@@ -1,10 +1,10 @@
 import React from 'react';
-import { Box, Button, Flex, IconButton, Input, Slider, SliderFilledTrack, SliderThumb, SliderTrack, Text } from '@chakra-ui/react';
-import { Minus, MoveDiagonal, Plus } from 'lucide-react';
+import { Box, Button, Flex, IconButton, Slider, SliderFilledTrack, SliderThumb, SliderTrack, Text } from '@chakra-ui/react';
+import { Minus, MoveDiagonal, Plus, Trash2 } from 'lucide-react';
 
 import { MAX_MEDIA_LAYOUT_ENTRIES, MAX_MEDIA_LAYOUT_TRACK, MEDIA_LAYOUT_SPAN_VALUES, type MediaLayoutSpan } from '~/schemas/registry';
-import { attachmentContentUrl } from './attachmentUiCore';
-import { mediaLayoutRows, spanAspect, spanColumns, spanRows } from './PostAttachments';
+import { attachmentMediaSrc } from './attachmentUiCore';
+import { mediaLayoutRows, rowAspectRatio, spanAspect, spanColumns, spanRows } from './PostAttachments';
 import type { PublicAttachment } from './attachmentTypes';
 
 const BORDER = '1px solid var(--tt-border, #ececef)';
@@ -16,17 +16,6 @@ const RADIUS_SM = 'var(--tt-radius-sm, 9px)';
 // owns the state; these are dumb inputs. Auto = masonry default (stored null).
 
 export type ComposerLayoutMode = 'auto' | 'rows' | 'grid';
-
-// "1-2-3" / "1,2,3" / "1 2 3" -> bounded int rows; null when nothing parses
-export const parseLayoutPattern = (value: string): number[] | null => {
-	const rows = value
-		.split(/[-,.\s/]+/)
-		.filter(Boolean)
-		.map((entry) => Number(entry))
-		.filter((entry) => Number.isInteger(entry) && entry >= 1 && entry <= MAX_MEDIA_LAYOUT_TRACK)
-		.slice(0, MAX_MEDIA_LAYOUT_ENTRIES);
-	return rows.length ? rows : null;
-};
 
 const MODES: { id: ComposerLayoutMode; label: string }[] = [
 	{ id: 'auto', label: 'Auto 🧱' },
@@ -60,15 +49,21 @@ export const MediaLayoutPicker = ({
 }: {
 	mode: ComposerLayoutMode;
 	onMode: (mode: ComposerLayoutMode) => void;
-	pattern: string;
-	onPattern: (value: string) => void;
+	pattern: number[];
+	onPattern: (value: number[]) => void;
 	columns: number;
 	onColumns: (columns: number) => void;
 	imageCount: number;
 }) => {
-	const parsed = parseLayoutPattern(pattern);
 	return (
-		<Flex flexDirection="column" rowGap={2} border={BORDER} borderRadius="var(--tt-radius-md, 12px)" padding={2.5} background="var(--tt-surface, #fafafb)">
+		<Flex
+			flexDirection="column"
+			rowGap={2}
+			border={BORDER}
+			borderRadius="var(--tt-radius-md, 12px)"
+			padding={2.5}
+			background="var(--tt-surface, #fafafb)"
+		>
 			<Flex alignItems="center" columnGap={2} flexWrap="wrap" rowGap={1.5}>
 				<Text fontSize="11px" fontWeight={700} letterSpacing="0.08em" color={MUTED}>
 					LAYOUT
@@ -91,27 +86,70 @@ export const MediaLayoutPicker = ({
 			</Flex>
 
 			{mode === 'rows' && (
-				<Flex alignItems="center" columnGap={2.5} flexWrap="wrap" rowGap={1.5}>
-					<Input
-						size="sm"
-						width="130px"
-						borderRadius={RADIUS_SM}
-						value={pattern}
-						onChange={(event) => onPattern(event.target.value)}
-						placeholder="1-2-3"
-						aria-label="Images per row, top to bottom (e.g. 1-2-3)"
-						isInvalid={!parsed}
-					/>
-					{parsed ? (
-						<PatternPreview pattern={parsed} imageCount={imageCount} />
-					) : (
-						<Text fontSize="11px" color="var(--tt-danger, #e5484d)">
-							Try something like 1-2-3 🥞
+				<Flex flexDirection="column" rowGap={2}>
+					<Flex alignItems="center" columnGap={2} flexWrap="wrap">
+						<PatternPreview pattern={pattern} imageCount={imageCount} />
+						<Text fontSize="11px" color={MUTED}>
+							Set each row visually · extra images repeat the last row
 						</Text>
-					)}
-					<Text fontSize="11px" color={MUTED}>
-						images per row · extras repeat the last row
-					</Text>
+					</Flex>
+					<Flex columnGap={2} rowGap={2} flexWrap="wrap" aria-label="Rows layout settings">
+						{pattern.map((count, index) => (
+							<Flex
+								key={index}
+								alignItems="center"
+								columnGap={1}
+								border={BORDER}
+								borderRadius={RADIUS_SM}
+								padding="5px 7px"
+								background="var(--tt-card, #fff)"
+							>
+								<Text fontSize="11px" fontWeight={700}>
+									Row {index + 1}
+								</Text>
+								<IconButton
+									aria-label={`Fewer images in row ${index + 1}`}
+									icon={<Minus size={12} />}
+									size="xs"
+									variant="ghost"
+									isDisabled={count <= 1}
+									onClick={() => onPattern(pattern.map((value, row) => (row === index ? Math.max(1, value - 1) : value)))}
+								/>
+								<Text minWidth="38px" textAlign="center" fontSize="12px" fontWeight={800}>
+									{count} {count === 1 ? 'image' : 'images'}
+								</Text>
+								<IconButton
+									aria-label={`More images in row ${index + 1}`}
+									icon={<Plus size={12} />}
+									size="xs"
+									variant="ghost"
+									isDisabled={count >= MAX_MEDIA_LAYOUT_TRACK}
+									onClick={() => onPattern(pattern.map((value, row) => (row === index ? Math.min(MAX_MEDIA_LAYOUT_TRACK, value + 1) : value)))}
+								/>
+								{pattern.length > 1 ? (
+									<IconButton
+										aria-label={`Delete row ${index + 1}`}
+										icon={<Trash2 size={12} />}
+										size="xs"
+										variant="ghost"
+										color="var(--tt-danger, #e5484d)"
+										onClick={() => onPattern(pattern.filter((_, row) => row !== index))}
+									/>
+								) : null}
+							</Flex>
+						))}
+						<Button
+							type="button"
+							size="xs"
+							variant="outline"
+							borderRadius="999px"
+							leftIcon={<Plus size={12} />}
+							isDisabled={pattern.length >= MAX_MEDIA_LAYOUT_ENTRIES}
+							onClick={() => onPattern([...pattern, pattern.at(-1) || 1])}
+						>
+							Add row
+						</Button>
+					</Flex>
 				</Flex>
 			)}
 
@@ -286,21 +324,20 @@ export const MediaLayoutCanvas = ({
 	};
 
 	return (
-		<Flex flexDirection="column" rowGap={2} border={BORDER} borderRadius="var(--tt-radius-md, 12px)" padding={2.5} background="var(--tt-surface, #fafafb)">
+		<Flex
+			flexDirection="column"
+			rowGap={2}
+			border={BORDER}
+			borderRadius="var(--tt-radius-md, 12px)"
+			padding={2.5}
+			background="var(--tt-surface, #fafafb)"
+		>
 			<Flex alignItems="center" columnGap={3} flexWrap="wrap" rowGap={1.5}>
 				<Text fontSize="11px" fontWeight={700} letterSpacing="0.08em" color={MUTED}>
-					GRID CANVAS
+					FINAL VIEW PREVIEW
 				</Text>
 				<Flex alignItems="center" columnGap={2} flex="1" minWidth="140px" maxWidth="240px">
-					<Slider
-						aria-label="Grid columns"
-						min={1}
-						max={MAX_MEDIA_LAYOUT_TRACK}
-						step={1}
-						value={columns}
-						onChange={onColumns}
-						isDisabled={disabled}
-					>
+					<Slider aria-label="Grid columns" min={1} max={MAX_MEDIA_LAYOUT_TRACK} step={1} value={columns} onChange={onColumns} isDisabled={disabled}>
 						<SliderTrack>
 							<SliderFilledTrack />
 						</SliderTrack>
@@ -333,8 +370,8 @@ export const MediaLayoutCanvas = ({
 						>
 							<Box
 								as="img"
-								src={attachmentContentUrl(attachment.id)}
-								alt={attachment.title || attachment.name}
+								src={attachmentMediaSrc(attachment)}
+								alt={attachment.title || attachment.filenamePreview || attachment.name}
 								loading="lazy"
 								referrerPolicy="no-referrer"
 								position="absolute"
@@ -345,8 +382,14 @@ export const MediaLayoutCanvas = ({
 								background="var(--tt-surface-alt, #e9e9ee)"
 								draggable={false}
 							/>
+							<SpanCycleButton
+								name={attachment.filenamePreview || attachment.name}
+								span={span}
+								onChange={(next) => onSpanChange(attachment.id, next)}
+								placement={{ position: 'absolute', bottom: 1, left: 1 }}
+							/>
 							<IconButton
-								aria-label={`Resize ${attachment.name} on the grid — currently ${span}. Drag, or use arrow keys: right wider, left narrower, down taller, up shorter.`}
+								aria-label={`Resize ${attachment.filenamePreview || attachment.name} on the grid — currently ${span}. Drag, or use arrow keys: right wider, left narrower, down taller, up shorter.`}
 								title="Drag to resize"
 								icon={<MoveDiagonal size={13} />}
 								size="xs"
@@ -376,6 +419,91 @@ export const MediaLayoutCanvas = ({
 					);
 				})}
 			</Box>
+		</Flex>
+	);
+};
+
+export const MediaLayoutFinalPreview = ({
+	attachments,
+	mode,
+	pattern
+}: {
+	attachments: PublicAttachment[];
+	mode: Exclude<ComposerLayoutMode, 'grid'>;
+	pattern: number[];
+}) => {
+	const rows = mode === 'rows' ? mediaLayoutRows(attachments.length, pattern) : [];
+	let offset = 0;
+	const preview = (attachment: PublicAttachment, aspectRatio?: string) => (
+		<Box
+			key={attachment.id}
+			position="relative"
+			overflow="hidden"
+			borderRadius={RADIUS_SM}
+			aspectRatio={aspectRatio}
+		>
+			{attachment.mediaKind === 'video' ? (
+				<Box
+					as="video"
+					src={attachmentMediaSrc(attachment)}
+					aria-label={attachment.title || attachment.filenamePreview || attachment.name}
+					width="100%"
+					height={aspectRatio ? '100%' : 'auto'}
+					objectFit="cover"
+					display="block"
+					{...(aspectRatio ? { position: 'absolute' as const, inset: 0 } : {})}
+					background="var(--tt-surface-alt, #e9e9ee)"
+					muted
+					playsInline
+				/>
+			) : (
+				<Box
+					as="img"
+					src={attachmentMediaSrc(attachment)}
+					alt={attachment.title || attachment.filenamePreview || attachment.name}
+					width="100%"
+					height={aspectRatio ? '100%' : 'auto'}
+					objectFit="cover"
+					display="block"
+					{...(aspectRatio ? { position: 'absolute' as const, inset: 0 } : {})}
+					background="var(--tt-surface-alt, #e9e9ee)"
+				/>
+			)}
+		</Box>
+	);
+	return (
+		<Flex
+			flexDirection="column"
+			rowGap={2}
+			border={BORDER}
+			borderRadius="var(--tt-radius-md, 12px)"
+			padding={2.5}
+			background="var(--tt-surface, #fafafb)"
+		>
+			<Text fontSize="11px" fontWeight={700} letterSpacing="0.08em" color={MUTED}>
+				FINAL VIEW PREVIEW
+			</Text>
+			{mode === 'auto' ? (
+				<Box sx={{ columnCount: { base: Math.min(2, attachments.length), md: Math.min(3, attachments.length) }, columnGap: '6px' }}>
+					{attachments.map((attachment) => (
+						<Box key={attachment.id} sx={{ breakInside: 'avoid' }} marginBottom="6px">
+							{preview(attachment)}
+						</Box>
+					))}
+				</Box>
+			) : (
+				<Flex flexDirection="column" rowGap="6px">
+					{rows.map((size, rowIndex) => {
+						const row = attachments.slice(offset, offset + size);
+						offset += size;
+						return (
+							<Box key={rowIndex} display="grid" gridTemplateColumns={`repeat(${row.length}, minmax(0, 1fr))`} gap="6px">
+								{row.map((attachment) => preview(attachment, rowAspectRatio(row.length)))}
+							</Box>
+						);
+					})}
+				</Flex>
+			)}
 		</Flex>
 	);
 };

@@ -65,6 +65,11 @@ encryption. In particular, a creator cannot be made to forget whom they added;
 the guarantee is that Thingtime does not expose the mapping through chat
 surfaces or client payloads.
 
+[TODO 35](./35-identity-agency-and-context-safe-presence.md) owns the shared
+identity vocabulary and any future context-presence framework. This TODO remains
+authoritative for chat-local identifiers, participant projections, historical
+anonymity, protected operator traceability, and the inviter disclosure.
+
 ## Architecture and projection rules
 
 Keep the existing relational Messenger model:

@@ -66,7 +66,9 @@ export const resolveConfiguredTextModeration = async (): Promise<TextModerationC
 	} catch (error) {
 		console.warn('[moderation] settings read failed; using env default text provider:', (error as Error)?.message || error);
 	}
-	return resolveTextModeration(process.env, adminProvider);
+	if (adminProvider === 'off') return { kind: 'off' };
+	const { resolveModerationEnvironment } = await import('./moderationCredentials');
+	return resolveTextModeration(await resolveModerationEnvironment(), adminProvider);
 };
 
 const defaultDependencies = (): AnalyzeTextDependencies => ({

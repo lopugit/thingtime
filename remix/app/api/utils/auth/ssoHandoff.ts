@@ -4,6 +4,7 @@ import { createSession, getLiveSession, revokeSession } from './sessions';
 import { findUserById, toPublicUserWithStorage } from './users';
 import type { PublicUser } from './users';
 import { getSessionsCollection } from '../mongodb/collections';
+import { emitLoginNotification } from '../notifications/notifications';
 
 // Cross-origin session handoff: how a Thingtime deployment OUTSIDE the
 // *.thingtime.com cookie family (an immutable *.vercel.app preview, a future
@@ -109,5 +110,6 @@ export const claimSsoHandoffCode = async (request: Request, code: unknown): Prom
 	if (!user) return fail(401, 'This sign-in link is no longer valid — try again');
 
 	const jwt = await signJwt({ sub: payload.sub, jti: payload.jti });
+	await emitLoginNotification(payload.sub);
 	return { ok: true, user: await toPublicUserWithStorage(user), jwt, jti: payload.jti };
 };
