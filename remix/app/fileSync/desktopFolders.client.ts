@@ -6,6 +6,7 @@ import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContrac
 import {
 	parseMobileFolderResult,
 	assertNativeScanExclusions,
+	assertNativeSymbolicLinkRequest,
 	supportsFolderAccess,
 	supportsNativeResourceLimits,
 	supportsNativeAuthorizationContext,
@@ -37,6 +38,7 @@ type ContextReply = {
 	capabilities: FolderCapabilities;
 	apiCapabilities: { schemaVersion: 1; origin: string; features: Record<string, { version: string }> };
 };
+const resourceQueues = new WeakMap<object, Promise<unknown>>();
 const queues = new WeakMap<object, Promise<unknown>>();
 // Match Electron/native lanes: long polls must not hold ordinary file IO.
 // Each lane remains serialized across hosts sharing the same bridge.
@@ -98,7 +100,7 @@ export async function createDesktopFolderHost(input: {
 				abort();
 				return;
 			}
-			const queue = payload.action === 'scan-changes' ? streamWaiterQueues : queues;
+			const queue = payload.action === 'resources' ? resourceQueues : payload.action === 'scan-changes' ? streamWaiterQueues : queues;
 			const queued = (queue.get(input.bridge) ?? Promise.resolve())
 				.catch(() => {})
 				.then(() => {
@@ -175,6 +177,7 @@ export async function createDesktopFolderHost(input: {
 	};
 	let context = await negotiate(input.signal);
 	origin = context.origin;
+	if (input.resourcePolicy?.deviceResourceLimits && (!capabilitySatisfies(context.capabilities?.fileAccessVersion, '1.16.0') || !capabilitySatisfies(context.capabilities?.fileResourceLimitsVersion, '1.1.0'))) throw Error('Update Thingtime before using device-wide sync resource limits.');
 	if (input.resourcePolicy && !supportsNativeResourceLimits(context.capabilities)) throw Error('Update Thingtime before using sync resource limits.');
 	const fetchBound = createFolderHostFetch({ origin, localOrigin, ownerId, signal: input.signal, check,
 		fetch: input.fetch ?? ((target, options) => window.fetch(target, options)) });
@@ -192,6 +195,7 @@ export async function createDesktopFolderHost(input: {
 				if (batch.descriptor.scope.ownerId !== ownerId || batch.descriptor.scope.deviceId !== deviceId || batch.descriptor.scope.origin !== origin)
 					throw changed();
 				const request: FolderRequest = { action: 'upload-batch', rootId: batch.descriptor.configuration.configuration.localRootId, batch };
+				assertNativeSymbolicLinkRequest(request, context.capabilities);
 				const { value, expected } = await send(request, signal);
 				const result = parseMobileFolderResult({ type: 'mobile-files-result', payload: value }, expected, request);
 				if (!result?.uploadedBatch) throw changed();
@@ -215,6 +219,7 @@ export async function createDesktopFolderHost(input: {
 		request: async (expectedOwner, request, signal) => {
 			if (expectedOwner !== ownerId) throw changed();
 			assertNativeScanExclusions(request, context.capabilities);
+			assertNativeSymbolicLinkRequest(request, context.capabilities);
 			if (['scan-capture', 'scan-page', 'scan-discard'].includes(request.action) && !supportsNativeInventoryPages(context.capabilities))
 				throw Error('Inventory pages require an updated Mac app.');
 			if (request.action === 'validate-folder-batch' && (!supportsNativeFolderBatches(context.capabilities) || !capabilitySatisfies(context.apiCapabilities.features['api.file-sync-batches']?.version, '1.1.0'))) throw Error('Folder metadata batches require a compatible native host and server.');

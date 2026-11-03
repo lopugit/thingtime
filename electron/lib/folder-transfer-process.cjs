@@ -12,6 +12,7 @@ function transferProcess(governor) {
         env: { PATH: process.env.PATH ?? '/usr/bin:/bin', ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'ignore', 'ignore', 'ipc'], serialization: 'advanced'
     });
     state = { child, pending: new Map(), idle: null }; children.set(governor, state);
+    governor.onPolicyChange = () => { if (child.connected) child.send({ kind: 'policy', policy: governor.policy, totalBytesPerSecond: governor.totalBytesPerSecond }, () => {}); };
     child.on('message', async message => {
         if (message.kind === 'authority') {
             let accepted = false, target;
@@ -26,7 +27,7 @@ function transferProcess(governor) {
         }
         if (message.kind === 'reply') state.pending.get(message.id)?.(message);
     });
-    child.on('exit', () => { children.delete(governor); clearTimeout(state.idle); for (const finish of [...state.pending.values()]) finish({ error: 'transport' }); });
+    child.on('exit', () => { if (children.get(governor) === state) { children.delete(governor); governor.onPolicyChange = undefined; } clearTimeout(state.idle); for (const finish of [...state.pending.values()]) finish({ error: 'transport' }); });
     child.send({ kind: 'policy', policy: governor.policy, totalBytesPerSecond: governor.totalBytesPerSecond }); return state;
 }
 async function governedFetch(governor, fetchUpload, target, options, check = () => {}) {

@@ -167,3 +167,18 @@ test('queued connection policy cannot raise an active stricter connection ceilin
  release(); g.setLimits({ cpuPercent: 15 });
  assert.equal(g.policy.uploadBytesPerSecond, undefined); assert.equal(g.policy.cpuPercent, 15);
 });
+
+test('saving a device cap notifies the active dedicated worker without resetting its reservations', { timeout: 12000 }, async () => {
+ const { governorFor } = require('../lib/folder-resource-governor.cjs');
+ let received = 0, firstByte; const first = new Promise(resolve => { firstByte = resolve; });
+ const server = createServer(async (request, response) => { for await (const chunk of request) { received += chunk.length; firstByte(); } response.end(); });
+ server.listen(0, '127.0.0.1'); await once(server, 'listening');
+ try {
+  const context = { apiOrigin: 'https://live-budget.example', ownerId: 'live-budget-owner' }, deviceResourceLimits = { transferBytesPerSecond: 1000, scanBytesPerSecond: 625000, cpuPercent: 100 };
+  const g = governorFor({ deviceId: 'live-device', rootId: 'connection', deviceResourceLimits }, context), start = performance.now();
+  const transfer = governedFetch(g, globalThis.fetch, new URL('http://127.0.0.1:' + server.address().port), { signal: AbortSignal.timeout(10000), headers: {}, body: Buffer.alloc(2000) });
+  await first;
+  assert.equal(governorFor({ action: 'resources', deviceId: 'live-device', deviceResourceLimits: { ...deviceResourceLimits, transferBytesPerSecond: 500 } }, context), g);
+  await transfer; assert.equal(received, 2000); assert.ok(performance.now() - start >= 3400, 'active worker retained its previous speed instead of receiving IPC policy');
+ } finally { server.close(); await once(server, 'close'); }
+});

@@ -1075,7 +1075,7 @@ const postSchema: ThingtimeSchema = {
 };
 
 const fileSchema: ThingtimeSchema = {
-  id: 'file', version: 1, kind: 'crystal', collection: null, title: 'File',
+  id: 'file', version: 2, kind: 'crystal', collection: null, title: 'File',
   summary: 'A stable file identity with retained attachment versions and Timeline history.',
   detail: 'The dedicated file writer changes the current content atomically using an expected revision and immutable operation identity. Bytes remain separately accounted attachment Things linked by parentId/targetId. Trash retains content until an explicit retention workflow removes it.',
   createdVia: 'POST /api/v1/files',
@@ -1083,7 +1083,8 @@ const fileSchema: ThingtimeSchema = {
   fields: [
     { name: 'name', type: 'string', required: true, max: 255, description: 'Editable filename.' },
     { name: 'trashed', type: 'boolean', required: true, description: 'Recoverable trash state; retained bytes remain accounted.' },
-    { name: 'content', type: 'object', required: true, description: 'Verified attachment identity, opaque content version, byte size and multipart fingerprint.' }
+    { name: 'content', type: 'object', required: true, description: 'Verified attachment identity, opaque content version, byte size and multipart fingerprint.' },
+    { name: 'symbolicLink', type: 'object', required: false, description: 'Optional inert posix-symlink-v1 metadata; targetBase64 is canonical raw POSIX readlink bytes matching the attachment payload. Never dereference.' }
   ]
 };
 

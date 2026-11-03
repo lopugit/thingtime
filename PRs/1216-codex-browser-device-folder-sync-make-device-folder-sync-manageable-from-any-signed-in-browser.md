@@ -315,3 +315,28 @@ separately from the historical browser/compiled-server harness results above.
 - Real disposable-backend run passed with 427 native calls, 855 identity checks, and 19 native/cloud pages, including large upload/download paths. Nine focused file-version/Timeline control tests passed. Evidence: `/tmp/pr1216-timeline-native-http.log`, `/tmp/pr1216-timeline-unit.log`. The task-owned relay/container, synthetic credentials and signed test executable were removed afterward; the installed app was untouched.
 - This proves the joined native adapter/API data path. It does not substitute for the installed UI, permissions, automatic scheduling and window-close acceptance. The current installed source is newer and lacks this branch's browser management entry; preserve newer app changes when integrating the final runtime.
 - Current requested configuration: separate two-way Desktop and Thingtime folders, Home paused. Desktop source permission and its private destination hierarchy have been verified, but saving/enabling remains unverified. Shared device resource limits (5 Mbps transfer and scan-read budgets, 15% CPU target) and unified usage bars are being implemented before enabling personal transfers.
+
+
+## Resource and link integration checkpoint — 2026-11-03
+
+- Resource and Timeline checkpoint `5a282d808` is preserved, followed by local merge `330b5ab55` of `origin/develop` (`8becdb8db`). The merged tree includes installed source `395997c5a75f4b8e5d8f36c667753c5d8919a42a`; no installed app was replaced at this checkpoint.
+- Conflict validation passed: 211 API-capability, index-audit and built-in schema projection tests. Both device-sync-control and MongoDB snapshot TTL policies remain present. Immutable graph snapshots from both parents were retained as exact blobs; final graph refresh remains pending.
+- The older controller failure on run `40837346827`, job `123327407128`, was a GitHub installation API rate-limit HTTP 403 on 2026-10-29, not a schema-test failure. It does not establish the status of the eventual new head.
+- In progress: full symbolic-link preservation/native restore/portable fallback and per-connection upload/download speed plus separate directional progress. These are not installed or verified on personal files yet.
+- Desktop and ~/Thingtime two-way connections remain unsaved/off until the 5 Mbps transfer, 5 Mbps scan-read and 15% CPU-target policy is installed. Home remains paused and DJ DODA automatic sync stays off.
+
+
+## Link and glance verification — 2026-11-03
+
+Native source verification: Apple 133/133 with real Rust + FAT opt-ins, Mac folder sync 45/45, Rust 19/19. Desktop Save As 13/13 with actual FAT opt-in. The disposable image was detached and removed. FAT driver evidence required a verified atomic-exchange probe and a journaled exclusive two-step fallback; ordinary regular-file cross-volume behavior remains unchanged. Mobile v1.0 Save As refuses tagged exports rather than silently writing raw target bytes.
+
+Collapsed connection summaries retain cached totals and show independently confirmed upload/download progress. They distinguish pause, idle, offline and incomplete discovery. A parent review removed repeat legacy-journal scans from status reads and stopped unconfirmed file callbacks from inflating percentages. Final compact desktop/mobile screenshots and consolidated tests are pending below; these statements do not establish installed or production acceptance.
+
+### Final integration checks — 2026-11-03
+
+- Collapsed folder cards now include separate live upload/download speed, confirmed/planned byte totals, percentage and remaining unconfirmed work. Source-device downloads and Thingtime uploads are independently labelled. Growing discovery, paused and offline states remain explicit; cards share the existing observer and retain individually editable Builder blocks. Desktop/mobile rendered fixtures pass.
+- Real HTTP/native symlink acceptance passed: 276 native calls, 553 identity checks, 12 native and 12 cloud pages, exact target metadata through durable journal reopen, same-byte regular/link transitions, non-UTF8/dangling links, restart and historical Timeline restore. Links deliberately use scalar writes until the bulk digest contract binds their metadata.
+- Full native helper suite: 242 tests, 2 opt-in skips, no failures. Full AppleFileSync with the real Rust helper and disposable FAT: 133 tests, no skips. Rust: 19 tests. Desktop link Save As: 18 focused tests with actual FAT, including cancellation, identity changes and concurrent writers. FAT fallback publication cannot promise atomic visibility; interruption retains a verified candidate, preserves uncertain final entries and requires checking the folder before retry.
+- The automatic-recovery fixture now supplies the current resource capability and native authorization conditions; the real coordinator/retry path passes. No production guard was weakened.
+- Final full shared sync suites: 682 + 9 tests passed, no skips. Full Electron: 404 tests, 402 passed, 2 optional FAT tests skipped in the general run (both covered by the dedicated mounted-FAT run), no failures. Device suites: 135 + 14 passed. Capability suite: 129 passed. Raw TypeScript passed.
+- Production capability discovery still lacks the new file/link and device-control versions. Signed installed acceptance and the release boundary remain separate from these passing isolated checks. Home remains paused; no personal upload was started.

@@ -209,6 +209,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 	const { check, json, negotiate: negotiateRequirements } = cloudRequests(runtime, scope, signal);
 	const empty = (m.kind === 'copy' && m.source.size === 0) || write.before?.content.size === 0;
 	const negotiate = () => negotiateRequirements({ ...CLOUD_TRANSFER_REQUIREMENTS, ...(retained ? CLOUD_FILE_RETENTION_REQUIREMENTS : {}),
+		...((m.kind === 'copy' ? m.source.symbolicLink : write.before?.symbolicLink) ? { 'api.files': '1.9.0' } : {}),
 		...(empty ? { 'api.files': '1.8.1',
 			'api.attachment-upload-complete': '1.5.0', 'api.attachment-content': '1.16.0' } : {}) });
 	const fileId = write.before?.id ?? write.operation.id;
@@ -405,6 +406,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 				name: m.path.split('/').at(-1),
 				folderId: write.folderId,
 				trashed: false,
+				...(m.source.symbolicLink ? { symbolicLink: m.source.symbolicLink } : {}),
 				content
 			});
 			if (fingerprint.id !== upload.id || !sameSyncContent(cloudFileSyncEntry(candidate, m.path), m.source))

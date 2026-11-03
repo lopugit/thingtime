@@ -27,3 +27,13 @@ test('identity invalidation fences late replies and removes prior measurements',
  const release = session.retain(), pending = session.refresh(); session.invalidate(); finish(status); await pending;
  assert.equal(session.read().status, null); assert.equal(session.read().online, false); release();
 });
+
+test('directional cached status is used only after negotiating the additive contract and worker projection', async () => {
+ for (const [ready, version] of [[false, '1.0.0'], [true, undefined], [true, '1.0.0']] as const) {
+  const progress = { stage: 'transferring', totalFinal: false, directions: { upload: { operations: 1, confirmed: 0, bytesTotal: '3', bytesConfirmed: '0' }, download: { operations: 0, confirmed: 0, bytesTotal: '0', bytesConfirmed: '0' } } };
+  const session = createRemoteDeviceStatusSession({ origin: 'https://device.test', ownerId: 'owner', deviceId: 'device', visible: () => true, assertCurrent() {}, negotiateDirections: async () => ready,
+   createClient: () => ({ send: async () => ({ ...status, directionalProgressVersion: version, jobs: [{ connectionId: 'connection', state: 'paused', progress }] }) }) as any });
+  const release = session.retain(); await session.refresh();
+  assert.equal(!!session.read().status?.jobs[0].progress, ready && version === '1.0.0'); release();
+ }
+});

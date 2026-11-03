@@ -653,3 +653,11 @@ test('publication failure and retry submit the immutable saved origin before upl
  await executeSyncRun(run, f.port(run, async () => {}));
  assert.deepEqual(origins[1], origins[0]); assert.ok(f.file());
 });
+
+test('symbolic-link uploads negotiate tagged file support before opening bytes or granting uploads', async () => {
+ const f = await fixture(new Uint8Array([46,46])); f.entry.symbolicLink = { format: 'posix-symlink-v1', targetBase64: 'Li4=' };
+ const run = f.make(); let tagged = false;
+ f.runtime.requireCapability = async (feature, minimum) => { if (feature === 'api.files') { tagged = true; assert.equal(minimum, '1.9.0'); throw Error('Symbolic links need the updated server'); } };
+ await assert.rejects(executeSyncRun(run, f.port(run, async () => {})), /updated server/);
+ assert.equal(tagged, true); assert.deepEqual(f.counts(), { puts: 0, starts: 0, commits: 0, opens: 0 });
+});

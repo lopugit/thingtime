@@ -173,6 +173,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			disposeProgressCache = progressCache.dispose;
 			const publish = (progress: Parameters<typeof update>[0]['progress']) => {
 				check(); if (!progress) return;
+				progress = { ...progress, statisticsObservedAt: Date.now() };
 				if (resources) progress = { ...progress, resources: nativeResources ?? resources.status() };
 				update({ progress });
 				progressCache.write(progress);

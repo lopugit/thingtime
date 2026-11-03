@@ -28,7 +28,8 @@ export type RemoteSyncCommand =
 export type RemoteSyncStatus = {
 	version: 1; deviceId: string; observedAt: string; roots: MobileFolder[]; rootsReady: boolean; rootsObservedAt?: string; capabilities: FolderCapabilities; nextCursor?: string;
 	resourceUsage?: RemoteSyncResources;
-	jobs: { connectionId: string; state: 'runnable' | 'scheduled' | 'paused' | 'attention' | 'complete'; intervalMs?: number; nextRunAt?: number; retryAt?: number }[];
+ directionalProgressVersion?: '1.0.0';
+	jobs: { connectionId: string; state: 'runnable' | 'scheduled' | 'paused' | 'attention' | 'complete'; intervalMs?: number; nextRunAt?: number; retryAt?: number; progress?: Pick<ForegroundSyncProgress, 'directions' | 'totalFinal' | 'indexState' | 'statisticsObservedAt' | 'stage'> }[];
 	task: null | { connectionId: string; active: boolean; stopping?: boolean; status?: 'running' | 'paused' | 'error' | 'complete'; waiting?: boolean;
 		progress: ForegroundSyncProgress & { message?: string }; transferRates?: { upload: SpeedReading; download: SpeedReading };
 		progressDescriptor?: SyncProgressDescriptor; inventoryDescriptor?: SyncInventoryDescriptor;
@@ -36,6 +37,7 @@ export type RemoteSyncStatus = {
 };
 
 export const REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS = { 'api.devices-sync-control': '1.1.0' } as const;
+export const REMOTE_SYNC_DIRECTION_REQUIREMENTS = { 'api.devices-sync-control': '1.3.0' } as const;
 export const REMOTE_SYNC_RESOURCE_REQUIREMENTS = { 'api.devices-sync-control': '1.2.0' } as const;
 export type RemoteSyncResources = { deviceResourceLimits: DeviceSyncResourcePolicy; resources?: SyncResourceStatus };
 export const supportsRemoteResourceControls = (capabilities: FolderCapabilities | undefined) => capabilities?.platform === 'macos' &&

@@ -119,3 +119,8 @@ and identity generation. It stops while hidden or unused and discards old
 identity measurements. Missing CPU, memory or throughput measurements stay
 unavailable; a viewing browser's preferences are never saved as remote policy.
 Older origins retain ordinary 1.0.0 controls and optional 1.1.0 source paths.
+
+Control 1.3.0 additionally carries optional per-job directional progress through
+the same status heartbeat. Resource read/save retains its 1.2.0 minimum; source
+paths retain 1.1.0 and ordinary controls retain 1.0.0. Clients negotiate the
+optional progress contract before projecting it, without another poller.

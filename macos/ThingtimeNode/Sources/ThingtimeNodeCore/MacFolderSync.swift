@@ -5,7 +5,7 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.16.0"
+    public static let version = "1.17.0"
     private static let supportedActions: Set<String> = ["validate-folder-batch", "upload-batch", "resources", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
@@ -53,6 +53,7 @@ public final class MacFolderSync {
     private var resourceStates: [String: MacSyncResources] = [:]
     private var active: RequestTask?
     private var streamWaiter: RequestTask?
+    private var resourceRequest: RequestTask?
 
     /// One task-owned scanner, 64 KiB read buffers, existing eight-capture disk
     /// retention and a 24-hour execution lifetime. Transport failures do not
@@ -361,7 +362,7 @@ public final class MacFolderSync {
 
     public func suspend() {
         backupJob?.task.cancel(); backupJob?.monitor.cancel(); streamJob?.task.cancel(); streamJob?.monitor.cancel(); streamJob?.wake.signal()
-        streamWaiter?.task.cancel(); streamJob?.wake.signal()
+        streamWaiter?.task.cancel(); streamJob?.wake.signal(); resourceRequest?.task.cancel()
         suspendRequest()
     }
     private func suspendRequest() {
@@ -427,10 +428,12 @@ public final class MacFolderSync {
         if r.action == "suspend" {
             if let active, active.id == r.requestId, active.owner == r.ownerId, active.device == r.deviceId { suspendRequest() }
             if let waiter = streamWaiter, waiter.id == r.requestId, waiter.owner == r.ownerId, waiter.device == r.deviceId { waiter.task.cancel(); streamJob?.wake.signal() }
+            if let resource = resourceRequest, resource.id == r.requestId, resource.owner == r.ownerId, resource.device == r.deviceId { resource.task.cancel() }
             return .object([:])
         }
         let waiting = r.action == "scan-changes"
-        guard waiting ? streamWaiter == nil : active == nil else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
+        let resourceControl = r.action == "resources" && r.rootId == nil
+        guard resourceControl ? resourceRequest == nil : (waiting ? streamWaiter == nil : active == nil) else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
         guard Self.supportedActions.contains(r.action) else { throw MobileFolderStore.Failure.invalid }
         guard (r.action == "read-range") == (stream != nil), (r.action == "stage-range") == (receive != nil), (r.action == "upload-batch") == (batchCallback != nil) else { throw MobileFolderStore.Failure.invalid }
         let task = Task {
@@ -466,25 +469,29 @@ public final class MacFolderSync {
             }
             catch { failure = error; throw error }
         }
-        if waiting { streamWaiter = (r.requestId, r.ownerId, r.deviceId, task) }
+        if resourceControl { resourceRequest = (r.requestId, r.ownerId, r.deviceId, task) }
+        else if waiting { streamWaiter = (r.requestId, r.ownerId, r.deviceId, task) }
         else { active = (r.requestId, r.ownerId, r.deviceId, task) }
         let governedPayload = (r.action == "upload-batch" && (r.resourceLimits?.uploadBytesPerSecond != nil || r.resourceLimits?.cpuPercent != nil)) ||
             (["stage-finish", "publish"].contains(r.action) && r.resourceLimits?.cpuPercent != nil)
         let timeout = Task {
             if governedPayload { return }
             try await Task.sleep(for: .milliseconds(r.action == "validate-folder-batch" ? (r.remainingMs ?? 0) : (isBatch ? 180_000 : 270_000)))
-            if waiting { if streamWaiter?.id == r.requestId { streamWaiter?.task.cancel(); streamJob?.wake.signal() } }
+            if resourceControl { if resourceRequest?.id == r.requestId { resourceRequest?.task.cancel() } }
+            else if waiting { if streamWaiter?.id == r.requestId { streamWaiter?.task.cancel(); streamJob?.wake.signal() } }
             else if active?.id == r.requestId { suspendRequest() }
         }
         defer {
             timeout.cancel()
-            if waiting { if streamWaiter?.id == r.requestId { streamWaiter = nil } }
+            if resourceControl { if resourceRequest?.id == r.requestId { resourceRequest = nil } }
+            else if waiting { if streamWaiter?.id == r.requestId { streamWaiter = nil } }
             else if active?.id == r.requestId { active = nil }
         }
         return try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: {
             task.cancel()
             Task { @MainActor [weak self] in
-                if waiting { if self?.streamWaiter?.id == r.requestId { self?.streamWaiter?.task.cancel(); self?.streamJob?.wake.signal() } }
+                if resourceControl { if self?.resourceRequest?.id == r.requestId { self?.resourceRequest?.task.cancel() } }
+                else if waiting { if self?.streamWaiter?.id == r.requestId { self?.streamWaiter?.task.cancel(); self?.streamJob?.wake.signal() } }
                 else if self?.active?.id == r.requestId { self?.suspendRequest() }
             }
         })
@@ -553,7 +560,7 @@ public final class MacFolderSync {
             try await authorized(r)
             return .object(result)
         } else if r.action == "context" {
-            var capabilities: [String: JSONValue] = ["fileAccessVersion": .string(Self.version), "fileStagingVersion": .string("1.1.0"), "filePublicationVersion": .string("1.2.0")]
+            var capabilities: [String: JSONValue] = ["fileAccessVersion": .string(Self.version), "fileSymbolicLinksVersion": .string("1.0.0"), "fileStagingVersion": .string("1.1.0"), "filePublicationVersion": .string("1.2.0")]
             if inventories.supportsResourceGovernance { capabilities["fileResourceLimitsVersion"] = .string("1.1.0") }
             capabilities["fileUploadBatchVersion"] = .string("1.0.0")
             capabilities["fileFolderBatchVersion"] = .string("1.0.0")

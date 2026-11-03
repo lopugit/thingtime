@@ -32,7 +32,7 @@ public enum MobileFolderBulkReader {
     }
     private static func check(_ actual: MobileFolderReader.Entry?, _ expected: MobileFolderReader.Entry) throws {
         guard let actual, actual.id == expected.id, actual.path == expected.path, actual.version == expected.version,
-              actual.kind == "file", actual.size == expected.size, actual.fingerprint == expected.fingerprint else {
+              actual.kind == "file", actual.size == expected.size, actual.fingerprint == expected.fingerprint, actual.symbolicLink == expected.symbolicLink else {
             throw MobileFolderStore.Failure.changed
         }
     }
@@ -43,6 +43,14 @@ public enum MobileFolderBulkReader {
     public static func read(bookmark: Data, expected: MobileFolderReader.Entry, sha256: String? = nil) throws -> Payload {
         try validate([expected])
         try check(MobileFolderReader.inspect(bookmark: bookmark, path: expected.path), expected)
+        if expected.symbolicLink != nil {
+            let chunk = try MobileFolderReader.read(bookmark: bookmark, path: expected.path, version: expected.version, offset: 0, length: Int(expected.size))
+            guard let bytes = Data(base64Encoded: chunk.data), NativeSymbolicLinks.fingerprint(bytes) == expected.fingerprint else { throw MobileFolderStore.Failure.changed }
+            let raw = NativeSymbolicLinks.hash(bytes)
+            guard sha256 == nil || raw == sha256 else { throw MobileFolderStore.Failure.changed }
+            try check(MobileFolderReader.inspect(bookmark: bookmark, path: expected.path), expected)
+            return Payload(bytes: bytes, sha256: raw)
+        }
         let bytes = try MobileFolderReader.access(bookmark) { root -> Data in
             let fd = try MobileFolderReader.openPath(root, path: expected.path); defer { close(fd) }
             let before = try MobileFolderReader.info(fd)

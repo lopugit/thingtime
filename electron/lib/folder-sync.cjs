@@ -216,7 +216,7 @@ function requestTiming(action, clock, diagnostic) {
 class DesktopFolderSync {
     constructor({ context, requestNative, verifyAccount = readAccount, capabilities = readCapabilities, fetchUpload = globalThis.fetch, timeoutMs = 300_000, diagnostic = () => {}, now = () => performance.now() }) {
         this.context = context; this.requestNative = requestNative; this.fetchUpload = fetchUpload; this.verifyAccount = verifyAccount;
-        this.now = now; this.capabilities = capabilities; this.timeoutMs = timeoutMs; this.diagnostic = diagnostic; this.generation = 0; this.active = null; this.streamWaiter = null; this.ordinaryQueue = []; this.quitting = false;
+        this.now = now; this.capabilities = capabilities; this.timeoutMs = timeoutMs; this.diagnostic = diagnostic; this.generation = 0; this.active = null; this.streamWaiter = null; this.resourceRequest = null; this.ordinaryQueue = []; this.quitting = false;
     }
     capture(event, input) {
         const context = this.context(), window = context.window;
@@ -258,10 +258,10 @@ class DesktopFolderSync {
             origin: state.context.apiOrigin, action: 'suspend'
         }).catch(() => {});
     }
-    invalidate() { this.generation += 1; this.nativePageCapability = null; this.cancel(); this.cancel(this.streamWaiter); for (const item of [...this.ordinaryQueue]) this.cancel(item.state); }
+    invalidate() { this.generation += 1; this.nativePageCapability = null; this.cancel(); this.cancel(this.streamWaiter); this.cancel(this.resourceRequest); for (const item of [...this.ordinaryQueue]) this.cancel(item.state); }
     // before-quit can precede renderer pagehide while local services drain.
     // Preserve admission through that interval, but permit no further IO.
-    quit() { this.quitting = true; this.generation += 1; this.nativePageCapability = null; this.cancel(this.active, shutdownWait()); this.cancel(this.streamWaiter, shutdownWait()); for (const item of [...this.ordinaryQueue]) this.cancel(item.state, shutdownWait()); }
+    quit() { this.quitting = true; this.generation += 1; this.nativePageCapability = null; this.cancel(this.active, shutdownWait()); this.cancel(this.streamWaiter, shutdownWait()); this.cancel(this.resourceRequest, shutdownWait()); for (const item of [...this.ordinaryQueue]) this.cancel(item.state, shutdownWait()); }
     samePageCapability(context, input) {
         const cached = this.nativePageCapability;
         return cached && cached.window === context.window && cached.generation === context.generation &&
@@ -279,9 +279,9 @@ class DesktopFolderSync {
             apiCapabilities: value?.apiCapabilities ? structuredClone(value.apiCapabilities) : this.samePageCapability(context, input)?.apiCapabilities };
     }
     admit(state) {
-        if (state.lane === 'streamWaiter') {
-            if (this.streamWaiter) throw new Error('Another streaming wait is running.');
-            this.streamWaiter = state; return Promise.resolve();
+        if (state.lane === 'streamWaiter' || state.lane === 'resourceRequest') {
+            if (this[state.lane]) throw new Error('Another control request is running.');
+            this[state.lane] = state; return Promise.resolve();
         }
         if (!this.active) { this.active = state; return Promise.resolve(); }
         if (this.active.input.action === 'choose' || state.input.action === 'choose') throw new Error('Another folder request is running.');
@@ -317,14 +317,14 @@ class DesktopFolderSync {
         try { context = this.capture(event, input); }
         catch (error) { this.reportFailure(input?.action, 'capture', error); throw error; }
         if (input.action === 'suspend') {
-            const state = [this.active, this.streamWaiter, ...this.ordinaryQueue.map(item => item.state)].find(value => value && value.context.event.senderFrame === event.senderFrame &&
+            const state = [this.active, this.streamWaiter, this.resourceRequest, ...this.ordinaryQueue.map(item => item.state)].find(value => value && value.context.event.senderFrame === event.senderFrame &&
                 value.input.requestId === input.requestId && value.input.ownerId === input.ownerId && value.input.deviceId === input.deviceId);
             if (state) this.cancel(state);
             return {};
         }
         const timing = requestTiming(input.action, this.now, row => this.diagnostic(row));
         let outcome = 'failed', endReply;
-        const lane = input.action === 'scan-changes' ? 'streamWaiter' : 'active';
+        const lane = input.action === 'scan-changes' ? 'streamWaiter' : input.action === 'resources' ? 'resourceRequest' : 'active';
         const state = { context, folderDeadline: input.action === 'validate-folder-batch' ? this.now() + input.remainingMs : null, input: structuredClone(input), abort: new AbortController(), dispatched: false, lane, phase: 'admission' };
         const policy = state.input.resourceLimits ?? { cpuPercent: 15, uploadBytesPerSecond: 625000, downloadBytesPerSecond: 625000 };
         const governedPayload = policy && ((['upload-part', 'upload-batch'].includes(input.action) && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||
@@ -347,9 +347,9 @@ class DesktopFolderSync {
             return reply;
         });
         try {
-            governor = governorFor(state.input, context);
             await timing.measure('queue', () => this.admit(state));
             await verify();
+            governor = governorFor(state.input, context);
             let apiCapabilities;
             if (state.input.action === 'context') {
                 state.phase = 'capability-verification';

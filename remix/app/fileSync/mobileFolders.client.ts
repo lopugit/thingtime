@@ -1,3 +1,4 @@
+import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 import { parseDeviceSyncResourcePolicy } from './deviceResourcePolicy';
 import { syncRequestHasPacing, parseSyncResourceStatus, type SyncResourceStatus } from './resourceGovernor';
 import { parseNativeFolderBatchResult } from './folderBatch';
@@ -129,6 +130,7 @@ export type FolderCapabilities = Pick<
 	| 'fileUploadBatchVersion'
 	| 'fileFolderBatchVersion'
 	| 'fileAccessVersion'
+	| 'fileSymbolicLinksVersion'
 	| 'fileStagingVersion'
 	| 'filePublicationVersion'
 	| 'fileTrashVersion'
@@ -138,6 +140,16 @@ export type FolderCapabilities = Pick<
 export const validNativeSourcePath = (value: unknown): value is string =>
  typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') &&
  !/[\p{Cc}\p{Cf}]/u.test(value) && (value === '/' || value.split('/').slice(1).every(part => part !== '' && part !== '.' && part !== '..'));
+export const supportsNativeSymbolicLinks = (bridge: FolderCapabilities | undefined) => bridge?.platform === 'macos' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.17.0') && capabilitySatisfies(bridge.fileSymbolicLinksVersion ?? '', '1.0.0');
+/** A native implementation must explicitly negotiate link creation/fallback;
+ * ignoring metadata and publishing an ordinary target-text file is unsafe. */
+export function assertNativeSymbolicLinkRequest(request: FolderRequest, capabilities: FolderCapabilities | undefined) {
+ const r = request as any;
+ const mutation = r.transfer?.operation?.mutation ?? r.trash?.operation?.mutation;
+ const entries = [r.upload?.source, r.expected, r.restore?.expected, r.cloudFile, mutation?.source, mutation?.expectedTarget, mutation?.expected,
+  ...(r.batch?.descriptor?.members?.map((member: any) => member.write?.operation?.mutation?.source) ?? [])];
+ if (entries.some(entry => entry?.symbolicLink !== undefined) && !supportsNativeSymbolicLinks(capabilities)) throw Error('Update the native app to preserve symbolic links and their exact target bytes.');
+}
 export const supportsNativeSourcePaths = (bridge: FolderCapabilities | undefined) =>
  bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 15;
 export const supportsNativeResourceLimits = (bridge: FolderCapabilities | undefined) => /^1\.\d+\.\d+$/.test(bridge?.fileResourceLimitsVersion ?? '');
@@ -720,7 +732,7 @@ export function requestMobileFolders(
 ): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
-	try { assertNativeScanExclusions(request, bridge); } catch (error) { return Promise.reject(error); }
+	try { assertNativeScanExclusions(request, bridge); assertNativeSymbolicLinkRequest(request, bridge); } catch (error) { return Promise.reject(error); }
 	if (['scan-capture', 'scan-page', 'scan-discard'].includes(request.action) && !supportsNativeInventoryPages(bridge))
 		return Promise.reject(Error('Inventory pages require a supported Mac or iOS app.'));
 	if (request.action === 'inspect' && (!supportsNativePathInspection(bridge) || !validSyncPath(request.path)))
@@ -961,6 +973,7 @@ export function mobileFolderSource(
 	request = requestMobileFolders,
 	bridge: FolderCapabilities | undefined = getNativeBridge()
 ): FingerprintSource {
+	if (scanned.symbolicLink && !supportsNativeSymbolicLinks(bridge)) throw Error('Update the native app to read symbolic links without following their targets.');
 	const entry = structuredClone(scanned);
 	if (!validSyncEntry(entry) || entry.kind !== 'file') throw Error('Select a scanned file.');
 	const streaming =

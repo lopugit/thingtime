@@ -57,7 +57,7 @@ export async function streamingFileFixture() {
 				body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
 			if (url.origin === 'https://objects.test') {
 				puts++;
-				objects.set(url.pathname.slice(1), new Uint8Array(init!.body as Uint8Array));
+				objects.set(url.pathname.slice(1), new Uint8Array(await new Response(init!.body).arrayBuffer()));
 				return new Response(null);
 			}
 			if (url.pathname === '/api/v1/files') {

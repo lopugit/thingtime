@@ -1,7 +1,7 @@
 // Opt-in real MacFolderSync + cloud acceptance. Picker/consent and credentials
 // are isolated test adapters; this never uses the installed Node or Keychain.
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp, mkdir, rm, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, mkdir, rm, stat, symlink, readlink, lstat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -34,6 +34,7 @@ const { FolderStream } = createRequire(import.meta.url)('../../electron/lib/fold
 
 const [fixturePath] = process.argv.slice(2);
 const photoFixture = process.argv.includes('--photos');
+const symlinksOnly = process.argv.includes('--symlinks-only');
 const pagedFixture = process.argv.includes('--paged');
 const wideFixture = process.argv.includes('--wide');
 const wideFolders = wideFixture ? 10001 : 0;
@@ -192,7 +193,7 @@ async function send(payload: any) {
 	});
 }
 const signal = new AbortController().signal;
-const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: pagedFixture ? '1.5.1' : '1.3.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.2.0', fileTrashVersion: '1.2.0' };
+const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.17.0', fileSymbolicLinksVersion: '1.0.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.2.0', fileTrashVersion: '1.2.0' };
 let deviceId: string | undefined, remoteRoot: string | undefined, configurationId: string | undefined;
 const deviceName = 'Mac sync acceptance ' + randomUUID();
 const factory = new IDBFactory();
@@ -509,7 +510,7 @@ try {
 				} } : journal,
 				runtime,
 				localTarget,
-				progress: value => { if (wideFixture && value.stage !== lastStage) {
+				progress: value => { if ((wideFixture || symlinksOnly) && value.stage !== lastStage) {
 					lastStage = value.stage; console.log('MAC_PAGED_STAGE sync-' + value.stage);
 				} }
 			},
@@ -517,10 +518,57 @@ try {
 		);
 		return result;
 	};
+	const exerciseSymbolicLinks = async () => {
+    // A link is an inert target-byte file version, never a read of its target.
+    // Exercise kind-only transitions with identical payload bytes as well.
+    const transitionPath = path.join(directory, 'selected/link-transition.bin');
+    const targetBytes = Buffer.from('../outside-sentinel.bin'), outsideBytes = randomBytes(313);
+    await writeFile(path.join(directory, 'outside-sentinel.bin'), outsideBytes);
+    await writeFile(transitionPath, targetBytes);
+    await run();
+    const linkNode = async () => { const node = (await inventory()).nodes.find(node => node.path === 'link-transition.bin'); assert.ok(node?.kind === 'file'); return node.file; };
+    const beforeLink = await linkNode();
+    await rm(transitionPath); await symlink(targetBytes, transitionPath);
+    await symlink('missing-target', path.join(directory, 'selected/dangling-link'));
+    await symlink(Buffer.from([255, 254, 47, 120]), path.join(directory, 'selected/non-utf8-link'));
+    await run();
+    const linked = await linkNode();
+    assert.equal(linked.id, beforeLink.id); assert.notEqual(linked.revision, beforeLink.revision);
+    assert.deepEqual(linked.symbolicLink, { format: 'posix-symlink-v1', targetBase64: targetBytes.toString('base64') });
+    const readCloudBytes = async (file: typeof linked) => { const response = await sessionFetch(new URL('/api/v1/attachments/content?id=' + file.content.attachmentId + '&cache=bytes', base)); assert.equal(response.status, 200); return Buffer.from(await response.arrayBuffer()); };
+    assert.deepEqual(await readCloudBytes(linked), targetBytes);
+    for (const [name, expected] of [['dangling-link', Buffer.from('missing-target')], ['non-utf8-link', Buffer.from([255, 254, 47, 120])]] as const) {
+      const node = (await inventory()).nodes.find(node => node.path === name); assert.ok(node?.kind === 'file');
+      assert.equal(node.file.symbolicLink?.targetBase64, expected.toString('base64')); assert.deepEqual(await readCloudBytes(node.file), expected);
+    }
+    const mismatch = await sessionFetch(new URL('/api/v1/files', base), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      ...fileRestoreCommand(linked, linked, randomUUID()), symbolicLink: { format: 'posix-symlink-v1', targetBase64: Buffer.from('wrong-target').toString('base64') }
+    }) });
+    assert.equal(mismatch.status, 409); await mismatch.body?.cancel(); assert.equal((await linkNode()).revision, linked.revision);
+    await rm(transitionPath); await writeFile(transitionPath, targetBytes); await run();
+    const ordinaryAgain = await linkNode(); assert.equal(ordinaryAgain.symbolicLink, undefined); assert.equal(ordinaryAgain.id, linked.id); assert.notEqual(ordinaryAgain.revision, linked.revision);
+    const linkHistory = (await api('/api/v1/timeline?' + new URLSearchParams({ ownerId: fixture.userId, dataPlane: 'home', thingId: linked.id }))).entries.map(parseTimelineEntry);
+    const priorLink = linkHistory.map((entry: import('../app/timeline/contract').TimelineEntry) => timelineFileVersion(entry.event, 'after')).find((file: typeof linked | null) => file?.revision === linked.revision);
+    assert.ok(priorLink?.symbolicLink);
+    const restoreLink = fileRestoreCommand(ordinaryAgain, priorLink, randomUUID());
+    await checkFileRestoreReceipt((await api('/api/v1/files', restoreLink)).file, restoreLink, priorLink, fixture.userId);
+    await stopNative(); journal.close(); journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange); await startNative();
+    await run(); assert.equal((await lstat(transitionPath)).isSymbolicLink(), true);
+    assert.deepEqual(await readlink(transitionPath, { encoding: 'buffer' }), targetBytes);
+    assert.deepEqual(await readFile(path.join(directory, 'outside-sentinel.bin')), outsideBytes, 'The outside target is never opened or modified by sync');
+    const stableLink = await linkNode(), transfersAfterLink = { ...counts }; await run();
+    assert.deepEqual(await linkNode(), stableLink); assert.deepEqual(counts, transfersAfterLink);
+    console.log('MAC_PAGED_STAGE symbolic-links-verified');
+
+	};
 	// No consent exists yet: a resumed worker must stop without prompting.
 	await assert.rejects(approveMobileSyncTarget(saved, scope, signal, request, caps, 'existing'));
 	await approveMobileSyncTarget(saved, scope, signal, request, caps);
 	// All retries below, including process restarts, can only reuse that grant.
+	if (symlinksOnly) {
+		await run(); await exerciseSymbolicLinks();
+		console.log(JSON.stringify({ok:true, scenario:'Mac symlink round trip',nativeCalls,verifyCalls,nativePages,cloudPages,counts,checks:['regular-link-regular-kind-transitions','raw-target-bytes-no-follow','dangling-and-non-utf8-links','link-metadata-attachment-integrity','link-timeline-restore-after-restart','stable-convergence'],picker:'fixture',keychain:'not-used'}));
+	} else {
 	loseCloud = true;
 	losePublication = true;
 	await assert.rejects(run(), /Lost accepted cloud commit/);
@@ -652,6 +700,8 @@ try {
 	assert.deepEqual(await verifyBytes({ 'local.bin': localBytes, 'remote.bin': editedRemote }), afterHistoryRestore);
 	assert.deepEqual(counts, transfersAfterRestore, 'A converged historical restore must not upload, stage or publish again');
 
+    await exerciseSymbolicLinks();
+
     // Fresh path observations distinguish a missing name from an old object's
     // missing id. Recreate the same nested path with two new stable identities.
     const pathProbe = 'path-check-' + randomUUID(), probeIds: string[] = [];
@@ -778,6 +828,11 @@ try {
 				'stable-convergence',
 				'independent-replacements',
 				'retained-cloud-versions',
+                'symlink-raw-target-bytes-no-follow',
+                'regular-link-regular-kind-transitions',
+                'link-timeline-restore-after-restart',
+                'dangling-and-non-utf8-links',
+                'link-metadata-attachment-integrity',
 				'native-edit-timeline-history-and-restore',
 				'lost-history-restore-reply-exact-replay',
 				'history-restore-download-after-native-restart',
@@ -794,6 +849,7 @@ try {
 			keychain: 'not-used'
 		})
 	);
+    }
     }
     }
 } finally {

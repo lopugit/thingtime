@@ -82,7 +82,7 @@ final class MobileFolderTests: XCTestCase {
             XCTAssertEqual(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: row.path), row)
         }
         try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("unrelated-link"), withDestinationURL: root)
-        XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: grant.bookmark))
+        XCTAssertTrue(try MobileFolderReader.scan(bookmark: grant.bookmark).contains { $0.symbolicLink != nil })
         XCTAssertEqual(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "nested/file.bin")?.size, 65_537)
         XCTAssertNil(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "missing"))
         XCTAssertNil(try MobileFolderReader.inspect(bookmark: grant.bookmark, path: "missing/child"))
@@ -121,7 +121,7 @@ final class MobileFolderTests: XCTestCase {
         try Data("changed".utf8).write(to: file)
         XCTAssertThrowsError(try MobileFolderReader.read(bookmark: grant.bookmark, path: "file", version: entry.version, offset: 0, length: 1))
         try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("link"), withDestinationURL: file)
-        XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: grant.bookmark))
+        XCTAssertTrue(try MobileFolderReader.scan(bookmark: grant.bookmark).contains { $0.symbolicLink != nil })
         XCTAssertThrowsError(try MobileFolderReader.read(bookmark: grant.bookmark, path: "link", version: entry.version, offset: 0, length: 1))
     }
     func testMissingFolderIsFailureNotAnEmptyScan() throws {

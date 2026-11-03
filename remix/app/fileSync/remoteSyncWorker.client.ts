@@ -1,3 +1,7 @@
+import { parseSyncDirections } from './directionalProgress';
+import { readStampedCache } from '../hooks/localCache';
+import { syncScopeKey } from './reconcile';
+import type { ForegroundSyncProgress } from './foregroundSync';
 import { rootIdentity } from '../utils/rootIdentity';
 import { createNativeSyncHost, getNativeSyncAdapter, isNativeSyncAdapterCurrent } from './nativeSyncHost.client';
 import type { FolderHost } from './desktopFolders.client';
@@ -10,7 +14,7 @@ import { createFolderHostFetch } from './folderHostFetch.client';
 import { executeRemoteSyncDetails } from './remoteSyncDetails.client';
 import type { SyncScope } from './reconcile';
 import { deviceResourceKey, readDeviceSyncResourcePolicy, saveDeviceSyncResourcePolicy } from './deviceResourcePolicy';
-import { REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, REMOTE_SYNC_RESOURCE_REQUIREMENTS, REMOTE_SYNC_RESULT_BYTES, validateRemoteSyncCommand, parseRemoteSyncResources, supportsRemoteResourceControls, type RemoteSyncCommand, type RemoteSyncStatus } from './remoteSyncProtocol';
+import { REMOTE_SYNC_DIRECTION_REQUIREMENTS, REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, REMOTE_SYNC_RESOURCE_REQUIREMENTS, REMOTE_SYNC_RESULT_BYTES, validateRemoteSyncCommand, parseRemoteSyncResources, supportsRemoteResourceControls, type RemoteSyncCommand, type RemoteSyncStatus } from './remoteSyncProtocol';
 
 export const REMOTE_SYNC_REQUIREMENTS = { 'api.devices-sync-control': '1.0.0' } as const;
 // One bounded, host/owner/device/origin-scoped optional negotiation. A short
@@ -34,6 +38,16 @@ async function projectRemoteRoots(context: RemoteSyncWorkerContext, roots: Mobil
   const { sourcePath: _sourcePath, ...withoutLocation } = root;
   return withoutLocation;
  });
+}
+const directionNegotiations = new WeakMap<FolderHost, { key: string; expires: number; result: Promise<boolean> }>();
+async function remoteDirectionsReady(context: RemoteSyncWorkerContext) {
+ if (!supportsRemoteResourceControls(context.host.capabilities)) return false;
+ const key = JSON.stringify([context.host.origin(), context.ownerId, context.deviceId]);
+ let saved = directionNegotiations.get(context.host);
+ if (!saved || saved.key !== key || saved.expires < Date.now()) {
+  saved = { key, expires: Date.now() + 30000, result: context.host.requireCapability('api.devices-sync-control', REMOTE_SYNC_DIRECTION_REQUIREMENTS['api.devices-sync-control']).then(() => true, () => false) }; directionNegotiations.set(context.host, saved);
+ }
+ const ready = await saved.result; context.check(); return ready;
 }
 const reviews = new WeakMap<object, string>();
 const reviewId = (controller: object) => {
@@ -86,6 +100,7 @@ export async function executeRemoteSyncCommand(command: RemoteSyncCommand, conte
 			return accepted;
 		}
 		case 'status': {
+            const directionsReady = await remoteDirectionsReady(context);
 			const scope = context.scope('remote-sync-status');
 			const journal = await openSyncJournal();
 			const jobs: RemoteSyncStatus['jobs'] = [];
@@ -105,12 +120,16 @@ export async function executeRemoteSyncCommand(command: RemoteSyncCommand, conte
 			const roots = [...session.roots].sort((a, b) => a.id.localeCompare(b.id));
 			jobs.sort((a, b) => a.connectionId.localeCompare(b.connectionId));
 			const snapshot: RemoteSyncStatus = {
-				version: 1, deviceId, observedAt: new Date().toISOString(), capabilities: { ...host.capabilities! }, rootsReady: session.rootsReady,
+				version: 1, ...(directionsReady ? { directionalProgressVersion: '1.0.0' as const } : {}), deviceId, observedAt: new Date().toISOString(), capabilities: { ...host.capabilities! }, rootsReady: session.rootsReady,
 				...(session.rootsObservedAt ? { rootsObservedAt: session.rootsObservedAt } : {}),
-				roots: await projectRemoteRoots(context, roots.slice(offset, offset + pageSize)), jobs: jobs.slice(offset, offset + pageSize),
+				roots: await projectRemoteRoots(context, roots.slice(offset, offset + pageSize)), jobs: jobs.slice(offset, offset + pageSize).map(job => {
+                    const cached = directionsReady ? readStampedCache<ForegroundSyncProgress>('tt:sync-progress:' + syncScopeKey(context.scope(job.connectionId))) : null;
+                    let directions; try { directions = cached?.directions ? parseSyncDirections(cached.directions) : undefined; } catch { /* Invalid historical data stays absent. */ }
+                    return { ...job, ...(directions && cached ? { progress: { directions, totalFinal: cached.totalFinal, indexState: cached.indexState, statisticsObservedAt: cached.statisticsObservedAt, stage: cached.stage } } : {}) };
+                }),
 				...(offset + pageSize < Math.max(roots.length, jobs.length) ? { nextCursor: String(offset + pageSize) } : {}),
 				task: task ? { connectionId: task.scope.rootId, active: task.active, stopping: task.stopping, status: task.status,
-					waiting: task.waiting, progress: structuredClone(task.progress),
+					waiting: task.waiting, progress: directionsReady ? structuredClone(task.progress) : (() => { const { directions: _directions, ...legacy } = task.progress; return structuredClone(legacy); })(),
 					...(task.progressDescriptor ? { progressDescriptor: structuredClone(task.progressDescriptor) } : {}),
 					...(task.inventoryDescriptor ? { inventoryDescriptor: structuredClone(task.inventoryDescriptor) } : {}),
 					...(task.transferSeries ? { transferRates: {

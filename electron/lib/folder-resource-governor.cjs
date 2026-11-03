@@ -124,7 +124,7 @@ function governorFor(input, context, force = false) {
     const configured = limits(input.resourceLimits ?? input.batch?.descriptor?.configuration?.configuration?.resourceLimits);
     const device = deviceLimits(input.deviceResourceLimits);
     const policy = { ...configured, cpuPercent: Math.min(configured.cpuPercent ?? 100, device.cpuPercent) };
-    if (!input.rootId && !input.batch && !input.transfer) return null;
+    if (!input.rootId && !input.batch && !input.transfer && !(input.action === 'resources' && input.deviceResourceLimits)) return null;
     const scope = input.resourceScope ?? input.batch?.descriptor?.scope?.rootId ?? input.transfer?.scope?.rootId;
     if (Object.keys(configured).length && (typeof scope !== 'string' || !scope || scope.length > 512)) throw new Error('A resource-limited sync requires its connection scope.');
     // Lazy TTL cleanup avoids timers or retaining abandoned connection scopes.
@@ -135,6 +135,7 @@ function governorFor(input, context, force = false) {
     if (!governor) { governor = new ResourceGovernor(policy); governors.set(key, governor); }
     else governor.setLimits(policy);
     governor.totalBytesPerSecond = device.transferBytesPerSecond; governor.deviceResourceLimits = device;
+    governor.onPolicyChange?.();
     governor.lastUsed = now;
     clearTimeout(governor.cleanupTimer);
     const expire = () => {

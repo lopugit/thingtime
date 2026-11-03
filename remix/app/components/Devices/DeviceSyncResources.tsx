@@ -77,7 +77,7 @@ export function DeviceSyncResources({ ownerId, deviceId, allowed, remote: suppli
   if (!hostRef.current) throw Error('The paired device connection changed.');
   const result = await hostRef.current.request(ownerId, { action: 'resources', deviceResourceLimits: policy }, AbortSignal.timeout(20000));
   if (!result.deviceResourceLimits) throw Error('The device did not confirm its saved resource targets.');
-  dirty.current = false; saveDeviceSyncResourcePolicy(key, result.deviceResourceLimits); setError('Device targets saved. Active captures retain their scan budget until the next capture.');
+  dirty.current = false; saveDeviceSyncResourcePolicy(key, result.deviceResourceLimits); setError('Device targets saved. Active captures retain their scan and CPU budgets until the next capture.');
  } catch (cause) { setError(cause instanceof Error ? cause.message : 'Targets could not be saved.'); } };
  return <SettingsDocumentHost documentKey="device-sync-total-resources" defaultDocument={deviceSyncResourceBlocks} scopeKey={key} title="Total Sync resource usage">
  {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={key} enabled={!editing} scope={{ deviceResources: data }} actions={actions}><WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} /></TransientBlockHost>}

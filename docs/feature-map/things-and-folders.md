@@ -701,3 +701,12 @@ measurement projections; client and worker require `api.devices-sync-control`
 mailbox retains ownership, leases and immutable saves. Focused protocol/client,
 worker, session and `deviceSyncControl` tests cover paused changes, no folder/job
 side effects, stale replies and shared polling. See browser-device-sync.md.
+
+POSIX symbolic-link metadata lives in `fileSync/symbolicLink.ts`; `SyncEntry`
+content/stamp equality includes link kind and exact raw target identity.
+`cloudFile.ts`, canonical `files/files.ts`, inventory projections and
+`fileVersions.ts` preserve it through uploads, retained history and guarded
+restore. `api.files` 1.9.0 / `api.file-sync-batches` 1.3.0 and native fileAccess
+1.17.0 / fileSymbolicLinks 1.0.0 are explicit requirements. Targets are never
+followed. Tests: `symbolicLink.test.ts`, canonical file/route suites and the
+isolated Mac paged HTTP lane described in mobile-file-sync.md.

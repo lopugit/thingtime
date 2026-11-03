@@ -434,7 +434,7 @@ final class MacFolderSyncTests: XCTestCase {
     func testBackupLifecycleReturnsQuicklySealsCoverageAndReusesLostReply() async throws {
         let selected = folder.appendingPathComponent("selected")
         try Data("kept".utf8).write(to: selected.appendingPathComponent("kept"))
-        try FileManager.default.createSymbolicLink(at: selected.appendingPathComponent("link"), withDestinationURL: selected.appendingPathComponent("absent"))
+        XCTAssertEqual(mkfifo(selected.appendingPathComponent("pipe").path, 0o600), 0)
         let service = try service(), rootId = try await root(service), fields = backupFields(rootId)
         let begin = try await service.handle(request("scan-capture", fields)).decode([String: JSONValue].self)
         XCTAssertEqual(begin["capturePolicy"], .string("backup-supported")); XCTAssertEqual(begin["complete"], .bool(false))
@@ -456,7 +456,7 @@ final class MacFolderSyncTests: XCTestCase {
         let skippedBody = try XCTUnwrap(skipped["skippedPage"]).decode([String: JSONValue].self)
         XCTAssertEqual(skippedBody["totalSkipped"], .number(1))
         let gaps = try XCTUnwrap(skippedBody["skipped"]).decode([MobileFolderInventory.Skipped].self)
-        XCTAssertEqual(gaps[0].path, "link"); XCTAssertEqual(gaps[0].reason, .symlink)
+        XCTAssertEqual(gaps[0].path, "pipe"); XCTAssertEqual(gaps[0].reason, .fifo)
         // A renderer reconnect can retrieve the sealed durable generation.
         let repeated = try await service.handle(request("scan-capture", fields)).decode([String: JSONValue].self)
         XCTAssertEqual(repeated["backupCapture"], completed["backupCapture"])
@@ -623,8 +623,7 @@ final class MacFolderSyncTests: XCTestCase {
         }
         denyAt = Int.max
         for i in 0..<600 {
-            try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("selected/link-\(i)"),
-                withDestinationURL: folder.appendingPathComponent("missing"))
+            XCTAssertEqual(mkfifo(folder.appendingPathComponent("selected/pipe-\(i)").path, 0o600), 0)
         }
         let backup = backupFields(id)
         _ = try await service.handle(request("scan-capture", backup))
@@ -658,8 +657,7 @@ final class MacFolderSyncTests: XCTestCase {
         let service = try service(), id = try await root(service)
         let selected = folder.appendingPathComponent("selected")
         try FileManager.default.createDirectory(at: selected.appendingPathComponent("Library"), withIntermediateDirectories: true)
-        try FileManager.default.createSymbolicLink(at: selected.appendingPathComponent("Library/blocked"),
-            withDestinationURL: selected.appendingPathComponent("missing"))
+        XCTAssertEqual(mkfifo(selected.appendingPathComponent("Library/blocked").path, 0o600), 0)
         try Data().write(to: selected.appendingPathComponent("kept"))
         let fields: [String: JSONValue] = ["rootId": .string(id), "excludedPaths": .array([.string("library")])]
         let scan = try await service.handle(request("scan", fields)).decode([String: JSONValue].self)
@@ -672,7 +670,7 @@ final class MacFolderSyncTests: XCTestCase {
         await rejects { try await service.handle(self.request("scan-capture", captureFields.merging(["excludedPaths": .array([])]) { _, v in v })) }
         let failed = try await service.handle(request("scan", ["rootId": .string(id)])).decode([String: JSONValue].self)
         XCTAssertEqual(failed["complete"], .bool(false)); XCTAssertNil(failed["entries"])
-        XCTAssertEqual(failed["scanFailure"], .object(["reason": .string("symlink"), "path": .string("Library/blocked")]))
+        XCTAssertEqual(failed["scanFailure"], .object(["reason": .string("special"), "path": .string("Library/blocked")]))
         await rejects { try await service.handle(self.request("scan", fields.merging(["excludedPaths": .array([.string("../escape")])]) { _, v in v })) }
         await rejects { try await service.handle(self.request("scan", fields.merging(["excludedPaths": .null]) { _, v in v })) }
     }
@@ -680,7 +678,7 @@ final class MacFolderSyncTests: XCTestCase {
 
     func testScanFailureIsIdentityBoundAndReauthorizesOwnerAndGrant() async throws {
         let selected = folder.appendingPathComponent("selected")
-        try FileManager.default.createSymbolicLink(at: selected.appendingPathComponent("blocked"), withDestinationURL: selected.appendingPathComponent("missing"))
+        XCTAssertEqual(mkfifo(selected.appendingPathComponent("blocked").path, 0o600), 0)
         for action in ["scan", "scan-capture"] {
             for revoked in ["none", "identity", "grant"] {
                 var saved: [String: Data] = [:], calls = 0
@@ -705,7 +703,7 @@ final class MacFolderSyncTests: XCTestCase {
                     let result = try await service.handle(request(action, fields, id: requestId)).decode([String: JSONValue].self)
                     XCTAssertEqual(result["requestId"], .string(requestId)); XCTAssertEqual(result["ownerId"], .string("owner"))
                     XCTAssertEqual(result["rootId"], .string(grant.id)); XCTAssertEqual(result["complete"], .bool(false))
-                    XCTAssertEqual(result["scanFailure"], .object(["reason": .string("symlink"), "path": .string("blocked")]))
+                    XCTAssertEqual(result["scanFailure"], .object(["reason": .string("special"), "path": .string("blocked")]))
                     for key in ["entries", "capture", "inventoryPage"] { XCTAssertNil(result[key]) }
                 }
                 XCTAssertEqual(calls, 2)
@@ -713,6 +711,29 @@ final class MacFolderSyncTests: XCTestCase {
         }
     }
 
+    func testRootlessResourceSaveHasIndependentAuthorizedLaneDuringActiveRequest() async throws {
+        let entered = expectation(description: "folder chooser holds active lane"), completed = expectation(description: "resource policy saved while active")
+        var gate: CheckedContinuation<URL?, Never>?, cancelled = 0, saved: [String: Data] = [:]
+        let service = try MacFolderSync(origin: origin, store: MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 }),
+            staging: MobileSyncStaging(directory: folder.appendingPathComponent("resource-lane")), verify: { owner, device in
+                guard owner == "owner", device == "device" else { throw MobileFolderStore.Failure.unavailable }
+            }, choose: { await withCheckedContinuation { gate = $0; entered.fulfill() } }, approve: { _ in true }, cancelDialog: { cancelled += 1 })
+        let choosing = Task { try await service.handle(request("choose")) }
+        await fulfillment(of: [entered], timeout: 1)
+        let policy = JSONValue.object(["transferBytesPerSecond": .number(625000), "scanBytesPerSecond": .number(625000), "cpuPercent": .number(15)])
+        let resource = Task { () -> Result<JSONValue, Error> in
+            defer { completed.fulfill() }
+            do { return .success(try await service.handle(request("resources", ["deviceResourceLimits": policy]))) }
+            catch { return .failure(error) }
+        }
+        await fulfillment(of: [completed], timeout: 1)
+        XCTAssertEqual(cancelled, 0)
+        gate?.resume(returning: nil); gate = nil
+        _ = try await choosing.value
+        let result = await resource.value
+        let response = try result.get().decode([String: JSONValue].self)
+        XCTAssertEqual(response["deviceResourceLimits"], policy)
+    }
     func testDeviceResourceSettingsAreRootlessPersistedAndDeviceBound() async throws {
         let service = try service()
         let policy: JSONValue = .object(["transferBytesPerSecond": .number(625000), "scanBytesPerSecond": .number(625000), "cpuPercent": .number(15)])
@@ -732,7 +753,7 @@ final class MacFolderSyncTests: XCTestCase {
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
         XCTAssertNotNil(context["conditions"])
         XCTAssertNotNil(context["roots"])
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.16.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0", "fileUploadBatchVersion": "1.0.0", "fileFolderBatchVersion": "1.0.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.17.0", "fileSymbolicLinksVersion": "1.0.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0", "fileUploadBatchVersion": "1.0.0", "fileFolderBatchVersion": "1.0.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }
