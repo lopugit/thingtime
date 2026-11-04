@@ -2,7 +2,7 @@ import React from 'react';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
-import { hasNativePasswordStatus, nativePasswordConnectionEvent, nativePasswordProvider } from '~/passwords/native.client';
+import { hasNativePasswordStatus, nativePasswordConnectionEvent, nativePasswordProvider, nativePasswordMode } from '~/passwords/native.client';
 import { NativePasswordConnectionController, nativeConnectionPresentation } from '~/passwords/nativeConnection';
 import { NATIVE_PASSWORD_CONNECTION_BLOCKS, migrateNativePasswordBranding } from './nativePasswordConnectionBlocks';
 
@@ -18,7 +18,7 @@ export function NativePasswordConnection({ ownerId }: { ownerId: string }) {
     events.forEach(event => window.addEventListener(event, refresh));
     return () => { controller.dispose(); events.forEach(event => window.removeEventListener(event, refresh)); };
   }, [controller]);
-  const presentation = nativeConnectionPresentation(snapshot, hasNativePasswordStatus());
+  const presentation = nativeConnectionPresentation(snapshot, hasNativePasswordStatus(), nativePasswordMode());
   return <SettingsDocumentHost documentKey="password-native-connection" title="Password AutoFill layout" defaultDocument={NATIVE_PASSWORD_CONNECTION_BLOCKS} migrateBlocks={migrateNativePasswordBranding} scopeKey={scopeKey} layoutEditingDisabled={snapshot.busy}>
     {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} actions={{ 'autofill.activate': async invocation => { if (!invocation.signal.aborted && !presentation.disabled) await controller.activate(); } }} scope={{ result: { ...presentation, notice: snapshot.notice, hasNotice: !!snapshot.notice } }}>
       <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />

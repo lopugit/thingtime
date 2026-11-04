@@ -41,10 +41,14 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
  await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(18090,'127.0.0.1',resolve);});
  let browser:any,page:any;const issues:string[]=[];
  try{
-  browser=await chromium.launch({headless:true});const context=await browser.newContext({viewport:{width:1280,height:900}});
+  browser=await chromium.launch({headless:true,executablePath:chromium.executablePath(),chromiumSandbox:true});const context=await browser.newContext({viewport:{width:1280,height:900}});
   const signedIn=await context.request.post(origin+'/api/v1/login',{headers:{Origin:origin},data:{username,password}});assert.equal(signedIn.status(),200,'Fresh synthetic sign-in at the exact UI origin');
   page=await context.newPage();page.on('pageerror',(error:Error)=>issues.push(error.name+': '+error.message.slice(0,200)+' '+String(error.stack).split('\n').slice(1,3).join(' ')));
   const inspect=async(name:string)=>{await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight));await page.evaluate(()=>window.scrollTo(0,0));assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${name}: no horizontal overflow`);await page.screenshot({path:`${output}/${name}.png`,fullPage:true});};
+  if(process.argv.includes('--native-approval-ui')){
+   await(await import('./password-native-approval-ui.integration')).runNativeApprovalUI({context,page,origin,ownerId,password,inspect});
+   assert.deepEqual(issues,[]);return;
+  }
   await page.goto(origin+'/scripts/password-verification.browser.html');
   await page.getByText('Isolated login',{exact:true}).waitFor();
   await page.getByText(longUser,{exact:true}).waitFor();await page.getByText('No username or email saved',{exact:true}).waitFor();

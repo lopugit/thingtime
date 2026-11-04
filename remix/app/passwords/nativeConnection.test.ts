@@ -75,3 +75,14 @@ test('a local account has a precise non-mutating HTTPS recovery state', async ()
   await controller.activate();
   assert.deepEqual(calls, ['status']);
 });
+
+test('scoped desktop status distinguishes missing keyring and does not advertise system autofill', async () => {
+  const locked = new NativePasswordConnectionController('fixture', async () => ({ok: true, connection: 'unavailable', availability: 'keyringUnavailable'}));
+  await locked.refresh();
+  assert.match(nativeConnectionPresentation(locked.getSnapshot(), true, 'scopedDesktop').status, /keyring/i);
+  const connected = new NativePasswordConnectionController('fixture', async () => ({ok: true, connection: 'connected', mode: 'scopedDesktop'}));
+  await connected.refresh();
+  const value = nativeConnectionPresentation(connected.getSnapshot(), true, 'scopedDesktop');
+  assert.match(value.status, /scoped/i);
+  assert.match(value.status, /System-wide AutoFill and passkeys are not supported/);
+});
