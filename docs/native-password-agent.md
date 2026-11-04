@@ -24,7 +24,8 @@ using the existing catalog fields and 1.6 contracts.
 Windows uses Electron safeStorage/DPAPI. Linux requires an available OS secret
 store (`gnome_libsecret`, KWallet, KWallet5 or KWallet6); `basic_text`, unknown and
 unavailable backends fail closed. The connection and interrupted-save journal
-are OS-encrypted. No vault session or password is copied into those files.
+are OS-encrypted. No vault session is persisted. An interrupted generated save
+keeps its password encrypted only until the same save is confirmed or removed.
 Grant/runtime files are private to the OS account; Windows verifies the actual
 owner/DACL, rejects reparse points and requires paths inside that user's profile.
 
@@ -50,9 +51,10 @@ stdin containing **non-secret parameters only**. Shell examples below use POSIX
 syntax; PowerShell can pipe the same JSON into `node`.
 
 ```sh
-node /opt/thingtime/resources/password-agent.mjs manifest --profile "$HOME/.config/Thingtime"
+profile="<absolute profile returned by --password-agent-info>"
+node /opt/thingtime/resources/password-agent.mjs manifest --profile "$profile"
 printf '%s' '{"ownerId":"<current-account-id>"}' |
-  node /opt/thingtime/resources/password-agent.mjs status --profile "$HOME/.config/Thingtime"
+  node /opt/thingtime/resources/password-agent.mjs status --profile "$profile"
 ```
 
 `authorize` binds an exact vault origin, account, stable task ID and target. It
