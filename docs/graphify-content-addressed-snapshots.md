@@ -31,7 +31,7 @@ graphify-out/
     GRAPH_REPORT.md
     cost.json
     snapshot.json
-  cache/semantic-cas/v1/<input-key>/<content-hash>.json
+  cache/semantic-cas/v1/[p<prompt-hash>/]<input-key>/<content-hash>.json
   .work/.../cache/semantic/<input-key>.json    # ignored private hydration
   graph.json -> snapshots/.../graph.json        # ignored compatibility alias
   manifest.json -> snapshots/.../manifest.json  # ignored compatibility alias
@@ -77,6 +77,37 @@ private semantic cache from immutable variants, validates the graph/manifest pai
 the report and HTML, finalizes an immutable snapshot, and refreshes ignored
 root aliases. Plain `graphify query` continues to work after activation because
 those aliases expose the selected snapshot at Graphify's conventional paths.
+
+For a change that touches documentation, scope semantic work to the changed
+documents instead of also retrying historical files that lack a semantic
+stamp:
+
+```sh
+scripts/graphify extract . --backend openai --semantic-file TESTING.md \
+  --semantic-file docs/graphify-content-addressed-snapshots.md
+```
+
+Repeat `--semantic-file` for each changed document, paper, or image. The
+selector only narrows semantic dispatch: structural changes, deleted files,
+and the rest of the live corpus still pass through Graphify's normal
+incremental scan. An unselected file keeps its prior semantic coverage and
+does not get a new semantic stamp. Scoped refresh requires an existing
+snapshot and is tested against Graphify 0.9.89. If the Graphify launcher cannot identify its Python interpreter,
+set `GRAPHIFY_PYTHON` to the interpreter with Graphify installed.
+
+In every semantic extract, each file or long document slice runs in a separate request, with concurrency
+bounded by Graphify's `--max-concurrency`. A slice that returns no source
+nodes is incomplete even if a different slice of the same file returned nodes.
+The wrapper rejects failed, incomplete, or unstamped semantic work before
+publishing a snapshot. It keeps Graphify's shrink protection and finalizes
+the per-file semantic cache only after every dispatched slice passes. Earlier
+cache entries produced with a different extraction prompt are not reused as
+evidence of complete coverage. The immutable cache preserves Graphify’s prompt
+namespace so the next checkout can hydrate results using the same prompt. A fresh pass on a large changed document sends
+its full text; the cache can reuse a verified result for unchanged content.
+
+Run the offline slice-coverage regression using the same Python interpreter
+as Graphify: `python3 -B scripts/graphify-semantic.test.py`.
 
 Every successful mutation or `ensure` also applies bounded retention. The
 default is one active portable snapshot in the checked-out tree. Set
