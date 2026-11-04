@@ -8,10 +8,10 @@ export type FileLocation = { deviceId: string; path: string; folderId?: undefine
 export type FileClipboard = { ownerId: string; mode: 'copy' | 'cut'; location: FileLocation; items: ThingsThing[] };
 let clipboard: FileClipboard | null = null;
 export const filesystemClipboard = { get: (ownerId: string) => clipboard?.ownerId === ownerId ? clipboard : null, set: (value: FileClipboard | null) => { clipboard = value; window.dispatchEvent(new Event('thingtime-files-clipboard')); } };
-export const fileRequest = async (url: string, body?: unknown, signal?: AbortSignal, method?: string): Promise<any> => {
+export const fileRequest = async (url: string, body?: unknown, signal?: AbortSignal, method?: string, headers?: Record<string, string>): Promise<any> => {
   signal?.throwIfAborted();
   const response = await fetch(url, { method: method || (body === undefined ? 'GET' : 'POST'), credentials: 'same-origin', cache: 'no-store', signal,
-    headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    headers: { ...headers, Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   const payload = await response.json();
   if (!response.ok || payload.ok === false) throw Object.assign(new Error(payload.error || `File operation failed (${response.status})`), { status: response.status, retryAfter: response.headers.get('Retry-After') });
   return payload;
