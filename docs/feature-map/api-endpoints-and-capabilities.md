@@ -1,5 +1,13 @@
 # API endpoints and capabilities
 
+`api.devices` and `api.devices-node-state` 1.14.0 add optional host resource
+measurements to the existing device state mirror. `DeviceResources.swift`
+samples host counters, `ThingtimeAPIClient` sends the fields only to a
+compatible paired origin, and `normalizeDeviceState` validates the scalar
+allowlist for writes and the owner-only read projection. Older snapshots omit
+these fields. Run `test:devices`, `test:api-capabilities`, and the
+`DeviceResourcesTests` Swift suite. See the [native node guide](../../macos/ThingtimeNode/README.md).
+
 `api.devices-sync-control` 1.1.0 adds `/api/v1/devices/sync-control` for the
 account browser and installed sync worker. `deviceSyncControl.ts` authenticates
 the owner and current device pairing, delivers an immutable request once, and
