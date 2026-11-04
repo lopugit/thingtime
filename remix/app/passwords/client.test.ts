@@ -1,6 +1,28 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { passwordRequest } from './client';
+import { passwordApprovalRequest, passwordRequest } from './client';
+
+test('passkey approval surfaces rate limits without spending its website deadline in backoff', async t => {
+  const origin = 'https://password-approval.test';
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin } } });
+  t.after(() => { if (previous) Object.defineProperty(globalThis, 'window', previous); else Reflect.deleteProperty(globalThis, 'window'); });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let posts = 0;
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    if (!String(input).startsWith('/api/v1/passwords')) return Response.json({ schemaVersion: 1, origin, features: { 'api.passwords': { version: '1.5.0' } } });
+    posts++;
+    assert.equal(init?.signal?.aborted, false);
+    return Response.json({ ok: false, error: 'Please wait before verifying again.' }, { status: 429, headers: { 'Retry-After': '120' } });
+  });
+  const controller = new AbortController();
+  await assert.rejects(passwordApprovalRequest('owner', { operation: 'verify-passkey' }, controller.signal), { status: 429, message: 'Please wait before verifying again.' });
+  t.mock.timers.tick(120_000);
+  assert.equal(posts, 1);
+  controller.abort();
+  await assert.rejects(passwordApprovalRequest('owner', { operation: 'verify-passkey' }, controller.signal), { name: 'AbortError' });
+  assert.equal(posts, 1);
+});
 
 test('whole-vault searches negotiate support, encode the query on every page, and respect cancellation', async t => {
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
