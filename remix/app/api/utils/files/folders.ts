@@ -1,3 +1,5 @@
+import { ExactCloudSyncDestinationChanged, SYNC_DESTINATION_CHANGED } from '../../../fileSync/cloudSyncDestination';
+import { assertCloudSyncDestination } from './inventory';
 import { createHash } from 'node:crypto';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
@@ -107,7 +109,8 @@ export function createCloudFolderService(
 		if (!entry) return null;
 		return validateReceipt(entry, owner, id, operationId);
 	};
-	const errorResult = (error: unknown) =>
+	const errorResult = (error: unknown) => error instanceof ExactCloudSyncDestinationChanged
+		? { ...failure(409, error.message), code: SYNC_DESTINATION_CHANGED } :
 		error instanceof StorageMutationError ? failure(error.status, error.message) : failure(503, 'Folder storage is temporarily unavailable.');
 	return {
 		async readReceipts(owner: string, inputs: { id: string; operationId: string }[], signal?: AbortSignal) {
@@ -267,6 +270,7 @@ export function createCloudFolderService(
 					for (const { input } of writes) {
 						options.check?.();
 						await deps.lock(things, owner, input.folderId, session, input.id);
+						if (input.syncDestination) await assertCloudSyncDestination(things, session, owner, input.syncDestination, input.folderId, null);
 					}
 					for (const { input, index } of writes) {
 						options.check?.();
@@ -336,23 +340,27 @@ export function createCloudFolderService(
 					if (existing) fail(409, 'Folder identity already exists.');
 					await authorized(things, owner, input.folderId, session);
 					await deps.lock(things, owner, input.folderId, session, input.id);
-					// All ordinary creates and folder moves fence this same parent. A
-					// concurrent sibling create retries and sees the occupied name.
-					const cursor = things
-						.find(
-							{ ownerId: owner, folderId: input.folderId, $or: [...folderThingMatch().$or, { thingtime: 'file', 'crystal.trashed': { $ne: true } }] },
-							{ session, projection: { _id: 0, 'crystal.name': 1 }, maxTimeMS: 5000 }
-						)
-						.limit(MAX_SYNC_SCAN_ENTRIES + 1);
-					let count = 0;
-					try {
-						for await (const sibling of cursor) {
-							if (++count > MAX_SYNC_SCAN_ENTRIES) fail(413, 'Folder exceeds the sync scan bound.');
-							if (typeof sibling.crystal?.name !== 'string' || syncPathKey(sibling.crystal.name) === syncPathKey(input.name))
-								fail(409, 'A cloud path already exists; reconcile before creating this folder.');
+					if (input.syncDestination) {
+						await assertCloudSyncDestination(things, session, owner, input.syncDestination, input.folderId, null);
+					} else {
+						// All ordinary creates and folder moves fence this same parent. A
+						// concurrent sibling create retries and sees the occupied name.
+						const cursor = things
+							.find(
+								{ ownerId: owner, folderId: input.folderId, $or: [...folderThingMatch().$or, { thingtime: 'file', 'crystal.trashed': { $ne: true } }] },
+								{ session, projection: { _id: 0, 'crystal.name': 1 }, maxTimeMS: 5000 }
+							)
+							.limit(MAX_SYNC_SCAN_ENTRIES + 1);
+						let count = 0;
+						try {
+							for await (const sibling of cursor) {
+								if (++count > MAX_SYNC_SCAN_ENTRIES) fail(413, 'Folder exceeds the sync scan bound.');
+								if (typeof sibling.crystal?.name !== 'string' || syncPathKey(sibling.crystal.name) === syncPathKey(input.name))
+									fail(409, 'A cloud path already exists; reconcile before creating this folder.');
+							}
+						} finally {
+							await cursor.close();
 						}
-					} finally {
-						await cursor.close();
 					}
 					const created = await deps.create(
 						owner,

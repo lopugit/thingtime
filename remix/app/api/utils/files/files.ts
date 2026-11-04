@@ -1,3 +1,5 @@
+import { ExactCloudSyncDestinationChanged, SYNC_DESTINATION_CHANGED } from '../../../fileSync/cloudSyncDestination';
+import { assertCloudSyncDestination } from './inventory';
 import { symbolicLinkBytes, symbolicLinkFingerprint } from '../../../fileSync/symbolicLink';
 import { equalContentFingerprints } from '../../../fileSync/contentFingerprint';
 import { parseFileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
@@ -60,7 +62,8 @@ export function createCloudFileService(overrides: Partial<{
 		if (!entry) return null;
 		return validateReceipt(entry, ownerId, id, operationId, retained);
 	};
-	const errorResult = (error: unknown) => error instanceof StorageMutationError ? failure(error.status, error.message) :
+	const errorResult = (error: unknown) => error instanceof ExactCloudSyncDestinationChanged
+		? { ...failure(409, error.message), code: SYNC_DESTINATION_CHANGED } : error instanceof StorageMutationError ? failure(error.status, error.message) :
 		(error as any)?.code === 11000 ? failure(409, 'File changed before publication; reconcile and retry with the original operation') : failure(503, 'File storage is temporarily unavailable');
 	return {
         async readReceipts(ownerId: string, requests: { id: string; operationId: string }[], signal?: AbortSignal) {
@@ -114,7 +117,10 @@ export function createCloudFileService(overrides: Partial<{
 				return await deps.transaction(async session => {
 					const before = await owned(things, ownerId, input.id, session);
 					const saved = await receipt(things, ownerId, input.id, input.operationId, session, retained); if (saved) return replay(saved);
-					if ((before?.timelineHeadId ?? null) !== input.expectedRevision) conflict('File changed; preserve both versions and reconcile');
+					if ((before?.timelineHeadId ?? null) !== input.expectedRevision) {
+						if (input.syncDestination) throw new ExactCloudSyncDestinationChanged();
+						conflict('File changed; preserve both versions and reconcile');
+					}
 					if (retained && (!before || before.crystal?.trashed || before.crystal?.name !== input.name || (before.folderId ?? null) !== input.folderId))
 						conflict('The reviewed file changed before retention');
 					if (before && currentContentStorageSizeBytes(before) === null) conflict('File storage requires reconciliation');
@@ -129,6 +135,9 @@ export function createCloudFileService(overrides: Partial<{
             if (origin.fileId !== input.id || origin.folderId !== input.folderId || origin.path.split('/').at(-1) !== input.name) conflict('Sync upload publication differs from its recorded destination');
           }
 					await deps.lockFolder(things, ownerId, input.folderId, session);
+					if (input.syncDestination)
+						await assertCloudSyncDestination(things, session, ownerId, input.syncDestination, input.folderId!,
+							input.expectedRevision === null ? null : { id: input.id, revision: input.expectedRevision });
 					// Binding writes the attachment even on restore: cleanup and content
 					// publication cannot both win a concurrent transaction.
 					const bound = await things.updateOne({ _id: attachment._id, ownerId, attachmentState: 'ready', objectVersionId: attachment.objectVersionId,

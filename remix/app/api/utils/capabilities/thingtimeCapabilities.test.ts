@@ -547,7 +547,7 @@ test('object-only empty finalization corrections remain compatible with shipped 
 
 test('sync upload provenance clients require compatible contracts on the selected origin', () => {
  const manifest = thingtimeCapabilityManifest('https://provenance.test');
- for (const [feature, required, old] of [['api.attachment-uploads', '1.7.0', '1.6.2'], ['api.things', '1.46.3', '1.39.1'], ['api.files', '1.9.0', '1.8.1'], ['api.file-sync-batches', '1.3.0', '1.2.1']]) {
+ for (const [feature, required, old] of [['api.attachment-uploads', '1.7.0', '1.6.2'], ['api.things', '1.46.3', '1.39.1'], ['api.files', '1.10.0', '1.9.0'], ['api.file-sync-batches', '1.3.0', '1.2.1']]) {
   assert.equal(manifest.features[feature].version, required);
   assert.equal(capabilitySatisfies(old, required), false);
   assert.equal(capabilitySatisfies('2.0.0', required), false);

@@ -24,6 +24,7 @@ export type CloudSyncPortInput = {
 	readLocal(path: string): Promise<SyncEntry | null>;
 	openSource(expected: SyncEntry): Promise<FingerprintSource>;
 	signal?: AbortSignal;
+	beforeLocalPublication?(operationId: string): Promise<void>;
 	localTarget?: LocalSyncTarget;
 	/** Validated saved root for older runs without per-operation roots. */
 	cloudRootId?: string;
@@ -152,6 +153,8 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 				validateLocalStage(staged, operation, scope);
 				if (source) await source.verify!();
 				if (!sameSyncStamp(m.source, await readLocalSource(write))) throw Error('Cloud path changed before local publication.');
+				check();
+				await input.beforeLocalPublication?.(operation.id);
 				check();
 				const result = await input.localTarget!.publish(structuredClone(operation), { ...scope }, structuredClone(staged));
 				check();
