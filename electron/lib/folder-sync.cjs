@@ -1,6 +1,7 @@
 'use strict';
 
 const { governorFor, limits: resourceLimits, deviceLimits } = require('./folder-resource-governor.cjs');
+const { TransferWorkerDisconnected } = require('./folder-transfer-process.cjs');
 const { stageFolderDownload } = require('./folder-download.cjs');
 const { uploadFolderPart, uploadRetry, retryableUploadFailure } = require('./folder-upload.cjs');
 const { validateFolderBatchInput, validateFolderBatchReply } = require('./folder-validate-batch.cjs');
@@ -458,8 +459,8 @@ class DesktopFolderSync {
                 this.reportFailure(input.action, state.phase, error);
                 // Only fixed, trusted native transport codes may retry. Source,
                 // account, capability and protocol refusals remain terminal.
-                if (state.phase === 'native-request' && error?.name === 'ThingtimeNodeBridgeError' &&
-                    ['node_timeout', 'node_unavailable'].includes(error.code)) throw transportRetry();
+                if (state.phase === 'native-request' && (error instanceof TransferWorkerDisconnected ||
+                    (error?.name === 'ThingtimeNodeBridgeError' && ['node_timeout', 'node_unavailable'].includes(error.code)))) throw transportRetry();
                 // Electron serializes Error.name in its rejection text. Normalize
                 // this exact native marker to the renderer's existing contract.
                 if (error?.name === 'ThingtimeNodeBridgeError' && error.code === 'folder_identity_retry' &&
