@@ -160,6 +160,11 @@ revoked-grant refusal. Their output contains booleans only; fixture screenshots
 show masked inputs. `password-native-approval-ui.integration.ts` exercises the
 actual editable React approval and protected production API handlers in an
 isolated database, with an explicit fixture IPC adapter.
+`THINGTIME_TEST_NATIVE_SNAP=1 node --test electron/test/native-password-snap.test.cjs`
+separately exercises installed Snap Chromium in its normal desktop user session,
+with only a new task profile and synthetic loopback form. Snap requires that
+session's systemd service, so it cannot run inside the private D-Bus keyring
+fixture. It verifies delivery, target changes, sandbox flags and profile cleanup.
 
 These checks do not prove a personal account's installed GUI ceremony, external
 service login, passkey operation or Windows signing. Record those separately in
