@@ -7,17 +7,23 @@ const { promisify } = require('node:util');
 const execute = promisify(execFile);
 const checkAcl = String.raw`
 $ErrorActionPreference = 'Stop'
+$phase = 'profile'
 try {
     $requested = [IO.Path]::GetFullPath($env:THINGTIME_PASSWORD_ACL_PATH)
     $userProfile = [IO.Path]::GetFullPath([Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)).TrimEnd([char]92)
     if ($userProfile -notmatch '^[A-Za-z]:\\' -or !($requested.Equals($userProfile, 'OrdinalIgnoreCase') -or $requested.StartsWith($userProfile + '\', 'OrdinalIgnoreCase'))) { exit 11 }
+    $phase = 'identity'
     $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $trusted = @($currentUser, 'S-1-5-18', 'S-1-5-32-544')
     for ($itemPath = $requested; ; $itemPath = [IO.Path]::GetDirectoryName($itemPath)) {
+        $phase = 'attributes'
         $attributes = [IO.File]::GetAttributes($itemPath)
         if ($attributes -band [IO.FileAttributes]::ReparsePoint) { exit 12 }
+        $phase = 'read-acl'
         $acl = if ($attributes -band [IO.FileAttributes]::Directory) { [IO.Directory]::GetAccessControl($itemPath) } else { [IO.File]::GetAccessControl($itemPath) }
+        $phase = 'decode-acl'
         $security = [Security.AccessControl.RawSecurityDescriptor]::new($acl.GetSecurityDescriptorBinaryForm(), 0)
+        $phase = 'inspect-acl'
         if ($trusted -notcontains $security.Owner.Value -or $null -eq $security.DiscretionaryAcl) { exit 13 }
         foreach ($ace in $security.DiscretionaryAcl) {
             if ($ace.AceFlags -band [Security.AccessControl.AceFlags]::InheritOnly) { continue }
@@ -26,7 +32,10 @@ try {
         }
         if ($itemPath.Equals($userProfile, 'OrdinalIgnoreCase')) { exit 0 }
     }
-} catch { exit 15 }
+} catch {
+    [Console]::WriteLine($phase + ':' + $_.Exception.GetType().Name + ':' + $_.FullyQualifiedErrorId)
+    exit 15
+}
 `;
 const failure = {
   11: 'path outside the Windows profile', 12: 'reparse point in the path',
@@ -50,7 +59,8 @@ async function requirePrivateWindowsPath(file) {
     });
   } catch (error) {
     const reason = failure[error.code] || 'Windows access check unavailable';
-    throw new Error(`Use a local path inside the current Windows user profile with access limited to that user and system administrators (${reason}).`);
+    const detail = error.code === 15 && /^(?:profile|identity|attributes|read-acl|decode-acl|inspect-acl):[A-Za-z]+:[A-Za-z0-9.,]+$/.exec(error.stdout?.trim() || '');
+    throw new Error(`Use a local path inside the current Windows user profile with access limited to that user and system administrators (${reason}${detail ? `, ${detail[0]}` : ''}).`);
   }
 }
 

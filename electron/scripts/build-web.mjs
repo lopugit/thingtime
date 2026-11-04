@@ -127,6 +127,18 @@ runRemixScript('build:server', {
   }
 });
 
+if (process.platform === 'win32') {
+  const fromRemix = createRequire(path.join(remixDir, 'package.json'));
+  const resvgManifest = fromRemix.resolve('@resvg/resvg-js/package.json');
+  const fromResvg = createRequire(resvgManifest);
+  const binding = `@resvg/resvg-js-win32-${process.arch}-msvc`;
+  const modules = path.join(remixOutputDir, 'server', 'node_modules');
+  const packages = [['@resvg/resvg-js', resvgManifest], [binding, fromResvg.resolve(`${binding}/package.json`)]];
+  for (const [name, manifest] of packages) {
+    await cp(path.dirname(manifest), path.join(modules, name), { dereference: true, recursive: true });
+  }
+}
+
 run(pnpmRunner.command, [...pnpmRunner.args, '--dir', mcpDir, 'run', 'build:desktop']);
 
 await mkdir(stagedWebDir, { recursive: true });

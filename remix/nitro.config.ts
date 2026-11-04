@@ -26,8 +26,8 @@ export default defineNitroConfig({
   // host serves public assets unless explicitly enabled. Keep cloud defaults.
   ...(desktopMiddleware ? { serveStatic: true } : {}),
   // Keep the Windows N-API addon on disk instead of feeding its .node file to
-  // Rolldown's JavaScript loader. Nitro traces the wrapper and host binding.
-  ...(desktopMiddleware && process.platform === 'win32' ? { traceDeps: ['@resvg/resvg-js*'] } : {}),
+  // Rolldown's JavaScript loader. The desktop build stages the host package.
+  ...(desktopMiddleware && process.platform === 'win32' ? { rolldownConfig: { external: ['@resvg/resvg-js'] } } : {}),
   modules: ['workflow/nitro'],
   compatibilityDate: '2026-07-02',
   // Browser image engines can be reached through shared schema imports. Do not
