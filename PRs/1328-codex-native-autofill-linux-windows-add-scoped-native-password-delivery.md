@@ -53,6 +53,17 @@ credential reads during discovery. The macOS Apple provider is unchanged.
   personal-account ceremony.
 - GNOME locked-keyring test: same PID/owner unlocked; wrong password and revoked
   grant left it locked; a same-user wrong-PID peer received zero bytes.
+- Ubuntu 24.04 ARM64: installed Snap Chromium passed direct synthetic delivery,
+  changed-document and cross-origin-action refusal, sandbox flags and task
+  profile cleanup in its normal desktop user session. Snap's systemd dependency
+  prevents using the private D-Bus fixture for that browser; it does not require
+  a personal browser profile or account. Hosted Ubuntu 24.04 x64 also passed the
+  full Electron/keyring/browser fixture.
+- Native Windows x64 packaging and the packaged CLI-discovery smoke passed. The
+  portable build loads one standalone configuration: Electron Builder otherwise
+  merges resource arrays twice and races copying DLLs. A regression test checks
+  the actual resolved resources and exclusion of Apple helpers. This is not a
+  Windows ARM64 build or personal-account GUI acceptance claim.
 - Actual editable React approval with a disposable real vault/API checks desktop,
   narrow and error layouts, current-password verification, exact proof binding
   and protected fill. Electron IPC is an explicit fixture adapter in that test;
@@ -60,6 +71,9 @@ credential reads during discovery. The macOS Apple provider is unchanged.
 - Native Linux/Windows CI and Windows unsigned package artifacts are attached to
   the PR workflow. Final results are recorded in the PR checks, not inferred
   from static code or cross compilation.
+- Graphify's semantic refresh returned partial results after hollow backend
+  responses. The available structural/semantic map and portable outputs are
+  retained; this does not claim every changed document was semantically indexed.
 
 Installed real-account login and final VM rollout are separate acceptance work.
 Neither synthetic tests nor package success proves external service sign-in or a

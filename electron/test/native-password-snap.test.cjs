@@ -30,6 +30,12 @@ test('installed Snap Chromium preserves confinement and delivers only to its tas
   await bound.deliver({ username: 'isolated-fixture', password }); await bound.close();
   assert.equal(await browser.page.$eval('#password', input => input.value) === password, true);
   assert.equal(browser.driver.browser.process().spawnargs.includes('--no-sandbox'), false);
+  const evidence = process.env.THINGTIME_NATIVE_PASSWORD_TEST_EVIDENCE;
+  if (evidence) {
+    assert.equal(path.isAbsolute(evidence), true);
+    await fs.mkdir(evidence, { recursive: true, mode: 0o700 });
+    await browser.page.screenshot({ path: path.join(evidence, 'snap-browser.png') });
+  }
   const stale = await browser.bind({ password: '#password' });
   await browser.page.reload({ waitUntil: 'domcontentloaded' });
   await assert.rejects(stale.deliver({ password }), { code: 'TARGET_CHANGED' }); await stale.close();

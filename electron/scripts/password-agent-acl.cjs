@@ -32,7 +32,15 @@ try {
             $ace = $dacl.get_Item($index)
             if ([int]$ace.AceFlags -band [int][Security.AccessControl.AceFlags]::InheritOnly) { continue }
             if ($ace.AceType -eq [Security.AccessControl.AceType]::AccessDenied) { continue }
-            if ($ace.AceType -ne [Security.AccessControl.AceType]::AccessAllowed -or $trusted -notcontains $ace.SecurityIdentifier.Value) { exit 14 }
+            if ($ace.AceType -ne [Security.AccessControl.AceType]::AccessAllowed) { exit 14 }
+            if ($trusted -notcontains $ace.SecurityIdentifier.Value) {
+                # Windows grants a capability SID Traverse/Synchronize on the
+                # profile root. Traversing an ancestor grants no access to its
+                # children. Never allow these ACEs on the requested object, or
+                # accept any read/list/write/delete/ACL-changing ancestor right.
+                $traverseOnly = 0x00100020
+                if ($itemPath.Equals($requested, 'OrdinalIgnoreCase') -or ([int]$ace.AccessMask -band (-bnot $traverseOnly))) { exit 14 }
+            }
         }
         if ($itemPath.Equals($userProfile, 'OrdinalIgnoreCase')) { exit 0 }
     }

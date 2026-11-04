@@ -40,4 +40,9 @@ test('Windows rejects a broadly readable directory and a profile junction', { sk
   await assert.rejects(privateDirectory(sharedPath), { code: 'UNSAFE_STORAGE' });
   await assert.rejects(privateWrite(path.join(sharedPath, 'runtime.json'), 'synthetic'), { code: 'UNSAFE_STORAGE' });
   await assert.rejects(fs.access(path.join(sharedPath, 'runtime.json')), { code: 'ENOENT' });
+  await promisify(execFile)(icacls, [root, '/grant', '*S-1-5-32-545:(X)']);
+  await requirePrivateWindowsPath(privatePath); // Ancestor traversal cannot read this private child.
+  await assert.rejects(requirePrivateWindowsPath(root), /current Windows user profile/);
+  await promisify(execFile)(icacls, [root, '/grant:r', '*S-1-5-32-545:(R)']);
+  await assert.rejects(requirePrivateWindowsPath(privatePath), /current Windows user profile/);
 });
