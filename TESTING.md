@@ -14317,3 +14317,11 @@ the isolated real-API/browser command and the metadata-only session boundary.
   private backup on the same SQLite database and verify it publishes a complete
   provisional generation while the search walk is still held. Resume search and
   verify its final catalog publishes atomically.
+
+### Mac native download recovery
+
+- [ ] Interrupt a signed range after an earlier range has staged. Resume the same
+  operation after temporary HTTP or socket failure and verify the retained offset,
+  exact final bytes and one published file. Wrong owner, cloud revision or range
+  must remain terminal. Check the phase-only `folder-sync.log` diagnostic
+  without logging request URLs, credentials, paths, or payload bytes.
