@@ -378,3 +378,25 @@ test('ignoring a newly confirmed path before strict handoff does not erase its c
 	assert.equal(x.receipts.size, 0);
 	x.f.journal().close();
 });
+
+test('a destination renamed after preparation is deferred using the exact path before another upload starts', { timeout: 10000 }, async () => {
+	const x = await fixture();
+	x.feeds([x.f.entry()], []); await x.run();
+	await x.f.revise([31, 32]);
+	x.feeds([x.f.entry()], []);
+	const fetch = x.input.runtime.fetch;
+	let renamed = false;
+	x.input.runtime.fetch = async (url, init) => {
+		const parsed = new URL(String(url));
+		if (!renamed && parsed.pathname === '/api/v1/files' && parsed.searchParams.has('operationId')) {
+			renamed = true;
+			[...x.f.files.values()][0].name = 'Moved.bin';
+		}
+		return fetch(url, init);
+	};
+	await x.stream();
+	assert.ok(renamed);
+	assert.equal(x.f.puts(), 1);
+	assert.equal(x.f.publications(), 1);
+	x.f.journal().close();
+});

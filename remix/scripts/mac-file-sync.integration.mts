@@ -33,6 +33,11 @@ import type { CloudTransportRuntime } from '../app/fileSync/cloudTransport';
 const { FolderStream } = createRequire(import.meta.url)('../../electron/lib/folder-stream.cjs');
 
 const [fixturePath] = process.argv.slice(2);
+const fixtureIndexer = process.env.THINGTIME_MAC_SYNC_INDEXER_BIN;
+if (fixtureIndexer) {
+	assert.ok(path.isAbsolute(fixtureIndexer));
+	assert.ok((await stat(fixtureIndexer)).isFile(), 'The fixture Rust indexer must be a regular executable.');
+}
 const photoFixture = process.argv.includes('--photos');
 const symlinksOnly = process.argv.includes('--symlinks-only');
 const pagedFixture = process.argv.includes('--paged');
@@ -246,7 +251,8 @@ try {
 	).device.id;
 	await writeFile(
 		path.join(directory, 'native.json'),
-		JSON.stringify({ base: base.origin, deviceId, credential, photoFixture, directory: pathToFileURL(directory + '/').href }),
+		JSON.stringify({ base: base.origin, deviceId, credential, photoFixture, directory: pathToFileURL(directory + '/').href,
+			...(fixtureIndexer ? { commanderIndexer: pathToFileURL(fixtureIndexer).href } : {}) }),
 		{ mode: 0o600 }
 	);
 	await startNative();

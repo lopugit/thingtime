@@ -260,6 +260,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 		lookup,
 		async read() {
 			await negotiate();
+			if (write.guardDestination) return readCloudPathEntry(runtime, scope, write.cloudRootId!, m.path, signal);
 			const result = await json('/api/v1/files?' + new URLSearchParams({ id: fileId }), undefined, true);
 			if (!result) return null;
 			const file = parseCloudFile(result.file);
@@ -463,6 +464,7 @@ export function createCloudFolderTransport(runtime: CloudTransportRuntime, saved
 		lookup,
 		async read() {
 			await ready();
+			if (write.guardDestination) return readCloudPathEntry(runtime, scope, write.cloudRootId!, m.path, signal);
 			const result = await json('/api/v1/files?' + new URLSearchParams({ folderId: input.id }), undefined, true);
 			return result ? receipt(result.folder).entry : null;
 		},
@@ -473,6 +475,7 @@ export function createCloudFolderTransport(runtime: CloudTransportRuntime, saved
 			// Individual fallback must preserve the exact original folderId.
 			if (!write.cloudRootId) throw Error('Folder publication has no reviewed cloud root.');
 			const parentPath = m.path.split('/').slice(0, -1).join('/');
+			if (write.guardDestination) return receipt((await json('/api/v1/files', input)).folder);
 			if (parentPath) {
 				const parent = await readCloudPathEntry(runtime, scope, write.cloudRootId, parentPath, signal);
 				if (parent?.kind !== 'folder' || parent.id !== input.folderId) throw Error('Folder parent changed before publication.');

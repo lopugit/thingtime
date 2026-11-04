@@ -13,6 +13,8 @@ const apiPort = 28311,
 	base = `http://127.0.0.1:${apiPort}`,
 	root = resolve(import.meta.dirname, '..');
 const wide = process.argv.includes('--wide');
+const indexer = process.env.THINGTIME_MAC_SYNC_INDEXER_BIN;
+if (indexer && !indexer.startsWith('/')) throw Error('The fixture Rust indexer path must be absolute.');
 const symlinksOnly = process.argv.includes('--symlinks-only');
 const clean = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR || tmpdir() };
 if (!process.env.TT_MAC_PAGED_WORKER) {
@@ -74,7 +76,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 			`\n(allow network-outbound (remote ip "localhost:${dbPort}"))\n(allow network-inbound (local ip "localhost:${dbPort}"))`;
 		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename, ...(wide ? ['--wide'] : []), ...(symlinksOnly ? ['--symlinks-only'] : [])], {
 			cwd: root,
-			env: { ...clean, TT_MAC_PAGED_WORKER: directory, THINGTIME_MAC_SYNC_FIXTURE_BIN: binary },
+			env: { ...clean, TT_MAC_PAGED_WORKER: directory, THINGTIME_MAC_SYNC_FIXTURE_BIN: binary, ...(indexer ? { THINGTIME_MAC_SYNC_INDEXER_BIN: indexer } : {}) },
 			stdio: ['ignore', 'pipe', 'pipe']
 		});
 		let output = '';
@@ -251,7 +253,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		const test = start(
 			process.execPath,
 			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', ...(symlinksOnly ? ['--symlinks-only'] : ['--large-upload', '--large-download']), ...(wide ? ['--wide'] : [])],
-			{ ...clean, THINGTIME_MAC_SYNC_FIXTURE_BIN: process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN }
+			{ ...clean, THINGTIME_MAC_SYNC_FIXTURE_BIN: process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN, ...(indexer ? { THINGTIME_MAC_SYNC_INDEXER_BIN: indexer } : {}) }
 		);
 		const output = collect(test, true);
 		const [code, exitSignal] = await once(test, 'exit');
