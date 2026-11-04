@@ -131,6 +131,7 @@ export type FolderCapabilities = Pick<
 	| 'fileUploadBatchVersion'
 	| 'fileFolderBatchVersion'
 	| 'fileAccessVersion'
+	| 'fileInventoryStrictCoverage'
 	| 'fileSymbolicLinksVersion'
 	| 'fileStagingVersion'
 	| 'filePublicationVersion'
@@ -172,6 +173,10 @@ export const supportsNativeInventoryPages = (bridge: FolderCapabilities | undefi
 	return minimum !== undefined && /^1\.\d+\.\d+$/.test(bridge?.fileAccessVersion ?? '') && major === 1 &&
 		(minor > minimum || (minor === minimum && patch >= 1));
 };
+/** Photos use a scoped virtual capture only on hosts that implement PhotoKit pages and inspection. */
+export const supportsNativePhotoInventoryPages = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'macos' ? capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.19.0')
+		: bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.5.0');
 /** Exclusions are pruned before opening native files or descending directories. */
 export const supportsNativeScanExclusions = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
 	const minimum = bridge?.platform === 'macos' ? 6 : bridge?.platform === 'ios' ? 4 : undefined;
@@ -180,9 +185,19 @@ export const supportsNativeScanExclusions = (bridge: FolderCapabilities | undefi
 };
 /** Mac 1.8 explicitly negotiates best-effort backup and its complete skip ledger. */
 export const supportsNativeBackupCapture = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
-	bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 8;
+	bridge?.platform === 'macos' ? capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.8.0')
+		: bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.5.0');
+/** iOS Rust folder inventory has no reliable subtree watcher for strict absence. */
+export function assertNativeFolderInventoryCoverage(bridge: FolderCapabilities, policy: import('./reconcile').SyncPolicy) {
+	const lacksStrictCoverage = bridge.fileInventoryStrictCoverage === false ||
+		(bridge.platform === 'ios' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.5.0') &&
+			bridge.fileInventoryStrictCoverage !== true);
+	if (lacksStrictCoverage && (policy.mode !== 'backup' || policy.propagateDeletes))
+		throw Error('This device cannot verify a complete folder inventory. Choose one-way Backup with deletion propagation disabled.');
+}
 export const supportsNativeStrictCapture = (bridge: FolderCapabilities | undefined) =>
-	bridge?.platform === 'macos' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.18.0');
+	bridge?.platform === 'macos' ? capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.18.0')
+		: bridge?.platform === 'ios' && supportsNativePhotoInventoryPages(bridge);
 export const supportsNativeIgnoreRules = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 9;
 /** Mac 1.10 adds opt-in byte-bounded inventory batches. */
@@ -198,7 +213,7 @@ export const supportsNativeStreamingBatches = (bridge: FolderCapabilities | unde
 	supportsNativeStreamingIndex(bridge) && (Number(bridge!.fileAccessVersion!.split('.')[1]) > 11 || Number(bridge!.fileAccessVersion!.split('.')[2]) >= 1);
 export function assertNativeScanExclusions(request: FolderRequest, bridge: FolderCapabilities | undefined) {
 	if ('capturePolicy' in request && request.capturePolicy === 'strict-async' && !supportsNativeStrictCapture(bridge))
-		throw Error('Update Thingtime Mac to run strict indexing in the background.');
+		throw Error('Update the native app to run indexing in the background.');
 	if ((['scan-stream', 'scan-changes', 'scan-stream-finish'].includes(request.action) || ('capturePolicy' in request && request.capturePolicy === 'one-way-supported')) && !supportsNativeStreamingIndex(bridge)) throw Error('Update Thingtime Mac to transfer while indexing.');
 	if ('pageSize' in request && request.pageSize !== undefined) {
 		if (!['scan-page', 'scan-skips', 'scan-changes'].includes(request.action)) throw Error('Invalid native inventory page size action.');

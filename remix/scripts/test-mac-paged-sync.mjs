@@ -58,7 +58,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
         if (process.env.THINGTIME_MAC_PAGED_EVIDENCE_PATH) {
             const target = process.env.THINGTIME_MAC_PAGED_EVIDENCE_PATH;
             assert.ok(target.startsWith('/'), 'Evidence path must be absolute');
-            const sourcePaths = execFileSync('rg', ['--files', '../apple/FileSync/Sources', '../macos/ThingtimeNode/Sources', '../Commander/crates/commander-indexer/src', 'app/fileSync', 'app/api/utils/files'], { cwd: root, encoding: 'utf8' }).trim().split('\n').filter(p => /\.(swift|rs|ts|tsx|mts)$/.test(p));
+            const sourcePaths = execFileSync('rg', ['--files', '../apple/FileSync/Sources', '../macos/ThingtimeNode/Sources', '../filesystem-indexer/crates/indexer/src', 'app/fileSync', 'app/api/utils/files'], { cwd: root, encoding: 'utf8' }).trim().split('\n').filter(p => /\.(swift|rs|ts|tsx|mts)$/.test(p));
             sourcePaths.push('scripts/mac-file-sync.integration.mts', 'scripts/test-mac-paged-sync.mjs'); sourcePaths.sort();
             const sha = async p => createHash('sha256').update(await readFile(p)).digest('hex');
             const files = Object.fromEntries(await Promise.all(sourcePaths.map(async p => [p, await sha(resolve(root, p))])));

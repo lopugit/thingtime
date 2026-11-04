@@ -188,7 +188,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
       const abort = () => { uploadError('Transfer cancelled; the source was kept.'); };
       signal.addEventListener('abort', abort, { once: true });
       uploadWaiter.current = { file, resolve: value => { signal.removeEventListener('abort', abort); resolve(value); }, reject: e => { signal.removeEventListener('abort', abort); reject(e); } };
-      uploads.replaceFiles([file]);
+      uploads.replaceFiles([file], signal);
     });
     signal.throwIfAborted();
     if (syncFolderId) {

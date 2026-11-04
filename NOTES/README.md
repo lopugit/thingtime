@@ -1,5 +1,7 @@
 # Thingtime notes
 
+[Shared Rust index/sync evidence](shared-rust-index-sync.md) — current producers, permission boundaries and portability (2026-11-04).
+
 `NOTES/` preserves evidence, observations, questions, and design thinking that
 should inform work without pretending the work has been committed to. Turn a
 note into a phased strategy in [`../PLAN/`](../PLAN/README.md), then create an

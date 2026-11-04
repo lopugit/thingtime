@@ -1,4 +1,6 @@
 import React from 'react';
+import { activityManager } from '~/activity/activityManager';
+import type { FolderHost } from '~/fileSync/desktopFolders.client';
 import { useDataPlane } from '~/hooks/useDataPlane';
 import { useDeviceSyncRemoteResources } from '~/fileSync/remoteDeviceResources.client';
 import { readDeviceSyncHistory } from '~/fileSync/deviceSyncHistory.client';
@@ -15,6 +17,42 @@ import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { deviceSyncResourceBlocks, migrateDeviceSyncResourceBlocks } from './deviceSyncResourceBlocks';
 import { deviceResourceHistoryDisplay, deviceResourceWindows, liveDeviceResourceDisplay, resourceDateTime, resourceReading, type DeviceResourceWindow } from './deviceSyncResourceDisplay';
 
+const resourceActivity = { id: 'sync.resources.local', title: 'Local Sync resource usage', kind: 'polling', detail: 'Samples the selected Mac during an active Sync transfer while the dashboard is visible.' } as const;
+const localSamplers = new WeakMap<FolderHost, { listeners: Set<(resources: SyncResourceStatus) => void>; stop(): void }>();
+
+function subscribeLocalResources(host: FolderHost, ownerId: string, listener: (resources: SyncResourceStatus) => void) {
+ let sampler = localSamplers.get(host);
+ if (!sampler) {
+  const listeners = new Set<(resources: SyncResourceStatus) => void>();
+  const stop = activityManager.register(resourceActivity, signal => {
+   let timer: ReturnType<typeof setTimeout> | undefined;
+   const sample = async () => {
+    try {
+     await activityManager.run(resourceActivity.id, async () => {
+      const reply = await host.request(ownerId, { action: 'resources' }, AbortSignal.any([signal, AbortSignal.timeout(2500)]));
+      if (!signal.aborted && reply.resources) for (const receive of listeners) receive(reply.resources);
+     });
+    } catch {
+     // Keep the previous measurement until its own timestamp expires.
+    } finally {
+     if (!signal.aborted) timer = setTimeout(() => void sample(), 1000);
+    }
+   };
+   void sample();
+   return () => clearTimeout(timer);
+  });
+  sampler = { listeners, stop };
+  localSamplers.set(host, sampler);
+ }
+ sampler.listeners.add(listener);
+ return () => {
+  sampler.listeners.delete(listener);
+  if (!sampler.listeners.size) {
+   sampler.stop();
+   localSamplers.delete(host);
+  }
+ };
+}
 export type RemoteDeviceResources = {
  origin: string; policy?: DeviceSyncResourcePolicy; resources?: SyncResourceStatus; taskResources?: SyncResourceStatus; observedAt?: number; receivedAt?: number; active: boolean;
  online?: boolean; checking?: boolean; refresh?(): Promise<void>; status: string;
@@ -50,6 +88,7 @@ function DeviceResourceSession({ ownerId, deviceId, allowed, remote: suppliedRem
  const key = deviceResourceKey(origin, ownerId, deviceId), prefix = React.useId();
  const policy = React.useSyncExternalStore(subscribeDeviceSyncResourcePolicy, () => readDeviceSyncResourcePolicy(key), () => readDeviceSyncResourcePolicy(key));
  const run = React.useSyncExternalStore(nativeSyncTasks.subscribe, nativeSyncTasks.read, () => null);
+ const [observation, setObservation] = React.useState<{ host: FolderHost; resources: SyncResourceStatus }>();
  const [draft, setDraft] = React.useState(() => draftFrom(policy));
  const dirty = React.useRef(false), draftIdentity = React.useRef(key);
  const [error, setError] = React.useState('');
@@ -134,10 +173,20 @@ function DeviceResourceSession({ ownerId, deviceId, allowed, remote: suppliedRem
  }, [key, transferBytesPerSecond, scanBytesPerSecond, cpuPercent]);
 
  const current = allowed && local && run?.scope.ownerId === ownerId && run.scope.deviceId === deviceId
-  && run.scope.origin === origin && run.scope.dataPlane === 'home' && run.active;
+  && run.scope.origin === origin && run.scope.dataPlane === 'home' && run.active && !run.stopping;
+ const activeHost = current ? run.host : undefined;
+ React.useEffect(() => {
+  if (!activeHost) return;
+  return subscribeLocalResources(activeHost, ownerId, resources => {
+   assertRef.current();
+   setObservation({ host: activeHost, resources });
+  });
+ }, [activeHost, ownerId]);
+ const sampled = activeHost && observation?.host === activeHost ? observation.resources : undefined;
  const observed = allowed ? (local ? native?.resources : remote.resources) : undefined;
  const activeSample = current ? run.progress.resources : allowed && !local ? remote.taskResources : undefined;
- const resources = (activeSample?.measuredAt ?? 0) > (observed?.measuredAt ?? 0) ? activeSample : observed;
+ const currentSample = (activeSample?.measuredAt ?? 0) > (observed?.measuredAt ?? 0) ? activeSample : observed;
+ const resources = (sampled?.measuredAt ?? 0) > (currentSample?.measuredAt ?? 0) ? sampled : currentSample;
  const observedAt = allowed ? local ? native?.observedAt : remote.observedAt : undefined;
  const receivedAt = allowed && !local ? remote.receivedAt : undefined;
  const sourceClock = React.useRef({ observedAt, receivedAt });

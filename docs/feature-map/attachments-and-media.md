@@ -1,5 +1,15 @@
 # Attachments and media
 
+The packaged Mac Files uploader uses a versioned Electron bridge for nonempty
+S3 parts when the bundled loopback UI targets a remote HTTPS API. It reuses the
+ordinary attachment reservation, scoped part signer and completion checks. The
+host streams bounded chunks to the signed S3 object with exact length and
+checksum, and invalidates on account, endpoint or frame changes. HTTPS browser
+and same-origin local storage retain the existing upload path. Run
+`electron/test/attachment-upload.test.cjs` and `desktopAttachmentUpload.test.ts`
+for transport, origin, integrity and cancellation coverage.
+
+
 Cloud sync HTTP 403 diagnostics retain only the operation and a closed policy
 reason (upload approval, origin, account or credential-purpose refusal).
 `cloudTransport.test.ts` verifies redaction and terminal refusal behavior; a

@@ -8,6 +8,7 @@ on:
     branches: [main]
     paths:
       - Commander/**
+      - filesystem-indexer/**
       - .github/workflows/commander-release.yml
   workflow_dispatch:
 

@@ -22,12 +22,7 @@ import type {
   Platform,
   SearchItem,
 } from '@commander/protocol';
-import {
-  applicationDirectories,
-  discoverApplications,
-  discoverApplicationsQuick,
-  discoverApplicationsIn,
-} from './applications.js';
+import { applicationDirectories, discoverApplications, discoverApplicationsIn } from './applications.js';
 import { commanderDataDirectory } from './config.js';
 import { pathActions } from './pathActions.js';
 import { FileChangeObserver } from './filesystemChanges.js';
@@ -67,6 +62,9 @@ const FILESYSTEM_RESULT_PAGE_SIZE = 160;
 const COMMANDER_INDEX_TIMEOUT_MS = 90_000;
 const COMMANDER_MAX_INDEX_TIMEOUT_MS = 15 * 60_000;
 const INDEX_STATUS_CACHE_MS = 30_000;
+const MAX_PENDING_DELTA_PATHS = 1024;
+const MAX_ACTIVE_OVERLAYS = 4;
+const MAX_INVENTORY_INVALIDATION_PATHS = 256;
 
 export class IndexingService {
   readonly #platform: Platform;
@@ -83,6 +81,11 @@ export class IndexingService {
   #persistentApplications: SearchItem[] = [];
   #pendingDeltaPaths = new Set<string>();
   #pendingFullDelta = false;
+  #inventoryPaths = new Set<string>();
+  #inventoryLostEvents = false;
+  #inventoryNotification: Promise<void> | undefined;
+  readonly #inventoryAbort = new AbortController();
+  #inventoryWarning: string | undefined;
   #overlayJobs = 0;
   #overlayContext = 0;
   #retiringOverlay = false;
@@ -142,11 +145,17 @@ export class IndexingService {
         );
       },
       () => this.#refreshApplications(),
+      (configuration, directory, after, limit) => {
+        if (!this.#metadataReader) throw new Error('Rust filesystem metadata reader unavailable');
+        return this.#metadataReader.listChildren(configuration, directory, after, limit);
+      },
       { excludedDirectories: [path.dirname(this.#databasePath)] },
     );
     if (!options.binaryPath) {
       this.#message =
-        'The bundled Rust filesystem indexer is unavailable; application refresh uses a fallback scan.';
+        this.#platform === 'macos'
+          ? 'The bundled Rust filesystem indexer is unavailable. Reinstall Commander and retry indexing.'
+          : 'The bundled Rust filesystem indexer is unavailable.';
       return;
     }
     const clientOptions = { binaryPath: options.binaryPath, databasePath: this.#databasePath };
@@ -185,10 +194,8 @@ export class IndexingService {
         this.#disableRust(error);
       }
     }
-    // The fallback gives the launcher freshly installed top-level applications
-    // while a missing/stale index is refreshed independently in the background.
-    applications = mergeApplications(applications, await this.#quickApplications());
-    this.#publishApplications(applications);
+    if (this.#available || this.#platform === 'macos') this.#publishApplications(applications);
+    else await this.#refreshFallbackApplications();
     this.#timer = setInterval(() => void this.#automaticRefresh(), 60_000);
     this.#timer.unref();
     void this.#watchSources();
@@ -318,8 +325,6 @@ export class IndexingService {
   #activateRun(run: ScheduledIndexRun): void {
     this.#activeRun = run;
     this.#running.add(run.scope);
-    if ((!this.#reader || !this.#writer) && (run.scope === 'all' || run.scope === 'applications'))
-      void this.#refreshFallbackApplications().catch(() => undefined);
     void this.#perform(run.scope, run.changedPaths)
       .then(() => run.resolve())
       .catch((error) => {
@@ -417,14 +422,16 @@ export class IndexingService {
       timing: timingSummary(this.#recentTimings),
       timeoutAttempts: structuredClone(this.#timeoutAttempts),
       ...(this.#progress ? { progress: structuredClone(this.#progress) } : {}),
-      ...(this.#notificationWarning || this.#message
-        ? { message: this.#notificationWarning ?? this.#message! }
+      ...(this.#notificationWarning || this.#inventoryWarning || this.#message
+        ? { message: this.#notificationWarning ?? this.#inventoryWarning ?? this.#message! }
         : {}),
     };
   }
 
   async close(): Promise<void> {
     this.#closed = true;
+    this.#inventoryAbort.abort();
+    await this.#inventoryNotification;
     this.#overlayContext++;
     this.#overlay.clear();
     this.#watchGeneration += 1;
@@ -482,6 +489,7 @@ export class IndexingService {
 
   async #indexApplications(changedPaths?: string[]): Promise<void> {
     if (!this.#writer || !this.#reader) {
+      if (this.#platform === 'macos') throw new Error(this.#message);
       await this.#refreshFallbackApplications();
       return;
     }
@@ -539,7 +547,6 @@ export class IndexingService {
     }
     this.#available = true;
     this.#message = undefined;
-    this.#publishApplications(await this.#queryApplications());
   }
 
   async #writeIndex(configuration: IndexConfiguration): Promise<IndexReport> {
@@ -643,12 +650,11 @@ export class IndexingService {
       'applications:',
       roots.map((root) => `applications:${root}`),
     );
-    // Read the complete persistent app catalogue, including freshly installed
-    // apps that the bounded direct scan can see before the index catches up.
-    return mergeApplications(response.records.map(indexRecordToSearchItem), await this.#quickApplications());
+    return response.records.map(indexRecordToSearchItem);
   }
 
   async #automaticRefresh(): Promise<void> {
+    this.#flushInventoryInvalidation();
     if (this.#closed || this.#activeRun) return;
     this.#effectiveFilesystemRoots = await indexRoots(this.#platform, this.#settings.roots);
     if (this.#legacySnapshot && this.#legacyRoots !== JSON.stringify(this.#effectiveFilesystemRoots)) {
@@ -663,6 +669,7 @@ export class IndexingService {
     this.reindexCommands();
     const status = await this.#safeRustStatus();
     if (!status) {
+      if (this.#platform === 'macos' && !this.#reader) return;
       if (
         !this.#running.has('applications') &&
         (!this.#lastApplicationsReconciledAtMs ||
@@ -710,7 +717,10 @@ export class IndexingService {
 
   #disableRust(error: unknown): void {
     this.#available = false;
-    this.#message = errorMessage(error);
+    this.#message =
+      this.#platform === 'macos'
+        ? `Rust filesystem index unavailable: ${errorMessage(error)}. Retry indexing in Search Settings.`
+        : errorMessage(error);
   }
 
   async #refreshFallbackApplications(): Promise<void> {
@@ -739,12 +749,6 @@ export class IndexingService {
     return createHash('sha256')
       .update(JSON.stringify({ settings: this.#settings, roots: [...this.#effectiveFilesystemRoots].sort() }))
       .digest('hex');
-  }
-
-  #quickApplications(): Promise<SearchItem[]> {
-    return this.#customApplicationRoots
-      ? discoverApplicationsIn(this.#applicationRoots)
-      : discoverApplicationsQuick();
   }
 
   #publishApplications(applications: SearchItem[]): void {
@@ -780,6 +784,8 @@ export class IndexingService {
       filesystemRoots,
       databaseDirectory: path.dirname(this.#databasePath),
       filesystemEnabled: this.#settings.enabled,
+      inventoryEnabled:
+        this.#platform === 'macos' && filesystemRoots.length > 0 && this.#writer !== undefined,
       recursive: this.#platform !== 'linux',
     };
     const signature = JSON.stringify(options);
@@ -794,8 +800,11 @@ export class IndexingService {
         this.#flushChanges();
       },
       () => {
+        if (this.#closed || this.#notificationWarning) return;
         this.#notificationWarning =
           'Live filesystem notifications are unavailable; periodic reconciliation remains active.';
+        this.#queueInventoryInvalidation([], true);
+        this.#queueDelta([], true);
       },
     );
     void previous?.close().catch(() => undefined);
@@ -809,8 +818,14 @@ export class IndexingService {
     void observer
       .take()
       .then(async (batch) => {
-        if (this.#closed || observer !== this.#changeObserver || !batch.paths.length) return;
+        if (this.#closed || observer !== this.#changeObserver) return;
+        this.#queueInventoryInvalidation(batch.inventoryPaths, batch.inventoryLostEvents);
         if (batch.volumesChanged) void this.#watchSources();
+        if (batch.fullReconciliation || this.#settings.maxEntries !== null) {
+          this.#queueDelta([], true);
+          return;
+        }
+        if (!batch.paths.length) return;
         const context = this.#overlayContext;
         const configuration = await this.#observationConfiguration();
         if (context !== this.#overlayContext || this.#closed) return;
@@ -822,6 +837,11 @@ export class IndexingService {
             ),
           ]),
         ];
+        // The writer still receives every invalidation when live observation is busy.
+        if (this.#overlayJobs >= MAX_ACTIVE_OVERLAYS) {
+          this.#queueDelta(batch.paths, false);
+          return;
+        }
         this.#overlayJobs++;
         void this.#overlay
           .apply(configuration, observedPaths)
@@ -832,11 +852,7 @@ export class IndexingService {
             this.#overlayJobs--;
             void this.#retireOverlay();
           });
-        // Persistence and subsequent event batches are independent of a long
-        // descendant observation walk. The single canonical writer remains serialized.
-        for (const changed of batch.paths) this.#pendingDeltaPaths.add(changed);
-        this.#pendingFullDelta ||= batch.fullReconciliation || this.#settings.maxEntries !== null;
-        this.#pumpDeltas();
+        this.#queueDelta(batch.paths, false);
       })
       .catch((error) => {
         if (!this.#closed) this.#message = errorMessage(error);
@@ -875,8 +891,55 @@ export class IndexingService {
     };
   }
 
+  #queueInventoryInvalidation(paths: string[], lostEvents: boolean): void {
+    if (this.#platform !== 'macos' || !this.#settings.enabled || this.#closed || !this.#writer) return;
+    if (!this.#inventoryLostEvents) {
+      for (const changed of paths) this.#inventoryPaths.add(changed);
+      this.#inventoryLostEvents = lostEvents || this.#inventoryPaths.size > MAX_INVENTORY_INVALIDATION_PATHS;
+      if (this.#inventoryLostEvents) this.#inventoryPaths.clear();
+    }
+    this.#flushInventoryInvalidation();
+  }
+
+  #flushInventoryInvalidation(): void {
+    if (this.#closed || !this.#settings.enabled || !this.#writer || this.#inventoryNotification) return;
+    const lostEvents = this.#inventoryLostEvents;
+    const paths = [...this.#inventoryPaths];
+    if (!lostEvents && !paths.length) return;
+    this.#inventoryLostEvents = false;
+    this.#inventoryPaths.clear();
+    let delivered = false;
+    this.#inventoryNotification = this.#writer
+      .invalidateInventoryPaths(paths, lostEvents, this.#inventoryAbort.signal)
+      .then(() => {
+        this.#inventoryWarning = undefined;
+        delivered = true;
+      })
+      .catch(() => {
+        if (this.#closed) return;
+        this.#inventoryPaths.clear();
+        this.#inventoryLostEvents = true;
+        this.#inventoryWarning =
+          'The Rust inventory could not record filesystem changes. Reconciliation will retry.';
+      })
+      .finally(() => {
+        this.#inventoryNotification = undefined;
+        if (delivered) this.#flushInventoryInvalidation();
+      });
+  }
+
+  #queueDelta(paths: string[], fullReconciliation: boolean): void {
+    if (!this.#reader || !this.#writer) return;
+    if (!this.#pendingFullDelta) {
+      for (const changed of paths) this.#pendingDeltaPaths.add(changed);
+      this.#pendingFullDelta = fullReconciliation || this.#pendingDeltaPaths.size > MAX_PENDING_DELTA_PATHS;
+      if (this.#pendingFullDelta) this.#pendingDeltaPaths.clear();
+    }
+    this.#pumpDeltas();
+  }
+
   #pumpDeltas(): void {
-    if (this.#closed || this.#activeRun || !this.#pendingDeltaPaths.size) return;
+    if (this.#closed || this.#activeRun || (!this.#pendingFullDelta && !this.#pendingDeltaPaths.size)) return;
     const run = this.#createRun('all');
     if (!this.#pendingFullDelta) {
       // Processing page only: subsequent runs drain every queued path.
@@ -897,6 +960,7 @@ export class IndexingService {
       this.#changesPending ||
       this.#overlayJobs ||
       this.#pendingDeltaPaths.size ||
+      this.#pendingFullDelta ||
       !this.#overlay.pending
     )
       return;
@@ -1062,9 +1126,8 @@ export function applicationBundleRoot(changed: string): string {
 
 function isApplicationCatalogChange(changed: string): boolean {
   return (
-    changed.endsWith('.app') ||
-    changed.includes('.app/') ||
-    /(?:^|\/)(?:Applications|Volumes)(?:\/|$)/u.test(changed)
+    /\.app(?:[\\/]|$)|\.(?:desktop|exe)$/iu.test(changed) ||
+    /(?:^|[\\/])(?:Applications|Volumes)(?:[\\/]|$)/iu.test(changed)
   );
 }
 

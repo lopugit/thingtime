@@ -39,6 +39,7 @@ class ResourceGovernor {
     }
     observeNative(resources) {
         if (resources?.version !== 1) return;
+        if (Number.isFinite(resources.measuredAt) && resources.measuredAt < this.nativeResources?.measuredAt) return;
         this.nativeResources = resources;
         this.sample('indexer-process', resources.indexingCpuPercent ?? null);
         this.sample('source-thread', resources.sourceCpuPercent ?? null);
@@ -116,8 +117,11 @@ class ResourceGovernor {
         const transport = this.transport && this.clock() - this.transportAt < 2000 ? this.transport : undefined;
         const first = this.byteSamples[0], last = this.byteSamples.at(-1), elapsed = first && last ? (last.at - first.at) / 1000 : 0;
         const current = elapsed >= .25 && elapsed <= 2 && this.clock() - last.at < 2000;
-        return { ...this.nativeResources, version: 1, cpuPercent: cpu,
-            measuredAt: Date.now(),
+        const measuredAt = Date.now();
+        const nativeAge = measuredAt - this.nativeResources?.measuredAt;
+        const native = nativeAge >= 0 && nativeAge < 2000 ? this.nativeResources : undefined;
+        return { ...native, version: 1, cpuPercent: cpu,
+            measuredAt,
             currentUploadBytesPerSecond: transport?.currentUploadBytesPerSecond ?? (current ? (last.upload - first.upload) / elapsed : null),
             currentDownloadBytesPerSecond: transport?.currentDownloadBytesPerSecond ?? (current ? (last.download - first.download) / elapsed : null),
             transferBytesPerSecond: this.totalBytesPerSecond, cpuStatus: cpu === null ? 'unavailable' : 'measured',
@@ -130,12 +134,14 @@ class ResourceGovernor {
 }
 const governors = new Map();
 function governorFor(input, context, force = false) {
+    const key = JSON.stringify([context.apiOrigin, context.ownerId, input.deviceId]);
+    // Reading telemetry shares the active governor but must never initialize it
+    // or reset an admitted connection's resource ceilings.
+    if (input.action === 'resources' && !input.deviceResourceLimits) return governors.get(key) ?? null;
     const configured = limits(input.resourceLimits ?? input.batch?.descriptor?.configuration?.configuration?.resourceLimits);
     const device = deviceLimits(input.deviceResourceLimits);
     const policy = { ...configured, cpuPercent: Math.min(configured.cpuPercent ?? 100, device.cpuPercent) };
-    const key = JSON.stringify([context.apiOrigin, context.ownerId, input.deviceId]);
-    if (!input.rootId && !input.batch && !input.transfer && !(input.action === 'resources' && input.deviceResourceLimits))
-        return input.action === 'resources' ? governors.get(key) ?? null : null;
+    if (!input.rootId && !input.batch && !input.transfer && !(input.action === 'resources' && input.deviceResourceLimits)) return null;
     const scope = input.resourceScope ?? input.batch?.descriptor?.scope?.rootId ?? input.transfer?.scope?.rootId;
     if (Object.keys(configured).length && (typeof scope !== 'string' || !scope || scope.length > 512)) throw new Error('A resource-limited sync requires its connection scope.');
     // Lazy TTL cleanup avoids timers or retaining abandoned connection scopes.

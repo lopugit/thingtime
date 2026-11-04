@@ -14,6 +14,7 @@ import {
   readSync,
   readlinkSync,
   readdirSync,
+  realpathSync,
   chmodSync,
   renameSync,
   rmdirSync,
@@ -464,10 +465,47 @@ export function snapshotRetentionLimit(
   return retention
 }
 
+// A valid-looking snapshot may exist only in this worktree. Require its
+// portable bytes to match HEAD and refuse staged changes before pruning it.
+function snapshotRecoverableFromHead(root, snapshotPath) {
+  const relative = path.relative(root, snapshotPath)
+  try {
+    if (realpathSync(snapshotPath) !== path.join(realpathSync(root), relative)) return false
+    runGit(root, ["diff", "--cached", "--quiet", "HEAD", "--", relative])
+    const committed = new Map(
+      runGit(root, ["ls-tree", "-rz", "--full-tree", "HEAD", "--", relative])
+        .split("\0")
+        .filter(Boolean)
+        .map((entry) => {
+          const [header, filename] = entry.split("\t")
+          return [filename, header.split(" ")]
+        }),
+    )
+
+    const portable = readdirSync(snapshotPath)
+      .filter((name) => PORTABLE_FILES.includes(name) || name === "snapshot.json")
+      .map((name) => path.join(relative, name))
+    // Any committed sidecar must match as well. Untracked derived output and
+    // Graphify's known query stamp can be regenerated and do not affect recovery.
+    const files = [...new Set([...portable, ...committed.keys()])]
+    for (const filename of files) {
+      const [mode, kind] = committed.get(filename) ?? []
+      if (kind !== "blob" || !["100644", "100755"].includes(mode)) return false
+      const file = lstatSync(path.join(root, filename))
+      if (!file.isFile() || Boolean(file.mode & 0o111) !== (mode === "100755")) return false
+    }
+    const hashes = runGit(root, ["hash-object", "--no-filters", "--", ...files]).split("\n")
+    return files.every((filename, index) => hashes[index] === committed.get(filename)[2])
+  } catch {
+    // Missing HEAD, Git errors, missing files or a concurrent change all
+    // leave recovery unproven. Keep the snapshot in place.
+    return false
+  }
+}
+
 /**
- * Bound portable snapshots in the current Git tree while keeping the active
- * source snapshot. Removed snapshots remain recoverable from Git history and
- * from any branch ref that still points to them.
+ * Bound recoverable snapshots while keeping the active source snapshot and
+ * any snapshots whose local contents are not safely recoverable from HEAD.
  */
 export function pruneSnapshots(
   root,
@@ -485,42 +523,26 @@ export function pruneSnapshots(
     fail(`Active snapshot is not a valid snapshot record: ${activePath}`)
   }
 
-  records.sort((left, right) => {
-    const leftActive = path.resolve(left.path) === activePath
-    const rightActive = path.resolve(right.path) === activePath
-    if (leftActive !== rightActive) return leftActive ? -1 : 1
-    return compareSnapshotQuality(left, right)
-  })
-
-  const retained = records.slice(0, retention)
-  const retainedPaths = new Set(
-    retained.map((record) => path.resolve(record.path)),
-  )
+  records.sort(compareSnapshotQuality)
+  const retained = [activeSnapshot.path]
   const removed = []
+  let slots = retention - 1
   for (const record of records) {
-    if (retainedPaths.has(path.resolve(record.path))) continue
-    rmSync(record.path, { recursive: true, force: true })
-    removed.push(record.path)
-  }
-
-  const snapshotsRoot = path.join(graphifyRoot(root), "snapshots", "v1")
-  if (existsSync(snapshotsRoot)) {
-    for (const sourceName of readdirSync(snapshotsRoot)) {
-      const sourceRoot = path.join(snapshotsRoot, sourceName)
-      if (
-        statSync(sourceRoot).isDirectory() &&
-        readdirSync(sourceRoot).length === 0
-      ) {
-        rmdirSync(sourceRoot)
-      }
+    if (path.resolve(record.path) === activePath) continue
+    if (!snapshotRecoverableFromHead(root, record.path)) {
+      retained.push(record.path)
+    } else if (slots > 0) {
+      retained.push(record.path)
+      slots -= 1
+    } else {
+      rmSync(record.path, { recursive: true, force: true })
+      removed.push(record.path)
+      const sourceRoot = path.dirname(record.path)
+      if (readdirSync(sourceRoot).length === 0) rmdirSync(sourceRoot)
     }
   }
 
-  return {
-    retention,
-    retained: retained.map((record) => record.path),
-    removed,
-  }
+  return { retention, retained, removed }
 }
 
 // Snapshot files are read-only on disk (markSnapshotReadOnly); a working copy

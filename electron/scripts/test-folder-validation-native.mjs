@@ -53,7 +53,7 @@ if (!process.env.TT_NATIVE_BATCH_WORKER) {
     });server.listen(port,'127.0.0.1');await once(server,'listening');
     const config=join(directory,'native.json');
     await writeFile(config,JSON.stringify({base:origin,deviceId:device,credential:'disposable-fixture-credential',directory:pathToFileURL(directory).href,
-        commanderIndexer:pathToFileURL(resolve(root,'../Commander/crates/commander-indexer/target/debug/commander-indexer')).href}),{mode:0o600});
+        commanderIndexer:pathToFileURL(resolve(root,'../filesystem-indexer/target/debug/commander-indexer')).href}),{mode:0o600});
     const child=spawn(join(directory,'MacFolderSyncFixture'),[config]);child.stderr.resume();let pending;
     createInterface({input:child.stdout}).on('line',line=>{const p=pending;pending=null;const v=JSON.parse(line);v.ok?p.resolve(v.result):p.reject(Error('Fixture refused'));});
     const send=request=>new Promise((resolve,reject)=>{assert.ok(!pending);pending={resolve,reject};const b=Buffer.from(JSON.stringify(request)),h=Buffer.alloc(4);h.writeUInt32BE(b.length);child.stdin.write(Buffer.concat([h,b]));});

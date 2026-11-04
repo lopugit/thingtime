@@ -159,6 +159,34 @@ test('device total budget reaches the real dedicated transport worker', async ()
  } finally { server.close(); await once(server, 'close'); }
 });
 
+test('a rootless telemetry read reports current worker rates without resetting the device policy', () => {
+ const { governorFor } = require('../lib/folder-resource-governor.cjs');
+ const context = { apiOrigin: 'https://telemetry.example', ownerId: 'telemetry-owner' };
+ const deviceId = 'telemetry-device', read = { action: 'resources', deviceId };
+ assert.equal(governorFor(read, context), null);
+ const governor = governorFor({ deviceId, rootId: 'connection',
+  deviceResourceLimits: { transferBytesPerSecond: 5_000_000, scanBytesPerSecond: 5_000_000, cpuPercent: 15 } }, context);
+ governor.observeTransport({ measuredAt: Date.now(), currentUploadBytesPerSecond: 400_000, currentDownloadBytesPerSecond: 0 });
+ governor.observeNative({ version: 1, measuredAt: Date.now(), scanBytesPerSecond: 240_000, memoryBytes: 1_048_576 });
+ const observation = governorFor(read, context);
+ assert.equal(observation, governor);
+ assert.equal(observation.snapshot().currentUploadBytesPerSecond, 400_000);
+ assert.equal(observation.snapshot().currentDownloadBytesPerSecond, 0);
+ assert.equal(observation.snapshot().scanBytesPerSecond, 240_000);
+ assert.equal(observation.snapshot().memoryBytes, 1_048_576);
+ governor.observeNative({ version: 1, measuredAt: governor.nativeResources.measuredAt - 1000, scanBytesPerSecond: 1000 });
+ assert.equal(observation.snapshot().scanBytesPerSecond, 240_000);
+ assert.equal(observation.totalBytesPerSecond, 5_000_000);
+ assert.equal(observation.policy.cpuPercent, 15);
+ assert.equal(governorFor(read, { ...context, ownerId: 'other-owner' }), null);
+ governor.transportAt -= 2500;
+ governor.nativeResources.measuredAt -= 2500;
+ assert.equal(observation.snapshot().currentUploadBytesPerSecond, null);
+ assert.equal(observation.snapshot().currentDownloadBytesPerSecond, null);
+ assert.equal(observation.snapshot().scanBytesPerSecond, undefined);
+ assert.equal(observation.snapshot().memoryBytes, undefined);
+});
+
 test('queued connection policy cannot raise an active stricter connection ceiling', async () => {
  const g = new ResourceGovernor({ uploadBytesPerSecond: 1000, cpuPercent: 5 });
  const release = await g.acquire(new AbortController().signal);

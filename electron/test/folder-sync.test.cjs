@@ -635,7 +635,7 @@ test('rootless resources sample the active device governor without waiting for o
  const finish = new Promise(resolve => { release = resolve; });
  f.run(async (_method, request) => {
   if (request.action === 'scan-status') { started(); await finish; }
-  return { ...request, roots: [], resources };
+  return { ...request, roots: [], resources: { ...resources, measuredAt: Date.now() } };
  });
  const active = f.host.request(f.event, transfer);
  try {

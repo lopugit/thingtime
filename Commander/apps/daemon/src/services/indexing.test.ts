@@ -13,17 +13,25 @@ import {
   IndexingService,
 } from './indexing.js';
 
-const { queryIndex, readCatalogue, readStatus, writeIndex, quickApps, readPolicy, observePaths, readback } =
-  vi.hoisted(() => ({
-    queryIndex: vi.fn(),
-    readCatalogue: vi.fn(),
-    readStatus: vi.fn(),
-    writeIndex: vi.fn(),
-    quickApps: vi.fn(),
-    readPolicy: vi.fn(async () => undefined),
-    observePaths: vi.fn(),
-    readback: vi.fn(),
-  }));
+const {
+  queryIndex,
+  readCatalogue,
+  readStatus,
+  writeIndex,
+  fallbackApps,
+  readPolicy,
+  observePaths,
+  readback,
+} = vi.hoisted(() => ({
+  queryIndex: vi.fn(),
+  readCatalogue: vi.fn(),
+  readStatus: vi.fn(),
+  writeIndex: vi.fn(),
+  fallbackApps: vi.fn(),
+  readPolicy: vi.fn(async () => undefined),
+  observePaths: vi.fn(),
+  readback: vi.fn(),
+}));
 vi.mock('@commander/filesystem-indexer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@commander/filesystem-indexer')>()),
   FileSystemIndexerClient: class {
@@ -33,13 +41,14 @@ vi.mock('@commander/filesystem-indexer', async (importOriginal) => ({
     readPolicy = readPolicy;
     observe = observePaths;
     readback = readback;
+    invalidateInventoryPaths = vi.fn(async () => undefined);
     index = writeIndex;
     close = vi.fn(async () => undefined);
   },
 }));
 vi.mock('./applications.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./applications.js')>()),
-  discoverApplicationsQuick: quickApps,
+  discoverApplications: fallbackApps,
 }));
 afterEach(() => {
   vi.useRealTimers();
@@ -76,7 +85,7 @@ describe('application candidate coverage', () => {
       expect(await service.queryItems('magician', 1501)).toHaveLength(1501);
       await service.queryItems('recovery');
       expect(writeIndex).not.toHaveBeenCalled();
-      expect(quickApps).not.toHaveBeenCalled();
+      expect(fallbackApps).not.toHaveBeenCalled();
       expect(readCatalogue).not.toHaveBeenCalled();
     } finally {
       await service.close();
@@ -84,14 +93,9 @@ describe('application candidate coverage', () => {
   });
 
   it('keeps the complete application catalogue after every completed scan', async () => {
-    const installed = {
-      ...indexRecordToSearchItem(record('Thingtime Recovery.app', 'application')),
-      id: 'app:recovery',
-    };
-    quickApps.mockResolvedValue([installed]);
-    readCatalogue.mockResolvedValue({
-      records: Array.from({ length: 1501 }, (_, index) => record(`Helper-${index}.app`, 'application')),
-    });
+    const installed = record('Thingtime Recovery.app', 'application');
+    const helpers = Array.from({ length: 1501 }, (_, index) => record(`Helper-${index}.app`, 'application'));
+    readCatalogue.mockResolvedValue({ records: [installed, ...helpers] });
     writeIndex.mockResolvedValue({
       durationMs: 1,
       resources: {},
@@ -106,14 +110,17 @@ describe('application candidate coverage', () => {
     });
     try {
       await service.start('applications');
-      expect(applications).toHaveBeenLastCalledWith(expect.arrayContaining([installed]));
+      expect(applications).toHaveBeenLastCalledWith(
+        expect.arrayContaining([indexRecordToSearchItem(installed)]),
+      );
       expect(applications.mock.lastCall![0]).toHaveLength(1502);
       expect(readCatalogue).toHaveBeenCalledWith(['application'], 'applications:', ['applications:/']);
       await vi.waitFor(async () => expect((await service.status()).running).toEqual([]));
-      // Refresh discovery as well: do not preserve an uninstalled app forever.
-      quickApps.mockResolvedValue([]);
+      // A committed deletion is reflected without merging an independent scan.
+      readCatalogue.mockResolvedValue({ records: helpers });
       await service.start('applications');
       expect(applications.mock.lastCall![0]).toHaveLength(1501);
+      expect(fallbackApps).not.toHaveBeenCalled();
     } finally {
       await service.close();
     }
@@ -122,7 +129,6 @@ describe('application candidate coverage', () => {
   it('loads a fresh saved catalogue on launch without starting indexing', async () => {
     const persistedIndexTime = Date.now() - 60_000;
     readCatalogue.mockResolvedValue({ records: [record('Thingtime Recovery', 'application')] });
-    quickApps.mockResolvedValue([]);
     readStatus.mockResolvedValue({
       schemaVersion: 4,
       configurationFingerprints: {
@@ -151,9 +157,60 @@ describe('application candidate coverage', () => {
       expect(restored.lastIndexedAtMs).toBe(persistedIndexTime);
       expect(writeIndex).not.toHaveBeenCalled();
       expect(readPolicy).not.toHaveBeenCalled();
+      expect(fallbackApps).not.toHaveBeenCalled();
       await vi.waitFor(() => expect(readStatus).toHaveBeenCalledTimes(2));
       expect(writeIndex).not.toHaveBeenCalled();
       expect((await service.status()).running).toEqual([]);
+    } finally {
+      await service.close();
+    }
+  });
+  it('starts cold application discovery through the Rust index', async () => {
+    const applications = vi.fn();
+    readStatus.mockResolvedValue({ schemaVersion: 4, kinds: [] });
+    readCatalogue.mockResolvedValueOnce({ records: [] }).mockResolvedValue({
+      records: [record('Cold Discovery', 'application')],
+    });
+    writeIndex.mockResolvedValue({
+      completedAtMs: Date.now(),
+      durationMs: 1,
+      resources: {},
+      status: { schemaVersion: 4, kinds: [] },
+    });
+    const service = new IndexingService({
+      binaryPath: '/mock/indexer',
+      applicationRoots: [os.tmpdir()],
+      platform: 'macos',
+      settings: { ...DEFAULT_SETTINGS, indexing: { ...DEFAULT_SETTINGS.indexing, enabled: false } },
+      callbacks: { applications, commands: () => 0 },
+    });
+    try {
+      expect(await service.initialize()).toEqual([]);
+      await vi.waitFor(() =>
+        expect(applications).toHaveBeenLastCalledWith([expect.objectContaining({ title: 'Cold Discovery' })]),
+      );
+      expect(writeIndex).toHaveBeenCalledTimes(1);
+      expect(writeIndex.mock.calls[0]![0].sources).toEqual([
+        expect.objectContaining({ kinds: ['application'] }),
+      ]);
+      expect(fallbackApps).not.toHaveBeenCalled();
+    } finally {
+      await service.close();
+    }
+  });
+
+  it('reports a missing Mac indexer without falling back to a separate catalogue', async () => {
+    const service = new IndexingService({
+      binaryPath: undefined,
+      platform: 'macos',
+      settings: DEFAULT_SETTINGS,
+      callbacks: { applications: vi.fn(), commands: () => 0 },
+    });
+    try {
+      expect(await service.initialize()).toEqual([]);
+      expect((await service.status()).message).toContain('Reinstall Commander');
+      await expect(service.start('applications')).rejects.toThrow('Reinstall Commander');
+      expect(fallbackApps).not.toHaveBeenCalled();
     } finally {
       await service.close();
     }
@@ -238,8 +295,9 @@ describe('background scheduling and active search totals', () => {
   });
 
   it('counts actual catalogue apps and enabled commands, then immediately excludes disabled files', async () => {
-    quickApps.mockResolvedValue([{ id: 'app:one', kind: 'application', path: '/test/one.app' }]);
-    readCatalogue.mockResolvedValue({ records: [] });
+    readCatalogue.mockResolvedValue({
+      records: [{ name: 'one.app', kind: 'application', path: '/test/one.app', parent: '/test', score: 0 }],
+    });
     readStatus.mockImplementation(async () => current());
     writeIndex.mockResolvedValue({
       durationMs: 1,
@@ -271,7 +329,6 @@ describe('background scheduling and active search totals', () => {
   it('reconciles due indexes in the background while queries use the independent reader', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(10_000_000);
-    quickApps.mockResolvedValue([]);
     readCatalogue.mockResolvedValue({ records: [] });
     const saved = current();
     saved.kinds = saved.kinds.map((kind) => ({
@@ -317,7 +374,6 @@ describe('legacy snapshot adoption', () => {
       kinds: [],
     });
     readCatalogue.mockResolvedValue({ records: [] });
-    quickApps.mockResolvedValue([]);
     writeIndex.mockImplementation(() => new Promise(() => undefined));
     queryIndex.mockResolvedValue({ records: [] });
     const service = new IndexingService({
@@ -351,11 +407,12 @@ describe('legacy snapshot adoption', () => {
       databaseSizeBytes: 100,
       configurationFingerprints: { 'filesystem:': 'known-old-settings' },
       kinds: ['application', 'file', 'directory'].map((kind) => ({
-        kind, count: 2, lastIndexedAtMs: Date.now(),
+        kind,
+        count: 2,
+        lastIndexedAtMs: Date.now(),
       })),
     });
     readCatalogue.mockResolvedValue({ records: [] });
-    quickApps.mockResolvedValue([]);
     writeIndex.mockImplementation(() => new Promise(() => undefined));
     const service = new IndexingService({
       binaryPath: '/mock/indexer',
@@ -396,7 +453,6 @@ describe('application namespace scheduling', () => {
     };
     readStatus.mockResolvedValue(saved);
     readCatalogue.mockResolvedValue({ records: [] });
-    quickApps.mockResolvedValue([]);
     writeIndex.mockResolvedValue({ completedAtMs: Date.now(), durationMs: 1, resources: {}, status: saved });
     const service = new IndexingService({
       binaryPath: '/mock/indexer',
@@ -437,7 +493,6 @@ describe('live query settings fence', () => {
     };
     readStatus.mockResolvedValue(saved);
     readCatalogue.mockResolvedValue({ records: [] });
-    quickApps.mockResolvedValue([]);
     queryIndex.mockResolvedValue({ records: [] });
     writeIndex.mockResolvedValue({ completedAtMs: Date.now(), durationMs: 1, resources: {}, status: saved });
     observePaths.mockImplementation(async (_config: IndexConfiguration, paths: string[]) => ({
