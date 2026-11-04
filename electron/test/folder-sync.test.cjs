@@ -609,7 +609,8 @@ test('real upload-part path sums every repeated authorization and child native c
 
 test('resource policy preserves connection binding and scoped native CPU feedback; malformed policy never dispatches', async () => {
  const f = fixture(), rootId = randomUUID();
- const input = f.input({ action: 'scan-status', rootId, resourceScope: 'connection', resourceLimits: { cpuPercent: 20, transferConcurrency: 2 } });
+ // Governors share CPU samples by device. Isolate this fixture from transfer-worker tests.
+ const input = f.input({ action: 'scan-status', rootId, deviceId: randomUUID(), resourceScope: 'connection', resourceLimits: { cpuPercent: 20, transferConcurrency: 2 } });
  f.run(async (_method, request) => ({ ...request, roots: [], resources: { version: 1, cpuPercent: 60, cpuStatus: 'measured', indexingCpuPercent: 60, sourceCpuPercent: null } }));
  const result = await f.host.request(f.event, input);
  assert.deepEqual(f.calls[0].resourceLimits, input.resourceLimits); assert.equal(f.calls[0].resourceScope, 'connection');
