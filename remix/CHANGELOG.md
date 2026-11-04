@@ -108,7 +108,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-11-04: Consolidate filesystem indexing and database code into the local `filesystem-indexer/` Rust workspace. Commander, native sync and iOS builds reference the same engine, with scoped inventories, cache reuse, paginated PhotoKit observations and cancellation coverage. Installed acceptance is tracked in the [shared-index plan](../PLAN/shared-rust-index-sync.md). **Codex (AI)**
+- 2026-11-04: Consolidate filesystem indexing and database code into the local `filesystem-indexer/` Rust workspace. Commander, native sync and iOS builds reference the same engine, with scoped inventories, cache reuse, paginated PhotoKit observations and cancellation coverage. Installed acceptance is tracked in the [PR #1327](../PRs/1327-codex-shared-rust-index-sync-share-one-rust-filesystem-engine.md). **Codex (AI)**
 
 - 2026-11-04: Give the password fields editor a distinct sibling React key so typing, focus refreshes and metadata reconciliation retain one editor. Extend the actual-manager browser regression to cover per-character changes, focus, Copy and duplicate-key warnings. — Codex (AI)
 
