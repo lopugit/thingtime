@@ -12,7 +12,7 @@ use ignore::{WalkBuilder, WalkState};
 use regex::RegexSet;
 use rusqlite::{
     params, params_from_iter, types::Value as SqlValue, Connection, ErrorCode, OptionalExtension,
-    Transaction,
+    Transaction, TransactionBehavior,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -30,6 +30,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 pub mod backup;
 pub mod backup_ignore;
 mod bounded_walk;
+mod list_children;
 mod read_policy;
 mod resources;
 use read_policy::ReadPolicy;
@@ -307,6 +308,12 @@ pub enum IndexerOperation {
     Observe {
         configuration: IndexConfiguration,
         paths: Vec<PathBuf>,
+    },
+    ListChildren {
+        configuration: IndexConfiguration,
+        path: PathBuf,
+        after: Option<String>,
+        limit: usize,
     },
     Readback {
         paths: Vec<PathBuf>,
@@ -808,6 +815,8 @@ impl IndexDatabase {
             IndexerOperation::Observe { configuration, paths } => {
                 serde_json::to_value(self.observe(&configuration, &paths)?)
             }
+            IndexerOperation::ListChildren {configuration,path,after,limit} => serde_json::to_value(
+                list_children::list(self,&configuration,&path,after.as_deref(),limit)?),
             IndexerOperation::Readback { paths, source_ids } => serde_json::to_value(self.readback(&paths, source_ids.as_deref())?),
             IndexerOperation::Catalogue {
                 kinds,
@@ -877,10 +886,16 @@ impl IndexDatabase {
             .filter(|changed| changed.starts_with(&root) || root.starts_with(changed))
             .collect();
         let root_text = path_text(&root)?;
-        let generation = next_generation(&self.connection)?;
         let started = Instant::now();
         let indexed_at = now_ms();
-        let transaction = self.connection.transaction()?;
+        // Native inventory now has its own WAL writer. Acquire the write
+        // reservation before reading or allocating the search generation:
+        // upgrading a deferred snapshot can fail immediately with BUSY_SNAPSHOT
+        // even when the connection has a busy timeout.
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let generation = next_generation(&transaction)?;
         let report = scan_and_store(
             &transaction,
             ScanContext {
@@ -972,7 +987,9 @@ impl IndexDatabase {
         if configuration.prune_source_prefixes.is_empty() {
             return Ok(());
         }
-        let transaction = self.connection.transaction()?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
         for prefix in &configuration.prune_source_prefixes {
             let active_ids = configuration
                 .sources
@@ -1424,6 +1441,8 @@ fn initialize_schema(connection: &Connection) -> Result<(), IndexerError> {
             format!("database schema {schema_version} is not supported"),
         ));
     }
+    #[cfg(unix)]
+    backup::inventory::initialize(connection)?;
     Ok(())
 }
 

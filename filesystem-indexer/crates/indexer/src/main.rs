@@ -50,12 +50,19 @@ fn main() -> ExitCode {
 
 fn run_cli(arguments: Vec<String>) -> Result<(), IndexerError> {
     #[cfg(unix)]
-    if arguments.as_slice() == ["backup"] {
+    if arguments.first().is_some_and(|command| command == "backup") {
         // Grant paths and policy travel over a private pipe, never argv/logs.
-        return commander_indexer::backup::serve(
+        let database = if arguments.len() == 1 {
+            None
+        } else {
+            Some(required_value(&arguments, "--database")?)
+        };
+        return commander_indexer::backup::serve_with_database(
             io::BufReader::new(io::stdin()),
             io::stdout().lock(),
-        );
+            database.as_deref(),
+        )
+        .map_err(private_inventory_error);
     }
     if arguments.is_empty()
         || arguments
@@ -74,6 +81,15 @@ fn run_cli(arguments: Vec<String>) -> Result<(), IndexerError> {
     }
     let command = arguments[0].as_str();
     let database_path = required_value(&arguments, "--database")?;
+    #[cfg(unix)]
+    if command == "inventory" {
+        return commander_indexer::backup::inventory::serve(
+            &database_path,
+            io::stdin().lock(),
+            io::stdout().lock(),
+        )
+        .map_err(private_inventory_error);
+    }
     let mut database = if arguments.iter().any(|argument| argument == "--reader") {
         IndexDatabase::open_reader(database_path)?
     } else {
@@ -123,6 +139,11 @@ fn run_cli(arguments: Vec<String>) -> Result<(), IndexerError> {
             format!("unknown command: {command}\n\n{HELP}"),
         )),
     }
+}
+
+#[cfg(unix)]
+fn private_inventory_error(error: IndexerError) -> IndexerError {
+    IndexerError::new(error.code, "Filesystem inventory could not complete.")
 }
 
 fn serve(

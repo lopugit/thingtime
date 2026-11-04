@@ -14055,3 +14055,44 @@ the isolated real-API/browser command and the metadata-only session boundary.
   reconcile, and that stopping a second scan preserves both sides. Change a
   file during the private scan and verify that no deletion is inferred from an
   incomplete inventory.
+
+
+## Shared Rust filesystem index and sync — 2026-11-04
+
+- Build from the top-level `filesystem-indexer/Cargo.toml`; run its workspace
+  tests and `apple/FileSync/test-embedded-rust.sh`. Commander, Mac Node and iOS
+  must reference this workspace directly, with no second engine source tree or
+  registry package. Verify both default and isolated `CARGO_TARGET_DIR` outputs.
+- Use disposable roots to compare a cold scan, unchanged warm scan and one-file
+  edit. Confirm unchanged content avoids hashing, new versions invalidate only
+  relevant observations, and private sync paths never appear in Commander search.
+- Interrupt before seal, mutate an early file while later files are checked,
+  revoke a grant, replace/remount the root, lose watcher coverage and restart.
+  Incomplete coverage must never become a successful empty inventory or authorize
+  propagated deletion. Restore legacy journal jobs without splicing old cursors
+  into a new Rust generation.
+- Reject a Swift output callback during a Rust write and cancel during hashing.
+  The embedded producer must terminate, release its DB/operation lease and join
+  before the native handle is destroyed; `Interrupted` must not cause an endless
+  `write_all` retry. Verify another operation can start afterward.
+- Browse early and late pages of a broad folder. Confirm pagination does not
+  replay all preceding directory walks, cancellation remains responsive, cached
+  pages remain root-authorized and a changed directory invalidates its cursor.
+- Check PhotoKit cold and warm captures, persisted original metadata reuse,
+  permission revocation and a library edit before the final page. Native Photos
+  permission still controls access; a cached digest never grants file reads.
+- Final signed Commander and Thingtime installs must embed the rebuilt helper,
+  preserve stable identity/preferences, and use the canonical shared DB. Verify
+  Desktop and `~/Thingtime` two-way synthetic byte/path/Timeline round trips,
+  Pause/Resume, restart and window-close continuation. Keep Home paused and its
+  removed grant absent. Record resource readings against OS measurements and
+  distinguish a configured target from a measured hard limit.
+- iOS archive compilation, simulator execution and physical Files/Photos grants
+  are separate evidence. Exercise only watcher guarantees the platform actually
+  provides; unavailable coverage must fail closed, not silently claim sealing.
+
+- Run the Commander daemon inventory integration with the native invalidation
+  watcher enabled. Hold the Rust search writer after it acquires its transaction;
+  committed counts and live file, directory and app changes must remain readable.
+  Resume the writer and verify concurrent inventory writes do not cause a search
+  write to fail with a SQLite snapshot lock.

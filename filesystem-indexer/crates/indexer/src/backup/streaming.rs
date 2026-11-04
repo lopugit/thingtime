@@ -15,7 +15,7 @@ impl State {
             CREATE TABLE dirs(path TEXT PRIMARY KEY, stamp TEXT NOT NULL);
             CREATE TABLE names(parent TEXT, canonical TEXT, name TEXT);
             CREATE INDEX lookup ON names(parent,canonical);
-            CREATE TABLE observed(seq INTEGER PRIMARY KEY, path TEXT UNIQUE, version TEXT NOT NULL, parent TEXT NOT NULL, identity TEXT NOT NULL);
+            CREATE TABLE observed(seq INTEGER PRIMARY KEY, path TEXT UNIQUE, version TEXT NOT NULL, parent TEXT NOT NULL, identity TEXT NOT NULL, link INTEGER NOT NULL);
             CREATE INDEX observed_parent ON observed(parent);
             CREATE UNIQUE INDEX observed_identity ON observed(identity);").map_err(|_| failure("streaming_unavailable"))?;
         Ok(Self { db })
@@ -96,7 +96,7 @@ impl State {
         Ok(())
     }
     pub(super) fn remember(&mut self, entry: &Entry) -> Result<(), rusqlite::Error> {
-        self.db.execute("INSERT INTO observed(path,version,parent,identity) VALUES(?1,?2,?3,?4) ON CONFLICT(path) DO UPDATE SET version=excluded.version,identity=excluded.identity", params![entry.path, entry.version, entry.path.rsplit_once('/').map(|(p,_)| p).unwrap_or(""), entry.id])?;
+        self.db.execute("INSERT INTO observed(path,version,parent,identity,link) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(path) DO UPDATE SET version=excluded.version,identity=excluded.identity,link=excluded.link", params![entry.path, entry.version, entry.path.rsplit_once('/').map(|(p,_)| p).unwrap_or(""), entry.id,entry.symbolic_link.is_some()])?;
         Ok(())
     }
 }
@@ -109,17 +109,51 @@ pub(super) struct Changes {
     overflow: Arc<AtomicBool>,
     root: PathBuf,
 }
-pub(super) fn watch(root: &Path) -> Result<Changes, IndexerError> {
+fn strict_backend(kind: notify::WatcherKind) -> bool {
+    matches!(
+        kind,
+        notify::WatcherKind::Fsevent | notify::WatcherKind::Inotify
+    )
+}
+
+pub(super) fn supports_strict() -> bool {
     use notify::Watcher;
-    let (sender, receiver) = mpsc::sync_channel(1024);
+    cfg!(any(target_os = "macos", target_os = "linux"))
+        && strict_backend(notify::RecommendedWatcher::kind())
+}
+
+pub(super) fn watch_strict(root: &Path) -> Result<Changes, IndexerError> {
+    // Polling can miss writes between validation and publication. Do not
+    // present it as complete coverage (iOS currently selects PollWatcher).
+    if !supports_strict() {
+        return Err(failure("strict_watcher_unavailable"));
+    }
+    watch_mode(root, true)
+}
+
+pub(super) fn watch(root: &Path) -> Result<Changes, IndexerError> {
+    watch_mode(root, false)
+}
+
+fn watch_mode(root: &Path, sealing: bool) -> Result<Changes, IndexerError> {
+    use notify::Watcher;
+    // Keep one bounded burst of precise native events while a seal checks its
+    // first batch of descriptors. Overflow still invalidates coverage.
+    let (sender, receiver) = mpsc::sync_channel(if sealing { 4096 } else { 1024 });
     let overflow = Arc::new(AtomicBool::new(false));
     let lost = overflow.clone();
-    let mut watcher = notify::recommended_watcher(move |event| {
-        if sender.try_send(event).is_err() {
-            lost.store(true, Ordering::Relaxed);
-        }
-    })
-    .map_err(|_| failure("streaming_unavailable"))?;
+    let mut watcher =
+        notify::recommended_watcher(move |event: Result<notify::Event, notify::Error>| {
+            if event.as_ref().is_ok_and(|event| {
+                !event.need_rescan() && matches!(event.kind, notify::EventKind::Access(_))
+            }) {
+                return;
+            }
+            if sender.try_send(event).is_err() {
+                lost.store(true, Ordering::Relaxed);
+            }
+        })
+        .map_err(|_| failure("streaming_unavailable"))?;
     watcher
         .watch(
             root,
@@ -140,6 +174,54 @@ pub(super) fn watch(root: &Path) -> Result<Changes, IndexerError> {
     })
 }
 impl Changes {
+    // Lost events and unknown paths still invalidate membership. An ordinary
+    // precise path hint can instead be checked against its exact saved stamp.
+    pub(super) fn check_quiet(
+        &self,
+        root: &File,
+        policy: &Policy,
+        mut unchanged: impl FnMut(&str) -> bool,
+    ) -> Result<(), Option<String>> {
+        let receiver = self.receiver.lock().unwrap();
+        loop {
+            if self.overflow.load(Ordering::Relaxed) {
+                return Err(None);
+            }
+            match receiver.try_recv() {
+                Err(mpsc::TryRecvError::Empty) if !self.overflow.load(Ordering::Relaxed) => {
+                    return Ok(())
+                }
+                Ok(Ok(event))
+                    if !event.need_rescan()
+                        && matches!(event.kind, notify::EventKind::Access(_)) =>
+                {
+                    ()
+                }
+                Ok(Ok(event)) if !event.need_rescan() && !event.paths.is_empty() => {
+                    // These notify attributes denote device/root changes,
+                    // rather than ordinary precise item events.
+                    if matches!(event.info(), Some("root changed" | "mount")) {
+                        return Err(None);
+                    }
+                    for path in event.paths {
+                        let relative = path
+                            .strip_prefix(&self.root)
+                            .ok()
+                            .and_then(Path::to_str)
+                            .filter(|p| p.is_empty() || valid_path(p));
+                        if relative.is_some_and(|p| {
+                            (!p.is_empty() && policy.pruned_event_kind(root, p, None))
+                                || unchanged(p)
+                        }) {
+                            continue;
+                        }
+                        return Err(relative.filter(|p| !p.is_empty()).map(str::to_owned));
+                    }
+                }
+                _ => return Err(None),
+            }
+        }
+    }
     pub(super) fn track_directory(&self, path: &Path) -> Result<(), &'static str> {
         // Linux inotify recursive setup walks the entire root synchronously.
         // Install each watch as our existing walker reaches that directory.
@@ -158,6 +240,8 @@ pub(super) struct Policy {
     pub(super) ignores: Arc<BackupIgnoreRules>,
     pub(super) exclusions: Vec<String>,
     pub(super) invalid: Arc<regex::Regex>,
+    pub(super) receipts: Option<Arc<native_receipts::Receipts>>,
+    pub(super) cache: Option<Arc<inventory::Cache>>,
 }
 impl Policy {
     // Prune private-cache/excluded notifications before any indexed-row query.
@@ -191,7 +275,30 @@ impl Policy {
         // removed file matched a directory-only ignore rule.
         kind.is_some_and(|is_dir| self.ignores.ignores_entry(path, is_dir))
     }
-    fn eligible(&self, root: &File, path: &str) -> Result<bool, &'static str> {
+    pub(super) fn observe(
+        &self,
+        root: &File,
+        path: &str,
+        governor: &ResourceGovernor,
+        cancelled: &AtomicBool,
+    ) -> Result<Option<Entry>, &'static str> {
+        observe_projected(
+            root,
+            path,
+            governor,
+            cancelled,
+            self.cache.as_deref(),
+            None,
+            self.receipts.as_deref(),
+        )
+    }
+    fn eligible(
+        &self,
+        root: &File,
+        path: &str,
+        governor: &ResourceGovernor,
+        cancelled: &AtomicBool,
+    ) -> Result<bool, &'static str> {
         if !valid_path(path) || self.invalid.is_match(path) {
             return Err("invalid-path");
         }
@@ -209,8 +316,21 @@ impl Policy {
                 prefix.push('/');
             }
             prefix.push_str(part);
-            let file = open_path(root, &prefix)?;
-            let is_dir = file.metadata().map_err(|_| "unreadable")?.is_dir();
+            let is_dir = match open_path(root, &prefix) {
+                Ok(file) => file.metadata().map_err(|_| "unreadable")?.is_dir(),
+                Err("symlink") if prefix == path => false,
+                Err(reason) => return Err(reason),
+            };
+            if is_dir {
+                if let Some(receipts) = &self.receipts {
+                    if matches!(
+                        receipts.inspect(root, &prefix, governor, cancelled)?,
+                        native_receipts::Projection::Skip
+                    ) {
+                        return Ok(false);
+                    }
+                }
+            }
             if self.ignores.ignores_entry(&prefix, is_dir) {
                 return Ok(false);
             }
@@ -326,21 +446,21 @@ pub(super) fn monitor(
             let upper = format!("{prefix}\u{10ffff}");
             let mut cursor = 0_i64;
             loop {
-                let rows: Vec<(i64, String, String)> = {
+                let rows: Vec<(i64, String, String, bool)> = {
                     let state = state.lock().unwrap();
                     let result = (|| -> Result<_, rusqlite::Error> {
                         let sql = if pruned {
-                            "SELECT seq,path,version FROM observed WHERE seq>?1 AND path=?4 AND ?2 IS NOT NULL AND ?3=1 AND ?5 IS NOT NULL AND ?6 IS NOT NULL ORDER BY seq LIMIT 64"
+                            "SELECT seq,path,version,link FROM observed WHERE seq>?1 AND path=?4 AND ?2 IS NOT NULL AND ?3=1 AND ?5 IS NOT NULL AND ?6 IS NOT NULL ORDER BY seq LIMIT 64"
                         } else if namespace {
-                            "SELECT seq,path,version FROM observed WHERE seq>?1 AND (path=?2 OR path=?4 OR parent=?4 OR (path>=?5 AND path<?6)) ORDER BY seq LIMIT 64"
+                            "SELECT seq,path,version,link FROM observed WHERE seq>?1 AND (path=?2 OR path=?4 OR parent=?4 OR (path>=?5 AND path<?6)) ORDER BY seq LIMIT 64"
                         } else {
-                            "SELECT seq,path,version FROM observed WHERE seq>?1 AND path=?2 AND ?3=0 AND ?4 IS NOT NULL AND ?5 IS NOT NULL AND ?6 IS NOT NULL"
+                            "SELECT seq,path,version,link FROM observed WHERE seq>?1 AND path=?2 AND ?3=0 AND ?4 IS NOT NULL AND ?5 IS NOT NULL AND ?6 IS NOT NULL"
                         };
                         let mut query = state.db.prepare(sql)?;
                         let rows = query
                             .query_map(
                                 params![cursor, relative, namespace, parent, prefix, upper],
-                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
                             )?
                             .collect::<Result<Vec<_>, _>>()?;
                         Ok(rows)
@@ -356,7 +476,7 @@ pub(super) fn monitor(
                 if rows.is_empty() {
                     break;
                 }
-                for (seq, path, version) in rows {
+                for (seq, path, version, was_link) in rows {
                     cursor = seq;
                     if cancelled.load(Ordering::Relaxed) {
                         return;
@@ -368,13 +488,19 @@ pub(super) fn monitor(
                             .validate(&root, &path, &governor, &cancelled)
                     };
                     let result = valid.and_then(|_| {
-                        let current = open_path(&root, &path)?
-                            .metadata()
-                            .map_err(|_| "unreadable")?;
-                        if stamp(&current) == version {
-                            return Ok(None);
+                        let file = open_metadata_entry(&root, &path)?;
+                        let metadata = file.metadata().map_err(|_| "unreadable")?;
+                        if metadata.is_symlink() && !was_link {
+                            return Err("symlink");
                         }
-                        observe(&root, &path, &governor, &cancelled).map(Some)
+                        if stamp(&metadata) == version {
+                            return if inventory::has_precise_stamps(&file) {
+                                Ok(None)
+                            } else {
+                                Err("changed")
+                            };
+                        }
+                        policy.observe(&root, &path, &governor, &cancelled)
                     });
                     let event = match result {
                         Ok(None) => continue,
@@ -383,11 +509,7 @@ pub(super) fn monitor(
                             if let Err(reason) = state.validate(&root, &path, &governor, &cancelled)
                             {
                                 gap(Some(&path), reason, "subtree")
-                            } else if open_path(&root, &path)
-                                .and_then(|f| f.metadata().map_err(|_| "unreadable"))
-                                .map(|m| stamp(&m))
-                                .ok()
-                                .as_ref()
+                            } else if metadata_version(&root, &path).ok().as_ref()
                                 != Some(&entry.version)
                             {
                                 gap(Some(&path), "changed", "subtree")
@@ -473,7 +595,7 @@ fn discover(
             cancelled.store(true, Ordering::Relaxed);
             return;
         }
-        match policy.eligible(root, &path) {
+        match policy.eligible(root, &path, governor, cancelled) {
             Ok(false) => continue,
             Err(reason) => {
                 let _ = sender.send(gap(Some(&path), reason, "subtree"));
@@ -505,8 +627,9 @@ fn discover(
             let _ = sender.send(gap(Some(&path), reason, "subtree"));
             continue;
         }
-        match observe(root, &path, governor, cancelled) {
-            Ok(entry) => {
+        match policy.observe(root, &path, governor, cancelled) {
+            Ok(None) => continue,
+            Ok(Some(entry)) => {
                 let directory = entry.kind == "folder";
                 let mut state = state.lock().unwrap();
                 if let Err(reason) = state.validate(root, &path, governor, cancelled) {
@@ -588,6 +711,8 @@ mod tests {
             ignores: Arc::new(BackupIgnoreRules::new("")),
             exclusions: vec![],
             invalid: Arc::new(regex::Regex::new(r"[\p{Cc}\p{Cf}]").unwrap()),
+            receipts: None,
+            cache: None,
         })
     }
     fn fixture() -> (TempDir, Arc<File>, Arc<ResourceGovernor>, Arc<AtomicBool>) {
@@ -730,6 +855,8 @@ mod tests {
                     vec![]
                 },
                 invalid: test_policy().invalid.clone(),
+                receipts: None,
+                cache: None,
             });
             fs::write(dir.path().join("visible/sibling"), "changed but unrelated").unwrap();
             fs::create_dir_all(dir.path().join("visible/node_modules/deep")).unwrap();
@@ -866,6 +993,8 @@ mod tests {
             ignores: Arc::new(BackupIgnoreRules::new("ignored/")),
             exclusions: vec![key("Library/Caches/ThingtimeFolderInventories")],
             invalid: test_policy().invalid.clone(),
+            receipts: None,
+            cache: None,
         };
         assert!(policy.pruned_event(
             &root,
@@ -991,5 +1120,16 @@ mod tests {
             None,
             test_policy(),
         );
+    }
+}
+
+#[cfg(test)]
+mod strict_backend_tests {
+    use super::*;
+    #[test]
+    fn polling_never_qualifies_for_strict_seal() {
+        assert!(!strict_backend(notify::WatcherKind::PollWatcher));
+        assert!(strict_backend(notify::WatcherKind::Fsevent));
+        assert!(strict_backend(notify::WatcherKind::Inotify));
     }
 }

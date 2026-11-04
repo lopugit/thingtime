@@ -22,6 +22,9 @@ use std::sync::{
 };
 use std::time::Duration;
 use unicode_normalization::UnicodeNormalization;
+pub mod inventory;
+mod live_children;
+mod native_receipts;
 mod streaming;
 
 #[derive(Deserialize)]
@@ -155,7 +158,7 @@ fn failure(code: &'static str) -> IndexerError {
 fn identity(m: &Metadata) -> String {
     format!("{}:{}", m.dev(), m.ino())
 }
-fn stamp(m: &Metadata) -> String {
+pub(crate) fn stamp(m: &Metadata) -> String {
     format!(
         "{}:{}:{}:{}:{}:{}:{}",
         m.dev(),
@@ -201,7 +204,7 @@ fn io_reason(e: rustix::io::Errno) -> &'static str {
 }
 
 /// Never open a special file or follow a link, including in any ancestor.
-fn open_path(root: &File, path: &str) -> Result<File, &'static str> {
+pub(crate) fn open_path(root: &File, path: &str) -> Result<File, &'static str> {
     let mut parent = root.try_clone().map_err(|_| "unreadable")?;
     let mut parts = path.split('/').peekable();
     while let Some(name) = parts.next() {
@@ -224,6 +227,7 @@ fn open_path(root: &File, path: &str) -> Result<File, &'static str> {
         if after.dev() != before.st_dev as u64
             || after.ino() != before.st_ino as u64
             || (kind == FileType::Directory) != after.is_dir()
+            || (kind == FileType::RegularFile) != after.is_file()
         {
             return Err("changed");
         }
@@ -232,11 +236,92 @@ fn open_path(root: &File, path: &str) -> Result<File, &'static str> {
     Ok(parent)
 }
 
+#[cfg(test)]
 fn observe(
     root: &File,
     path: &str,
     governor: &ResourceGovernor,
     cancelled: &AtomicBool,
+) -> Result<Entry, &'static str> {
+    observe_cached(root, path, governor, cancelled, None, None)
+}
+
+fn observe_projected(
+    root: &File,
+    path: &str,
+    governor: &ResourceGovernor,
+    cancelled: &AtomicBool,
+    cache: Option<&inventory::Cache>,
+    mount: Option<&str>,
+    receipts: Option<&native_receipts::Receipts>,
+) -> Result<Option<Entry>, &'static str> {
+    if let Some(receipts) = receipts {
+        let projection = receipts.inspect(root, path, governor, cancelled)?;
+        if !matches!(projection, native_receipts::Projection::Raw)
+            && mount.is_some()
+            && inventory::mount_identity(&open_path(root, path)?).as_deref() != mount
+        {
+            return Err("mount_changed");
+        }
+        match projection {
+            native_receipts::Projection::Skip => return Ok(None),
+            native_receipts::Projection::Link(entry) => return Ok(Some(entry)),
+            native_receipts::Projection::Raw => (),
+        }
+    }
+    observe_cached(root, path, governor, cancelled, cache, mount).map(Some)
+}
+
+fn open_link(parent: &File, name: &str) -> Result<File, &'static str> {
+    #[cfg(target_vendor = "apple")]
+    let flags = OFlags::RDONLY | OFlags::CLOEXEC | OFlags::from_bits_retain(0x00200000) /* Darwin O_SYMLINK pins the link inode */;
+    #[cfg(not(target_vendor = "apple"))]
+    let flags = OFlags::PATH | OFlags::CLOEXEC | OFlags::NOFOLLOW;
+    Ok(File::from(
+        openat(parent, name, flags, Mode::empty()).map_err(io_reason)?,
+    ))
+}
+
+fn metadata_version(root: &File, path: &str) -> Result<String, &'static str> {
+    let file = open_metadata_entry(root, path)?;
+    Ok(stamp(&file.metadata().map_err(|_| "unreadable")?))
+}
+
+fn open_metadata_entry(root: &File, path: &str) -> Result<File, &'static str> {
+    match open_path(root, path) {
+        Ok(file) => Ok(file),
+        Err("symlink") => {
+            let (parent, name) = path.rsplit_once('/').unwrap_or(("", path));
+            let directory = if parent.is_empty() {
+                root.try_clone().map_err(|_| "unreadable")?
+            } else {
+                open_path(root, parent)?
+            };
+            let before = statat(&directory, name, AtFlags::SYMLINK_NOFOLLOW).map_err(io_reason)?;
+            if FileType::from_raw_mode(before.st_mode) != FileType::Symlink {
+                return Err("changed");
+            }
+            let link = open_link(&directory, name)?;
+            let metadata = link.metadata().map_err(|_| "unreadable")?;
+            if !metadata.is_symlink()
+                || before.st_dev as u64 != metadata.dev()
+                || before.st_ino as u64 != metadata.ino()
+            {
+                return Err("changed");
+            }
+            Ok(link)
+        }
+        Err(reason) => Err(reason),
+    }
+}
+
+fn observe_cached(
+    root: &File,
+    path: &str,
+    governor: &ResourceGovernor,
+    cancelled: &AtomicBool,
+    cache: Option<&inventory::Cache>,
+    expected_mount: Option<&str>,
 ) -> Result<Entry, &'static str> {
     // Resolve ancestors only as directories, then read the final link itself.
     let (parent_path, name) = path.rsplit_once('/').unwrap_or(("", path));
@@ -247,11 +332,7 @@ fn observe(
     };
     let initial = statat(&parent, name, AtFlags::SYMLINK_NOFOLLOW).map_err(io_reason)?;
     if FileType::from_raw_mode(initial.st_mode) == FileType::Symlink {
-        #[cfg(target_vendor = "apple")]
-        let flags = OFlags::RDONLY | OFlags::CLOEXEC | OFlags::from_bits_retain(0x00200000) /* Darwin O_SYMLINK pins the link inode */;
-        #[cfg(not(target_vendor = "apple"))]
-        let flags = OFlags::PATH | OFlags::CLOEXEC | OFlags::NOFOLLOW;
-        let link = File::from(openat(&parent, name, flags, Mode::empty()).map_err(io_reason)?);
+        let link = open_link(&parent, name)?;
         let before = link.metadata().map_err(|_| "unreadable")?;
         if before.dev() != initial.st_dev as u64
             || before.ino() != initial.st_ino as u64
@@ -301,11 +382,19 @@ fn observe(
     let mut file = open_path(root, path)?;
     let before = file.metadata().map_err(|_| "unreadable")?;
     let version = stamp(&before);
+    let mount = (cache.is_some() || expected_mount.is_some())
+        .then(|| inventory::mount_identity(&file))
+        .flatten();
+    if expected_mount.is_some() && mount.as_deref() != expected_mount {
+        return Err("mount_changed");
+    }
+    let cache = cache.filter(|_| inventory::has_precise_stamps(&file));
     let size = if before.is_dir() { 0 } else { before.size() };
     if size > 9_007_199_254_740_991 {
         return Err("special");
     }
     let mut fingerprint = None;
+    let mut cache_miss = false;
     let sha256 = if before.is_file() && size == 0 {
         Some(format!("{:x}", Sha256::digest([])))
     } else {
@@ -314,49 +403,63 @@ fn observe(
     if before.is_file() && size > 0 {
         let mib = 1_048_576;
         let part_size = (8 * mib).max(size.div_ceil(10_000)).div_ceil(mib) * mib;
-        let mut composite = Sha256::new();
-        let mut part = Sha256::new();
-        let mut offset = 0;
-        let mut in_part = 0;
-        let mut buffer = [0_u8; 65_536];
-        while offset < size {
-            if cancelled.load(Ordering::Relaxed) || governor.checkpoint().is_err() {
-                return Err("cancelled");
+        let cached = cache
+            .zip(mount.as_deref())
+            .and_then(|(cache, mount)| cache.get(mount, &version));
+        cache_miss = cached.is_none();
+        let digest = if let Some(digest) = cached {
+            digest
+        } else {
+            let mut composite = Sha256::new();
+            let mut part = Sha256::new();
+            let mut offset = 0;
+            let mut in_part = 0;
+            let mut buffer = [0_u8; 65_536];
+            while offset < size {
+                if cancelled.load(Ordering::Relaxed) || governor.checkpoint().is_err() {
+                    return Err("cancelled");
+                }
+                let wanted = (buffer.len() as u64)
+                    .min(size - offset)
+                    .min(part_size - in_part) as usize;
+                governor
+                    .pace_scan(wanted, cancelled)
+                    .map_err(|_| "cancelled")?;
+                let n = file.read(&mut buffer[..wanted]).map_err(|_| "unreadable")?;
+                if n == 0 {
+                    return Err("changed");
+                }
+                governor.record_scan(n);
+                part.update(&buffer[..n]);
+                offset += n as u64;
+                in_part += n as u64;
+                if in_part == part_size || offset == size {
+                    composite.update(part.finalize_reset());
+                    in_part = 0;
+                }
             }
-            let wanted = (buffer.len() as u64)
-                .min(size - offset)
-                .min(part_size - in_part) as usize;
-            governor
-                .pace_scan(wanted, cancelled)
-                .map_err(|_| "cancelled")?;
-            let n = file.read(&mut buffer[..wanted]).map_err(|_| "unreadable")?;
-            if n == 0 {
-                return Err("changed");
-            }
-            governor.record_scan(n);
-            part.update(&buffer[..n]);
-            offset += n as u64;
-            in_part += n as u64;
-            if in_part == part_size || offset == size {
-                composite.update(part.finalize_reset());
-                in_part = 0;
-            }
-        }
+            format!("{:x}", composite.finalize())
+        };
         fingerprint = Some(Fingerprint {
             algorithm: "sha256-parts-v1",
             part_size_bytes: part_size,
             part_count: size.div_ceil(part_size),
-            sha256: format!("{:x}", composite.finalize()),
+            sha256: digest,
         });
     }
+    let reopened = open_path(root, path)?;
     if stamp(&file.metadata().map_err(|_| "unreadable")?) != version
-        || stamp(
-            &open_path(root, path)?
-                .metadata()
-                .map_err(|_| "unreadable")?,
-        ) != version
+        || stamp(&reopened.metadata().map_err(|_| "unreadable")?) != version
+        || (mount.is_some() && inventory::mount_identity(&reopened) != mount)
     {
         return Err("changed");
+    }
+    if cache_miss {
+        if let (Some(cache), Some(mount), Some(fingerprint)) =
+            (cache, mount.as_deref(), fingerprint.as_ref())
+        {
+            cache.put(mount, &version, &fingerprint.sha256);
+        }
     }
     Ok(Entry {
         path: path.to_owned(),
@@ -376,11 +479,14 @@ pub fn capture(
     request: Request,
     emit: impl FnMut(Event) -> Result<(), IndexerError>,
 ) -> Result<(), IndexerError> {
-    capture_inner(request, None, emit)
+    capture_inner(request, None, None, None, None, emit)
 }
 fn capture_inner(
     request: Request,
     control: Option<Arc<WatchControl>>,
+    cache: Option<Arc<inventory::Cache>>,
+    external_cancelled: Option<Arc<AtomicBool>>,
+    receipts: Option<Arc<native_receipts::Receipts>>,
     mut emit: impl FnMut(Event) -> Result<(), IndexerError>,
 ) -> Result<(), IndexerError> {
     if request.version != 1
@@ -443,13 +549,15 @@ fn capture_inner(
         inner: sender,
         sequence: Arc::new(AtomicU64::new(0)),
     };
-    let cancelled = Arc::new(AtomicBool::new(false));
-    let streaming = request
-        .streaming
+    let cancelled = external_cancelled.unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
+    // Durable provisional captures must exclude both sides of ambiguous
+    // names before publishing. The existing namespace guard also works
+    // without a live backup stream.
+    let streaming = (request.streaming || cache.is_some())
         .then(streaming::State::new)
         .transpose()?
         .map(|s| Arc::new(Mutex::new(s)));
-    let changes = if streaming.is_some() {
+    let changes = if request.streaming {
         Some(streaming::watch(&request.root)?)
     } else {
         None
@@ -468,14 +576,15 @@ fn capture_inner(
             ignores: ignores.clone(),
             exclusions: exclusions.clone(),
             invalid: invalid.clone(),
+            receipts: receipts.clone(),
+            cache: cache.clone(),
         });
-        if let Some(state) = streaming.clone() {
+        if let (Some(state), Some(changes)) = (streaming.clone(), changes.as_ref()) {
             let root = root.clone();
             let governor = governor.clone();
             let cancelled = cancelled.clone();
             let finished = finished.clone();
             let sender = sender.clone();
-            let changes = changes.as_ref().unwrap();
             let control = control.clone();
             let policy = policy.clone();
             scope.spawn(move || {
@@ -485,6 +594,7 @@ fn capture_inner(
             });
         }
         let streaming_worker = streaming.clone();
+        let worker_policy = policy.clone();
         let changes_worker = changes.as_ref();
         scope.spawn(move || {
             walker.run(|| {
@@ -492,6 +602,7 @@ fn capture_inner(
                 let cancelled = cancel_worker.clone();
                 let governor = governor_worker.clone();
                 let root = root_worker.clone();
+                let worker_policy = worker_policy.clone();
                 let ignores = ignores.clone();
                 let exclusions = &exclusions;
                 let invalid = invalid.clone();
@@ -568,8 +679,12 @@ fn capture_inner(
                             return WalkState::Skip;
                         }
                     }
-                    match observe(&root, relative, &governor, &cancelled) {
-                        Ok(entry) => {
+                    match worker_policy.observe(&root, relative, &governor, &cancelled) {
+                        Ok(None) => {
+                            send(Event::Ignored);
+                            return WalkState::Skip;
+                        }
+                        Ok(Some(entry)) => {
                             if let Some(state) = &streaming {
                                 let mut state = state.lock().unwrap();
                                 if let Err(reason) =
@@ -578,11 +693,7 @@ fn capture_inner(
                                     send(gap(Some(relative), reason, "subtree"));
                                     return WalkState::Skip;
                                 }
-                                if open_path(&root, relative)
-                                    .and_then(|f| f.metadata().map_err(|_| "unreadable"))
-                                    .map(|m| stamp(&m))
-                                    .ok()
-                                    .as_ref()
+                                if metadata_version(&root, relative).ok().as_ref()
                                     != Some(&entry.version)
                                 {
                                     send(gap(Some(relative), "changed", "subtree"));
@@ -617,7 +728,7 @@ fn capture_inner(
                     WalkState::Continue
                 })
             });
-            if streaming_worker.is_some() {
+            if changes_worker.is_some() {
                 let _ = sender.send(Event::Indexed);
             }
             finished.store(true, Ordering::Relaxed);
@@ -683,15 +794,42 @@ fn capture_inner(
     emit(Event::Complete)
 }
 
-pub fn serve(
+pub fn serve(input: impl BufRead + Send + 'static, output: impl Write) -> Result<(), IndexerError> {
+    serve_with_database(input, output, None)
+}
+
+pub fn serve_with_database(
     mut input: impl BufRead + Send + 'static,
     output: impl Write,
+    database: Option<&Path>,
 ) -> Result<(), IndexerError> {
-    let mut line = String::new();
-    input
-        .read_line(&mut line)
+    let line = inventory::read_request_line(&mut input)?;
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&line).map_err(|_| failure("invalid_request"))?;
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| failure("invalid_request"))?;
+    let scope = object
+        .remove("scope")
+        .map(serde_json::from_value::<inventory::Scope>)
+        .transpose()
         .map_err(|_| failure("invalid_request"))?;
-    let request: Request = serde_json::from_str(&line).map_err(|_| failure("invalid_request"))?;
+    let generation = object
+        .remove("generation")
+        .map(serde_json::from_value::<String>)
+        .transpose()
+        .map_err(|_| failure("invalid_request"))?;
+    let receipts = object
+        .remove("nativeReceiptDirectory")
+        .map(serde_json::from_value::<PathBuf>)
+        .transpose()
+        .map_err(|_| failure("invalid_request"))?;
+    if database.is_some() != scope.is_some()
+        || (scope.is_none() && (generation.is_some() || receipts.is_some()))
+    {
+        return Err(failure("invalid_scope"));
+    }
+    let request: Request = serde_json::from_value(value).map_err(|_| failure("invalid_request"))?;
     let streaming = request.streaming;
     let mut output = BufWriter::with_capacity(65_536, output);
     let control = streaming.then(|| Arc::new(WatchControl::default()));
@@ -717,7 +855,26 @@ pub fn serve(
             }
         });
     }
-    capture_inner(request, control, |event| {
+    if let (Some(database), Some(scope)) = (database, scope) {
+        return inventory::scan(
+            database,
+            request,
+            scope,
+            generation,
+            inventory::ModeKind::Backup,
+            control,
+            receipts,
+            Arc::new(AtomicBool::new(false)),
+            |event| {
+                serde_json::to_writer(&mut output, &event).map_err(|_| failure("output_closed"))?;
+                output
+                    .write_all(b"\n")
+                    .map_err(|_| failure("output_closed"))?;
+                output.flush().map_err(|_| failure("output_closed"))
+            },
+        );
+    }
+    capture_inner(request, control, None, None, None, |event| {
         serde_json::to_writer(&mut output, &event).map_err(|_| failure("output_closed"))?;
         output
             .write_all(b"\n")

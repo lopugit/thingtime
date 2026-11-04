@@ -596,7 +596,7 @@ values, source context and password history. See [the password contract](../pass
 
 ## Mac backup scan implementation
 
-`Commander/crates/commander-indexer/src/backup.rs` adapts the shared bounded Rust
+`filesystem-indexer/crates/indexer/src/backup.rs` adapts the shared bounded Rust
 walker to private JSONL backup observations. `backup_ignore.rs` matches the same
 Git oracle as the web/Apple adapters. `apple/FileSync/.../CommanderBackupCapture.swift`
 runs the bundled helper under the selected grant, validates returned metadata and

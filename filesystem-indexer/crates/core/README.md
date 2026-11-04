@@ -59,7 +59,7 @@ every match, and `noneOf` rejects any match.
 ## Development
 
 ```sh
-cargo fmt --check --manifest-path Commander/crates/commander-core/Cargo.toml
-cargo test --manifest-path Commander/crates/commander-core/Cargo.toml
-cargo clippy --all-targets --all-features --manifest-path Commander/crates/commander-core/Cargo.toml -- -D warnings
+cargo fmt --check --manifest-path filesystem-indexer/crates/core/Cargo.toml
+cargo test --manifest-path filesystem-indexer/crates/core/Cargo.toml
+cargo clippy --all-targets --all-features --manifest-path filesystem-indexer/crates/core/Cargo.toml -- -D warnings
 ```
