@@ -166,7 +166,7 @@ test('a rootless telemetry read reports current worker rates without resetting t
  assert.equal(governorFor(read, context), null);
  const governor = governorFor({ deviceId, rootId: 'connection',
   deviceResourceLimits: { transferBytesPerSecond: 5_000_000, scanBytesPerSecond: 5_000_000, cpuPercent: 15 } }, context);
- governor.transport = { measuredAt: Date.now(), currentUploadBytesPerSecond: 400_000, currentDownloadBytesPerSecond: 0 };
+ governor.observeTransport({ measuredAt: Date.now(), currentUploadBytesPerSecond: 400_000, currentDownloadBytesPerSecond: 0 });
  governor.observeNative({ version: 1, measuredAt: Date.now(), scanBytesPerSecond: 240_000, memoryBytes: 1_048_576 });
  const observation = governorFor(read, context);
  assert.equal(observation, governor);
@@ -179,7 +179,7 @@ test('a rootless telemetry read reports current worker rates without resetting t
  assert.equal(observation.totalBytesPerSecond, 5_000_000);
  assert.equal(observation.policy.cpuPercent, 15);
  assert.equal(governorFor(read, { ...context, ownerId: 'other-owner' }), null);
- governor.transport.measuredAt -= 2500;
+ governor.transportAt -= 2500;
  governor.nativeResources.measuredAt -= 2500;
  assert.equal(observation.snapshot().currentUploadBytesPerSecond, null);
  assert.equal(observation.snapshot().currentDownloadBytesPerSecond, null);
@@ -209,4 +209,19 @@ test('saving a device cap notifies the active dedicated worker without resetting
   assert.equal(governorFor({ action: 'resources', deviceId: 'live-device', deviceResourceLimits: { ...deviceResourceLimits, transferBytesPerSecond: 500 } }, context), g);
   await transfer; assert.equal(received, 2000); assert.ok(performance.now() - start >= 3400, 'active worker retained its previous speed instead of receiving IPC policy');
  } finally { server.close(); await once(server, 'close'); }
+});
+
+test('an old or disconnected transport observation is not restamped by a fresh device read', () => {
+ let now = 1000;
+ const governor = new ResourceGovernor({}, () => now);
+ governor.observeTransport({ cpuPercent: 3, currentUploadBytesPerSecond: 125_000, currentDownloadBytesPerSecond: 0 });
+ assert.equal(governor.snapshot().currentUploadBytesPerSecond, 125_000);
+ assert.equal(governor.snapshot().currentDownloadBytesPerSecond, 0);
+ now += 2_000;
+ assert.equal(governor.snapshot().currentUploadBytesPerSecond, null);
+ assert.equal(governor.snapshot().cpuStatus, 'unavailable');
+ governor.observeTransport({ cpuPercent: 2, currentUploadBytesPerSecond: 1, currentDownloadBytesPerSecond: 2 });
+ governor.clearTransport();
+ assert.equal(governor.snapshot().currentDownloadBytesPerSecond, null);
+ assert.deepEqual(governor.snapshot().cpuScopes, []);
 });

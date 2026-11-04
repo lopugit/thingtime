@@ -46,6 +46,14 @@ class ResourceGovernor {
         if (Number.isSafeInteger(resources.effectiveTransferConcurrency) && resources.effectiveTransferConcurrency > 0) this.nativeTransfer = resources.effectiveTransferConcurrency;
         if (Number.isSafeInteger(resources.effectiveIndexingConcurrency) && resources.effectiveIndexingConcurrency > 0) this.indexing = resources.effectiveIndexingConcurrency;
     }
+    observeTransport(resources) {
+        this.transport = resources; this.transportAt = this.clock();
+        this.sample('transport-process', resources.cpuPercent);
+    }
+    clearTransport() {
+        this.transport = undefined; this.transportAt = undefined;
+        this.sample('transport-process', null);
+    }
     cpu() { const fresh = [...this.samples.values()].filter(x => this.clock() - x.at < 2000); return fresh.length ? Math.min(100, fresh.reduce((s, x) => s + x.percent, 0)) : null; }
     concurrency() { return Math.max(1, Math.floor(Math.min(16, this.policy.transferConcurrency ?? 16) * this.factor)); }
     clearIdleReservations() {
@@ -106,11 +114,12 @@ class ResourceGovernor {
     }
     snapshot() {
         const cpu = this.cpu();
+        const transport = this.transport && this.clock() - this.transportAt < 2000 ? this.transport : undefined;
         const first = this.byteSamples[0], last = this.byteSamples.at(-1), elapsed = first && last ? (last.at - first.at) / 1000 : 0;
-        const current = elapsed >= .25 && this.clock() - last.at < 2000;
+        const current = elapsed >= .25 && elapsed <= 2 && this.clock() - last.at < 2000;
         const measuredAt = Date.now();
-        const transport = this.transport && measuredAt - this.transport.measuredAt < 2000 ? this.transport : undefined;
-        const native = this.nativeResources && measuredAt - this.nativeResources.measuredAt < 2000 ? this.nativeResources : undefined;
+        const nativeAge = measuredAt - this.nativeResources?.measuredAt;
+        const native = nativeAge >= 0 && nativeAge < 2000 ? this.nativeResources : undefined;
         return { ...native, version: 1, cpuPercent: cpu,
             measuredAt,
             currentUploadBytesPerSecond: transport?.currentUploadBytesPerSecond ?? (current ? (last.upload - first.upload) / elapsed : null),
