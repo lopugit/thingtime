@@ -1395,17 +1395,17 @@ export function useApi() {
     // third-party app connections (Reddit, YouTube, Mastodon, …) — link
     // external accounts, browse their feeds, manage AI feed filters
     connections: {
-      providers: useCallback(async () => getJson('/api/v1/connections/providers'), []),
-      list: useCallback(async () => getJson('/api/v1/connections'), []),
+      providers: useCallback(async () => { await requireThingtimeCapability('api.connections-providers', '2.0.0'); return getJson('/api/v1/connections/providers'); }, []),
+      list: useCallback(async () => { await requireThingtimeCapability('api.connections', '2.0.0'); return getJson('/api/v1/connections'); }, []),
       connect: useCallback(
-        async (args) => asyncFetcher.submit({ provider: args?.provider, fields: args?.fields }, { action: '/api/v1/connections' }),
+        async (args) => { await requireThingtimeCapability('api.connections', '2.0.0'); return asyncFetcher.submit({ provider: args?.provider, fields: args?.fields }, { action: '/api/v1/connections' }); },
         [asyncFetcher]
       ),
-      unlink: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/connections/unlink' }), [asyncFetcher]),
+      unlink: useCallback(async (args) => { await requireThingtimeCapability('api.connections-unlink', '2.0.0'); return asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/connections/unlink' }); }, [asyncFetcher]),
       // SSO account linking: begin returns the provider's authorize URL — send
       // the browser there; the callback lands back on /connections
       oauthBegin: useCallback(
-        async (args) => asyncFetcher.submit({ provider: args?.provider }, { action: '/api/v1/connections/oauth/begin' }),
+        async (args) => { await requireThingtimeCapability('api.connections-oauth-begin', '2.0.0'); return asyncFetcher.submit({ provider: args?.provider }, { action: '/api/v1/connections/oauth/begin' }); },
         [asyncFetcher]
       ),
       // the Thingtime-managed virtual YouTube subscription list
@@ -1419,8 +1419,9 @@ export function useApi() {
         [asyncFetcher]
       ),
       feed: useCallback(
-        async (args) =>
-          getJson(
+        async (args) => {
+          await requireThingtimeCapability('api.connections-feed', '2.0.0');
+          return getJson(
             `/api/v1/connections/feed${toQuery({
               connection: args?.connection,
               cursor: args?.cursor,
@@ -1428,20 +1429,21 @@ export function useApi() {
               sync: args?.sync,
               deepen: args?.deepen
             })}`
-          ),
+          ); },
         []
       ),
-      filters: useCallback(async () => getJson('/api/v1/connections/filters'), []),
+      filters: useCallback(async () => { await requireThingtimeCapability('api.connections-filters', '2.0.0'); return getJson('/api/v1/connections/filters'); }, []),
       saveFilter: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          await requireThingtimeCapability('api.connections-filters', '2.0.0');
+          return asyncFetcher.submit(
             { id: args?.id, name: args?.name, prompt: args?.prompt, action: args?.action, enabled: args?.enabled },
             { action: '/api/v1/connections/filters' }
-          ),
+          ); },
         [asyncFetcher]
       ),
       removeFilter: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id, remove: true }, { action: '/api/v1/connections/filters' }),
+        async (args) => { await requireThingtimeCapability('api.connections-filters', '2.0.0'); return asyncFetcher.submit({ id: args?.id, remove: true }, { action: '/api/v1/connections/filters' }); },
         [asyncFetcher]
       )
     },

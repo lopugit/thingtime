@@ -6782,3 +6782,39 @@ module (`THINGTIME_TEST_PLAYWRIGHT_MODULE=<absolute-path>/index.mjs`) and a brow
 binary cache (`PLAYWRIGHT_BROWSERS_PATH=<absolute-cache-path>` when needed). It
 uses its own synthetic sign-in, browser process/profile and loopback18090/18091,
 then closes them; never point this fixture at a personal profile or database.
+
+
+### Social OAuth platform vault setup
+
+Connections API 2.0 uses fixed encrypted admin-secret labels, including
+`connections-google-oauth` and `connections-facebook-oauth`. Provision or update
+the existing label through authorized platform-vault controls; do not create
+duplicate labels. Ambiguous labels fail closed. `google-mail-oauth` remains a
+separate mail integration and is not implicitly reused. Legacy provider client
+ID/secret environment variables are not a fallback.
+
+Each encrypted secret contains this JSON shape (placeholder values only):
+
+```json
+{"environments":{"production":{"origins":{"https://thingtime.com":{"clientId":"PROVIDER_CLIENT_ID","clientSecret":"PROVIDER_CLIENT_SECRET","redirectUri":"https://thingtime.com/api/v1/connections/oauth/callback"}}}}}
+```
+
+Use the deployment's explicit data-environment ID and exact selected origin.
+Register that exact callback in the provider console. Preview and local origins
+need their own entries and approved callback registrations; they cannot borrow
+production configuration. Keep the existing server vault bootstrap keys in their
+approved secret stores. Never put client secrets in client Things or source.
+
+The Google identity card requests openid/profile/email with account selection,
+offline access and PKCE. Google service cards request their own permissions.
+Facebook account linking requests public_profile only; the posts provider is a
+separate user_posts grant. Provider testing mode, eligible test accounts, app
+review and publication remain provider prerequisites. A configured card only
+proves valid vault configuration, not real provider consent or API permission.
+
+Authenticated grants are encrypted per Thingtime owner/account and saved with
+origin/environment/client binding. Reconnect migrates only the caller's legacy
+link while preserving its ID; shared legacy tokens are refused until reconnect.
+Secret rotation keeps compatible grants; changing client, callback or environment
+requires a fresh connection. Disconnect and token refresh serialize through the
+home-plane transactional account path. No provider request API is added here.
