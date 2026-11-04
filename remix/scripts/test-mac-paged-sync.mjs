@@ -233,7 +233,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		console.log('MAC_PAGED_STAGE signup');
 		const manifest = await fetch(base + '/.well-known/thingtime-capabilities.json').then((r) => r.json());
 		assert.equal(manifest.origin, base);
-		assert.equal(manifest.features['api.files'].version, '1.9.0');
+		assert.equal(manifest.features['api.files'].version, '1.10.0');
 		assert.equal(manifest.features['api.file-sync-batches'].version, '1.3.0');
 		const registered = await fetch(base + '/api/v1/auth/register', {
 			method: 'POST',
