@@ -18,6 +18,12 @@ if (parallelDevMode) {
 	app.setName(developmentName);
 	app.setPath('userData', profilePath);
 }
+// Read-only installed CLI discovery runs before settings, sessions, vault state,
+// renderer startup or single-instance forwarding. It never opens profile files.
+if (process.argv.includes('--password-agent-info')) {
+	fs.writeSync(1, JSON.stringify({ profile: app.getPath('userData'), cli: app.isPackaged ? path.join(process.resourcesPath, 'password-agent.mjs') : path.join(__dirname, 'scripts/password-agent.mjs'), supported: ['linux', 'win32'].includes(process.platform) }) + '\n');
+	app.exit(0);
+}
 const { checkEndpointCompatibility, compatibilityError, probeEndpointCapabilities } = require('./lib/endpoint-compatibility.cjs');
 const { prepareAppLocations } = require('./lib/app-locations.cjs');
 const { startRendererServer } = require('./lib/renderer-server.cjs');
@@ -96,6 +102,7 @@ let desktopServicesClosing = false;
 let desktopServicesClosed = false;
 async function closeDesktopServices() {
  const tasks = [];
+ if (process.platform !== 'darwin') tasks.push(passwordProvider.close());
  if (agentBrowsersPromise) tasks.push(agentBrowsersPromise.then(controller => controller.close()));
  if (localRuntime) tasks.push((async () => {
   try { await globalThis[Symbol.for('thingtime.chatgpt-plan.close')]?.(); }
@@ -106,7 +113,7 @@ async function closeDesktopServices() {
 }
 attachQuitSignals(app);
 app.on('before-quit', (event) => {
- if (desktopServicesClosed || (!localRuntime && !agentBrowsersPromise)) return;
+ if (desktopServicesClosed || (!localRuntime && !agentBrowsersPromise && process.platform === 'darwin')) return;
  event.preventDefault();
  if (desktopServicesClosing) return;
  desktopServicesClosing = true;
@@ -1898,7 +1905,9 @@ ipcMain.handle('thingtime-desktop:speech-stop', (event, request) => {
 	return desktopSpeech.stop(request.sessionId);
 });
 
-const passwordProvider = require('./lib/password-provider.cjs').createPasswordProvider({ app, root: __dirname, origin: () => appOrigin, endpoint: activeAccountEndpoint });
+const passwordProvider = require('./lib/password-provider.cjs').createPasswordProvider({ app, root: __dirname, origin: () => appOrigin, endpoint: activeAccountEndpoint,
+  safeStorage, dialog, BrowserWindow, ipcMain, window: () => mainWindow,
+  context: () => ({ origin: appOrigin, endpoint: activeAccountEndpoint(), session: mainWindow?.webContents?.session }) });
 ipcMain.handle('thingtime-desktop:password-provider', (event, request) => passwordProvider(event, request));
 
 ipcMain.handle('thingtime-desktop:mail-sync', (event, request) => desktopMail.sync(event, request));
@@ -2018,6 +2027,7 @@ if (!singleInstanceLock) {
    const partition = rendererPartition();
    await (partition ? session.fromPartition(partition) : session.defaultSession).clearCache();
 			createWindow();
+      await passwordProvider.start()?.catch(() => { console.warn('The native password bridge could not start.'); });
       createApplicationMenu();
       if (!(parallelDevMode && process.env.THINGTIME_DESKTOP_DEV_TEST_ORIGIN)) void checkSelectedEndpointCompatibility({ syncNode: true }).catch((error) => {
         desktopSettingsLastError = error instanceof Error ? error.message : String(error);

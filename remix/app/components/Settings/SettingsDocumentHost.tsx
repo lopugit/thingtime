@@ -17,10 +17,13 @@ export type SettingsDocumentHostProps = {
   defaultDocument: WebpageBlock[];
   scopeKey: string;
   title?: string;
+  editLayoutLabel?: string;
   /** Keep a live commit's transient authority mounted until it settles. */
   layoutEditingDisabled?: boolean;
   /** View-only consumers render the saved document without layout management UI. */
   showLayoutControls?: boolean;
+  /** Opt in to the existing Builder media upload controls in this document. */
+  allowMediaUploads?: boolean;
   /** Keep the duplicate floating Lopu bubble off narrow control workspaces.
    * The shared navigation opener and an already-open assistant remain available. */
   clearMobileLaunchers?: boolean;
@@ -72,7 +75,7 @@ function ScopedSettingsDocument(props: SettingsDocumentHostProps) {
     writable={props.persistence === 'device' || (!!user?.id && !!dataPlane && !user.temporary)} />;
 }
 
-function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', persistence = 'account', accountTransport, children, documentScope, writable, layoutEditingDisabled = false, showLayoutControls = true, clearMobileLaunchers = false, loadFallbackDocument, migrateBlocks }: SettingsDocumentHostProps & {
+function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', editLayoutLabel = 'Edit layout', persistence = 'account', accountTransport, children, documentScope, writable, layoutEditingDisabled = false, showLayoutControls = true, allowMediaUploads = false, clearMobileLaunchers = false, loadFallbackDocument, migrateBlocks }: SettingsDocumentHostProps & {
   documentScope: Parameters<typeof settingsDocumentKey>[0]; writable: boolean;
 }) {
   const key = settingsDocumentKey(documentScope);
@@ -165,19 +168,19 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
   };
   return <Box minW={0} data-settings-document={documentScope.documentKey} data-tt-mobile-control-workspace={clearMobileLaunchers ? true : undefined}>
     {showLayoutControls && <Flex gap={2} mb={2} align="center" flexWrap="wrap">
-      <Button size="xs" variant="ghost" isDisabled={saveBusy || layoutEditingDisabled} onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : 'Edit layout'}</Button>
+      <Button size="xs" variant="ghost" isDisabled={saveBusy || layoutEditingDisabled} onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : editLayoutLabel}</Button>
       {dirty && <Text fontSize="xs">Unsaved layout</Text>}
       {editing && <Button size="xs" isDisabled={!ready || !writable || !dirty || saveBusy} onClick={() => void save()}>Save layout</Button>}
       {!writable && <Text fontSize="xs">Sign in to save a personal layout.</Text>}
     </Flex>}
     {showLayoutControls && error && <Flex gap={2} align="center"><Text role="alert" fontSize="xs">{error}</Text><Button size="xs" onClick={() => setReload(value => value + 1)}>Retry</Button></Flex>}
-    {showLayoutControls && editing ? <SettingsEditor key="edit" draft={draft} name={document.name} onName={name => { if (saving.current) return; revision.current++; setDocument(previous => ({ ...previous, name })); }}>
+    {showLayoutControls && editing ? <SettingsEditor key="edit" allowMediaUploads={allowMediaUploads} draft={draft} name={document.name} onName={name => { if (saving.current) return; revision.current++; setDocument(previous => ({ ...previous, name })); }}>
       {chrome => children({ blocks: document.blocks, chrome, editing: true, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}
     </SettingsEditor> : <React.Fragment key="view">{children({ blocks: document.blocks, chrome: null, editing: false, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}</React.Fragment>}
   </Box>;
 }
 
-function SettingsEditor({ draft, name, onName, children }: { draft: UseWebpageDraft; name: string; onName: (name: string) => void; children: (chrome: BuilderChrome) => React.ReactNode }) {
+function SettingsEditor({ draft, name, onName, allowMediaUploads, children }: { allowMediaUploads: boolean; draft: UseWebpageDraft; name: string; onName: (name: string) => void; children: (chrome: BuilderChrome) => React.ReactNode }) {
   const [open, setOpen] = React.useState(false);
   const inspectBlock = React.useCallback(() => setOpen(true), []);
   const builder = useBuilderChrome(draft, { allowedBlockTypes: SETTINGS_BLOCK_TYPES, onInspect: inspectBlock });
@@ -187,6 +190,7 @@ function SettingsEditor({ draft, name, onName, children }: { draft: UseWebpageDr
     {children(builder.chrome)}{builder.insertMenu}
     {open && <BuilderDrawer allowedBlockTypes={SETTINGS_BLOCK_TYPES} allowDataSources={false} title="Settings layout" mode="site" hideTransfer draft={draft} selectedId={builder.selectedId}
       onSelectBlock={id => builder.chrome.onSelect(id)} onDeselect={builder.deselect} onClose={() => setOpen(false)} pageName={name} onPageName={onName}
+      onUploadToBlock={allowMediaUploads ? builder.uploadToBlock : undefined}
       audienceAcl={['tt:user']} onAudienceAcl={() => {}} helpText="Edit this layout with normal Builder blocks. Live operations pause while editing. Save stores only the authored layout." />}
   </>;
 }

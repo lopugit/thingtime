@@ -2,11 +2,16 @@
 
 import { createHash, randomUUID } from "node:crypto"
 import {
+  accessSync,
+  closeSync,
+  constants,
   cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readSync,
   readlinkSync,
   readdirSync,
   chmodSync,
@@ -21,7 +26,7 @@ import {
 import { mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { pathToFileURL } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import { execFileSync, spawnSync } from "node:child_process"
 
 export const SNAPSHOT_SCHEMA = "thingtime.graphify-snapshot.v1"
@@ -263,17 +268,24 @@ function semanticRichness(value) {
   )
 }
 
-function semanticCacheEntries(cachePath) {
+function semanticCacheNamespaces(cachePath) {
   if (!existsSync(cachePath)) return []
-  return readdirSync(cachePath, { withFileTypes: true })
-    .filter(
-      (entry) =>
-        entry.isFile() && /^[0-9a-f]{64}\.json$/.test(entry.name),
-    )
-    .map((entry) => ({
-      inputKey: entry.name.slice(0, -5),
-      path: path.join(cachePath, entry.name),
-    }))
+  return ["", ...readdirSync(cachePath, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && /^p[0-9a-f]{12}$/.test(entry.name))
+    .map((entry) => entry.name)]
+}
+
+function semanticCacheEntries(cachePath) {
+  return semanticCacheNamespaces(cachePath).flatMap((namespace) => {
+    const directory = path.join(cachePath, namespace)
+    return readdirSync(directory, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /^[0-9a-f]{64}\.json$/.test(entry.name))
+      .map((entry) => ({
+        namespace,
+        inputKey: entry.name.slice(0, -5),
+        path: path.join(directory, entry.name),
+      }))
+  })
 }
 
 /**
@@ -297,6 +309,7 @@ export function ingestSemanticCache(
     const contentHash = sha256Parts([bytes])
     const destination = path.join(
       semanticCasRoot(root),
+      entry.namespace,
       entry.inputKey,
       `${contentHash}.json`,
     )
@@ -323,37 +336,53 @@ export function hydrateSemanticCache(
   if (!existsSync(casRoot)) return []
 
   const hydrated = []
-  for (const inputKey of readdirSync(casRoot).sort()) {
-    if (!/^[0-9a-f]{64}$/.test(inputKey)) continue
-    const inputRoot = path.join(casRoot, inputKey)
-    if (!statSync(inputRoot).isDirectory()) continue
-    const candidates = []
-    for (const name of readdirSync(inputRoot).sort()) {
-      if (!/^[0-9a-f]{64}\.json$/.test(name)) continue
-      const candidatePath = path.join(inputRoot, name)
-      const bytes = readFileSync(candidatePath)
-      const contentHash = sha256Parts([bytes])
-      if (name !== `${contentHash}.json`) {
-        fail(`Corrupt Graphify semantic cache variant: ${candidatePath}`)
+  for (const namespace of semanticCacheNamespaces(casRoot)) {
+    const casDirectory = path.join(casRoot, namespace)
+    const mutableDirectory = path.join(mutableCache, namespace)
+    for (const inputKey of readdirSync(casDirectory).sort()) {
+      if (!/^[0-9a-f]{64}$/.test(inputKey)) continue
+      const inputRoot = path.join(casDirectory, inputKey)
+      if (!statSync(inputRoot).isDirectory()) continue
+      const candidates = []
+      for (const name of readdirSync(inputRoot).sort()) {
+        if (!/^[0-9a-f]{64}\.json$/.test(name)) continue
+        const candidatePath = path.join(inputRoot, name)
+        const bytes = readFileSync(candidatePath)
+        const contentHash = sha256Parts([bytes])
+        if (name !== `${contentHash}.json`) {
+          fail(`Corrupt Graphify semantic cache variant: ${candidatePath}`)
+        }
+        const parsed = safeJson(candidatePath)
+        const richness = semanticRichness(parsed)
+        if (richness < 0) {
+          fail(`Invalid Graphify semantic cache variant: ${candidatePath}`)
+        }
+        candidates.push({ bytes, contentHash, richness })
       }
-      const parsed = safeJson(candidatePath)
-      const richness = semanticRichness(parsed)
-      if (richness < 0) {
-        fail(`Invalid Graphify semantic cache variant: ${candidatePath}`)
-      }
-      candidates.push({ bytes, contentHash, richness })
+      candidates.sort(
+        (left, right) =>
+          right.richness - left.richness ||
+          left.contentHash.localeCompare(right.contentHash),
+      )
+      if (candidates.length === 0) continue
+      const destination = path.join(mutableDirectory, `${inputKey}.json`)
+      mkdirSync(mutableDirectory, { recursive: true })
+      writeFileSync(destination, candidates[0].bytes)
+      hydrated.push(destination)
     }
-    candidates.sort(
-      (left, right) =>
-        right.richness - left.richness ||
-        left.contentHash.localeCompare(right.contentHash),
-    )
-    if (candidates.length === 0) continue
-    const destination = path.join(mutableCache, `${inputKey}.json`)
-    writeFileSync(destination, candidates[0].bytes)
-    hydrated.push(destination)
   }
   return hydrated
+}
+
+function isQueryStampDirectory(snapshotPath, name) {
+  if (name !== "cache") return false
+  const directory = path.join(snapshotPath, name)
+  // Upstream query touches this ignored sidecar next to the resolved graph,
+  // even for a read-only query given an explicit immutable graph path.
+  if (!lstatSync(directory).isDirectory()) return false
+  return readdirSync(directory).every((entry) =>
+    entry === "last_query_stamp" && lstatSync(path.join(directory, entry)).isFile(),
+  )
 }
 
 function snapshotRecord(snapshotPath) {
@@ -367,7 +396,9 @@ function snapshotRecord(snapshotPath) {
     return null
   }
   if (
-    readdirSync(snapshotPath).some((name) => !SNAPSHOT_FILES.has(name))
+    readdirSync(snapshotPath).some(
+      (name) => !SNAPSHOT_FILES.has(name) && !isQueryStampDirectory(snapshotPath, name),
+    )
   ) {
     return null
   }
@@ -572,7 +603,82 @@ function prepareWorkingOutput(root, sourceFingerprint) {
   return workRoot
 }
 
-function invokeGraphify(root, outputPath, args) {
+function graphifyPython() {
+  if (process.env.GRAPHIFY_PYTHON) return process.env.GRAPHIFY_PYTHON
+  for (const directory of (process.env.PATH ?? "").split(path.delimiter)) {
+    const executable = path.join(directory, "graphify")
+    try {
+      accessSync(executable, constants.X_OK)
+    } catch {
+      continue
+    }
+    const file = openSync(executable, "r")
+    try {
+      const header = Buffer.alloc(4096)
+      const size = readSync(file, header, 0, header.length, 0)
+      const interpreter = /^#!\s*(\/[^\r\n]+)\r?\n/.exec(
+        header.toString("utf8", 0, size),
+      )?.[1]
+      if (interpreter && /(?:^|\/)python[\d.]*$/.test(interpreter)) {
+        return interpreter
+      }
+      break
+    } finally {
+      closeSync(file)
+    }
+  }
+  // Standard installs use the system interpreter; binary/launcher
+  // distributions can point GRAPHIFY_PYTHON to their Python environment.
+  return "python3"
+}
+
+function extractSemanticScope(root, args) {
+  const files = []
+  const graphifyArgs = []
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+    if (arg !== "--semantic-file") {
+      graphifyArgs.push(arg)
+      continue
+    }
+    const source = args[++index]
+    if (!source || source.startsWith("-")) fail("--semantic-file requires a path")
+    const absolute = path.resolve(root, source)
+    const relative = path.relative(root, absolute)
+    if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`)) {
+      fail("--semantic-file requires a source inside the repository")
+    }
+    files.push(relative)
+  }
+  if (files.length) {
+    const [, target] = graphifyArgs
+    if (graphifyArgs[0] !== "extract" || !target || path.resolve(root, target) !== root) {
+      fail("Use extract . --semantic-file <path> for scoped semantic extraction")
+    }
+    const incompatible = new Set([
+      "--allow-dedup-shrink", "--allow-partial", "--code-only", "--exclude",
+      "--force", "--mode", "--no-cluster", "--out", "--token-budget",
+    ])
+    for (const arg of graphifyArgs) {
+      if (incompatible.has(arg.split("=", 1)[0])) {
+        fail(`${arg} is incompatible with scoped semantic extraction`)
+      }
+    }
+    if (["1", "true", "yes"].includes(process.env.GRAPHIFY_FORCE?.toLowerCase())) {
+      fail("GRAPHIFY_FORCE is incompatible with scoped semantic extraction")
+    }
+  }
+  const flags = new Set(graphifyArgs.map((arg) => arg.split("=", 1)[0]))
+  const strict = graphifyArgs[0] === "extract" && !flags.has("--code-only")
+  if (strict) {
+    for (const flag of ["--allow-partial", "--out", "--output", "--token-budget"]) {
+      if (flags.has(flag)) fail(`${flag} is incompatible with verified semantic extraction`)
+    }
+  }
+  return { graphifyArgs, files: strict ? [...new Set(files)] : null }
+}
+
+function invokeGraphify(root, outputPath, args, semanticFiles = null) {
   const env = {
     ...process.env,
     GRAPHIFY_OUT: outputPath,
@@ -580,7 +686,19 @@ function invokeGraphify(root, outputPath, args) {
       process.env.GRAPHIFY_VIZ_NODE_LIMIT || "1000000",
     THINGTIME_GRAPHIFY_CAS_CHILD: "1",
   }
-  const result = spawnSync("graphify", args, {
+  let command = "graphify"
+  let commandArgs = args
+  if (semanticFiles !== null) {
+    command = graphifyPython()
+    commandArgs = [
+      fileURLToPath(new URL("./graphify-semantic.py", import.meta.url)),
+      ...args,
+    ]
+    env.THINGTIME_GRAPHIFY_SEMANTIC_FILES = JSON.stringify(semanticFiles)
+    // Graphify otherwise re-execs as its stock module, losing the adapter.
+    env.PYTHONHASHSEED ??= "0"
+  }
+  const result = spawnSync(command, commandArgs, {
     cwd: root,
     env,
     stdio: "inherit",
@@ -632,6 +750,7 @@ export function finalizeSnapshot(
     sourceTree,
     version = graphifyVersion(),
     minimumNodeCount = 0,
+    ingestWorkingCache = false,
   },
 ) {
   const graph = validatePortableOutput(workingOutput)
@@ -642,6 +761,9 @@ export function finalizeSnapshot(
     fail(
       `Graphify output collapsed from ${minimumNodeCount} to ${graph.nodes.length} nodes; rerun an intentional large deletion with --force`,
     )
+  }
+  if (ingestWorkingCache) {
+    ingestSemanticCache(root, path.join(workingOutput, "cache", "semantic"))
   }
   removeCacheLink(workingOutput)
   const digest = artifactHash(workingOutput, version)
@@ -768,6 +890,7 @@ export function activateSnapshot(root, snapshot) {
 }
 
 function runMutation(root, args) {
+  const { graphifyArgs, files } = extractSemanticScope(root, args)
   const retention = snapshotRetentionLimit()
   return withRepositoryLock(root, () => {
     const fingerprint = computeSourceFingerprint(root)
@@ -779,18 +902,24 @@ function runMutation(root, args) {
       fingerprint.sourceFingerprint,
     )
     try {
-      invokeGraphify(root, workingOutput, args)
+      invokeGraphify(root, workingOutput, graphifyArgs, files)
       if (args[0] === "extract") {
-        invokeGraphify(root, workingOutput, ["cluster-only", root])
+        // This derived step must not fan out into more backend requests.
+        // Existing labels are reused; operators can name new communities
+        // separately through the explicit label command.
+        invokeGraphify(root, workingOutput, ["cluster-only", root, "--no-label"])
       }
       invokeGraphify(root, workingOutput, ["export", "html"])
-      ingestSemanticCache(
-        root,
-        path.join(workingOutput, "cache", "semantic"),
-      )
+      if (
+        files !== null &&
+        computeSourceFingerprint(root).sourceFingerprint !== fingerprint.sourceFingerprint
+      ) {
+        fail("Thingtime sources changed during semantic extraction; retry with a stable source tree")
+      }
       const snapshot = finalizeSnapshot(root, workingOutput, {
         ...fingerprint,
         minimumNodeCount,
+        ingestWorkingCache: true,
       })
       activateSnapshot(root, snapshot)
       pruneSnapshots(root, snapshot, retention)

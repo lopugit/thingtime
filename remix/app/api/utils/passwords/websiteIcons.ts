@@ -47,6 +47,22 @@ export function declaredWebsiteIcons(html:string,base:string):string[]{
   return [...new Set(result)];
 }
 
+/** Some product pages share the parent site's favicon but publish their own
+ * mark as an image. Only the caller's pinned official asset namespace matches. */
+export function declaredBrandImages(html: string, matches: (url: URL) => boolean): string[] {
+  const result = new Set<string>();
+  walk(parse(html) as Node, node => {
+    if (node.tagName !== 'img') return;
+    const src = node.attrs?.find(attr => attr.name === 'src')?.value;
+    if (!src) return;
+    try {
+      const url = new URL(src);
+      if (url.protocol === 'https:' && !url.username && !url.password && matches(url)) result.add(url.href);
+    } catch { /* Ignore relative or invalid sources for a pinned namespace. */ }
+  });
+  return [...result];
+}
+
 /** Only self-contained vector primitives reach resvg. No scripts, foreign
  * documents, fonts, files, data images or network references are retained. */
 function selfContainedSvg(bytes:Buffer){
@@ -119,15 +135,48 @@ export async function decodeWebsiteIcon(bytes:Buffer,_type:string,signal?:AbortS
   throw new Error('No usable icon');
 }
 
-export async function resolveWebsiteIcon(origins:string[],signal:AbortSignal,deps={fetch:fetchPublicIconResource,decode:decodeWebsiteIcon},authorize=async()=>{}):Promise<Buffer|null>{
-  for(const origin of origins){
-    signal.throwIfAborted();let icons:string[]=[];
-    try{const page=await deps.fetch(origin+'/',AbortSignal.any([signal,AbortSignal.timeout(3500)]),undefined,authorize);if(['text/html','application/xhtml+xml'].includes(page.type))icons=declaredWebsiteIcons(page.bytes.toString('utf8'),page.url);}catch{signal.throwIfAborted();}
-    icons.push(origin+'/favicon.ico');
-    for(const url of new Set(icons)){try{
-      const resource=await deps.fetch(url,AbortSignal.any([signal,AbortSignal.timeout(3500)]),undefined,authorize);
-      const image=await deps.decode(resource.bytes,resource.type,signal);signal.throwIfAborted();return image;
-    }catch{signal.throwIfAborted();}}
+type WebsiteIconDeps = { fetch: typeof fetchPublicIconResource; decode: typeof decodeWebsiteIcon };
+const websiteIconDeps: WebsiteIconDeps = { fetch: fetchPublicIconResource, decode: decodeWebsiteIcon };
+
+export async function resolvePublicPageIcon(pageUrl: string, signal: AbortSignal, {
+  deps = websiteIconDeps,
+  authorize = async () => {},
+  discover = declaredWebsiteIcons,
+  useOriginFavicon = true,
+  publishedIcon,
+  acceptedImageType = (_type: string) => true,
+}: {
+  deps?: WebsiteIconDeps;
+  authorize?: () => Promise<void>;
+  discover?: (html: string, base: string) => string[];
+  useOriginFavicon?: boolean;
+  publishedIcon?: string;
+  acceptedImageType?: (type: string) => boolean;
+} = {}): Promise<Buffer | null> {
+  signal.throwIfAborted();
+  let icons: string[] = [];
+  try {
+    const page = await deps.fetch(pageUrl, AbortSignal.any([signal, AbortSignal.timeout(3500)]), undefined, authorize);
+    if (['text/html', 'application/xhtml+xml'].includes(page.type)) icons = discover(page.bytes.toString('utf8'), page.url);
+  } catch { signal.throwIfAborted(); }
+  if (publishedIcon) icons.push(publishedIcon);
+  if (useOriginFavicon) icons.push(new URL('/favicon.ico', pageUrl).href);
+  for (const url of new Set(icons)) {
+    try {
+      const resource = await deps.fetch(url, AbortSignal.any([signal, AbortSignal.timeout(3500)]), undefined, authorize);
+      if (!acceptedImageType(resource.type)) continue;
+      const image = await deps.decode(resource.bytes, resource.type, signal);
+      signal.throwIfAborted();
+      return image;
+    } catch { signal.throwIfAborted(); }
+  }
+  return null;
+}
+
+export async function resolveWebsiteIcon(origins: string[], signal: AbortSignal, deps = websiteIconDeps, authorize = async () => {}): Promise<Buffer | null> {
+  for (const origin of origins) {
+    const image = await resolvePublicPageIcon(origin + '/', signal, { deps, authorize });
+    if (image) return image;
   }
   return null;
 }

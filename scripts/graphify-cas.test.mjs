@@ -127,6 +127,25 @@ test("immutable output variants coexist and richer valid output wins", () => {
   }
 })
 
+test("a Graphify query stamp does not invalidate the immutable baseline", () => {
+  const root = fixture()
+  try {
+    const current = computeSourceFingerprint(root)
+    const snapshot = finalizeSnapshot(root, writeOutput(root, "queried", 3), {
+      ...current,
+      version: "test",
+    })
+    const cache = path.join(snapshot.path, "cache")
+    mkdirSync(cache)
+    writeFileSync(path.join(cache, "last_query_stamp"), "1")
+    assert.equal(selectSnapshot(root, current.sourceFingerprint)?.path, snapshot.path)
+    writeFileSync(path.join(cache, "unexpected"), "unrelated")
+    assert.equal(selectSnapshot(root, current.sourceFingerprint), null)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test("bounded retention keeps the active snapshot and prunes superseded trees", () => {
   const root = fixture()
   try {

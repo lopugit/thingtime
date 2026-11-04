@@ -602,3 +602,10 @@ a fixed operation. Token envelopes never cross the response boundary.
 Generic Things 1.46.3 also keeps private account and named grant metadata
 behind the origin-scoped Connections API. See
 `test:connections:oauth` and `test:api-capabilities`.
+
+Connection provider artwork negotiates `api.connections-provider-icon` 1.0.0.
+`GET /api/v1/connections/provider-icon?provider=<built-in-id>` serves cached
+PNG bytes, 204 when unavailable, or 404 for an unknown provider. This public
+asset stays on the document origin without opening a data-plane connection or
+forwarding user headers to the provider. Verify both manifests and route
+registration with `test:api-capabilities` and `test:connections:built`.

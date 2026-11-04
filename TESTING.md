@@ -1,5 +1,16 @@
 # TESTING.md — per-area manual test checklists
 
+## Linux and Windows native password bridge
+
+- [ ] Build the intended platform package, install with the existing profile preserved, launch with the normal Chromium sandbox, and negotiate the shipped `native.passwords` 1.0.0 manifest. macOS still reports its existing Apple bridge 1.2.0.
+- [ ] Verify OS-backed encryption (Linux libsecret/KWallet; Windows DPAPI), private file permissions/ACLs, and refusal of Linux basic_text or unavailable keyring. Keep first keyring initialization and first Thingtime sign-in distinct from broker availability.
+- [ ] Connect the exact signed-in owner/API origin, approve a bounded task, generate/save/read back a synthetic credential, and retry the same request ID without creating a different password. No secret appears in CLI output, logs, screenshots or grant metadata.
+- [ ] On the installed app, approve the real editable per-entry verification view; wrong password and cancellation deliver nothing. Confirm current-password Always policy and remembered-device policy remain effective. Inspect desktop/narrow/error states and scroll top to bottom without overflow.
+- [ ] Fill an authorized HTTPS top-level document and compare the destination values with the isolated vault source internally. Refuse wrong origin/account/port, cross-origin form, iframe, hidden/ambiguous field, changed document, stale approval and revoked grant. Never submit automatically.
+- [ ] On Linux, use a separate synthetic D-Bus/HOME keyring to verify locked → unlocked on the same daemon, wrong-password refusal, wrong peer refusal and revocation immediately before delivery. Do not use or reset a real login keyring for this test.
+- [ ] Sign out, switch account/API origin, disconnect, expire/release scope and quit; verify grant invalidation and task-browser/profile cleanup. Validate the Windows named pipe and actual DPAPI on a Windows runner separately from a personal-account GUI acceptance.
+- [ ] Record installed personal-account/service sign-in and required passkey presence separately. A successful synthetic API, runtime or package check is not that acceptance.
+
 ## Builder Thing navigation (2026-10-29)
 
 - [ ] Create a page, Component, Action, Schema, data Thing and app folder through Builder. Exact-ID API reads and reloads retain `builder-thing` in the existing `thingtime` array without replacing their other schemas. Ordinary data created outside Builder remains ordinary data.
@@ -4380,6 +4391,16 @@ email whose link points at the attacker.
       At desktop and 375px, verify the controls can receive keyboard focus and
       stay clear of the drawer trigger and Commander. Open and dismiss the
       drawer and Commander to confirm both remain reachable.
+
+- [ ] In the iOS app’s URL view, repeat Back, Forward and Refresh after
+      navigating from Home to another Thingtime page. On a narrow phone,
+      confirm that the buttons sit below the status bar and remain tappable
+      alongside the drawer, search, account and notifications. Verify that
+      Refresh loads a new document at the same URL.
+      For a browser regression, set `THINGTIME_WEB_URL` to the task-owned
+      loopback Vite shell and run `PLAYWRIGHT_MODULE=<installed entry> node
+      remix/scripts/navbar-history-acceptance.mjs`. The runner verifies desktop
+      Chrome and the iOS bridge layout at 390, 375, and 320px.
 
 ## Profile page (`remix/app/components/Profile/ProfilePage.tsx`)
 
@@ -14045,6 +14066,17 @@ separate from deterministic discovery/lease tests.
   Never reuse real-account credentials in isolated fixture browsers. Passing the
   synthetic tests does not establish real Google/Meta or installed-app acceptance.
 
+- Connections provider marks: at desktop and narrow mobile widths, scroll the
+  catalog through its last card. Compare Google, Gmail, Drive, Docs, Sheets,
+  Calendar and Facebook to their official sites. Confirm identical card icon
+  dimensions while loading and when an icon response fails, with no horizontal
+  overflow or duplicate accessible name. Check that the credential form repeats
+  the provider's mark and sign-in buttons still select the same providers. Demo
+  and generic RSS should use the local mark. No browser request should reach a
+  third-party icon host. In **Edit provider cards**, select the image, title,
+  description and Connect button separately. Verify Upload appears first and
+  that a URL override, title and button edits persist across save and reload.
+
 ### Mac symlinks and collapsed connection progress — 2026-11-03
 
 - [x] Preserve opaque relative, absolute, broken, looping and non-UTF8 link targets through native scan/read and cloud metadata; distinguish an ordinary file containing the same bytes. Do not follow a link or a symlink ancestor outside the selected grant.
@@ -14127,6 +14159,14 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ### Mac strict inventory job
 
+- [ ] Run `swift test --package-path macos/ThingtimeNode --filter MacFolderSyncDialogTests`.
+  Verify the folder chooser opens as a sheet, leaves the main actor responsive,
+  dismisses its own sheet on cancellation, and permits a second chooser.
+- [ ] In the signed Mac app, open the local folder chooser, select **Existing
+  folder**, and choose a disposable fixture. Verify the native downloads
+  approval prompt opens for that exact folder. Repeat and cancel the chooser,
+  then verify device status and folder listing still respond and the chooser
+  opens again.
 - [ ] Run `swift test --package-path macos/ThingtimeNode --filter MacFolderSyncTests`
   and `npm --prefix remix run test:file-sync`. The native regression advances the
   job clock beyond 270 seconds while the inventory remains private, then checks

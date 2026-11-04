@@ -625,6 +625,8 @@ final class MacFolderSyncTests: XCTestCase {
         let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
         let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
         let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
+        let lateSelection = folder.appendingPathComponent("late-selection", isDirectory: true)
+        try FileManager.default.createDirectory(at: lateSelection, withIntermediateDirectories: false)
         let service = try MacFolderSync(origin: origin, store: store,
             staging: MobileSyncStaging(directory: folder.appendingPathComponent("private")),
             verify: { _, _ in
@@ -636,7 +638,7 @@ final class MacFolderSyncTests: XCTestCase {
                 await withCheckedContinuation { pickerGate = $0; pickerStarted.fulfill() }
             }, approve: { _ in true },
             inventories: NativeRustFixture.inventory(directory: folder.appendingPathComponent("inventories")),
-            cancelDialog: { pickerGate?.resume(returning: nil); pickerGate = nil })
+            cancelDialog: { pickerGate?.resume(returning: lateSelection); pickerGate = nil })
         defer { backupGate?.resume(); pickerGate?.resume(returning: nil); service.suspend() }
         let fields = backupFields(grant.id)
         let begin = try await service.handle(request("scan-capture", fields)).decode([String: JSONValue].self)
@@ -650,6 +652,7 @@ final class MacFolderSyncTests: XCTestCase {
         _ = try await service.handle(request("suspend", id: requestId))
         await rejects { try await pending.value }
         XCTAssertNil(pickerGate)
+        XCTAssertEqual(try store.list(owner).map(\.id), [grant.id])
         backupGate?.resume(); backupGate = nil
         let completed = try await awaitBackup(service, fields: fields)
         let status = try XCTUnwrap(completed["backupCapture"]).decode([String: JSONValue].self)

@@ -201,6 +201,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/connections/filters': () => import('../../../app/routes/api/v1/connections/filters/_filters'),
   'v1/connections/oauth/begin': () => import('../../../app/routes/api/v1/connections/oauth/begin/_begin'),
   'v1/connections/oauth/callback': () => import('../../../app/routes/api/v1/connections/oauth/callback/_callback'),
+  'v1/connections/provider-icon': () => import('../../../app/routes/api/v1/connections/provider-icon/_provider-icon'),
   'v1/connections/providers': () => import('../../../app/routes/api/v1/connections/providers/_providers'),
   'v1/connections/named': () => import('../../../app/routes/api/v1/connections/named/_named'),
   'v1/connections/unlink': () => import('../../../app/routes/api/v1/connections/unlink/_unlink'),
@@ -403,6 +404,15 @@ export default defineHandler(async (event) => {
     }
 
     return jsonResponse(createApiDocPayload(doc, new URL(event.req.url).origin));
+  }
+
+  // Fixed public provider artwork is an asset of the document origin. It
+  // never reads the account, selected data plane, or fallback API.
+  if (path === 'v1/connections/provider-icon') {
+    if (method !== 'GET' && method !== 'HEAD') return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD' } });
+    const route = await routeModules['v1/connections/provider-icon']();
+    const response = normalizeResponse(await route.loader!({ request: event.req }));
+    return method === 'HEAD' ? new Response(null, { status: response.status, headers: response.headers }) : response;
   }
 
   if (shouldProxyApiToFallback(event.req)) {
