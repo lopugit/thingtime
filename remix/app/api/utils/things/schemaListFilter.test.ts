@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { listSchemaIdMatch, listCrystalIdMatch } from './things';
+import { listSchemaIdMatch, listCrystalIdMatch, parseChronoCursor } from './things';
 
 test('optional saved Schema Thing ID becomes an exact crystal predicate before paging', () => {
 	assert.deepEqual(listSchemaIdMatch(null), { ok: true, match: null });
@@ -22,5 +22,16 @@ test('schema list filter rejects ambiguous or operator-shaped IDs', () => {
 		assert.equal(result.ok, false, String(value));
 		if (!result.ok) assert.equal(result.status, 400);
 		assert.equal(listCrystalIdMatch('parentId', value).ok, false, String(value));
+	}
+});
+
+
+test('chronological pagination keeps the complete ID after the timestamp', () => {
+	assert.deepEqual(parseChronoCursor('1720000000000_stop_with_underscores'), {
+		createdAt: new Date(1720000000000),
+		id: 'stop_with_underscores'
+	});
+	for (const invalid of ['1720000000000_', '_stop', 'NaN_stop', '9e99_stop']) {
+		assert.equal(parseChronoCursor(invalid), null);
 	}
 });

@@ -34,6 +34,7 @@ import {
 import { isCustomMongoEndpointActive } from '~/api/utils/mongodb/endpoint';
 import { parseCommentSort } from '~/api/utils/things/updownCore';
 import { sharedThingRead } from './sharedThingRead';
+import { readThingNumericSummary } from '~/api/utils/things/numericSummary';
 import { deleteOwnedChatArchive } from '~/api/utils/things/chatArchiveOwnerTransfer';
 import { renameLibraryThing } from '~/api/utils/things/renameLibraryThing';
 import { readOwnedChatArchive } from '~/api/utils/things/chatArchiveReadTransfer';
@@ -107,6 +108,15 @@ export const loader = async ({ request }: { request: Request }) => {
   const viewer = withLinkKeys(withFoundPostBrowser(viewerOf(user, actorPat(actor)), request, actor.kind === 'anonymous'), [(params.get('key') || '').trim()]);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
+
+  if (params.has('maxCrystalField') || params.has('excludeArchived')) {
+    const headers = { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' };
+    // Account-scoped OAuth tokens use PAT-shaped authorization with CORS.
+    const kind = actor.kind === 'pat' && actor.cors ? 'app' : actor.kind;
+    const result = await readThingNumericSummary(params, kind, (query) => listThings(viewer, query, null, { signal: request.signal }), request.signal);
+    if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status, headers });
+    return json(result, { headers });
+  }
 
   const commentProjection = params.has('commentProjection');
   if (commentProjection) {

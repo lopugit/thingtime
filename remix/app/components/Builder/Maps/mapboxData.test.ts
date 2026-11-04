@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { activeMapboxNavigation, mapboxFavouritePoints, mapboxHeight, mapboxOrderedRoutePoints, mapboxPoints, mapboxRoute, mapboxStyle, publicMapboxToken, validCoordinates } from './mapboxData';
+import { activeMapboxNavigation, mapboxFavouritePoints, mapboxHeight, markerSelection, mapboxOrderedRoutePoints, mapboxPoints, mapboxRoute, mapboxStyle, publicMapboxToken, validCoordinates } from './mapboxData';
 
 test('Mapbox primitives retain only valid finite coordinates', () => {
 	assert.equal(validCoordinates([180, 90]), true);
@@ -56,4 +56,52 @@ test('browser configuration accepts only public Mapbox tokens', () => {
 	assert.equal(publicMapboxToken({ publicToken: 'pk.sample-token' }), 'pk.sample-token');
 	assert.equal(publicMapboxToken({ publicToken: 'sk.secret-token' }), null);
 	assert.equal(publicMapboxToken({ publicToken: 'pk.bad token' }), null);
+});
+
+
+test('stops inherit favourite marker appearance but can independently clear or override fields', () => {
+	const crystal = {
+		title: 'Place', longitude: 144, latitude: -37, markerIcon: '★',
+		markerLabelMode: 'both', markerLabel: 'Pick-up', markerIcons: '♿, 🚲\n ',
+		markerAvatarAttachmentId: 'account-photo'
+	};
+	const [favourite] = mapboxFavouritePoints([{ id: 'place', crystal }]);
+	assert.deepEqual(favourite.appearance, {
+		markerIcon: '★', markerLabelMode: 'both', customLabel: 'Pick-up', markerIcons: ['♿', '🚲'],
+		avatarSrc: '/api/v1/attachments/content?id=account-photo'
+	});
+	const [stop] = mapboxOrderedRoutePoints({
+		points: [{ id: 'stop', label: 'Stop', coordinates: [144, -37] }],
+		items: [{ id: 'stop', favorite: { crystal }, crystal: { rank: 3, markerIcon: '📦', markerIcons: '', markerAvatarAttachmentId: '' } }]
+	}, null);
+	assert.deepEqual(stop.appearance, { ...favourite.appearance, markerIcon: '📦', markerIcons: [], avatarSrc: '' });
+});
+
+test('markers cannot source avatars from a URL or inject attachment query options', () => {
+	for (const markerAvatarAttachmentId of ['https://example.com/avatar', 'photo&key=secret', 'javascript:alert(1)']) {
+		const [point] = mapboxPoints([{ id: 'point', coordinates: [144, -37], markerAvatarAttachmentId }]);
+		assert.equal(point.appearance?.avatarSrc, '');
+	}
+	const [point] = mapboxPoints([{ id: 'point', coordinates: [144, -37], markerAvatar: 'https://example.com/avatar' }]);
+	assert.equal(point.appearance?.avatarSrc, undefined);
+});
+
+test('favourite and stop selection can use separate local state without changing query', () => {
+	const config = { onSelectState: 'favouriteId', onRouteSelectState: 'stopId', onSelectQuery: 'legacy' };
+	const query = { routeId: 'current' };
+	assert.deepEqual(markerSelection({ id: 'a', group: 'favourite' }, config, query), { op: 'set', key: 'favouriteId', value: 'a', clear: ['stopId'] });
+	assert.deepEqual(markerSelection({ id: 'b', group: 'route' }, config, query), { op: 'set', key: 'stopId', value: 'b', clear: ['favouriteId'] });
+	assert.deepEqual(markerSelection({ id: 'a', group: 'favourite' }, { onSelectQuery: 'legacy' }, query), {
+		op: 'query', params: { routeId: 'current', legacy: 'a' }
+	});
+	assert.deepEqual(markerSelection({ id: 'b', group: 'route' }, { onRouteSelectQuery: 'stopId', queryScope: 'page' }, query), {
+		op: 'query', scope: 'page', params: { routeId: 'current', stopId: 'b' }
+	});
+	const both = { onSelectQuery: 'favoriteId', onRouteSelectQuery: 'stopId', queryScope: 'page' };
+	assert.deepEqual(markerSelection({ id: 'b', group: 'route' }, both, { ...query, favoriteId: 'a' }), {
+		op: 'query', scope: 'page', params: { routeId: 'current', stopId: 'b' }
+	});
+	assert.deepEqual(markerSelection({ id: 'a', group: 'favourite' }, both, { ...query, stopId: 'b' }), {
+		op: 'query', scope: 'page', params: { routeId: 'current', favoriteId: 'a' }
+	});
 });

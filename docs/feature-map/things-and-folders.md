@@ -754,3 +754,14 @@ folder. The destination lookup reads only saved sync configurations and exact
 folder ancestry, once per distinct folder in the current operation. Other
 uploads keep their ordinary attachment placement. The sync inventory still
 enumerates only canonical files and folders.
+
+## Numeric summaries
+
+`GET /api/v1/things` (1.47.0) accepts `maxCrystalField` for first-party owner/PAT
+`thingtime=data` lists with exact `schemaId` and `parentId`; `excludeArchived=true`
+omits archived entries. `numericSummary.ts` streams the existing `listThings`
+projection and accumulates finite numbers without an item-count cap or a new
+index. It returns only a complete `summary.max`, or null for no numbers. Abort,
+pagination and access failures never return a partial maximum. This read does
+not allocate an atomic sequence. Focused tests cover filtering and complete
+pagination; real API acceptance must verify separate account/PAT boundaries.

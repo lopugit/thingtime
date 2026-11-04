@@ -2,7 +2,7 @@ import React from 'react';
 import { isTransientBlockTarget, TRANSIENT_BLOCK_ACTION } from '../Builder/transientBlockActions';
 import { CATALOG_RECORD_ACTION } from '~/schemas/catalogRecordsSuite';
 import { LOCAL_UI_ACTION, localQueryFormInput } from './localUiAction';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -89,11 +89,14 @@ export const clickTtActionForEnter = (event: React.KeyboardEvent, requireFieldse
 	const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
 	if (!submit) return;
 	const action = submit.getAttribute('data-tt-action');
-	const inputs = submit.getAttribute('data-tt-action-inputs') || '';
-	if (action !== LOCAL_UI_ACTION || /"op":"search"/.test(inputs)) {
-		event.preventDefault();
-		submit.click();
+	if (action === LOCAL_UI_ACTION) {
+		try {
+			const input = JSON.parse(submit.getAttribute('data-tt-action-inputs') || '{}');
+			if (input?.op !== 'search' && !(input?.op === 'query' && input.scope === 'page' && input.form === true)) return;
+		} catch { return; }
 	}
+	event.preventDefault();
+	submit.click();
 };
 
 // A result that carries a `message` string narrates itself in the toast —
@@ -141,8 +144,13 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 	runtimeRef.current = runtime;
 	const user = useCurrentUser();
 	const signedIn = !!user?.id;
-	const identityRef = React.useRef(user?.id);
-	identityRef.current = user?.id;
+	const location = useLocation();
+	// A local selection keeps the route generation. Account/access changes
+	// and real navigation retire async confirmations and completions.
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque action generation
+	const actionIdentity = React.useMemo(() => ({}), [user?.id, runtime.identity, location.key]);
+	const identityRef = React.useRef(actionIdentity);
+	identityRef.current = actionIdentity;
 	const navigate = useNavigate();
 
 	return React.useCallback(
@@ -160,7 +168,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			if (tag === 'input' || tag === 'select' || tag === 'textarea' || tag === 'option' || tag === 'label') return;
 			event.preventDefault();
 			event.stopPropagation();
-			if (busyRef.current || control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true') return;
+			if (control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true') return;
 			const action = control.getAttribute('data-tt-action') || '';
 			if (action === '$transient') return; // An enclosing transient host owns this intent; never persist or dispatch it.
 			if (!action) return;
@@ -180,6 +188,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 				} catch {}
 				return;
 			}
+			if (busyRef.current) return;
 			if (action === REFRESH_ACTION) {
 				runtimeRef.current.refresh();
 				return;
@@ -298,7 +307,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 				} finally {
 					control.removeAttribute('aria-busy');
 					busyRef.current = false;
-					if (mountedRef.current) reportPending?.(null);
+					if (mountedRef.current && identity === identityRef.current) reportPending?.(null);
 				}
 			})();
 		},
