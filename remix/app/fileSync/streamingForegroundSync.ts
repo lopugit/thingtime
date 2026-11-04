@@ -100,6 +100,7 @@ export async function streamForegroundSync(
 	if (!state.directions) state = await runs.backfillDirections(spec) ?? state;
  let priorityReadiness: PriorityReadiness | undefined;
 	let lastProgress: ForegroundSyncProgress | undefined;
+	let activeFile: Pick<ForegroundSyncProgress, 'path' | 'bytes' | 'size' | 'direction'> | undefined;
 	const publishProgress = (value: ForegroundSyncProgress) => { lastProgress = value; input.progress(value); };
 	const coverage = () => ({
 		...(priorityReadiness ? { priorityReadiness } : {}),
@@ -109,7 +110,7 @@ export async function streamForegroundSync(
 		...(skipped === undefined ? {} : { skipped, coverage: 'partial' as const, consistency: 'per-entry' as const })
 	});
 	const ignore = createSyncIgnorePolicy(configuration.ignoreRules, configuration.excludedPaths);
-	const report = () => publishProgress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, directions: state.directions, indexed, ...coverage() });
+	const report = () => publishProgress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, directions: state.directions, indexed, ...coverage(), ...activeFile });
 	const bulk = local && !twoWay && input.nativeOperationGuards && input.uploadBatch && !input.runtime.authorizeMutation ? input.uploadBatch : undefined;
 	const folderBulk = local && !twoWay && input.nativeOperationGuards && input.folderBatch && !input.runtime.authorizeMutation ? input.folderBatch : undefined;
 	const batching = !!bulk || !!folderBulk;
@@ -156,7 +157,8 @@ export async function streamForegroundSync(
 			openSource,
 			progress: (path, bytes, size, direction) => {
 				check();
-				publishProgress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, directions: state.directions, indexed, path, bytes, size, ...coverage(), ...(direction ? { direction } : {}) });
+				activeFile = { path, bytes, size, ...(direction ? { direction } : {}) };
+				report();
 			}
 		},
 		twoWay ? { ...runtime, beforeFilePublication: markPublication } : runtime
@@ -250,7 +252,11 @@ export async function streamForegroundSync(
 	// and destination; neither feed's missing rows can authorize anything.
 	const prepareTwoWay = async (event: NonNullable<Awaited<ReturnType<typeof runs.nextStreamInput>>>) => {
 		const entry = event.entry, from = event.replica!;
-		const defer = async () => { state = await runs.appendStream(spec, event, null, false, false); };
+		const defer = async () => {
+			// Keep positive folder rows for the provisional progress tree. A
+			// matching ancestor often needs no operation of its own.
+			state = await runs.appendStream(spec, event, null, false, entry.kind === 'folder' && !ignore.ignored(entry.path, entry.kind));
+		};
 		// The other replica's echo cannot supersede an in-flight publication.
 		// Preserve its receipt (or uncertain ID) before advancing this path.
 		for (;;) {
@@ -550,7 +556,7 @@ export async function streamForegroundSync(
 					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, targetChanged);
 				} else throw error;
 			} finally {
-				dispatching = undefined;
+				dispatching = undefined; activeFile = undefined;
 			}
 			check();
 			wake();

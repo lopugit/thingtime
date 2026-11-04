@@ -1177,6 +1177,11 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			});
 		},
 
+		completedStreamProgress: (value: PagedRunSpec) => withHeader<PagedRunProgress>(parsePagedRunSpec(value), 'readonly', (h, _tx, done) => {
+			if (!h.stream?.terminal || h.phase !== 'complete') throw Error('Early sync progress is not complete.');
+			done(progress(h));
+		}, true),
+
 		async earlyReceiptsForPaths(value: PagedRunSpec, paths: readonly string[]): Promise<(ConfirmedSyncOperation | null)[]> {
 			const spec = parsePagedRunSpec(value), requested = [...paths];
 			if (spec.streaming?.source !== 'both' || requested.length > INVENTORY_PAGE_ENTRIES || requested.some(path => !validSyncPath(path)))

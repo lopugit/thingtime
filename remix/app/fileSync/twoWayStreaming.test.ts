@@ -94,6 +94,8 @@ test('new files and one-sided file edits in both directions confirm while both i
 			directions.add(activity.direction);
 			(activity.direction === 'upload' ? firstUpload : firstDownload).resolve();
 		};
+		let completed: Parameters<typeof x.input.progress>[0] | undefined;
+		x.input.progress = value => { if (value.stage === 'complete') completed = value; };
 		const oldHead = await x.checkpoints().current();
 		const run = x.run();
 		await both;
@@ -105,6 +107,10 @@ test('new files and one-sided file edits in both directions confirm while both i
 		assert.deepEqual([...x.downloads.values()].at(-1), new Uint8Array(phase ? [21, 22, 23, 24] : [5, 6, 7]));
 		const final = await run;
 		assert.ok('progress' in final); assert.equal(final.progress.operations, 0);
+		assert.equal(completed?.confirmed, 2);
+		assert.equal(completed?.total, 2);
+		assert.equal(completed?.directions?.upload.confirmed, 1);
+		assert.equal(completed?.directions?.download.confirmed, 1);
 		assert.notDeepEqual(await x.checkpoints().current(), oldHead);
 		assert.equal(await x.runs().streamAwaitingReconciliation(), null);
 	}

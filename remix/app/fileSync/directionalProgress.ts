@@ -36,3 +36,15 @@ export function removeUnconfirmedSyncDirection(totals: SyncDirectionalTotals, op
 export function syncRunDirections(operations: readonly SyncOperation[]): SyncDirectionalTotals {
  const totals = emptySyncDirections(); for (const operation of operations) addSyncDirection(totals, operation); return totals;
 }
+
+/** Combine disjoint completed and current runs for presentation only. */
+export function combineSyncDirections(earlier?: SyncDirectionalTotals, current?: SyncDirectionalTotals): SyncDirectionalTotals | undefined {
+ if (!earlier || !current) return earlier ?? current;
+ const total = emptySyncDirections();
+ for (const key of ['upload', 'download'] as const) {
+  const a = earlier[key], b = current[key];
+  total[key] = { operations: a.operations + b.operations, confirmed: a.confirmed + b.confirmed,
+   bytesTotal: String(BigInt(a.bytesTotal) + BigInt(b.bytesTotal)), bytesConfirmed: String(BigInt(a.bytesConfirmed) + BigInt(b.bytesConfirmed)) };
+ }
+ return total;
+}

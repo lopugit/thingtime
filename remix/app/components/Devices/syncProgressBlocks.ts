@@ -98,6 +98,7 @@ export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>
 	const growingTotal = liveIndex || progress?.totalFinal === false;
 	const stoppedIndex = (liveIndex || !hasIndex) && ['error', 'paused', 'cancelled'].includes(state);
 	const download = progress?.direction === 'download';
+	const mixed = !!progress?.directions?.upload.operations && !!progress.directions.download.operations;
 	const preparation = progress?.preparation;
 	const preparationLabels: Record<NonNullable<ForegroundSyncProgress['preparation']>['phase'], string> = {
 		'validate-local': 'Validating device structure', 'read-remote': 'Reading cloud structure', 'validate-remote': 'Validating cloud structure',
@@ -114,10 +115,10 @@ export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>
 		: progress?.stage === 'checking' ? 'Checking access…' : 'Indexing files… Total still being discovered.';
 	const coverage = progress?.coverage === 'partial' ? ` Partial backup · ${(progress.skipped ?? 0).toLocaleString()} skipped observations. Review backup coverage below.` : '';
 	const globalState = state === 'error' ? 'Error' : state === 'cancelled' ? 'Cancelled' : state === 'paused' ? 'Paused' : progress?.stage === 'complete' || state === 'complete' ? progress?.coverage === 'partial' ? 'Supported items complete · Partial backup' : 'Complete'
-		: preparation ? `Preparing ${download ? 'download' : 'upload'}` : progress?.stage === 'verifying' ? `Verifying ${download ? 'downloaded' : 'uploaded'} files`
+		: preparation ? `Preparing ${mixed ? 'transfers' : download ? 'download' : 'upload'}` : progress?.stage === 'verifying' ? mixed ? 'Verifying files' : `Verifying ${download ? 'downloaded' : 'uploaded'} files`
 		: progress?.indexState === 'watching' && progress.confirmed === progress.total && !progress.path ? 'Waiting for new indexed files'
-		: progress?.stage === 'transferring' || hasIndex ? download ? 'Downloading' : 'Uploading' : 'Waiting for the first indexed file';
-	return { sync: { ...priorityReadinessDisplay(progress, state), prioritiesEnabled, prioritiesDisabled, transferTitle: `2. ${download ? 'Download' : 'Upload'} files and folders`, indexDescription: indexed + (!stoppedIndex && preparationText ? ` ${preparationText}` : '') + coverage, uploadDescription: `${globalState}${progress ? ` · ${progress.confirmed.toLocaleString()} / ${progress.total.toLocaleString()} operations confirmed${growingTotal ? ' so far · Total may grow' : ''}` : ''}${summary ? ` · ${syncProgressNodeDisplay(summary, progress, state).bytes}` : ''}`,
+		: progress?.stage === 'transferring' || hasIndex ? download ? 'Downloading' : progress?.direction === 'upload' ? 'Uploading' : mixed ? 'Transferring' : 'Uploading' : 'Waiting for the first indexed file';
+	return { sync: { ...priorityReadinessDisplay(progress, state), prioritiesEnabled, prioritiesDisabled, transferTitle: `2. ${mixed ? 'Transfer' : download ? 'Download' : 'Upload'} files and folders`, indexDescription: indexed + (!stoppedIndex && preparationText ? ` ${preparationText}` : '') + coverage, uploadDescription: `${globalState}${progress ? ` · ${progress.confirmed.toLocaleString()} / ${progress.total.toLocaleString()} operations confirmed${growingTotal ? ' so far · Total may grow' : ''}` : ''}${summary ? ` · ${syncProgressNodeDisplay(summary, progress, state).bytes}` : ''}`,
 		currentFolder: focusedFolder || 'Root folder', atRoot: !focusedFolder,
 		folderSummary: focusDisplay ? `${focusDisplay.percentLabel} · ${focusDisplay.counts} · ${focusDisplay.bytes}${growingTotal ? ' · Based on files prepared so far' : ''}` : hasIndex ? 'Reading folder totals…' : 'Folder totals become available as files are indexed.',
 		current: progress?.path ? `Current file: ${progress.path}${progress.bytes !== undefined && progress.size !== undefined ? ` · ${progressBytes(progress.bytes)} / ${progressBytes(progress.size)}` : ''}` : message,

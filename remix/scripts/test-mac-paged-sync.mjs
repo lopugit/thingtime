@@ -16,6 +16,8 @@ const wide = process.argv.includes('--wide');
 const indexer = process.env.THINGTIME_MAC_SYNC_INDEXER_BIN;
 if (indexer && !indexer.startsWith('/')) throw Error('The fixture Rust indexer path must be absolute.');
 const symlinksOnly = process.argv.includes('--symlinks-only');
+const early = process.argv.includes('--two-way-early');
+if (early && (!indexer || wide || symlinksOnly)) throw Error('The early acceptance requires only --two-way-early and an exact Rust fixture binary.');
 const clean = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR || tmpdir() };
 if (!process.env.TT_MAC_PAGED_WORKER) {
 	for (const port of [apiPort, dbPort]) {
@@ -74,7 +76,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		const policy =
 			accountBackupSandbox(apiPort, true) +
 			`\n(allow network-outbound (remote ip "localhost:${dbPort}"))\n(allow network-inbound (local ip "localhost:${dbPort}"))`;
-		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename, ...(wide ? ['--wide'] : []), ...(symlinksOnly ? ['--symlinks-only'] : [])], {
+		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename, ...(wide ? ['--wide'] : []), ...(symlinksOnly ? ['--symlinks-only'] : []), ...(early ? ['--two-way-early'] : [])], {
 			cwd: root,
 			env: { ...clean, TT_MAC_PAGED_WORKER: directory, THINGTIME_MAC_SYNC_FIXTURE_BIN: binary, ...(indexer ? { THINGTIME_MAC_SYNC_INDEXER_BIN: indexer } : {}) },
 			stdio: ['ignore', 'pipe', 'pipe']
@@ -252,7 +254,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		console.log('MAC_PAGED_STAGE native-transfers');
 		const test = start(
 			process.execPath,
-			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', ...(symlinksOnly ? ['--symlinks-only'] : ['--large-upload', '--large-download']), ...(wide ? ['--wide'] : [])],
+			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', ...(early ? ['--two-way-early'] : symlinksOnly ? ['--symlinks-only'] : ['--large-upload', '--large-download']), ...(wide ? ['--wide'] : [])],
 			{ ...clean, THINGTIME_MAC_SYNC_FIXTURE_BIN: process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN, ...(indexer ? { THINGTIME_MAC_SYNC_INDEXER_BIN: indexer } : {}) }
 		);
 		const output = collect(test, true);
