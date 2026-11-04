@@ -173,6 +173,15 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
 
 ## Remote and stored files
 
+For connected folder sync, `app/fileSync/streamingForegroundSync.ts` can
+prepare two-way copies from native and cloud index hints while both source
+feeds remain open. `app/api/utils/files/inventory.ts` resolves the exact
+destination under the same transaction and ancestor locks used by the
+canonical file and folder writers. Early two-way cloud writes negotiate
+`api.files` 1.10.0 before using that guard. The strict paged plan and
+checkpoint remain responsible for reconciliation and agreement.
+
+
 `FilesystemThingsBrowser.tsx` adapts ephemeral remote inode entries into the
 same `ThingsGridView`/`ThingsListView` used by `/things`. The full-page entry is
 `/things?files=thingtime` (or a device id); `DeviceDetailsDrawer` mounts the same
@@ -596,7 +605,7 @@ values, source context and password history. See [the password contract](../pass
 
 ## Mac backup scan implementation
 
-`Commander/crates/commander-indexer/src/backup.rs` adapts the shared bounded Rust
+`filesystem-indexer/crates/indexer/src/backup.rs` adapts the shared bounded Rust
 walker to private JSONL backup observations. `backup_ignore.rs` matches the same
 Git oracle as the web/Apple adapters. `apple/FileSync/.../CommanderBackupCapture.swift`
 runs the bundled helper under the selected grant, validates returned metadata and
@@ -701,6 +710,29 @@ measurement projections; client and worker require `api.devices-sync-control`
 mailbox retains ownership, leases and immutable saves. Focused protocol/client,
 worker, session and `deviceSyncControl` tests cover paused changes, no folder/job
 side effects, stale replies and shared polling. See browser-device-sync.md.
+The installed Mac dashboard shares one Activity Manager sampler per active
+local run. It reads the existing rootless resources lane while visible, and
+Electron projects current worker samples from the same device governor without
+changing limits. Stale transfer, scan and memory measurements expire.
+
+Sync history uses `fileSync/deviceSyncHistoryRecorder.ts` inside the admitted
+native runner, independently of dashboard mounting. `deviceSyncHistoryJournal.ts`
+stores individual origin/owner/device/data-plane scoped observations in the
+existing IndexedDB journal. Range reads process all matching rows in bounded
+batches; display buckets retain measured sample counts and null gaps.
+`deviceSyncHistory.client.ts` reads locally or requests the paired worker's
+read-only `history` command after negotiating `api.devices-sync-control` 1.4.0.
+The API lease completion and remote client both validate the requested range
+and strict result projection. `DeviceSyncResources` and
+`deviceSyncResourceBlocks.ts` expose editable live/history controls and stats.
+
+Mac signed-range staging uses the existing attachment and file reads through
+`electron/lib/folder-download.cjs` and its transport child. Native
+`fileDownloadVersion` 1.0.1 reports temporary transport failures as a runnable
+wait. Retry rechecks the same owner, selected origin, cloud revision and signed
+range, then resumes from native staging's retained offset. The folder diagnostic
+log records only closed phase and result labels. Test the retry and range
+integrity in `electron/test/folder-download.test.cjs`.
 
 POSIX symbolic-link metadata lives in `fileSync/symbolicLink.ts`; `SyncEntry`
 content/stamp equality includes link kind and exact raw target identity.

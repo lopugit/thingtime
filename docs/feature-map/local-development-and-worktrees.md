@@ -150,8 +150,18 @@ Keep backend/browser network isolation and dedicated test credentials in place.
 ## Commander native background indexing
 
 `Commander/apps/daemon/src/services/indexing.ts` schedules coalesced subtree updates and periodic full reconciliation;
-`Commander/crates/commander-indexer` owns transactional SQLite/WAL snapshots, ignore traversal and unique counters.
+`filesystem-indexer/crates/indexer` owns transactional SQLite/WAL snapshots, ignore traversal and unique counters.
 `Commander/script/dev-parallel.sh` runs an isolated native development bundle beside the installed app;
 `Commander/script/verify-background-index.mjs` verifies its real bundled daemon against disposable filesystem events.
 Run Commander typecheck/tests, both Rust crates and the native checks in `Commander/docs/TESTING.md`. Index status
 changes negotiate the daemon's `commander.index-status` capability; no Thingtime data API is added by this lane.
+
+## Shared Rust filesystem workspace
+
+`filesystem-indexer/Cargo.toml` owns the local `core`, `indexer` and `ffi` crates
+and one lockfile. Native build scripts reference these paths directly; no
+registry release is required. `filesystem-indexer/README.md` documents consumers,
+iOS toolchains and isolated build outputs. Run workspace Cargo tests, the linked
+Swift/Rust fixture (`apple/FileSync/test-embedded-rust.sh`) and affected native
+host suites before signing and installing. Release listeners include changes in
+this directory for every consuming app.

@@ -83,6 +83,14 @@ targets:
         ENABLE_PREVIEWS: true
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_OBJC_BRIDGING_HEADER: ShareSupport/ShareItemProviderBridge.h
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libcommander_indexer_ffi.a -lsqlite3 -liconv -lc++"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+    preBuildScripts:
+      - name: Build shared Rust filesystem indexer
+        script: '"$SRCROOT/../filesystem-indexer/scripts/build-ios.sh"'
+        basedOnDependencyAnalysis: false
+        outputFiles:
+          - "$(BUILT_PRODUCTS_DIR)/libcommander_indexer_ffi.a"
     entitlements:
       path: Thingtime/Resources/Thingtime.entitlements
       properties:

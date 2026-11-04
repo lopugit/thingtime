@@ -1,9 +1,18 @@
 'use strict';
+const { normalizeEndpointUrl } = require('../desktop-settings.cjs');
 const { NativePasswordBroker } = require('./broker.cjs');
 const { startPasswordControl } = require('./control.cjs');
 const { createNativePasswordApproval } = require('./approval.cjs');
 
-function createDesktopPasswordBridge({ app, safeStorage, context, dialog, window: getWindow, BrowserWindow, ipcMain, preload }) {
+function createDesktopPasswordBridge({ app, safeStorage, context: getDesktopContext, dialog, window: getWindow, BrowserWindow, ipcMain, preload }) {
+  const context = () => {
+    const current = getDesktopContext();
+    if (!current?.session) return current;
+    // Desktop settings store root URLs; the broker and approval use exact origins.
+    let endpoint = null;
+    try { endpoint = new URL(normalizeEndpointUrl(current.endpoint)).origin; } catch {}
+    return { ...current, endpoint };
+  };
   const approval = createNativePasswordApproval({ BrowserWindow, ipcMain, preload, context, window: getWindow });
   const broker = new NativePasswordBroker({ userData: app.getPath('userData'), safeStorage, context, verify: request => approval.approve(request), approve: async ({ taskId, scope, target }) => {
     const options = { type: 'question', title: 'Thingtime Password AutoFill', message: 'Allow this credential task for 15 minutes?',

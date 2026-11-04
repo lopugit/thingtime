@@ -5,7 +5,7 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.18.0"
+    public static let version = "1.19.0"
     private static let supportedActions: Set<String> = ["validate-folder-batch", "upload-batch", "resources", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
@@ -55,8 +55,8 @@ public final class MacFolderSync {
     private var streamWaiter: RequestTask?
     private var resourceRequest: RequestTask?
 
-    /// One task-owned scanner, 64 KiB read buffers, existing eight-capture disk
-    /// retention and a 24-hour execution lifetime. Transport failures do not
+    /// One task-owned scanner, bounded Rust buffers and a 24-hour
+    /// execution lifetime. Transport failures do not
     /// cancel it; explicit cancel, authority loss or lifetime expiry do.
     public static let maximumBackupJobSeconds: TimeInterval = 24 * 60 * 60
     // Testable timing only; production keeps one scanner and one sequential
@@ -83,8 +83,10 @@ public final class MacFolderSync {
 
     private func checkBackupAuthority(scope: MobileFolderInventory.Scope, grant: MobileFolderStore.Grant, started: Date) throws {
         try Task.checkCancellation()
+        let current = try store.grant(scope.owner, id: grant.id)
         guard backupNow().timeIntervalSince(started) < backupLifetime,
-              try store.grant(scope.owner, id: grant.id).bookmark == grant.bookmark else { throw MobileFolderStore.Failure.changed }
+              current.bookmark == grant.bookmark, current.sourceKind == grant.sourceKind else { throw MobileFolderStore.Failure.changed }
+        if grant.sourceKind == "photos", !["full", "limited"].contains(photos.access()) { throw PhotoLibraryReader.Failure.unavailable }
     }
 
     private func awaitBackupAuthorization(scope: MobileFolderInventory.Scope, grant: MobileFolderStore.Grant, started: Date) async throws {
@@ -125,6 +127,13 @@ public final class MacFolderSync {
             case .changed: return "source-changed"
             case .storage: return "local-storage"
             case .approvalCancelled: return "approval-cancelled"
+            }
+        }
+        if let index = error as? RustInventoryTransportFailure {
+            switch index {
+            case .unavailable: return "shared-indexer-unavailable"
+            case .invalidResponse: return "shared-indexer-protocol"
+            case .operation: return "shared-indexer-operation"
             }
         }
         return "unexpected"
@@ -168,20 +177,43 @@ public final class MacFolderSync {
     private var backupJob: BackupJob?
 
     private func backupMatches(_ job: BackupJob, scope: MobileFolderInventory.Scope, grant: MobileFolderStore.Grant, id: String, exclusions: [String], ignoreRules: String?, strict: Bool) -> Bool {
-        job.strict == strict && job.scope == scope && job.grant.bookmark == grant.bookmark && job.progress.status().id == id.lowercased() && job.exclusions == exclusions && MobileFolderIgnoreRules.sameText(job.ignoreRules, ignoreRules)
+        job.strict == strict && job.scope == scope && job.grant.bookmark == grant.bookmark && job.grant.sourceKind == grant.sourceKind && job.progress.status().id == id.lowercased() && job.exclusions == exclusions && MobileFolderIgnoreRules.sameText(job.ignoreRules, ignoreRules)
     }
     private func backup(_ r: Request, scope: MobileFolderInventory.Scope, grant: MobileFolderStore.Grant) async throws -> MobileFolderInventory.BackupStatus {
         guard streamJob == nil else { throw MobileFolderStore.Failure.changed }
-        let strict = r.capturePolicy == "strict-async"
+        let strict = r.capturePolicy == "strict-async", photoSource = grant.sourceKind == "photos"
+        let inventories = inventories, photos = photos
+        guard photoSource || inventories.supportsResourceGovernance else { throw RustInventoryTransportFailure.unavailable }
         guard let rawId = r.captureId, UUID(uuidString: rawId) != nil else { throw MobileFolderStore.Failure.invalid }
         if r.action != "scan-cancel", let job = backupJob, job.progress.status().state == "running", job.resourceLimits != r.resourceLimits { throw MobileFolderStore.Failure.changed }
         let id = rawId.lowercased(), exclusions = try MobileFolderReader.canonicalExclusions(r.excludedPaths ?? []), rules = try MobileFolderIgnoreRules(r.ignoreRules).text
+        if photoSource {
+            guard strict, exclusions.isEmpty, rules == nil else { throw MobileFolderStore.Failure.invalid }
+        }
+        let discardStrict: @Sendable (String) throws -> Void = { generation in
+            if photoSource {
+                try photos.discard(scope: scope, capture: .init(id: id, generation: generation, totalEntries: 0))
+            } else {
+                try inventories.abandonStrict(scope, id: id, generation: generation, bookmark: grant.bookmark)
+            }
+        }
+        let readStatus: @Sendable () throws -> MobileFolderInventory.BackupStatus? = {
+            if photoSource {
+                return try photos.status(scope: scope, id: id).map { .init(capture: $0, state: "complete") }
+            }
+            return try inventories.backupStatus(scope, id: id, bookmark: grant.bookmark,
+                excludedPaths: exclusions, ignoreRules: rules, strict: strict)
+        }
         if let job = backupJob, backupMatches(job, scope: scope, grant: grant, id: id, exclusions: exclusions, ignoreRules: rules, strict: strict),
            job.progress.status().state != "running", r.action == "scan-status" || r.action == "scan-cancel" {
             if strict, r.action == "scan-cancel", job.progress.status().state == "complete" {
-                let generation = job.progress.status().generation, inventories = inventories
-                try await worker { try inventories.abandonStrict(scope, id: id, generation: generation, bookmark: grant.bookmark) }
+                let generation = job.progress.status().generation
+                try await worker { try discardStrict(generation) }
                 job.progress.finish(nil)
+            }
+            if r.action == "scan-status", job.progress.status().state == "complete" {
+                guard let current = try await worker(readStatus) else { throw MobileFolderStore.Failure.changed }
+                return current
             }
             return job.progress.status()
         }
@@ -192,59 +224,72 @@ public final class MacFolderSync {
             }
             return job.progress.status()
         }
-        let inventories = inventories
         if r.action == "scan-cancel" {
-            guard let status = try await worker({ try inventories.backupStatus(scope, id: id, bookmark: grant.bookmark, excludedPaths: exclusions, ignoreRules: rules, strict: strict) }) else {
+            if photoSource {
+                try await worker { try discardStrict(id) }
+                return .init(capture: .init(id: id, generation: id, totalEntries: 0), state: "interrupted")
+            }
+            guard let status = try await worker(readStatus) else {
                 // A cache eviction or process restart may have removed an old
                 // job. Cancellation still succeeds, after the normal live
                 // account/grant checks, without disclosing capture metadata.
                 return .init(capture: .init(id: id, generation: UUID().uuidString.lowercased(), totalEntries: 0,
                     coverage: "partial", consistency: "per-entry", totalSkipped: 0), state: "interrupted")
             }
-            if strict {
-                try await worker { try inventories.abandonStrict(scope, id: id, generation: status.generation, bookmark: grant.bookmark) }
-            }
+            if strict { try await worker { try discardStrict(status.generation) } }
             return .init(capture: .init(id: status.id, generation: status.generation, totalEntries: status.totalEntries,
                 coverage: status.coverage, consistency: status.consistency, totalSkipped: status.totalSkipped), state: "interrupted", ignoredCount: status.ignoredCount)
         }
-        let old = try await worker { try inventories.backupStatus(scope, id: id, bookmark: grant.bookmark, excludedPaths: exclusions, ignoreRules: rules, strict: strict) }
+        let old = try await worker(readStatus)
         if r.action == "scan-status" {
             guard let old else { throw MobileFolderStore.Failure.changed }; return old
         }
+        if strict && !photoSource {
+            try await worker { try inventories.checkStrictVolume(bookmark: grant.bookmark) }
+        }
         if let old, old.state == "complete" { return old }
         backupJob?.monitor.cancel()
-        let progress = BackupProgress(id: id, generation: UUID().uuidString.lowercased())
+        let progress = BackupProgress(id: id, generation: photoSource ? id : UUID().uuidString.lowercased())
         let started = backupNow()
         let resources = MacSyncResources.current
         let task = Task { @MainActor [weak self] in
             guard let self else { progress.finish(nil); return }
-            var preparedCapture: MobileFolderInventory.Capture?
             do {
-                let prepared = try await self.worker(metered: strict) {
+                let prepared = try await self.worker(metered: false) {
+                    if photoSource {
+                        return try photos.prepareCapture(scope: scope, id: id, generation: progress.status().generation,
+                            progress: { progress.update($0, 0) }, authorize: { try Task.checkCancellation() })
+                    }
                     if strict {
                         return try inventories.capture(scope, id: id, bookmark: grant.bookmark,
                             excludedPaths: exclusions, ignoreRules: rules, preparingGeneration: progress.status().generation,
-                            progress: { progress.update($0, 0) })
+                            resourceLimits: resources?.policy ?? r.resourceLimits, resourceUsage: { resources?.update($0) },
+                            sourceCpuMeter: resources?.source, progress: { progress.update($0, 0) })
                     }
                     return try inventories.prepareBackup(scope, id: id, generation: progress.status().generation, bookmark: grant.bookmark,
-                        excludedPaths: exclusions, ignoreRules: rules, resourceLimits: inventories.supportsResourceGovernance ? resources?.policy : r.resourceLimits, resourceUsage: { resources?.update($0) }, sourceCpuMeter: resources?.source, ignored: { progress.ignored($0) }, progress: { entries, skipped in progress.update(entries, skipped) })
+                        excludedPaths: exclusions, ignoreRules: rules, resourceLimits: resources?.policy ?? r.resourceLimits, resourceUsage: { resources?.update($0) }, sourceCpuMeter: resources?.source, ignored: { progress.ignored($0) }, progress: { entries, skipped in progress.update(entries, skipped) })
                 }
-                preparedCapture = prepared
                 if strict { try await self.strictSealReady?() }
                 try Task.checkCancellation()
                 try await self.awaitBackupAuthorization(scope: scope, grant: grant, started: started)
-                try await self.worker { try inventories.sealBackup(scope, capture: prepared, bookmark: grant.bookmark, strict: strict) }
+                let sealed = try await self.worker {
+                    if photoSource { return try photos.sealCapture(scope: scope, capture: prepared) }
+                    try inventories.sealBackup(scope, capture: prepared, bookmark: grant.bookmark, strict: strict, resourceLimits: resources?.policy ?? r.resourceLimits)
+                    return prepared
+                }
                 try self.checkBackupAuthority(scope: scope, grant: grant, started: started)
-                progress.finish(prepared)
+                progress.finish(sealed)
             } catch {
                 ThingtimeNodeLog.actions.error("Backup indexing stopped: phase=scan code=\(Self.backupDiagnosticCode(error), privacy: .public)")
                 // Cleanup runs independently of the cancelled job task. A
                 // cancellation racing the final fsync cannot leave it sealed.
                 if strict {
                     let generation = progress.status().generation
-                    await Task.detached { try? inventories.abandonStrict(scope, id: id, generation: generation, bookmark: grant.bookmark) }.value
-                } else if let preparedCapture {
-                    await Task.detached { try? inventories.abandonBackup(scope, capture: preparedCapture, bookmark: grant.bookmark) }.value
+                    await Task.detached { try? discardStrict(generation) }.value
+                } else {
+                    let interrupted = progress.status()
+                    let capture = MobileFolderInventory.Capture(id: id, generation: interrupted.generation, totalEntries: 0)
+                    await Task.detached { try? inventories.abandonBackup(scope, capture: capture, bookmark: grant.bookmark) }.value
                 }
                 progress.finish(nil, failure: strict ? error as? MobileFolderReader.ScanFailure : nil)
             }
@@ -298,6 +343,7 @@ public final class MacFolderSync {
         guard let id = r.captureId, UUID(uuidString: id) != nil else { throw MobileFolderStore.Failure.invalid }
         let exclusions = try MobileFolderReader.canonicalExclusions(r.excludedPaths ?? []), rules = try MobileFolderIgnoreRules(r.ignoreRules).text
         let inventories = inventories
+        guard inventories.supportsResourceGovernance else { throw RustInventoryTransportFailure.unavailable }
         if let job = streamJob {
             guard job.scope == scope, job.grant.bookmark == grant.bookmark, job.id == id,
                   job.exclusions == exclusions, (r.action == "scan-cancel" || job.resourceLimits == r.resourceLimits), MobileFolderIgnoreRules.sameText(job.rules, rules) else { throw MobileFolderStore.Failure.changed }
@@ -315,7 +361,7 @@ public final class MacFolderSync {
                 guard let self else { return }
                 do {
                     try self.checkBackupAuthority(scope: scope, grant: grant, started: started)
-                    try await self.worker(metered: false) { try inventories.runStream(scope, id: id, bookmark: grant.bookmark, excludedPaths: exclusions, ignoreRules: rules, resourceLimits: inventories.supportsResourceGovernance ? resources?.policy : r.resourceLimits, resourceUsage: { resources?.update($0) }, sourceCpuMeter: resources?.source, control: control, wake: { wake.signal() }) }
+                    try await self.worker(metered: false) { try inventories.runStream(scope, id: id, bookmark: grant.bookmark, excludedPaths: exclusions, ignoreRules: rules, resourceLimits: resources?.policy ?? r.resourceLimits, resourceUsage: { resources?.update($0) }, sourceCpuMeter: resources?.source, control: control, wake: { wake.signal() }) }
                     try await self.awaitBackupAuthorization(scope: scope, grant: grant, started: started)
                     try await self.worker { try inventories.finishStream(scope, id: id, bookmark: grant.bookmark, state: "complete") }
                 } catch {
@@ -413,7 +459,9 @@ public final class MacFolderSync {
         if case .object(let fields) = payload, fields["capturePolicy"] != nil, r.capturePolicy == nil { throw MobileFolderStore.Failure.invalid }
         if let policy = r.capturePolicy {
             if policy == "strict-async" {
-                guard ["scan-capture", "scan-status", "scan-cancel"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+                guard ["scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-discard"].contains(r.action) else {
+                    throw MobileFolderStore.Failure.invalid
+                }
             } else if policy == "one-way-supported" {
                 guard ["scan-stream", "scan-stream-finish", "scan-changes", "scan-cancel"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
             } else if ["scan-stream", "scan-stream-finish", "scan-changes"].contains(r.action) { throw MobileFolderStore.Failure.invalid }
@@ -574,9 +622,37 @@ public final class MacFolderSync {
     }
     private func value<T: Encodable>(_ input: T) throws -> JSONValue { try JSONValue.from(input) }
 
+    private func captureInline(_ r: Request, scope: MobileFolderInventory.Scope, grant: MobileFolderStore.Grant,
+                               id: String) async throws -> MobileFolderInventory.Capture {
+        let inventories = inventories, resources = MacSyncResources.current
+        let generation = UUID().uuidString.lowercased()
+        let prepared = try await worker(metered: false) {
+            try inventories.prepareInline(scope, id: id, generation: generation, bookmark: grant.bookmark,
+                excludedPaths: r.excludedPaths ?? [], ignoreRules: r.ignoreRules, resourceLimits: resources?.policy ?? r.resourceLimits,
+                resourceUsage: { resources?.update($0) }, sourceCpuMeter: resources?.source)
+        }
+        do {
+            try await authorized(r)
+            guard try store.grant(scope.owner, id: grant.id).bookmark == grant.bookmark else { throw MobileFolderStore.Failure.changed }
+            try await worker(metered: false) {
+                try inventories.sealInline(scope, capture: prepared, bookmark: grant.bookmark, resourceLimits: resources?.policy ?? r.resourceLimits)
+            }
+            guard try store.grant(scope.owner, id: grant.id).bookmark == grant.bookmark else { throw MobileFolderStore.Failure.changed }
+            return prepared
+        } catch {
+            if prepared.generation == generation {
+                await Task.detached {
+                    try? inventories.discard(scope, capture: prepared, bookmark: grant.bookmark, ignoreRules: r.ignoreRules)
+                }.value
+            }
+            throw error
+        }
+    }
+
     private func execute(_ r: Request, owner: FileSyncOwnerScope, stream: (@Sendable (Data) throws -> Void)?, receive: (@Sendable (Int) throws -> Data)?, batchCallback: (@Sendable (JSONValue, TimeInterval) async throws -> JSONValue)?, started: TimeInterval) async throws -> JSONValue {
         var result: [String: JSONValue] = ["requestId": .string(r.requestId), "ownerId": .string(r.ownerId), "deviceId": .string(r.deviceId), "origin": .string(r.origin)]
         var inspectedGrant: MobileFolderStore.Grant?
+        var inspectedPhotos: MobileFolderStore.Grant?
         var checkedApproval: MobileFolderStore.WriteApproval?
         if r.action == "resources" {
             result["roots"] = .array([])
@@ -684,8 +760,16 @@ public final class MacFolderSync {
                 }
                 else {
                 let staging = staging, photos = photos
-                let photoScope = owner.key + ":" + root
-                guard grant.sourceKind != "photos" || ["scan", "read", "read-range"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+                let photoScope = PhotoLibraryReader.Scope(owner: owner, deviceId: r.deviceId, rootId: root)
+                guard grant.sourceKind != "photos" || ["scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-discard", "inspect", "read", "read-range"].contains(r.action) else {
+                    throw MobileFolderStore.Failure.invalid
+                }
+                if grant.sourceKind == "photos" {
+                    guard ["full", "limited"].contains(photos.access()) else {
+                        throw PhotoLibraryReader.Failure.unavailable
+                    }
+                    inspectedPhotos = grant
+                }
                 if r.action == "trash-list" {
                     guard let trash, approveRestore != nil else { throw MobileFolderStore.Failure.unavailable }
                     result["trashPage"] = try value(await worker { try trash.list(owner: owner, rootId: root, bookmark: grant.bookmark, cursor: r.cursor) })
@@ -745,6 +829,34 @@ public final class MacFolderSync {
                         }
                         result["trash"] = try value(lookup)
                     }
+                } else if grant.sourceKind == "photos" && ["scan-capture", "scan-page", "scan-discard"].contains(r.action)
+                    && (r.action != "scan-capture" || r.capturePolicy == nil) {
+                    guard r.capturePolicy == nil || r.capturePolicy == "strict-async", r.inventoryDeviceId == r.deviceId,
+                          r.excludedPaths?.isEmpty != false, r.ignoreRules?.isEmpty != false else { throw MobileFolderStore.Failure.invalid }
+                    if r.action == "scan-capture" {
+                        guard let id = r.captureId else { throw MobileFolderStore.Failure.invalid }
+                        let prepared = try await worker { try photos.prepareCapture(scope: photoScope, id: id, generation: id) }
+                        do {
+                            try await authorized(r)
+                            guard try store.grant(owner, id: grant.id).sourceKind == "photos",
+                                  ["full", "limited"].contains(photos.access()) else { throw MobileFolderStore.Failure.changed }
+                            result["capture"] = try value(await worker { try photos.sealCapture(scope: photoScope, capture: prepared) })
+                        } catch {
+                            await Task.detached { try? photos.discard(scope: photoScope, capture: prepared) }.value
+                            throw error
+                        }
+                    } else {
+                        guard let capture = r.capture else { throw MobileFolderStore.Failure.invalid }
+                        if r.action == "scan-page" {
+                            guard let offset = r.offset, offset >= 0, offset <= 9_007_199_254_740_991 else { throw MobileFolderStore.Failure.invalid }
+                            result["inventoryPage"] = try value(await worker { try photos.page(scope: photoScope, capture: capture, offset: Int(offset), pageSize: r.pageSize) })
+                        } else {
+                            try await worker { try photos.discard(scope: photoScope, capture: capture) }
+                            result["discarded"] = .bool(true)
+                        }
+                    }
+                    if let policy = r.capturePolicy { result["capturePolicy"] = .string(policy) }
+                    result["complete"] = .bool(true)
                 } else if r.action == "scan-stream" || r.action == "scan-stream-finish" || r.action == "scan-changes" || (r.action == "scan-cancel" && r.capturePolicy == "one-way-supported") {
                     guard r.capturePolicy == "one-way-supported", r.inventoryDeviceId == r.deviceId else { throw MobileFolderStore.Failure.invalid }
                     inspectedGrant = grant
@@ -752,7 +864,7 @@ public final class MacFolderSync {
                     result["changesPage"] = try value(await self.stream(r, scope: .init(owner: owner, deviceId: r.deviceId, rootId: root), grant: grant))
                 } else if ["scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard"].contains(r.action) {
                     guard r.inventoryDeviceId == r.deviceId else { throw MobileFolderStore.Failure.invalid }
-                    inspectedGrant = grant
+                    if grant.sourceKind != "photos" { inspectedGrant = grant }
                     let inventoryScope = MobileFolderInventory.Scope(owner: owner, deviceId: r.deviceId, rootId: root)
                     let inventories = inventories
                     if let policy = r.capturePolicy, ["backup-supported", "strict-async"].contains(policy), ["scan-capture", "scan-status", "scan-cancel"].contains(r.action) {
@@ -783,7 +895,7 @@ public final class MacFolderSync {
                         if r.action == "scan-capture" {
                             guard let id = r.captureId else { throw MobileFolderStore.Failure.invalid }
                             do {
-                                result["capture"] = try value(await worker { try inventories.capture(inventoryScope, id: id, bookmark: grant.bookmark, excludedPaths: r.excludedPaths ?? [], ignoreRules: r.ignoreRules) })
+                                result["capture"] = try value(await captureInline(r, scope: inventoryScope, grant: grant, id: id))
                             } catch let failure as MobileFolderReader.ScanFailure { result["scanFailure"] = try value(failure) }
                         } else {
                             guard let capture = r.capture,
@@ -805,20 +917,33 @@ public final class MacFolderSync {
                     }
                 } else if r.action == "inspect" {
                     guard let path = r.path else { throw MobileFolderStore.Failure.invalid }
-                    inspectedGrant = grant
-                    let entry = try await worker { try MobileFolderReader.inspect(bookmark: grant.bookmark, path: path) }
+                    if grant.sourceKind != "photos" { inspectedGrant = grant }
+                    let entry = try await worker {
+                        if grant.sourceKind == "photos" { return try photos.inspect(scope: photoScope, path: path) }
+                        return try MobileFolderReader.inspect(bookmark: grant.bookmark, path: path)
+                    }
                     result["path"] = .string(path); result["complete"] = .bool(true)
                     result["entry"] = try entry.map { try value($0) } ?? .null
                 } else if r.action == "scan" {
                     if grant.sourceKind != "photos" { inspectedGrant = grant }
+                    let inventories = inventories
+                    let scope = MobileFolderInventory.Scope(owner: owner, deviceId: r.deviceId, rootId: root)
                     do {
-                        result["entries"] = try value(await worker {
-                            if grant.sourceKind == "photos" {
-                                guard r.excludedPaths?.isEmpty != false, r.ignoreRules?.isEmpty != false else { throw MobileFolderStore.Failure.invalid }
-                                return try photos.scan(scope: photoScope)
+                        if grant.sourceKind == "photos" {
+                            guard r.excludedPaths?.isEmpty != false, r.ignoreRules?.isEmpty != false else { throw MobileFolderStore.Failure.invalid }
+                            result["entries"] = try value(await worker { try photos.scan(scope: photoScope) })
+                        } else {
+                            let capture = try await captureInline(r, scope: scope, grant: grant, id: UUID().uuidString)
+                            do {
+                                result["entries"] = try value(await worker {
+                                    try inventories.readInline(scope, capture: capture, bookmark: grant.bookmark, ignoreRules: r.ignoreRules)
+                                })
+                            } catch {
+                                await Task.detached { try? inventories.discard(scope, capture: capture, bookmark: grant.bookmark, ignoreRules: r.ignoreRules) }.value
+                                throw error
                             }
-                            return try MobileFolderReader.scan(bookmark: grant.bookmark, excludedPaths: r.excludedPaths ?? [], ignoreRules: r.ignoreRules)
-                        })
+                            try await worker { try inventories.discard(scope, capture: capture, bookmark: grant.bookmark, ignoreRules: r.ignoreRules) }
+                        }
                     } catch let failure as MobileFolderReader.ScanFailure {
                         result["scanFailure"] = try value(failure)
                     }
@@ -899,6 +1024,13 @@ public final class MacFolderSync {
                   !batch.chargingOnly || status.charging == true else { throw MobileFolderStore.Failure.changed }
         }
         if r.action == "validate-folder-batch", let inspectedGrant { try MobileFolderReader.checkAccess(bookmark: inspectedGrant.bookmark) }
+        if let inspectedPhotos {
+            let current = try store.grant(owner, id: inspectedPhotos.id)
+            guard current.sourceKind == "photos", current.bookmark == inspectedPhotos.bookmark,
+                  ["full", "limited"].contains(photos.access()) else {
+                throw MobileFolderStore.Failure.changed
+            }
+        }
         if let inspectedGrant {
             let current = try store.grant(owner, id: inspectedGrant.id)
             guard current.bookmark == inspectedGrant.bookmark, current.sourceKind == nil else { throw MobileFolderStore.Failure.changed }

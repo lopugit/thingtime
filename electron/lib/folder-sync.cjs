@@ -1,6 +1,7 @@
 'use strict';
 
 const { governorFor, limits: resourceLimits, deviceLimits } = require('./folder-resource-governor.cjs');
+const { TransferWorkerDisconnected } = require('./folder-transfer-process.cjs');
 const { stageFolderDownload } = require('./folder-download.cjs');
 const { uploadFolderPart, uploadRetry, retryableUploadFailure } = require('./folder-upload.cjs');
 const { validateFolderBatchInput, validateFolderBatchReply } = require('./folder-validate-batch.cjs');
@@ -340,10 +341,11 @@ class DesktopFolderSync {
             state.phase = previousPhase;
         };
         let governor;
+        const readResources = state.input.action === 'resources' && state.input.deviceResourceLimits === undefined;
         const nativeRequest = (request, extra = {}) => timing.measure('native', async () => {
             const governed = { ...request, ...(request.rootId === state.input.rootId && state.input.resourceLimits ? { resourceLimits: state.input.resourceLimits, resourceScope: state.input.resourceScope } : {}), ...(state.input.deviceResourceLimits ? { deviceResourceLimits: state.input.deviceResourceLimits } : {}) };
             const reply = await this.requestNative('folder-sync.request', governed, { ...extra, signal: extra.signal ?? state.abort.signal });
-            if (governor && reply?.resources?.version === 1) governor.observeNative(reply.resources);
+            if (governor && !readResources && reply?.resources?.version === 1) governor.observeNative(reply.resources);
             return reply;
         });
         try {
@@ -412,22 +414,31 @@ class DesktopFolderSync {
                 signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), fetchUpload: this.fetchUpload,
                 requestNative: nativeRequest,
                 signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); }
-            }) : state.input.action === 'stage-download' ? await stageFolderDownload({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest }) : await nativeRequest({ ...state.input, origin: context.apiOrigin });
-            if (governor) value.resources = governor.snapshot();
+            }) : state.input.action === 'stage-download' ? await stageFolderDownload({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, diagnostic: this.diagnostic }) : await nativeRequest({ ...state.input, origin: context.apiOrigin });
+            if (governor && !readResources) value.resources = governor.snapshot();
             endReply = timing.begin('reply');
             state.phase = 'reply-verification';
             if (!value || typeof value !== 'object') throw unavailable();
             if (state.input.action === 'context') {
                 this.assertCurrent(state);
                 value.apiCapabilities = apiCapabilities;
+                const accessVersion = /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(value.capabilities?.fileAccessVersion ?? '');
+                if (Number(accessVersion?.[1]) >= 16 && value.capabilities?.fileResourceLimitsVersion === '1.1.0')
+                    value.capabilities = { ...value.capabilities, fileResourceLimitsVersion: '1.1.1' };
                 if (/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileResourceLimitsVersion ?? '') && /^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileStagingVersion ?? '') && /^1\.(1[7-9]|[2-9][0-9]|[1-9][0-9]{2,})\.(0|[1-9][0-9]*)$/.test(apiCapabilities?.features?.['api.attachment-content']?.version ?? ''))
-                    value.capabilities = { ...value.capabilities, fileDownloadVersion: '1.0.0' };
+                    value.capabilities = { ...value.capabilities, fileDownloadVersion: '1.0.1' };
                 if (/^1\.([2-9]|[1-9][0-9]+)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileAccessVersion ?? ''))
                     value.capabilities = { ...value.capabilities, fileUploadVersion: '1.1.0' };
             }
             await verify();
             if (!value || typeof value !== 'object' || value.requestId !== input.requestId || value.ownerId !== input.ownerId ||
                 value.deviceId !== input.deviceId || value.origin !== context.apiOrigin) throw unavailable();
+            // The read lane borrows the current governor without replacing its
+            // policy. Merge native gauges only after the exact reply is fenced.
+            if (governor && readResources && value.resources?.version === 1) {
+                governor.observeNative(value.resources);
+                value.resources = governor.snapshot();
+            }
             if (state.input.action === 'context') this.rememberPageCapability(context, state.input, value);
             if (input.action === 'read-range') {
                 const c = value.chunk;
@@ -448,8 +459,8 @@ class DesktopFolderSync {
                 this.reportFailure(input.action, state.phase, error);
                 // Only fixed, trusted native transport codes may retry. Source,
                 // account, capability and protocol refusals remain terminal.
-                if (state.phase === 'native-request' && error?.name === 'ThingtimeNodeBridgeError' &&
-                    ['node_timeout', 'node_unavailable'].includes(error.code)) throw transportRetry();
+                if (state.phase === 'native-request' && (error instanceof TransferWorkerDisconnected ||
+                    (error?.name === 'ThingtimeNodeBridgeError' && ['node_timeout', 'node_unavailable'].includes(error.code)))) throw transportRetry();
                 // Electron serializes Error.name in its rejection text. Normalize
                 // this exact native marker to the renderer's existing contract.
                 if (error?.name === 'ThingtimeNodeBridgeError' && error.code === 'folder_identity_retry' &&

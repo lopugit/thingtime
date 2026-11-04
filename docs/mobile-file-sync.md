@@ -4128,3 +4128,26 @@ of the short control request deadlines under the existing monitored job
 lifetime and device resource policy. Commander continues to handle best-effort
 backup and one-way streaming. Using its discovery for strict two-way capture
 requires proving namespace completeness before publishing a generation.
+
+## Two-way transfers while indexing
+
+A connection with deletion propagation off can use both the native shared
+indexer feed and the cloud index feed when the device supports streaming.
+Both source cursors are durable and independent. A feed entry is a hint;
+the runner verifies the current source version and exact destination path
+against live observations and the last sealed agreement before starting a
+copy. New folders can be created first, so their eligible children can
+follow without waiting for the whole folder. A child whose ancestor has no
+sealed agreement or confirmed early creation waits for strict reconciliation.
+
+Only new items and one-sided regular-file edits with an unchanged destination
+use this path. Missing previous destinations, links, ambiguous paths and
+competing edits wait for the complete inventories. The early pass never
+infers deletion from a missing feed entry. Transfers use the existing upload
+and native publication guards, resource controls, and durable operation IDs.
+Confirmed copies carry their source and destination stamps into strict planning
+and checkpoint verification; they do not publish a checkpoint on their own.
+The folder progress view includes these receipts after strict planning without
+counting the same discovered path twice. Totals stay provisional through
+strict discovery, and the transfer heading follows the saved directions after
+the live byte sample ends.

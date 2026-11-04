@@ -11,6 +11,9 @@ import {
 	supportsMobileSyncConditions,
 	supportsMobileFolderPublication,
 	supportsNativePathInspection,
+	supportsNativePhotoInventoryPages,
+	supportsNativeBackupCapture,
+	assertNativeFolderInventoryCoverage,
 	type FolderRequest
 } from './mobileFolders.client';
 import { nativeBridgeMessageEvent } from '../utils/nativeBridge';
@@ -29,6 +32,24 @@ test('single-path inspection negotiates the native contract and requires explici
 	assert.equal(parse({ entry: null })?.inspectedEntry, null);
 	for (const patch of [{ entry: undefined }, { complete: false }, { path: 'other' }, { rootId: 'other' },
 		{ entry: { ...entry, path: 'other' } }, { entry: { ...entry, size: -1 } }]) assert.throws(() => parse(patch));
+});
+test('photo inventory pages negotiate independently of legacy folder pages', () => {
+	for (const [platform, version, supported] of [
+		['macos', '1.18.0', false], ['macos', '1.19.0', true],
+		['ios', '1.4.0', false], ['ios', '1.5.0', true], ['ios', '1.6.0', true],
+		['macos', '2.0.0', false], ['android', '1.99.0', false]
+	] as const) assert.equal(supportsNativePhotoInventoryPages({ platform, fileAccessVersion: version }), supported);
+});
+test('iOS Rust backup negotiates per-entry pages without advertising strict folder coverage', () => {
+	const modern = { platform: 'ios', fileAccessVersion: '1.5.0', fileInventoryStrictCoverage: false } as const;
+	assert.equal(supportsNativeBackupCapture(modern), true);
+	assert.equal(supportsNativeBackupCapture({ ...modern, fileAccessVersion: '1.4.0' }), false);
+	assert.doesNotThrow(() => assertNativeFolderInventoryCoverage(modern, { mode: 'backup', propagateDeletes: false }));
+	for (const mode of ['two-way', 'download', 'upload', 'backup'] as const) {
+		assert.throws(() => assertNativeFolderInventoryCoverage(modern, { mode, propagateDeletes: true }), /one-way Backup/);
+		if (mode !== 'backup') assert.throws(() => assertNativeFolderInventoryCoverage(modern, { mode, propagateDeletes: false }), /complete folder inventory/);
+	}
+	assert.doesNotThrow(() => assertNativeFolderInventoryCoverage({ platform: 'macos', fileAccessVersion: '1.19.0' }, { mode: 'two-way', propagateDeletes: false }));
 });
 test('native folder capability is explicit and account/origin/request responses are fenced', () => {
 	assert.equal(supportsMobileFolders({ platform: 'ios', isNativeWebView: true } as any), false);

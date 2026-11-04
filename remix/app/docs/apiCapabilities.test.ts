@@ -1,3 +1,4 @@
+import { REMOTE_SYNC_HISTORY_REQUIREMENTS } from '~/fileSync/remoteSyncProtocol';
 import { isGatewayDataPath } from '../../server/utils/environmentGateway';
 import { CONNECTION_ICON_FEATURE, CONNECTION_ICON_PATH, CONNECTION_ICON_VERSION } from '../connections/providerIcons';
 import { FILE_SYNC_RESOURCE_REQUIREMENTS } from '~/fileSync/configuration';
@@ -23,8 +24,8 @@ test('private agent reporting is registered in both manifests with an independen
   assert.equal(manifest.features['api.chatgpt-mcp'].version, '1.1.0');
   assert.equal(legacy.features['api.tokens'], '1.1.0');
   assert.equal(manifest.features['api.tokens'].version, '1.1.0');
-  assert.equal(legacy.features['api.chatgpt-oauth-authorize'], '1.1.0');
-  assert.equal(manifest.features['api.chatgpt-oauth-authorize'].version, '1.1.0');
+  assert.equal(legacy.features['api.chatgpt-oauth-authorize'], '1.2.0');
+  assert.equal(manifest.features['api.chatgpt-oauth-authorize'].version, '1.2.0');
   assert.ok(manifest.operations.some(operation => operation.path === '/api/v1/agents/reporting' && operation.feature === 'api.agent-reporting' && operation.methods.includes('POST')));
   for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), true);
   for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
@@ -739,10 +740,12 @@ test('range programs require the additive owned-boundary contract', () => {
 
  test('password manager registers its live route and version on both discovery manifests', () => {
   const doc = apiEndpointDocs.find(doc => doc.id === 'passwords');
-  assert.equal(doc?.featureVersion, '1.7.0');
+  assert.equal(doc?.featureVersion, '1.8.0');
   assert.deepEqual(doc?.methods, ['GET', 'POST']);
-  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.7.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.7.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.8.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.8.0');
+  for (const version of ['1.8.0', '1.8.1', '1.9.0']) assert.equal(capabilitySatisfies(version, '1.8.0'), true);
+  for (const version of [undefined, '1.7.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.8.0'), false);
   for (const version of ['1.7.0', '1.7.1', '1.8.0']) assert.equal(capabilitySatisfies(version, '1.7.0'), true);
   for (const version of [undefined, '1.6.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.7.0'), false);
   assert.equal(typeof routeModules['v1/passwords'], 'function');
@@ -862,10 +865,13 @@ test('resource limits and CPU downloads negotiate only their semantic dependenci
 
 
 test('remote folder sync control is registered on both capability manifests', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.devices-sync-control'], '1.3.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.devices-sync-control'].version, '1.3.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.devices-sync-control'], '1.4.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.devices-sync-control'].version, '1.4.0');
   for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
   for (const version of ['1.1.0', '1.1.1', '1.2.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), true);
+  const history = REMOTE_SYNC_HISTORY_REQUIREMENTS['api.devices-sync-control'];
+  for (const version of [undefined, '1.3.0', '2.0.0']) assert.equal(capabilitySatisfies(version, history), false);
+  for (const version of ['1.4.0', '1.4.1', '1.5.0']) assert.equal(capabilitySatisfies(version, history), true);
   assert.equal(typeof routeModules['v1/devices/sync-control'], 'function');
 });
 

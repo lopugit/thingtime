@@ -1,5 +1,5 @@
 import { passwordWebsiteOrigins } from '~/passwords/icons';
-import { passwordWebsiteOrigins as passwordAutofillOrigins } from '~/passwords/websites';
+import { passwordAutofillOrigins } from '~/passwords/websites';
 import { openPasswordIcon, sealPasswordIcon } from './icons';
 import { deletePasswordFiles } from './files';
 import { BSON, ObjectId } from 'mongodb';
