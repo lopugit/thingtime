@@ -739,10 +739,12 @@ test('range programs require the additive owned-boundary contract', () => {
 
  test('password manager registers its live route and version on both discovery manifests', () => {
   const doc = apiEndpointDocs.find(doc => doc.id === 'passwords');
-  assert.equal(doc?.featureVersion, '1.6.1');
+  assert.equal(doc?.featureVersion, '1.7.0');
   assert.deepEqual(doc?.methods, ['GET', 'POST']);
-  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.6.1');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.6.1');
+  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.7.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.7.0');
+  for (const version of ['1.7.0', '1.7.1', '1.8.0']) assert.equal(capabilitySatisfies(version, '1.7.0'), true);
+  for (const version of [undefined, '1.6.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.7.0'), false);
   assert.equal(typeof routeModules['v1/passwords'], 'function');
   for (const version of ['1.5.0', '1.5.1', '1.6.0']) assert.equal(capabilitySatisfies(version, '1.5.0'), true);
   for (const version of [undefined, '1.4.0', '1.4.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.5.0'), false);
@@ -765,6 +767,8 @@ test('mobile pairing requirements are advertised by both manifests and reject de
  assert.equal(route['api.devices-pairing-claim'], '1.2.0');
  assert.equal(manifest['api.devices-pairing-claim'].version, '1.2.0');
  for (const version of [undefined, '1.0.0', '1.1.0', '2.0.0']) assert.equal(capabilitySatisfies(version, MOBILE_DEVICE_REQUIREMENTS['api.devices-pairing-claim']), false);
+  for (const version of ['1.7.0', '1.7.1', '1.8.0']) assert.equal(capabilitySatisfies(version, '1.7.0'), true);
+  for (const version of [undefined, '1.6.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.7.0'), false);
 });
 
 
