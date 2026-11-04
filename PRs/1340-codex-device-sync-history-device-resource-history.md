@@ -1,4 +1,4 @@
-# Device sync resource history
+# PR #1340: Device sync resource history
 
 ## Problem and resulting behavior
 
@@ -39,6 +39,7 @@ unobserved earlier periods cannot be reconstructed.
   These are explicit regression cases, not accepted exceptions.
 - Isolated Electron renderer-restart verification passed four launches using the real built web bundle, IndexedDB and synthetic receipts; this does not establish native transfer acceptance.
 - Scoped semantic Graphify extraction was attempted for five changed documents, but the 104-chunk run did not finish within its bounded run. The code graph is refreshed; changed documentation is not claimed as semantically reindexed.
+- Changed-file lint completed with no errors: two pre-existing API-doc escape warnings and one closure warning on the intentionally shared, single history-read lane. An additional concurrency audit confirmed the native singleton prevents overlapping admissions; 23 runtime/window-retention/history regressions passed.
 - Production deployment and signed installed-device acceptance remain pending.
   The installed app currently includes separate in-progress filesystem work;
   delivery must preserve that source rather than downgrade the installation.
