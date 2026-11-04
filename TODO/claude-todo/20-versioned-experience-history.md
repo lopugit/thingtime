@@ -42,6 +42,19 @@ to open or like._
   **Earlier versions** actions on searchable/generated surfaces. Search by
   route, query, date, source app/surface, and item that appeared in the results.
 
+### Relationship to the unified Timeline
+
+The shared Timeline records changes and outcomes associated with Things; it is
+not by itself a replay of the surrounding feed or search view. Keep this TODO's
+checkpoint contract focused on normalized view state, captured result membership
+and order, loaded-page depth, and viewport position. Reuse the shared Timeline's
+record/version, account-scope, local persistence, sync, and History-surface
+contracts where approved, rather than introducing a second event log, outbox, or
+sync protocol. Do not treat Timeline delivery-ledger work as proof that these
+experience checkpoints are already implemented. See the
+[evidence note](../../NOTES/experience-checkpoints-and-unified-timeline.md) and
+the [unified Timeline contract on `develop`](https://github.com/lopugit/thingtime/blob/develop/docs/unified-timeline.md).
+
 ### Restore, compare, and continue
 
 - Opening a checkpoint first renders the last-known historical state from cache,
@@ -138,12 +151,14 @@ unless the user explicitly adopts it into an account.
 ## Delivery shape
 
 1. Define the versioned snapshot envelope, redaction rules, retention/quota
-   policy, and per-surface adapter contract.
+   policy, and per-surface adapter contract; map it onto the shared Timeline
+   record/version and account-scope boundaries without creating parallel sync.
 2. Ship a vertical slice for Thingtime `/feed` and advanced search: automatic
    checkpoints, exact ordered replay, scroll restoration, timeline discovery,
    and current rerun.
-3. Add durable API-backed account sync and relational page chunks, preserving a
-   local first-paint cache for optimistic restore.
+3. Add checkpoint storage and relational result-page chunks through the
+   approved shared-history contract, preserving a local first-paint cache for
+   optimistic restore and keeping guest state local unless explicitly adopted.
 4. Expand to other first-party routes, then expose the bounded adapter contract
    to registered app integrations.
 5. Add compare/branch, naming/pinning, export/delete controls, and storage
@@ -182,6 +197,9 @@ unless the user explicitly adopts it into an account.
   latest-revision write coordination and page-hide flush behavior.
 - `remix/app/hooks/useThingtimeMachine.tsx` — current in-memory undo/redo
   timeline; explicitly not the durable experience-history contract.
+- `docs/unified-timeline.md` on `develop` — shared event-history contract and
+  implementation ledger; experience checkpoints remain a related, separately
+  scoped view-state problem.
 - `remix/app/components/Feed/Feed.tsx` — current algorithm/filter/search pager
   and the first vertical-slice surface.
 - `remix/app/components/Feed/AdvancedFilters.tsx` — normalized advanced-search
