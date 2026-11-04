@@ -173,6 +173,15 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
 
 ## Remote and stored files
 
+For connected folder sync, `app/fileSync/streamingForegroundSync.ts` can
+prepare two-way copies from native and cloud index hints while both source
+feeds remain open. `app/api/utils/files/inventory.ts` resolves the exact
+destination under the same transaction and ancestor locks used by the
+canonical file and folder writers. Early two-way cloud writes negotiate
+`api.files` 1.10.0 before using that guard. The strict paged plan and
+checkpoint remain responsible for reconciliation and agreement.
+
+
 `FilesystemThingsBrowser.tsx` adapts ephemeral remote inode entries into the
 same `ThingsGridView`/`ThingsListView` used by `/things`. The full-page entry is
 `/things?files=thingtime` (or a device id); `DeviceDetailsDrawer` mounts the same

@@ -1,4 +1,5 @@
-import { streamOneWayForegroundSync } from './streamingForegroundSync';
+import { combineSyncDirections } from './directionalProgress';
+import { streamForegroundSync } from './streamingForegroundSync';
 import { assertBackupCapturePolicy, parseNativeBackupCapture, type NativeBackupCapture } from './nativeInventory';
 import { foregroundSyncContext } from './foregroundSyncContext';
 import { runForegroundCloudSync, type ForegroundSyncInput, type ForegroundSyncProgress } from './foregroundSync';
@@ -35,22 +36,34 @@ const identity = (source: 'local' | 'remote'): InventoryIdentity => ({ id: crypt
 /** Called inside the foreground root lock, including review and checkpoint
  * publication. Android keeps its existing runner while its work is deferred. */
 export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfiguration, scope: SyncScope, input: ForegroundSyncInput, signal: AbortSignal) {
-	const streamed = await streamOneWayForegroundSync(reviewed, scope, input, signal);
+	const runs = input.journal.pagedRuns({ scope, currentScope: input.currentScope, signal, cleanup: 'foreground' });
+	let early = await runs.streamAwaitingReconciliation();
+	const streamed = early ?? await streamForegroundSync(reviewed, scope, input, signal);
 	if (streamed) await input.releaseLocalImport?.(streamed.plan.local);
-	const result = await runPagedForegroundTransfer(reviewed, scope, input, signal);
+	early ??= await runs.streamAwaitingReconciliation();
+	const result = await runPagedForegroundTransfer(reviewed, scope, input, signal, early);
 	// Drain obsolete observations only after the transfer has published its
 	// checkpoint or retained receipts. Every page still checks scope and pins;
 	// interruption leaves the retired cursor recoverable on the next run.
-	if (streamed) await input.journal.pagedRuns({ scope, currentScope: input.currentScope, signal, cleanup: 'foreground' }).retireCompletedStream(streamed);
+	if (streamed) await runs.retireCompletedStream(streamed);
 	await input.journal.maintenance({ scope, currentScope: input.currentScope, signal, cleanup: 'foreground' }).collect();
 	return result;
 }
 
-async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, scope: SyncScope, input: ForegroundSyncInput, signal: AbortSignal) {
+async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, scope: SyncScope, input: ForegroundSyncInput, signal: AbortSignal, early: PagedRunSpec | null) {
 	const { configuration, check, authorize, scanCloud, readLocal, openSource, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	const access = { scope, currentScope: input.currentScope, signal, cleanup: 'foreground' as const }, inventory = input.journal.inventory(access),
 		plans = input.journal.plans(access), runs = input.journal.pagedRuns(access), checkpoints = input.journal.pagedCheckpoints(access), drafts = input.journal.reviewDrafts(access);
-	input.progress({ stage: 'checking', confirmed: 0, total: 0 }); await authorize();
+	let earlyProgress: PagedRunProgress | undefined;
+	const publish = (value: ForegroundSyncProgress) => input.progress({
+		...value,
+		totalFinal: value.totalFinal ?? !['checking', 'scanning', 'reviewing'].includes(value.stage),
+		...(earlyProgress ? {
+			confirmed: value.confirmed + earlyProgress.confirmed, total: value.total + earlyProgress.operations,
+			directions: combineSyncDirections(earlyProgress.directions, value.directions)
+		} : {})
+	});
+	await authorize();
 	// A previous interrupted plan can leave millions of obsolete rows. Bound
 	// startup cleanup so that backlog cannot starve the user's next transfer.
 	await input.journal.maintenance(access).step(); check();
@@ -59,7 +72,7 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 	let indexProgress: Pick<ForegroundSyncProgress, 'indexed' | 'indexTotal' | 'coverage' | 'skipped' | 'consistency'> = {};
 	const indexing = (value: ForegroundSyncProgress) => {
 		const { indexed, indexTotal, coverage, skipped, consistency } = value;
-		indexProgress = { indexed, indexTotal, coverage, skipped, consistency }; input.progress(value);
+		indexProgress = { indexed, indexTotal, coverage, skipped, consistency }; publish(value);
 	};
 	let lastPreparation: ForegroundSyncProgress['preparation'], lastReport = 0;
 	const preparing = (phase: NonNullable<ForegroundSyncProgress['preparation']>['phase'], completed?: number, total?: number) => {
@@ -68,7 +81,7 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		// publishing phase changes and a known final count.
 		if (lastPreparation?.phase === phase && now - lastReport < 1000 && (total === undefined || completed !== total)) return;
 		lastReport = now; lastPreparation = { phase, completed, total };
-		input.progress({ stage: 'scanning', confirmed: active?.progress.confirmed ?? 0, total: active?.progress.operations ?? 0,
+		publish({ stage: 'scanning', confirmed: active?.progress.confirmed ?? 0, total: active?.progress.operations ?? 0,
 			...indexProgress, preparation: lastPreparation });
 	};
 	const previousHead = await checkpoints.current(), legacy = await input.journal.read(scope), legacyCheckpoint = previousHead ? null : await input.journal.checkpoint(scope); check();
@@ -81,6 +94,14 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		throw Error('An unfinished transfer belongs to different settings. Restore its original settings before retrying; its work has been preserved.');
 	if (draft && JSON.stringify(draft.spec.configuration) !== JSON.stringify(configuration))
 		throw Error('A saved conflict review belongs to different settings. Restore its original settings before retrying or cancelling it.');
+	// A deliberate root change cannot inherit receipts from the old pair.
+	if (early && (early.configuration?.localRootId !== configuration.localRootId ||
+		early.configuration.remoteFolderId !== configuration.remoteFolderId)) {
+		await runs.releaseEarlyAfterRootChange(early, configuration);
+		early = null;
+	}
+	if (early) { earlyProgress = await runs.completedStreamProgress(early); check(); }
+	publish({ stage: 'checking', confirmed: 0, total: 0 });
 	if (draft && active && (draft.spec.id !== active.spec.id || (active.spec.review
 		? draft.progress.phase !== 'sealed' || draft.progress.kind !== active.spec.review.kind || draft.progress.count !== active.spec.review.count
 		: draft.progress.phase !== 'reviewing' || draft.progress.count !== 0)))
@@ -220,15 +241,16 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 	};
 	const capture = async (baseline: PagedPlanSpec['baseline'], purpose: 'initial' | 'review' = 'initial') => {
 		indexProgress = {}; lastPreparation = undefined;
-		input.progress({ stage: 'scanning', confirmed: 0, total: 0 });
+		publish({ stage: 'scanning', confirmed: 0, total: 0 });
 		await authorize();
 		const local = input.beginLocalImport ? await input.beginLocalImport(purpose) : identity('local'), remote = identity('remote');
 		await importObservations(local, remote, false, !!input.beginLocalImport);
 		const spec: PagedPlanSpec = { id: crypto.randomUUID(), local, remote, baseline,
-			policy: { mode: configuration.mode, propagateDeletes: configuration.propagateDeletes }, excludedPaths: configuration.excludedPaths, ...(configuration.ignoreRules ? { ignoreRules: configuration.ignoreRules } : {}) };
+			policy: { mode: configuration.mode, propagateDeletes: configuration.propagateDeletes }, ...(early ? { earlyRunId: early.id } : {}), excludedPaths: configuration.excludedPaths, ...(configuration.ignoreRules ? { ignoreRules: configuration.ignoreRules } : {}) };
 		preparing('index-plan');
 		const result = await plans.build(spec, value => preparing(value.phase === 'indexing' ? 'index-plan' : 'plan',
-			value.phase === 'indexing' ? value.indexed : value.planned, value.phase === 'indexing' ? undefined : value.indexed));
+			value.phase === 'indexing' ? value.indexed : value.planned, value.phase === 'indexing' ? undefined : value.indexed),
+			early ? paths => runs.earlyReceiptsForPaths(early!, paths) : undefined);
 		// Every whole-tree compatibility boundary must stay bounded. The native
 		// paged path can keep its plan, review and baseline on disk throughout.
 		if (result.indexed > MAX_SYNC_SCAN_ENTRIES &&
@@ -290,6 +312,8 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		await checkpoints.changeRoots(configuration.localRootId, configuration.remoteFolderId);
 		const head = await checkpoints.current(); check();
 		let baseline = draft?.spec.plan.baseline ?? head?.baseline;
+		if (draft && draft.spec.plan.earlyRunId !== early?.id)
+			throw Error('Early sync reconciliation evidence changed while this review was saved.');
 		if (draft && head && JSON.stringify(draft.spec.plan.baseline) !== JSON.stringify(head.baseline))
 			throw Error('The baseline changed while this conflict review was saved. Its choices were preserved.');
 		if (!baseline) {
@@ -318,7 +342,7 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 				if (retained?.spec.review?.id === review.id && JSON.stringify(retained.spec.configuration) === JSON.stringify(configuration)) {
 					await releaseDraft(saved); await plans.discard(plan);
 					await input.releaseLocalImport?.(plan.local); check();
-					input.progress({ stage: 'retained', confirmed: retained.progress.confirmed, total: retained.progress.operations });
+					publish({ stage: 'retained', confirmed: retained.progress.confirmed, total: retained.progress.operations });
 					return retained;
 				}
 			}
@@ -339,14 +363,14 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
  if (!state.directions) state = await runs.backfillDirections(spec) ?? state;
  const retain = spec.review?.kind === 'retain';
 	const report = (value: PagedRunProgress, stage: ForegroundSyncProgress['stage'] = retain ? 'retaining' : 'transferring') => {
-		state = value; input.progress({ stage, confirmed: value.confirmed, total: value.operations, directions: value.directions, totalFinal: true, ...(planningCoverage ? { coverage: planningCoverage.coverage, skipped: planningCoverage.totalSkipped, consistency: planningCoverage.consistency } : {}) });
+		state = value; publish({ stage, confirmed: value.confirmed, total: value.operations, directions: value.directions, totalFinal: true, ...(planningCoverage ? { coverage: planningCoverage.coverage, skipped: planningCoverage.totalSkipped, consistency: planningCoverage.consistency } : {}) });
 	};
 	const port = await createPagedCloudSyncPort(spec, configuration, runs, {
 		currentScope: input.currentScope, signal, localTarget,
 		transfer: input.transfer,
 		readLocal,
 		openSource,
-		progress: (path, bytes, size, direction) => { check(); input.progress({ stage: retain ? 'retaining' : 'transferring', confirmed: state.confirmed, total: state.operations, directions: state.directions, totalFinal: true, direction, path, bytes, size, ...(planningCoverage ? { coverage: planningCoverage.coverage, skipped: planningCoverage.totalSkipped, consistency: planningCoverage.consistency } : {}) }); }
+		progress: (path, bytes, size, direction) => { check(); publish({ stage: retain ? 'retaining' : 'transferring', confirmed: state.confirmed, total: state.operations, directions: state.directions, totalFinal: true, direction, path, bytes, size, ...(planningCoverage ? { coverage: planningCoverage.coverage, skipped: planningCoverage.totalSkipped, consistency: planningCoverage.consistency } : {}) }); }
 	}, runtime);
 	const done = await executePreparedPagedSyncRun(spec, scope, runs, port, { signal, changed: p => report(p) }); check();
 	if (retain) { await runs.finishRetention(spec); report(done, 'retained'); return { spec, progress: done }; }

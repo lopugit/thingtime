@@ -14318,6 +14318,27 @@ the isolated real-API/browser command and the metadata-only session boundary.
   provisional generation while the search walk is still held. Resume search and
   verify its final catalog publishes atomically.
 
+### Two-way transfers during initial indexing
+
+- Run `npm --prefix remix run test:file-sync`. The two-way streaming regression
+  holds both source feeds open while uploads and staged downloads confirm,
+  repeats the check for one-sided edits from a sealed baseline, and exercises
+  stale hints, conflicting edits, lost replies, cancellation, authority loss,
+  and a deletion between strict planning and checkpoint capture.
+- Run `npm --prefix remix run test:files:two-way-progress-ui` with the MCP
+  workspace's Playwright and its Chromium installed. The isolated desktop and
+  narrow viewport checks use the real progress viewer and journal, including a
+  download still active during another index frame, provisional discovery,
+  confirmed nested totals after strict planning, and the final direction label.
+- In the signed Mac app, use a disposable connection with deletion propagation
+  off and a late large file to keep the Rust scanner active. Create a small
+  local-only file and a small cloud-only file in already covered paths or new
+  source folders. Record a canonical cloud publication receipt and the native
+  download's matching bytes while the same initial scan is still unsealed.
+  Verify final strict reconciliation converges and preserves operation history.
+  Repeat Stop/resume with the same capture and operation identities. Preserve
+  existing scheduled connections, resource limits, folder grants, and user data.
+
 ### Mac native download recovery
 
 - [ ] Interrupt a signed range after an earlier range has staged. Resume the same

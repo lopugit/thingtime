@@ -112,7 +112,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				const cleanupCheck = () => { cleanupSignal.throwIfAborted(); checkIdentity(); };
 				const streaming = await journal!.pagedRuns({ scope: binding, currentScope: () => { cleanupCheck(); return binding; } }).active();
 				const captures = [
-					...(streaming?.spec.streaming?.source === 'local' ? [{ id: streaming.spec.streaming.captureId, policy: 'one-way-supported' as const }] : []),
+					...(streaming?.spec.streaming && streaming.spec.streaming.source !== 'remote' ? [{ id: streaming.spec.streaming.captureId, policy: 'one-way-supported' as const }] : []),
 					...((job ?? resume)?.nativeCaptureId ? [{ id: (job ?? resume)!.nativeCaptureId!, policy: 'backup-supported' as const }] : [])
 				];
 				if (!captures.length) return;
@@ -353,6 +353,10 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				if (finished?.state === 'scheduled' && adapter.platform === 'macos') await setDesktopSyncScheduled(true, adapter.bridge);
 			}, undefined, signal);
 		} catch (error) {
+			// If the remote feed or a guarded transfer fails, stop only this
+			// connection's native scanner. The durable stream ID/cursors stay
+			// intact for retry, and a failed account check cannot cancel another run.
+			if (reviewed.configuration.mode === 'two-way' && !signal.aborted) await cancelCapture?.().catch(() => {});
 			const failed = job ?? (resume?.intervalMs !== undefined ? resume : null);
 			if (failed && jobs && !signal.aborted && isSyncConnectionFailure(error)) {
 				const delay = error instanceof SyncConnectionWait ? error.retryAfterMs : undefined;

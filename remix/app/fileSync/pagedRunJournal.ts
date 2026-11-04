@@ -24,19 +24,22 @@ import { sameSyncScope, sameSyncStamp, syncPathKey, validSyncPath, validSyncEntr
 export const RETAINED_HEADS = 'sync-retained-run-heads';
 export const REVIEW_STORE = 'sync-run-reviews';
 const INPUT_PATH = 'stream-input-path';
-type StreamInput = NativeIndexChange & { generation: string; inputScope?: string; inputRun?: string; inputPath?: string };
+type Replica = 'local' | 'remote';
+type ReplicaFeed = { sequence: number; generation: string; terminal: boolean };
+type StreamInput = NativeIndexChange & { generation: string; replica?: Replica; inputScope?: string; inputRun?: string; inputPath?: string };
 export const CLOUD_PARENTS = 'sync-cloud-trash-parents';
 export const PAGED_RUN_HEADS = 'sync-paged-run-heads';
+export const streamReconciliationKey = (scope: string): IDBValidKey => [scope, 'stream-reconciliation'];
 export const PAGED_RUN_STORES = ['sync-paged-runs', 'sync-paged-operations'] as const;
 const stores = [SYNC_PRIORITY_STORE, JOURNAL_RETENTION_STORE, RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, ...PAGED_RUN_STORES, PAGED_RUN_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE, PAGED_CHECKPOINT_HEADS, 'runs'];
-export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration; streaming?: { source: 'local' | 'remote'; captureId: string } };
+export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration; streaming?: { source: 'local' | 'remote' | 'both'; captureId: string } };
 export type PagedRunProgress = { phase: 'preparing' | 'ready' | 'running' | 'complete'; read: number; total: number; operations: number; confirmed: number; directions?: SyncDirectionalTotals };
 const directionMigrationsByDatabase = new WeakMap<IDBDatabase, Map<string, Promise<PagedRunProgress | undefined>>>();
 type SortKey = [number, number, string];
 export type CloudBindingProgress = { prepared: number; total: number; phase: 'preparing' | 'ready' };
 type CloudPreparation = { configuration: FileSyncConfiguration; root: CloudInventoryRoot; prepared: number; after: SortKey | null };
 export type PagedRunHeader = PagedRunProgress & { spec: PagedRunSpec; scope: string; instance: string; retired?: true; planInstance: string;
-	next: PagedPlanCursor | null; revision: number; confirmedThrough: SortKey | null; cloud?: CloudPreparation; review?: PagedReviewProgress; retained?: true; scheduling?: Scheduling; stream?: { sequence: number; generation: string | null; terminal: boolean; conflicts: number; sourceCursor?: string; snapshotComplete?: boolean; indexedSequence?: number; sourceTerminal?: boolean; priorityPreparation?: true; preparedAhead?: number; inputBackfillSequence?: number; inputBackfillThrough?: number } };
+	next: PagedPlanCursor | null; revision: number; confirmedThrough: SortKey | null; cloud?: CloudPreparation; review?: PagedReviewProgress; retained?: true; scheduling?: Scheduling; stream?: { sequence: number; generation: string | null; terminal: boolean; conflicts: number; sourceCursor?: string; snapshotComplete?: boolean; indexedSequence?: number; sourceTerminal?: boolean; priorityPreparation?: true; preparedAhead?: number; inputBackfillSequence?: number; inputBackfillThrough?: number; replicaFeeds?: Partial<Record<Replica, ReplicaFeed>> } };
 type BatchReservation = { kind?: 'folders'; id: string; count: number; remaining: number; next: number };
 type Scheduling = { canonical: boolean; legacy: boolean; revision: number; index: number; after: string | null; reserved: string | null;
 	batch?: BatchReservation; recovery?: BatchReservation; streamScan?: { index: number; ancestor: number; phase: 0 | 1 | 2 } };
@@ -53,9 +56,13 @@ export const parsePagedRunSpec = (value: PagedRunSpec): PagedRunSpec => {
 	const plan = parsePagedPlanSpec(value.plan), configuration = value.configuration === undefined ? undefined : parseFileSyncConfiguration(value.configuration);
 	if (configuration && (configuration.mode !== plan.policy.mode || configuration.propagateDeletes !== plan.policy.propagateDeletes || (configuration.ignoreRules ?? '') !== (plan.ignoreRules ?? '') ||
 		JSON.stringify(configuration.excludedPaths.map(syncPathKey).sort()) !== JSON.stringify(plan.excludedPaths.map(syncPathKey).sort()))) throw Error('Saved run settings do not match the plan.');
-	if (value.streaming && (!configuration || value.review || plan.policy.propagateDeletes || !['upload', 'download', 'backup'].includes(plan.policy.mode) || !identifier(value.streaming.captureId) || value.streaming.source !== (plan.policy.mode === 'download' ? 'remote' : 'local'))) throw Error('Streaming requires an approved one-way connection without deletions.');
+	if (value.streaming && (!configuration || value.review || plan.policy.propagateDeletes || !identifier(value.streaming.captureId) || value.streaming.source !== (plan.policy.mode === 'two-way' ? 'both' : plan.policy.mode === 'download' ? 'remote' : 'local'))) throw Error('Streaming requires an approved connection without deletions.');
 	return { id: value.id, plan, ...(value.streaming ? { streaming: { source: value.streaming.source, captureId: value.streaming.captureId } } : {}), ...(value.review === undefined ? {} : { review: parsePagedRunReview(value.review) }), ...(configuration ? { configuration } : {}) };
 };
+const validStreamInput = (change: NativeIndexChange & { replica?: Replica }, spec: PagedRunSpec) =>
+	validIndexProvenance(change) && (spec.streaming?.source === 'both'
+		? (change.replica === 'local' || change.replica === 'remote') && (change.sourceKind === undefined || change.replica === 'remote')
+		: change.replica === undefined && (change.sourceKind === undefined || spec.streaming?.source === 'remote'));
 const inputs = (spec: PagedRunSpec) => [spec.plan.local, spec.plan.remote, spec.plan.baseline.local, spec.plan.baseline.remote];
 const progress = ({ phase, read, total, operations, confirmed, directions }: Header): PagedRunProgress => ({ phase, read, total, operations, confirmed, ...(directions ? { directions: structuredClone(directions) } : {}) });
 const orderKey = (op: SyncOperation): SortKey => syncMutationOrderKey(op.mutation);
@@ -101,7 +108,14 @@ export const validatePagedRunHeader = (h: Header, spec: PagedRunSpec, scope: Syn
  }
 	if (!!spec.streaming !== !!h.stream) throw Error('Invalid streaming sync progress.');
 	if (h.stream) {
-		const stream = h.stream;
+		const stream = h.stream, feeds = stream.replicaFeeds;
+		if (feeds && (spec.streaming?.source !== 'both' || Object.keys(feeds).some(k => k !== 'local' && k !== 'remote') ||
+			Object.values(feeds).some(f => !f || !identifier(f.generation) || !nonnegative(f.sequence) || typeof f.terminal !== 'boolean') ||
+			(feeds.local?.sequence ?? 0) + (feeds.remote?.sequence ?? 0) !== stream.indexedSequence ||
+			stream.generation !== spec.streaming.captureId || stream.sourceTerminal !== (!!feeds.local?.terminal && !!feeds.remote?.terminal)))
+			throw Error('Invalid two-way streaming watermarks.');
+		if (spec.streaming?.source === 'both' && !feeds && (stream.indexedSequence !== undefined || stream.sourceTerminal || stream.terminal))
+			throw Error('Missing two-way streaming watermarks.');
 		if (!nonnegative(stream.sequence) || (stream.sequence + (stream.preparedAhead ?? 0)) !== h.total || !nonnegative(stream.conflicts) || stream.conflicts > h.read ||
 			typeof stream.terminal !== 'boolean' || (stream.generation !== null && !identifier(stream.generation)) ||
 			(stream.sourceCursor !== undefined && (!/^(0|[1-9][0-9]{0,15})$/.test(stream.sourceCursor) || !Number.isSafeInteger(Number(stream.sourceCursor)))) ||
@@ -315,7 +329,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 	};
 	const inputRow = (value: StreamInput, spec: PagedRunSpec, generation: string | null, primaryKey: IDBValidKey): StreamInput => {
 		if (!value || !nonnegative(value.sequence) || value.sequence === 0 || value.generation !== generation ||
-			!validSyncEntry(value.entry) || value.revision !== value.entry.version || !validIndexProvenance(value) ||
+			!validSyncEntry(value.entry) || value.revision !== value.entry.version || !validStreamInput(value, spec) ||
 			JSON.stringify(primaryKey) !== JSON.stringify([key, spec.id, 'input', value.sequence]) ||
 			(value.inputScope !== undefined && (value.inputScope !== key || value.inputRun !== spec.id || value.inputPath !== syncPathKey(value.entry.path))))
 			throw Error('Durable streaming input is missing or changed.');
@@ -808,11 +822,12 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 
 		/** Commit one fully prepared revision and its feed cursor atomically.
 		 * The prior version's receipt remains retained before replacing a path. */
-		async appendStream(value: PagedRunSpec, change: NativeIndexChange & { generation: string }, binding: CloudOperationBinding | null, conflict = false, observe = true) {
+		async appendStream(value: PagedRunSpec, change: StreamInput, binding: CloudOperationBinding | null, conflict = false, observe = true) {
 			const spec = parsePagedRunSpec(value), event = structuredClone(change), prepared = binding && structuredClone(binding);
-			if (!spec.streaming || !identifier(event.generation) || !nonnegative(event.sequence) || event.sequence === 0 || event.revision !== event.entry?.version || !validSyncEntry(event.entry) || !validIndexProvenance(event) || (event.sourceKind !== undefined && spec.streaming.source !== 'remote')) throw Error('Invalid streaming index change.');
+			if (!spec.streaming || !identifier(event.generation) || !nonnegative(event.sequence) || event.sequence === 0 || event.revision !== event.entry?.version || !validSyncEntry(event.entry) || !validStreamInput(event, spec)) throw Error('Invalid streaming index change.');
 			if (prepared) { const write = parseCloudWrite(prepared.write), m = write.operation.mutation;
-				if (!sameSyncScope(write.scope, scope) || write.cloudRootId !== spec.configuration!.remoteFolderId || m.kind !== 'copy' || m.from !== spec.streaming.source || !sameSyncStamp(m.source, event.entry) || write.operation.confirmed || write.operation.id === spec.id) throw Error('Streaming operation does not match the indexed revision.'); }
+				if (!sameSyncScope(write.scope, scope) || write.cloudRootId !== spec.configuration!.remoteFolderId || m.kind !== 'copy' || m.from !== (event.replica ?? spec.streaming.source) || (event.replica !== undefined && (!!m.source.symbolicLink || (m.source.kind === 'folder' && m.expectedTarget !== null) ||
+					(m.from === 'local' && !write.guardDestination))) || !sameSyncStamp(m.source, event.entry) || write.operation.confirmed || write.operation.id === spec.id) throw Error('Streaming operation does not match the indexed revision.'); }
 			if (bytes({ event, prepared }) > INVENTORY_PAGE_BYTES) throw Error('Streaming change exceeds its byte bound.');
 			return withHeader<PagedRunProgress>(spec, 'readwrite', (h, tx, done, fail) => {
 				const stream = h.stream!, events = tx.objectStore(REVIEW_STORE), token = [key, spec.id, 'event', event.sequence], get = events.get(token);
@@ -822,7 +837,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 					if (stream.indexedSequence !== undefined) {
 						const staged = events.get([key, spec.id, 'input', event.sequence]);
 						staged.onsuccess = () => { try { check(); const source = staged.result;
-							if (!source || !validSyncEntry(source.entry) || source.sequence !== event.sequence || source.generation !== event.generation || source.revision !== event.revision || !sameSyncStamp(source.entry, event.entry) || source.sourcePosition !== event.sourcePosition || source.sourceKind !== event.sourceKind) throw Error('Durable streaming input changed before preparation.');
+							if (!source || !validSyncEntry(source.entry) || source.sequence !== event.sequence || source.generation !== event.generation || source.revision !== event.revision || !sameSyncStamp(source.entry, event.entry) || source.sourcePosition !== event.sourcePosition || source.sourceKind !== event.sourceKind || source.replica !== event.replica) throw Error('Durable streaming input changed before preparation.');
 						} catch (error) { fail(error); } };
 					}
 					if (event.sequence !== stream.sequence + 1) {
@@ -869,8 +884,8 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		 * transfers. A quota/transaction failure leaves its source watermark intact. */
 		async appendStreamInput(value: PagedRunSpec, generation: string, changes: readonly NativeIndexChange[], terminal: boolean) {
 			const spec = parsePagedRunSpec(value), rows = structuredClone(changes);
-			if (!spec.streaming || !identifier(generation) || !Array.isArray(rows) || rows.length > INVENTORY_PAGE_ENTRIES || typeof terminal !== 'boolean' ||
-				rows.some(row => !nonnegative(row.sequence) || row.sequence === 0 || !validSyncEntry(row.entry) || row.revision !== row.entry.version || !validIndexProvenance(row) || (row.sourceKind !== undefined && spec.streaming.source !== 'remote')) || bytes(rows) > INVENTORY_PAGE_BYTES) throw Error('Invalid streaming input page.');
+			if (!spec.streaming || spec.streaming.source === 'both' || !identifier(generation) || !Array.isArray(rows) || rows.length > INVENTORY_PAGE_ENTRIES || typeof terminal !== 'boolean' ||
+				rows.some(row => !nonnegative(row.sequence) || row.sequence === 0 || !validSyncEntry(row.entry) || row.revision !== row.entry.version || !validStreamInput(row, spec)) || bytes(rows) > INVENTORY_PAGE_BYTES) throw Error('Invalid streaming input page.');
 			return withHeader<void>(spec, 'readwrite', (h, tx, done, fail) => {
 				const stream = h.stream!, after = stream.indexedSequence ?? stream.sequence;
 				if (stream.sourceTerminal || stream.terminal || (stream.generation !== null && stream.generation !== generation) || rows.some((row, i) => row.sequence !== after + i + 1)) throw Error('Streaming input generation or watermark changed.');
@@ -885,6 +900,35 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				stream.indexedSequence = after + rows.length; stream.generation = generation; stream.sourceTerminal = terminal; h.revision++; save(h, tx); done(undefined);
 			});
 		},
+		/** Atomically join a producer's own watermark to the shared durable queue.
+		 * Neither producer can advance or seal the other producer's feed. */
+		async appendReplicaStreamInput(value: PagedRunSpec, replica: Replica, sourceGeneration: string, after: number, changes: readonly NativeIndexChange[], terminal: boolean) {
+			const spec = parsePagedRunSpec(value), rows = structuredClone(changes);
+			if (spec.streaming?.source !== 'both' || !['local', 'remote'].includes(replica) || !identifier(sourceGeneration) || !nonnegative(after) ||
+				typeof terminal !== 'boolean' || rows.length > INVENTORY_PAGE_ENTRIES || bytes(rows) > INVENTORY_PAGE_BYTES ||
+				rows.some((row, i) => row.sequence !== after + i + 1 || !validSyncEntry(row.entry) || row.revision !== row.entry.version || !validStreamInput({ ...row, replica }, spec)))
+				throw Error('Invalid two-way streaming input page.');
+			const generation = spec.streaming.captureId;
+			return withHeader<void>(spec, 'readwrite', (h, tx, done, fail) => {
+				const stream = h.stream!, previous = stream.replicaFeeds?.[replica], indexed = stream.indexedSequence ?? 0;
+				if (stream.terminal || previous?.terminal || (previous?.sequence ?? 0) !== after ||
+					(previous && previous.generation !== sourceGeneration)) throw Error('Two-way source generation or watermark changed.');
+				const events = tx.objectStore(REVIEW_STORE);
+				for (const [i, row] of rows.entries()) {
+					const sequence = indexed + i + 1;
+					events.add({ ...row, replica, sequence, generation, inputScope: key, inputRun: spec.id, inputPath: syncPathKey(row.entry.path) }, [key, spec.id, 'input', sequence]);
+					if (row.sourceKind === 'delta') {
+						const token = [key, spec.id, 'delta', syncPathKey(row.entry.path)], prior = events.get(token);
+						prior.onsuccess = () => { try { check(); events.put(Math.max(prior.result ?? 0, row.sourcePosition!), token); } catch (error) { fail(error); } };
+					}
+				}
+				const feeds = { ...stream.replicaFeeds, [replica]: { sequence: after + rows.length, generation: sourceGeneration, terminal } };
+				stream.replicaFeeds = feeds; stream.indexedSequence = indexed + rows.length; stream.generation = generation;
+				stream.sourceTerminal = !!feeds.local?.terminal && !!feeds.remote?.terminal;
+				h.revision++; save(h, tx); done(undefined);
+			});
+		},
+
 		/** One resumable local migration page; no network work or embedded path set. */
 		backfillStreamInputs: (value: PagedRunSpec) => backfillInputs(parsePagedRunSpec(value)),
 		/** Only the trusted native local adapter enables preparation hints. This
@@ -894,7 +938,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			if (!h.stream.priorityPreparation) { h.stream.priorityPreparation = true; h.stream.preparedAhead = 0; h.stream.inputBackfillSequence = h.stream.sequence; h.stream.inputBackfillThrough = h.stream.indexedSequence ?? h.stream.sequence; h.revision++; save(h, tx); }
 			done(undefined);
 		}),
-		async nextStreamInput(value: PagedRunSpec, preparePriorities = true): Promise<(NativeIndexChange & { generation: string }) | null> {
+		async nextStreamInput(value: PagedRunSpec, preparePriorities = true): Promise<StreamInput | null> {
 			const spec = parsePagedRunSpec(value);
 			await drainStream(spec);
 			const preferred = preparePriorities ? await priorityInput(spec) : null;
@@ -932,13 +976,15 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 
 		/** Only for an executor's preflight failure AFTER receipt lookup returned
 		 * missing. Pending/uncertain publications must retain the original ID. */
-		async skipUnpublishedStreamOperation(value: PagedRunSpec, operationId: string, conflict: boolean) {
+		async skipUnpublishedStreamOperation(value: PagedRunSpec, operationId: string, conflict: boolean, firstGuardedDispatchRejected = false) {
 			const spec = parsePagedRunSpec(value);
 			return withHeader<PagedRunProgress>(spec, 'readwrite', (h, tx, done, fail) => {
 				if (!h.stream || h.scheduling?.reserved !== operationId) throw Error('Only the reserved unpublished streaming operation can be superseded.');
 				const ops = tx.objectStore(PAGED_RUN_STORES[1]), get = ops.index('operation').get([key, operationId]);
 				get.onsuccess = () => { try { check(); const r = row(get.result, spec);
-					if (r.operation.confirmed || r.receipt !== null || r.canonicalDispatched === true) throw Error('Preserve the published or uncertain revision receipt.');
+					if (r.operation.confirmed || r.receipt !== null ||
+						(r.canonicalDispatched === true && !(firstGuardedDispatchRejected && spec.streaming?.source === 'both' && r.cloud?.write.guardDestination)))
+						throw Error('Preserve the published or uncertain revision receipt.');
 					if (h.scheduling?.batch) throw Error('Recover the reserved batch before replanning a member.');
 					const retire = () => {
 					if (!conflict && r.canonicalDispatched === false && r.cloud && eligibleFolderBatchWrite(r.cloud.write, scope))
@@ -1074,10 +1120,10 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		},
 		async markStreamCanonicalDispatch(value: PagedRunSpec, operationId: string) {
 			const spec = parsePagedRunSpec(value);
-			return withHeader<void>(spec, 'readwrite', (h, tx, done, fail) => {
+			return withHeader<boolean>(spec, 'readwrite', (h, tx, done, fail) => {
 				if (h.scheduling?.reserved !== operationId) throw Error('Only the reserved original operation can dispatch.');
 				const ops = tx.objectStore(PAGED_RUN_STORES[1]), get = ops.index('operation').get([key, operationId]);
-				get.onsuccess = () => { try { check(); const r = row(get.result, spec); r.canonicalDispatched = true; ops.put(r, [key, spec.id, ...orderKey(r.operation)]); h.revision++; save(h, tx); done(undefined); } catch (e) { fail(e); } };
+				get.onsuccess = () => { try { check(); const r = row(get.result, spec), first = r.canonicalDispatched === false; r.canonicalDispatched = true; ops.put(r, [key, spec.id, ...orderKey(r.operation)]); h.revision++; save(h, tx); done(first); } catch (e) { fail(e); } };
 			});
 		},
 
@@ -1087,7 +1133,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			const spec = parsePagedRunSpec(value);
 			if (!/^(0|[1-9][0-9]{0,15})$/.test(cursor) || !Number.isSafeInteger(Number(cursor)) || typeof snapshotComplete !== 'boolean') throw Error('Invalid remote streaming cursor.');
 			return withHeader<void>(spec, 'readwrite', (h, tx, done) => {
-				if (spec.streaming?.source !== 'remote' || !h.stream || h.stream.terminal || (h.stream.indexedSequence ?? h.stream.sequence) !== sequence || (h.stream.sourceCursor !== undefined && Number(cursor) < Number(h.stream.sourceCursor)) || (h.stream.snapshotComplete && !snapshotComplete)) throw Error('Remote source checkpoint changed.');
+				if (!spec.streaming || !['remote', 'both'].includes(spec.streaming.source) || !h.stream || h.stream.terminal || (spec.streaming.source === 'both' ? h.stream.replicaFeeds?.remote?.sequence ?? 0 : h.stream.indexedSequence ?? h.stream.sequence) !== sequence || (h.stream.sourceCursor !== undefined && Number(cursor) < Number(h.stream.sourceCursor)) || (h.stream.snapshotComplete && !snapshotComplete)) throw Error('Remote source checkpoint changed.');
 				h.stream.sourceCursor = cursor; h.stream.snapshotComplete = snapshotComplete; h.revision++; save(h, tx); done(undefined);
 			});
 		},
@@ -1106,15 +1152,95 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				if (!h.stream?.terminal || h.phase !== 'complete') throw Error('Finish every indexed revision before releasing its stream.');
 				// A complete feed establishes no whole-tree agreement. A subsequent
 				// sealed reconciliation owns review and the checkpoint publication.
-				tx.objectStore(PAGED_RUN_HEADS).delete(key); done(undefined);
+				const heads = tx.objectStore(PAGED_RUN_HEADS);
+				if (spec.streaming?.source === 'both' && h.confirmed) heads.add(spec.id, streamReconciliationKey(key));
+				heads.delete(key); done(undefined);
 			});
+		},
+
+		async streamAwaitingReconciliation(): Promise<PagedRunSpec | null> {
+			return transaction(stores, 'readonly', (tx, done, fail) => {
+				const pointer = tx.objectStore(PAGED_RUN_HEADS).get(streamReconciliationKey(key));
+				pointer.onsuccess = () => { try {
+					check(); const id = pointer.result;
+					if (id === undefined) { done(null); return; }
+					if (!identifier(id)) throw Error('Invalid early sync reconciliation identity.');
+					const get = tx.objectStore(PAGED_RUN_STORES[0]).get([key, id]);
+					get.onsuccess = () => { try {
+						check(); const h: Header = get.result, spec = parsePagedRunSpec(h?.spec);
+						validate(h, spec);
+						if (spec.id !== id || spec.streaming?.source !== 'both' || h.phase !== 'complete' || !h.confirmed)
+							throw Error('Early sync receipts are unavailable for reconciliation.');
+						done(spec);
+					} catch (error) { fail(error); } };
+				} catch (error) { fail(error); } };
+			});
+		},
+
+		completedStreamProgress: (value: PagedRunSpec) => withHeader<PagedRunProgress>(parsePagedRunSpec(value), 'readonly', (h, _tx, done) => {
+			if (!h.stream?.terminal || h.phase !== 'complete') throw Error('Early sync progress is not complete.');
+			done(progress(h));
+		}, true),
+
+		async earlyReceiptsForPaths(value: PagedRunSpec, paths: readonly string[]): Promise<(ConfirmedSyncOperation | null)[]> {
+			const spec = parsePagedRunSpec(value), requested = [...paths];
+			if (spec.streaming?.source !== 'both' || requested.length > INVENTORY_PAGE_ENTRIES || requested.some(path => !validSyncPath(path)))
+				throw Error('Invalid early sync reconciliation page.');
+			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
+				if (h.phase !== 'complete') throw Error('Finish the early sync feed before reconciliation.');
+				if (!requested.length) { done([]); return; }
+				const result: (ConfirmedSyncOperation | null)[] = []; let pending = requested.length;
+				requested.forEach((path, i) => {
+					const get = tx.objectStore(PAGED_RUN_STORES[1]).index('path').get([key, spec.id, syncPathKey(path)]);
+					get.onsuccess = () => { try {
+						check(); const item = get.result === undefined ? null : row(get.result, spec);
+						if (item && (!item.operation.confirmed || !item.receipt)) throw Error('An early sync receipt is unavailable.');
+						result[i] = item && { operation: item.operation, receipt: item.receipt! };
+						if (!--pending) done(result);
+					} catch (error) { fail(error); } };
+				});
+			}, true);
+		},
+
+		async releaseEarlyAfterRootChange(value: PagedRunSpec, current: FileSyncConfiguration) {
+			const spec = parsePagedRunSpec(value);
+			if (spec.streaming?.source !== 'both' || (spec.configuration?.localRootId === current.localRootId &&
+				spec.configuration.remoteFolderId === current.remoteFolderId)) throw Error('Early sync receipts still belong to this root pair.');
+			return withHeader<void>(spec, 'readwrite', (h, tx, done, fail) => {
+				if (h.phase !== 'complete') throw Error('Preserve unfinished streaming receipts.');
+				const heads = tx.objectStore(PAGED_RUN_HEADS), pointer = heads.get(streamReconciliationKey(key));
+				pointer.onsuccess = () => { try {
+					check(); if (pointer.result !== spec.id) throw Error('Early sync reconciliation changed.');
+					heads.delete(streamReconciliationKey(key)); done(undefined);
+				} catch (error) { fail(error); } };
+			}, true);
+		},
+
+		/** Progress retains the exact completed early pass referenced by the strict plan. */
+		async earlyProgressSource(value: PagedRunSpec): Promise<PagedRunSpec | null> {
+			const spec = parsePagedRunSpec(value), id = spec.plan.earlyRunId;
+			if (!id) return null;
+			return withHeader(spec, 'readonly', (_h, tx, done, fail) => {
+				const get = tx.objectStore(PAGED_RUN_STORES[0]).get([key, id]);
+				get.onsuccess = () => { try {
+					check(); const h: Header = get.result, early = parsePagedRunSpec(h?.spec);
+					validate(h, early);
+					if (early.id !== id || early.streaming?.source !== 'both' || h.phase !== 'complete' ||
+						early.configuration?.localRootId !== spec.configuration?.localRootId ||
+						early.configuration?.remoteFolderId !== spec.configuration?.remoteFolderId)
+						throw Error('Early sync progress belongs to different folders.');
+					done(early);
+				} catch (error) { fail(error); } };
+			}, true);
 		},
 
 		async retireCompletedStream(value: PagedRunSpec) {
 			const spec = parsePagedRunSpec(value);
+			if (spec.streaming?.source === 'both') return; // Maintenance owns the strict progress dependency.
 			return withHeader<void>(spec, 'readwrite', (h, tx, done) => {
 				if (!h.stream?.terminal || h.phase !== 'complete') throw Error('Preserve unfinished streaming receipts.');
-				retireJournalMetadata(tx, key, 'run', spec.id, PAGED_RUN_STORES[0], h); done(undefined);
+				retireJournalMetadata(tx, key, 'run', spec.id, PAGED_RUN_STORES[0], h);
+				done(undefined);
 			}, true);
 		},
 
@@ -1195,7 +1321,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 					}
 					rows.push(saved); size += length; cursor.continue();
 				} catch (e) { fail(e); } };
-			});
+			}, spec.streaming?.source === 'both');
 		},
 		async active(): Promise<{ spec: PagedRunSpec; progress: PagedRunProgress; review?: PagedReviewProgress } | null> {
 			return transaction(stores, 'readonly', (tx, done, fail) => {
