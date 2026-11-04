@@ -131,8 +131,13 @@
       Repeat after default/compact changes and at minimum and wide/tall window sizes. Center links, text fields,
       header/footer controls and file dragging must retain normal input and cursors. Disable custom resize handling:
       its native handle views must stop intercepting hits and cursors. Run the loaded-WebKit native cursor regression
-      for sibling hit ownership, system cursor selection and relayout/invalidation; dispatched cursor updates and
-      endpoint drags do not substitute for this physical-hover check when automation lacks pointer movement.
+      for sibling hit ownership, system cursor selection and relayout/invalidation. Run
+      `swift test --package-path hosts/macos --filter CommanderWebViewTests/testResizeBorderWindowServerTargetingAndMotionDispatch`
+      from `Commander/`: the shown, non-key fixture must pass WindowServer targeting on the inner and outer halves
+      of every edge/corner in both modes at normal/minimum sizes, plus continued motion, central cursor restoration
+      and removal of the exterior input surface when disabled. An unavailable/occluded WindowServer fixture skips
+      that integration check explicitly. Dispatched events and endpoint drags do not substitute for physical hover
+      when automation lacks pointer movement; inspect the barely painted native band for unwanted visible edges.
 - [ ] While resizing, trigger an emoji insertion or press Return to paste from Commander’s Emoji & Symbols picker,
       release the mouse, press Escape, change focus, hide, or close the launcher. The resize session must cancel
       immediately, so later pointer movement cannot resize the panel. In
