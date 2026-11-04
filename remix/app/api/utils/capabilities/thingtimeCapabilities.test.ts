@@ -114,7 +114,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.things-fork']?.version, '1.7.0');
 	assert.equal(manifest.features['api.things-import']?.version, '1.11.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.15.0');
-	assert.equal(manifest.features['api.devices-node-state']?.version, '1.13.0');
+	assert.equal(manifest.features['api.devices-node-state']?.version, '1.14.0');
 	assert.equal(capabilitySatisfies('1.9.0', '1.10.0'), false);
 	assert.equal(capabilitySatisfies('1.11.0', '1.10.0'), true);
   for (const [feature, required, previous] of [['api.things-export', '1.15.0', '1.13.0'], ['api.attachment-content', '1.17.0', '1.6.4']]) {
@@ -502,8 +502,8 @@ test('Characters negotiate management and acting identities on both manifests', 
 test('full Mac capability lists negotiate additive device contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://preview.example.test');
   for (const [feature, current, minimum] of [
-    ['api.devices', '1.13.0', '1.10.0'],
-    ['api.devices-node-state', '1.13.0', '1.11.0'],
+    ['api.devices', '1.14.0', '1.10.0'],
+    ['api.devices-node-state', '1.14.0', '1.11.0'],
     ['api.devices-pairing-claim', '1.2.0', '1.0.0']
   ]) {
     assert.equal(manifest.features[feature]?.version, current);
@@ -513,6 +513,16 @@ test('full Mac capability lists negotiate additive device contracts', () => {
   }
 });
 
+
+test('host resource telemetry negotiates both additive device contracts', () => {
+  const manifest = thingtimeCapabilityManifest('https://devices.test');
+  for (const feature of ['api.devices', 'api.devices-node-state']) {
+    assert.equal(manifest.features[feature]?.version, '1.14.0');
+    assert.equal(createApiCapabilitiesManifest().features[feature], '1.14.0');
+    for (const version of ['1.14.0', '1.14.1', '1.15.0']) assert(capabilitySatisfies(version, '1.14.0'));
+    for (const version of [undefined, '1.13.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.14.0'), false);
+  }
+});
 
 test('sync ignore rules require the additive saved-policy contract on both manifests', () => {
   assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.46.2');
