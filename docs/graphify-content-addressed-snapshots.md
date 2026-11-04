@@ -114,6 +114,8 @@ default is one active portable snapshot in the checked-out tree. Set
 `GRAPHIFY_SNAPSHOT_RETENTION` to a positive integer to retain a larger bounded
 set for an explicit local workflow. Invalid, zero, and unbounded values fail
 closed. `scripts/graphify prune` applies the same policy without rebuilding.
+Pruning keeps untracked, staged, and locally modified snapshots. It removes a
+superseded snapshot only after its portable files match committed Git content.
 
 `extract --no-cluster` is rejected because Graphify has historically been able
 to replace a large graph with only the newly extracted nodes in that mode.
@@ -150,9 +152,9 @@ legacy generated directory and regenerates it under the immutable layout.
 ## Retention
 
 Snapshots are portable build outputs, not source authority. The current tree
-keeps the active source fingerprint and, by default, no superseded portable
-snapshots. Deleted snapshot paths remain recoverable from Git history, and an
-open PR or another branch retains its own snapshot until that ref adopts the
+keeps the active source fingerprint and, by default, removes superseded
+snapshots that match committed files. Deleted snapshot paths remain recoverable
+from Git history, and an open PR or another branch retains its own snapshot until that ref adopts the
 new policy. This makes pruning branch-local and safe without querying or
 rewriting another ref.
 

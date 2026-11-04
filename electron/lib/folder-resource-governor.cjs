@@ -39,11 +39,20 @@ class ResourceGovernor {
     }
     observeNative(resources) {
         if (resources?.version !== 1) return;
+        if (Number.isFinite(resources.measuredAt) && resources.measuredAt < this.nativeResources?.measuredAt) return;
         this.nativeResources = resources;
         this.sample('indexer-process', resources.indexingCpuPercent ?? null);
         this.sample('source-thread', resources.sourceCpuPercent ?? null);
         if (Number.isSafeInteger(resources.effectiveTransferConcurrency) && resources.effectiveTransferConcurrency > 0) this.nativeTransfer = resources.effectiveTransferConcurrency;
         if (Number.isSafeInteger(resources.effectiveIndexingConcurrency) && resources.effectiveIndexingConcurrency > 0) this.indexing = resources.effectiveIndexingConcurrency;
+    }
+    observeTransport(resources) {
+        this.transport = resources; this.transportAt = this.clock();
+        this.sample('transport-process', resources.cpuPercent);
+    }
+    clearTransport() {
+        this.transport = undefined; this.transportAt = undefined;
+        this.sample('transport-process', null);
     }
     cpu() { const fresh = [...this.samples.values()].filter(x => this.clock() - x.at < 2000); return fresh.length ? Math.min(100, fresh.reduce((s, x) => s + x.percent, 0)) : null; }
     concurrency() { return Math.max(1, Math.floor(Math.min(16, this.policy.transferConcurrency ?? 16) * this.factor)); }
@@ -105,22 +114,30 @@ class ResourceGovernor {
     }
     snapshot() {
         const cpu = this.cpu();
+        const transport = this.transport && this.clock() - this.transportAt < 2000 ? this.transport : undefined;
         const first = this.byteSamples[0], last = this.byteSamples.at(-1), elapsed = first && last ? (last.at - first.at) / 1000 : 0;
-        const current = elapsed >= .25 && this.clock() - last.at < 2000;
-        return { ...this.nativeResources, version: 1, cpuPercent: cpu,
-            measuredAt: Date.now(),
-            currentUploadBytesPerSecond: this.transport?.currentUploadBytesPerSecond ?? (current ? (last.upload - first.upload) / elapsed : null),
-            currentDownloadBytesPerSecond: this.transport?.currentDownloadBytesPerSecond ?? (current ? (last.download - first.download) / elapsed : null),
+        const current = elapsed >= .25 && elapsed <= 2 && this.clock() - last.at < 2000;
+        const measuredAt = Date.now();
+        const nativeAge = measuredAt - this.nativeResources?.measuredAt;
+        const native = nativeAge >= 0 && nativeAge < 2000 ? this.nativeResources : undefined;
+        return { ...native, version: 1, cpuPercent: cpu,
+            measuredAt,
+            currentUploadBytesPerSecond: transport?.currentUploadBytesPerSecond ?? (current ? (last.upload - first.upload) / elapsed : null),
+            currentDownloadBytesPerSecond: transport?.currentDownloadBytesPerSecond ?? (current ? (last.download - first.download) / elapsed : null),
             transferBytesPerSecond: this.totalBytesPerSecond, cpuStatus: cpu === null ? 'unavailable' : 'measured',
-            cpuScopes: [...this.samples.entries()].filter(([, value]) => this.clock() - value.at < 2000).map(([key]) => key), effectiveTransferConcurrency: Math.min(this.concurrency(), this.nativeTransfer ?? 16, this.transport?.effectiveTransferConcurrency ?? 16),
+            cpuScopes: [...this.samples.entries()].filter(([, value]) => this.clock() - value.at < 2000).map(([key]) => key), effectiveTransferConcurrency: Math.min(this.concurrency(), this.nativeTransfer ?? 16, transport?.effectiveTransferConcurrency ?? 16),
             effectiveIndexingConcurrency: this.indexing ?? Math.max(1, Math.min(this.policy.indexingConcurrency ?? 4, 64)),
             ...(this.policy.cpuPercent ? { scopeCpuBudgetPercent: this.policy.cpuPercent / 3 } : {}),
-            ...(this.policy.uploadBytesPerSecond ? { uploadBytesPerSecond: (this.transport?.uploadBytesPerSecond ?? this.policy.uploadBytesPerSecond * this.factor) } : {}),
+            ...(this.policy.uploadBytesPerSecond ? { uploadBytesPerSecond: (transport?.uploadBytesPerSecond ?? this.policy.uploadBytesPerSecond * this.factor) } : {}),
             ...(this.policy.downloadBytesPerSecond ? { downloadBytesPerSecond: this.policy.downloadBytesPerSecond * this.factor } : {}) };
     }
 }
 const governors = new Map();
 function governorFor(input, context, force = false) {
+    const key = JSON.stringify([context.apiOrigin, context.ownerId, input.deviceId]);
+    // Reading telemetry shares the active governor but must never initialize it
+    // or reset an admitted connection's resource ceilings.
+    if (input.action === 'resources' && !input.deviceResourceLimits) return governors.get(key) ?? null;
     const configured = limits(input.resourceLimits ?? input.batch?.descriptor?.configuration?.configuration?.resourceLimits);
     const device = deviceLimits(input.deviceResourceLimits);
     const policy = { ...configured, cpuPercent: Math.min(configured.cpuPercent ?? 100, device.cpuPercent) };
@@ -130,7 +147,6 @@ function governorFor(input, context, force = false) {
     // Lazy TTL cleanup avoids timers or retaining abandoned connection scopes.
     const now = performance.now();
     for (const [key, saved] of governors) if (!saved.active && !saved.pending && now - (saved.lastUsed ?? now) > 300000) governors.delete(key);
-    const key = JSON.stringify([context.apiOrigin, context.ownerId, input.deviceId]);
     let governor = governors.get(key);
     if (!governor) { governor = new ResourceGovernor(policy); governors.set(key, governor); }
     else governor.setLimits(policy);

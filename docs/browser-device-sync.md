@@ -125,3 +125,30 @@ Control 1.3.0 additionally carries optional per-job directional progress through
 the same status heartbeat. Resource read/save retains its 1.2.0 minimum; source
 paths retain 1.1.0 and ordinary controls retain 1.0.0. Clients negotiate the
 optional progress contract before projecting it, without another poller.
+
+## Sync resource history
+
+The app-owned native sync runner records observations during admitted runs, even
+when no dashboard is open. History is retained in the source app's IndexedDB
+journal across restarts, scoped by selected API origin, owner, paired device and
+data plane. Removing that app's local storage removes its local history. History
+begins with the updated collector; earlier measurements cannot be reconstructed.
+A remote browser reads the source through the existing paired control mailbox
+and requires `api.devices-sync-control` 1.4.0. The source must be connected for a
+fresh remote read. This does not start, resume or change a sync connection.
+
+Live readings retain their observation time. A paused or completed job cannot
+present its last nonzero rate as live. Historical buckets show means of measured
+samples, not time-weighted utilization or total transferred bytes. Per-metric
+sample counts distinguish partial coverage; empty intervals and unavailable CPU,
+scan or indexer memory stay unknown. CPU scopes identify the measured sync work;
+these figures are not whole-device CPU or memory. Collection uses a five-second
+cadence, suspends across gaps, and never interpolates unobserved activity. Range
+reads process every matching record in bounded batches; chart resolution does
+not discard retained history or impose a maximum user-selected time window.
+
+Electron resource collector `fileResourceLimitsVersion` 1.1.1 merges the active
+transport governor into read-only resource responses after verifying the selected
+origin, owner and device. These reads never create or alter a resource policy.
+Transport readings expire after two seconds and clear when their worker exits;
+older 1.1.0 collectors remain compatible but may provide partial measurements.

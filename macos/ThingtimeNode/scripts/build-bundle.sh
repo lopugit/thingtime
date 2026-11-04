@@ -11,7 +11,7 @@ CONTENTS_PATH="${APP_PATH}/Contents"
 VERSION="${THINGTIME_NODE_VERSION:-0.1.0}"
 BUILD_NUMBER="${THINGTIME_NODE_BUILD_NUMBER:-1}"
 SIGNING_MODE="${THINGTIME_NODE_SIGNING_MODE:-signed}"
-INDEXER_MANIFEST="${PACKAGE_ROOT}/../../Commander/crates/commander-indexer/Cargo.toml"
+INDEXER_MANIFEST="${PACKAGE_ROOT}/../../filesystem-indexer/crates/indexer/Cargo.toml"
 INDEXER_TARGET="${CACHE_ROOT}/commander-indexer-release"
 
 case "${CACHE_ROOT}" in

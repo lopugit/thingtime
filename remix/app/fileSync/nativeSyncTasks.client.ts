@@ -1,3 +1,5 @@
+import { reportDeviceSyncHistoryStorage } from './deviceSyncHistory.client';
+import { createDeviceSyncHistoryRecorder } from './deviceSyncHistoryRecorder';
 import { deviceResourceKey, deviceSyncGovernor, readDeviceSyncResourcePolicy } from './deviceResourcePolicy';
 import { activityManager } from '~/activity/activityManager';
 import { fileSyncDownloadRequirements } from './signedDownloadTarget';
@@ -21,7 +23,7 @@ import type { ForegroundSyncInput } from './foregroundSync';
 import type { InventoryIdentity } from './inventoryJournal';
 import { readCloudFolderInventoryPages } from './cloudInventoryPages.client';
 import { readCloudFolderInventory } from './cloudInventory.client';
-import { mobileFolderSource, supportsNativeInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging } from './mobileFolders.client';
+import { mobileFolderSource, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
 import { createConflictReviewController } from './conflictReviewController';
@@ -84,6 +86,8 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			return strictCancellation ??= cancelSavedStrictCapture(job, adapter, checkIdentity);
 		};
 		let disposeProgressCache: (() => void) | undefined;
+		let history: ReturnType<typeof createDeviceSyncHistoryRecorder> | undefined;
+		let historyStatus: 'paused' | 'complete' | 'error' = 'paused';
 		let jobs: ReturnType<Awaited<ReturnType<typeof openSyncJournal>>['jobs']> | undefined;
 		try {
 			check();
@@ -126,7 +130,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			const resourceKey = deviceResourceKey(binding.origin, binding.ownerId, binding.deviceId);
 			const resources = deviceSyncGovernor(resourceKey, reviewed.configuration.resourceLimits);
 			let nativeResources: SyncResourceStatus | undefined;
-			const host = await createNativeSyncHost({ ...(resources ? { resourcePolicy: { resourceLimits: reviewed.configuration.resourceLimits, resourceScope: reviewed.id, deviceResourceLimits: () => readDeviceSyncResourcePolicy(resourceKey), observe: (value: SyncResourceStatus) => { nativeResources = value; resources.observe(value); } } } : {}), ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal, assertCurrent: check });
+			const host = await createNativeSyncHost({ ...(resources ? { resourcePolicy: { resourceLimits: reviewed.configuration.resourceLimits, resourceScope: reviewed.id, deviceResourceLimits: () => readDeviceSyncResourcePolicy(resourceKey), observe: (value: SyncResourceStatus) => { nativeResources = value; resources.observe(value); history?.observe(value); } } } : {}), ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal, assertCurrent: check });
 			if (host.origin() !== binding.origin) throw Error('The selected sync server changed.');
 			await host.requireCapability('api.things', reviewed.configuration.resourceLimits ? '1.39.0' : reviewed.configuration.ignoreRules ? '1.38.0' : '1.36.0');
 			if (reviewed.configuration.resourceLimits) await host.requireCapability('api.file-sync-batches', '1.2.0');
@@ -141,8 +145,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			if (reviewed.configuration.ignoreRules && !supportsNativeIgnoreRules(capabilities)) throw Error('Update Thingtime Mac before using this connection’s Gitignore rules.');
 			const currentScope = () => { check(); host.assertCurrent(); return binding; };
 			const runtime = { ...(resources ? { resources } : {}), currentScope, origin: host.origin, fetch: host.fetch, requireCapability: host.requireCapability };
-			const backup = supportsNativeBackupCapture(capabilities) && reviewed.configuration.mode === 'backup' && !reviewed.configuration.propagateDeletes;
-			const strictAsync = !backup && supportsNativeStrictCapture(capabilities);
+			let photoSource = false, backup = false, strictAsync = false;
 			let capturedSource: NativeBackupCapture | undefined;
 			const releaseLocalImport = async (inventory: InventoryIdentity) => {
 				if (!job?.localImport || JSON.stringify(job.localImport.inventory) !== JSON.stringify(inventory)) return;
@@ -182,7 +185,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					for await (const page of readNativeInventory({ ownerId: binding.ownerId, deviceId: binding.deviceId, rootId: reviewed.configuration.localRootId,
 						excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}), signal, request, ...options, ...(captureId ? { strictAsync, captureId,
 							onStrictProgress: (indexed: number) => publish({ stage: 'scanning', confirmed: 0, total: 0, indexed }) } : {}),
-							...(supportsNativeInventoryBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}), ...(backup ? { backupPolicy: reviewed.configuration, captureId: job!.nativeCaptureId,
+							...(!photoSource && supportsNativeInventoryBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}), ...(backup ? { backupPolicy: reviewed.configuration, captureId: job!.nativeCaptureId,
 							onCaptureStatus: async value => {
 							if (value.state === 'complete') capturedSource = value;
 							if (job!.nativeCaptureGeneration === value.generation) return;
@@ -216,13 +219,19 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				progress = { ...progress, statisticsObservedAt: Date.now() };
 				if (resources) progress = { ...progress, resources: nativeResources ?? resources.status() };
 				update({ progress });
+				history?.stage(progress.stage);
 				progressCache.write(progress);
 				if (progress.stage === 'retained') window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
 			};
 			await withSyncRootLock(binding, async () => {
 				const roots = (await request(binding.ownerId, { action: 'list' }, signal)).roots;
 				assertPhotoSourcePolicy(reviewed.configuration, roots); check();
-				const inspect = supportsNativePathInspection(capabilities) && roots.some(root => root.id === reviewed.configuration.localRootId && root.sourceKind !== 'photos');
+				photoSource = roots.find(root => root.id === reviewed.configuration.localRootId)?.sourceKind === 'photos';
+				if (!photoSource) assertNativeFolderInventoryCoverage(capabilities, reviewed.configuration);
+				backup = !photoSource && supportsNativeBackupCapture(capabilities) && reviewed.configuration.mode === 'backup' && !reviewed.configuration.propagateDeletes;
+				const photoPages = photoSource && supportsNativePhotoInventoryPages(capabilities);
+				strictAsync = photoPages || (!photoSource && capabilities.platform === 'macos' && !backup && supportsNativeStrictCapture(capabilities));
+				const inspect = photoSource ? photoPages : supportsNativePathInspection(capabilities);
 				const localTarget = ['download', 'two-way'].includes(reviewed.configuration.mode)
 					? await approveMobileSyncTarget(reviewed, binding, signal, request, capabilities, resume ? 'existing' : 'request') : undefined;
 				let prior = await jobs!.read(); check();
@@ -247,12 +256,26 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				if (!job) return; // A stopped/completed/replaced discovery is never replayed.
 				if (stopRequested) await jobs!.transition(job, 'paused');
 				check();
+				// Use the same admitted device/origin, and fence by account
+				// generation without the run's abort so Stop can record its end.
+				const historyJournal = journal!.deviceHistory({ scope: binding, assertCurrent: checkIdentity });
+				history = createDeviceSyncHistoryRecorder({
+					write: sample => historyJournal.append(sample),
+					...(adapter.platform === 'macos' ? { readResources: async (readSignal: AbortSignal) => {
+						check(); readSignal.throwIfAborted();
+						const result = await request(binding.ownerId, { action: 'resources' }, readSignal);
+						check(); readSignal.throwIfAborted();
+						if (result.roots.length || !result.deviceResourceLimits) throw Error('The device did not confirm sync resources.');
+						return result.resources;
+					} } : {}),
+					onStorageStatus: available => { checkIdentity(); reportDeviceSyncHistoryStorage(binding, available); }
+				});
 				await runPagedForegroundCloudSync(reviewed, binding, {
 					currentScope, localTarget, journal: journal!, runtime, progress: publish,
 					...(host.uploadBatch ? { uploadBatch: host.uploadBatch } : {}),
 					...(host.folderBatch ? { folderBatch: host.folderBatch } : {}),
 					...(supportsNativeAuthorizationContext(capabilities) ? { nativeOperationGuards: true as const } : {}),
-					...(inspect && supportsNativeStreamingIndex(capabilities) && !reviewed.configuration.propagateDeletes ? {
+					...(!photoSource && inspect && supportsNativeStreamingIndex(capabilities) && !reviewed.configuration.propagateDeletes ? {
 						streamLocalChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>) => readNativeIndexChanges({ ownerId: binding.ownerId, deviceId: binding.deviceId,
 							rootId: reviewed.configuration.localRootId, captureId, afterSequence, readyToFinish, signal: streamSignal ?? signal, request, excludedPaths: reviewed.configuration.excludedPaths, ignoreRules: reviewed.configuration.ignoreRules,
 							...(supportsNativeStreamingBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}) }),
@@ -266,7 +289,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 						const key = 'tt:sync-inventory:' + syncScopeKey(binding);
 						writeStampedCache(key, descriptor); pruneCacheNamespace('tt:sync-inventory:', key, 32);
 					},
-					transfer: value => { check(); update({ transfer: value }); },
+					transfer: value => { check(); update({ transfer: value }); history?.transfer(value); },
 					progressSession: descriptor => {
 						check(); update({ progressDescriptor: descriptor });
 						const key = 'tt:sync-progress-tree:' + syncScopeKey(binding);
@@ -326,6 +349,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					})
 				}, signal);
 				check(); const finished = await jobs!.finish(job, Date.now()); check();
+				if (finished) historyStatus = 'complete';
 				if (finished?.state === 'scheduled' && adapter.platform === 'macos') await setDesktopSyncScheduled(true, adapter.bridge);
 			}, undefined, signal);
 		} catch (error) {
@@ -336,14 +360,23 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				throw new SyncConnectionWait(error instanceof SyncConnectionWait ? error.message :
 					'Waiting for the connection to return. Saved transfer progress will continue automatically.', delay);
 			}
-			if (failed && jobs && !signal.aborted && !(error instanceof SyncConditionsWait) && !(error instanceof NativeInventoryRetryWait)) await jobs.attention(failed);
+			if (failed && jobs && !signal.aborted && !(error instanceof SyncConditionsWait) && !(error instanceof NativeInventoryRetryWait)) {
+				historyStatus = 'error';
+				await jobs.attention(failed);
+			}
 			throw error;
 		} finally {
 			disposeProgressCache?.();
 			// The stop hook uses this journal after immediate abort. Keep it open
 			// until durable pause and independent capture cancellation settle.
-			await stopCleanup.finish().catch(() => {});
-			disposeActivity(); visibility?.dispose(); journal?.close(); unsubscribe(); window.removeEventListener('pagehide', leave);
+			const cleanup = stopCleanup.finish().then(() => historyStatus, () => 'error' as const);
+			const historyFinish = history?.finish(cleanup);
+			await cleanup;
+			// A slow optional sample write must not hold the run or host open.
+			// Only the journal handle outlives the runner, until its write settles.
+			if (historyFinish) void historyFinish.finally(() => journal?.close());
+			else journal?.close();
+			disposeActivity(); visibility?.dispose(); unsubscribe(); window.removeEventListener('pagehide', leave);
 			await releaseWindow?.();
 		}
 	}, () => {
