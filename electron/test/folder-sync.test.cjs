@@ -669,3 +669,14 @@ test('desktop context advertises rootless live resource sampling only on compati
   assert.equal(result.capabilities.fileResourceLimitsVersion, expected);
  }
 });
+
+test('desktop advertises the signed download recovery patch on compatible staging and server contracts', async () => {
+    const f = fixture();
+    f.run(async (_method, request) => ({ ...request, roots: [],
+        capabilities: { fileAccessVersion: '1.18.0', fileStagingVersion: '1.1.0', fileResourceLimitsVersion: '1.1.0' } }));
+    f.host.capabilities = async () => ({ schemaVersion: 1, origin: f.context.apiOrigin, features: {
+        'api.devices-node-identity': { version: '1.0.0' }, 'api.attachment-content': { version: '1.17.0' }
+    } });
+    const reply = await f.host.request(f.event, f.input({ action: 'context' }));
+    assert.equal(reply.capabilities.fileDownloadVersion, '1.0.1');
+});

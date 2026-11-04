@@ -15,9 +15,9 @@ function transferProcess(governor) {
     governor.onPolicyChange = () => { if (child.connected) child.send({ kind: 'policy', policy: governor.policy, totalBytesPerSecond: governor.totalBytesPerSecond }, () => {}); };
     child.on('message', async message => {
         if (message.kind === 'authority') {
-            let accepted = false, target;
-            try { const pending = state.pending.get(message.id); if (pending) { target = await pending.check(message.phase); accepted = state.pending.has(message.id); } } catch { }
-            if (child.connected) child.send({ kind: 'authority-reply', ticket: message.ticket, accepted, ...(target ? { target } : {}) });
+            let accepted = false, retry = false, target;
+            try { const pending = state.pending.get(message.id); if (pending) { target = await pending.check(message.phase); accepted = state.pending.has(message.id); } } catch (error) { retry = error?.code === 'SYNC_DOWNLOAD_RETRY'; }
+            if (child.connected) child.send({ kind: 'authority-reply', ticket: message.ticket, accepted, ...(retry ? { retry: true } : {}), ...(target ? { target } : {}) });
             return;
         }
         if (message.kind === 'resources') {
