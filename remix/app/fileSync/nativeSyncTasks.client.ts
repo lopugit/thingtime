@@ -1,3 +1,5 @@
+import { reportDeviceSyncHistoryStorage } from './deviceSyncHistory.client';
+import { createDeviceSyncHistoryRecorder } from './deviceSyncHistoryRecorder';
 import { deviceResourceKey, deviceSyncGovernor, readDeviceSyncResourcePolicy } from './deviceResourcePolicy';
 import { activityManager } from '~/activity/activityManager';
 import { fileSyncDownloadRequirements } from './signedDownloadTarget';
@@ -84,6 +86,8 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			return strictCancellation ??= cancelSavedStrictCapture(job, adapter, checkIdentity);
 		};
 		let disposeProgressCache: (() => void) | undefined;
+		let history: ReturnType<typeof createDeviceSyncHistoryRecorder> | undefined;
+		let historyStatus: 'paused' | 'complete' | 'error' = 'paused';
 		let jobs: ReturnType<Awaited<ReturnType<typeof openSyncJournal>>['jobs']> | undefined;
 		try {
 			check();
@@ -126,7 +130,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			const resourceKey = deviceResourceKey(binding.origin, binding.ownerId, binding.deviceId);
 			const resources = deviceSyncGovernor(resourceKey, reviewed.configuration.resourceLimits);
 			let nativeResources: SyncResourceStatus | undefined;
-			const host = await createNativeSyncHost({ ...(resources ? { resourcePolicy: { resourceLimits: reviewed.configuration.resourceLimits, resourceScope: reviewed.id, deviceResourceLimits: () => readDeviceSyncResourcePolicy(resourceKey), observe: (value: SyncResourceStatus) => { nativeResources = value; resources.observe(value); } } } : {}), ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal, assertCurrent: check });
+			const host = await createNativeSyncHost({ ...(resources ? { resourcePolicy: { resourceLimits: reviewed.configuration.resourceLimits, resourceScope: reviewed.id, deviceResourceLimits: () => readDeviceSyncResourcePolicy(resourceKey), observe: (value: SyncResourceStatus) => { nativeResources = value; resources.observe(value); history?.observe(value); } } } : {}), ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal, assertCurrent: check });
 			if (host.origin() !== binding.origin) throw Error('The selected sync server changed.');
 			await host.requireCapability('api.things', reviewed.configuration.resourceLimits ? '1.39.0' : reviewed.configuration.ignoreRules ? '1.38.0' : '1.36.0');
 			if (reviewed.configuration.resourceLimits) await host.requireCapability('api.file-sync-batches', '1.2.0');
@@ -216,6 +220,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				progress = { ...progress, statisticsObservedAt: Date.now() };
 				if (resources) progress = { ...progress, resources: nativeResources ?? resources.status() };
 				update({ progress });
+				history?.stage(progress.stage);
 				progressCache.write(progress);
 				if (progress.stage === 'retained') window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
 			};
@@ -247,6 +252,20 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				if (!job) return; // A stopped/completed/replaced discovery is never replayed.
 				if (stopRequested) await jobs!.transition(job, 'paused');
 				check();
+				// Use the same admitted device/origin, and fence by account
+				// generation without the run's abort so Stop can record its end.
+				const historyJournal = journal!.deviceHistory({ scope: binding, assertCurrent: checkIdentity });
+				history = createDeviceSyncHistoryRecorder({
+					write: sample => historyJournal.append(sample),
+					...(adapter.platform === 'macos' ? { readResources: async (readSignal: AbortSignal) => {
+						check(); readSignal.throwIfAborted();
+						const result = await request(binding.ownerId, { action: 'resources' }, readSignal);
+						check(); readSignal.throwIfAborted();
+						if (result.roots.length || !result.deviceResourceLimits) throw Error('The device did not confirm sync resources.');
+						return result.resources;
+					} } : {}),
+					onStorageStatus: available => { checkIdentity(); reportDeviceSyncHistoryStorage(binding, available); }
+				});
 				await runPagedForegroundCloudSync(reviewed, binding, {
 					currentScope, localTarget, journal: journal!, runtime, progress: publish,
 					...(host.uploadBatch ? { uploadBatch: host.uploadBatch } : {}),
@@ -266,7 +285,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 						const key = 'tt:sync-inventory:' + syncScopeKey(binding);
 						writeStampedCache(key, descriptor); pruneCacheNamespace('tt:sync-inventory:', key, 32);
 					},
-					transfer: value => { check(); update({ transfer: value }); },
+					transfer: value => { check(); update({ transfer: value }); history?.transfer(value); },
 					progressSession: descriptor => {
 						check(); update({ progressDescriptor: descriptor });
 						const key = 'tt:sync-progress-tree:' + syncScopeKey(binding);
@@ -326,6 +345,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					})
 				}, signal);
 				check(); const finished = await jobs!.finish(job, Date.now()); check();
+				if (finished) historyStatus = 'complete';
 				if (finished?.state === 'scheduled' && adapter.platform === 'macos') await setDesktopSyncScheduled(true, adapter.bridge);
 			}, undefined, signal);
 		} catch (error) {
@@ -336,14 +356,23 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				throw new SyncConnectionWait(error instanceof SyncConnectionWait ? error.message :
 					'Waiting for the connection to return. Saved transfer progress will continue automatically.', delay);
 			}
-			if (failed && jobs && !signal.aborted && !(error instanceof SyncConditionsWait) && !(error instanceof NativeInventoryRetryWait)) await jobs.attention(failed);
+			if (failed && jobs && !signal.aborted && !(error instanceof SyncConditionsWait) && !(error instanceof NativeInventoryRetryWait)) {
+				historyStatus = 'error';
+				await jobs.attention(failed);
+			}
 			throw error;
 		} finally {
 			disposeProgressCache?.();
 			// The stop hook uses this journal after immediate abort. Keep it open
 			// until durable pause and independent capture cancellation settle.
-			await stopCleanup.finish().catch(() => {});
-			disposeActivity(); visibility?.dispose(); journal?.close(); unsubscribe(); window.removeEventListener('pagehide', leave);
+			const cleanup = stopCleanup.finish().then(() => historyStatus, () => 'error' as const);
+			const historyFinish = history?.finish(cleanup);
+			await cleanup;
+			// A slow optional sample write must not hold the run or host open.
+			// Only the journal handle outlives the runner, until its write settles.
+			if (historyFinish) void historyFinish.finally(() => journal?.close());
+			else journal?.close();
+			disposeActivity(); visibility?.dispose(); unsubscribe(); window.removeEventListener('pagehide', leave);
 			await releaseWindow?.();
 		}
 	}, () => {

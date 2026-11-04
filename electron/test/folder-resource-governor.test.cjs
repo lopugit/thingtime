@@ -182,3 +182,18 @@ test('saving a device cap notifies the active dedicated worker without resetting
   await transfer; assert.equal(received, 2000); assert.ok(performance.now() - start >= 3400, 'active worker retained its previous speed instead of receiving IPC policy');
  } finally { server.close(); await once(server, 'close'); }
 });
+
+test('an old or disconnected transport observation is not restamped by a fresh device read', () => {
+ let now = 1000;
+ const governor = new ResourceGovernor({}, () => now);
+ governor.observeTransport({ cpuPercent: 3, currentUploadBytesPerSecond: 125_000, currentDownloadBytesPerSecond: 0 });
+ assert.equal(governor.snapshot().currentUploadBytesPerSecond, 125_000);
+ assert.equal(governor.snapshot().currentDownloadBytesPerSecond, 0);
+ now += 2_000;
+ assert.equal(governor.snapshot().currentUploadBytesPerSecond, null);
+ assert.equal(governor.snapshot().cpuStatus, 'unavailable');
+ governor.observeTransport({ cpuPercent: 2, currentUploadBytesPerSecond: 1, currentDownloadBytesPerSecond: 2 });
+ governor.clearTransport();
+ assert.equal(governor.snapshot().currentDownloadBytesPerSecond, null);
+ assert.deepEqual(governor.snapshot().cpuScopes, []);
+});

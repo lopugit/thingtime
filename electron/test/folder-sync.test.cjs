@@ -620,3 +620,52 @@ test('resource policy preserves connection binding and scoped native CPU feedbac
  await assert.rejects(f.host.request(f.event, f.input({ ...input, requestId: randomUUID(), resourceLimits: { transferConcurrency: 0 } })));
  assert.equal(f.calls.length, before);
 });
+
+test('rootless resources sample the active device governor without waiting for or changing its scoped transfer', async () => {
+ const { governorFor } = require('../lib/folder-resource-governor.cjs');
+ const f = fixture(), deviceId = randomUUID();
+ const transfer = f.input({ action: 'scan-status', rootId: randomUUID(), deviceId, resourceScope: 'connection',
+    resourceLimits: { cpuPercent: 12, transferConcurrency: 2 },
+    deviceResourceLimits: { transferBytesPerSecond: 5_000_000, scanBytesPerSecond: 1_000_000, cpuPercent: 15 } });
+ const context = { apiOrigin: transfer.origin, ownerId: transfer.ownerId };
+ const resources = { version: 1, cpuStatus: 'measured', cpuPercent: 4, sourceCpuPercent: 4, memoryBytes: 4096,
+  effectiveTransferConcurrency: 2, effectiveIndexingConcurrency: 1, scanBytesPerSecond: 1234 };
+ let started, release;
+ const held = new Promise(resolve => { started = resolve; });
+ const finish = new Promise(resolve => { release = resolve; });
+ f.run(async (_method, request) => {
+  if (request.action === 'scan-status') { started(); await finish; }
+  return { ...request, roots: [], resources };
+ });
+ const active = f.host.request(f.event, transfer);
+ try {
+  await held;
+  const read = { action: 'resources', deviceId }, governor = governorFor(read, context);
+  assert.ok(governor);
+  governor.observeTransport({ cpuPercent: 2, currentUploadBytesPerSecond: 125_000, currentDownloadBytesPerSecond: 0 });
+  const sample = await f.host.request(f.event, f.input(read));
+  assert.equal(sample.resources.currentUploadBytesPerSecond, 125_000);
+  assert.equal(sample.resources.currentDownloadBytesPerSecond, 0);
+  assert.deepEqual(sample.resources.cpuScopes.sort(), ['source-thread', 'transport-process']);
+  assert.equal(sample.resources.memoryBytes, 4096);
+  assert.equal(sample.resources.scanBytesPerSecond, 1234);
+  assert.equal(sample.resources.transferBytesPerSecond, 5_000_000);
+  assert.deepEqual(governor.policy, { cpuPercent: 12, transferConcurrency: 2 });
+  assert.equal(governorFor({ ...read, deviceId: randomUUID() }, context), null);
+  assert.equal(governorFor(read, { ...context, apiOrigin: 'https://other.invalid' }), null);
+  assert.equal(governorFor(read, { ...context, ownerId: 'other-owner' }), null);
+  assert.equal(f.calls.at(-1).deviceResourceLimits, undefined, 'read never writes device limits');
+ } finally { release(); await active; }
+});
+
+
+test('desktop context advertises rootless live resource sampling only on compatible native hosts', async () => {
+ for (const [fileAccessVersion, fileResourceLimitsVersion, expected] of [
+  ['1.15.0', '1.1.0', '1.1.0'], ['1.16.0', '1.1.0', '1.1.1'], ['1.18.0', '1.2.0', '1.2.0']
+ ]) {
+  const f = fixture();
+  f.run(async (_method, request) => ({ ...request, roots: [], capabilities: { fileAccessVersion, fileResourceLimitsVersion } }));
+  const result = await f.host.request(f.event, f.input({ action: 'context' }));
+  assert.equal(result.capabilities.fileResourceLimitsVersion, expected);
+ }
+});

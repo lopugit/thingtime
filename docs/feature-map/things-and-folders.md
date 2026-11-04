@@ -702,6 +702,17 @@ mailbox retains ownership, leases and immutable saves. Focused protocol/client,
 worker, session and `deviceSyncControl` tests cover paused changes, no folder/job
 side effects, stale replies and shared polling. See browser-device-sync.md.
 
+Sync history uses `fileSync/deviceSyncHistoryRecorder.ts` inside the admitted
+native runner, independently of dashboard mounting. `deviceSyncHistoryJournal.ts`
+stores individual origin/owner/device/data-plane scoped observations in the
+existing IndexedDB journal. Range reads process all matching rows in bounded
+batches; display buckets retain measured sample counts and null gaps.
+`deviceSyncHistory.client.ts` reads locally or requests the paired worker's
+read-only `history` command after negotiating `api.devices-sync-control` 1.4.0.
+The API lease completion and remote client both validate the requested range
+and strict result projection. `DeviceSyncResources` and
+`deviceSyncResourceBlocks.ts` expose editable live/history controls and stats.
+
 POSIX symbolic-link metadata lives in `fileSync/symbolicLink.ts`; `SyncEntry`
 content/stamp equality includes link kind and exact raw target identity.
 `cloudFile.ts`, canonical `files/files.ts`, inventory projections and

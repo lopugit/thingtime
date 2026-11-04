@@ -21,13 +21,12 @@ function transferProcess(governor) {
             return;
         }
         if (message.kind === 'resources') {
-            governor.transport = message.resources;
-            governor.sample('transport-process', message.resources.cpuPercent);
+            if (children.get(governor) === state) governor.observeTransport(message.resources);
             return;
         }
         if (message.kind === 'reply') state.pending.get(message.id)?.(message);
     });
-    child.on('exit', () => { if (children.get(governor) === state) { children.delete(governor); governor.onPolicyChange = undefined; } clearTimeout(state.idle); for (const finish of [...state.pending.values()]) finish({ error: 'transport' }); });
+    child.on('exit', () => { if (children.get(governor) === state) { children.delete(governor); governor.onPolicyChange = undefined; governor.clearTransport(); } clearTimeout(state.idle); for (const finish of [...state.pending.values()]) finish({ error: 'transport' }); });
     child.send({ kind: 'policy', policy: governor.policy, totalBytesPerSecond: governor.totalBytesPerSecond }); return state;
 }
 async function governedFetch(governor, fetchUpload, target, options, check = () => {}) {
