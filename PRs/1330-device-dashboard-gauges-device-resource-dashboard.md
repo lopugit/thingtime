@@ -11,9 +11,10 @@ The macOS node publishes measured values after negotiating device capabilities 1
 - The schema suite passed all 295 tests after early-refusal checks switched from wall-clock thresholds to deterministic work counts. The evaluator is unchanged.
 - Graphify refreshed structural coverage and retained existing semantic data. Changed documentation awaits semantic re-indexing after the backend returned empty results.
 
-The dashboard branch incorporates main commit `4077f99ad3`, which adds the
-standalone browser navigation controls. The dashboard implementation and the
-navigation change coexist without product conflict resolutions. The required
-checks passed before this integration and are rerun for the combined branch.
+The dashboard branch incorporates main commit `2e9d7bb2e9`, which includes the
+standalone browser navigation controls and separately authorized named
+connections. Both changelog entries and capability contracts are preserved.
+The required checks passed before these integrations and are rerun for the
+combined branch.
 
 The [pre-integration product preview](https://thingtime-mzg7q7sa4-lopugits-projects.vercel.app) served HTML and the expected origin-scoped device capabilities. The current preview, signed installation, and production acceptance are tracked in [PR #1330](https://github.com/lopugit/thingtime/pull/1330).

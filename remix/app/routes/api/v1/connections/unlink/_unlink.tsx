@@ -3,6 +3,7 @@ import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { unlinkConnection } from '~/api/utils/connections/connections';
+import { requestOrigin } from '~/api/utils/connections/oauth';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 // POST /api/v1/connections/unlink — remove one of the caller's third-party
@@ -21,7 +22,8 @@ export const action = async ({ request }: { request: Request }) => withVaultRequ
   const unsupported = requireJsonContentType(request);
   if (unsupported) return unsupported;
   const body = await readJsonBody(request, 4 * 1024);
-  const result = await unlinkConnection(user, { id: body?.id });
+  if (body?.expectedOwnerId !== undefined && body.expectedOwnerId !== user.id) return json({ ok: false, error: 'Your Thingtime account changed.' }, { status: 409 });
+  const result = await unlinkConnection(user, { id: body?.id, origin: requestOrigin(request) });
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });
   }

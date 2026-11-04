@@ -593,3 +593,12 @@ Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
 the built `test:environment-gateway:acceptance` runner. See
 [the gateway runbook](../environment-api-gateway.md) for server settings,
 environment partitioning and outstanding live rollout acceptance.
+
+Named Connections management is opt-in at `api.connections`,
+`api.connections-oauth-begin`, `api.connections-oauth-callback` and
+`api.connections-unlink` 2.1. `POST /api/v1/connections/named`
+(`api.connections-named` 1.0) verifies exact actor, origin, connection ID and
+a fixed operation. Token envelopes never cross the response boundary.
+Generic Things 1.46.3 also keeps private account and named grant metadata
+behind the origin-scoped Connections API. See
+`test:connections:oauth` and `test:api-capabilities`.

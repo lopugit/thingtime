@@ -4255,6 +4255,7 @@ const passkeyAppLinkThingSchema: ThingtimeSchema = {
 export const EXTERNAL_CONNECTION_THINGTIME = [
   'external-account',
   'external-account-link',
+  'external-auth-connection',
   'external-post',
   'external-post-source',
   'feed-filter',
