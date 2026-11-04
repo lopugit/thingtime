@@ -1,6 +1,7 @@
 import {parse as parseDomain} from 'tldts';
 import {requireThingtimeCapability} from '~/api/utils/capabilities/requireCapability.client';
 import {nativePasswordVerificationRequest,passwordRequest} from './client';
+import {passwordWebsiteOrigin} from './websites';
 export type VaultRequest={version:1;id:string;type:'catalog'|'fill'|'totp-import';origin:string;entryId?:string;totp?:string;query?:string;cursor?:string;target:{tabId:number;frameId:0;documentId:string};presentation?:{fontSize:number}};
 type NativeBase={version:1;id:string;expectedOwnerId:string;apiOrigin:string;entryId:string;requestHash:string};
 export type NativeApprovalRequest=NativeBase&({type:'fill';origin:string}|{type:'native-consumer';consumerId:'org.gnome.keyring'});
@@ -32,10 +33,30 @@ export function validateNativeApprovalRequest(input:unknown,ownerId:string):Nati
 }
 export const fillContext=(r:FillRequest)=>({purpose:'fill' as const,rp:new URL(r.origin).hostname,origin:r.origin,entryId:r.entryId!,...(r.requestHash?{requestHash:r.requestHash}:{})});
 export const ensurePasswordFill=()=>requireThingtimeCapability('api.passwords','1.6.1');
+/** Keep discovery metadata only. Preserve absence for pre-1.7 APIs, and
+ * never turn a malformed or empty exact-origin list into a hostname grant. */
+export function browserPasswordCatalogEntry(item:{id:string;title?:string;username?:string;domains?:string[];origins?:unknown}){
+ const {id,title='',username='',domains=[]}=item;
+ const origins=item.origins;
+ return {id,title,username,domains,...(origins===undefined?{}:{origins:Array.isArray(origins)?origins.filter((value):value is string=>typeof value==='string'&&passwordWebsiteOrigin(value)===value):[]}),fillEligible:true as const};
+}
 export async function fillVerification(ownerId:string,r:VaultRequest,signal:AbortSignal){await ensurePasswordFill();signal.throwIfAborted();return passwordRequest(ownerId,{operation:'verification-status',context:fillContext(r)},signal);}
 export async function loadPasswordCatalog(ownerId:string,r:VaultRequest,signal:AbortSignal){
- await ensurePasswordFill();const catalog:any[]=[];const seen=new Set<string>();let cursor:string|undefined;
- do{signal.throwIfAborted();const result=await passwordRequest(ownerId,{operation:'catalog',...(cursor?{cursor}:{})},signal);signal.throwIfAborted();for(const item of result.catalog||[])if(item.fillEligible===true)catalog.push({id:item.id,title:item.title||'',username:item.username||'',domains:item.domains||[],hasPassword:true,fillEligible:true});cursor=result.nextCursor||undefined;if(cursor&&seen.has(cursor))throw Error('The account list could not finish. Reconnect and retry.');if(cursor)seen.add(cursor);}while(cursor);
+ await ensurePasswordFill();const catalog:(ReturnType<typeof browserPasswordCatalogEntry>&{hasPassword:true})[]=[];const seen=new Set<string>();let cursor:string|undefined;
+ do{
+  signal.throwIfAborted();
+  const result=await passwordRequest(ownerId,{operation:'catalog',...(cursor?{cursor}:{})},signal);
+  signal.throwIfAborted();
+  for(const item of result.catalog||[]){
+   if(item.fillEligible!==true)continue;
+   if(r.type==='fill'){
+    if(item.id===r.entryId)return [{...browserPasswordCatalogEntry(item),hasPassword:true as const}];
+   }else catalog.push({...browserPasswordCatalogEntry(item),hasPassword:true});
+  }
+  cursor=result.nextCursor||undefined;
+  if(cursor&&seen.has(cursor))throw Error('The account list could not finish. Reconnect and retry.');
+  if(cursor)seen.add(cursor);
+ }while(cursor);
  return catalog;
 }
 
