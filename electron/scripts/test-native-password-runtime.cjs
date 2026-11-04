@@ -31,6 +31,7 @@ app.whenReady().then(async () => {
         // This tests the actual sandboxed window/preload/IPC, not vault proof
         // issuance (the separate real-API UI integration covers that boundary).
         res.end(`<title>Isolated approval IPC fixture</title><script>
+          history.replaceState({idx:0}, '');
           (async()=>{const bridge=window.thingtimeDesktop;
             const request=await bridge.passwordApprovalReady('synthetic-owner');
             await bridge.passwordApprovalRespond({id:request.id,ownerId:request.expectedOwnerId,proof:{requestId:request.id,binding:request.requestHash,
@@ -59,8 +60,15 @@ app.whenReady().then(async () => {
     parent = new BrowserWindow({ show: false, webPreferences: { session: context.session, sandbox: true, contextIsolation: true, nodeIntegration: false } });
     approval = createNativePasswordApproval({ BrowserWindow, ipcMain, preload: path.resolve(__dirname, '../preload.cjs'), context: () => context, window: () => parent, timeout: 15000 });
     const approvedEntry = randomUUID();
+    let sameDocumentStartup = false;
+    app.once('browser-window-created', (_event, window) => {
+      window.webContents.on('did-start-navigation', details => {
+        if (details.isMainFrame && details.isSameDocument && details.url === `${origin}/passwords/provider?view=vault`) sameDocumentStartup = true;
+      });
+    });
     const proof = await approval.approve({ scope: { origin, ownerId: 'synthetic-owner' }, target: { kind: 'website', origin: 'https://fixture.example' }, entryId: approvedEntry, assertCurrent() {} });
     assert.equal(proof.context.entryId, approvedEntry); assert.equal(proof.context.origin, 'https://fixture.example');
+    assert.equal(sameDocumentStartup, true, 'The runtime exercised the approval route’s startup history replacement.');
     approval.close(); approval = null;
     report.sandboxedApprovalWindow = true;
     stage = 'encryption'; broker = new NativePasswordBroker({ userData: path.join(root, 'profile'), safeStorage, context: () => context, approve: async () => true });
