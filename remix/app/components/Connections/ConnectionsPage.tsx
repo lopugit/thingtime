@@ -4,7 +4,9 @@ import { Link, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { notifyConnectionOAuthReturn, openConnectionOAuthTab } from './oauthTab.client';
 import { cardStyle, connectedProviderLabel, oauthErrorMessage, type ChannelRef, type Connection } from './shared';
 
 // /connections — link third-party apps (Reddit, YouTube, Mastodon, Bluesky,
@@ -38,6 +40,24 @@ const FILTERS_CACHE = 'tt-connections-filters';
 export const ConnectionsPage = () => {
   const api = useApi();
   const lopu = useLopu();
+  const ownerId = useCurrentUser()?.id;
+  const currentOwner = React.useRef(ownerId);
+  currentOwner.current = ownerId;
+  const oauthAttempt = React.useRef<{ tab: NonNullable<ReturnType<typeof openConnectionOAuthTab>>; deadline: number } | null>(null);
+  const [oauthProvider, setOAuthProvider] = React.useState<string | null>(null);
+
+  const cancelOAuth = React.useCallback(() => {
+    const attempt = oauthAttempt.current;
+    if (!attempt) return;
+    oauthAttempt.current = null;
+    window.clearTimeout(attempt.deadline);
+    attempt.tab.cancel();
+  }, []);
+
+  React.useEffect(() => {
+    setOAuthProvider(null);
+    return () => cancelOAuth();
+  }, [cancelOAuth, ownerId]);
   const [searchParams, setSearchParams] = useSearchParams();
 
   // optimistic first paint from the synchronous cache tier (house rule:
@@ -93,8 +113,10 @@ export const ConnectionsPage = () => {
   // input, so the copy comes from ./shared and the param only selects it.
   React.useEffect(() => {
     const connected = searchParams.get('connected');
-    const failure = oauthErrorMessage(searchParams.get('oauthError'));
+    const code = searchParams.get('oauthError');
+    const failure = oauthErrorMessage(code);
     if (!connected && !failure) return;
+    notifyConnectionOAuthReturn(connected, code);
     if (connected) {
       const label = connectedProviderLabel(connected, providers);
       lopu({ title: label ? `Account linked via ${label} 🎉` : 'Account linked 🎉', status: 'success', duration: 6000 });
@@ -102,21 +124,57 @@ export const ConnectionsPage = () => {
     } else if (failure) {
       lopu({ title: failure, status: 'error' });
     }
-    setSearchParams({}, { replace: true });
+    const remaining = new URLSearchParams(searchParams);
+    remaining.delete('connected');
+    remaining.delete('oauthError');
+    setSearchParams(remaining, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   const openConnect = async (provider: Provider) => {
-    // SSO providers hand the browser to their own sign-in — no form here
     if (provider.auth === 'oauth2') {
-      setBusy(true);
+      if (oauthAttempt.current || !ownerId) return;
+      let tab: ReturnType<typeof openConnectionOAuthTab> = null;
       try {
-        const resp = await api.v1.connections.oauthBegin({ provider: provider.id });
-        if (resp?.authorizeUrl) window.location.href = resp.authorizeUrl;
+        tab = openConnectionOAuthTab(provider.id, (result) => {
+          const attempt = oauthAttempt.current;
+          if (!attempt || attempt.tab !== tab || currentOwner.current !== ownerId) return false;
+          oauthAttempt.current = null;
+          window.clearTimeout(attempt.deadline);
+          setOAuthProvider(null);
+          if (result.status === 'failed') {
+            lopu({ title: oauthErrorMessage(result.code) || 'Could not finish sign-in', status: 'error' });
+          } else {
+            void refresh();
+          }
+          return true;
+        });
+        if (!tab) {
+          lopu({ title: 'Allow pop-ups for Thingtime, then try signing in again', status: 'info' });
+          return;
+        }
+        const deadline = window.setTimeout(() => {
+          if (oauthAttempt.current?.tab !== tab) return;
+          cancelOAuth();
+          setOAuthProvider(null);
+          lopu({ title: 'Sign-in timed out. You can try again.', status: 'info' });
+          void refresh();
+        }, 15 * 60 * 1000);
+        oauthAttempt.current = { tab, deadline };
+        setOAuthProvider(provider.name);
+
+        const resp = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId });
+        if (oauthAttempt.current?.tab !== tab || currentOwner.current !== ownerId) return;
+        if (!resp?.authorizeUrl || !tab.navigate(resp.authorizeUrl)) {
+          cancelOAuth();
+          setOAuthProvider(null);
+          lopu({ title: 'Sign-in tab closed. You can try again.', status: 'info' });
+        }
       } catch (err: any) {
-        lopu({ title: err?.error || `Could not start the ${provider.name} sign-in 😞`, status: 'error' });
-      } finally {
-        setBusy(false);
+        if (tab && oauthAttempt.current?.tab !== tab) return;
+        cancelOAuth();
+        setOAuthProvider(null);
+        lopu({ title: err?.error || `Could not start the ${provider.name} sign-in`, status: 'error' });
       }
       return;
     }
@@ -354,6 +412,18 @@ export const ConnectionsPage = () => {
       {/* provider catalog */}
       <Box display="flex" flexDirection="column" rowGap={3}>
         <Text fontWeight="600">Connect a 3rd party app</Text>
+        {oauthProvider ? (
+          <Flex alignItems="center" flexWrap="wrap" gap={2}>
+            <Text role="status" fontSize="sm">Finish signing in to {oauthProvider} in the new tab.</Text>
+            <Button size="sm" variant="ghost" onClick={() => {
+              cancelOAuth();
+              setOAuthProvider(null);
+              void refresh();
+            }}>
+              Stop waiting
+            </Button>
+          </Flex>
+        ) : null}
         <Box display="grid" gridTemplateColumns={['1fr', 'repeat(2, 1fr)', 'repeat(3, 1fr)']} gap={3}>
           {providers.map((provider) => (
             <Box key={provider.id} {...cardStyle} padding={4} display="flex" flexDirection="column" rowGap={2}>
@@ -367,7 +437,7 @@ export const ConnectionsPage = () => {
               <Button
                 size="sm"
                 borderRadius="999px"
-                isDisabled={!provider.configured || signedOut || busy}
+                isDisabled={!provider.configured || signedOut || busy || (provider.auth === 'oauth2' && (!ownerId || !!oauthProvider))}
                 onClick={() => openConnect(provider)}
                 variant={connecting?.id === provider.id ? 'solid' : 'outline'}
               >

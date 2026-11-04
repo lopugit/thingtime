@@ -353,8 +353,13 @@ session/client/callback; `connections.ts` transactionally stores owner-scoped
 accounts and `tokenVault.ts` encrypts their grants through the existing account
 vault. Shared legacy credentials require reconnect, preserving the caller's link
 ID. Public-source sharing remains intact. Google identity/service cards and
-Facebook identity/posts cards select separate grants. Run `test:connections` and
-`test:api-capabilities`; see README social OAuth setup and TESTING acceptance.
+Facebook identity/posts cards select separate grants. `ConnectionsPage.tsx` opens
+sign-in in a user-initiated tab and `oauthTab.client.ts` removes the opener
+before provider navigation. The existing callback route verifies the live
+session and saves the grant. A tab-local random channel sends a same-origin
+refresh hint, and the initiating page reloads its authorized list. Run
+`test:connections`, `test:connections:oauth-tab`, and `test:api-capabilities`;
+see README social OAuth setup and TESTING acceptance.
 
 Browser extension accounts: `BrowserExtensionAccountBridge.tsx` projects the
 canonical `api.auth-accounts` roster into the selected first-party document;

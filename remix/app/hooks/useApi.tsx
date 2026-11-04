@@ -1405,7 +1405,7 @@ export function useApi() {
       // SSO account linking: begin returns the provider's authorize URL — send
       // the browser there; the callback lands back on /connections
       oauthBegin: useCallback(
-        async (args) => { await requireThingtimeCapability('api.connections-oauth-begin', '2.0.0'); return asyncFetcher.submit({ provider: args?.provider }, { action: '/api/v1/connections/oauth/begin' }); },
+        async (args) => { await requireThingtimeCapability('api.connections-oauth-begin', '2.0.0'); return asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId }, { action: '/api/v1/connections/oauth/begin' }); },
         [asyncFetcher]
       ),
       // the Thingtime-managed virtual YouTube subscription list
