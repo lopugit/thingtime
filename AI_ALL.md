@@ -407,10 +407,9 @@ or authorization for new work.
   after source or base changes. A started run, queued merge, status comment,
   skipped matrix job or green warning-only check is not completion. Identify
   cancelled, pending, missing and failing checks accurately.
-- Primary-branch merges/pushes still require explicit repository-specific
-  authorization for the current action. Historical PR approval text never grants
-  it. After an authorized merge, correlate the merge SHA, deployed source, actual
-  alias and behavior; ancestry alone cannot prove a feature was newly shipped.
+- Merge authorized changes through the normal PR process after required checks
+  and reviews pass. After merge, correlate the merge SHA, deployed source,
+  actual alias and behavior; ancestry alone cannot prove a feature was shipped.
 
 ### Preserve evidence without turning old results into policy
 
@@ -721,18 +720,21 @@ points, not the individual files.
 
 ## GitHub push and PR publishing
 
-- Product feature, fix, docs and chore PRs target `develop`. Protected
-  controller-only changes use the canonical `github-actions` branch and its
-  own runbook/contracts; do not route those through a missing product build.
-  Stacked branch → branch PRs keep their parent feature branch as base. Target
-  `main` only when the user explicitly authorizes that exact PR against `main`
-  (for example a `develop` → `main` promotion PR). Opening a promotion is not
-  permission to merge it or update the remote primary branch.
-- For a PR being maintained in the current task, correct an unintended `main`
-  base to `develop` (`gh pr edit <n> --base develop`) unless it is an authorized
-  promotion. Do not retarget unrelated PRs during a read-only history review.
-  GitHub refuses some native-stack base changes; report those rather than
-  forcing them.
+- Base new feature worktrees on freshly fetched `origin/main`. Create a
+  distinct `codex/<task-slug>` branch and verify the starting SHA and clean
+  worktree before editing.
+- Open all Thingtime PRs against `main`. For a PR owned by the current task,
+  correct an unintended base only after checking the resulting diff against
+  `main`; preserve explicitly requested bases and unrelated PRs.
+- Agents have standing authorization to merge their authorized Thingtime PRs
+  into `main` through GitHub's normal PR process. Verify the exact head, base,
+  scope, required checks and reviews, and follow any task-specific hold. Use the
+  repository's supported merge queue or auto-merge where appropriate. Verify the
+  actual merge and record the merge SHA. Direct pushes or other direct ref
+  updates to `main` still require explicit authorization.
+- The deployed CI controller on `github-actions` remains a separate runtime
+  surface. Inspect it before changing CI and distinguish merging source into
+  `main` from updating the deployed controller.
 - The repository may not have a configured Git remote in a cloud checkout. The
   canonical repository URL from `package.json` is
   `https://github.com/lopugit/thingtime.git`.
