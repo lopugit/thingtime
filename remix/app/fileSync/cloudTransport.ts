@@ -1,3 +1,4 @@
+import { CLOUD_SYNC_DESTINATION_REQUIREMENTS, ExactCloudSyncDestinationChanged, SYNC_DESTINATION_CHANGED } from './cloudSyncDestination';
 import { createSyncTransferDeadline } from './syncTransferDeadline';
 import { supportsSyncUploadStreaming, SYNC_STREAM_UPLOAD_UNAVAILABLE } from './browserSyncUpload';
 import { readCloudPathEntry } from './cloudPath.client';
@@ -32,6 +33,8 @@ export type CloudTransportRuntime = {
 	resources?: import('./resourceGovernor').SyncResourceGovernor;
 	/** Offload only when native configuration/device/network checks cover the runtime policy. */
 	nativeUploadApproval?: FileSyncApproval;
+	/** Durable fence for a new final publication, after staging/source checks. */
+	beforeFilePublication?(operationId: string): Promise<void>;
 	currentScope(): SyncScope;
 	origin(): string;
 	fetch: typeof fetch;
@@ -67,10 +70,12 @@ async function readCloudFailure(response: Response, check: () => void): Promise<
     } catch { check(); } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 /** Diagnostics are fixed vocabulary only; never retain arbitrary response text. */
-async function cloudConflict(response: Response, url: URL, mutation: boolean, check: () => void): Promise<Error> {
+async function cloudConflict(response: Response, url: URL, mutation: boolean, check: () => void, guarded: boolean): Promise<Error> {
     const label = cloudOperation(url, mutation);
     const operation = label === 'upload-parts' ? 'cloud-request' : label;
     const value = await readCloudFailure(response, check);
+    if (guarded && url.pathname === '/api/v1/files' && mutation && value?.ok === false && value.code === SYNC_DESTINATION_CHANGED)
+        return new ExactCloudSyncDestinationChanged();
     let code = 'conflict_unknown', retryable = false;
     if (value?.ok === false) {
         if (uploadWaitCodes.has(value.code) || value.code === 'upload_unavailable') code = value.code;
@@ -154,7 +159,7 @@ export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, 
 			return null;
 		}
 		if (!response.ok) {
-			if (response.status === 409) throw await cloudConflict(response, url, body !== undefined, check);
+			if (response.status === 409) throw await cloudConflict(response, url, body !== undefined, check, !!(body && typeof body === 'object' && 'syncDestination' in body));
             if (response.status === 403) throw await cloudForbidden(response, url, body !== undefined, check);
             if (response.status === 408 || response.status === 429 || (response.status >= 500 && response.status <= 599))
                 throw await cloudTemporaryFailure(response, url, body !== undefined, scope, check);
@@ -211,7 +216,8 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 	const negotiate = () => negotiateRequirements({ ...CLOUD_TRANSFER_REQUIREMENTS, ...(retained ? CLOUD_FILE_RETENTION_REQUIREMENTS : {}),
 		...((m.kind === 'copy' ? m.source.symbolicLink : write.before?.symbolicLink) ? { 'api.files': '1.9.0' } : {}),
 		...(empty ? { 'api.files': '1.8.1',
-			'api.attachment-upload-complete': '1.5.0', 'api.attachment-content': '1.16.0' } : {}) });
+			'api.attachment-upload-complete': '1.5.0', 'api.attachment-content': '1.16.0' } : {}),
+		...(write.guardDestination ? CLOUD_SYNC_DESTINATION_REQUIREMENTS : {}) });
 	const fileId = write.before?.id ?? write.operation.id;
 	const receipt = (value: unknown): SyncReceipt => {
 		const file = parseCloudFile(value);
@@ -228,6 +234,8 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 	};
 	const commit = async (content: CloudFile['content'], replayOnly = false) => {
 		const command = cloudWriteCommit(write, content);
+		if (write.guardDestination && !replayOnly) await runtime.beforeFilePublication?.(write.operation.id);
+		check();
 		const result = await json('/api/v1/files', retained ? parseCloudFileRetention({ ...command, kind: 'retained-version' }) : command);
 		if (retained && result.retained !== true) throw Error('The server did not confirm version retention.');
 		if (replayOnly && result.replayed !== true) throw Error('Cloud operation receipt was not an exact replay.');
@@ -256,6 +264,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 		lookup,
 		async read() {
 			await negotiate();
+			if (write.guardDestination) return readCloudPathEntry(runtime, scope, write.cloudRootId!, m.path, signal);
 			const result = await json('/api/v1/files?' + new URLSearchParams({ id: fileId }), undefined, true);
 			if (!result) return null;
 			const file = parseCloudFile(result.file);
@@ -435,10 +444,11 @@ export function createCloudFolderTransport(runtime: CloudTransportRuntime, saved
 		id: write.operation.id,
 		operationId: write.operation.id,
 		name: m.path.split('/').at(-1),
-		folderId: write.folderId
+		folderId: write.folderId,
+		...(write.guardDestination ? { syncDestination: { rootId: write.cloudRootId!, path: m.path } } : {})
 	});
 	const { json, negotiate } = cloudRequests(runtime, scope, signal);
-	const ready = () => negotiate({ ...CLOUD_FOLDER_REQUIREMENTS, 'api.actions-run': '1.7.0', 'api.mongodb-endpoint': '1.1.0' });
+	const ready = () => negotiate({ ...CLOUD_FOLDER_REQUIREMENTS, ...(write.guardDestination ? CLOUD_SYNC_DESTINATION_REQUIREMENTS : {}), 'api.actions-run': '1.7.0', 'api.mongodb-endpoint': '1.1.0' });
 	const receipt = (value: unknown): SyncReceipt => {
 		const folder = parseCloudFolder(value);
 		if (folder.id !== input.id || folder.name !== input.name || folder.folderId !== input.folderId)
@@ -458,6 +468,7 @@ export function createCloudFolderTransport(runtime: CloudTransportRuntime, saved
 		lookup,
 		async read() {
 			await ready();
+			if (write.guardDestination) return readCloudPathEntry(runtime, scope, write.cloudRootId!, m.path, signal);
 			const result = await json('/api/v1/files?' + new URLSearchParams({ folderId: input.id }), undefined, true);
 			return result ? receipt(result.folder).entry : null;
 		},
@@ -468,6 +479,10 @@ export function createCloudFolderTransport(runtime: CloudTransportRuntime, saved
 			// Individual fallback must preserve the exact original folderId.
 			if (!write.cloudRootId) throw Error('Folder publication has no reviewed cloud root.');
 			const parentPath = m.path.split('/').slice(0, -1).join('/');
+			if (write.guardDestination) {
+				await runtime.beforeFilePublication?.(write.operation.id);
+				return receipt((await json('/api/v1/files', input)).folder);
+			}
 			if (parentPath) {
 				const parent = await readCloudPathEntry(runtime, scope, write.cloudRootId, parentPath, signal);
 				if (parent?.kind !== 'folder' || parent.id !== input.folderId) throw Error('Folder parent changed before publication.');
