@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -77,7 +77,8 @@ try {
       if (url.pathname === endpoint + '/providers') {
         const configured = route.request().headers()['x-thingtime-expected-api-origin'] !== selectedOrigin;
         return json(route, { providers: [{ id: 'facebook-account', name: 'Facebook', icon: 'f', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Link a social account', fields: [] },
-          ...(configured ? [{ id: 'google', name: 'Google account', icon: 'g', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Link a Google account', fields: [] }] : [])] });
+          ...(configured ? [{ id: 'google', name: 'Google account', icon: 'g', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Link a Google account', fields: [] },
+            { id: 'google-drive', name: 'Google Drive', icon: 'g', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Select Drive scopes', fields: [] }] : [])] });
       }
       if (url.pathname === '/api/v1/webpages/resolve') {
         const savedLayout = savedLayouts.get(url.searchParams.get('id'));
@@ -118,6 +119,7 @@ try {
           assert.equal(body.expectedOwnerId, firstOwner);
           assert.equal(body.provider, 'google');
           assert.ok(body.named.allowedOperations.includes('google.profile'));
+          assert.deepEqual(body.named.requestedScopes, ['profile']);
           pendingNamed = body.named;
         } else assert.deepEqual(body, { provider: 'facebook-account', expectedOwnerId: 'oauth-tab-fixture-owner' });
         begins++;
@@ -149,7 +151,7 @@ try {
       page.setDefaultTimeout(12000);
       const initial = origin + '/connections?keep=1';
       await page.goto(initial);
-      const signIn = page.getByRole('button', { name: 'Sign in with Facebook' });
+      const signIn = page.getByRole('button', { name: 'Default sign-in with Facebook' });
       await signIn.waitFor();
       const pendingCopy = label === 'desktop' ? 'Complete Facebook sign-in in your new tab.' : 'Finish signing in to Facebook in the new tab.';
       const stopCopy = label === 'desktop' ? 'End sign-in wait' : 'Stop waiting';
@@ -254,6 +256,16 @@ try {
         assert.ok(savedLayouts.has('settings-named-auth-connections'));
         await page.reload();
       }
+      await namedHost.getByText('Choose a provider for named access', { exact: true }).click();
+      await namedHost.getByRole('button', { name: 'Add Google Drive connection' }).click();
+      await namedHost.getByRole('textbox', { name: 'Connection name' }).fill('Drive metadata fixture');
+      await namedHost.getByRole('checkbox', { name: 'View file metadata' }).check();
+      assert.ok(await namedHost.getByRole('checkbox', { name: 'View file metadata' }).isChecked());
+      assert.equal(await namedHost.getByRole('checkbox', { name: 'Google profile name and photo' }).count(), 0);
+      await namedHost.getByText('Provider permissions to request', { exact: true }).scrollIntoViewIfNeeded();
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+      await page.screenshot({ path: join(evidence, label + '-named-permission-form.png'), fullPage: true });
+      await namedHost.getByRole('button', { name: 'Cancel', exact: true }).click();
       for (const name of ['Reading profile', 'Second profile']) {
         await namedHost.getByRole('button', { name: 'Add named connection' }).click();
         await namedHost.getByRole('combobox', { name: 'Provider', exact: true }).selectOption('google');
@@ -262,6 +274,7 @@ try {
           await namedHost.getByText('Choose approved operations', { exact: true }).waitFor();
         }
         await namedHost.getByRole('textbox', { name: 'Connection name' }).fill(name);
+        await namedHost.getByRole('checkbox', { name: 'Profile name and photo', exact: true }).check();
         await namedHost.getByRole('checkbox', { name: 'Google profile name and photo' }).check();
         const newPage = context.waitForEvent('page');
         await namedHost.getByRole('button', { name: 'Continue to sign in' }).click();
@@ -277,6 +290,14 @@ try {
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
       await page.screenshot({ path: join(evidence, label + '-named-connections.png'), fullPage: true });
+      await writeFile(join(evidence, label + '-named-rendered-result.json'), JSON.stringify({
+        viewport: { width, height }, permissionForm: label + '-named-permission-form.png',
+        savedCards: label + '-named-connections.png', selectedOperation: 'google.profile', selectedId: 'named-1',
+        renderedResult: await namedHost.getByText('name: Named profile result').textContent(),
+        namedProfiles: namedRows.map(row => ({ id: row.id, name: row.named.name, requested: row.named.requestedScopes, confirmed: row.named.grantedScopes, allowed: row.named.allowedOperations })),
+        drivePicker: { metadataSelected: true, identityOperationAvailable: true, profileOperationAvailable: false },
+        separateBuilderLabelsSaved: label === 'desktop'
+      }, null, 2));
       if (label === 'desktop') {
         holdList = undefined;
         await page.close();
@@ -287,7 +308,7 @@ try {
         const nativeRequests = observedOrigins.length;
         await hosted.goto(initial);
         await hosted.waitForFunction(() => typeof window.resolveFixtureDesktopInfo === 'function');
-        assert.equal(await hosted.getByRole('button', { name: 'Sign in with Facebook' }).count(), 0);
+        assert.equal(await hosted.getByRole('button', { name: 'Default sign-in with Facebook' }).count(), 0);
         assert.equal(observedOrigins.length, nativeRequests);
         await hosted.evaluate(() => window.resolveFixtureDesktopInfo({}));
         assert.equal(observedOrigins.length, nativeRequests);
@@ -307,7 +328,7 @@ try {
             response.request().headers()['x-thingtime-expected-api-origin'] === origin)));
         await selectOrigin(origin);
         await hosted.getByText('OAuth fixture account').waitFor();
-        await hosted.getByRole('button', { name: 'Sign in with Facebook' }).waitFor();
+        await hosted.getByRole('button', { name: 'Default sign-in with Facebook' }).waitFor();
         await firstOriginReads;
         const beforeSwitch = observedOrigins.length;
         await hosted.evaluate(async () => {
@@ -316,7 +337,7 @@ try {
         });
         await hosted.waitForFunction(() => typeof window.resolveFixtureDesktopInfo === 'function');
         assert.equal(await hosted.getByText('OAuth fixture account').count(), 0);
-        assert.equal(await hosted.getByRole('button', { name: 'Sign in with Facebook' }).count(), 0);
+        assert.equal(await hosted.getByRole('button', { name: 'Default sign-in with Facebook' }).count(), 0);
         assert.equal(observedOrigins.length, beforeSwitch);
         await hosted.evaluate(value => window.resolveFixtureDesktopInfo({ apiOrigin: value }), selectedOrigin);
         await hosted.getByText('Selected API connection').waitFor();

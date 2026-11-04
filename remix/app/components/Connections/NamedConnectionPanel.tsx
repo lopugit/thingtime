@@ -2,12 +2,12 @@ import React from 'react';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
-import { namedAccess, namedOperationsFor, type NamedConnectionInput, type NamedOperation } from '~/connections/namedAccess';
+import { namedAccess, namedFacebookProvider, namedGoogleProvider, namedOperationsFor, namedProviderPermissions, type NamedConnectionInput, type NamedOperation } from '~/connections/namedAccess';
 import { namedConnectionBlocks } from './namedConnectionBlocks';
 import type { Connection } from './shared';
 
 type Provider = { id: string; name: string; auth: string; configured: boolean };
-type Draft = { provider: string; requestId: string; name: string; allowedOperations: NamedOperation[]; reconnectId?: string };
+type Draft = { provider: string; requestId: string; name: string; allowedOperations: NamedOperation[]; requestedScopes: string[]; reconnectId?: string };
 
 export function NamedConnectionPanel({ scopeKey, providers, connections, busy, start, remove, use, onError }: {
   scopeKey: string; providers: Provider[]; connections: Connection[]; busy: boolean;
@@ -25,13 +25,16 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
   const useGeneration = React.useRef(0);
   const selected = named.find(connection => connection.id === active) || named[0];
   const options = draft ? namedOperationsFor(draft.provider) : [];
+  const permissions = draft ? namedProviderPermissions(draft.provider) : [];
+  const initialScopes = (provider: string) => namedFacebookProvider(provider) ? ['public_profile'] : [];
   const begin = (provider: string, connection?: Connection) => {
     setDraft({ provider, requestId: crypto.randomUUID(), name: connection?.named?.name || '',
-      allowedOperations: connection?.named?.allowedOperations || ['account.identity'], ...(connection ? { reconnectId: connection.id } : {}) });
+      allowedOperations: connection?.named?.allowedOperations || ['account.identity'],
+      requestedScopes: connection?.named?.requestedScopes.filter(scope => namedProviderPermissions(provider).some(option => option.scope === scope)) || initialScopes(provider), ...(connection ? { reconnectId: connection.id } : {}) });
   };
   if (!candidates.length && !named.length) return null;
   const rows = named.map(connection => ({
-    id: connection.id, name: connection.named!.name, account: `${connection.providerName} · ${connection.account.displayName}`,
+    id: connection.id, name: connection.named!.name, account: `${connection.providerName} · Account ${connection.account.id.slice(-8)}`,
     requested: connection.named!.requestedScopes.join(', ') || 'No selectable OAuth scopes reported',
     granted: connection.named!.grantedScopes === null ? 'Provider did not report OAuth scopes' : connection.named!.grantedScopes.join(', ') || 'None',
     allowed: connection.named!.allowedOperations.map(operation => namedAccess[operation].label).join(', ')
@@ -42,12 +45,20 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
       scope={{ named: {
         rows, canUse: !!selected, active: selected?.id || '', operations: selected?.named?.allowedOperations.map(id => ({ id, label: namedAccess[id].label })) || [],
         result, providers: candidates.map(provider => ({ id: provider.id, label: provider.name })),
+        permissionOptions: permissions.map(({ scope, label }) => ({ id: scope, label,
+          selected: draft?.requestedScopes.includes(scope) || false, required: scope === 'public_profile' })),
+        hasPermissions: !!permissions.length,
+        permissionNotice: permissions.length ? 'Choose the scopes to request from this provider. Saved scopes do not enable a Thingtime action on their own.'
+          : 'Custom provider scopes are unavailable for this provider. Its standard consent applies.',
         editing: !!draft || editing, formTitle: draft?.reconnectId ? 'Reconnect the same account' : 'New sign-in',
         reconnecting: !!draft?.reconnectId, provider: draft?.provider || candidates[0]?.id || '', name: draft?.name || '',
         options: options.map(id => ({ id, label: namedAccess[id].label, selected: draft?.allowedOperations.includes(id) || false }))
       } }}
       actions={{
-        add: () => { if (!busy && candidates[0]) begin(candidates[0].id); },
+        add: ({ inputs }) => {
+          const provider = typeof inputs.id === 'string' ? candidates.find(item => item.id === inputs.id) : candidates[0];
+          if (!busy && provider) begin(provider.id);
+        },
         reconnect: ({ inputs }) => { const target = named.find(item => item.id === inputs.id); if (!busy && target) begin(target.provider, target); },
         remove: async ({ inputs }) => {
           const target = named.find(item => item.id === inputs.id);
@@ -58,12 +69,22 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
         },
         provider: ({ value }) => {
           if (!draft || draft.reconnectId || typeof value !== 'string' || !candidates.some(item => item.id === value)) return;
-          setDraft({ ...draft, provider: value, allowedOperations: ['account.identity'] });
+          setDraft({ ...draft, provider: value, allowedOperations: ['account.identity'], requestedScopes: initialScopes(value) });
+        },
+        permission: ({ inputs, value }) => {
+          const scope = inputs.id;
+          if (!draft || typeof scope !== 'string' || scope === 'public_profile' || !permissions.some(item => item.scope === scope)) return;
+          setDraft({ ...draft,
+            requestedScopes: value === true ? [...new Set([...draft.requestedScopes, scope])] : draft.requestedScopes.filter(item => item !== scope),
+            allowedOperations: value === true ? draft.allowedOperations : draft.allowedOperations.filter(item => namedAccess[item].scope !== scope)
+          });
         },
         access: ({ inputs, value }) => {
           const id = inputs.id as NamedOperation;
           if (!draft || !options.includes(id)) return;
-          setDraft({ ...draft, allowedOperations: value === true ? [...new Set([...draft.allowedOperations, id])] : draft.allowedOperations.filter(item => item !== id) });
+          const required = namedAccess[id].scope;
+          setDraft({ ...draft, allowedOperations: value === true ? [...new Set([...draft.allowedOperations, id])] : draft.allowedOperations.filter(item => item !== id),
+            requestedScopes: value === true && required ? [...new Set([...draft.requestedScopes, required])] : draft.requestedScopes });
         },
         cancel: () => setDraft(null),
         start: ({ readField }) => {
@@ -71,6 +92,10 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
           const name = readField('connection-name');
           if (typeof name !== 'string' || !name.trim() || !draft.allowedOperations.length) {
             onError(new Error('Enter a connection name and choose at least one allowed operation.'));
+            return;
+          }
+          if (namedGoogleProvider(draft.provider) && draft.provider !== 'google' && !draft.requestedScopes.length) {
+            onError(new Error('Choose at least one permission to request for this Google service.'));
             return;
           }
           const { provider, ...intent } = draft;

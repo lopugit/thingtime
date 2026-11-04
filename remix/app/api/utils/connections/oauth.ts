@@ -7,9 +7,9 @@ import { connectionVaultConfigured } from './tokenVault';
 import { resolvePublicOrigin } from '../auth/publicOrigin';
 import { oauthGrantMatches } from './oauthConfig';
 import { prepareNamedIntent, saveNamedConnection, type NamedIntent } from './namedConnections';
-import { namedGoogleProvider, parseNamedConnectionInput, requestedNamedGoogleScopes } from '../../../connections/namedAccess';
+import { namedAuthorizeScopes, namedFacebookProvider, parseNamedConnectionInput } from '../../../connections/namedAccess';
 import { upsertAccountAndLink, type PublicConnection } from './connections';
-import { connectionProviderById, oauthCredsFor } from './providers';
+import { connectionProviderById, oauthCredsFor, readConnectionFacebookPermissions } from './providers';
 import { fail, pkceVerifierFor, type Fail, type OAuthErrorCode } from './shared';
 
 // SSO account linking: POST /api/v1/connections/oauth/begin hands the client
@@ -74,7 +74,7 @@ export const beginOAuth = async (
   const prepared = input.named === undefined ? null : await prepareNamedIntent(user, provider, input.named, requestOrigin);
   if (prepared?.ok === false) return prepared;
   const intent = prepared?.intent;
-  const requestedScopes = intent && namedGoogleProvider(provider.id) ? requestedNamedGoogleScopes(intent.allowedOperations) : undefined;
+  const requestedScopes = intent ? namedAuthorizeScopes(provider.id, intent.requestedScopes || []) : undefined;
   const { redirectUri } = creds;
   // PKCE (X requires it): the S256 verifier is derived from a server secret and
   // this nonce, so only the nonce rides the state JWT through the provider round
@@ -165,6 +165,7 @@ export const completeOAuth = async (
 
   const tokens = { ...exchanged.tokens, clientId: creds.clientId, oauthBinding: creds.binding,
     oauthOrigin: creds.origin, oauthEnvironment: creds.environment };
+  if (namedIntent && namedFacebookProvider(provider.id)) tokens.confirmedScopes = await readConnectionFacebookPermissions(tokens);
   const resolved = await provider.oauth.resolveAccountFromTokens(tokens);
   if (resolved.ok === false) return { ...resolved, oauthCode: 'exchange' };
   const linked = namedIntent

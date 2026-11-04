@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
-import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
+import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { connectionVaultConfigured, packConnectionTokens } from './tokenVault';
 import { fail } from './shared';
 import { namedAccess, parseNamedConnectionInput, verifiedNamedScope, type NamedConnectionInput } from '../../../connections/namedAccess';
@@ -23,8 +23,8 @@ export async function prepareNamedIntent(owner: Owner, provider: ConnectionProvi
     shareId: input.reconnectId, thingtime: NAMED_CONNECTION_KIND, ownerId: owner.id,
     'crystal.provider': provider.id, 'crystal.origin': origin
   });
-  if (!existing?.parentId || !(existing.updatedAt instanceof Date)) return fail(404, 'Connection not found on this origin.');
-  return { ok: true as const, intent: { ...input, expectedAccountId: existing.parentId, expectedRevision: existing.updatedAt.toISOString() } };
+  if (!existing?.parentId || typeof existing.crystal?.credentialVersion !== 'string') return fail(404, 'Connection not found on this origin.');
+  return { ok: true as const, intent: { ...input, expectedAccountId: existing.parentId, expectedRevision: existing.crystal.credentialVersion } };
 }
 
 export async function saveNamedConnection(
@@ -33,7 +33,7 @@ export async function saveNamedConnection(
 ) {
   if (!(tokens?.accessToken || tokens?.idToken) || !connectionVaultConfigured()) return fail(503, 'Secure account storage is unavailable.');
   const grantedScopes = tokens.confirmedScopes ?? null;
-  if (intent.allowedOperations.some(operation => {
+  if ((intent.requestedScopes || []).some(scope => !verifiedNamedScope(grantedScopes || [], scope)) || intent.allowedOperations.some(operation => {
     const scope = namedAccess[operation].scope;
     return scope && (!grantedScopes || !verifiedNamedScope(grantedScopes, scope));
   })) return fail(403, 'The provider did not confirm all selected permissions.');
@@ -61,7 +61,7 @@ export async function saveNamedConnection(
     const now = new Date();
     const fields = {
       secure: await packConnectionTokens(owner.id, id, tokens),
-      'crystal.name': intent.name, 'crystal.grantRevision': intent.requestId, 'crystal.requestedScopes': requestedScopes,
+      'crystal.name': intent.name, 'crystal.grantRevision': intent.requestId, 'crystal.credentialVersion': randomUUID(), 'crystal.requestedScopes': requestedScopes,
       'crystal.grantedScopes': grantedScopes, 'crystal.allowedOperations': intent.allowedOperations,
       'crystal.expiresAt': tokens.expiresAt || null, updatedAt: now
     };
@@ -69,14 +69,14 @@ export async function saveNamedConnection(
     // refresh of the original must never re-create or silently replace it.
     if (intent.reconnectId) {
       const updated = await collection.updateOne(
-        { ...identity, updatedAt: new Date(intent.expectedRevision!) },
+        { ...identity, 'crystal.credentialVersion': intent.expectedRevision },
         { $set: fields }, { session }
       );
       if (!updated.matchedCount) return fail(409, 'This connection changed. Start reconnecting again.');
     } else {
       await collection.updateOne(identity, { $set: fields, $setOnInsert: {
         schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, shareId: id, thingtime: [NAMED_CONNECTION_KIND],
-        ownerId: owner.id, parentId: accountId, targetId: null, tags: [], acl: [ACL_OWNER], storageClass: 'control', createdAt: now,
+        ownerId: owner.id, parentId: accountId, targetId: null, tags: [], acl: [], storageClass: 'control', createdAt: now,
         'crystal.provider': provider.id, 'crystal.accountId': accountId, 'crystal.origin': origin, 'crystal.environment': environment
       } }, { session, upsert: true });
     }

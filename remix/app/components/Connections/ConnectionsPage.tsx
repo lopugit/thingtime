@@ -296,15 +296,19 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
 
   const unlink = async (connection: Connection) => {
     // optimistic remove, restore on failure
-    const previous = connections;
     setConnections((current) => current.filter((entry) => entry.id !== connection.id));
     try {
       await api.v1.connections.unlink({ id: connection.id, named: !!connection.named, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin });
       if (!isCurrent() || !apiOrigin) return;
-      writeLocalCache(connectionsCache, previous.filter((entry) => entry.id !== connection.id));
+      setConnections(current => {
+        const next = current.filter(entry => entry.id !== connection.id);
+        writeLocalCache(connectionsCache, next);
+        return next;
+      });
       lopu({ title: `Unlinked ${connection.account.displayName} 👋`, status: 'success', duration: 5000 });
     } catch (err: any) {
-      setConnections(previous);
+      if (!isCurrent()) return;
+      setConnections(current => current.some(entry => entry.id === connection.id) ? current : [...current, connection]);
       lopu({ title: err?.error || 'Could not unlink that connection 😞', status: 'error' });
     }
   };
@@ -532,7 +536,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
             </TransientBlockHost>}
           </SettingsDocumentHost>
         ) : null}
-        <Box display="grid" gridTemplateColumns={['1fr', 'repeat(2, 1fr)', 'repeat(3, 1fr)']} gap={3}>
+        <Box display="grid" gridTemplateColumns={['minmax(0, 1fr)', 'repeat(2, minmax(0, 1fr))', 'repeat(3, minmax(0, 1fr))']} gap={3}>
           {providers.map((provider) => (
             <Box key={provider.id} {...cardStyle} padding={4} display="flex" flexDirection="column" rowGap={2}>
               <Flex alignItems="center" columnGap={2}>
@@ -545,11 +549,15 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
               <Button
                 size="sm"
                 borderRadius="999px"
+                whiteSpace="normal"
+                height="auto"
+                minHeight="32px"
+                paddingY={2}
                 isDisabled={!provider.configured || signedOut || busy || (provider.auth === 'oauth2' && (!ownerId || !!oauthProvider))}
                 onClick={() => openConnect(provider)}
                 variant={connecting?.id === provider.id ? 'solid' : 'outline'}
               >
-                {!provider.configured ? 'Needs setup' : provider.auth === 'oauth2' ? `Sign in with ${provider.name}` : 'Connect'}
+                {!provider.configured ? 'Needs setup' : provider.auth === 'oauth2' ? `Default sign-in with ${provider.name}` : provider.auth === 'credential' ? 'Connect default account' : 'Connect'}
               </Button>
             </Box>
           ))}

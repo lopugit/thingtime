@@ -23,6 +23,7 @@ try {
   const register = await import('../app/routes/api/v1/auth/register/_register');
   const accounts = await import('../app/routes/api/v1/connections/_connections');
   const begin = await import('../app/routes/api/v1/connections/oauth/begin/_begin');
+  const genericThings = await import('../app/routes/api/v1/things/_things');
   const namedRoute = await import('../app/routes/api/v1/connections/named/_named');
   const callback = await import('../app/routes/api/v1/connections/oauth/callback/_callback');
   const feed = await import('../app/routes/api/v1/connections/feed/_feed');
@@ -51,11 +52,11 @@ try {
   const configured = await call(integrations.action, '/api/v1/admin/integrations', owner.cookie, { action: 'create-secret', label: 'connections-google-oauth', value: JSON.stringify({ environments: { 'oauth-integration': { origins: { [base]: { clientId: 'synthetic-client', clientSecret: 'synthetic-client-secret', redirectUri: base + '/api/v1/connections/oauth/callback' } } } } }) });
   assert.equal(configured.response.status, 200, 'Platform vault configuration status');
   const provider = connectionProviderById('google')!;
-  let externalId = 'google-one', exchanges = 0, granted = ['openid', 'email'], expiring = false;
+  let externalId = 'google-one', exchanges = 0, granted = ['openid', 'email'], expirationDelay = 3600000;
   provider.oauth!.exchangeCode = async ({ code }) => {
     assert.ok(vaultRequest(), 'Real callback route must install the request vault context');
     exchanges++;
-    return { ok: true, tokens: { accessToken: 'synthetic-access-' + code, refreshToken: 'synthetic-refresh-' + code, expiresAt: new Date(Date.now() + (expiring ? 1 : 3600000)).toISOString(), scopes: granted, confirmedScopes: granted } };
+    return { ok: true, tokens: { accessToken: 'synthetic-access-' + code, refreshToken: 'synthetic-refresh-' + code, expiresAt: new Date(Date.now() + expirationDelay).toISOString(), scopes: granted, confirmedScopes: granted } };
   };
   provider.oauth!.resolveAccountFromTokens = async () => ({ ok: true, account: { providerAccountId: externalId, displayName: externalId, handle: externalId + '@example.test', avatarUrl: null, profileUrl: null, config: {} } });
   async function connect(user: typeof owner) {
@@ -119,10 +120,16 @@ try {
     assert.match((await finishNamed(started, code, actor)).response.headers.get('location') || '', /connected=google/);
     return started;
   };
-  const namedDrive = await call(begin.action, '/api/v1/connections/oauth/begin', owner.cookie,
-    { provider: 'google-drive', named: { requestId: randomUUID(), name: 'Drive identity only', allowedOperations: ['account.identity'] } });
+  const scopeOwner = await identity();
+  const driveMetadata = 'https://www.googleapis.com/auth/drive.metadata.readonly';
+  const namedDrive = await call(begin.action, '/api/v1/connections/oauth/begin', scopeOwner.cookie,
+    { provider: 'google-drive', named: { requestId: randomUUID(), name: 'Drive metadata', allowedOperations: ['account.identity'], requestedScopes: [driveMetadata] } });
   assert.equal(namedDrive.response.status, 200);
-  assert.equal(new URL(namedDrive.data.authorizeUrl).searchParams.get('scope'), 'openid', 'Unsupported Drive operations never request Drive scope');
+  assert.equal(new URL(namedDrive.data.authorizeUrl).searchParams.get('scope'), 'openid ' + driveMetadata);
+  const wrongDriveScope = await call(begin.action, '/api/v1/connections/oauth/begin', scopeOwner.cookie,
+    { provider: 'google-drive', named: { requestId: randomUUID(), name: 'Cross service', allowedOperations: ['account.identity'],
+      requestedScopes: ['https://www.googleapis.com/auth/gmail.readonly'] } });
+  assert.equal(wrongDriveScope.response.status, 400);
   externalId = 'google-one';
   granted = ['openid', 'profile'];
   const started = await success('Profile use', ['google.profile'], 'profile-one');
@@ -132,6 +139,8 @@ try {
   await success('Email use', ['google.email'], 'email-one');
   const email = (await namedList()).find((item: any) => item.named.name === 'Email use');
   assert.ok(email && email.id !== profile.id && email.account.id === profile.account.id);
+  assert.deepEqual(email.account, { id: profile.account.id, handle: '', displayName: '', avatarUrl: null, profileUrl: null },
+    'Named list must not inherit metadata from another provider grant');
   const repeatedRequest = randomUUID();
   const firstDraft = await startNamed('Duplicate scope', ['google.email'], undefined, repeatedRequest);
   const retryDraft = await startNamed('Duplicate scope', ['google.email'], undefined, repeatedRequest);
@@ -140,12 +149,23 @@ try {
   assert.equal((await namedList()).length, 3, 'Same scope is allowed but a retry cannot create a duplicate');
   assert.equal((await call(accounts.loader, '/api/v1/connections', owner.cookie)).data.connections.length, 1, 'Legacy list is unchanged');
   assert.equal((await namedList(other)).length, 0);
+  for (const protectedId of [email.id, email.account.id]) {
+    assert.equal((await call(genericThings.loader, '/api/v1/things?id=' + protectedId, owner.cookie)).response.status, 404,
+      'Neither named credentials nor private provider metadata have a generic read path');
+  }
   assert.equal((await use(email.id, 'google.email', other)).response.status, 404);
   assert.equal((await use(profile.id, 'google.email')).response.status, 403);
   const realFetch = globalThis.fetch;
+  let releaseOldUse!: () => void, enteredOldUse!: () => void;
+  const oldUseStarted = new Promise<void>(resolve => { enteredOldUse = resolve; });
+  const waitOldUse = new Promise<void>(resolve => { releaseOldUse = resolve; });
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     assert.equal(String(input), 'https://openidconnect.googleapis.com/v1/userinfo', 'Only the synthetic identity endpoint may be called');
     const header = new Headers(init?.headers).get('authorization');
+    if (header === 'Bearer synthetic-access-retired') {
+      enteredOldUse(); await waitOldUse;
+      return Response.json({ sub: 'google-one', name: 'Stale profile must not be returned' });
+    }
     assert.ok(header && ['Bearer synthetic-access-profile-one', 'Bearer synthetic-access-email-one', 'Bearer synthetic-access-profile-updated', 'Bearer synthetic-access-lease-refreshed'].includes(header),
       'Exactly selected credential reached the provider');
     return Response.json({ sub: 'google-one', name: 'Verified name', email: 'verified@example.test' });
@@ -172,7 +192,7 @@ try {
   assert.equal(excluded.response.status, 404, 'Named authorization does not grant a legacy feed');
 
   const refreshOwner = await identity();
-  expiring = true;
+  expirationDelay = 1;
   await success('Refresh race', ['google.profile'], 'lease-race', undefined, refreshOwner);
   const expiringProfile = (await namedList(refreshOwner)).find((item: any) => item.named.name === 'Refresh race');
   let releaseRefresh!: () => void, enteredRefresh!: () => void, refreshes = 0;
@@ -197,6 +217,26 @@ try {
   assert.equal((await use(expiringProfile.id, 'google.profile', refreshOwner)).response.status, 403);
   assert.deepEqual((await namedList(refreshOwner)).find((item: any) => item.id === expiringProfile.id).named.grantedScopes, ['openid']);
 
+  expirationDelay = 20000;
+  await success('Retired scope race', ['google.profile'], 'retired', undefined, refreshOwner);
+  const retired = (await namedList(refreshOwner)).find((item: any) => item.named.name === 'Retired scope race');
+  let releaseScopeChange!: () => void, enteredScopeChange!: () => void;
+  const scopeChangeStarted = new Promise<void>(resolve => { enteredScopeChange = resolve; });
+  const waitScopeChange = new Promise<void>(resolve => { releaseScopeChange = resolve; });
+  provider.oauth!.refreshTokens = async () => {
+    enteredScopeChange();
+    await waitScopeChange;
+    return { accessToken: 'synthetic-access-new-scope', expiresAt: new Date(Date.now() + 3600000).toISOString(), confirmedScopes: ['openid'] };
+  };
+  const scopeChange = use(retired.id, 'google.profile', refreshOwner);
+  await Promise.race([scopeChangeStarted, scopeChange.then(result => { throw new Error(`Scope change did not start (HTTP ${result.response.status})`); })]);
+  const oldUse = use(retired.id, 'google.profile', refreshOwner);
+  await Promise.race([oldUseStarted, oldUse.then(result => { throw new Error(`Old provider read did not start (HTTP ${result.response.status})`); })]);
+  releaseScopeChange();
+  assert.equal((await scopeChange).response.status, 403);
+  releaseOldUse();
+  assert.equal((await oldUse).response.status, 403, 'Scope reduction blocks an older in-flight provider response');
+
   const manual = connectionProviderById('bluesky-account')!;
   manual.resolveAccount = async fields => ({ ok: true, account: { providerAccountId: fields.handle,
     displayName: 'Fixture manual account', handle: fields.handle, avatarUrl: null, profileUrl: null,
@@ -213,8 +253,46 @@ try {
   assert.equal((await manualConnect('Manual wrong target', 'different.bsky.social', manualA.data.connection.id)).response.status, 409);
   assert.equal((await use(manualB.data.connection.id, 'account.identity', refreshOwner)).response.status, 200);
   assert.equal(JSON.stringify(await namedList(refreshOwner)).includes('synthetic-manual'), false, 'Manual secrets never appear in metadata');
+  const driveProvider = connectionProviderById('google-drive')!;
+  driveProvider.oauth!.resolveAccountFromTokens = provider.oauth!.resolveAccountFromTokens;
+  driveProvider.oauth!.exchangeCode = async () => ({ ok: true, tokens: { accessToken: 'synthetic-drive-access', confirmedScopes: ['openid', driveMetadata] } });
+  const driveCompleted = await finishNamed(new URL(namedDrive.data.authorizeUrl), 'drive-fixture-code', scopeOwner);
+  assert.match(driveCompleted.response.headers.get('location') || '', /connected=google-drive/);
+  const savedDrive = (await namedList(scopeOwner))[0];
+  assert.deepEqual(savedDrive.named.requestedScopes, ['openid', driveMetadata]);
+  assert.deepEqual(savedDrive.named.grantedScopes, ['openid', driveMetadata]);
+  assert.deepEqual(savedDrive.named.allowedOperations, ['account.identity']);
+  assert.equal((await use(savedDrive.id, 'google.profile', scopeOwner)).response.status, 403);
+
+  const facebookConfigured = await call(integrations.action, '/api/v1/admin/integrations', owner.cookie, { action: 'create-secret', label: 'connections-facebook-oauth',
+    value: JSON.stringify({ environments: { 'oauth-integration': { origins: { [base]: { clientId: 'synthetic-facebook-client',
+      clientSecret: 'synthetic-facebook-secret', redirectUri: base + '/api/v1/connections/oauth/callback' } } } } }) });
+  assert.equal(facebookConfigured.response.status, 200);
+  const facebook = connectionProviderById('facebook')!;
+  facebook.oauth!.resolveAccountFromTokens = provider.oauth!.resolveAccountFromTokens;
+  facebook.oauth!.exchangeCode = async () => ({ ok: true, tokens: { accessToken: 'synthetic-facebook-access', scopes: ['public_profile', 'email', 'user_posts'] } });
+  let postsGranted = false;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    assert.equal(String(input), 'https://graph.facebook.com/v23.0/me/permissions?fields=permission,status');
+    assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer synthetic-facebook-access');
+    return Response.json({ data: [{ permission: 'public_profile', status: 'granted' },
+      { permission: 'email', status: 'granted' }, { permission: 'user_posts', status: postsGranted ? 'granted' : 'declined' }] });
+  }) as typeof fetch;
+  const startFacebook = async () => {
+    const started = await call(begin.action, '/api/v1/connections/oauth/begin', scopeOwner.cookie, { provider: 'facebook',
+      named: { requestId: randomUUID(), name: 'Facebook posts credential', allowedOperations: ['account.identity'], requestedScopes: ['email', 'user_posts'] } });
+    assert.equal(started.response.status, 200);
+    const authorize = new URL(started.data.authorizeUrl);
+    assert.equal(authorize.searchParams.get('scope'), 'public_profile,email,user_posts');
+    return authorize;
+  };
+  assert.match((await finishNamed(await startFacebook(), 'fb-partial', scopeOwner)).response.headers.get('location') || '', /oauthError=permissions/);
+  postsGranted = true;
+  assert.match((await finishNamed(await startFacebook(), 'fb-granted', scopeOwner)).response.headers.get('location') || '', /connected=facebook/);
+  const savedFacebook = (await namedList(scopeOwner)).find((item: any) => item.provider === 'facebook');
+  assert.deepEqual(savedFacebook.named.grantedScopes, ['public_profile', 'email', 'user_posts']);
   globalThis.fetch = realFetch;
-  report(JSON.stringify({ connectionsOAuthProof: true, api: 'unmodified Request handlers', storage: 'disposable replica transactions', provider: 'synthetic exchange/profile only', owners: 2, ownerAccounts: [2, 1], replayRejected: true, wrongOriginFeedRejected: true, ownerOnlyDisconnect: true, namedConnections: true, targetedReconnect: true, partialRefused: true, siblingRetained: true, refreshLease: true, scopeShrink: true, manualProfiles: true, namedFeedDenied: true }));
+  report(JSON.stringify({ connectionsOAuthProof: true, api: 'unmodified Request handlers', storage: 'disposable replica transactions', provider: 'synthetic exchange/profile only', owners: 2, ownerAccounts: [2, 1], replayRejected: true, wrongOriginFeedRejected: true, ownerOnlyDisconnect: true, namedConnections: true, targetedReconnect: true, partialRefused: true, siblingRetained: true, refreshLease: true, scopeShrink: true, manualProfiles: true, namedFeedDenied: true, oldProviderResponseDenied: true, genericProjectionDenied: true, independentScopeSelection: true, facebookPermissionProof: true }));
   process.exit(0);
 } catch (error: any) {
   // Assertions use status/booleans, never fixture secrets or cookies.

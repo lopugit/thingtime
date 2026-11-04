@@ -6794,11 +6794,16 @@ named ID and requires the same external account. **Remove local connection**
 retires only that local credential. It does not call provider revocation.
 
 The card separates the scopes requested from the provider, scopes the provider
-explicitly reported, and operations Thingtime permits. Google account supports
-separately selected profile and email reads. Other provider cards currently
-offer saved account identity. Named Google service cards request identity only
-until their service operations are available. Other providers may use their
-normal provider consent scopes.
+explicitly reported, and operations Thingtime permits. Choose provider
+permissions separately from allowed operations. Google account offers verified
+profile and email reads. Google Workspace service cards and Facebook can save
+explicitly selected provider permissions for future supported use. Their only
+executable operation here is saved account identity. Providers with no
+configurable permission catalog use their standard consent. See the official
+[Google scope catalog](https://developers.google.com/identity/protocols/oauth2/scopes),
+[Calendar permissions](https://developers.google.com/workspace/calendar/api/auth),
+[Drive permissions](https://developers.google.com/workspace/drive/api/guides/api-specific-auth),
+and [Meta permissions edge](https://github.com/facebook/facebook-nodejs-business-sdk/blob/main/src/objects/user.js).
 Bluesky exchanges the supplied app password for a separate session and stores
 only the session credential. Provider APIs may share grants or enforce their
 own limits. Google can invalidate older refresh tokens and its revoke endpoint

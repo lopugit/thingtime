@@ -1685,6 +1685,13 @@ const githubProvider: ConnectionProvider = {
 
 const GRAPH = 'https://graph.facebook.com/v23.0';
 
+export async function readConnectionFacebookPermissions(tokens: OAuthTokens): Promise<string[] | undefined> {
+  const result = await authedJson(`${GRAPH}/me/permissions?fields=permission,status`, { token: tokens.accessToken });
+  if (result.ok === false || !Array.isArray(result.data?.data)) return undefined;
+  return result.data.data.flatMap((item: { permission?: unknown; status?: unknown }) =>
+    item?.status === 'granted' && typeof item.permission === 'string' ? [item.permission] : []);
+}
+
 const facebookProvider: ConnectionProvider = {
   id: 'facebook',
   name: 'Facebook posts',
@@ -1697,8 +1704,8 @@ const facebookProvider: ConnectionProvider = {
   oauth: {
     clientIdEnv: 'FACEBOOK_APP_ID',
     clientSecretEnv: 'FACEBOOK_APP_SECRET',
-    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
-      `https://www.facebook.com/v23.0/dialog/oauth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&response_type=code&scope=${encodeURIComponent('public_profile,user_posts')}`,
+    buildAuthorizeUrl: ({ clientId, redirectUri, state, requestedScopes }) =>
+      `https://www.facebook.com/v23.0/dialog/oauth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&response_type=code&scope=${encodeURIComponent(requestedScopes?.join(',') || 'public_profile,user_posts')}`,
     exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
       const short = await fetchJson(
         `${GRAPH}/oauth/access_token?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${encodeURIComponent(clientSecret)}&code=${encodeURIComponent(code)}`
@@ -1768,9 +1775,9 @@ const facebookAccountProvider: ConnectionProvider = {
   about: 'Save your Facebook identity for later actions. Requests your public profile; no posts permission.',
   oauth: {
     ...facebookProvider.oauth!,
-    buildAuthorizeUrl: ({ clientId, redirectUri, state }) => {
+    buildAuthorizeUrl: ({ clientId, redirectUri, state, requestedScopes }) => {
       const url = new URL('https://www.facebook.com/v23.0/dialog/oauth');
-      url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, state, response_type: 'code', scope: 'public_profile' }).toString();
+      url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, state, response_type: 'code', scope: requestedScopes?.join(',') || 'public_profile' }).toString();
       return url.href;
     },
     exchangeCode: async (input) => {

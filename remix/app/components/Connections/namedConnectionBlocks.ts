@@ -29,6 +29,10 @@ export const namedConnectionBlocks: WebpageBlock[] = [
     ]
   }]),
   button('named-add', 'Add named connection', 'add'),
+  { id: 'named-provider-shortcuts', type: 'element', tag: 'details', children: [
+    element('named-provider-shortcuts-title', 'summary', 'Choose a provider for named access'),
+    collection('named-provider-shortcut-list', 'named.providers', [button('named-provider-shortcut', 'Add {item.label} connection', 'add', { id: '{item.id}' })], true)
+  ] },
   when('named-form', 'named.editing', [{
     id: 'named-form-group', type: 'element', tag: 'fieldset',
     css: { display: 'grid', gap: '8px', padding: '12px', 'min-width': '0', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '12px' },
@@ -43,7 +47,20 @@ export const namedConnectionBlocks: WebpageBlock[] = [
       element('named-name-label', 'label', 'Connection name', { htmlFor: 'named-connection-name' }),
       element('named-name-field', 'input', '', { id: 'named-connection-name', name: 'connection-name', 'aria-label': 'Connection name', defaultValue: '{named.name}' },
         { 'min-height': '44px', padding: '6px 8px', border: '1px solid var(--tt-border, #ddd)' }),
-      element('named-access-label', 'p', 'Allowed in Thingtime'),
+      element('named-provider-scope-label', 'p', 'Provider permissions to request', {}, { 'font-weight': '600' }),
+      element('named-provider-scope-notice', 'p', '{named.permissionNotice}'),
+      when('named-provider-scope-available', 'named.hasPermissions', [
+        collection('named-provider-scope-options', 'named.permissionOptions', [{
+          id: 'named-provider-scope-row', type: 'element', tag: 'label',
+          css: { display: 'flex', gap: '8px', 'align-items': 'center', 'min-height': '44px' },
+          children: [
+            element('named-provider-scope-choice', 'input', '', { type: 'checkbox', checked: '{item.selected}', disabled: '{item.required}', 'aria-label': '{item.label}',
+              'data-tt-action': '$transient', 'data-tt-action-inputs': { operation: 'permission', id: '{item.id}' } }),
+            element('named-provider-scope-copy', 'span', '{item.label}')
+          ]
+        }], true)
+      ]),
+      element('named-access-label', 'p', 'Allowed operations in Thingtime', {}, { 'font-weight': '600' }),
       collection('named-access-options', 'named.options', [{
         id: 'named-access-row', type: 'element', tag: 'label', css: { display: 'flex', gap: '8px', 'align-items': 'center', 'min-height': '44px' },
         children: [

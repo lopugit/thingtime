@@ -155,16 +155,18 @@ export const toPublicConnection = (linkDoc: any, accountDoc: any, provider: Conn
   expiresAt: typeof grant?.crystal?.expiresAt === 'string' ? grant.crystal.expiresAt : null,
   account: {
     id: String(accountDoc?.shareId || linkDoc?.crystal?.accountId || ''),
-    handle: String(accountDoc?.crystal?.handle || ''),
-    displayName: String(accountDoc?.crystal?.displayName || ''),
+    // A canonical account may carry metadata discovered by a different grant.
+    // Named consumers can retrieve provider fields only via their own operation.
+    handle: named ? '' : String(accountDoc?.crystal?.handle || ''),
+    displayName: named ? '' : String(accountDoc?.crystal?.displayName || ''),
     // Scheme-checked on the way out, exactly like the synced-post author links
     // above (and toPublicPosts' safeExternalLink): an account's crystal carries
     // provider-supplied values — RSS takes `profileUrl` straight from a feed's
     // <link href>, and that feed is any URL a user named — so a bare typeof
     // check would let a hostile source park a `javascript:` target in a field
     // the UI is free to render as an <a href>/<img src> later.
-    avatarUrl: webLink(accountDoc?.crystal?.avatarUrl),
-    profileUrl: webLink(accountDoc?.crystal?.profileUrl)
+    avatarUrl: named ? null : webLink(accountDoc?.crystal?.avatarUrl),
+    profileUrl: named ? null : webLink(accountDoc?.crystal?.profileUrl)
   },
   ...(provider?.id === 'youtube' ? { channels: sanitizeChannelList(accountDoc?.crystal?.config?.channels) } : {}),
   lastSyncedAt: accountDoc?.crystal?.lastSyncedAt instanceof Date ? accountDoc.crystal.lastSyncedAt.toISOString() : null,
@@ -386,10 +388,11 @@ export const unlinkConnection = async (
   const linkId = typeof input.id === 'string' ? input.id.trim() : '';
   if (!linkId) return fail(400, 'id (the connection id) is required');
   const home = await getHomeThingsCollection();
+  const environment = input.origin ? getDeploymentDataEnvironment() : null;
   return withHomeMongoTransaction(async session => {
     const identity = { shareId: linkId, ownerId: user.id, $or: [
       { thingtime: EXTERNAL_LINK_KIND },
-      ...(input.origin ? [{ thingtime: NAMED_CONNECTION_KIND, 'crystal.origin': input.origin }] : [])
+      ...(environment ? [{ thingtime: NAMED_CONNECTION_KIND, 'crystal.origin': input.origin, 'crystal.environment': environment.id }] : [])
     ] };
     const link: any = await home.findOne(identity, { session });
     if (!link) return fail(404, 'Connection not found');
@@ -688,7 +691,7 @@ const liveTokensFor = async (provider: ConnectionProvider, accountDoc: any, owne
     const refreshed = { ...tokens, ...response, refreshToken: response.refreshToken || tokens.refreshToken,
       clientId: tokens.clientId, oauthBinding: tokens.oauthBinding, oauthOrigin: tokens.oauthOrigin, oauthEnvironment: tokens.oauthEnvironment };
     const result = await home.updateOne({ ...identity, secure: accountDoc.secure, 'credentialRefreshLease.id': lease }, {
-      $set: { secure: await packConnectionTokens(ownerId, identity.shareId, refreshed), ...(kind === NAMED_CONNECTION_KIND ? { 'crystal.grantedScopes': refreshed.confirmedScopes ?? null } : { 'crystal.scopes': refreshed.scopes || [] }), 'crystal.expiresAt': refreshed.expiresAt || null, updatedAt: new Date() }
+      $set: { secure: await packConnectionTokens(ownerId, identity.shareId, refreshed), ...(kind === NAMED_CONNECTION_KIND ? { 'crystal.grantedScopes': refreshed.confirmedScopes ?? null, 'crystal.credentialVersion': randomUUID() } : { 'crystal.scopes': refreshed.scopes || [] }), 'crystal.expiresAt': refreshed.expiresAt || null, updatedAt: new Date() }
     });
     // A reconnect or disconnect wins over a refresh started with older credentials.
     return result.matchedCount ? refreshed : currentTokens(await home.findOne(identity));
@@ -733,7 +736,8 @@ export async function useNamedConnection(user: SessionUser, input: { id?: unknow
   const home = await getHomeThingsCollection();
   const stillAuthorized = () => home.findOne({ shareId: id, ownerId: user.id, thingtime: NAMED_CONNECTION_KIND, parentId: pair.account.shareId,
     'crystal.origin': origin, 'crystal.environment': environment.id, 'crystal.allowedOperations': operation,
-    'crystal.grantRevision': pair.link.crystal.grantRevision });
+    'crystal.grantRevision': pair.link.crystal.grantRevision,
+    ...(scope ? { 'crystal.grantedScopes': { $in: [scope, `https://www.googleapis.com/auth/userinfo.${scope}`] } } : {}) });
   if (!await stillAuthorized()) return fail(403, 'This connection changed or was removed.');
   if (operation === 'account.identity') return { ok: true as const, result: { provider: provider.id, accountId: pair.account.shareId } };
   const profile = await readConnectionGoogleUserInfo(tokens);
