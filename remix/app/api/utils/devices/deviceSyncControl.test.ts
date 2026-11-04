@@ -123,3 +123,20 @@ test('resource policy commands remain owner/device/lease bound and reject malfor
  const result = await f.call({ action: 'complete', requestId: 'resource', leaseId: command.leaseId, result: { deviceResourceLimits } }) as any;
  assert.deepEqual(result.result, { deviceResourceLimits });
 });
+
+test('history command is read-only, lease-bound, and accepts only its requested aggregate range', async () => {
+ const { createDeviceSyncHistoryAggregation } = await import('~/fileSync/deviceSyncHistory');
+ const f = fixture(), range = { from: 1000, to: 5000, bucketCount: 2 };
+ assert.equal((await f.enqueue('forged', { action: 'history', range, ownerId: 'foreign' }) as any).status, 400);
+ assert.equal((await f.enqueue('history', { action: 'history', range }) as any).status, 'pending');
+ const { command } = await f.call({ action: 'poll' }) as any;
+ const complete = { action: 'complete', requestId: 'history', leaseId: command.leaseId };
+ const result = createDeviceSyncHistoryAggregation(range).result();
+ assert.equal((await f.call({ ...complete, result: { ...result, folder: '/private' } }) as any).status, 400);
+ assert.equal((await f.call({ ...complete, result: createDeviceSyncHistoryAggregation({ ...range, to: 6000 }).result() }) as any).status, 400);
+ assert.equal((await f.call({ ...complete, leaseId: 'foreign', result }) as any).status, 409);
+ assert.deepEqual((await f.call({ ...complete, result }) as any).result, result);
+ assert.equal((await f.call({ action: 'read', requestId: 'history' }, 'foreign') as any).status, 404);
+ f.credentials[0].jti = 'new-pairing';
+ assert.equal((await f.call({ action: 'read', requestId: 'history' }) as any).status, 409);
+});
