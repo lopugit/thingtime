@@ -1614,6 +1614,13 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] `GET /.well-known/oauth-protected-resource`, `GET
       /.well-known/oauth-authorization-server`, and the Thingtime capability
       manifest return the deployed HTTPS origin and the MCP path exactly.
+- [ ] From Codex, connect the deployed MCP URL. With issuer identification
+      advertised, its shared CIMD reaches consent through the exact loopback
+      `/callback` on the ephemeral port. Confirm the callback returns the
+      discovery issuer and the host exchanges its code and lists the account.
+      The shared client rejects non-loopback hosts, callback-ID paths and
+      extra URL components. Legacy callback-specific clients still require
+      their own matching callback ID.
 - [ ] From ChatGPT Developer mode, add the deployed MCP URL. The authorization
       page works at desktop and a 390px mobile viewport, requires `resource`,
       state, and S256 PKCE, and never reflects a personal access token in the
