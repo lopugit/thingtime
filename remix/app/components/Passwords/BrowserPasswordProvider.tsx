@@ -126,7 +126,10 @@ function ProviderSession({ ownerId }: { ownerId: string }) {
     'provider.cancel': () => {
       const operation = live.current;
       if (!operation || operation.request.id !== request?.id) return;
-      finish({ error: { name: operation.excluded ? 'InvalidStateError' : 'NotAllowedError', message: operation.excluded ? 'The website excludes an existing saved passkey.' : 'Passkey request cancelled.' } }, operation.excluded ? 'Return to the website to use your existing passkey.' : 'Request cancelled.');
+      const message = operation.excluded ? 'Return to the website to use your existing passkey.'
+        : operation.busy && operation.attempt.writeId ? 'Request cancelled before Thingtime could confirm the save. Check the saved passkey before trying again.'
+        : 'Request cancelled.';
+      finish({ error: { name: operation.excluded ? 'InvalidStateError' : 'NotAllowedError', message: operation.excluded ? 'The website excludes an existing saved passkey.' : 'Passkey request cancelled.' } }, message);
     },
     'provider.fallback': () => { if (!live.current?.excluded) finish({ fallback: true }, 'Continue with your browser’s other passkey provider.'); },
     'provider.approve': async invocation => {

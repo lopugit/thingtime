@@ -10692,7 +10692,9 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   withhold the assertion even if the replacement is also allowed by the site.
 - [ ] Return a 429 with a long Retry-After or hold an approval response. Show a
   recoverable error without hidden backoff and withhold any late assertion when
-  the website cancels or its request expires. Bulk transfers still back off.
+  the website cancels or its request expires. While approval is held, click
+  Cancel and verify it aborts the fetch and emits one cancellation only. Bulk
+  transfers still back off.
 - [ ] Reject wrong passwords, foreign/public-suffix RPs and disallowed credential
   IDs. Cancel, abort, navigate either tab, switch Thingtime account, expire the
   request and interrupt the extension worker; no stale response or duplicate

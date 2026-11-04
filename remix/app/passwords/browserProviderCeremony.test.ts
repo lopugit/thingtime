@@ -308,7 +308,9 @@ test('persisted legacy approval controls gain terminal guards without changing a
   const legacy = [{id: 'root', type: 'element', tag: 'section', children: [
     {id: 'bp-retry', type: 'element', tag: 'button', text: 'My refresh text', css: {color: 'purple'}, props: {'data-extra': 'retained'}},
     {id: 'bp-fallback', type: 'element', tag: 'button', text: 'My alternate provider', css: {padding: '19px'}},
-    {id: 'bp-cancel', type: 'element', tag: 'button', text: 'Cancel', css: {border: '2px solid green'}},
+    {id: 'bp-cancel', type: 'element', tag: 'button', text: 'Cancel', css: {border: '2px solid green'}, props: {
+      disabled: '{result.busy}', 'data-tt-action': '$transient', 'data-tt-action-inputs': {operation: 'provider.cancel'}, 'data-extra': 'retained',
+    }},
   ]}] as any;
   const before = structuredClone(legacy), migrated = migrateBrowserProviderRecoveryControls(legacy);
   const controls = migrated[0].children!;
@@ -316,8 +318,9 @@ test('persisted legacy approval controls gain terminal guards without changing a
   assert.equal((controls[0] as any).condition.arg, 'result.canRefresh'); assert.deepEqual(controls[0].children![0], before[0].children[0]);
   assert.equal((controls[1] as any).condition.arg, 'result.canChooseProvider'); assert.deepEqual(controls[1].children![0], before[0].children[1]);
   assert.equal((controls[2] as any).text, '{result.cancelLabel}'); assert.deepEqual(controls[2].css, before[0].children[2].css);
+  assert.deepEqual(controls[2].props, { ...before[0].children[2].props, disabled: false }, 'The default Cancel stays usable while busy.');
   assert.deepEqual(migrateBrowserProviderRecoveryControls(migrated), migrated, 'Idempotent wrappers');
   assert.deepEqual(migrateBrowserProviderRecoveryControls([]), [], 'Deleted controls stay deleted');
-  const custom = [{id: 'bp-cancel', type: 'element', tag: 'button', text: 'My close label', css: {fontSize: '22px'}}] as any;
-  assert.deepEqual(migrateBrowserProviderRecoveryControls(custom), custom, 'An authored cancel label is retained');
+  const custom = [{...before[0].children[2], text: 'My close label', props: {...before[0].children[2].props, disabled: '{result.customDisabled}'}}] as any;
+  assert.deepEqual(migrateBrowserProviderRecoveryControls(custom), custom, 'An authored cancel label and custom disabled condition are retained');
 });
