@@ -13,70 +13,6 @@ final class MobileFolderInventoryTests: XCTestCase {
         return (source, try FolderBookmark.create(source), .init(owner: owner, deviceId: "fixture-device", rootId: UUID().uuidString.lowercased()), root.appendingPathComponent("journal"))
     }
 
-    func testCurrentRevisionDedupeRetainsReversionsAndContiguousSequencesAcrossRestart() throws {
-        let (source, bookmark, _, directory) = try fixture()
-        try Data("fixture".utf8).write(to: source.appendingPathComponent("file"))
-        let a = try XCTUnwrap(MobileFolderReader.scan(bookmark: bookmark).first)
-        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(a)) as? [String: Any])
-        object["version"] = "fixture-B"
-        let b = try JSONDecoder().decode(MobileFolderReader.Entry.self, from: JSONSerialization.data(withJSONObject: object))
-        try NativeFileJournal.locked(directory: directory) { fd in
-            do {
-                let db = try MobileFolderInventory.Database(directory: fd, create: true)
-                try db.execute("CREATE TABLE changes (ordinal INTEGER PRIMARY KEY, data BLOB NOT NULL, path TEXT NOT NULL, revision TEXT NOT NULL)")
-                try db.execute("CREATE TABLE current_entries (path TEXT PRIMARY KEY, revision TEXT NOT NULL)")
-                try db.execute("CREATE TABLE stream_metadata (skipped INTEGER NOT NULL, totalEntries INTEGER NOT NULL)")
-                try db.execute("INSERT INTO stream_metadata VALUES (0, 0)")
-                var cursor = 0
-                for entry in [a, b, a, a] { if try db.insertChange(entry, sequence: cursor + 1) { cursor += 1 } }
-                XCTAssertEqual(cursor, 3)
-                var versions: [String] = [], sequences: [Int] = []
-                try db.rows(offset: 1, table: "changes") { sequence, data in
-                    sequences.append(sequence); versions.append(try JSONDecoder().decode(MobileFolderReader.Entry.self, from: data).version); return true
-                }
-                XCTAssertEqual(sequences, [1, 2, 3]); XCTAssertEqual(versions, [a.version, b.version, a.version])
-            }
-            let reopened = try MobileFolderInventory.Database(directory: fd, create: false, writable: true)
-            XCTAssertFalse(try reopened.insertChange(a, sequence: 4))
-            XCTAssertEqual(try reopened.lastSequence(), 3); XCTAssertEqual(try reopened.streamTotal(), 1)
-        }
-    }
-
-    func testStreamBatchesBoundEncodedChangesAndResumeExactSequence() throws {
-        let (source, bookmark, scope, directory) = try fixture()
-        try Data().write(to: source.appendingPathComponent("fixture"))
-        let sample = try XCTUnwrap(MobileFolderReader.scan(bookmark: bookmark).first)
-        let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
-        _ = try store.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil)
-        let bucket = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil).first)
-        try NativeFileJournal.locked(directory: bucket.appendingPathComponent(id)) { fd in
-            let db = try MobileFolderInventory.Database(directory: fd, create: false, writable: true)
-            try db.execute("BEGIN IMMEDIATE")
-            for index in 1...2000 {
-                var row = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(sample)) as? [String: Any])
-                row["path"] = "file-\(index)"; row["id"] = "entry-\(index)"; row["version"] = String(repeating: "v", count: 128)
-                let entry = try JSONDecoder().decode(MobileFolderReader.Entry.self, from: JSONSerialization.data(withJSONObject: row))
-                XCTAssertTrue(try db.insertChange(entry, sequence: index))
-            }
-            try db.execute("COMMIT")
-        }
-        var after = 0, pages = 0
-        repeat {
-            let page = try store.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: after, pageSize: 4096)
-            let encoded = try JSONEncoder().encode(page)
-            XCTAssertLessThanOrEqual(encoded.count, MobileFolderInventory.maximumPageBytes)
-            XCTAssertFalse(page.changes.isEmpty)
-            XCTAssertEqual(page.changes.first?.sequence, after + 1)
-            XCTAssertEqual(page.nextSequence, after + page.changes.count)
-            if let export = ProcessInfo.processInfo.environment["THINGTIME_STREAM_PAGE_FIXTURE_DIRECTORY"] {
-                try encoded.write(to: URL(fileURLWithPath: export).appendingPathComponent("page-\(pages).json"))
-            }
-            after = page.nextSequence; pages += 1
-            if !page.hasMore { break }
-        } while true
-        XCTAssertEqual(after, 2000); XCTAssertGreaterThan(pages, 1); XCTAssertLessThan(pages, 2000 / 128)
-    }
-
     func testIgnoreRulesPruneDependenciesBeforeOpenAndBindCapturePolicy() throws {
         let (source, bookmark, scope, directory) = try fixture()
         for name in ["project/node_modules", ".venv", "cache", "hard"] {
@@ -94,7 +30,7 @@ final class MobileFolderInventoryTests: XCTestCase {
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: venv.path) }
         let rules = "node_modules/\n.venv/\n/cache/\n*.tmp\n!keep.tmp\n!hard/\n"
         let expected: Set<String> = ["project", "project/cache", "project/cache/kept", "NODE_MODULES", "NODE_MODULES/kept", ".gitignore", "secret", "keep.tmp"]
-        let exclusions = ["hard"], store = MobileFolderInventory(directory: directory)
+        let exclusions = ["hard"], store = try RustIndexFixture.inventory(directory: directory)
         let scanned = try MobileFolderReader.scan(bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules)
         XCTAssertEqual(Set(scanned.map(\.path)), expected)
         let strictID = UUID().uuidString.lowercased()
@@ -127,7 +63,7 @@ final class MobileFolderInventoryTests: XCTestCase {
         XCTAssertTrue(try MobileFolderReader.scan(bookmark: bookmark, ignoreRules: "/" + nfd).isEmpty)
         let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(entry)) as! [String: Any]
         XCTAssertTrue(try XCTUnwrap(json["path"] as? String).utf8.elementsEqual(nfd.utf8), "JSON transport must preserve matching bytes")
-        let store = MobileFolderInventory(directory: directory)
+        let store = try RustIndexFixture.inventory(directory: directory)
         let capture = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark, ignoreRules: "/" + nfc)
         let page = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0, ignoreRules: "/" + nfc)
         XCTAssertTrue(try XCTUnwrap(page.entries.first).path.utf8.elementsEqual(nfd.utf8), "Folded identity keys must not rewrite emitted paths")
@@ -135,7 +71,7 @@ final class MobileFolderInventoryTests: XCTestCase {
 
     func testIgnorePolicyIdentityUsesExactUnicodeBytesAndValidatesBeforeGrantAccess() throws {
         let (_, bookmark, scope, directory) = try fixture()
-        let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
+        let store = try RustIndexFixture.inventory(directory: directory), id = UUID().uuidString.lowercased()
         let composed = "café", decomposed = "cafe\u{301}"
         XCTAssertEqual(composed, decomposed) // Swift equivalence must not bind rules.
         XCTAssertFalse(MobileFolderIgnoreRules.sameText(composed, decomposed))
@@ -153,7 +89,7 @@ final class MobileFolderInventoryTests: XCTestCase {
         for i in 0..<1301 {
             try Data().write(to: source.appendingPathComponent(String(repeating: "f", count: 220) + String(format: "%04d", i)))
         }
-        let store = MobileFolderInventory(directory: directory)
+        let store = try RustIndexFixture.inventory(directory: directory)
         // The capture itself has no new fields and survives the paging upgrade.
         let capture = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark)
         XCTAssertEqual(try store.read(scope, capture: capture, bookmark: bookmark, offset: 0).entries.count, 128)
@@ -183,7 +119,7 @@ final class MobileFolderInventoryTests: XCTestCase {
         for i in 0..<4103 {
             XCTAssertEqual(mkfifo(source.appendingPathComponent("pipe-\(i)").path, 0o600), 0)
         }
-        let store = MobileFolderInventory(directory: directory)
+        let store = try RustIndexFixture.inventory(directory: directory)
         let capture = try store.prepareBackup(scope, id: UUID().uuidString.lowercased(), generation: UUID().uuidString.lowercased(), bookmark: bookmark)
         try store.sealBackup(scope, capture: capture, bookmark: bookmark)
         XCTAssertEqual(capture.totalSkipped, 4103)
@@ -212,7 +148,7 @@ final class MobileFolderInventoryTests: XCTestCase {
         try FileManager.default.linkItem(at: source.appendingPathComponent("first"), to: source.appendingPathComponent("alias"))
         XCTAssertEqual(mkfifo(source.appendingPathComponent("pipe").path, 0o600), 0)
         try Data().write(to: source.appendingPathComponent("bad\\name"))
-        let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
+        let store = try RustIndexFixture.inventory(directory: directory), id = UUID().uuidString.lowercased()
         let capture = try store.prepareBackup(scope, id: id, generation: UUID().uuidString.lowercased(), bookmark: bookmark)
         XCTAssertEqual(capture.coverage, "partial"); XCTAssertEqual(capture.consistency, "per-entry")
         XCTAssertEqual(capture.totalEntries, 1); XCTAssertEqual(capture.totalSkipped, 133)
@@ -251,7 +187,7 @@ final class MobileFolderInventoryTests: XCTestCase {
         try Data().write(to: source.appendingPathComponent("kept"))
         try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: blocked.path)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: blocked.path) }
-        let store = MobileFolderInventory(directory: directory)
+        let store = try RustIndexFixture.inventory(directory: directory)
         let capture = try store.prepareBackup(scope, id: UUID().uuidString.lowercased(), generation: UUID().uuidString.lowercased(), bookmark: bookmark)
         try store.sealBackup(scope, capture: capture, bookmark: bookmark)
         XCTAssertEqual(try store.read(scope, capture: capture, bookmark: bookmark, offset: 0).entries.map(\.path), ["kept"])
@@ -276,7 +212,7 @@ final class MobileFolderInventoryTests: XCTestCase {
     func testBackupCancellationAndLostHostLeaveUnsealedGeneration() async throws {
         let (source, bookmark, scope, directory) = try fixture()
         try Data().write(to: source.appendingPathComponent("first"))
-        let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
+        let store = try RustIndexFixture.inventory(directory: directory), id = UUID().uuidString.lowercased()
         let interrupted = try store.prepareBackup(scope, id: id, generation: UUID().uuidString.lowercased(), bookmark: bookmark)
         XCTAssertEqual(try store.backupStatus(scope, id: id, bookmark: bookmark)?.state, "interrupted")
         XCTAssertThrowsError(try store.read(scope, capture: interrupted, bookmark: bookmark, offset: 0))
@@ -312,7 +248,7 @@ final class MobileFolderInventoryTests: XCTestCase {
         let exclusions = ["library", "APPLICATIONS", ".Trash", "CAFE\u{301}", "keep/blocked"]
         let small = try MobileFolderReader.scan(bookmark: bookmark, excludedPaths: exclusions)
         XCTAssertEqual(Set(small.map(\.path)), ["Library-copy", "keep", "keep/file"])
-        let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
+        let store = try RustIndexFixture.inventory(directory: directory), id = UUID().uuidString.lowercased()
         let capture = try store.capture(scope, id: id, bookmark: bookmark, excludedPaths: exclusions)
         let page = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0)
         XCTAssertEqual(Set(page.entries.map(\.path)), Set(small.map(\.path)))
@@ -326,7 +262,7 @@ final class MobileFolderInventoryTests: XCTestCase {
     func testFailedCaptureCannotRetryWithAnotherExclusionPolicy() throws {
         let (source, bookmark, scope, directory) = try fixture()
         XCTAssertEqual(mkfifo(source.appendingPathComponent("blocked").path, 0o600), 0)
-        let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
+        let store = try RustIndexFixture.inventory(directory: directory), id = UUID().uuidString.lowercased()
         XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark))
         XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark, excludedPaths: ["blocked"]))
         let next = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark, excludedPaths: ["blocked"])
@@ -347,12 +283,12 @@ final class MobileFolderInventoryTests: XCTestCase {
     func testLargeCapturePagesReopenAndRetainExactObservation() throws {
         let (source, bookmark, scope, directory) = try fixture()
         for index in 0..<10_001 { try Data().write(to: source.appendingPathComponent("file-\(index)")) }
-        let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
+        let store = try RustIndexFixture.inventory(directory: directory), id = UUID().uuidString.lowercased()
         let capture = try store.capture(scope, id: id, bookmark: bookmark)
         XCTAssertEqual(capture.totalEntries, 10_001)
         XCTAssertEqual(try store.capture(scope, id: id, bookmark: bookmark), capture)
         try Data("later edit".utf8).write(to: source.appendingPathComponent("file-0"))
-        let reopened = MobileFolderInventory(directory: directory)
+        let reopened = try RustIndexFixture.inventory(directory: directory)
         var offset = 0, paths = Set<String>(), pages = 0
         while true {
             let page = try reopened.read(scope, capture: capture, bookmark: bookmark, offset: offset)
@@ -379,7 +315,7 @@ final class MobileFolderInventoryTests: XCTestCase {
 
     func testEmptyCaptureAndWrongGenerationScopeOrBookmarkRefused() throws {
         let (_, bookmark, scope, directory) = try fixture()
-        let store = MobileFolderInventory(directory: directory)
+        let store = try RustIndexFixture.inventory(directory: directory)
         let capture = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark)
         let page = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0)
         XCTAssertTrue(page.entries.isEmpty); XCTAssertNil(page.nextOffset)
@@ -396,7 +332,7 @@ final class MobileFolderInventoryTests: XCTestCase {
         let (source, bookmark, scope, directory) = try fixture()
         try Data("test".utf8).write(to: source.appendingPathComponent("first"))
         try FileManager.default.linkItem(at: source.appendingPathComponent("first"), to: source.appendingPathComponent("second"))
-        let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
+        let store = try RustIndexFixture.inventory(directory: directory), id = UUID().uuidString.lowercased()
         XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark)) { error in
             XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.reason, .duplicateIdentity)
             XCTAssertTrue(["first", "second"].contains((error as? MobileFolderReader.ScanFailure)?.path ?? ""))
@@ -466,36 +402,63 @@ final class MobileFolderInventoryTests: XCTestCase {
         XCTAssertEqual(fields["reason"] as? String, "invalid-path"); XCTAssertTrue(fields["path"] is NSNull)
     }
 
-    func testAbandonedCaptureEvictionIsBoundedAndOldGenerationRefused() throws {
-        let (_, bookmark, scope, directory) = try fixture()
-        let store = MobileFolderInventory(directory: directory), firstID = UUID().uuidString.lowercased()
-        let first = try store.capture(scope, id: firstID, bookmark: bookmark)
-        for _ in 0..<MobileFolderInventory.maximumCaptures {
-            _ = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark)
+    func testTypedRootGapDoesNotInventAnEntryPath() throws {
+        let decoder = JSONDecoder()
+        let root = try decoder.decode(RustInventoryClient.Gap.self,
+            from: Data(#"{"path":null,"reason":"changed","scope":"root"}"#.utf8)).checked()
+        XCTAssertNil(root.path)
+        XCTAssertEqual(root.reason, .changed)
+        XCTAssertEqual(root.scope, .root)
+        XCTAssertThrowsError(try decoder.decode(RustInventoryClient.Gap.self,
+            from: Data(#"{"path":null,"reason":"changed","scope":"subtree"}"#.utf8)).checked())
+    }
+
+    func testLegacyJournalRequiresRecaptureWithoutPresentingOldRowsAsEmpty() throws {
+        struct LegacyRecord: Encodable {
+            let scope: MobileFolderInventory.Scope
+            let bookmarkHash: String
+            let capture: MobileFolderInventory.Capture
+            let capturePolicy: String
+            let excludedPaths: [String]
         }
-        XCTAssertThrowsError(try store.read(scope, capture: first, bookmark: bookmark, offset: 0))
-        let replacement = try store.capture(scope, id: firstID, bookmark: bookmark)
-        XCTAssertNotEqual(replacement.generation, first.generation)
-        XCTAssertThrowsError(try store.read(scope, capture: first, bookmark: bookmark, offset: 0))
-        let buckets = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-        let captures = try FileManager.default.contentsOfDirectory(at: XCTUnwrap(buckets.first), includingPropertiesForKeys: nil)
-            .filter { UUID(uuidString: $0.lastPathComponent) != nil }
-        XCTAssertEqual(captures.count, MobileFolderInventory.maximumCaptures)
+        let (source, bookmark, scope, directory) = try fixture()
+        try Data("content".utf8).write(to: source.appendingPathComponent("actual"))
+        let id = UUID().uuidString.lowercased(), generation = UUID().uuidString.lowercased()
+        let capture = MobileFolderInventory.Capture(id: id, generation: generation, totalEntries: 1,
+            coverage: "full", consistency: "per-entry", totalSkipped: 0)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let bucket = directory.appendingPathComponent(NativeSymbolicLinks.hash(try encoder.encode(scope)))
+        let job = bucket.appendingPathComponent(id)
+        try NativeFileJournal.locked(directory: job) { fd in
+            try NativeFileJournal.save(LegacyRecord(scope: scope, bookmarkHash: NativeSymbolicLinks.hash(bookmark),
+                capture: capture, capturePolicy: "backup-supported", excludedPaths: []), fd)
+            try Data("legacy disposable rows".utf8).write(to: job.appendingPathComponent("inventory.sqlite"))
+        }
+        let store = try RustIndexFixture.inventory(directory: directory)
+        XCTAssertEqual(try store.backupStatus(scope, id: id, bookmark: bookmark)?.state, "interrupted")
+        XCTAssertThrowsError(try store.read(scope, capture: capture, bookmark: bookmark, offset: 0))
+        let replacement = try store.prepareBackup(scope, id: id, generation: UUID().uuidString, bookmark: bookmark)
+        XCTAssertNotEqual(replacement.generation, generation)
+        try store.sealBackup(scope, capture: replacement, bookmark: bookmark)
+        XCTAssertEqual(try store.read(scope, capture: replacement, bookmark: bookmark, offset: 0).entries.map(\.path), ["actual"])
+        XCTAssertThrowsError(try store.read(scope, capture: capture, bookmark: bookmark, offset: 0))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: job.appendingPathComponent("inventory.sqlite").path))
     }
 
     func testTruncatedCaptureAndReplacedDatabaseNeverBecomeCompleteOrEmpty() throws {
         for corrupt in [false, true] {
             let (source, bookmark, scope, directory) = try fixture()
             for i in 0..<3 { try Data().write(to: source.appendingPathComponent("file-\(i)")) }
-            let store = MobileFolderInventory(directory: directory)
+            let store = try RustIndexFixture.inventory(directory: directory)
             let capture = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark)
-            let bucket = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil).first)
-            let file = bucket.appendingPathComponent(capture.id).appendingPathComponent("inventory.sqlite")
+            let file = directory.deletingLastPathComponent().appendingPathComponent(".shared-index/filesystem-index.sqlite3")
+            let records = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil)?.allObjects.compactMap { $0 as? URL } ?? []
+            XCTAssertFalse(records.contains(where: { $0.lastPathComponent.hasPrefix("inventory.sqlite") }))
             if corrupt { try Data("not a database".utf8).write(to: file) }
             else {
                 var db: OpaquePointer?
                 XCTAssertEqual(sqlite3_open(file.path, &db), SQLITE_OK)
-                XCTAssertEqual(sqlite3_exec(db, "DELETE FROM entries WHERE ordinal = 2", nil, nil, nil), SQLITE_OK)
+                XCTAssertEqual(sqlite3_exec(db, "DELETE FROM inventory_entries WHERE path = 'file-2'", nil, nil, nil), SQLITE_OK)
                 sqlite3_close(db)
             }
             XCTAssertThrowsError(try store.read(scope, capture: capture, bookmark: bookmark, offset: 0))
@@ -514,7 +477,7 @@ final class MobileFolderInventoryTests: XCTestCase {
             }, replay: { visit in for row in rows { try visit(row) } })
         }
         do { try await work.value; XCTFail("Cancelled capture completed") } catch is CancellationError { }
-        let store = MobileFolderInventory(directory: directory)
+        let store = try RustIndexFixture.inventory(directory: directory)
         XCTAssertEqual(try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark).totalEntries, 1)
     }
 }

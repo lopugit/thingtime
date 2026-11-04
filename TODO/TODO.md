@@ -1,5 +1,7 @@
 # TODO
 
+[57 — Shared Rust index/sync](claude-todo/57-shared-rust-index-sync.md) — active P0 migration across discovery and sync workflows.
+
 ## Priority 1 — Fundamental product behavior
 
 - **Complete SEO, Schema.org and rich results across all pages, `/things` and public UGC.**

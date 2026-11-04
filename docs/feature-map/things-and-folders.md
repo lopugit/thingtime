@@ -596,7 +596,7 @@ values, source context and password history. See [the password contract](../pass
 
 ## Mac backup scan implementation
 
-`Commander/crates/commander-indexer/src/backup.rs` adapts the shared bounded Rust
+`filesystem-indexer/crates/indexer/src/backup.rs` adapts the shared bounded Rust
 walker to private JSONL backup observations. `backup_ignore.rs` matches the same
 Git oracle as the web/Apple adapters. `apple/FileSync/.../CommanderBackupCapture.swift`
 runs the bundled helper under the selected grant, validates returned metadata and
@@ -701,6 +701,10 @@ measurement projections; client and worker require `api.devices-sync-control`
 mailbox retains ownership, leases and immutable saves. Focused protocol/client,
 worker, session and `deviceSyncControl` tests cover paused changes, no folder/job
 side effects, stale replies and shared polling. See browser-device-sync.md.
+The installed Mac dashboard shares one Activity Manager sampler per active
+local run. It reads the existing rootless resources lane while visible, and
+Electron projects current worker samples from the same device governor without
+changing limits. Stale transfer, scan and memory measurements expire.
 
 POSIX symbolic-link metadata lives in `fileSync/symbolicLink.ts`; `SyncEntry`
 content/stamp equality includes link kind and exact raw target identity.

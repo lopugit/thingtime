@@ -122,7 +122,7 @@ test('native paged reader pins exclusions and never imports excluded observation
 
 test('Mac 1.8 backup capture preserves coverage, polls one identity and pages every skip', async () => {
 	const { supportsNativeBackupCapture } = await import('./mobileFolders.client');
-	for (const [platform, fileAccessVersion, wanted] of [['macos', '1.7.9', false], ['macos', '1.8.0', true], ['macos', '2.8.0', false], ['ios', '1.8.0', false]] as const)
+	for (const [platform, fileAccessVersion, wanted] of [['macos', '1.7.9', false], ['macos', '1.8.0', true], ['macos', '2.8.0', false], ['ios', '1.4.0', false], ['ios', '1.5.0', true]] as const)
 		assert.equal(supportsNativeBackupCapture({ platform, fileAccessVersion }), wanted);
 	const captureId = crypto.randomUUID(), current = { ...capture, id: captureId, coverage: 'partial' as const, consistency: 'per-entry' as const, totalSkipped: 129 };
 	const requests: FolderRequest[] = [], progress: unknown[] = [];
@@ -615,7 +615,7 @@ test('cancellation during journal cursor lookup cannot request or expose native 
 test('strict native inventory can span the old deadline without releasing a provisional row', async () => {
 	const initial = { rootId, inventoryDeviceId: 'device', captureId: capture.id, capturePolicy: 'strict-async' as const };
 	const req = { action: 'scan-capture' as const, ...initial };
-	assert.throws(() => assertNativeScanExclusions(req, { platform: 'macos', fileAccessVersion: '1.17.0' }), /Update Thingtime Mac/);
+	assert.throws(() => assertNativeScanExclusions(req, { platform: 'macos', fileAccessVersion: '1.17.0' }), /Update the native app/);
 	assert.doesNotThrow(() => assertNativeScanExclusions(req, { platform: 'macos', fileAccessVersion: '1.18.0' }));
 
 	for (const outcome of ['complete', 'interrupted', 'replacement', 'partial'] as const) {
@@ -655,4 +655,47 @@ test('strict native inventory can span the old deadline without releasing a prov
 			assert.deepEqual(actions, ['scan-capture', 'scan-status', 'scan-status']);
 		}
 	}
+});
+
+
+test('PhotoKit capture uses short cancellable requests after both legacy bridge deadlines', async () => {
+ const start = { action: 'scan-capture' as const, rootId, inventoryDeviceId: 'device', captureId: capture.id, capturePolicy: 'strict-async' as const };
+ assert.throws(() => assertNativeScanExclusions(start, { platform: 'ios', fileAccessVersion: '1.4.0' }), /Update the native app/);
+ assert.doesNotThrow(() => assertNativeScanExclusions(start, { platform: 'ios', fileAccessVersion: '1.5.0' }));
+ for (const outcome of ['complete', 'cancel', 'identity'] as const) {
+  const controller = new AbortController(), actions: string[] = [], imported: string[] = [];
+  let clock = 0;
+  const consume = async () => {
+   for await (const value of readNativeInventory({
+    ownerId: 'owner', deviceId: 'device', rootId, signal: controller.signal, strictAsync: true, captureId: capture.id,
+    waitForPoll: async () => {
+     clock += 400_000;
+     if (clock >= 1_200_000 && outcome === 'cancel') controller.abort();
+    },
+    request: async (owner, request) => {
+     assert.equal(owner, 'owner');
+     actions.push(request.action);
+     if (request.action === 'scan-page') {
+      assert.equal(clock, 1_200_000);
+      return { roots: [], inventoryPage: page };
+     }
+     if (request.action === 'scan-discard') return { roots: [] };
+     assert.ok(request.action === 'scan-capture' || request.action === 'scan-status');
+     assert.equal(request.capturePolicy, 'strict-async');
+     if (clock >= 1_200_000 && outcome === 'identity') throw Error('The active account changed.');
+     const complete = clock >= 1_200_000;
+     return { roots: [], strictCapture: { id: capture.id, generation, state: complete ? 'complete' : 'running', indexedEntries: 1 },
+      ...(complete ? { capture } : {}) };
+    }
+   })) imported.push(...value.entries.map(item => item.path));
+  };
+  if (outcome === 'complete') {
+   await consume(); assert.deepEqual(imported, [entry.path]);
+   assert.deepEqual(actions, ['scan-capture', 'scan-status', 'scan-status', 'scan-status', 'scan-page', 'scan-discard']);
+  } else {
+   await assert.rejects(consume(), outcome === 'cancel' ? { name: 'AbortError' } : /active account changed/);
+   assert.deepEqual(imported, []);
+   assert.equal(actions.includes('scan-page'), false);
+  }
+ }
 });

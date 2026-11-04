@@ -9,6 +9,7 @@ on:
       - electron/**
       - MCP/**
       - macos/**
+      - filesystem-indexer/**
       - .github/workflows/electron-release.yml
   workflow_dispatch:
 
