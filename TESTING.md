@@ -4381,6 +4381,16 @@ email whose link points at the attacker.
       stay clear of the drawer trigger and Commander. Open and dismiss the
       drawer and Commander to confirm both remain reachable.
 
+- [ ] In the iOS app’s URL view, repeat Back, Forward and Refresh after
+      navigating from Home to another Thingtime page. On a narrow phone,
+      confirm that the buttons sit below the status bar and remain tappable
+      alongside the drawer, search, account and notifications. Verify that
+      Refresh loads a new document at the same URL.
+      For a browser regression, set `THINGTIME_WEB_URL` to the task-owned
+      loopback Vite shell and run `PLAYWRIGHT_MODULE=<installed entry> node
+      remix/scripts/navbar-history-acceptance.mjs`. The runner verifies desktop
+      Chrome and the iOS bridge layout at 390, 375, and 320px.
+
 ## Profile page (`remix/app/components/Profile/ProfilePage.tsx`)
 
 - [ ] The self-profile action row is Edit profile ✏️ / All settings ⚙️ /

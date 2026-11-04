@@ -67,7 +67,8 @@ editable settings blocks and the existing configuration form; see
 ## Shared navigation and Builder controls
 
 `Nav/Nav.tsx` shares Back and Forward with the Electron titlebar. The
-standalone web navbar adds Refresh and exposes all three on desktop and mobile.
+web navbar adds Refresh and exposes all three in standalone browsers and the
+iOS app’s selected URL view.
 Back and Forward traverse the current tab history and Refresh reloads the
 current document. See the shared page shell checklist in `TESTING.md`.
 

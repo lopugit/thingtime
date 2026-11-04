@@ -97,7 +97,6 @@ const NavNavigationButton = ({ label, onClick }: { label: keyof typeof navigatio
 			sx={{
 				WebkitTapHighlightColor: 'transparent',
 				touchAction: 'manipulation',
-				'html.thingtime-native-webview:not(.thingtime-electron-desktop) &': { display: 'none' },
 				'html.thingtime-electron-desktop &.nav-refresh-button': { display: 'none' }
 			}}
 			onClick={onClick}
@@ -243,7 +242,7 @@ export const Nav = (props) => {
 					paddingY={0}
 					sx={{
 						'@media (max-width: 47.99em)': {
-							'html:not(.thingtime-native-webview, .thingtime-electron-desktop) &': {
+							'html:not(.thingtime-electron-desktop) &': {
 								paddingLeft: '48px',
 								paddingRight: '8px',
 								'& .nav-left-section': { minWidth: 0, flexShrink: 1 },
@@ -252,7 +251,7 @@ export const Nav = (props) => {
 							}
 						},
 						'@media (max-width: 400px)': {
-							'html:not(.thingtime-native-webview, .thingtime-electron-desktop) &': {
+							'html:not(.thingtime-electron-desktop) &': {
 								'& .nav-right-section': { columnGap: '2px' },
 								'& .nav-right-account-button': {
 									paddingInline: 0,
@@ -262,7 +261,7 @@ export const Nav = (props) => {
 							}
 						},
 						'@media (max-width: 340px)': {
-							'html:not(.thingtime-native-webview, .thingtime-electron-desktop) & .nav-right-account-button .nav-account-name': {
+							'html:not(.thingtime-electron-desktop) & .nav-right-account-button .nav-account-name': {
 								display: 'none'
 							}
 						}
@@ -286,7 +285,7 @@ export const Nav = (props) => {
 						sx={{
 							'@media (max-width: 47.99em)': {
 								'& > :not(.nav-navigation-button)': { display: 'none' },
-								'html.thingtime-native-webview &, html.thingtime-electron-desktop &': { display: 'none' }
+								'html.thingtime-electron-desktop &': { display: 'none' }
 							}
 						}}
 					>
