@@ -1,3 +1,4 @@
+import { syncRunDirections } from './directionalProgress';
 import type { PriorityReadiness } from './priorityReadiness';
 import { createSyncIgnorePolicy } from './syncIgnore';
 import type { InventoryIdentity } from './inventoryJournal';
@@ -25,6 +26,8 @@ import type { TransferActivity } from './transferActivity';
 export type SyncInventoryDescriptor = { scope: SyncScope; inventory: InventoryIdentity };
 
 export type ForegroundSyncProgress = {
+	directions?: import('./directionalProgress').SyncDirectionalTotals;
+	statisticsObservedAt?: number;
 	resources?: import('./resourceGovernor').SyncResourceStatus;
 	stage: 'checking' | 'scanning' | 'reviewing' | 'transferring' | 'verifying' | 'complete' | 'retaining' | 'retained';
 	confirmed: number;
@@ -250,9 +253,11 @@ export async function runForegroundCloudSync(
 		}
 	}
 	let confirmedCount = run.operations.filter((op) => op.confirmed).length;
+ let directionTotals = syncRunDirections(run.operations);
 	const report = (value: SyncRun, stage: ForegroundSyncProgress['stage'] = retain ? 'retaining' : 'transferring') => {
 		confirmedCount = value.operations.filter((op) => op.confirmed).length;
-		input.progress({ stage, confirmed: confirmedCount, total: value.operations.length });
+  directionTotals = syncRunDirections(value.operations);
+		input.progress({ stage, confirmed: confirmedCount, total: value.operations.length, directions: directionTotals, totalFinal: true });
 	};
 	const port = createCloudSyncPort(
 		run,
@@ -270,12 +275,12 @@ export async function runForegroundCloudSync(
 			localTarget,
 			signal,
 			transfer: input.transfer,
-			progress: (path, bytes, size) => {
+			progress: (path, bytes, size, direction) => {
 				check();
 				input.progress({
 					stage: retain ? 'retaining' : 'transferring',
 					confirmed: confirmedCount,
-					total: run.operations.length,
+					total: run.operations.length, directions: directionTotals, totalFinal: true, direction,
 					path,
 					bytes,
 					size

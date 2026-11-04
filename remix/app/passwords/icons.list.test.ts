@@ -48,7 +48,7 @@ test('explicit legacy previews and native catalog never expose secret-typed user
   const catalog=await passwordCatalog('owner');assert.equal(catalog.catalog[0].username,'',type);assert.equal(catalog.catalog[0].fillEligible,false);
  }
  const id='00000000-0000-4000-8000-000000000002';
- const entry={title:'Legacy safe user',passwordType:'login',fields:[{id:'username',label:'Username',type:'text',value:'legacy@example.invalid'}]};
+ const entry={title:'Legacy safe user',passwordType:'login',fields:[{id:'username',label:'Username',type:'text',value:'legacy@example.invalid'},{id:'website',label:'Website',type:'url',value:'https://legacy-site.example/private?token=synthetic'}]};
  docs=[{shareId:id,crystal:{title:entry.title,passwordType:entry.passwordType,encryptedValue:sealVaultValue('owner',key,id,'secret',JSON.stringify(entry),maxBytes)},passwordRevision:1,createdAt:new Date(),updatedAt:new Date()}];
- assert.equal((await listPasswords('owner',undefined,'',true)).entries[0].username,'legacy@example.invalid','Old rows require no edit or resave');
+ const legacy=await listPasswords('owner',undefined,'',true);assert.equal(legacy.entries[0].username,'legacy@example.invalid','Old rows require no edit or resave');assert.equal(legacy.entries[0].websiteIcon,true);assert.equal(JSON.stringify(legacy).includes('legacy-site.example'),false);assert.equal(JSON.stringify(legacy).includes('synthetic'),false);
 });

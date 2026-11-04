@@ -3,6 +3,7 @@ import React from 'react';
 import { Box, Button, Flex, FormControl, FormLabel, Input, Text, Textarea } from '@chakra-ui/react';
 import { moveThingField, type ThingMods } from './thingMods';
 import { totpCode } from '~/passwords/totp';
+import { CopyPasswordButton } from './CopyPasswordButton';
 
 export function OneTimeCode({ value }: { value: string }) {
   const [result, setResult] = React.useState<{ code: string; remaining: number } | null>(null);
@@ -40,9 +41,10 @@ export function ThingFields({ thing, mods, onChange, onModsChange }: {
             {mods.removable && onModsChange && <Button size="xs" aria-label={`Remove ${field.label}`} onClick={() => onModsChange({ ...mods, fields: mods.fields.filter(item => item.id !== field.id) })}>×</Button>}
           </Flex>
         </Flex>
-        <Flex gap={2} alignItems="start">
+        <Flex gap={2} alignItems="start" flexWrap="wrap">
           <Box flex={1} minWidth={0}>{(field.type === 'notes' || field.multiline || ['address', 'structured', 'ssh-key'].includes(field.type)) && (!secret || revealed[field.id]) ? <Textarea {...props} rows={3} /> : <Input {...props} type={secret && !revealed[field.id] ? 'password' : 'text'} inputMode={field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : 'text'} />}</Box>
           {secret && mods.revealSecrets && <Button size="sm" aria-label={`${revealed[field.id] ? 'Hide' : 'Show'} ${field.label}`} onClick={() => setRevealed(prev => ({ ...prev, [field.id]: !prev[field.id] }))}>{revealed[field.id] ? 'Hide' : 'Show'}</Button>}
+          {mods.copyPasswords && field.type === 'password' && <CopyPasswordButton value={thing[field.id] ?? ''} label={field.label} />}
         </Flex>
         {field.type === 'totp' && thing[field.id] && <OneTimeCode value={thing[field.id]} />}
       </FormControl>;

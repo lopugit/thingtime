@@ -181,8 +181,7 @@ final class MobileFolderInventoryTests: XCTestCase {
     func testSkipPagesOptInto4096WithLegacyDefaultAndExactLastPage() throws {
         let (source, bookmark, scope, directory) = try fixture()
         for i in 0..<4103 {
-            try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("link-\(i)"),
-                withDestinationURL: source.appendingPathComponent("missing"))
+            XCTAssertEqual(mkfifo(source.appendingPathComponent("pipe-\(i)").path, 0o600), 0)
         }
         let store = MobileFolderInventory(directory: directory)
         let capture = try store.prepareBackup(scope, id: UUID().uuidString.lowercased(), generation: UUID().uuidString.lowercased(), bookmark: bookmark)
@@ -207,7 +206,7 @@ final class MobileFolderInventoryTests: XCTestCase {
         let outside = source.deletingLastPathComponent().appendingPathComponent("outside-pipe")
         XCTAssertEqual(mkfifo(outside.path, 0o600), 0)
         for i in 0..<130 {
-            try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("link-\(i)"), withDestinationURL: outside)
+            XCTAssertEqual(mkfifo(source.appendingPathComponent("pipe-\(i)").path, 0o600), 0)
         }
         try Data("supported".utf8).write(to: source.appendingPathComponent("first"))
         try FileManager.default.linkItem(at: source.appendingPathComponent("first"), to: source.appendingPathComponent("alias"))
@@ -232,9 +231,8 @@ final class MobileFolderInventoryTests: XCTestCase {
             guard let next = page.nextOffset else { break }; offset = next
         } while true
         XCTAssertEqual(gaps.map(\.ordinal), Array(0..<133))
-        XCTAssertEqual(gaps.filter { $0.reason == .symlink }.count, 130)
-        XCTAssertEqual(gaps.filter { $0.reason == .duplicateIdentity }.count, 1)
-        XCTAssertEqual(gaps.filter { $0.reason == .fifo }.count, 1)
+                XCTAssertEqual(gaps.filter { $0.reason == .duplicateIdentity }.count, 1)
+        XCTAssertEqual(gaps.filter { $0.reason == .fifo }.count, 131)
         XCTAssertEqual(gaps.filter { $0.reason == .invalidPath && $0.path == nil }.count, 1)
         let stripped = MobileFolderInventory.Capture(id: capture.id, generation: capture.generation, totalEntries: capture.totalEntries)
         XCTAssertThrowsError(try store.read(scope, capture: stripped, bookmark: bookmark, offset: 0))
@@ -302,15 +300,13 @@ final class MobileFolderInventoryTests: XCTestCase {
 
     func testExclusionsPruneBeforeOpeningAndPreserveExactPathBoundaries() throws {
         let (source, bookmark, scope, directory) = try fixture()
-        // Each excluded subtree contains a symlink the reader must never open.
+        // Each excluded subtree contains a FIFO the reader must never open.
         // The included sibling proves exclusions are exact paths, not prefixes.
         for name in ["Library", ".Trash", "Café", "keep"] {
             try FileManager.default.createDirectory(at: source.appendingPathComponent(name), withIntermediateDirectories: true)
-            try FileManager.default.createSymbolicLink(at: source.appendingPathComponent(name + "/blocked"),
-                withDestinationURL: source.appendingPathComponent("missing"))
+            XCTAssertEqual(mkfifo(source.appendingPathComponent(name + "/blocked").path, 0o600), 0)
         }
-        try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("Applications"),
-            withDestinationURL: source.appendingPathComponent("missing"))
+        XCTAssertEqual(mkfifo(source.appendingPathComponent("Applications").path, 0o600), 0)
         try Data("included".utf8).write(to: source.appendingPathComponent("Library-copy"))
         try Data().write(to: source.appendingPathComponent("keep/file"))
         let exclusions = ["library", "APPLICATIONS", ".Trash", "CAFE\u{301}", "keep/blocked"]
@@ -329,8 +325,7 @@ final class MobileFolderInventoryTests: XCTestCase {
 
     func testFailedCaptureCannotRetryWithAnotherExclusionPolicy() throws {
         let (source, bookmark, scope, directory) = try fixture()
-        try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("blocked"),
-            withDestinationURL: source.appendingPathComponent("missing"))
+        XCTAssertEqual(mkfifo(source.appendingPathComponent("blocked").path, 0o600), 0)
         let store = MobileFolderInventory(directory: directory), id = UUID().uuidString.lowercased()
         XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark))
         XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark, excludedPaths: ["blocked"]))
@@ -408,15 +403,10 @@ final class MobileFolderInventoryTests: XCTestCase {
         }
         try FileManager.default.removeItem(at: source.appendingPathComponent("second"))
         try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("second"), withDestinationURL: source.appendingPathComponent("first"))
-        XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark)) { error in
-            XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.reason, .symlink)
-            XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.path, "second")
-        }
-        let bucket = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil).first)
-        let record = try Data(contentsOf: bucket.appendingPathComponent(id).appendingPathComponent("record.json"))
-        XCTAssertEqual((try JSONSerialization.jsonObject(with: record) as? [String: Any])?["complete"] as? Bool, false)
-        try FileManager.default.removeItem(at: source.appendingPathComponent("second"))
-        XCTAssertEqual(try store.capture(scope, id: id, bookmark: bookmark).totalEntries, 1)
+        let capture = try store.capture(scope, id: id, bookmark: bookmark)
+        XCTAssertEqual(capture.totalEntries, 2)
+        let rows = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0).entries
+        XCTAssertNotNil(rows.first { $0.path == "second" }?.symbolicLink)
     }
 
     func testStreamingCaptureRechecksEarlierFilesBeforeCompletion() throws {
@@ -456,11 +446,9 @@ final class MobileFolderInventoryTests: XCTestCase {
         let outside = source.deletingLastPathComponent().appendingPathComponent("outside")
         XCTAssertEqual(mkfifo(outside.path, 0o600), 0)
         try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("link"), withDestinationURL: outside)
-        // A followed FIFO would block. The diagnostic is about the link itself.
-        XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: bookmark)) { error in
-            XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.reason, .symlink)
-            XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.path, "link")
-        }
+        // A followed FIFO would block; capture the link's opaque target only.
+        let link = try XCTUnwrap(MobileFolderReader.scan(bookmark: bookmark).first)
+        XCTAssertNotNil(link.symbolicLink)
         try FileManager.default.removeItem(at: source.appendingPathComponent("link"))
         XCTAssertEqual(mkfifo(source.appendingPathComponent("pipe").path, 0o600), 0)
         XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: bookmark)) { error in

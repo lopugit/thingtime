@@ -4833,6 +4833,28 @@ see [selected-folder setup and limits](android/README.md#selected-folders).
 Release signing
 and store distribution remain separate setup; never commit signing keys.
 
+### Mac folder sync resource controls
+
+Open **Things → your Mac → Device sync & backup**. The device-wide usage
+summary shares one budget across that account's folder connections. Its default
+transfer allowance is **5 Mbps total for upload and download combined**
+(625,000 bytes/second), with a separate **5 Mbps file-content scan/read allowance**
+and a **15% sync CPU target**. Lower per-connection limits still apply. The CPU
+target is adaptive backpressure, not an operating-system hard ceiling; metadata
+walking is controlled by CPU/concurrency rather than pretending directory
+entries have a network bitrate. These local preferences require no new secret
+or environment variable and survive connection switching. Saving limits does
+not grant a folder or start a paused job.
+
+The summary identifies measured sync scopes and leaves unavailable measurements
+unavailable. Memory attributed only to an indexer is not whole-app memory.
+Collapsed folder cards show **To Thingtime** (upload) and **To this Mac**
+(download) separately; incomplete discovery means totals can still grow.
+Native folder permissions, conflict review and explicit start/pause remain on
+the executing device. The [browser/device control runbook](docs/browser-device-sync.md)
+documents capability negotiation and isolated acceptance. A packaged client or
+passing fixture does not establish deployment to a selected production origin.
+
 ### Verifying file-sync content fingerprints locally
 
 The existing content endpoint advertises `api.attachment-content` 1.14.0 and

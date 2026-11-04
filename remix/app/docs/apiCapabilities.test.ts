@@ -736,13 +736,18 @@ test('range programs require the additive owned-boundary contract', () => {
 
  test('password manager registers its live route and version on both discovery manifests', () => {
   const doc = apiEndpointDocs.find(doc => doc.id === 'passwords');
-  assert.equal(doc?.featureVersion, '1.5.0');
+  assert.equal(doc?.featureVersion, '1.6.1');
   assert.deepEqual(doc?.methods, ['GET', 'POST']);
-  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.5.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.5.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.6.1');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.6.1');
   assert.equal(typeof routeModules['v1/passwords'], 'function');
   for (const version of ['1.5.0', '1.5.1', '1.6.0']) assert.equal(capabilitySatisfies(version, '1.5.0'), true);
   for (const version of [undefined, '1.4.0', '1.4.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.5.0'), false);
+  for (const version of ['1.6.0', '1.6.1', '1.7.0']) assert.equal(capabilitySatisfies(version, '1.6.0'), true);
+  for (const version of [undefined, '1.5.0', '1.5.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.6.0'), false);
+  for (const version of ['1.6.1', '1.6.2', '1.7.0']) assert.equal(capabilitySatisfies(version, '1.6.1'), true);
+  for (const version of [undefined, '1.6.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.6.1'), false);
+  assert.match(doc?.detail || '', /website-icon/);
   assert.match(doc?.detail || '', /verification-settings/);
   assert.match(doc?.detail || '', /reuseRecentDeviceVerification/);
  });
@@ -846,6 +851,15 @@ test('resource limits and CPU downloads negotiate only their semantic dependenci
  assert.equal(capabilitySatisfies('1.1.0', FILE_SYNC_RESOURCE_REQUIREMENTS['api.file-sync-batches']), false);
  assert.equal(capabilitySatisfies('1.16.0', requirements['api.attachment-content']), false);
  assert.equal(capabilitySatisfies('1.18.0', requirements['api.attachment-content']), true);
+});
+
+
+test('remote folder sync control is registered on both capability manifests', () => {
+  assert.equal(createApiCapabilitiesManifest().features['api.devices-sync-control'], '1.3.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.devices-sync-control'].version, '1.3.0');
+  for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
+  for (const version of ['1.1.0', '1.1.1', '1.2.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), true);
+  assert.equal(typeof routeModules['v1/devices/sync-control'], 'function');
 });
 
  test('preview retention routes and both manifests share explicit independent contracts', () => {

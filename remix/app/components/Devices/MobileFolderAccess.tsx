@@ -1,26 +1,30 @@
+import { supportsNativeSourcePaths, validNativeSourcePath } from '~/fileSync/mobileFolders.client';
 import { nativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { requestMobileFolders, supportsMobileFolders, type FolderRequest, type MobileFolder } from '~/fileSync/mobileFolders.client';
 import type { FolderHost } from '~/fileSync/desktopFolders.client';
 import { getNativeBridge } from '~/utils/nativeBridge';
+import { SyncFolderCard } from './SyncFolderCard';
 import { MobileSyncConnections } from './MobileSyncConnections';
 const cached = new Map<string, MobileFolder[]>();
-type FolderAccessProps = { ownerId: string; deviceId: string; host?: FolderHost };
-export function MobileFolderAccess({ ownerId, deviceId, host }: FolderAccessProps) {
+type FolderAccessProps = { ownerId: string; deviceId: string; host?: FolderHost; active?: boolean };
+export function MobileFolderAccess({ ownerId, deviceId, host, active = true }: FolderAccessProps) {
 	if (!host && !supportsMobileFolders()) return null;
 	return (
 		<FolderAccess
 			key={JSON.stringify([host?.origin() ?? window.location.origin, ownerId, deviceId])}
 			ownerId={ownerId}
 			deviceId={deviceId}
+			active={active}
 			host={host}
 		/>
 	);
 }
-function FolderAccess({ ownerId, deviceId, host }: FolderAccessProps) {
+function FolderAccess({ ownerId, deviceId, host, active = true }: FolderAccessProps) {
 	const key = JSON.stringify([host?.origin() ?? window.location.origin, ownerId, deviceId]);
 	const requestFolders = host?.request ?? requestMobileFolders;
+	const cardTransport = React.useMemo(() => host ? { origin: host.origin(), fetch: host.fetch, currentOrigin: host.origin } : undefined, [host]);
 	const [roots, setRoots] = useState<MobileFolder[]>(() => cached.get(key) ?? []),
 		[busy, setBusy] = useState(false),
 		[error, setError] = useState('');
@@ -89,7 +93,11 @@ function FolderAccess({ ownerId, deviceId, host }: FolderAccessProps) {
 				</Button>
 			</Flex>
 			{roots.map((root) => (
-				<Flex key={root.id} marginTop={3} gap={2} align="center" wrap="wrap">
+				<SyncFolderCard key={root.id} title={root.name} scopeKey={`${key}:${root.id}`} accountTransport={cardTransport}
+                    description="Folder access granted · configure a sync connection below"
+                    path={supportsNativeSourcePaths(host?.capabilities ?? getNativeBridge()) && validNativeSourcePath(root.sourcePath) && root.sourceKind !== 'photos' ? root.sourcePath : 'Folder path unavailable'}
+                    stats={checked[root.id] || 'Not checked'}>
+                <Flex gap={2} align="center" wrap="wrap">
 					<Box flex="1" minWidth="140px" overflowWrap="anywhere">
 						<Text fontSize="13px">{root.name}</Text>
 						{checked[root.id] ? (
@@ -106,7 +114,7 @@ function FolderAccess({ ownerId, deviceId, host }: FolderAccessProps) {
 							Remove access
 						</Button>
 					</Flex>
-				</Flex>
+				</Flex></SyncFolderCard>
 			))}
 			{busy ? (
 				<Text fontSize="12px" marginTop={2}>
@@ -118,7 +126,7 @@ function FolderAccess({ ownerId, deviceId, host }: FolderAccessProps) {
 					{error}
 				</Text>
 			) : null}
-			<MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={roots} rootsReady={rootsReady} host={host} />
+			<MobileSyncConnections active={active} ownerId={ownerId} deviceId={deviceId} roots={roots} rootsReady={rootsReady} host={host} />
 		</Box>
 	);
 }

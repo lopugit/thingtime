@@ -133,7 +133,10 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 							...request,
 							origin,
 							roots: [{ id: rootId, name: 'Fixture' }],
-							capabilities: { fileAccessVersion: '1.11.0', fileUploadVersion: '1.0.0' },
+							conditions: { network: 'wifi', charging: true },
+							// The byte planner is replaced above; the host still negotiates
+							// the current device budget before exercising durable retry.
+							capabilities: { fileAccessVersion: '1.17.0', fileResourceLimitsVersion: '1.1.0', fileUploadVersion: '1.0.0', fileSymbolicLinksVersion: '1.0.0' },
 							apiCapabilities: { schemaVersion: 1, origin, features: { 'api.things': { version: '1.38.0' } } },
 							uploadedPart: request.upload ? { ...request.upload, version: entry.version, size: entry.size, sha256: 'b'.repeat(64) } : undefined
 						};
@@ -190,7 +193,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 				// These are the production coordinator's normal bounded discovery passes,
 				// used by the shell's online/visibility/30s callbacks, not upload calls.
 				await resumeNativeSyncJobs(scope.ownerId, 0, new AbortController().signal);
-				assert.equal(runnerCalls, 1);
+				assert.equal(runnerCalls, 1, nativeSyncTasks.read()?.progress.message ?? "Native retry runner was not admitted");
 				assert.equal(runnerError instanceof SyncConnectionWait, transient);
 				assert.equal(nativeSyncTasks.read()?.status, transient ? 'paused' : 'error');
 				assert.equal(nativeSyncTasks.read()?.waiting, transient);

@@ -29,6 +29,19 @@ const make=()=>{
   return{service,request,records,ceremonies,pause:(callback:()=>Promise<void>)=>pause=callback,changePassword:()=>passwordHash='changed',revoke:()=>sessions.delete('A'),changeLock:()=>ownSessions.get('A').meta.passwordVerificationLock='lock',setAfterRead:(callback:()=>void)=>afterRead=callback,clock:(value:number)=>now=value,settings:(value:any)=>settings=value,entry:(value:any)=>entry=value};
 };
 const context={purpose:'create',rp:'example.test',entryId:'95af3e96-59f9-42d0-b72a-46e74e3b3194'};
+test('bare saved website approval remains bound to its exact HTTPS origin, entry and current session',async()=>{
+ const f=make(),who=await f.service.identity('owner','https://thingtime.example','A');
+ const selected={purpose:'fill',rp:'thingtime.com',origin:'https://thingtime.com',entryId:crypto.randomUUID()};
+ const entry=(website:string)=>({passwordType:'login',fields:[{id:'password',type:'password',value:'synthetic-only'},{id:'website',type:'url',value:website}]});
+ f.entry(entry('thingtime.com'));
+ const id=crypto.randomUUID(),cookie=(await f.service.verify(f.request(),who,selected,id,true))!.split(';')[0];
+ await f.service.require(f.request(cookie),who,selected,id);
+ for(const other of [{...selected,rp:'sub.thingtime.com',origin:'https://sub.thingtime.com'}, {...selected,origin:'https://thingtime.com:8443'}, {...selected,entryId:crypto.randomUUID()}])await assert.rejects(f.service.require(f.request(cookie),who,other,id));
+ for(const website of ['*.thingtime.com','https://user:secret@thingtime.com','https://sub.thingtime.com','https://thingtime.com:8443','http://thingtime.com']){
+  f.entry(entry(website));await assert.rejects(f.service.status(f.request(cookie),who,selected));
+ }
+ f.entry(entry('thingtime.com'));f.revoke();await assert.rejects(f.service.require(f.request(cookie),who,selected,id));
+});
 test('status never writes authority; Never reuse needs exact device/account/origin and current session',async()=>{
  const f=make(),who=await f.service.identity('owner','https://thingtime.example','A');
  assert.equal((await f.service.status(f.request(),who,context)).required,true);assert.equal(f.records.size,0);assert.equal(f.ceremonies.size,0);

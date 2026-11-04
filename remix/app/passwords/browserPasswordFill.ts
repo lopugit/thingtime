@@ -13,7 +13,7 @@ export function validateVaultRequest(input:unknown):VaultRequest {
  return structuredClone(v);
 }
 export const fillContext=(r:VaultRequest)=>({purpose:'fill' as const,rp:new URL(r.origin).hostname,origin:r.origin,entryId:r.entryId!});
-export const ensurePasswordFill=()=>requireThingtimeCapability('api.passwords','1.5.0');
+export const ensurePasswordFill=()=>requireThingtimeCapability('api.passwords','1.6.1');
 export async function fillVerification(ownerId:string,r:VaultRequest,signal:AbortSignal){await ensurePasswordFill();signal.throwIfAborted();return passwordRequest(ownerId,{operation:'verification-status',context:fillContext(r)},signal);}
 export async function loadPasswordCatalog(ownerId:string,r:VaultRequest,signal:AbortSignal){
  await ensurePasswordFill();const catalog:any[]=[];const seen=new Set<string>();let cursor:string|undefined;

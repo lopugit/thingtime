@@ -4,7 +4,7 @@ import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { openSyncJournal } from './journal.client';
 import { createSyncRun, type SyncExecutionPort, type SyncOperation, type SyncReceipt } from './execute';
 import { executePagedSyncRun } from './pagedExecute';
-import { type PagedRunSpec } from './pagedRunJournal';
+import { PAGED_RUN_STORES, type PagedRunSpec } from './pagedRunJournal';
 import { type InventoryIdentity, upgradeInventoryJournal } from './inventoryJournal';
 import { PLAN_STORES } from './pagedPlanJournal';
 import { planFileSync, syncScopeKey, type SyncEntry, type SyncScope } from './reconcile';
@@ -243,4 +243,48 @@ test('one capture used for both current and baseline keeps one internal generati
 	await f.plans.discard(s.plan); s.plan.baseline = { local: s.plan.local, remote: s.plan.remote };
 	await f.plans.build(s.plan); await f.runs.prepare(s); assert.equal((await f.runs.start(s)).phase, 'complete');
 	await assert.rejects(f.inventory.discard(s.plan.local), /pinned/); f.journal.close();
+});
+
+test('directional journal byte plans survive reopening and exact receipt retries do not double count', async () => {
+ let f = await fixture(); const s = spec(); await seed(f, s, [file('upload')], [file('download')]);
+ await f.runs.prepare(s); await f.runs.start(s);
+ const planned = (await f.runs.read(s)).progress.directions!;
+ assert.equal(planned.upload.bytesTotal, '2'); assert.equal(planned.download.bytesTotal, '2');
+ let operation = (await f.runs.read(s)).operations[0]; const original = receipt(operation);
+ const confirmed = await f.runs.confirm(s, original); await f.runs.confirm(s, original);
+ assert.equal(confirmed.directions![operation.mutation.kind === 'copy' && operation.mutation.from === 'local' ? 'upload' : 'download'].bytesConfirmed, '2');
+ f.journal.close(); f = await fixture(f.factory);
+ assert.deepEqual((await f.runs.read(s)).progress.directions, confirmed.directions);
+ f.journal.close();
+});
+
+async function eraseLegacyDirections(f: Awaited<ReturnType<typeof fixture>>, s: PagedRunSpec) {
+ const opened = f.factory.open('paged-run-test'); const db = await new Promise<IDBDatabase>((resolve, reject) => { opened.onsuccess = () => resolve(opened.result); opened.onerror = () => reject(opened.error); });
+ await new Promise<void>((resolve, reject) => { const tx = db.transaction([PAGED_RUN_STORES[0]], 'readwrite'), store = tx.objectStore(PAGED_RUN_STORES[0]), get = store.get([syncScopeKey(scope), s.id]); get.onsuccess = () => { const old = get.result; delete old.directions; store.put(old, [syncScopeKey(scope), s.id]); }; tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); }); db.close();
+}
+test('legacy directional migration is explicit, coalesced, page-bounded and persists a complete exact result', async () => {
+ const f = await fixture(), s = spec(); await seed(f, s, Array.from({ length: 300 }, (_, i) => file('file-' + String(i).padStart(4, '0')))); await f.runs.prepare(s); await eraseLegacyDirections(f, s);
+ assert.equal((await f.runs.read(s)).progress.directions, undefined, 'ordinary reads must not launch a scan');
+ const first = f.runs.backfillDirections(s), second = f.runs.backfillDirections(s); assert.equal(first, second);
+ const migrated = await first; assert.equal(migrated!.directions!.upload.operations, 300); assert.equal(migrated!.directions!.upload.bytesTotal, '600');
+ assert.equal((await f.runs.read(s)).progress.directions!.upload.bytesTotal, '600'); f.journal.close();
+});
+test('cancelling a legacy progress migration never persists a partial total', async () => {
+ const f = await fixture(), s = spec(); await seed(f, s, Array.from({ length: 300 }, (_, i) => file('file-' + String(i).padStart(4, '0')))); await f.runs.prepare(s); await eraseLegacyDirections(f, s);
+ const abort = new AbortController(), runs = f.journal.pagedRuns({ ...f.access, signal: abort.signal });
+ const migration = runs.backfillDirections(s); setTimeout(() => abort.abort(), 0); await assert.rejects(migration, { name: 'AbortError' });
+ assert.equal((await f.runs.read(s)).progress.directions, undefined); f.journal.close();
+});
+
+test('durable inventory, planned operations and confirmed receipts preserve symbolic-link identity across reopen', async () => {
+ const {symbolicLinkFingerprint}=await import('./symbolicLink');
+ const symbolicLink={format:'posix-symlink-v1' as const,targetBase64:'Li4='};
+ const source:SyncEntry={...file('link'),sha256:null,fingerprint:await symbolicLinkFingerprint(symbolicLink),symbolicLink};
+ let f=await fixture();const s=spec();await seed(f,s,[source]);
+ assert.deepEqual((await f.inventory.read(s.plan.local)).entries[0],source);
+ f.journal.close();f=await fixture(f.factory);assert.deepEqual((await f.inventory.read(s.plan.local)).entries[0],source);
+ await f.runs.begin(s);await f.runs.prepare(s);const operation=(await f.runs.read(s)).operations[0];assert.equal(operation.mutation.kind,'copy');
+ if(operation.mutation.kind==='copy')assert.deepEqual(operation.mutation.source,source);
+ await f.runs.start(s);await f.runs.confirm(s,receipt(operation));f.journal.close();f=await fixture(f.factory);
+ assert.deepEqual((await f.runs.readConfirmed(s)).rows[0].receipt.entry?.symbolicLink,symbolicLink);f.journal.close();
 });

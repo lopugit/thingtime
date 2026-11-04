@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { WebpageBlock } from '~/components/Builder/webpageBlocks';
-import { PASSWORD_BRAND_ICON, passwordBrandingMigration, migratePasswordPreviewContrast } from '~/components/Passwords/passwordBrandingBlocks';
+import { PASSWORD_BRAND_ICON, passwordBrandingMigration, migratePasswordPreviewContrast, PASSWORD_PREVIEW_ICON_CSS } from '~/components/Passwords/passwordBrandingBlocks';
 import { BROWSER_PROVIDER_BLOCKS } from '~/components/Passwords/browserProviderBlocks';
 import { PASSWORD_GENERATOR_BLOCKS } from '~/components/Passwords/passwordGeneratorDocument';
 import { PASSWORD_PASSKEY_BLOCKS } from '~/components/Passwords/passwordPasskeyBlocks';
@@ -36,4 +36,12 @@ test('subtitle repair preserves authored layouts, custom colors, deleted fields 
  assert.strictEqual(children[1],custom);assert.strictEqual(children[2],unrelated);
  assert.strictEqual(migratePasswordPreviewContrast(repaired),repaired);
  const deleted=[{...before[0],children:[custom]}];assert.strictEqual(migratePasswordPreviewContrast(deleted),deleted);
+});
+
+test('default logo backplate upgrades exact old image CSS without replacing authored styles or deleted blocks',()=>{
+ const old={id:'pp-icon',type:'element',tag:'img',props:{src:'{item.image}',title:'My icon'},css:{width:'32px',height:'32px','object-fit':'contain','flex-shrink':'0'}} as WebpageBlock;
+ const before=[old],migrated=migratePasswordPreviewContrast(before);assert.deepEqual(migrated[0].css,PASSWORD_PREVIEW_ICON_CSS);assert.strictEqual(migrated[0].props,old.props);assert.equal(old.css?.background,undefined);assert.strictEqual(migratePasswordPreviewContrast(migrated),migrated);
+ for(const css of [{...old.css,background:'rebeccapurple'},{...old.css,padding:'5px'},{...old.css,width:'48px'}]){const authored=[{...old,css}];assert.strictEqual(migratePasswordPreviewContrast(authored),authored);}
+ const deletedBackground={...PASSWORD_PREVIEW_ICON_CSS};delete deletedBackground.background;const authored=[{...old,css:deletedBackground}];assert.strictEqual(migratePasswordPreviewContrast(authored),authored);
+ const deleted:WebpageBlock[]=[];assert.strictEqual(migratePasswordPreviewContrast(deleted),deleted);
 });

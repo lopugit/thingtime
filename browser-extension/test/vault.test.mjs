@@ -9,11 +9,11 @@ function fixture(){
  let target={tabId:1,documentId:'source',origin:'https://login.example.test',windowId:10};const config={origin:'https://thingtime.com',autofillEnabled:true};
  const currentDocument=async(id,doc,origin,provider=false)=>{const f=frames.get(id);return f?.documentId===doc&&new URL(f.url).origin===origin&&(!provider||new URL(f.url).pathname==='/passwords/provider');};
  let epoch=0;const workspace={target:async()=>target,generation:()=>epoch};const setTarget=value=>{target=value;epoch++;};
- const vault=createVaultController(api,{settings:async()=>config,workspace,currentDocument});
+ let admitted=true;const vault=createVaultController(api,{accountAdmission:async()=>admitted,settings:async()=>config,workspace,currentDocument});
  const sender={tab:{id:1,windowId:10,url:frames.get(1).url},url:frames.get(1).url,origin:target.origin,frameId:0,documentId:'source'};
  const provider=()=>({tab:{id:20,url:frames.get(20).url,windowId:99},url:frames.get(20).url,origin:config.origin,frameId:0,documentId:'provider'});
  const request=()=>sent.filter(x=>x.message.action==='vault-provider-request').at(-1).message.request;
- return{api,vault,workspace,setTarget,frames,sent,removed,focus,windows,config,sender,provider,request};
+ return{setAdmitted:value=>admitted=value,api,vault,workspace,setTarget,frames,sent,removed,focus,windows,config,sender,provider,request};
 }
 async function connect(e){const p=e.vault.handle({action:'vault-catalog'},e.sender,false);await tick();await e.vault.handle({action:'vault-provider-ready'},e.provider(),false);const r=e.request();await e.vault.handle({action:'vault-provider-response',version:1,id:r.id,ownerId:'owner',catalog:[{id:'entry',title:'Synthetic login',username:'fixture@example.test',domains:['login.example.test'],hasPassword:true,fillEligible:true,password:'must-not-cache',privateKey:'must-not-cache'}]},e.provider(),false);return p;}
 test('owned popup, allowlisted live catalog and selected fill bind exact original document',async()=>{
@@ -45,3 +45,4 @@ test('displayed A catalog selection cannot silently fill B, or outlive retarget 
 test('a workspace cache repaint cannot close a newly opening provider before its ready handshake',async()=>{
  const e=fixture();const pending=e.vault.handle({action:'vault-catalog'},e.sender,false);await tick();const cached=await e.vault.handle({action:'vault-cached'},e.sender,false);assert.deepEqual(cached.catalog,[]);assert.equal(e.removed.length,0);await e.vault.handle({action:'vault-provider-ready'},e.provider(),false);const r=e.request();await e.vault.handle({action:'vault-provider-response',version:1,id:r.id,ownerId:'owner',catalog:[]},e.provider(),false);assert.equal((await pending).ok,true);
 });
+test('locked connection refuses content chip catalog and fill admissions until explicit unlock',async()=>{const e=fixture();e.setAdmitted(false);for(const message of [{action:'vault-catalog'},{action:'vault-fill',entryId:'entry'}]){const result=await e.vault.handle(message,e.sender,false);assert.equal(result.ok,false);assert.match(result.error,/Unlock/);}assert.equal(e.windows.length,0);e.setAdmitted(true);const result=await connect(e);assert.equal(result.ok,true);});

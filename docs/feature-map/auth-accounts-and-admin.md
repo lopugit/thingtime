@@ -96,6 +96,12 @@ private draft API, editor recovery, account isolation and independent media copi
 
 ## Password manager
 
+The controlled `ThingFields.tsx` password rows opt into `CopyPasswordButton.tsx`
+only for non-passkey manager entries. Copy uses an already-authorized draft and
+browser Clipboard API with secret-free inline status; it never reads clipboard
+contents or logs/notifies the value. `scripts/password-copy.browser.html` checks
+exact synthetic writes, rejection/unavailability, masking and stale completions.
+
 `PasswordGenerator.tsx`, `PasswordIcon.tsx` and `PasswordPasskeySetup.tsx` compose
 editable settings blocks; secret output stays in the controlled entry draft.
 `passwords/generator.ts` owns WebCrypto/preset validation. `passwords/icons.ts`,
@@ -104,7 +110,7 @@ image loading and the separately sealed list projection. `test:passwords` covers
 these boundaries; `scripts/password-tools.browser.html` is an isolated synthetic
 UI fixture, not native-provider acceptance.
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.5.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.6.1 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -128,6 +134,14 @@ projects page events before runtime transport; the background fences the active
 document and accepts diagnostic reads only from its own popup. These are untrusted
 status hints, not authority or ceremony evidence; no request or identity fields
 are retained. Browser tests cover missing/replaced hooks, redaction and navigation.
+
+`passwords/websites.ts` supplies shared bare-host-to-HTTPS normalization for
+catalog hints and exact-origin fill verification. The browser fill client
+requires `api.passwords` 1.6.1; URL normalization is not an authorization grant.
+Extension 0.4.1 keeps the chooser inside active modal focus/accessibility scope
+and gives explicit website-reload recovery after extension replacement.
+`password-autofill-modal.browser.html` is a synthetic modal/runtime fixture;
+real signed-in fill and extension reload remain distinct acceptance checks.
 
 `NativePasswordConnection.tsx` and `nativePasswordConnectionBlocks.ts` supply the
 single editable device connection control shared by Password manager and Passwords
@@ -341,3 +355,22 @@ vault. Shared legacy credentials require reconnect, preserving the caller's link
 ID. Public-source sharing remains intact. Google identity/service cards and
 Facebook identity/posts cards select separate grants. Run `test:connections` and
 `test:api-capabilities`; see README social OAuth setup and TESTING acceptance.
+
+Browser extension accounts: `BrowserExtensionAccountBridge.tsx` projects the
+canonical `api.auth-accounts` roster into the selected first-party document;
+`BrowserExtensionAccounts.tsx` reuses Login and AccountSwitcher in an owned popup.
+`browser-extension/accounts.js` binds discovery to origin, document and identity
+generation, clears stale catalog/requests, and preserves explicit local Lock.
+No session cookie or token crosses the bridge. See
+[extension accounts](../browser-extension-accounts.md), extension account/content
+regressions and `password-extension-accounts.integration.ts` for real API and
+isolated browser acceptance.
+
+Password website icons: `api.passwords` 1.6 adds `website-icon` for an exact
+owner, entry and revision. `api/utils/passwords/websiteIcons.ts` discovers ordered
+public Website origins using anonymous, DNS-pinned fetches and PNG sanitization;
+`passwords/icons.client.ts` limits concurrent requests and scopes blob caches to
+origin/owner/revision. Explicit custom icons take precedence. The metadata list
+exposes an availability hint, not saved URLs. Cover route authorization, revoked
+sessions, redirects, malformed images, fallback order and editable-card rendering
+with the password icon tests and TESTING.md checklist.

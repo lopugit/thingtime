@@ -81,7 +81,8 @@ export async function streamOneWayForegroundSync(
 		indexState: 'indexing' | 'watching' | 'complete' = 'indexing',
 		skipped: number | undefined;
 	if (local && input.nativeOperationGuards && state.phase !== 'complete') await runs.enableStreamPriorities(spec);
-	let priorityReadiness: PriorityReadiness | undefined;
+	if (!state.directions) state = await runs.backfillDirections(spec) ?? state;
+ let priorityReadiness: PriorityReadiness | undefined;
 	let lastProgress: ForegroundSyncProgress | undefined;
 	const publishProgress = (value: ForegroundSyncProgress) => { lastProgress = value; input.progress(value); };
 	const coverage = () => ({
@@ -92,7 +93,7 @@ export async function streamOneWayForegroundSync(
 		...(skipped === undefined ? {} : { skipped, coverage: 'partial' as const, consistency: 'per-entry' as const })
 	});
 	const ignore = createSyncIgnorePolicy(configuration.ignoreRules, configuration.excludedPaths);
-	const report = () => publishProgress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, indexed, ...coverage() });
+	const report = () => publishProgress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, directions: state.directions, indexed, ...coverage() });
 	const bulk = local && input.nativeOperationGuards && input.uploadBatch && !input.runtime.authorizeMutation ? input.uploadBatch : undefined;
 	const folderBulk = local && input.nativeOperationGuards && input.folderBatch && !input.runtime.authorizeMutation ? input.folderBatch : undefined;
 	const batching = !!bulk || !!folderBulk;
@@ -131,7 +132,7 @@ export async function streamOneWayForegroundSync(
 			openSource,
 			progress: (path, bytes, size) => {
 				check();
-				publishProgress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, indexed, path, bytes, size, ...coverage() });
+				publishProgress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, directions: state.directions, indexed, path, bytes, size, ...coverage() });
 			}
 		},
 		runtime

@@ -1,4 +1,4 @@
-import { SyncResourceGovernor } from './resourceGovernor';
+import { deviceResourceKey, deviceSyncGovernor } from './deviceResourcePolicy';
 import { parseFileSyncConfiguration, FILE_SYNC_IGNORE_REQUIREMENTS, FILE_SYNC_RESOURCE_REQUIREMENTS } from './configuration';
 import { planConfiguredFileSync, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
 import { inventorySyncEntry, parseCloudInventory } from './cloudInventory';
@@ -86,7 +86,7 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 	};
 	const runtime: CloudTransportRuntime = {
 		...input.runtime,
-		...(configuration.resourceLimits ? { resources: input.runtime.resources ?? new SyncResourceGovernor(configuration.resourceLimits) } : {}),
+		resources: input.runtime.resources ?? deviceSyncGovernor(deviceResourceKey(scope.origin, scope.ownerId, scope.deviceId), configuration.resourceLimits),
 		// Custom mutation policies must remain in the shared per-part path.
 		nativeUploadApproval: input.runtime.authorizeMutation ? undefined : approved,
 		currentScope: input.currentScope,

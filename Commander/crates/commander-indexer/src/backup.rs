@@ -9,7 +9,7 @@ use crate::{
     IndexerError,
 };
 use ignore::WalkState;
-use rustix::fs::{open, openat, statat, AtFlags, FileType, Mode, OFlags};
+use rustix::fs::{open, openat, readlinkat, statat, AtFlags, FileType, Mode, OFlags};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{File, Metadata};
@@ -42,6 +42,8 @@ pub struct Request {
     pub resource_feedback: bool,
     #[serde(default = "default_cpu_shares")]
     pub cpu_budget_shares: usize,
+    #[serde(default)]
+    pub scan_bytes_per_second: Option<f64>,
 }
 
 fn default_cpu_shares() -> usize {
@@ -67,6 +69,36 @@ pub struct Entry {
     sha256: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     fingerprint: Option<Fingerprint>,
+    #[serde(rename = "symbolicLink", skip_serializing_if = "Option::is_none")]
+    symbolic_link: Option<SymbolicLink>,
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SymbolicLink {
+    format: &'static str,
+    target_base64: String,
+}
+fn base64(bytes: &[u8]) -> String {
+    const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut output = String::new();
+    for chunk in bytes.chunks(3) {
+        let n = ((chunk[0] as u32) << 16)
+            | ((chunk.get(1).copied().unwrap_or(0) as u32) << 8)
+            | chunk.get(2).copied().unwrap_or(0) as u32;
+        output.push(TABLE[((n >> 18) & 63) as usize] as char);
+        output.push(TABLE[((n >> 12) & 63) as usize] as char);
+        output.push(if chunk.len() > 1 {
+            TABLE[((n >> 6) & 63) as usize] as char
+        } else {
+            '='
+        });
+        output.push(if chunk.len() > 2 {
+            TABLE[(n & 63) as usize] as char
+        } else {
+            '='
+        });
+    }
+    output
 }
 
 #[derive(Debug, Serialize)]
@@ -206,6 +238,66 @@ fn observe(
     governor: &ResourceGovernor,
     cancelled: &AtomicBool,
 ) -> Result<Entry, &'static str> {
+    // Resolve ancestors only as directories, then read the final link itself.
+    let (parent_path, name) = path.rsplit_once('/').unwrap_or(("", path));
+    let parent = if parent_path.is_empty() {
+        root.try_clone().map_err(|_| "unreadable")?
+    } else {
+        open_path(root, parent_path)?
+    };
+    let initial = statat(&parent, name, AtFlags::SYMLINK_NOFOLLOW).map_err(io_reason)?;
+    if FileType::from_raw_mode(initial.st_mode) == FileType::Symlink {
+        #[cfg(target_vendor = "apple")]
+        let flags = OFlags::RDONLY | OFlags::CLOEXEC | OFlags::from_bits_retain(0x00200000) /* Darwin O_SYMLINK pins the link inode */;
+        #[cfg(not(target_vendor = "apple"))]
+        let flags = OFlags::PATH | OFlags::CLOEXEC | OFlags::NOFOLLOW;
+        let link = File::from(openat(&parent, name, flags, Mode::empty()).map_err(io_reason)?);
+        let before = link.metadata().map_err(|_| "unreadable")?;
+        if before.dev() != initial.st_dev as u64
+            || before.ino() != initial.st_ino as u64
+            || !before.file_type().is_symlink()
+        {
+            return Err("changed");
+        }
+        let target = readlinkat(&parent, name, Vec::new()).map_err(io_reason)?;
+        let bytes = target.as_bytes();
+        if bytes.is_empty() || bytes.contains(&0) {
+            return Err("special");
+        }
+        let after = statat(&parent, name, AtFlags::SYMLINK_NOFOLLOW).map_err(io_reason)?;
+        if after.st_dev != initial.st_dev
+            || after.st_ino != initial.st_ino
+            || stamp(&before) != stamp(&link.metadata().map_err(|_| "unreadable")?)
+            || readlinkat(&parent, name, Vec::new())
+                .map_err(io_reason)?
+                .as_bytes()
+                != bytes
+        {
+            return Err("changed");
+        }
+        governor
+            .pace_scan(bytes.len(), cancelled)
+            .map_err(|_| "cancelled")?;
+        governor.record_scan(bytes.len());
+        return Ok(Entry {
+            path: path.to_owned(),
+            id: identity(&before),
+            version: stamp(&before),
+            kind: "file",
+            size: bytes.len() as u64,
+            sha256: None,
+            fingerprint: Some(Fingerprint {
+                algorithm: "sha256-parts-v1",
+                part_size_bytes: 8_388_608,
+                part_count: 1,
+                sha256: format!("{:x}", Sha256::digest(Sha256::digest(bytes))),
+            }),
+            symbolic_link: Some(SymbolicLink {
+                format: "posix-symlink-v1",
+                target_base64: base64(bytes),
+            }),
+        });
+    }
     let mut file = open_path(root, path)?;
     let before = file.metadata().map_err(|_| "unreadable")?;
     let version = stamp(&before);
@@ -234,10 +326,14 @@ fn observe(
             let wanted = (buffer.len() as u64)
                 .min(size - offset)
                 .min(part_size - in_part) as usize;
+            governor
+                .pace_scan(wanted, cancelled)
+                .map_err(|_| "cancelled")?;
             let n = file.read(&mut buffer[..wanted]).map_err(|_| "unreadable")?;
             if n == 0 {
                 return Err("changed");
             }
+            governor.record_scan(n);
             part.update(&buffer[..n]);
             offset += n as u64;
             in_part += n as u64;
@@ -270,6 +366,7 @@ fn observe(
         size,
         sha256,
         fingerprint,
+        symbolic_link: None,
     })
 }
 
@@ -321,6 +418,13 @@ fn capture_inner(
         &request.resource_limits,
         request.cpu_budget_shares,
     )?);
+    if request
+        .scan_bytes_per_second
+        .is_some_and(|rate| !rate.is_finite() || rate <= 0.0)
+    {
+        return Err(failure("invalid_configuration"));
+    }
+    governor.set_scan_rate(request.scan_bytes_per_second);
     let source = IndexSource {
         id: "backup".into(),
         root: request.root.clone(),
