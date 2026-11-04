@@ -30,6 +30,7 @@ export type ThingsThing = {
   targetId: string | null;
   parentId?: string | null;
   folderId: string | null;
+  timelineHeadId?: string;
   crystal: Record<string, any>;
   extended: unknown | null;
   tags: string[];
