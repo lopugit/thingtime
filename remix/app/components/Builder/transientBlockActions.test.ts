@@ -63,6 +63,10 @@ test('capture leaves native Thing controls and nested adapters to their own hand
 		'the Thing data/render toggle must reach its React onClick');
 	const owned = control('$transient');
 	assert.equal(transientControlForTarget(root as any, { closest: () => owned } as any), owned);
+	const link = {};
+	const outerCard = { ...owned, contains: (element: unknown) => element === link };
+	assert.equal(transientControlForTarget(root as any, { closest: (selector: string) => selector === '[data-tt-action]' ? outerCard : link } as any), null,
+		'a nested link without an action keeps its own default activation');
 	const foreign = control('saved-action');
 	assert.equal(transientControlForTarget(root as any, { closest: () => foreign } as any), null);
 	const nested = control('$transient', nestedBoundary);

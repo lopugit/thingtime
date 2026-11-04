@@ -41,3 +41,26 @@ test('preview usernames require canonical public text/email fields even when nam
  for(const extra of [{concealed:true},{structured:true}])assert.equal(passwordPreviewUsername({title:'Fixture',passwordType:'login',fields:[{id:'username',label:'Username',type:'text',value:'synthetic-secret',...extra}]}),'');
  assert.equal(passwordPreviewUsername({title:'Fixture',passwordType:'login',fields:[{id:'username',label:'Username',type:'text',value:'legacy-user'}]}),'legacy-user');
 });
+
+test('legacy 1PUX hidden fields and descriptions do not hide the explicit saved login', async () => {
+ const {passwordPreviewUsername}=await import('./model');
+ const {importOnePasswordItem}=await import('./onePassword');
+ const source={categoryUuid:'001',overview:{title:'Synthetic AWS account',subtitle:'overview@example.invalid'},details:{notesPlain:'notes@example.invalid',loginFields:[
+  {designation:'username',fieldType:'H',name:'appAction',value:'awsWeb'},
+  {fieldType:'T',name:'Root user email address',value:'root@example.invalid'},
+  {designation:'password',fieldType:'P',value:'synthetic-secret'}
+ ]}};
+ const entry=importOnePasswordItem(source);
+ const legacy={...entry,fields:entry.fields.map(field=>field.id==='username'?{...field,label:'Username',concealed:undefined}:field)};
+ assert.equal(entry.fields[0].concealed,true);
+ assert.equal(passwordPreviewUsername(legacy),'root@example.invalid','Retained form type excludes a hidden field imported by an older build');
+ assert.equal(passwordPreviewUsername({...entry,fields:entry.fields.map(field=>field.value==='root@example.invalid'?{...field,value:'updated@example.invalid'}:field)}),'updated@example.invalid','Only the current saved value is read');
+ const description={...entry,onePassword:undefined,fields:[
+  {id:'username',label:'Description',type:'text' as const,value:'AWS account label'},
+  {id:'typed-email',label:'Email address',type:'email' as const,value:'root@example.invalid'}
+ ]};
+ assert.equal(passwordPreviewUsername(description),'root@example.invalid');
+ assert.equal(passwordPreviewUsername({...description,fields:[...description.fields,{id:'second-email',label:'Email',type:'email',value:'other@example.invalid'}]}),'','Ambiguous identities are not guessed');
+ assert.equal(passwordPreviewUsername({...entry,fields:entry.fields.filter(field=>field.value!=='root@example.invalid')}),'','Notes and source subtitles never supply the preview');
+ assert.equal(passwordPreviewUsername({...description,fields:[{...description.fields[0],label:'Username',value:'iam-user'},description.fields[1]]}),'iam-user','An actual saved username wins over a secondary email');
+});
