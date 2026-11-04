@@ -66,7 +66,7 @@ try {
       if (url.pathname.endsWith('thingtime-capabilities.json')) {
         const features = Object.fromEntries(['connections', 'connections-providers', 'connections-filters', 'connections-oauth-begin'].map(name => ['api.' + name, { version: '2.0.0' }]));
         Object.assign(features, {
-          'api.connections': { version: '2.1.0' }, 'api.connections-oauth-begin': { version: '2.1.0' },
+          'api.connections': { version: '2.1.0' }, 'api.connections-unlink': { version: '2.1.0' }, 'api.connections-oauth-begin': { version: '2.1.0' },
           'api.connections-oauth-callback': { version: '2.1.0' }, 'api.connections-provider-icon': { version: '1.0.0' }, 'api.connections-named': { version: '1.0.0' },
           'api.mongodb-endpoint': { version: '1.1.0' }, 'api.webpages-resolve': { version: '1.6.0' },
           'api.actions-run': { version: '1.7.0' }, 'api.things': { version: '1.36.0' }
@@ -150,6 +150,12 @@ try {
         if (!url.searchParams.has('error')) linked = true;
         return route.fulfill({ status: 302, headers: { location: origin + '/connections?' + (linked ? 'connected=facebook-account' : 'oauthError=declined') } });
       }
+      if (url.pathname === endpoint + '/unlink') {
+        assert.equal(route.request().postDataJSON().id, 'fixture-link');
+        assert.equal(route.request().postDataJSON().expectedOwnerId, firstOwner);
+        linked = false;
+        return json(route, { ok: true });
+      }
       if (url.pathname === endpoint + '/named') {
         const body = route.request().postDataJSON();
         assert.deepEqual(body, { id: 'named-1', operation: 'google.profile', expectedOwnerId: firstOwner });
@@ -211,7 +217,7 @@ try {
       const stopCopy = label === 'desktop' ? 'End sign-in wait' : 'Stop waiting';
       if (label === 'desktop') {
         const host = page.locator('[data-settings-document="connections-oauth-pending"]');
-        await host.getByRole('button', { name: 'Edit layout', exact: true }).click();
+        await host.getByRole('button', { name: 'Edit sign-in status', exact: true }).click();
         await host.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
         const drawer = page.getByTestId('builder-drawer');
         for (const [id, value] of [['connections-oauth-message', 'Complete {oauth.provider} sign-in in your new tab.'], ['connections-oauth-stop', stopCopy]]) {
@@ -264,6 +270,14 @@ try {
       const approvedClosed = approved.waitForEvent('close', { timeout: 5000 });
       await approved.getByRole('link', { name: 'Continue' }).click();
       await approvedClosed;
+      const linkedCard = page.locator('[data-block-id="connections-linked-card"]').filter({ hasText: 'OAuth fixture account' });
+      const linkedMark = linkedCard.locator('[data-block-id="connections-linked-logo"]');
+      await linkedMark.scrollIntoViewIfNeeded();
+      await page.waitForFunction(() => [...document.querySelectorAll('[data-block-id="connections-linked-logo"]')].some(img => img.src.includes('provider=facebook') && img.naturalWidth > 0));
+      assert.equal(await linkedCard.getByRole('link', { name: 'Feed', exact: true }).getAttribute('href'), '/connections/feed?connection=fixture-link');
+      assert.equal(await linkedCard.getByRole('button', { name: 'Unlink', exact: true }).isEnabled(), true);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+      await page.screenshot({ path: join(evidence, `provider-icons-linked-${label}.png`), fullPage: true });
       await page.getByText('OAuth fixture account').waitFor();
       assert.equal(await signIn.isEnabled(), true);
       assert.equal(page.url(), initial);
@@ -430,6 +444,13 @@ try {
         assert.equal(await hosted.getByRole('button', { name: 'Needs setup' }).isDisabled(), true);
         assert.ok(observedOrigins.slice(beforeSwitch).every(value => value === selectedOrigin));
         await hosted.close();
+      }
+      if (label === 'phone') {
+        const unlinkRequest = page.waitForResponse(response => new URL(response.url()).pathname === endpoint + '/unlink');
+        await linkedCard.getByRole('button', { name: 'Unlink', exact: true }).click();
+        assert.equal((await unlinkRequest).status(), 200);
+        await linkedCard.waitFor({ state: 'detached' });
+        assert.equal(linked, false);
       }
       assert.deepEqual(pageErrors, []);
       console.log(`PASS ${label}: blocked, declined, abandoned, successful, provider opener isolation, account/origin fences, named connection create/use, and layout persistence`);

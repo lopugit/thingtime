@@ -411,7 +411,7 @@ export default defineHandler(async (event) => {
   if (path === 'v1/connections/provider-icon') {
     if (method !== 'GET' && method !== 'HEAD') return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD' } });
     const route = await routeModules['v1/connections/provider-icon']();
-    const response = await route.loader({ request: event.req });
+    const response = normalizeResponse(await route.loader!({ request: event.req }));
     return method === 'HEAD' ? new Response(null, { status: response.status, headers: response.headers }) : response;
   }
 

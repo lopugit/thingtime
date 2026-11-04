@@ -445,7 +445,7 @@ export function HtmlBlockElement({ tag, attributes, editorProps, children }: {
  if (safeTag === 'a') return <ComponentLink {...merged}>{children}</ComponentLink>;
  const fallback = attributes?.['data-tt-image-fallback'];
  if (safeTag === 'img' && typeof fallback === 'string' && /^\/[a-zA-Z0-9_/-]+\.(?:png|svg|webp)$/.test(fallback) && !fallback.startsWith('//')) {
-  return <HtmlBlockImage key={String(merged.src ?? '')} elementProps={merged} fallback={fallback} />;
+  return <HtmlBlockImage key={String(props.src ?? '')} elementProps={merged} fallback={fallback} />;
  }
  return React.createElement(safeTag, merged, VOID_TAGS.has(safeTag) ? undefined : children);
 }

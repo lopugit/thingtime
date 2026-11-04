@@ -18,7 +18,7 @@ import { connectionIconUrl, CONNECTION_ICON_FEATURE, CONNECTION_ICON_VERSION } f
 import { NamedConnectionPanel } from './NamedConnectionPanel';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { NAMED_CONNECTION_FEATURE, NAMED_CONNECTION_VERSION, type NamedConnectionInput } from '~/connections/namedAccess';
-import { providerCatalogBlocks } from './providerCatalogBlocks';
+import { linkedConnectionBlocks, providerCatalogBlocks } from './providerCatalogBlocks';
 import { oauthPendingBlocks } from './oauthPendingBlocks';
 import { notifyConnectionOAuthReturn, openConnectionOAuthTab } from './oauthTab.client';
 import { cardStyle, connectedProviderLabel, oauthErrorMessage, type ChannelRef, type Connection } from './shared';
@@ -451,6 +451,13 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
       provider.auth === 'credential' ? 'Connect default account' : 'Connect',
   }));
   const legacyConnections = connections.filter(connection => !connection.named);
+  const linkedRows = legacyConnections.map(connection => ({
+    id: connection.id, displayName: connection.account.displayName,
+    providerLabel: `${connection.providerName}${connection.contentVisibility === 'personal' ? ' · personal feed' : ''}`,
+    subtitle: `${connection.account.handle}${connection.lastSyncError ? ' · Feed sync needs attention' : ''}`,
+    iconUrl: connectionIconUrl(connection.provider, providerIconsEnabled),
+    feedHref: `/connections/feed?connection=${encodeURIComponent(connection.id)}`,
+  }));
   return (
     <Box
       maxWidth="860px"
@@ -498,36 +505,16 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
       {!signedOut && legacyConnections.length ? (
         <Box display="flex" flexDirection="column" rowGap={3}>
           <Text fontWeight="600">Your connections</Text>
-          {legacyConnections.map((connection) => (
-            <Flex key={connection.id} {...cardStyle} padding={4} alignItems="center" columnGap={3} flexWrap="wrap" rowGap={2}>
-              <Text fontSize="xl">{connection.providerIcon}</Text>
-              <Box flex="1" minWidth="200px">
-                <Text fontWeight="600">
-                  {connection.account.displayName}
-                  <Text as="span" color="var(--tt-muted, #6b7280)" fontWeight="400" marginLeft={2} fontSize="sm">
-                    {connection.providerName}
-                    {connection.contentVisibility === 'personal' ? ' · personal feed' : ''}
-                  </Text>
-                </Text>
-                <Text fontSize="sm" color="var(--tt-muted, #6b7280)">
-                  {connection.account.handle}
-                  {connection.lastSyncError ? ` · ⚠️ ${connection.lastSyncError}` : ''}
-                </Text>
-              </Box>
-              <Button
-                as={Link}
-                to={`/connections/feed?connection=${encodeURIComponent(connection.id)}`}
-                size="sm"
-                variant="outline"
-                borderRadius="999px"
-              >
-                Feed
-              </Button>
-              <Button size="sm" variant="ghost" borderRadius="999px" onClick={() => unlink(connection)}>
-                Unlink
-              </Button>
-            </Flex>
-          ))}
+          <SettingsDocumentHost documentKey="connections-linked-accounts" title="Linked connection cards" editLayoutLabel="Edit linked accounts"
+            defaultDocument={linkedConnectionBlocks} scopeKey={scopeKey} allowMediaUploads>
+            {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing}
+              scope={{ linked: { rows: linkedRows }, ...(editing && { item: linkedRows[0] }) }} actions={{ unlink: ({ inputs }) => {
+                const connection = legacyConnections.find(candidate => candidate.id === inputs.connectionId);
+                if (connection && isCurrent()) return unlink(connection);
+              } }}>
+              <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
+            </TransientBlockHost>}
+          </SettingsDocumentHost>
         </Box>
       ) : null}
 
@@ -550,7 +537,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
       <Box display="flex" flexDirection="column" rowGap={3}>
         <Text fontWeight="600">Connect a 3rd party app</Text>
         {ownerId && !signedOut && !native ? (
-          <SettingsDocumentHost documentKey="connections-oauth-pending" title="Connection sign-in layout" defaultDocument={oauthPendingBlocks} scopeKey={scopeKey}>
+          <SettingsDocumentHost documentKey="connections-oauth-pending" title="Connection sign-in layout" editLayoutLabel="Edit sign-in status" defaultDocument={oauthPendingBlocks} scopeKey={scopeKey}>
             {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} scope={{ oauth: { pending: !!oauthProvider || editing, provider: oauthProvider || 'your provider' } }}
               actions={{ stop: () => {
                 cancelOAuth();
