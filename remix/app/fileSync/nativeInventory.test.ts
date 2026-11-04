@@ -611,3 +611,48 @@ test('cancellation during journal cursor lookup cannot request or expose native 
  }, { name: 'AbortError' });
  assert.deepEqual(calls, ['scan-capture']);
 });
+
+test('strict native inventory can span the old deadline without releasing a provisional row', async () => {
+	const initial = { rootId, inventoryDeviceId: 'device', captureId: capture.id, capturePolicy: 'strict-async' as const };
+	const req = { action: 'scan-capture' as const, ...initial };
+	assert.throws(() => assertNativeScanExclusions(req, { platform: 'macos', fileAccessVersion: '1.17.0' }), /Update Thingtime Mac/);
+	assert.doesNotThrow(() => assertNativeScanExclusions(req, { platform: 'macos', fileAccessVersion: '1.18.0' }));
+
+	for (const outcome of ['complete', 'interrupted', 'replacement', 'partial'] as const) {
+		let clock = 0;
+		const actions: string[] = [], imported: string[] = [];
+		const iterator = readNativeInventory({
+			ownerId: 'owner', deviceId: 'device', rootId, signal: new AbortController().signal, strictAsync: true, captureId: capture.id,
+			waitForPoll: async () => { clock += 150_000; },
+			request: async (_, request) => {
+				actions.push(request.action);
+				if (request.action === 'scan-page') {
+					assert.equal(clock, 300_000);
+					return { roots: [], inventoryPage: page };
+				}
+				if (request.action === 'scan-discard') return { roots: [] };
+				assert.ok(request.action === 'scan-capture' || request.action === 'scan-status');
+				assert.equal(request.capturePolicy, 'strict-async');
+				const state = clock < 300_000 ? 'running' : outcome === 'interrupted' ? 'interrupted' : 'complete';
+				const observedGeneration = clock >= 300_000 && outcome === 'replacement' ? crypto.randomUUID() : generation;
+				const result = parseMobileFolderResult({ type: 'mobile-files-result', payload: {
+					...expected, rootId, capturePolicy: 'strict-async', captureId: capture.id, roots: [],
+					strictCaptureState: state, captureGeneration: observedGeneration, indexedEntries: 1, complete: state === 'complete',
+					...(state === 'complete' ? { capture: { ...capture, generation: observedGeneration,
+						...(outcome === 'partial' ? { coverage: 'partial', consistency: 'per-entry', totalSkipped: 1 } : {}) } } : {})
+				} }, expected, request);
+				return result!;
+			}
+		});
+		const consume = async () => { for await (const row of iterator) imported.push(...row.entries.map(item => item.path)); };
+		if (outcome === 'complete') {
+			await consume();
+			assert.deepEqual(imported, [entry.path]);
+			assert.deepEqual(actions, ['scan-capture', 'scan-status', 'scan-status', 'scan-page', 'scan-discard']);
+		} else {
+			await assert.rejects(consume(), /coverage|identity|whole folder/i);
+			assert.deepEqual(imported, []);
+			assert.deepEqual(actions, ['scan-capture', 'scan-status', 'scan-status']);
+		}
+	}
+});

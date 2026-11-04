@@ -465,6 +465,93 @@ final class MacFolderSyncTests: XCTestCase {
         await rejects { try await service.handle(self.request("scan-page", pageFields.merging(["capture": .object(stripped)]) { _, v in v })) }
     }
 
+    func testStrictCaptureOutlivesRequestDeadlineAndPublishesOnlyAfterSeal() async throws {
+        for outcome in ["complete", "changed", "cancelled", "owner", "grant"] {
+            let selected = folder.appendingPathComponent("selected")
+            let file = selected.appendingPathComponent("kept")
+            try Data("kept".utf8).write(to: file)
+            var saved: [String: Data] = [:], current = Date()
+            let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+            let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+            let grant = try store.add(owner, selected: selected)
+            let preparing = expectation(description: "strict inventory prepared before remote authorization")
+            var allowSeal = false, ownerValid = true
+            let inventories = MobileFolderInventory(directory: folder.appendingPathComponent(UUID().uuidString))
+            let service = try MacFolderSync(origin: origin, store: store,
+                staging: MobileSyncStaging(directory: folder.appendingPathComponent(UUID().uuidString)),
+                verify: { _, _ in if !ownerValid { throw MobileFolderStore.Failure.unavailable } },
+                choose: { nil }, approve: { _ in false }, inventories: inventories)
+            service.strictSealReady = {
+                preparing.fulfill()
+                while !allowSeal { try await Task.sleep(for: .milliseconds(5)) }
+            }
+            service.backupNow = { current }
+            service.backupMonitorInterval = .seconds(60)
+            var fields = backupFields(grant.id)
+            fields["capturePolicy"] = .string("strict-async")
+            let begin = try await service.handle(request("scan-capture", fields)).decode([String: JSONValue].self)
+            XCTAssertEqual(begin["strictCaptureState"], .string("running"))
+            XCTAssertNil(begin["capture"])
+            XCTAssertNil(begin["backupCapture"])
+            await fulfillment(of: [preparing], timeout: 3)
+            current = current.addingTimeInterval(271)
+            let pending = try await service.handle(request("scan-status", fields)).decode([String: JSONValue].self)
+            XCTAssertEqual(pending["strictCaptureState"], .string("running"))
+            XCTAssertEqual(pending["captureGeneration"], begin["captureGeneration"])
+            XCTAssertNil(pending["capture"])
+            let descriptor: JSONValue = .object(["id": try XCTUnwrap(fields["captureId"]),
+                "generation": try XCTUnwrap(begin["captureGeneration"]), "totalEntries": .number(1)])
+            let pageFields: [String: JSONValue] = ["rootId": .string(grant.id), "inventoryDeviceId": .string("device"),
+                "capture": descriptor, "offset": .number(0)]
+            await rejects { try await service.handle(self.request("scan-page", pageFields)) }
+
+            if outcome == "cancelled" {
+                let cancelled = try await service.handle(request("scan-cancel", fields)).decode([String: JSONValue].self)
+                XCTAssertEqual(cancelled["cancelled"], .bool(true))
+            } else {
+                if outcome == "changed" { try Data("changed".utf8).write(to: file) }
+                if outcome == "owner" { ownerValid = false }
+                if outcome == "grant" { try store.remove(owner, id: grant.id) }
+                allowSeal = true
+            }
+            if outcome == "owner" || outcome == "grant" {
+                await rejects { try await service.handle(self.request("scan-status", fields)) }
+                await rejects { try await service.handle(self.request("scan-page", pageFields)) }
+                let scope = MobileFolderInventory.Scope(owner: owner, deviceId: "device", rootId: grant.id)
+                let capture = try descriptor.decode(MobileFolderInventory.Capture.self)
+                do {
+                    _ = try inventories.read(scope, capture: capture, bookmark: grant.bookmark, offset: 0)
+                    XCTFail("Revoked strict capture was readable")
+                } catch { }
+                service.suspend()
+                continue
+            }
+            var result = pending
+            for _ in 0..<100 {
+                result = try await service.handle(request("scan-status", fields)).decode([String: JSONValue].self)
+                if result["strictCaptureState"] != .string("running") { break }
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            XCTAssertEqual(result["captureGeneration"], begin["captureGeneration"])
+            if outcome == "complete" {
+                XCTAssertEqual(result["strictCaptureState"], .string("complete"))
+                XCTAssertEqual(result["capture"], descriptor)
+                let page = try await service.handle(request("scan-page", pageFields)).decode([String: JSONValue].self)
+                XCTAssertEqual(try XCTUnwrap(page["inventoryPage"]).decode(MobileFolderInventory.Page.self).entries.map(\.path), ["kept"])
+                let cancelled = try await service.handle(request("scan-cancel", fields)).decode([String: JSONValue].self)
+                XCTAssertEqual(cancelled["cancelled"], .bool(true))
+                await rejects { try await service.handle(self.request("scan-page", pageFields)) }
+            } else {
+                XCTAssertEqual(result["strictCaptureState"], .string("interrupted"))
+                XCTAssertNil(result["capture"])
+                if outcome == "changed" {
+                    XCTAssertEqual(result["scanFailure"], .object(["path": .string("kept"), "reason": .string("changed")]))
+                }
+                await rejects { try await service.handle(self.request("scan-page", pageFields)) }
+            }
+        }
+    }
+
     func testBackupExplicitCancellationIsDistinctFromTransportRequestCancellation() async throws {
         let selected = folder.appendingPathComponent("selected")
         // Enough metadata work to leave a live job, without allocating file data.
@@ -753,7 +840,7 @@ final class MacFolderSyncTests: XCTestCase {
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
         XCTAssertNotNil(context["conditions"])
         XCTAssertNotNil(context["roots"])
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.17.0", "fileSymbolicLinksVersion": "1.0.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0", "fileUploadBatchVersion": "1.0.0", "fileFolderBatchVersion": "1.0.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.18.0", "fileSymbolicLinksVersion": "1.0.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0", "fileUploadBatchVersion": "1.0.0", "fileFolderBatchVersion": "1.0.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }
