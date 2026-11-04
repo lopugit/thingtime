@@ -16,7 +16,8 @@ Status: shared engine implemented and exercised in signed macOS builds. Final in
 - [x] Run shared Rust, Commander, Swift, iOS simulator, web Sync and release contract regressions.
 - [x] Install signed Commander and Thingtime on macOS and verify their running binaries.
 - [x] Verify synthetic upload/download byte equality, native consent, window-close continuation, pause and restart, and retained Timeline versions.
-- [ ] Verify Timeline restore, ordinary Files upload and live Sync measurements on the final integrated signed build.
+- [x] Verify installed Timeline restore, ordinary Files upload and live Sync measurements against independent file hashes and process counters.
+- [ ] Verify the final signed bundle and the corrected idle dashboard status.
 - [ ] Merge through protected PR checks and verify production deployment.
 
 ## TODO at a later date

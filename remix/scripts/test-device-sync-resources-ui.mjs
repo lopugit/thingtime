@@ -10,9 +10,39 @@ const scratch = await mkdtemp(join(tmpdir(), 'thingtime-sync-resources-'));
 const evidence = resolve(process.argv[2] || join(tmpdir(), 'thingtime-sync-resources-evidence'));
 let context, server;
 try {
+ const localFixture = {
+  name: 'local-resource-fixture',
+  setup(build) {
+   build.onResolve({ filter: /^~\/fileSync\/(nativeSyncHost|nativeSyncTasks)\.client$/ }, ({ path, importer }) =>
+    importer.endsWith('/DeviceSyncResources.tsx') ? { path, namespace: 'local-resource-fixture' } : undefined);
+   build.onLoad({ filter: /.*/, namespace: 'local-resource-fixture' }, ({ path }) => ({
+    contents: path.includes('nativeSyncHost') ? `
+     const local = new URLSearchParams(location.search).get('mode') === 'local';
+     const host = {
+      origin: () => location.origin,
+      capabilities: { fileAccessVersion: '1.16.0', fileResourceLimitsVersion: '1.1.0' },
+      request: async () => ({ deviceResourceLimits: { transferBytesPerSecond: 5000000, scanBytesPerSecond: 5000000, cpuPercent: 15 } })
+     };
+     export const getNativeSyncAdapter = () => local ? { platform: 'macos' } : undefined;
+     export const createNativeSyncHost = async () => host;
+    ` : `
+     let run = null;
+     const listeners = new Set();
+     window.startLocalResourceFixture = () => {
+      run = { scope: { ownerId: 'resource-fixture-owner', deviceId: 'resource-fixture-device', origin: location.origin }, active: true, progress: {} };
+      for (const listener of listeners) listener();
+     };
+     export const nativeSyncTasks = {
+      read: () => run,
+      subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); }
+     };
+    `
+   }));
+  }
+ };
  const source = `import React,{useState} from 'react';import{createRoot}from'react-dom/client';import{ChakraProvider}from'@chakra-ui/react';import{DeviceSyncResources}from'../app/components/Devices/DeviceSyncResources';
- function Fixture(){const[revision,setRevision]=useState(0),[known,setKnown]=useState(true),[policy,setPolicy]=useState({transferBytesPerSecond:625000,scanBytesPerSecond:625000,cpuPercent:15});Object.assign(window,{resourceFixture:{refresh:()=>setRevision(x=>x+1),unknown:()=>setKnown(false),policy:()=>policy}});const remote={origin:'https://resource-fixture.invalid',policy:{...policy},active:known,status:'Synthetic selected device · observed '+revision,resources:known?{version:1,cpuPercent:3,cpuStatus:'measured',cpuScopes:['source-thread','indexer-process','transport-process'],effectiveTransferConcurrency:1,effectiveIndexingConcurrency:1,currentUploadBytesPerSecond:125000,currentDownloadBytesPerSecond:62500,scanBytesPerSecond:100000,memoryBytes:67108864,measuredAt:Date.now()}:undefined,save:async next=>{setPolicy(next);return next;}};return <ChakraProvider><main style={{maxWidth:1000,margin:'auto',padding:16}}><DeviceSyncResources ownerId='resource-fixture-owner' deviceId='resource-fixture-device' allowed={true} remote={remote}/><div style={{height:600}}>End of resource fixture</div></main></ChakraProvider>;}createRoot(document.getElementById('root')).render(<Fixture/>);`;
- await require('esbuild').build({ stdin:{contents:source,loader:'tsx',resolveDir:join(root,'scripts')},bundle:true,format:'esm',platform:'browser',target:'esnext',outfile:join(scratch,'fixture.js'),tsconfig:join(root,'tsconfig.json'),define:{'process.env.NODE_ENV':'"development"'},logLevel:'error',loader:{'.wasm':'file'} });
+ function Fixture(){const[revision,setRevision]=useState(0),[known,setKnown]=useState(true),[policy,setPolicy]=useState({transferBytesPerSecond:625000,scanBytesPerSecond:625000,cpuPercent:15});Object.assign(window,{resourceFixture:{refresh:()=>setRevision(x=>x+1),unknown:()=>setKnown(false),policy:()=>policy}});const remote={origin:'https://resource-fixture.invalid',policy:{...policy},active:known,status:'Synthetic selected device · observed '+revision,resources:known?{version:1,cpuPercent:3,cpuStatus:'measured',cpuScopes:['source-thread','indexer-process','transport-process'],effectiveTransferConcurrency:1,effectiveIndexingConcurrency:1,currentUploadBytesPerSecond:125000,currentDownloadBytesPerSecond:62500,scanBytesPerSecond:100000,memoryBytes:67108864,measuredAt:Date.now()}:undefined,save:async next=>{setPolicy(next);return next;}};return <ChakraProvider><main style={{maxWidth:1000,margin:'auto',padding:16}}><DeviceSyncResources ownerId='resource-fixture-owner' deviceId='resource-fixture-device' allowed={true} remote={location.search ? undefined : remote}/><div style={{height:600}}>End of resource fixture</div></main></ChakraProvider>;}createRoot(document.getElementById('root')).render(<Fixture/>);`;
+ await require('esbuild').build({ stdin:{contents:source,loader:'tsx',resolveDir:join(root,'scripts')},bundle:true,plugins:[localFixture],format:'esm',platform:'browser',target:'esnext',outfile:join(scratch,'fixture.js'),tsconfig:join(root,'tsconfig.json'),define:{'process.env.NODE_ENV':'"development"'},logLevel:'error',loader:{'.wasm':'file'} });
  const bundle = await readFile(join(scratch,'fixture.js'));
  server=createServer((request,response)=>{response.writeHead(200,{'Content-Type':request.url==='/fixture.js'?'application/javascript':'text/html','Cache-Control':'no-store'});response.end(request.url==='/fixture.js'?bundle:'<!doctype html><meta charset="utf-8"><title>[QA] Sync resource dashboard</title><meta name="viewport" content="width=device-width,initial-scale=1"><div id="root"></div><script type="module" src="/fixture.js"></script>');});
  server.listen(28269,'127.0.0.1');await once(server,'listening');
@@ -40,5 +70,13 @@ try {
   assert.equal(await page.locator('[role="meter"][aria-hidden="true"]').count(),4,'unknown bars are decorative, never announced as measured zero');
   await page.screenshot({path:join(evidence,label+'-unavailable.png'),fullPage:true});
  }
- assert.deepEqual(errors,[]);await writeFile(join(evidence,'result.json'),JSON.stringify({passed:true,views:['desktop','mobile'],checks:['actual Builder bar primitives','background edit preservation','selected-device save','full scroll and overflow','unknown static bars']},null,2));console.log('Sync resource dashboard desktop/mobile checks passed. Evidence: '+evidence);
+ await page.goto('http://127.0.0.1:28269/?mode=remote-missing');
+ await page.getByText('Connecting to the selected device…',{exact:true}).waitFor();
+ await page.goto('http://127.0.0.1:28269/?mode=local');
+ await page.getByText('Unavailable / 40 Mbps shared',{exact:true}).waitFor();
+ await page.getByText('No current resource observation for this device. Paused or completed run measurements are not shown as live.',{exact:true}).waitFor();
+ assert.equal(await page.getByText('Remote device resources are unavailable.',{exact:true}).count(),0);
+ await page.evaluate(()=>window.startLocalResourceFixture());
+ await page.getByText('Current app-owned Sync workload across this device’s connections.',{exact:true}).waitFor();
+ assert.deepEqual(errors,[]);await writeFile(join(evidence,'result.json'),JSON.stringify({passed:true,views:['desktop','mobile'],checks:['actual Builder bar primitives','background edit preservation','selected-device save','full scroll and overflow','unknown static bars','verified local idle vs missing remote vs active local subtitle']},null,2));console.log('Sync resource dashboard desktop/mobile checks passed. Evidence: '+evidence);
 }catch(error){if(context?.pages()[0]){await context.pages()[0].screenshot({path:join(evidence,'failure.png'),fullPage:true}).catch(()=>{});console.error((await context.pages()[0].locator('body').innerText()).slice(0,2500));}throw error;}finally{await context?.close();if(server){server.close();await once(server,'close');}await rm(scratch,{recursive:true,force:true});}

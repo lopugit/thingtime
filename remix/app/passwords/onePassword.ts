@@ -1,4 +1,4 @@
-import { validatePasswordEntry, type PasswordEntry, type PasswordField, type FieldType } from './model';
+import { isHiddenPasswordFormField, validatePasswordEntry, type PasswordEntry, type PasswordField, type FieldType } from './model';
 // Numeric categories are part of the 1PUX contract; unfamiliar categories remain intact.
 export const ONE_PASSWORD_CATEGORIES: Record<string, string> = { '001': 'login', '002': 'credit-card', '003': 'secure-note', '004': 'identity', '005': 'password', '006': 'document', '100': 'software-license', '101': 'bank-account', '102': 'database', '103': 'driver-license', '104': 'outdoor-license', '105': 'membership', '106': 'passport', '107': 'rewards', '108': 'social-security-number', '109': 'wireless-router', '110': 'server', '111': 'email-account', '112': 'api-credential', '113': 'medical-record', '114': 'ssh-key' };
 const own = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
@@ -13,7 +13,13 @@ export function importOnePasswordItem(item: any): PasswordEntry {
   for (const [index, field] of (details.loginFields ?? []).entries()) {
     if (!field || typeof field !== 'object') continue;
     const designation = ['username', 'password'].includes(field.designation) && !fields.some(f => f.id === field.designation) ? field.designation : `import-${++sequence}`;
-    add(designation, field.name || field.designation || 'Form field', (field.fieldType || field.type) === 'P' || field.designation === 'password' ? 'password' : 'text', field.value, { sourcePath: ['details', 'loginFields', index, 'value'] });
+    const hidden = isHiddenPasswordFormField(field);
+    const secret = (field.fieldType || field.type) === 'P' || field.designation === 'password';
+    add(designation, field.name || field.designation || 'Form field', secret ? 'password' : 'text', field.value, {
+      ...(hidden ? { concealed: true } : {}),
+      ...(typeof field.value === 'string' ? {} : { structured: true }),
+      sourcePath: ['details', 'loginFields', index, 'value']
+    });
   }
   if (details.password !== undefined && !fields.some(f => f.id === 'password')) add('password', 'Password', 'password', details.password, { sourcePath: ['details', 'password'] });
   if (overview.url !== undefined) add('website', 'Website', 'url', overview.url, { sourcePath: ['overview', 'url'] });

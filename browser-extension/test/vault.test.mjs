@@ -9,11 +9,11 @@ function fixture(){
  let target={tabId:1,documentId:'source',origin:'https://login.example.test',windowId:10};const config={origin:'https://thingtime.com',autofillEnabled:true};
  const currentDocument=async(id,doc,origin,provider=false)=>{const f=frames.get(id);return f?.documentId===doc&&new URL(f.url).origin===origin&&(!provider||new URL(f.url).pathname==='/passwords/provider');};
  let epoch=0;const workspace={target:async()=>target,generation:()=>epoch};const setTarget=value=>{target=value;epoch++;};
- let admitted=true;const vault=createVaultController(api,{accountAdmission:async()=>admitted,settings:async()=>config,workspace,currentDocument});
+ let admitted=true,identity=null;const vault=createVaultController(api,{accountAdmission:async()=>admitted,accountIdentity:()=>identity,settings:async()=>config,workspace,currentDocument});
  const sender={tab:{id:1,windowId:10,url:frames.get(1).url},url:frames.get(1).url,origin:target.origin,frameId:0,documentId:'source'};
  const provider=()=>({tab:{id:20,url:frames.get(20).url,windowId:99},url:frames.get(20).url,origin:config.origin,frameId:0,documentId:'provider'});
  const request=()=>sent.filter(x=>x.message.action==='vault-provider-request').at(-1).message.request;
- return{setAdmitted:value=>admitted=value,api,vault,workspace,setTarget,frames,sent,removed,focus,windows,config,sender,provider,request};
+ return{setAdmitted:value=>admitted=value,setOwner:ownerId=>identity={ownerId,origin:config.origin},api,vault,workspace,setTarget,frames,sent,removed,focus,windows,config,sender,provider,request};
 }
 async function connect(e){const p=e.vault.handle({action:'vault-catalog'},e.sender,false);await tick();await e.vault.handle({action:'vault-provider-ready'},e.provider(),false);const r=e.request();await e.vault.handle({action:'vault-provider-response',version:1,id:r.id,ownerId:'owner',catalog:[{id:'entry',title:'Synthetic login',username:'fixture@example.test',domains:['login.example.test'],hasPassword:true,fillEligible:true,password:'must-not-cache',privateKey:'must-not-cache'}]},e.provider(),false);return p;}
 test('owned popup, allowlisted live catalog and selected fill bind exact original document',async()=>{
@@ -44,6 +44,72 @@ test('displayed A catalog selection cannot silently fill B, or outlive retarget 
 });
 test('a workspace cache repaint cannot close a newly opening provider before its ready handshake',async()=>{
  const e=fixture();const pending=e.vault.handle({action:'vault-catalog'},e.sender,false);await tick();const cached=await e.vault.handle({action:'vault-cached'},e.sender,false);assert.deepEqual(cached.catalog,[]);assert.equal(e.removed.length,0);await e.vault.handle({action:'vault-provider-ready'},e.provider(),false);const r=e.request();await e.vault.handle({action:'vault-provider-response',version:1,id:r.id,ownerId:'owner',catalog:[]},e.provider(),false);assert.equal((await pending).ok,true);
+});
+test('catalog refresh reuses only the live provider without stealing focus or returning locked metadata',async()=>{
+ const e=fixture();
+ const action={action:'vault-catalog',backgroundRefresh:true};
+ assert.equal((await e.vault.handle(action,e.sender,false)).ok,false);
+ assert.equal(e.windows.length,0);
+ await connect(e);const focus=e.focus.slice();
+ const refresh=e.vault.handle(action,e.sender,false);await tick();
+ const r=e.request();assert.equal(r.type,'catalog');
+ await e.vault.handle({action:'vault-provider-response',version:1,id:r.id,ownerId:'owner',catalog:[{id:'added',fillEligible:true,hasPassword:true,origins:['https://login.example.test','https://evil.test/path']}]},e.provider(),false);
+ assert.deepEqual((await refresh).catalog[0].origins,['https://login.example.test']);
+ assert.equal(e.windows.length,1);
+ assert.deepEqual(e.focus,focus);
+ e.setAdmitted(false);
+ assert.deepEqual((await e.vault.handle({action:'vault-cached'},e.sender,false)).catalog,[]);
+});
+test('selected cached fill preempts a pending background catalog and binds the cached owner',async()=>{
+ const e=fixture();
+ await connect(e);
+ const refresh=e.vault.handle({action:'vault-catalog',backgroundRefresh:true},e.sender,false);
+ await tick();
+ const catalog=e.request();
+ const fill=e.vault.handle({action:'vault-fill',entryId:'entry',expectedOwnerId:'owner'},e.sender,false);
+ await tick();
+ assert.deepEqual(await refresh,{ok:false,superseded:true});
+ const selection=e.request();
+ assert.equal(selection.type,'fill');
+ assert.equal(selection.expectedOwnerId,'owner');
+ const index=e.sent.findIndex(({message})=>message.action==='vault-provider-cancel'&&message.id===catalog.id);
+ assert.ok(index>=0&&e.sent[index+1].message.request.id===selection.id);
+ assert.equal((await e.vault.handle({action:'vault-provider-response',version:1,id:catalog.id,ownerId:'owner',catalog:[]},e.provider(),false)).ok,false);
+ await e.vault.handle({action:'vault-provider-response',version:1,id:selection.id,ownerId:'owner',values:{username:'fixture',password:crypto.randomUUID()}},e.provider(),false);
+ assert.equal((await fill).ok,true);
+ assert.equal((await e.vault.handle({action:'vault-fill',entryId:'entry',expectedOwnerId:'different-owner'},e.sender,false)).connectionEnded,true);
+});
+test('only a same-owner transient refresh failure retains the live cached catalog',async()=>{
+ const e=fixture();await connect(e);
+ async function fail(ownerId,name){
+  const refresh=e.vault.handle({action:'vault-catalog',backgroundRefresh:true},e.sender,false);
+  await tick();
+  await e.vault.handle({action:'vault-provider-response',version:1,id:e.request().id,ownerId,error:{name}},e.provider(),false);
+  return refresh;
+ }
+ assert.deepEqual(await fail('owner','NetworkError'),{ok:false,retryable:true,ownerId:'owner'});
+ const cached=await e.vault.handle({action:'vault-cached'},e.sender,false);
+ assert.equal(cached.catalog.length,1);
+ assert.equal((await fail('different-owner','NetworkError')).connectionEnded,true);
+ assert.deepEqual((await e.vault.handle({action:'vault-cached'},e.sender,false)).catalog,[]);
+ const invalidated=e.sent.find(({message})=>message.action==='vault-source-invalidate');
+ assert.equal(invalidated.message.sessionId,cached.sessionId);
+ assert.deepEqual(invalidated.options,{documentId:'source'});
+});
+test('workspace fill can open its live owner but cannot open a provider for a stale cached owner',async()=>{
+ const e=fixture();
+ const action={action:'vault-fill',entryId:'entry',expectedOwnerId:'owner',target:{tabId:1,windowId:10,documentId:'source',origin:e.sender.origin}};
+ e.setOwner('different-owner');
+ assert.equal((await e.vault.handle(action,{},true)).connectionEnded,true);
+ assert.equal(e.windows.length,0);
+ e.setOwner('owner');
+ const fill=e.vault.handle(action,{},true);
+ await tick();
+ await e.vault.handle({action:'vault-provider-ready'},e.provider(),false);
+ const request=e.request();
+ assert.equal(request.expectedOwnerId,'owner');
+ await e.vault.handle({action:'vault-provider-response',version:1,id:request.id,ownerId:'owner',values:{username:'fixture',password:crypto.randomUUID()}},e.provider(),false);
+ assert.equal((await fill).ok,true);
 });
 test('locked connection refuses content chip catalog and fill admissions until explicit unlock',async()=>{const e=fixture();e.setAdmitted(false);for(const message of [{action:'vault-catalog'},{action:'vault-fill',entryId:'entry'}]){const result=await e.vault.handle(message,e.sender,false);assert.equal(result.ok,false);assert.match(result.error,/Unlock/);}assert.equal(e.windows.length,0);e.setAdmitted(true);const result=await connect(e);assert.equal(result.ok,true);});
 
