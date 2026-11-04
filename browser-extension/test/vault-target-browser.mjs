@@ -12,7 +12,9 @@ const { chromium } = await import(pathToFileURL(modulePath));
 const sandbox = await mkdtemp(join(tmpdir(), 'thingtime-vault-target-'));
 const evidence = process.env.THINGTIME_VAULT_TARGET_EVIDENCE || join(tmpdir(), 'thingtime-vault-target-evidence');
 const extension = join(sandbox, 'extension');
-const origin = 'https://login-fixture.test';
+// Every AWS URL in this disposable browser is fulfilled by the local fixture.
+// The production sign-in page and account are never contacted.
+const origin = 'https://signin.aws.amazon.com';
 let context;
 try {
   await mkdir(extension);
@@ -29,11 +31,24 @@ try {
   await writeFile(join(extension, 'worker.js'), `
     chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if (message.action === 'state') { reply({ autofillEnabled: true }); return; }
-      if (message.action === 'vault-cached') {
-        reply({ ok: true, catalog: [{ id: 'fixture', title: 'Fixture account', domains: ['login-fixture.test'], hasPassword: true }] });
+      if (message.action === 'vault-cached' || message.action === 'vault-catalog') {
+        globalThis.requesterId=sender.tab.id;
+        const initial=[{ id: 'fixture', title: 'Fixture account', domains: ['signin.aws.amazon.com'], hasPassword: true }];
+        const cached={ok:true,connected:true,ownerId:'fixture',sessionId:'fixture-session',catalog:initial};
+        if(message.action==='vault-cached'&&globalThis.holdCache){
+          globalThis.releaseCache=()=>reply(cached);
+          return true;
+        }
+        if(message.action==='vault-catalog'&&globalThis.holdCatalog){
+          globalThis.releaseCatalog=kind=>reply(kind==='transient'?{ok:false,retryable:true,ownerId:'fixture'}:kind==='superseded'?{ok:false,superseded:true}:{ok:true,ownerId:'fixture',sessionId:'fixture-session',catalog:[...initial,...globalThis.moreAccounts]});
+          return true;
+        }
+        reply(cached);
         return;
       }
       if (message.action !== 'vault-fill') return;
+      if(message.expectedOwnerId!=='fixture'){reply({ok:false,connectionEnded:true});return;}
+      if(globalThis.releaseCatalog&&globalThis.holdCatalog){globalThis.releaseCatalog('superseded');delete globalThis.releaseCatalog;globalThis.holdCatalog=false;}
       const send = data => chrome.tabs.sendMessage(sender.tab.id, data, { documentId: sender.documentId });
       void (async () => {
         const capture = await send({ action: 'vault-prepare', targetId: message.targetId });
@@ -92,6 +107,73 @@ try {
   };
 
   await show('<form id="identify" action="/identify"><input id="field" autocomplete="section-login username"></form>');
+  await worker.evaluate(()=>{
+    globalThis.holdCatalog=true;
+    globalThis.moreAccounts=Array.from({length:64},(_,i)=>({id:'page-two-'+i,title:'Amazon account '+i,username:'synthetic-'+i+'@example.test',domains:['signin.aws.amazon.com'],origins:['https://signin.aws.amazon.com'],hasPassword:true}));
+    globalThis.moreAccounts.push(
+      {id:'late-root',title:'Amazon root',username:'root-fixture@example.test',domains:['aws.amazon.com'],origins:['https://aws.amazon.com','https://signin.aws.amazon.com'],hasPassword:true},
+      {id:'console',title:'Amazon console',domains:['console.aws.amazon.com'],origins:['https://console.aws.amazon.com','https://signin.aws.amazon.com'],hasPassword:true},
+      {id:'portal',title:'Amazon portal',domains:['portal.aws.amazon.com'],origins:['https://portal.aws.amazon.com','https://signin.aws.amazon.com'],hasPassword:true},
+      {id:'foreign-port',title:'Wrong port',domains:['signin.aws.amazon.com'],origins:['https://signin.aws.amazon.com:8443'],hasPassword:true},
+      {id:'foreign-suffix',title:'Wrong host suffix',domains:['signin.aws.amazon.com.evil.test'],origins:['https://signin.aws.amazon.com.evil.test'],hasPassword:true},
+      {id:'foreign-prefix',title:'Wrong host prefix',domains:['evilaws.amazon.com'],origins:['https://evilaws.amazon.com'],hasPassword:true},
+      {id:'foreign-sibling',title:'Wrong host sibling',domains:['billing.aws.amazon.com'],origins:['https://billing.aws.amazon.com'],hasPassword:true},
+      {id:'legacy-unapproved',title:'Wrong legacy hint',domains:['aws.amazon.com'],hasPassword:true}
+    );
+  });
+  await chips.last().click();
+  const search=chooser.getByRole('searchbox',{name:'Search saved accounts for this website'});
+  await search.fill('fixture');
+  assert.equal(await chooser.getByRole('button',{name:'Fixture account'}).count(),1);
+  assert.equal(await chooser.locator('.spinner:visible').count(),1);
+  const finishCatalog=kind=>worker.evaluate(kind=>new Promise((resolve,reject)=>{
+    let tries=0;
+    const t=setInterval(()=>{
+      if(globalThis.releaseCatalog){clearInterval(t);globalThis.releaseCatalog(kind);delete globalThis.releaseCatalog;resolve();}
+      else if(++tries>200){clearInterval(t);reject(new Error('No pending catalog'));}
+    },25);
+  }),kind);
+  await finishCatalog('transient');
+  const retry=chooser.getByRole('button',{name:'Retry',exact:true});
+  await retry.waitFor();
+  assert.equal(await chooser.getByRole('button',{name:'Fixture account'}).count(),1);
+  assert.equal(await search.inputValue(),'fixture');
+  await retry.click();
+  await finishCatalog('success');
+  await worker.evaluate(()=>globalThis.holdCatalog=false);
+  await chooser.getByRole('button',{name:/Amazon root/}).waitFor();
+  assert.equal(await search.inputValue(),'fixture');
+  await search.fill('');
+  assert.equal(await chooser.locator('button.account').count(),68);
+  assert.equal(await chooser.getByRole('button',{name:/Amazon console/}).count(),1);
+  assert.equal(await chooser.getByRole('button',{name:/Amazon portal/}).count(),1);
+  assert.equal(await chooser.getByRole('button',{name:/Wrong/}).count(),0);
+  for(const width of [960,375]){
+    await page.setViewportSize({width,height:740});
+    await chooser.evaluate(element=>element.scrollTop=element.scrollHeight);
+    assert.ok(await chooser.evaluate(element=>element.scrollWidth<=element.clientWidth+1));
+    await search.fill('root-fixture');
+    assert.equal(await chooser.getByRole('button',{name:/Amazon root/}).count(),1);
+    await page.screenshot({path:join(evidence,`complete-chooser-${width}.png`)});
+    await search.fill('');
+  }
+  await worker.evaluate(()=>chrome.tabs.sendMessage(globalThis.requesterId,{action:'vault-source-invalidate',sessionId:'obsolete-session'}));
+  assert.equal(await chooser.locator('button.account').count(),68);
+  await worker.evaluate(()=>chrome.tabs.sendMessage(globalThis.requesterId,{action:'vault-source-invalidate',sessionId:'fixture-session'}));
+  await retry.waitFor();
+  assert.equal(await chooser.locator('button.account').count(),0);
+  await chooser.getByRole('button',{name:'Close account chooser'}).click();
+  await worker.evaluate(()=>globalThis.holdCache=true);
+  await chips.last().click();
+  await worker.evaluate(async()=>{
+    for(let n=0;n<200&&!globalThis.releaseCache;n++)await new Promise(resolve=>setTimeout(resolve,25));
+    await chrome.tabs.sendMessage(globalThis.requesterId,{action:'vault-source-invalidate',sessionId:'fixture-session'});
+    globalThis.releaseCache();delete globalThis.releaseCache;globalThis.holdCache=false;
+  });
+  await retry.waitFor();
+  assert.equal(await chooser.locator('button.account').count(),0,'Invalidation before cached reply must not resurrect rows');
+  await chooser.getByRole('button',{name:'Close account chooser'}).click();
+  await worker.evaluate(()=>globalThis.holdCatalog=true);
   await choose();
   await release(true);
   assert.equal(await page.locator('#field').inputValue(), 'fixture@example.test');

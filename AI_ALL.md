@@ -653,6 +653,28 @@ points, not the individual files.
 
 - Every new user-facing feature or meaningful product addition must include a reasonably chosen settings surface for the behaviors users are likely to want to customize. Choose safe, useful defaults; avoid exposing implementation-only knobs; preserve existing preferences through migrations; and document what each control changes. If a feature genuinely has no meaningful user choice, no setting is required.
 
+### Seamless inline loading
+
+- Use one subtle inline loading icon, animation, or progress bar beside the
+  affected control or content region. Never stack or repeat visible loading
+  messages for the same operation, or replace a usable screen with loading
+  text, a blocking spinner, or a skeleton.
+- Keep existing content, search results, input, focus, and scroll position
+  usable during same-account background refreshes. On a true cold start,
+  reserve the content's layout and show only the single inline indicator;
+  do not flash empty-result messages before loading finishes. Clear protected
+  content immediately when its account, origin, authorization, or lock state
+  changes.
+- Give the indicator an accessible status label and appropriate busy semantics
+  without duplicate screen-reader announcements. Respect reduced motion, avoid
+  flicker and layout shifts, and replace a failed or stalled load with one
+  clear inline error and a working retry action.
+- Apply this across pages, extensions, popups, dialogs, cards, lists, and
+  controls. Verify cold start, cached refresh, searching while loading, empty,
+  error/retry, and identity changes before declaring the flow complete.
+
+### Rendered interaction verification
+
 - For rendered browser validation in Codex Desktop, prefer the in-app Browser first when it is available. If localhost is blocked there, or the user explicitly asks for Chrome, use the Codex Chrome tab control workflow (`chrome:control-chrome`) before falling back to standalone Playwright. Keep Chrome checks read-only unless the user requested an action, and do not inspect cookies, local storage, passwords, or profile data.
 - Before finishing a PR, run the manual checklists in `TESTING.md` for every
   area the PR touches, and add a line there whenever a new bug class is fixed
@@ -661,11 +683,11 @@ points, not the individual files.
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,
   overflow, and overlap behavior match the request.
-- Optimistic rendering at all times (UI house rule): never flash a loading
-  screen, spinner, or skeleton when prior or cached state exists. Render the
+- Optimistic rendering at all times (UI house rule): never replace prior or
+  cached content with a loading screen, blocking spinner, or skeleton. Render the
   last-known value instantly from cache/local state and refetch in the
   background, reconciling (and reverting on failure) when fresh data lands.
-  Only show a loading state on a true cold start with nothing to show. Use the
+  Use the single inline indicator above for refreshes and true cold starts. Use the
   synchronous `~/hooks/localCache` tier (localStorage, keys `tt-<domain>`) for
   anything that gates first paint; the async localforage `thingtime` blob
   cannot seed the first render. Examples: the account switcher paints its

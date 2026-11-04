@@ -13995,6 +13995,19 @@ separate from deterministic discovery/lease tests.
   scrolling, saved preference reload, explicit Never enrollment, then a new
   approval without another account password. This is isolated API/UI evidence,
   not Google, production or signed OS-provider acceptance.
+- Click an entry title at 375px and check the exact entry opens in view. Open
+  again by keyboard at desktop width and check Close restores the card's focus.
+  Verify a legacy import with a hidden form field and an explicit login email
+  shows the email in the preview and catalog. Confirm protected fill agrees,
+  alternate origins still fail, and notes and descriptions are never projected.
+  Use an entry saved for `https://aws.amazon.com` on
+  `https://signin.aws.amazon.com`: the catalog should suggest it and protected
+  fill should use the same approved origin. Confirm the same explicit pair for
+  the AWS console and portal, and reject alternate ports, unrelated AWS hosts,
+  Amazon retail and lookalike domains.
+- Stall a provider catalog request, cancel its exact ID, then select a saved
+  login. A wrong ID cannot cancel; the old result cannot complete the newer
+  selection. Loading a selected login stops scanning after its entry is found.
 - In Builder, edit the global checkbox/label/dropdown independently and the saved
   card's title/username/type/icon independently. Save/reload the layout; authored
   text/styles/deleted controls must survive migrations. Inspect per-entry Use
