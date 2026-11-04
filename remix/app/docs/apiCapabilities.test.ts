@@ -24,8 +24,8 @@ test('private agent reporting is registered in both manifests with an independen
   assert.equal(manifest.features['api.chatgpt-mcp'].version, '1.1.0');
   assert.equal(legacy.features['api.tokens'], '1.1.0');
   assert.equal(manifest.features['api.tokens'].version, '1.1.0');
-  assert.equal(legacy.features['api.chatgpt-oauth-authorize'], '1.1.0');
-  assert.equal(manifest.features['api.chatgpt-oauth-authorize'].version, '1.1.0');
+  assert.equal(legacy.features['api.chatgpt-oauth-authorize'], '1.2.0');
+  assert.equal(manifest.features['api.chatgpt-oauth-authorize'].version, '1.2.0');
   assert.ok(manifest.operations.some(operation => operation.path === '/api/v1/agents/reporting' && operation.feature === 'api.agent-reporting' && operation.methods.includes('POST')));
   for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), true);
   for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
