@@ -85,16 +85,19 @@ app.whenReady().then(async () => {
     const disk = await fs.readFile(broker.store.file); assert.equal(disk.includes(Buffer.from(marker)), false); assert.equal((await broker.store.read()).pending.fixture.marker, marker);
     delete state.pending.fixture; await broker.store.write(state);
     report.osEncryption = true; report.transport = process.platform === 'win32' ? 'named-pipe' : 'unix-socket'; report.cliSecretFree = true;
-    stage = 'browser'; browser = new PasswordBrowser({ directory: path.join(root, 'browser'), headless: true });
+    stage = 'browser-open'; browser = new PasswordBrowser({ directory: path.join(root, 'browser'), headless: true });
     await browser.open({ kind: 'website', origin }, `${origin}/form`);
+    stage = 'browser-fill';
     // A malicious page cannot forge our isolated-world origin/form checks.
     await browser.page.evaluate(() => { window.URL = class { constructor() { this.origin = location.origin; } }; });
     const bound = await browser.bind({ username: '#user', password: '#password' });
     await bound.deliver({ username: 'fixture-user', password }); await bound.close();
     assert.equal(await browser.page.$eval('#password', node => node.value), password);
     assert.equal(browser.driver.browser.process().spawnargs.includes('--no-sandbox'), false);
+    stage = 'browser-render';
     await browser.page.screenshot({ path: path.join(root, 'browser-desktop.png') });
     await browser.page.setViewport({ width: 390, height: 844 }); await browser.page.screenshot({ path: path.join(root, 'browser-mobile.png') });
+    stage = 'browser-document-fences';
     const stale = await browser.bind({ password: '#password' }); await browser.page.reload({ waitUntil: 'domcontentloaded' });
     await assert.rejects(stale.deliver({ username: '', password }), { code: 'TARGET_CHANGED' }); await stale.close();
     await browser.page.$eval('form', form => { form.action = 'https://different.example'; });

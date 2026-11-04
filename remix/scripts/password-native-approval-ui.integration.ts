@@ -41,10 +41,14 @@ export async function runNativeApprovalUI({context,page,origin,ownerId,password,
  assert.equal(proof.requestId,pending.id);assert.equal(proof.context.origin,pending.origin);
  assert.equal(proof.context.entryId,entryId);assert.equal(proof.context.requestHash,pending.requestHash);
  assert.equal(await page.locator('input[type=password]').inputValue(),'');
+ assert.notEqual((await request({operation:'fill',id:randomUUID(),passkeySession:proof})).status,200);
+ assert.notEqual((await request({operation:'fill',id:entryId,passkeySession:{...proof,context:{...proof.context,origin:'https://another-fixture.example'}}})).status,200);
  const fill=await request({operation:'fill',id:entryId,passkeySession:proof});
- assert.equal(fill.status,200);assert.equal(fill.body.password,secret);assert.equal(fill.body.username,'native-fixture@example.invalid');
- // Proof is single-use even when a caller repeats the same fill request.
+ assert.equal(fill.status,200);assert.ok(fill.body.password===secret,'Delivered value matches the isolated vault');assert.equal(fill.body.username,'native-fixture@example.invalid');
+ // The existing API permits retries within a ceremony; an explicit lock ends
+ // that authority. Native IPC resolves once and never accepts caller proofs.
+ assert.equal((await request({operation:'verification-lock'})).status,200);
  assert.notEqual((await request({operation:'fill',id:entryId,passkeySession:proof})).status,200);
  await page.evaluate(()=>{(window as any).fixtureApproval=null;});
- console.log('PASS: native approval React UI with real disposable vault/API; exact account/origin/entry proof; wrong-password refusal; one-use protected fill; desktop/narrow/error scrolling and no overflow. Electron IPC is a fixture adapter in this UI check.');
+ console.log('PASS: native approval React UI with real disposable vault/API; exact account/origin/entry proof; wrong-password and revoked-proof refusal; protected fill; desktop/narrow/error scrolling and no overflow. Electron IPC is a fixture adapter in this UI check.');
 }

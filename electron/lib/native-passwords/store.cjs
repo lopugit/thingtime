@@ -9,7 +9,7 @@ async function requireWindowsAcl(file) {
   const scripts = __dirname.split(path.sep).includes('app.asar') ? process.resourcesPath : path.resolve(__dirname, '../../scripts');
   const { requirePrivateWindowsPath } = require(path.join(scripts, 'password-agent-acl.cjs'));
   try { await requirePrivateWindowsPath(file); }
-  catch { fail('UNSAFE_STORAGE', 'The password bridge needs a private directory inside the current Windows user profile.'); }
+  catch (error) { fail('UNSAFE_STORAGE', error.message); }
 }
 async function privateDirectory(directory) {
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });

@@ -18,12 +18,16 @@ const apiHandler = './server/routes/api/[...].ts';
 const chatGptDiscoveryHandler = './server/routes/chatgpt-discovery.ts';
 const thingtimeCapabilitiesHandler = './server/handlers/thingtime-capabilities.ts';
 const apiRoutes = [...apiV1RouteKeys, ...apiV1DocsRouteKeys];
+const desktopMiddleware = /^node[_-]middleware$/.test(process.env.NITRO_PRESET ?? '');
 
 export default defineNitroConfig({
   serverDir: 'server',
   // Electron owns the HTTP socket; Nitro's middleware preset assumes another
   // host serves public assets unless explicitly enabled. Keep cloud defaults.
-  ...(/^node[_-]middleware$/.test(process.env.NITRO_PRESET ?? '') ? { serveStatic: true } : {}),
+  ...(desktopMiddleware ? { serveStatic: true } : {}),
+  // Keep the Windows N-API addon on disk instead of feeding its .node file to
+  // Rolldown's JavaScript loader. Nitro traces the wrapper and host binding.
+  ...(desktopMiddleware && process.platform === 'win32' ? { traceDeps: ['@resvg/resvg-js*'] } : {}),
   modules: ['workflow/nitro'],
   compatibilityDate: '2026-07-02',
   // Browser image engines can be reached through shared schema imports. Do not

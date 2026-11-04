@@ -37,9 +37,14 @@ dependencies separately from a connected account.
 
 ## CLI contract
 
-Use Node 22 or newer and the CLI shipped with the installed app. Supply the exact
-app user-data directory with `--profile` (normally `~/.config/Thingtime` on Linux,
-`%APPDATA%\Thingtime` on Windows). Keep grant files in a private directory inside
+Use Node 22 or newer and the CLI shipped with the installed app. Run that app's
+executable with `--password-agent-info` to print only its computed profile and CLI
+paths, before any settings/session/vault files are opened. For example:
+`/opt/thingtime/thingtime-electron --password-agent-info` (Linux), or
+`Thingtime.exe --password-agent-info` (Windows). The app exits without opening a
+window or forwarding to the running instance. Use the returned exact profile
+path with `--profile`; packaging can change the default app name.
+Keep grant files in a private directory inside
 your OS account; never print, attach or commit them. Input is a JSON object on
 stdin containing **non-secret parameters only**. Shell examples below use POSIX
 syntax; PowerShell can pipe the same JSON into `node`.
@@ -81,9 +86,12 @@ created. Do not create the external account until `saved: true` is confirmed.
 Every `fill` opens a separate sandboxed Thingtime approval window showing the
 target, selected saved account and vault account. It obeys the entry's existing
 verification policy, including a current-password prompt when required. Only
-the exact window/frame can return a single-use request/entry/origin-bound proof;
-the protected vault `fill` operation consumes it. The broad task consent does
-not replace per-entry verification.
+the exact window/frame can return the request/entry/origin-bound proof, and that
+window accepts one response before closing. The broker never accepts proofs
+from CLI parameters and starts a fresh approval for each delivery. The protected
+vault `fill` API retains its existing bounded same-request retry semantics; a
+vault lock revokes pending authority. Broad task consent does not replace
+per-entry verification.
 
 Only the top-level document and uniquely selected, visible username/password
 inputs are supported. The broker binds the actual document and elements in a

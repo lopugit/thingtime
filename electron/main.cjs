@@ -18,6 +18,12 @@ if (parallelDevMode) {
 	app.setName(developmentName);
 	app.setPath('userData', profilePath);
 }
+// Read-only installed CLI discovery runs before settings, sessions, vault state,
+// renderer startup or single-instance forwarding. It never opens profile files.
+if (process.argv.includes('--password-agent-info')) {
+	fs.writeSync(1, JSON.stringify({ profile: app.getPath('userData'), cli: app.isPackaged ? path.join(process.resourcesPath, 'password-agent.mjs') : path.join(__dirname, 'scripts/password-agent.mjs'), supported: ['linux', 'win32'].includes(process.platform) }) + '\n');
+	app.exit(0);
+}
 const { checkEndpointCompatibility, compatibilityError, probeEndpointCapabilities } = require('./lib/endpoint-compatibility.cjs');
 const { prepareAppLocations } = require('./lib/app-locations.cjs');
 const { startRendererServer } = require('./lib/renderer-server.cjs');
