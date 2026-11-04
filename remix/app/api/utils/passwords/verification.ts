@@ -7,8 +7,7 @@ import { findUserById, getUserPasswordVerification, setUserPasswordVerification 
 import { verifyJwt } from '../auth/jwt';
 import { getLiveSession } from '../auth/sessions';
 import { readPassword, savePassword, PasswordManagerError } from './passwords';
-import { isPasswordFillEntry, passwordFieldValue } from '~/passwords/model';
-import { passwordWebsiteOrigins } from '~/passwords/websites';
+import { isPasswordFillEntry, passwordCanAutofillAtOrigin, passwordFieldValue } from '~/passwords/model';
 import { verificationContext, verificationWindow, rememberedVerificationValid, type VerificationWindow, type EntryVerificationWindow, type VerificationContext, type RememberedVerification } from '~/passwords/verificationPolicy';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
@@ -81,7 +80,7 @@ export function createPasswordVerificationService(deps = { store: defaultStore, 
       if (context.purpose === 'get' && (saved.entry.passwordType !== 'passkey' || passwordFieldValue(saved.entry, 'relyingParty') !== context.rp))
         throw new PasswordManagerError(403, 'Choose a saved passkey for this website.');
       if (context.purpose === 'fill' && !isPasswordFillEntry(saved.entry)) throw new PasswordManagerError(403, 'Choose a saved login with a password.');
-      if (context.purpose === 'fill' && !passwordWebsiteOrigins(saved.entry.fields).includes(context.origin))
+      if (context.purpose === 'fill' && !passwordCanAutofillAtOrigin(saved.entry, context.origin))
         throw new PasswordManagerError(403, 'Choose a saved login for this exact website origin.');
       entryWindow = saved.entry.verificationWindow ?? 'global';
       changedAt = Math.max(changedAt, saved.verificationChangedAt ?? 0);

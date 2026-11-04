@@ -110,7 +110,7 @@ image loading and the separately sealed list projection. `test:passwords` covers
 these boundaries; `scripts/password-tools.browser.html` is an isolated synthetic
 UI fixture, not native-provider acceptance.
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.6.1 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.8.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -118,6 +118,8 @@ fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
 intentionally bypasses general request diagnostics and automatic origin fallback
 so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
+`passwords/model.ts` resolves explicit login identifiers for previews, the catalog
+and protected fill while excluding imported hidden values and descriptions.
 `passwords/browserPasskey.ts` validates RP/origin/options and implements ES256;
 `browserProviderCeremony.ts` owns policy-checked `verify-passkey`, catalog selection,
 retry identity and durable readback. Once a sign-in choice is selected, approval
@@ -141,7 +143,10 @@ status hints, not authority or ceremony evidence; no request or identity fields
 are retained. Browser tests cover missing/replaced hooks, redaction and navigation.
 
 `passwords/websites.ts` supplies shared bare-host-to-HTTPS normalization for
-catalog hints and exact-origin fill verification. The browser fill client
+catalog hints and exact-origin fill verification. The `api.passwords` 1.8.0
+AWS sign-in allowlist adds one exact login destination for the three known
+first-party AWS website origins; catalog and protected fill use the same rule.
+The browser fill client
 requires `api.passwords` 1.6.1; URL normalization is not an authorization grant.
 Extension 0.4.1 keeps the chooser inside active modal focus/accessibility scope
 and gives explicit website-reload recovery after extension replacement.

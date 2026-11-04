@@ -6,11 +6,26 @@ mock.module(new URL('./client.ts',import.meta.url).href,{namedExports:{passwordR
 let fill:any;
 before(async()=>{fill=await import('./browserPasswordFill');});
 test('browser fill requires corrected website contract and reads every catalog page without secret fields',async()=>{
- requirements=[];pages=[{catalog:[{id:'one',title:'Other',username:'other',fillEligible:true,domains:['other.test'],password:'never-forward'}],nextCursor:'two'}, {catalog:[{id:'two',title:'Selected',username:'selected',fillEligible:true,domains:['thingtime.com'],password:'never-forward'}]}];
+ const userinfoUrl=new URL('https://thingtime.com');
+ userinfoUrl.username='synthetic';
+ userinfoUrl.password=crypto.randomUUID();
+ const unprojectedPassword=crypto.randomUUID();
+ requirements=[];pages=[{catalog:[{id:'one',title:'Other',username:'other',fillEligible:true,domains:['other.test'],password:unprojectedPassword}],nextCursor:'two'}, {catalog:[{id:'two',title:'Selected',username:'selected',fillEligible:true,domains:['thingtime.com'],origins:['https://thingtime.com:8443','https://thingtime.com/path',userinfoUrl.href],password:unprojectedPassword}]}];
  const r=fill.validateVaultRequest({version:1,id:crypto.randomUUID(),type:'catalog',origin:'https://thingtime.com',target:{tabId:1,frameId:0,documentId:'fixture'}});
  const catalog=await fill.loadPasswordCatalog('owner',r,new AbortController().signal);
- assert.deepEqual(requirements,[['api.passwords','1.6.1']]);assert.deepEqual(catalog.map((row:any)=>row.id),['one','two']);assert.equal(JSON.stringify(catalog).includes('never-forward'),false);
+ assert.deepEqual(requirements,[['api.passwords','1.6.1']]);assert.deepEqual(catalog.map((row:any)=>row.id),['one','two']);assert.equal(JSON.stringify(catalog).includes(unprojectedPassword),false);
+ assert.equal('origins' in catalog[0],false,'An older catalog can still use hostname hints');
+ assert.deepEqual(catalog[1].origins,['https://thingtime.com:8443'],'Only canonical exact origins cross the extension boundary');
  const controller=new AbortController();controller.abort();await assert.rejects(fill.loadPasswordCatalog('owner',r,controller.signal));
+});
+
+test('selecting a login stops discovery as soon as that exact eligible entry is found',async()=>{
+ pages=[{catalog:[{id:'other',fillEligible:true}],nextCursor:'second'},
+  {catalog:[{id:'selected',title:'Selected',fillEligible:true}],nextCursor:'remaining'},
+  {catalog:[{id:'later',fillEligible:true}]}];
+ const selected=await fill.loadPasswordCatalog('owner',{type:'fill',entryId:'selected'},new AbortController().signal);
+ assert.deepEqual(selected.map((row:any)=>row.id),['selected']);
+ assert.equal(pages.length,1,'An exact selection never scans unrelated later pages');
 });
 
 const nativeRequest=()=>({version:1,id:crypto.randomUUID(),expectedOwnerId:'owner',apiOrigin:'https://vault.example',entryId:crypto.randomUUID(),requestHash:'H'.repeat(43)});

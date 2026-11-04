@@ -2,7 +2,7 @@ import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapa
 // Deliberately bypasses useApi's diagnostics/history and origin fallback. The
 // current first-party session is the only credential; payloads stay in memory.
 async function requestOnce(ownerId: string, body?: Record<string, unknown>, signal?: AbortSignal, cursor?: string, query?: string, previews = false, selectedOrigin?: string) {
-  await requireThingtimeCapability('api.passwords', selectedOrigin ? '1.7.0' : previews ? '1.5.0' : '1.3.0');
+  await requireThingtimeCapability('api.passwords', selectedOrigin ? '1.7.0' : previews ? '1.8.0' : '1.3.0');
   signal?.throwIfAborted();
   const params = new URLSearchParams();
   if (cursor) params.set('cursor', cursor);
