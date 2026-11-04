@@ -346,6 +346,18 @@ settings, Security, and explicit fill approval. `PasswordPreviewList.tsx` provid
 editable safe username cards. See [the contract](../password-verification-preferences.md),
 `test:passwords:verification`, `test:passwords:verification-ui` and TESTING.md.
 
+
+## Social OAuth connections
+
+`connections/oauthConfig.ts` resolves fixed encrypted platform-secret labels by
+exact origin and data environment. `oauth.ts` binds single-use state to the live
+session/client/callback; `connections.ts` transactionally stores owner-scoped
+accounts and `tokenVault.ts` encrypts their grants through the existing account
+vault. Shared legacy credentials require reconnect, preserving the caller's link
+ID. Public-source sharing remains intact. Google identity/service cards and
+Facebook identity/posts cards select separate grants. Run `test:connections` and
+`test:api-capabilities`; see README social OAuth setup and TESTING acceptance.
+
 Browser extension accounts: `BrowserExtensionAccountBridge.tsx` projects the
 canonical `api.auth-accounts` roster into the selected first-party document;
 `BrowserExtensionAccounts.tsx` reuses Login and AccountSwitcher in an owned popup.

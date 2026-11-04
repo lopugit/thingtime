@@ -44,7 +44,9 @@ const pkceSecret = () =>
   process.env.CONNECTIONS_PKCE_SECRET?.trim() ||
   process.env.JWT_SECRET?.trim() ||
   process.env.JWT_PRIVATE_KEY?.trim() ||
-  'dev-insecure-secret-change-me';
+  process.env.THINGTIME_USER_VAULT_KEY?.trim() ||
+  process.env.THINGTIME_ADMIN_VAULT_KEY?.trim() ||
+  (() => { throw new Error('OAuth PKCE requires a configured server secret.'); })();
 
 // The PKCE verifier for an outbound OAuth round trip, DERIVED from a server
 // secret and the state's public nonce rather than carried inside the state.

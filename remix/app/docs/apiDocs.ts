@@ -14150,7 +14150,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-providers',
+    id: 'connections-providers', contractVersion: '2.0.0', featureVersion: '2.0.0',
     group: 'connections',
     title: 'Connection providers',
     endpoint: '/api/v1/connections/providers',
@@ -14199,15 +14199,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections',
+    id: 'connections', contractVersion: '2.0.0', featureVersion: '2.0.0',
     group: 'connections',
     title: 'Connections',
     endpoint: '/api/v1/connections',
     summary: 'Lists or creates links between this Thingtime account and third-party app accounts.',
     detail:
       'A connection links the current Thingtime account to one external identity (a subreddit set, a YouTube ' +
-      'channel, a Mastodon account, …). External accounts are shared many-to-many: the same third-party identity ' +
-      'can be linked from several Thingtime accounts, converging on one account record. Once linked, the feed is ' +
+      'channel, a Mastodon account, …). Public sources are shared many-to-many. Authenticated identities and encrypted credentials are owner-scoped; the same third-party identity ' +
+      'can be linked independently from several Thingtime accounts without sharing credentials. Legacy shared grants require reconnect; relinking preserves the caller’s existing connection ID. Once linked, the feed is ' +
       'browsable via /api/v1/connections/feed with Thingtime comments and reactions layered on top.',
     auth: {
       mode: 'session-or-bearer',
@@ -14257,7 +14257,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-unlink',
+    id: 'connections-unlink', contractVersion: '2.0.0', featureVersion: '2.0.0',
     group: 'connections',
     title: 'Unlink connection',
     endpoint: '/api/v1/connections/unlink',
@@ -14296,7 +14296,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-feed',
+    id: 'connections-feed', contractVersion: '2.0.0', featureVersion: '2.0.0',
     group: 'connections',
     title: 'Connections feed',
     endpoint: '/api/v1/connections/feed',
@@ -14361,7 +14361,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-oauth-begin',
+    id: 'connections-oauth-begin', contractVersion: '2.0.0', featureVersion: '2.0.0',
     group: 'connections',
     title: 'Begin SSO connect',
     endpoint: '/api/v1/connections/oauth/begin',
@@ -14371,7 +14371,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'own sign-in page collects credentials (Thingtime never sees a third-party password) and returns to the ' +
       'callback endpoint, which saves the token response into the linked external account’s sealed secure storage. ' +
       'The state parameter is a short-lived signed JWT bound to the beginning session. Providers report ' +
-      'configured:false in the catalog until their app credentials are set in the environment.',
+      'configured:false until their encrypted platform-vault app bundle matches the selected origin and environment. State is single-use and bound to the live session, client, callback and environment.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -14381,7 +14381,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST the provider id (an oauth2 provider from /api/v1/connections/providers).',
       'Navigate the browser to the returned authorizeUrl.',
       'The provider redirects to /api/v1/connections/oauth/callback, which finishes the link and lands on /connections.',
-      'Handle 400 for unconfigured providers (the error names the env credentials to set).'
+      'Handle 503 when the selected origin/environment has no valid provider or account vault configuration.'
     ],
     requestExamples: [
       {
@@ -14398,14 +14398,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: true, provider: 'facebook', authorizeUrl: 'https://www.facebook.com/v23.0/dialog/oauth?...' }
       },
       {
-        status: 400,
-        description: 'Provider not configured on this deployment.',
-        body: { ok: false, error: 'Facebook is not configured on this deployment yet (set FACEBOOK_APP_ID and FACEBOOK_APP_SECRET)' }
+        status: 503,
+        description: 'Provider not configured for the selected origin and environment.',
+        body: { ok: false, error: 'This service is not configured for this Thingtime origin and environment.' }
       }
     ]
   }),
   endpoint({
-    id: 'connections-oauth-callback',
+    id: 'connections-oauth-callback', contractVersion: '2.0.0', featureVersion: '2.0.0',
     group: 'connections',
     title: 'SSO connect callback',
     endpoint: '/api/v1/connections/oauth/callback',
@@ -14532,7 +14532,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-filters',
+    id: 'connections-filters', contractVersion: '2.0.0', featureVersion: '2.0.0',
     group: 'connections',
     title: 'Feed filters',
     endpoint: '/api/v1/connections/filters',
