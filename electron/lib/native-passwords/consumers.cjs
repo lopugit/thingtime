@@ -8,7 +8,9 @@ const { fail, PasswordBridgeError } = require('./contract.cjs');
 const { privateDirectory } = require('./store.cjs');
 
 async function browserExecutable(platform = process.platform) {
-  const candidates = platform === 'linux' ? ['/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', '/opt/google/chrome/chrome'] : platform === 'win32' ? [
+  // Ubuntu's installed Google Chrome has a vendor sandbox path. Prefer it to
+  // developer Chromium builds which may be unable to use restricted userns.
+  const candidates = platform === 'linux' ? ['/usr/bin/google-chrome', '/opt/google/chrome/chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'] : platform === 'win32' ? [
     path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Google/Chrome/Application/chrome.exe'),
     path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Microsoft/Edge/Application/msedge.exe'),
     path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Microsoft/Edge/Application/msedge.exe'),

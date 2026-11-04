@@ -24,9 +24,13 @@ try {
         $phase = 'decode-acl'
         $security = [Security.AccessControl.RawSecurityDescriptor]::new($acl.GetSecurityDescriptorBinaryForm(), 0)
         $phase = 'inspect-acl'
-        if ($trusted -notcontains $security.Owner.Value -or $null -eq $security.DiscretionaryAcl) { exit 13 }
-        foreach ($ace in $security.DiscretionaryAcl) {
-            if ($ace.AceFlags -band [Security.AccessControl.AceFlags]::InheritOnly) { continue }
+        $dacl = $security.DiscretionaryAcl
+        if ($trusted -notcontains $security.Owner.Value -or [object]::ReferenceEquals($null, $dacl)) { exit 13 }
+        # Explicit indexing avoids PowerShell adapting GenericAcl as an
+        # object array via its strongly typed ICollection.CopyTo method.
+        for ($index = 0; $index -lt $dacl.Count; $index++) {
+            $ace = $dacl.get_Item($index)
+            if ([int]$ace.AceFlags -band [int][Security.AccessControl.AceFlags]::InheritOnly) { continue }
             if ($ace.AceType -eq [Security.AccessControl.AceType]::AccessDenied) { continue }
             if ($ace.AceType -ne [Security.AccessControl.AceType]::AccessAllowed -or $trusted -notcontains $ace.SecurityIdentifier.Value) { exit 14 }
         }

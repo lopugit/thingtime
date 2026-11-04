@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
@@ -29,8 +28,9 @@ function call(descriptor, request) {
 }
 try {
   const method = process.argv[2];
-  if (!method || method.startsWith('-')) throw new Error('Usage: password-agent.mjs <manifest|status|authorize|catalog|generate|open-browser|fill|unlock-keyring|release> [--profile <absolute Thingtime userData>] [--grant-file <absolute private file>]. Non-secret parameters are a JSON object on stdin.');
-  const profile = argument('--profile') || (process.platform === 'win32' ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData/Roaming'), 'Thingtime') : path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'Thingtime'));
+  if (!method || method.startsWith('-')) throw new Error('Usage: password-agent.mjs <manifest|status|authorize|catalog|generate|open-browser|fill|unlock-keyring|release> --profile <absolute Thingtime userData> [--grant-file <absolute private file>]. Non-secret parameters are a JSON object on stdin.');
+  const profile = argument('--profile');
+  if (!path.isAbsolute(profile || '')) throw new Error('Use --profile with the exact path reported by the installed app --password-agent-info.');
   const descriptor = await readPrivate(path.join(profile, 'native-passwords/runtime.json'));
   if (descriptor.version !== 1 || typeof descriptor.socket !== 'string' || typeof descriptor.token !== 'string') throw new Error('Unsupported native bridge descriptor.');
   if (process.platform === 'win32' && !/^\\\\\.\\pipe\\thingtime-passwords-[a-f0-9]{32}$/.test(descriptor.socket)) throw new Error('The native bridge must use a local Thingtime named pipe.');
