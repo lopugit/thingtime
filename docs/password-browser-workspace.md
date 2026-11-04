@@ -14,8 +14,20 @@ commit recheck these fences. The browser-provider document must be the exact
 owned popup tab/document at the configured origin and route. Page-provided
 postMessage/custom events cannot initiate a credential request; isolated chips
 accept trusted user clicks, while extension workspace controls are bound to the
-extension document. Login form/action and field identities plus an unpredictable
-local nonce are rechecked before setting values. No submit action is invoked.
+extension document. Before verification and delivery, it rechecks the captured
+modal or document, form owner and action if present, exact field nodes, and an
+unpredictable local nonce. On form-less pages, a password or explicitly marked
+username field is captured on its own. New-password and one-time-code tokens,
+disabled controls, and fields whose owner or identity changes are excluded.
+Thingtime never invokes a submit action.
+
+For assisted sign-in, use the on-site Thingtime chooser on the exact intended
+origin and select the matching saved account. The chooser and approval surface
+identify the site and selected entry with metadata. The verified provider hands
+the value directly to the bound browser field. Keep passwords out of clipboard,
+chat, console output and screenshots. If the site changes steps, use the chooser
+on the newly displayed field. Continue through the site's own sign-in control
+with any required human verification.
 
 Metadata is strictly allowlisted (`id`, title, username, domains and fill
 eligibility), memory-only and tied to the live provider/owner. Server-selected

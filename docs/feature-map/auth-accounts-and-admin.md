@@ -122,7 +122,10 @@ so decrypted fields never enter shared client history/cache. The reusable
 `browserProviderCeremony.ts` owns policy-checked `verify-passkey`, catalog selection,
 retry identity and durable readback. `BrowserPasswordProvider.tsx` serves
 `/passwords/provider` with editable `browserProviderBlocks.ts`. Chromium transport
-and trusted tab/document checks live in `browser-extension/`; package with
+and trusted tab/document checks live in `browser-extension/`. The shared
+captured target in `content-vault.js` covers form-owned inputs and standalone
+sign-in steps, with field identity and action checks before preparation and
+delivery. Package with
 `build:password-extension`, test with `test:password-extension` and
 `test:passwords`. Browser acceptance must use the real local API/vault and an
 independent relying party; unit signatures and synthetic UI alone are insufficient.
