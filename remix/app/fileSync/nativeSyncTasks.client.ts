@@ -7,7 +7,7 @@ import { readCloudIndexChanges } from './cloudIndexChanges.client';
 import { readNativeIndexChanges } from './streamingIndex';
 import { SyncConditionsWait } from './foregroundSyncContext';
 import { SyncConnectionWait, isSyncConnectionFailure } from './syncConnectionWait';
-import { pauseSyncJobAdmission, type SyncJob } from './syncJobJournal';
+import { pauseSyncJobAdmission, retireStrictCapture, type SyncJob } from './syncJobJournal';
 import { holdDesktopSyncWindow, setDesktopSyncScheduled } from './desktopSyncWindow.client';
 import { createNativeSyncHost, getNativeSyncAdapter, isNativeSyncAdapterCurrent } from './nativeSyncHost.client';
 import { watchNativeSyncVisibility } from './nativeSyncVisibility';
@@ -34,6 +34,20 @@ import { TIMELINE_CHANGED_EVENT } from '../timeline/clientEvents';
 
 export const nativeSyncTasks = createSyncTaskRuntime();
 export const supportsNativeSyncTasks = () => !!getNativeSyncAdapter();
+
+async function cancelSavedStrictCapture(job: SyncJob, adapter: NonNullable<ReturnType<typeof getNativeSyncAdapter>>, checkIdentity: () => void) {
+	if (!job.strictCaptureId) return;
+	const signal = AbortSignal.timeout(10_000), { scope, reviewed } = job;
+	const assertCurrent = () => {
+		signal.throwIfAborted(); checkIdentity();
+		if (!isNativeSyncAdapterCurrent(adapter)) throw Error('The active sync host changed.');
+	};
+	const host = await createNativeSyncHost({ ownerId: scope.ownerId, deviceId: scope.deviceId, adapter, signal, assertCurrent });
+	if (host.origin() !== scope.origin) throw Error('The selected sync server changed.');
+	await host.request(scope.ownerId, { action: 'scan-cancel', rootId: reviewed.configuration.localRootId,
+		inventoryDeviceId: scope.deviceId, captureId: job.strictCaptureId, capturePolicy: 'strict-async', excludedPaths: reviewed.configuration.excludedPaths,
+		...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}) }, signal);
+}
 
 /** Explicit runs persist admission separately from editable connection Things.
  * Relaunch resumes only that admitted job, using existing native consent. */
@@ -64,20 +78,10 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 		let journal: Awaited<ReturnType<typeof openSyncJournal>> | undefined;
 		let releaseWindow: (() => Promise<void>) | undefined, job: SyncJob | null = null;
 		let admissionPending: Promise<SyncJob | null> | undefined;
-		let strictCaptureId: string | undefined;
 		let strictCancellation: Promise<void> | undefined;
 		const cancelStrictCapture = () => {
-			const captureId = strictCaptureId;
-			if (!captureId) return Promise.resolve();
-			return strictCancellation ??= (async () => {
-				const signal = AbortSignal.timeout(10_000);
-				const assertCurrent = () => { signal.throwIfAborted(); checkIdentity(); };
-				const host = await createNativeSyncHost({ ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal, assertCurrent });
-				if (host.origin() !== binding.origin) throw Error('The selected sync server changed.');
-				await host.request(binding.ownerId, { action: 'scan-cancel', rootId: reviewed.configuration.localRootId,
-					inventoryDeviceId: binding.deviceId, captureId, capturePolicy: 'strict-async', excludedPaths: reviewed.configuration.excludedPaths,
-					...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}) }, signal);
-			})();
+			if (!job?.strictCaptureId) return Promise.resolve();
+			return strictCancellation ??= cancelSavedStrictCapture(job, adapter, checkIdentity);
 		};
 		let disposeProgressCache: (() => void) | undefined;
 		let jobs: ReturnType<Awaited<ReturnType<typeof openSyncJournal>>['jobs']> | undefined;
@@ -168,7 +172,11 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					if (!changed) throw Error('The sync job changed before indexing.'); job = changed;
 				}
 				const captureId = strictAsync ? crypto.randomUUID() : undefined;
-				if (captureId) { strictCaptureId = captureId; strictCancellation = undefined; }
+				if (captureId) {
+					const recorded = await jobs!.strictCapture(job!, captureId);
+					if (!recorded) throw Error('The sync job changed before strict indexing.');
+					job = recorded; strictCancellation = undefined; check();
+				}
 				let finished = false;
 				try {
 					for await (const page of readNativeInventory({ ownerId: binding.ownerId, deviceId: binding.deviceId, rootId: reviewed.configuration.localRootId,
@@ -188,7 +196,11 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					finished = true;
 				} finally {
 					if (captureId && !finished) await cancelStrictCapture().catch(() => {});
-					if (strictCaptureId === captureId) strictCaptureId = undefined;
+				}
+				if (captureId) {
+					const cleared = await retireStrictCapture(jobs!, job!, cancelStrictCapture); check();
+					if (!cleared) throw Error('The sync job changed after strict indexing.');
+					job = cleared;
 				}
 				if (backup && !options?.retainCaptureUntilHandoff) {
 					const changed = await jobs!.capture(job!, null); check();
@@ -213,8 +225,15 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				const inspect = supportsNativePathInspection(capabilities) && roots.some(root => root.id === reviewed.configuration.localRootId && root.sourceKind !== 'photos');
 				const localTarget = ['download', 'two-way'].includes(reviewed.configuration.mode)
 					? await approveMobileSyncTarget(reviewed, binding, signal, request, capabilities, resume ? 'existing' : 'request') : undefined;
+				let prior = await jobs!.read(); check();
+				let resumeJob = resume;
+				if (resume && (prior?.id !== resume.id || prior.revision !== resume.revision)) return;
+				if (prior?.strictCaptureId) {
+					prior = await retireStrictCapture(jobs!, prior, saved => cancelSavedStrictCapture(saved, adapter, checkIdentity)); check();
+					if (!prior) return;
+					if (resume) resumeJob = prior;
+				}
 				if (!resume) {
-					const prior = await jobs!.read(); check();
 					// A new approved revision cannot borrow the earlier native job.
 					// Cancel its same-connection scan before dropping that ticket.
 					if (prior?.nativeCaptureId && (prior.state === 'paused' || JSON.stringify(prior.reviewed.configuration) === JSON.stringify(reviewed.configuration)) && JSON.stringify(prior.reviewed) !== JSON.stringify(reviewed)) {
@@ -223,7 +242,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					}
 				}
 				check();
-				admissionPending = resume ? jobs!.begin(resume, Date.now(), crypto.randomUUID()) : jobs!.admit(reviewed, crypto.randomUUID(), intervalMs);
+				admissionPending = resumeJob ? jobs!.begin(resumeJob, Date.now(), crypto.randomUUID()) : jobs!.admit(reviewed, crypto.randomUUID(), intervalMs);
 				job = await admissionPending;
 				if (!job) return; // A stopped/completed/replaced discovery is never replayed.
 				if (stopRequested) await jobs!.transition(job, 'paused');
@@ -352,9 +371,19 @@ export async function pauseNativeSyncJob(scope: SyncScope, generation: number) {
 		for (let attempt = 0; attempt < 3; attempt++) {
 			await nativeSyncTasks.cancel(scope); check();
 			const job = await jobs.read();
-			if (!job || ['paused', 'complete'].includes(job.state) || await jobs.pause(job)) {
-				await nativeSyncTasks.cancel(scope); return;
+			const paused = job && (['paused', 'complete'].includes(job.state) ? job : await jobs.pause(job));
+			if (job && !paused) continue;
+			await nativeSyncTasks.cancel(scope);
+			if (paused?.strictCaptureId) {
+				const adapter = getNativeSyncAdapter();
+				if (!adapter) throw Error('Pause saved. Native indexing cleanup could not be confirmed.');
+				try {
+					await retireStrictCapture(jobs, paused, saved => cancelSavedStrictCapture(saved, adapter, check));
+				} catch {
+					throw Error('Pause saved. Native indexing cleanup could not be confirmed.');
+				}
 			}
+			return;
 		}
 		throw Error('The sync job changed while stopping. Please retry.');
 	} finally { journal?.close(); }

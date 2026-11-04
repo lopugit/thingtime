@@ -4121,7 +4121,9 @@ synchronous capture protocol.
 Two-way sync uses the existing strict Swift scan, which keeps rows private
 through authorization and a final replay of root and entry stamps. If a file
 changes, the grant is revoked, or the job is cancelled, reconciliation cannot
-use the partial inventory to infer deletions. The scan continues independently
+use the partial inventory to infer deletions. The runner records the exact capture ID before dispatch. If cancellation
+cannot be confirmed, Pause or Resume retries cleanup for that same ID and
+original folder settings before replacing it. The scan continues independently
 of the short control request deadlines under the existing monitored job
 lifetime and device resource policy. Commander continues to handle best-effort
 backup and one-way streaming. Using its discovery for strict two-way capture
