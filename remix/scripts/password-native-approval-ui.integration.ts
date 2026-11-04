@@ -18,11 +18,11 @@ export async function runNativeApprovalUI({context,page,origin,ownerId,password,
  assert.equal((await request({operation:'verification-settings',window:'always',reuseRecentDeviceVerification:false,revision:settings.body.settings.revision})).status,200);
  const make=()=>({version:1,id:randomUUID(),expectedOwnerId:ownerId,apiOrigin:origin,entryId,requestHash:randomBytes(32).toString('base64url'),type:'fill',origin:'https://native-fixture.example'});
  const begin=async(pending:any)=>{
-  await page.addInitScript((value:any)=>{
+  await page.addInitScript({content:`(() => {
    if(new URLSearchParams(location.search).get('surface')!=='native')return;
-   (window as any).fixtureApproval=null;
-   (window as any).thingtimeDesktop={passwordApprovalReady:async()=>value,passwordApprovalRespond:async(response:any)=>{(window as any).fixtureApproval=response;}};
-  },pending);
+   window.fixtureApproval=null;
+   window.thingtimeDesktop={passwordApprovalReady:async()=>(${JSON.stringify(pending)}),passwordApprovalRespond:async(response)=>{window.fixtureApproval=response;}};
+  })();`});
   await page.goto(origin+'/scripts/password-verification.browser.html?surface=native');
   await page.getByRole('heading',{name:'Autofill with Thingtime',exact:true}).waitFor();
   await page.getByText(/native-fixture@example.invalid/).waitFor();
