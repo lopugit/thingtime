@@ -17,7 +17,7 @@ export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-
 
 export const CHATGPT_PLUGIN_FEATURES = {
   'chatgpt.mcp': '1.5.0',
-  'chatgpt.oauth': '1.10.0',
+  'chatgpt.oauth': '1.11.0',
   'chatgpt.agent-reporting': '1.0.0',
   'chatgpt.connections': '1.3.0',
   'chatgpt.things.read': '1.3.0',
@@ -164,6 +164,7 @@ const CHATGPT_REDIRECT_URIS = new Set([
 ]);
 const CODEX_CIMD_CLIENT_PREFIX = 'https://chatgpt.com/oauth/codex/';
 const CODEX_CIMD_CLIENT_SUFFIX = '/client.json';
+const CODEX_SHARED_CIMD_CLIENT_ID = 'https://chatgpt.com/oauth/codex/client.json';
 
 const cleanOrigin = (value: unknown): string | null => {
   if (typeof value !== 'string' || !value.trim() || value.length > 2048) return null;
@@ -241,6 +242,14 @@ const normalizeCodexCimdRedirectUri = (value: unknown, callbackId: string): stri
   }
 };
 
+// Codex uses the shared CIMD with an issuer-bound callback. Match only the
+// two loopback hosts published by that client and its exact callback path.
+const normalizeCodexSharedCimdRedirectUri = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const match = /^http:\/\/(?:127\.0\.0\.1|localhost):([1-9][0-9]{0,4})\/callback$/.exec(value);
+  return match?.[0] === value && Number(match[1]) <= 65535 ? value : null;
+};
+
 // Dynamic Client Registration is a compatibility path for Codex clients that
 // cannot use CIMD yet, and for ChatGPT developer apps. A registration may use
 // only a native loopback callback or ChatGPT's exact connector callback; no
@@ -316,15 +325,20 @@ export const parseChatGptAuthorizationRequest = (
   if (params.get('response_type') !== 'code') return { ok: false, error: 'response_type must be code' };
 
   const clientId = params.get('client_id')?.trim() || '';
+  const isCodexSharedClient = clientId === CODEX_SHARED_CIMD_CLIENT_ID;
   const codexCallbackId = codexCallbackIdFromClientId(clientId);
   const registeredDynamicClient = dynamicClient?.clientId === clientId ? dynamicClient : null;
-  if (!allowedChatGptClientIds().includes(clientId) && !codexCallbackId && !registeredDynamicClient) return { ok: false, error: 'Unknown OAuth client' };
+  if (!isCodexSharedClient && !codexCallbackId && !registeredDynamicClient && !allowedChatGptClientIds().includes(clientId)) {
+    return { ok: false, error: 'Unknown OAuth client' };
+  }
 
   const redirectUri = registeredDynamicClient
     ? normalizeRegisteredClientRedirectUri(params.get('redirect_uri'), origin)
     : codexCallbackId
       ? normalizeCodexCimdRedirectUri(params.get('redirect_uri'), codexCallbackId)
-      : normalizeChatGptRedirectUri(params.get('redirect_uri'));
+      : isCodexSharedClient
+        ? normalizeCodexSharedCimdRedirectUri(params.get('redirect_uri'))
+        : normalizeChatGptRedirectUri(params.get('redirect_uri'));
   if (registeredDynamicClient && (!redirectUri || !registeredDynamicClient.redirectUris.includes(redirectUri))) {
     return { ok: false, error: 'redirect_uri is not registered for this OAuth client' };
   }
