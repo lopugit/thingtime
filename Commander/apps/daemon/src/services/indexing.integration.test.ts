@@ -192,7 +192,9 @@ describe('background filesystem inventory', () => {
           commands: () => 7,
         },
         onProgress(progress) {
-          if (!armed || stopped || !progress.sourceId.startsWith('filesystem:')) return;
+          if (!armed || stopped || !progress.sourceId.startsWith('filesystem:') || progress.processed < 500) {
+            return;
+          }
           process.kill(writerPid, 'SIGSTOP');
           stopped = true;
           held();
@@ -225,13 +227,50 @@ describe('background filesystem inventory', () => {
         writerPid = Number(writer.trim().split(/\s+/u)[0]);
         armed = true;
         const fullRun = service.start('all');
+        void fullRun.catch(() => undefined); // The finally path can close the writer after an assertion fails.
         await Promise.race([
           heldPromise,
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Writer did not enter filesystem transaction')), 10_000),
+            setTimeout(() => reject(new Error('Writer did not stage filesystem rows')), 10_000),
           ),
         ]);
         expect((await service.status()).running).toContain('all');
+        const backup = path.join(temporary, 'approved-backup');
+        await mkdir(backup);
+        await writeFile(path.join(backup, 'independent.txt'), 'shared database, independent write');
+        const identity = await stat(backup, { bigint: true });
+        const backupResult = await new Promise<string>((resolve, reject) => {
+          const helper = execFile(
+            binaryPath,
+            ['inventory', '--database', databasePath],
+            { timeout: 8_000, maxBuffer: 65_536 },
+            (error, stdout) => (error ? reject(error) : resolve(stdout)),
+          );
+          helper.stdin?.on('error', () => undefined);
+          helper.stdin?.end(
+            JSON.stringify({
+              version: 1,
+              operation: 'scan',
+              scope: {
+                origin: 'https://fixture.invalid',
+                accountId: 'account',
+                deviceId: 'device',
+                rootId: 'backup',
+              },
+              mode: 'backup',
+              generation: 'during-search-walk',
+              root: backup,
+              rootIdentity: `${identity.dev}:${identity.ino}`,
+            }) + '\n',
+          );
+        });
+        expect(backupResult.trim().split('\n').map((line) => JSON.parse(line))).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ event: 'complete', coverage: 'provisional', entryCount: 1 }),
+          ]),
+        );
+        expect(stopped).toBe(true);
+
         const visible = async (query: string, title: string) =>
           (await service.queryItems(query)).some((item) => item.title === title);
         const observe = async (label: string, check: () => Promise<boolean>) => {

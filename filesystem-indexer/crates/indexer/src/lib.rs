@@ -888,16 +888,20 @@ impl IndexDatabase {
         let root_text = path_text(&root)?;
         let started = Instant::now();
         let indexed_at = now_ms();
-        // Native inventory now has its own WAL writer. Acquire the write
-        // reservation before reading or allocating the search generation:
-        // upgrading a deferred snapshot can fail immediately with BUSY_SNAPSHOT
-        // even when the connection has a busy timeout.
-        let transaction = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let generation = next_generation(&transaction)?;
+        // Filesystem walking and CPU pacing can take minutes. Keep candidate
+        // rows in this connection's file-backed TEMP database so native
+        // inventory can still commit to the shared main database.
+        self.connection.execute_batch(
+            "CREATE TEMP TABLE IF NOT EXISTS search_scan_stage (
+               path TEXT NOT NULL, name TEXT NOT NULL, parent TEXT NOT NULL,
+               kind TEXT NOT NULL, modified_at_ms INTEGER, size INTEGER,
+               PRIMARY KEY (path, kind)
+             ) WITHOUT ROWID;",
+        )?;
+        let staging = self.connection.transaction()?;
+        staging.execute("DELETE FROM temp.search_scan_stage", [])?;
         let report = scan_and_store(
-            &transaction,
+            &staging,
             ScanContext {
                 source,
                 database_path: &self.database_path,
@@ -906,10 +910,33 @@ impl IndexDatabase {
                 matcher,
                 max_entries,
                 changed_paths: changed_paths.clone(),
-                generation,
                 governor: Arc::clone(&governor),
             },
             progress,
+        )?;
+        staging.commit()?;
+        governor.check_memory_now()?;
+
+        // Only the set-based publication acquires a main database write
+        // reservation. A failure leaves the previous complete search rows
+        // and counts intact; inventory writes cannot invalidate a deferred
+        // read snapshot because publication begins with write authority.
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let generation = next_generation(&transaction)?;
+        transaction.execute(
+            "INSERT INTO main.records
+               (source_id, path, name, parent, kind, modified_at_ms, size, generation)
+             SELECT ?1, path, name, parent, kind, modified_at_ms, size, ?2
+             FROM temp.search_scan_stage WHERE 1
+             ON CONFLICT(source_id, path, kind) DO UPDATE SET
+               name = excluded.name,
+               parent = excluded.parent,
+               modified_at_ms = excluded.modified_at_ms,
+               size = excluded.size,
+               generation = excluded.generation",
+            params![source.id, generation],
         )?;
         let scan_warning = report.diagnostics.first().map(String::as_str);
 
@@ -1589,7 +1616,6 @@ struct ScanContext<'a> {
     matcher: Arc<CustomIgnoreMatcher>,
     max_entries: Option<usize>,
     changed_paths: Vec<PathBuf>,
-    generation: i64,
     governor: Arc<ResourceGovernor>,
 }
 
@@ -1625,7 +1651,6 @@ fn scan_and_store(
         matcher,
         max_entries,
         changed_paths,
-        generation,
         governor,
     } = context;
     let source_owned = source.clone();
@@ -1646,7 +1671,6 @@ fn scan_and_store(
     let cancelled = Arc::new(AtomicBool::new(false));
     let discovered = Arc::new(AtomicUsize::new(0));
     let root_owned = root.to_path_buf();
-    let source_id = source.id.clone();
     let mut report = SourceReport {
         source_id: source.id.clone(),
         root: root_text.to_owned(),
@@ -1763,15 +1787,9 @@ fn scan_and_store(
         drop(sender);
 
         let mut insert = transaction.prepare_cached(
-            "INSERT INTO records
-               (source_id, path, name, parent, kind, modified_at_ms, size, generation)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-             ON CONFLICT(source_id, path, kind) DO UPDATE SET
-               name = excluded.name,
-               parent = excluded.parent,
-               modified_at_ms = excluded.modified_at_ms,
-               size = excluded.size,
-               generation = excluded.generation",
+            "INSERT OR REPLACE INTO temp.search_scan_stage
+               (path, name, parent, kind, modified_at_ms, size)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         )?;
         let mut limit_reported = false;
         let mut fatal_error = None;
@@ -1787,14 +1805,12 @@ fn scan_and_store(
                         continue;
                     }
                     if let Err(error) = insert.execute(params![
-                        source_id,
                         record.path,
                         record.name,
                         record.parent,
                         record.kind.as_str(),
                         record.modified_at_ms,
                         record.size.and_then(|size| i64::try_from(size).ok()),
-                        generation,
                     ]) {
                         cancelled.store(true, Ordering::Relaxed);
                         return Err(error.into());

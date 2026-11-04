@@ -154,6 +154,31 @@ impl ModeKind {
     }
 }
 
+fn default_sync_limits() -> IndexResourceLimits {
+    IndexResourceLimits {
+        max_cpu_percent: SYNC_CPU_PERCENT,
+        ..IndexResourceLimits::default()
+    }
+}
+
+pub(super) fn decode_sync_limits(
+    mut value: Value,
+) -> Result<IndexResourceLimits, serde_json::Error> {
+    if let Some(limits) = value.as_object_mut() {
+        limits
+            .entry("maxCpuPercent")
+            .or_insert_with(|| json!(SYNC_CPU_PERCENT));
+    }
+    serde_json::from_value(value)
+}
+
+fn deserialize_sync_limits<'de, D>(deserializer: D) -> Result<IndexResourceLimits, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    decode_sync_limits(Value::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Command {
@@ -177,7 +202,10 @@ struct Command {
     #[serde(default)]
     excluded_paths: Vec<String>,
     ignore_rules: Option<String>,
-    #[serde(default)]
+    #[serde(
+        default = "default_sync_limits",
+        deserialize_with = "deserialize_sync_limits"
+    )]
     resource_limits: IndexResourceLimits,
     #[serde(default)]
     resource_feedback: bool,
@@ -555,7 +583,11 @@ pub fn serve_with_cancellation(
             let _admission = admit(database_path)?;
             let current = status(&database.connection, &scope, Some(generation))?
                 .ok_or_else(|| failure("generation_unavailable"))?;
-            let governor = sync_governor(command.resource_limits, None, command.cpu_budget_shares)?;
+            let governor = sync_governor(
+                command.resource_limits,
+                command.scan_bytes_per_second,
+                command.cpu_budget_shares,
+            )?;
             if command
                 .native_receipt_directory
                 .as_deref()
@@ -701,20 +733,20 @@ fn admit(database: &Path) -> Result<File, IndexerError> {
     Ok(file)
 }
 
+fn sync_scan_rate(requested: Option<f64>) -> f64 {
+    requested.unwrap_or(SYNC_SCAN_BYTES_PER_SECOND)
+}
+
 fn sync_governor(
-    mut limits: IndexResourceLimits,
+    limits: IndexResourceLimits,
     rate: Option<f64>,
     shares: usize,
 ) -> Result<ResourceGovernor, IndexerError> {
     if ![1, 3].contains(&shares) || rate.is_some_and(|v| !v.is_finite() || v < 1.0) {
         return Err(failure("invalid_configuration"));
     }
-    limits.max_cpu_percent = limits.max_cpu_percent.min(SYNC_CPU_PERCENT);
     let governor = ResourceGovernor::new_with_cpu_share(&limits, shares)?;
-    governor.set_scan_rate(Some(
-        rate.unwrap_or(SYNC_SCAN_BYTES_PER_SECOND)
-            .min(SYNC_SCAN_BYTES_PER_SECOND),
-    ));
+    governor.set_scan_rate(Some(sync_scan_rate(rate)));
     Ok(governor)
 }
 
@@ -1553,16 +1585,7 @@ pub(super) fn scan(
     }
     request.excluded_paths.sort_unstable();
     request.excluded_paths.dedup();
-    request.resource_limits.max_cpu_percent = request
-        .resource_limits
-        .max_cpu_percent
-        .min(SYNC_CPU_PERCENT);
-    request.scan_bytes_per_second = Some(
-        request
-            .scan_bytes_per_second
-            .unwrap_or(SYNC_SCAN_BYTES_PER_SECOND)
-            .min(SYNC_SCAN_BYTES_PER_SECOND),
-    );
+    request.scan_bytes_per_second = Some(sync_scan_rate(request.scan_bytes_per_second));
     let receipts = open_receipts(receipt_directory.as_deref())?;
     let (id, generation) = begin(
         &mut db,
@@ -2154,5 +2177,36 @@ mod stamp_policy_tests {
         assert!(!precise_linux_fs(0x6969)); // NFS
         assert!(!precise_linux_fs(0x794c_7630)); // overlay
         assert!(!precise_linux_fs(0));
+    }
+}
+
+#[cfg(test)]
+mod resource_defaults_tests {
+    use super::*;
+
+    #[test]
+    fn omitted_limits_use_sync_defaults_and_explicit_limits_are_retained() {
+        let omitted: Command =
+            serde_json::from_value(json!({"version": 1, "operation": "scan"})).unwrap();
+        let partial: Command = serde_json::from_value(json!({
+            "version": 1, "operation": "scan", "resourceLimits": {"maxThreads": 2}
+        }))
+        .unwrap();
+        assert_eq!(omitted.resource_limits.max_cpu_percent, 15);
+        assert_eq!(partial.resource_limits.max_cpu_percent, 15);
+        assert_eq!(partial.resource_limits.max_threads, 2);
+        assert_eq!(sync_scan_rate(omitted.scan_bytes_per_second), 625_000.0);
+
+        let explicit: Command = serde_json::from_value(json!({
+            "version": 1, "operation": "scan", "scanBytesPerSecond": 50_000_000.0,
+            "resourceLimits": {"maxCpuPercent": 40}
+        }))
+        .unwrap();
+        assert_eq!(sync_scan_rate(explicit.scan_bytes_per_second), 50_000_000.0);
+        let governor =
+            sync_governor(explicit.resource_limits, explicit.scan_bytes_per_second, 1).unwrap();
+        assert_eq!(governor.effective().max_cpu_percent, 40);
+        assert!(sync_governor(default_sync_limits(), Some(f64::NAN), 1).is_err());
+        assert!(sync_governor(default_sync_limits(), Some(-1.0), 1).is_err());
     }
 }

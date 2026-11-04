@@ -14137,7 +14137,8 @@ the isolated real-API/browser command and the metadata-only session boundary.
   provides; unavailable coverage must fail closed, not silently claim sealing.
 
 - Run the Commander daemon inventory integration with the native invalidation
-  watcher enabled. Hold the Rust search writer after it acquires its transaction;
-  committed counts and live file, directory and app changes must remain readable.
-  Resume the writer and verify concurrent inventory writes do not cause a search
-  write to fail with a SQLite snapshot lock.
+  watcher enabled. Hold the Rust search writer after it has staged 500 paths; committed
+  counts and live file, directory and app changes must remain readable. Start a
+  private backup on the same SQLite database and verify it publishes a complete
+  provisional generation while the search walk is still held. Resume search and
+  verify its final catalog publishes atomically.

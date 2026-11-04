@@ -186,6 +186,7 @@ struct RustInventoryClient: Sendable {
         fields["nativeReceiptDirectory"] = Self.receiptPath
         fields["resourceLimits"] = Self.limits(limits)
         fields["cpuBudgetShares"] = limits?.cpuPercent == nil ? 1 : 3
+        fields["scanBytesPerSecond"] = SyncScanContext.helperBytesPerSecond
         let result: Status = try run("seal", scope: scope, generation: generation, fields: fields)
         try Self.checkStatus(result, generation: generation)
         guard result.coverage == "sealed" else { throw Failure.changed }

@@ -829,7 +829,19 @@ pub fn serve_with_database(
     {
         return Err(failure("invalid_scope"));
     }
-    let request: Request = serde_json::from_value(value).map_err(|_| failure("invalid_request"))?;
+    let scoped_limits = if database.is_some() {
+        let limits = object
+            .remove("resourceLimits")
+            .unwrap_or_else(|| serde_json::json!({}));
+        Some(inventory::decode_sync_limits(limits).map_err(|_| failure("invalid_request"))?)
+    } else {
+        None
+    };
+    let mut request: Request =
+        serde_json::from_value(value).map_err(|_| failure("invalid_request"))?;
+    if let Some(limits) = scoped_limits {
+        request.resource_limits = limits;
+    }
     let streaming = request.streaming;
     let mut output = BufWriter::with_capacity(65_536, output);
     let control = streaming.then(|| Arc::new(WatchControl::default()));

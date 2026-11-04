@@ -151,6 +151,54 @@ fn rejects_changed_subtree_symlink_replacement_and_duplicate_inode() {
 }
 
 #[test]
+fn private_strict_and_backup_paths_honor_configured_cpu_policy() {
+    let fixture = Fixture::new();
+    let cpu_percent = |events: Vec<Value>| {
+        events
+            .iter()
+            .rev()
+            .find(|event| event["event"] == "resources")
+            .unwrap()["usage"]["effective"]["maxCpuPercent"]
+            .as_u64()
+            .unwrap()
+    };
+    for (index, (limits, expected)) in [
+        (None, 15),
+        (Some(json!({"maxThreads": 2})), 15),
+        (Some(json!({"maxCpuPercent": 40})), 40),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut request = fixture.scan(&format!("strict-{index}"), "strict");
+        if let Some(limits) = limits.clone() {
+            request["resourceLimits"] = limits;
+        }
+        assert_eq!(cpu_percent(fixture.call(request).unwrap()), expected);
+
+        let mut request = fixture.scan(&format!("backup-{index}"), "backup");
+        let request_fields = request.as_object_mut().unwrap();
+        request_fields.remove("operation");
+        request_fields.remove("mode");
+        if let Some(limits) = limits {
+            request["resourceLimits"] = limits;
+        }
+        let mut output = Vec::new();
+        commander_indexer::backup::serve_with_database(
+            Cursor::new(serde_json::to_vec(&request).unwrap()),
+            &mut output,
+            Some(&fixture.db),
+        )
+        .unwrap();
+        let events = serde_json::Deserializer::from_slice(&output)
+            .into_iter::<Value>()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(cpu_percent(events), expected);
+    }
+}
+
+#[test]
 fn scoped_invalidation_fences_authority_and_cancellation_preserves_valid_hashes() {
     let f = Fixture::new();
     let file = f.root.join("mutable");
