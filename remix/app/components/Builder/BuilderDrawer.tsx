@@ -396,6 +396,8 @@ const BlockInspector = ({
 		patch({ css: Object.keys(css).length ? css : undefined });
 	};
 	const [expandError, setExpandError] = React.useState('');
+	const [mediaUrlEditor, setMediaUrlEditor] = React.useState<string | null>(null);
+	const isMediaElement = block.type === 'element' && ['img', 'video', 'audio'].includes(block.tag || '');
 	const component = block.type === 'component' ? draft.componentsByRef[block.component || ''] : null;
 	const specs = React.useMemo(() => sanitizeArgSpecs(component?.crystal?.args), [component?.crystal?.args]);
 
@@ -459,15 +461,24 @@ const BlockInspector = ({
     {block.type === 'element' ? <>
      <FieldRow label="Element"><Input {...inputStyles} aria-label="Element tag" value={block.tag || 'div'} onChange={e => patch({ tag: e.target.value })} /></FieldRow>
      <FieldRow label="Text"><Textarea {...inputStyles} aria-label="Block text" value={block.text || ''} onChange={e => patch({ text: e.target.value })} /></FieldRow>
-     {['name', 'placeholder', 'defaultValue', 'href', 'src', 'alt', 'title', 'type', 'data-tt-action'].map(key => <FieldRow key={key} label={key}>
+     {['name', 'placeholder', 'defaultValue', 'href', 'src', 'alt', 'title', 'type', 'data-tt-action'].filter(key => key !== 'src' || !isMediaElement).map(key => <FieldRow key={key} label={key}>
       <Input {...inputStyles} aria-label={`Element ${key}`} value={String(block.props?.[key] ?? '')} onChange={e => patch({ props: { ...block.props, [key]: e.target.value } })} />
      </FieldRow>)}
      <FieldRow label="Action inputs"><StructuredValue key={block.id} value={block.props?.['data-tt-action-inputs']} onChange={value=>patch({props:{...block.props,'data-tt-action-inputs':value}})} /></FieldRow>
     </> : null}
-    {block.type === 'element' && ['img','video','audio'].includes(block.tag || '') ? <FieldRow label="Upload media">
-     <Button size="sm" isDisabled={!onUploadToBlock} onClick={() => uploadInputRef.current?.click()}>Upload file</Button>
-     <input ref={uploadInputRef} type="file" accept={`image/*,video/*,audio/*,${HEIC_IMAGE_ACCEPT}`} style={{display:'none'}} onChange={event => { const files=Array.from(event.target.files || []); if(files.length) onUploadToBlock?.(block.id,files); event.target.value=''; }} />
-    </FieldRow> : null}
+    {isMediaElement ? <>
+     <FieldRow label="Upload media">
+      <Button size="sm" isDisabled={!onUploadToBlock} onClick={() => uploadInputRef.current?.click()}>Upload file</Button>
+      <input ref={uploadInputRef} type="file" accept={block.tag === 'img' ? `image/*,${HEIC_IMAGE_ACCEPT}` : `${block.tag}/*`} style={{display:'none'}} onChange={event => { const files=Array.from(event.target.files || []); if(files.length) onUploadToBlock?.(block.id,files); event.target.value=''; }} />
+     </FieldRow>
+     <Button type="button" size="sm" alignSelf="start" variant="ghost" aria-expanded={mediaUrlEditor === block.id}
+      onClick={() => setMediaUrlEditor(mediaUrlEditor === block.id ? null : block.id)}>
+      {mediaUrlEditor === block.id ? 'Hide URL option' : 'Use URL instead'}
+     </Button>
+     {mediaUrlEditor === block.id ? <FieldRow label="Image or media URL">
+      <Input {...inputStyles} aria-label="Element src" value={String(block.props?.src ?? '')} onChange={e => patch({ props: { ...block.props, src: e.target.value } })} />
+     </FieldRow> : null}
+    </> : null}
     {block.type === 'element' && block.format ? <>
      <FieldRow label="Formatted value path"><Input {...inputStyles} value={String(block.format.arg || '')} onChange={e => patch({ format: { ...block.format, arg: e.target.value } })} /></FieldRow>
      <FieldRow label="Format"><Input {...inputStyles} value={String(block.format.kind || '')} onChange={e => patch({ format: { ...block.format, kind: e.target.value } })} /></FieldRow>
