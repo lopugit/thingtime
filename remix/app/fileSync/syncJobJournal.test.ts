@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { openSyncJournal } from './journal.client';
-import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, pauseSyncJobAdmission, syncJobCanPause, syncJobDue } from './syncJobJournal';
+import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, pauseSyncJobAdmission, retireStrictCapture, syncJobCanPause, syncJobDue } from './syncJobJournal';
 import { newFileSyncConfiguration } from './configuration';
 import type { SyncScope } from './reconcile';
 const scope: SyncScope = { origin: 'https://sync.example', ownerId: 'owner', dataPlane: 'home', deviceId: 'device', rootId: 'connection' };
@@ -253,5 +253,38 @@ test('transient retry deadlines survive restart, reject noisy early wakes, and p
  assert.equal(await jobs.defer(stopped, 120_103), null);
  await assert.rejects(jobs.defer(manual, 0, Infinity), /deadline/);
  const bounded = (await jobs.defer(manual, 100, 999999999))!; assert.equal(bounded.retryAt, 300_100);
+ journal.close();
+});
+
+test('strict native capture survives a lost reply and a failed cleanup across a reopen', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const initial = saved(), captureId = crypto.randomUUID(), replacement = crypto.randomUUID();
+ const admitted = await jobs.admit(initial, 'strict');
+ const scanning = (await jobs.strictCapture(admitted, captureId))!;
+ const attempts: string[] = [];
+ const lostReply = async (job: typeof scanning) => {
+  attempts.push(job.strictCaptureId!);
+  assert.deepEqual(job.scope, scanning.scope);
+  assert.deepEqual(job.reviewed, initial);
+  throw Error('Cancel reply lost');
+ };
+ await assert.rejects(retireStrictCapture(jobs, scanning, lostReply), /Cancel reply lost/);
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ const retained = (await jobs.read())!;
+ assert.equal(retained.strictCaptureId, captureId);
+ assert.equal(await jobs.strictCapture(retained, replacement), null);
+ await assert.rejects(jobs.admit(initial, 'new-cycle'), /previous strict inventory cleanup/);
+ const paused = (await jobs.pause(retained))!;
+ await assert.rejects(retireStrictCapture(jobs, paused, lostReply), /Cancel reply lost/);
+ assert.equal((await jobs.read())?.strictCaptureId, captureId);
+ const cleaned = await retireStrictCapture(jobs, paused, async job => {
+  attempts.push(job.strictCaptureId!);
+  assert.deepEqual(job.reviewed.configuration, initial.configuration);
+ });
+ assert.equal(cleaned?.strictCaptureId, undefined);
+ assert.deepEqual(attempts, [captureId, captureId, captureId]);
+ const resumed = await jobs.admit(initial, 'new-cycle');
+ assert.equal((await jobs.strictCapture(resumed, replacement))?.strictCaptureId, replacement);
+ assert.equal(await jobs.strictCapture(paused, null), null);
  journal.close();
 });

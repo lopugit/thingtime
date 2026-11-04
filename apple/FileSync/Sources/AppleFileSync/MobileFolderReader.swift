@@ -296,9 +296,9 @@ public struct MobileFolderReader {
     /// The sink owns uniqueness checks and bounded, disk-backed retention. No
     /// provisional rows become a complete capture until the second pass succeeds.
     static func capture(bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil, append: (Entry) throws -> Void,
-                        replay: ((Entry) throws -> Void) throws -> Void) throws {
+                        replay: ((Entry) throws -> Void) throws -> Void) throws -> String {
         let exclusions = try canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules)
-        try access(bookmark) { root in
+        return try access(bookmark) { root in
             let initial = try stamp(info(root))
             func walk(_ parent: Int32, prefix: String) throws {
                 let before = try stamp(info(parent))
@@ -314,15 +314,26 @@ public struct MobileFolderReader {
                 guard try stamp(info(parent)) == before else { throw Failure.changed }
             }
             try walk(root, prefix: "")
-            try replay { row in
-                try Task.checkCancellation()
-                try scanAt(row.path) {
-                    let fd = try openPath(root, path: row.path); defer { close(fd) }
-                    guard try stamp(info(fd)) == row.version else { throw Failure.changed }
-                }
-            }
-            guard try stamp(info(root)) == initial else { throw Failure.changed }
+            try verifyCapture(root, initial: initial, replay: replay)
+            return initial
         }
+    }
+
+    static func verifyCapture(bookmark: Data, rootVersion: String,
+                              replay: ((Entry) throws -> Void) throws -> Void) throws {
+        try access(bookmark) { root in try verifyCapture(root, initial: rootVersion, replay: replay) }
+    }
+
+    private static func verifyCapture(_ root: Int32, initial: String, replay: ((Entry) throws -> Void) throws -> Void) throws {
+        guard try stamp(info(root)) == initial else { throw Failure.changed }
+        try replay { row in
+            try Task.checkCancellation()
+            try scanAt(row.path) {
+                let fd = try openPath(root, path: row.path); defer { close(fd) }
+                guard try stamp(info(fd)) == row.version else { throw Failure.changed }
+            }
+        }
+        guard try stamp(info(root)) == initial else { throw Failure.changed }
     }
     public struct BackupGap: Codable, Equatable, Sendable {
         public enum Scope: String, Codable, Sendable { case entry, subtree, root }
