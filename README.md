@@ -6431,6 +6431,15 @@ this host/Electron capability. Status reads do not contact the server or establi
 that macOS AutoFill is enabled; verify those requirements separately. Keep an
 existing custom host's OAuth/login behavior when updating native components.
 
+### Shared Rust filesystem engine
+
+All first-party Rust indexing code lives in the top-level
+[`filesystem-indexer/`](filesystem-indexer/README.md) Cargo workspace. Commander,
+Thingtime Mac/Electron and iOS reference the same local source and lockfile;
+nothing is published to a package registry. Native builds compile and embed the
+required helper or static archive. Platform adapters retain folder permissions,
+exact-version file operations and UI responsibilities.
+
 ### Commander-backed Mac backup indexing
 
 The signed macOS node bundles the repository's `commander-indexer` Rust binary.

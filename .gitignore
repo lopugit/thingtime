@@ -128,3 +128,6 @@ remix/public/downloads/thingtime-passwords-extension.zip
 
 # Python bytecode from native release verification tests.
 iOS/scripts/__pycache__/
+
+# Separate linked Rust/Swift boundary acceptance products
+apple/FileSync/.build-embedded/

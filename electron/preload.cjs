@@ -13,6 +13,12 @@ if (process.argv?.includes('--thingtime-native-password-approval')) {
 	passwordProvider: (request) => ipcRenderer.invoke('thingtime-desktop:password-provider', request),
 	fileExportVersion: process.platform === 'darwin' ? '1.1.0' : undefined,
 	fileExportRequest: (request) => ipcRenderer.invoke('thingtime-desktop:file-export', request),
+	attachmentUploadVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	attachmentUploadRequest: (request) => {
+		if (request?.action === 'chunk' && (!(request.bytes instanceof Uint8Array) || request.bytes.length > 256 * 1024))
+			throw Error('Invalid upload chunk.');
+		return ipcRenderer.invoke('thingtime-desktop:attachment-upload', request);
+	},
 	folderSyncRequest: (request) => ipcRenderer.invoke('thingtime-desktop:folder-sync', request),
 	folderSyncTaskVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
 	setFolderSyncActive: (request) => ipcRenderer.invoke('thingtime-desktop:folder-sync-active', request),

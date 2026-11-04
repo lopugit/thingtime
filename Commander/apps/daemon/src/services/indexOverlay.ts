@@ -1,4 +1,3 @@
-import { opendir } from 'node:fs/promises';
 import path from 'node:path';
 import { setImmediate as yieldToLoop } from 'node:timers/promises';
 import { fuzzyTextScore } from '@commander/protocol';
@@ -18,6 +17,12 @@ type Observe = (
   configuration: IndexConfiguration,
   paths: string[],
 ) => Promise<{ observations: PathObservation[] }>;
+type ListChildren = (
+  configuration: IndexConfiguration,
+  directory: string,
+  after: string | undefined,
+  limit: number,
+) => Promise<{ paths: string[]; nextAfter?: string | null }>;
 type Readback = (paths: string[]) => Promise<{ entries: PersistentPathState[] }>;
 interface Entry {
   record?: IndexRecord;
@@ -37,7 +42,7 @@ export class IndexOverlay {
   ) => Promise<{ observations: PathObservation[] }>;
   readonly #readback: (paths: string[]) => Promise<{ entries: PersistentPathState[] }>;
   readonly #changed: () => void;
-  readonly #openDirectory: typeof opendir;
+  readonly #listChildren: ListChildren;
   readonly #excludedDirectories: string[];
   #activeDirectories = new Map<string, number>();
   #subtreeEpoch = new Map<string, number>();
@@ -53,9 +58,10 @@ export class IndexOverlay {
     observe: Observe,
     readback: Readback,
     changed: () => void,
-    options: { openDirectory?: typeof opendir; excludedDirectories?: string[] } = {},
+    listChildren: ListChildren,
+    options: { excludedDirectories?: string[] } = {},
   ) {
-    this.#openDirectory = options.openDirectory ?? opendir;
+    this.#listChildren = listChildren;
     this.#excludedDirectories = (options.excludedDirectories ?? []).map(canonicalPath);
     this.#observe = observe;
     this.#readback = readback;
@@ -261,34 +267,19 @@ export class IndexOverlay {
         continue;
       }
       this.#activeDirectories.set(directory, epoch);
-      const handle = await this.#openDirectory(directory).catch(() => undefined);
-      if (!handle) {
-        unavailableTrees.push(directory);
-        if (this.#activeDirectories.get(directory) === epoch) {
-          this.#activeDirectories.delete(directory);
-          this.#rescanDirectories.delete(directory);
-        }
-        continue;
-      }
-      let batch: string[] = [];
       try {
-        for await (const entry of handle) {
-          if (generation !== this.#generation) break;
-          const rawPath = path.join(directory, entry.name);
-          if (rawPath === '/System/Volumes/Data') continue;
-          const childPath = canonicalPath(rawPath);
-          if (this.#excludedDirectories.some((root) => within(childPath, root))) continue;
-          batch.push(childPath);
-          if (batch.length >= BATCH_SIZE) {
-            await observe(batch);
-            batch = [];
-          }
-        }
+        let after: string | undefined;
+        do {
+          const page = await this.#listChildren(configuration, directory, after, BATCH_SIZE);
+          if (page.paths.length > BATCH_SIZE || (page.nextAfter && page.nextAfter === after))
+            throw new Error('Invalid Rust directory page');
+          await observe(page.paths);
+          after = page.nextAfter ?? undefined;
+        } while (after && generation === this.#generation);
       } catch {
         // Failure to enumerate is unavailable, never proof of child deletion.
         unavailableTrees.push(directory);
       }
-      if (batch.length) await observe(batch);
       if (this.#activeDirectories.get(directory) === epoch) this.#activeDirectories.delete(directory);
       if (
         generation === this.#generation &&

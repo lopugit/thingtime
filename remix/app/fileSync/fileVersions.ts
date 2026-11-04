@@ -61,6 +61,19 @@ export function fileRestoreKey(scope: TimelineScope, version: CloudFile): string
 	return `tt-file-restore:${timelineScopeKey(scope)}:${version.id}:${version.revision}`;
 }
 
+/** Desktop History is rendered locally, but file restores target its selected account API. */
+export function desktopFileRestoreScope(scope: TimelineScope, info: { contentOrigin?: string | null; apiOrigin?: string | null }): TimelineScope | null {
+	if (info.contentOrigin !== scope.apiOrigin || !info.apiOrigin) return null;
+	try {
+		const selected = new URL(info.apiOrigin);
+		const loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(selected.hostname) || selected.hostname.endsWith('.localhost');
+		if (selected.href !== `${selected.origin}/` || (selected.protocol !== 'https:' && !(selected.protocol === 'http:' && loopback))) return null;
+		return { ...scope, apiOrigin: selected.origin };
+	} catch {
+		return null;
+	}
+}
+
 async function fileOperationEventId(ownerId: string, id: string, operationId: string, kind: 'commit' | 'retain'): Promise<string> {
 	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([ownerId, id, operationId])));
 	return `file-${kind}-${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
