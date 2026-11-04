@@ -42,3 +42,18 @@ export async function passwordVerificationRequest(ownerId: string, body: Record<
   signal.throwIfAborted();
   return passwordRequest(ownerId, body, signal);
 }
+
+/** Approval has a live website deadline. Return a rate limit to the chooser
+ * immediately; bulk transfers still use backpressure. */
+export async function passwordApprovalRequest(ownerId: string, body: Record<string, unknown>, signal: AbortSignal) {
+  try {
+    signal.throwIfAborted();
+    await requireThingtimeCapability('api.passwords', '1.5.0');
+    const result = await requestOnce(ownerId, body, signal);
+    signal.throwIfAborted();
+    return result;
+  } catch (error) {
+    signal.throwIfAborted();
+    throw error;
+  }
+}

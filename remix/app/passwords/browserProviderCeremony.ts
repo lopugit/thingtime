@@ -1,11 +1,12 @@
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import type { VerificationContext } from './verificationPolicy';
-import { passwordRequest } from './client';
+import { passwordApprovalRequest, passwordRequest } from './client';
 import { createBrowserPasskeyAssertion, prepareBrowserPasskeyRegistration, requireNoExcludedBrowserPasskey, BrowserPasskeyExcludedError, BROWSER_PASSKEY_EXCLUDED_MESSAGE, validateBrowserPasskeyRequest, type BrowserPasskeyRequest } from './browserPasskey';
 import { passwordFieldValue, validatePasswordEntry, type PasswordEntry } from './model';
 
 export type ProviderRequest = BrowserPasskeyRequest & { version: 1; id: string };
 export type ProviderChoice = { id: string; title: string; username: string; relyingParty?: string; credentialId?: string };
+type ProviderSelection = Pick<ProviderChoice, 'id' | 'relyingParty' | 'credentialId'>;
 type Vault = (body: Record<string, unknown>, signal: AbortSignal, cursor?: string) => Promise<any>;
 export type BrowserProviderAttempt = { requestFingerprint?: string; sessionBinding?: string; prepared?: Awaited<ReturnType<typeof prepareBrowserPasskeyRegistration>>; id?: string; writeId?: string; context?: VerificationContext };
 export function validateProviderRequest(input: unknown): ProviderRequest {
@@ -14,6 +15,11 @@ export function validateProviderRequest(input: unknown): ProviderRequest {
   return { ...validateBrowserPasskeyRequest(value), version: 1, id: value.id };
 }
 export const providerRp = (request: BrowserPasskeyRequest) => (request.type === 'create' ? request.publicKey.rp?.id : request.publicKey.rpId) || new URL(request.origin).hostname;
+function matchesProviderChoice(request: ProviderRequest, item: ProviderSelection): boolean {
+  const allowed = request.publicKey.allowCredentials;
+  return item.relyingParty === providerRp(request) && !!item.credentialId &&
+    (request.type === 'create' || !allowed?.length || allowed.some(value => value.id === item.credentialId));
+}
 export async function loadProviderChoices(request: ProviderRequest, vault: Vault, signal: AbortSignal): Promise<ProviderChoice[]> {
   const choices: ProviderChoice[] = [];
   const seen = new Set<string>();
@@ -22,22 +28,28 @@ export async function loadProviderChoices(request: ProviderRequest, vault: Vault
     signal.throwIfAborted();
     const page = await vault({ operation: 'catalog', ...(cursor ? { cursor } : {}) }, signal);
     signal.throwIfAborted();
-    for (const item of page.catalog || []) if (item.relyingParty === providerRp(request) && item.credentialId) {
-      const allowed = request.publicKey.allowCredentials;
-      if (request.type === 'create' || !allowed?.length || allowed.some(value => value.id === item.credentialId)) choices.push(item);
-    }
+    for (const item of page.catalog || []) if (matchesProviderChoice(request, item)) choices.push(item);
     cursor = page.nextCursor || undefined;
     if (cursor && seen.has(cursor)) throw new Error('The password list could not finish. Try again.');
     if (cursor) seen.add(cursor);
   } while (cursor);
   return choices;
 }
-export function browserProviderVault(ownerId: string): Vault {
-  return (body, signal) => passwordRequest(ownerId, body, signal);
+export function browserProviderVault(ownerId: string, mode: 'discovery' | 'approval' = 'discovery'): Vault {
+  return (body, signal) => mode === 'approval' ? passwordApprovalRequest(ownerId, body, signal) : passwordRequest(ownerId, body, signal);
+}
+/** The extension starts its watchdog before delivery and may cancel earlier.
+ * Leave time to show recovery before our estimate of that outer deadline. */
+export function providerApprovalBudget(request: ProviderRequest, receivedAt: number, now = performance.now()): number {
+  const timeout = Math.max(1, Math.min(request.publicKey.timeout ?? 120_000, 120_000));
+  return Math.max(0, Math.floor(receivedAt + timeout - now - Math.min(1_000, timeout / 10)));
 }
 /** Secrets exist only in this invocation. No response leaves before durable exact readback. */
-export async function runProviderCeremony(request: ProviderRequest, password: string, selectedId: string, vault: Vault, signal: AbortSignal, attempt: BrowserProviderAttempt = {}) {
+export async function runProviderCeremony(request: ProviderRequest, password: string, selected: ProviderSelection | null, vault: Vault, signal: AbortSignal, attempt: BrowserProviderAttempt = {}) {
   signal.throwIfAborted();
+  const selectedId = selected?.id || '', credentialId = selected?.credentialId;
+  if (request.type === 'get' && (!selected || !selectedId || !matchesProviderChoice(request, selected)))
+    throw new DOMException('Choose a saved passkey for this website.', 'NotAllowedError');
   const fingerprint = JSON.stringify(request);
   if (attempt.requestFingerprint && attempt.requestFingerprint !== fingerprint) throw new DOMException('The passkey request changed.', 'InvalidStateError');
   attempt.requestFingerprint = fingerprint;
@@ -55,19 +67,22 @@ export async function runProviderCeremony(request: ProviderRequest, password: st
     throw new DOMException('Verify your account again.', 'NotAllowedError');
   attempt.sessionBinding = verified.sessionBinding;
   const boundVault: Vault = (body, selectedSignal, cursor) => vault({ ...body, passkeySession: passkeySession() }, selectedSignal, cursor);
-  const choices = await loadProviderChoices(request, boundVault, signal);
   if (request.type === 'get') {
-    if (!choices.some(value => value.id === selectedId)) throw new DOMException('Choose a saved passkey for this website.', 'NotAllowedError');
+    // Approval is already bound to this entry. Recheck the choice against
+    // the exact live record instead of decrypting and paging the whole vault again.
     const saved = await boundVault({ operation: 'read', id: selectedId }, signal);
     signal.throwIfAborted();
+    if (saved.id !== selectedId || saved.entry?.passwordType !== 'passkey' || passwordFieldValue(saved.entry, 'credentialId') !== credentialId)
+      throw new DOMException('The saved passkey changed. Start again.', 'InvalidStateError');
     const response = await createBrowserPasskeyAssertion(saved.entry, request, true);
     signal.throwIfAborted();
     // Revalidate the exact vault session after signing, before the assertion leaves.
     const current = await boundVault({ operation: 'read', id: selectedId }, signal);
     signal.throwIfAborted();
-    if (current.revision !== saved.revision || JSON.stringify(current.entry) !== JSON.stringify(saved.entry)) throw new DOMException('The saved passkey changed. Start again.', 'InvalidStateError');
+    if (current.id !== selectedId || current.revision !== saved.revision || JSON.stringify(current.entry) !== JSON.stringify(saved.entry)) throw new DOMException('The saved passkey changed. Start again.', 'InvalidStateError');
     return response;
   }
+  const choices = await loadProviderChoices(request, boundVault, signal);
   const excluded: PasswordEntry[] = choices.map(value => ({ title: value.title, passwordType: 'passkey', fields: [
     { id: 'credentialId', label: 'Credential ID', type: 'text', value: value.credentialId! },
     { id: 'relyingParty', label: 'Website', type: 'text', value: value.relyingParty! },
@@ -99,6 +114,8 @@ export async function ensureBrowserProvider(signal: AbortSignal) {
  * or terminate a replacement request. Other InvalidStateErrors stay distinct. */
 export function browserProviderFailure(error: unknown, operation: object, current: object | null): {kind: 'excluded' | 'retryable'; message: string} | null {
   if (operation !== current) return null;
+  if (error instanceof DOMException && error.name === 'TimeoutError')
+    return {kind: 'retryable', message: 'Thingtime did not respond in time. Try again or choose another passkey provider.'};
   return error instanceof BrowserPasskeyExcludedError
     ? {kind: 'excluded', message: BROWSER_PASSKEY_EXCLUDED_MESSAGE}
     : {kind: 'retryable', message: error instanceof Error ? error.message : 'The passkey could not be completed.'};
