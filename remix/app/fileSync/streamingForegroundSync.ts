@@ -135,6 +135,13 @@ export async function streamForegroundSync(
 	await refreshReadiness();
 	if (!local || twoWay) report();
 	input.progressSession?.({ scope: structuredClone(scope), run: structuredClone(spec) });
+	let dispatching: { id: string; first: boolean; marked: boolean } | undefined;
+	const markPublication = async (operationId: string) => {
+		if (dispatching?.id !== operationId || dispatching.marked) throw Error('Early publication identity changed.');
+		dispatching.first = await runs.markStreamCanonicalDispatch(spec, operationId);
+		dispatching.marked = true;
+		check();
+	};
 	const port = await createPagedCloudSyncPort(
 		spec,
 		configuration,
@@ -143,6 +150,7 @@ export async function streamForegroundSync(
 			currentScope: input.currentScope,
 			signal,
 			localTarget,
+			...(twoWay ? { beforeLocalPublication: markPublication } : {}),
 			readLocal,
 			transfer: input.transfer,
 			openSource,
@@ -151,7 +159,7 @@ export async function streamForegroundSync(
 				publishProgress({ stage: 'transferring', confirmed: state.confirmed, total: state.operations, directions: state.directions, indexed, path, bytes, size, ...coverage(), ...(direction ? { direction } : {}) });
 			}
 		},
-		runtime
+		twoWay ? { ...runtime, beforeFilePublication: markPublication } : runtime
 	);
 	// A revision counter closes the lost-wakeup race around durable reads.
 	let wakeRevision = 0;
@@ -483,7 +491,8 @@ export async function streamForegroundSync(
 				await wait(observed);
 				continue;
 			}
-			let firstDispatch = false;
+			let applyEntered = false;
+			dispatching = { id: operation.id, first: false, marked: false };
 			try {
 				const rebind = local && !twoWay ? await runs.targetRebind(spec, operation.id) : null;
 				check();
@@ -511,7 +520,9 @@ export async function streamForegroundSync(
 					wake(); report(); continue;
 				}
 				const receipt = await executeSyncOperation(operation, scope, { ...port, apply: async (op, currentScope) => {
-					firstDispatch = await runs.markStreamCanonicalDispatch(spec, op.id); check(); return port.apply(op, currentScope);
+					applyEntered = true;
+					if (!twoWay) await markPublication(op.id);
+					check(); return port.apply(op, currentScope);
 				} }, signal);
 				check();
 				state = await runs.confirm(spec, receipt);
@@ -520,11 +531,26 @@ export async function streamForegroundSync(
 				// An explicit, transactional rejection of the first guarded
 				// dispatch proves no effect. A previous uncertain attempt still
 				// owns its original ID even if this retry is refused.
-				if (twoWay && firstDispatch && error instanceof ExactCloudSyncDestinationChanged) {
+				if (twoWay && dispatching.first && error instanceof ExactCloudSyncDestinationChanged) {
 					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, true, true);
 				} else if (error instanceof SyncObservationChangedError) {
 					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, error.targetChanged);
+				} else if (twoWay && applyEntered && !dispatching.marked && operation.mutation.kind === 'copy') {
+					// Staging bytes has no live effect. A source or target may
+					// change mid-transfer; exact point reads decide whether to
+					// defer, while a persisted prior dispatch still forbids it.
+					check();
+					const m = operation.mutation, targetSide = m.from === 'local' ? 'remote' : 'local';
+					let sourceChanged = false, targetChanged = false;
+					try {
+						sourceChanged = !sameSyncStamp(m.source, await port.read(m.from, m.path));
+						targetChanged = !sameSyncStamp(m.expectedTarget, await port.read(targetSide, m.path));
+					} catch { check(); throw error; }
+					if (!sourceChanged && !targetChanged) throw error;
+					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, targetChanged);
 				} else throw error;
+			} finally {
+				dispatching = undefined;
 			}
 			check();
 			wake();

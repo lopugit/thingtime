@@ -33,6 +33,8 @@ export type CloudTransportRuntime = {
 	resources?: import('./resourceGovernor').SyncResourceGovernor;
 	/** Offload only when native configuration/device/network checks cover the runtime policy. */
 	nativeUploadApproval?: FileSyncApproval;
+	/** Durable fence for a new final publication, after staging/source checks. */
+	beforeFilePublication?(operationId: string): Promise<void>;
 	currentScope(): SyncScope;
 	origin(): string;
 	fetch: typeof fetch;
@@ -232,6 +234,8 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 	};
 	const commit = async (content: CloudFile['content'], replayOnly = false) => {
 		const command = cloudWriteCommit(write, content);
+		if (write.guardDestination && !replayOnly) await runtime.beforeFilePublication?.(write.operation.id);
+		check();
 		const result = await json('/api/v1/files', retained ? parseCloudFileRetention({ ...command, kind: 'retained-version' }) : command);
 		if (retained && result.retained !== true) throw Error('The server did not confirm version retention.');
 		if (replayOnly && result.replayed !== true) throw Error('Cloud operation receipt was not an exact replay.');
@@ -475,7 +479,10 @@ export function createCloudFolderTransport(runtime: CloudTransportRuntime, saved
 			// Individual fallback must preserve the exact original folderId.
 			if (!write.cloudRootId) throw Error('Folder publication has no reviewed cloud root.');
 			const parentPath = m.path.split('/').slice(0, -1).join('/');
-			if (write.guardDestination) return receipt((await json('/api/v1/files', input)).folder);
+			if (write.guardDestination) {
+				await runtime.beforeFilePublication?.(write.operation.id);
+				return receipt((await json('/api/v1/files', input)).folder);
+			}
 			if (parentPath) {
 				const parent = await readCloudPathEntry(runtime, scope, write.cloudRootId, parentPath, signal);
 				if (parent?.kind !== 'folder' || parent.id !== input.folderId) throw Error('Folder parent changed before publication.');

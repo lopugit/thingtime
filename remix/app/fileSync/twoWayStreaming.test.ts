@@ -400,3 +400,27 @@ test('a destination renamed after preparation is deferred using the exact path b
 	assert.equal(x.f.publications(), 1);
 	x.f.journal().close();
 });
+
+test('a source changed during staging leaves no uncertain publication and strict reconciliation copies the new bytes', { timeout: 10000 }, async () => {
+	const x = await fixture(), source = x.input.source;
+	x.feeds([x.f.entry()], []);
+	let stageChanged = false;
+	x.input.source = async entry => {
+		const opened = await source(entry);
+		return { ...opened, verify: async () => {
+			if (!stageChanged) {
+				stageChanged = true;
+				await x.f.revise([44, 45, 46]);
+				throw Error('Source changed after staging');
+			}
+		} };
+	};
+	await x.run();
+	assert.ok(stageChanged);
+	assert.equal(x.f.puts(), 2);
+	assert.equal(x.f.publications(), 1);
+	const file = [...x.f.files.values()][0];
+	assert.deepEqual(x.f.objects.get(file.content.attachmentId), new Uint8Array([44, 45, 46]));
+	assert.ok(await x.checkpoints().current());
+	x.f.journal().close();
+});
