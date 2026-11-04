@@ -413,7 +413,7 @@ class DesktopFolderSync {
                 signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), fetchUpload: this.fetchUpload,
                 requestNative: nativeRequest,
                 signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); }
-            }) : state.input.action === 'stage-download' ? await stageFolderDownload({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest }) : await nativeRequest({ ...state.input, origin: context.apiOrigin });
+            }) : state.input.action === 'stage-download' ? await stageFolderDownload({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, diagnostic: this.diagnostic }) : await nativeRequest({ ...state.input, origin: context.apiOrigin });
             if (governor && !readResources) value.resources = governor.snapshot();
             endReply = timing.begin('reply');
             state.phase = 'reply-verification';
@@ -425,7 +425,7 @@ class DesktopFolderSync {
                 if (Number(accessVersion?.[1]) >= 16 && value.capabilities?.fileResourceLimitsVersion === '1.1.0')
                     value.capabilities = { ...value.capabilities, fileResourceLimitsVersion: '1.1.1' };
                 if (/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileResourceLimitsVersion ?? '') && /^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileStagingVersion ?? '') && /^1\.(1[7-9]|[2-9][0-9]|[1-9][0-9]{2,})\.(0|[1-9][0-9]*)$/.test(apiCapabilities?.features?.['api.attachment-content']?.version ?? ''))
-                    value.capabilities = { ...value.capabilities, fileDownloadVersion: '1.0.0' };
+                    value.capabilities = { ...value.capabilities, fileDownloadVersion: '1.0.1' };
                 if (/^1\.([2-9]|[1-9][0-9]+)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileAccessVersion ?? ''))
                     value.capabilities = { ...value.capabilities, fileUploadVersion: '1.1.0' };
             }

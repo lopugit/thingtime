@@ -14338,3 +14338,11 @@ the isolated real-API/browser command and the metadata-only session boundary.
   Verify final strict reconciliation converges and preserves operation history.
   Repeat Stop/resume with the same capture and operation identities. Preserve
   existing scheduled connections, resource limits, folder grants, and user data.
+
+### Mac native download recovery
+
+- [ ] Interrupt a signed range after an earlier range has staged. Resume the same
+  operation after temporary HTTP or socket failure and verify the retained offset,
+  exact final bytes and one published file. Wrong owner, cloud revision or range
+  must remain terminal. Check the phase-only `folder-sync.log` diagnostic
+  without logging request URLs, credentials, paths, or payload bytes.
