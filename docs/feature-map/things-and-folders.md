@@ -717,6 +717,14 @@ The API lease completion and remote client both validate the requested range
 and strict result projection. `DeviceSyncResources` and
 `deviceSyncResourceBlocks.ts` expose editable live/history controls and stats.
 
+Mac signed-range staging uses the existing attachment and file reads through
+`electron/lib/folder-download.cjs` and its transport child. Native
+`fileDownloadVersion` 1.0.1 reports temporary transport failures as a runnable
+wait. Retry rechecks the same owner, selected origin, cloud revision and signed
+range, then resumes from native staging's retained offset. The folder diagnostic
+log records only closed phase and result labels. Test the retry and range
+integrity in `electron/test/folder-download.test.cjs`.
+
 POSIX symbolic-link metadata lives in `fileSync/symbolicLink.ts`; `SyncEntry`
 content/stamp equality includes link kind and exact raw target identity.
 `cloudFile.ts`, canonical `files/files.ts`, inventory projections and
