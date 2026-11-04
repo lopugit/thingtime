@@ -779,8 +779,10 @@ test('backup retention advertises owner-only holds and deferred cleanup together
 test('Gmail OAuth and its one-use callback are advertised on both manifests and registered', () => {
 	const legacy = createApiCapabilitiesManifest().features;
 	const manifest = thingtimeCapabilityManifest('https://thingtime.test').features;
-	assert.equal(legacy['api.mail'], '1.2.0');
-	assert.equal(manifest['api.mail'].version, '1.2.0');
+	assert.equal(legacy['api.mail'], '1.2.1');
+	assert.equal(manifest['api.mail'].version, '1.2.1');
+	assert.equal(legacy['api.mail-sync'], '1.0.1');
+	assert.equal(manifest['api.mail-sync'].version, '1.0.1');
 	assert.equal(legacy['api.mail-google-callback'], '1.0.0');
 	assert.equal(manifest['api.mail-google-callback'].version, '1.0.0');
 	assert.equal(typeof routeModules['v1/mail/google/callback'], 'function');

@@ -31,6 +31,8 @@ temporary accounts and internal Action identities are not vault sessions.
 `catalog` returns names, usernames, exact HTTPS domains and public passkey
 identifiers for native and browser-provider selection; passwords, TOTP seeds and signing keys are
 excluded. Responses are private/no-store. The browser provider and optional native bridge reuse this catalog without exposing signing keys.
+The native picker checks the same account again before filling and requires
+device-owner verification.
 
 Autofill interprets a saved bare Website host such as `thingtime.com` as
 `https://thingtime.com`, through the same normalizer for catalog discovery and
@@ -212,10 +214,28 @@ for testing; never import personal browser sessions or production credentials.
 
 ## Native Password AutoFill
 
-Native provider code is present in `apple/Passwords` and
-`apple/PasswordProvider`; the desktop bridge negotiates the installed provider.
-This checkout does not expose an iOS native-password bridge; web-only behavior
-remains available there.
+`apple/Passwords` contains the shared Swift library. `apple/PasswordProvider`
+contains the AuthenticationServices extension used by iOS and the macOS
+Thingtime Passwords companion embedded in Electron; the desktop bridge negotiates
+the installed provider. The containing app needs
+Apple's AutoFill entitlement and the same Keychain group as its extension.
+Only the selected first-party HttpOnly session cookie is stored in the device's
+unlocked-only, non-synchronizing data-protection Keychain. Every session operation
+requires the configured shared access group; the macOS legacy Keychain is never
+used. No vault passwords or signing keys are persistently cached on the device.
+Logout/account or endpoint changes clear
+the link; expired/revoked sessions fail at the server.
+
+Open Passwords in the native app, choose **Connect Password AutoFill**, then
+enable **Thingtime** in OS Settings → General → AutoFill & Passwords. System
+configuration and biometric/device passcode prompts require the user. Password
+and passkey providers require iOS 17/macOS 14; native OTP AutoFill requires
+iOS 18/macOS 15. The provider uses exact HTTPS host matches for passwords/TOTP
+and the OS-supplied relying party and allowed credential IDs for passkeys.
+ES256 passkeys use random credential IDs, none attestation, a zero signature
+counter for synchronized credentials and user verification. Encrypted storage
+is acknowledged and read back before a new registration completes.
+
 The provider handles a website-initiated WebAuthn registration, checks the relying
 party and supported algorithm, creates an ES256 key, saves it through the encrypted
 vault, verifies readback and completes the operating-system request. Registration starts at the destination website rather than in a standalone
@@ -337,6 +357,11 @@ See the [README setup](../README.md#password-manager-setup) and
 `npm --prefix remix run test:passwords` covers crypto envelopes, session races,
 formats, TOTP and HTTP boundaries. `node remix/scripts/verify-password-manager.mjs
 http://localhost:<web-port>` exercises a disposable replica through HTTP only.
+`swift test --package-path apple/Passwords` verifies real passkey signatures,
+TOTP test vectors and session/domain validation. Builds alone do not establish
+that signed OS registration or a third-party login ceremony works. iOS provider
+ceremonies require a physical device; the simulator is a compile/UI check.
+Record actual OS/device results separately in the delivery PR.
 
 Screen-capture QA can use a synthetic canvas video stream in a disposable test page to exercise the real decoder and cleanup paths without sharing a desktop. This verifies video processing, cancellation, and stopped tracks, but does not substitute for OS picker/permission validation. Closing the editor aborts its pending scan; a stream returned by a late browser picker is immediately stopped.
 
@@ -348,6 +373,8 @@ in an isolated localhost deployment, then configure the first username in
 It uses real session/admin/password/upload endpoints and creates a synthetic
 `/tmp/thingtime-password-import-qa/all-data.1pux` for browser round-trip checks.
 Never point this test at production or supply personal credentials.
+
+The installed desktop bridge checks the selected HTTPS server's capability manifest before forwarding private password requests. Full-vault title search requires `api.passwords` 1.2.0 or a compatible update there, even when the bundled UI is newer. Missing, wrong-origin, or breaking manifests produce an explicit compatibility error instead of silently using an older listing contract.
 
 The synthetic UI fixture at `scripts/password-tools.browser.html` mounts the real
 password components with a fail-closed synthetic transport. Its Run regression
@@ -399,7 +426,9 @@ The tree is decorative beside visible accessible text; entry/site icons retain
 their meaning. Extension 0.2.1 packages valid 16/32/48/128px icons. Native
 1.0.7/build 8 packages the same tree and ICNS in both host and provider extension.
 System bundle icons are separate from website-controlled passkey/account artwork.
-The current iOS project has no shared PasswordProvider target/resource consumer.
+The iOS project's `ThingtimePasswordProvider` target shares the
+`apple/PasswordProvider` source but does not package these branding resources;
+only the macOS host and provider extension consume them.
 
 Password confirmation timing, durable account/origin/device Never trust,
 per-entry overrides, explicit forgetting, native reuse boundaries and the 1.5 API
