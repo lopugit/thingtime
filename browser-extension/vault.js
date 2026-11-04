@@ -141,8 +141,8 @@ export function createVaultController(api, {settings, workspace, currentDocument
         else {
           await focus(s);
           if (s.ownerId!==message.ownerId || !await requestCurrent(r)) { values.username=''; values.password=''; r.resolve(failure('The vault or requesting page changed.')); return {ok:true}; }
-          const result=await api.tabs.sendMessage(s.target.tabId,{action:'vault-fill-values',nonce:r.form.nonce,formId:r.form.formId,origin:s.target.origin,entryId:r.entryId,username:values.username,password:values.password},{documentId:s.target.documentId}).catch(()=>null);
-          r.resolve(result?.ok===true?{ok:true}:failure('The form changed. Choose the account again.'));
+          const result=await api.tabs.sendMessage(s.target.tabId,{action:'vault-fill-values',nonce:r.capture.nonce,targetId:r.capture.targetId,origin:s.target.origin,entryId:r.entryId,username:values.username,password:values.password},{documentId:s.target.documentId}).catch(()=>null);
+          r.resolve(result?.ok===true?{ok:true}:failure('The sign-in fields changed. Choose the account again.'));
           values.username=''; values.password='';
         }
       } else r.resolve({ok:true});
@@ -162,9 +162,14 @@ export function createVaultController(api, {settings, workspace, currentDocument
     if(!await accountAdmission())return failure('Unlock the Thingtime browser workspace to reconnect.');
     if (message.action==='vault-fill') {
       if(typeof message.entryId!=='string' || !message.entryId) return {ok:false};
-      const form=await api.tabs.sendMessage(target.tabId,{action:'vault-prepare',formId:message.formId},{documentId:target.documentId}).catch(()=>null);
-      if(!form?.ok || form.origin!==target.origin || form.actionOrigin!==target.origin || typeof form.nonce!=='string' || !await validTarget(target)) return failure('Choose a visible login form that submits to this website.');
-      const guard=()=>internal?workspaceMatches(target,target.workspaceEpoch):validTarget(target);const s=await connection(target,sender,guard);return begin(s,{type:'fill',entryId:message.entryId,form,workspaceBound:internal,workspaceEpoch:target.workspaceEpoch});
+      const capture=await api.tabs.sendMessage(target.tabId,{action:'vault-prepare',targetId:message.targetId},{documentId:target.documentId}).catch(()=>null);
+      if(!capture?.ok || capture.origin!==target.origin || capture.actionOrigin!==target.origin ||
+        typeof capture.nonce!=='string' || typeof capture.targetId!=='string' ||
+        (message.targetId!==undefined && capture.targetId!==message.targetId) || !await validTarget(target))
+        return failure('Choose an available sign-in field on this website.');
+      const guard=()=>internal?workspaceMatches(target,target.workspaceEpoch):validTarget(target);
+      const s=await connection(target,sender,guard);
+      return begin(s,{type:'fill',entryId:message.entryId,capture,workspaceBound:internal,workspaceEpoch:target.workspaceEpoch});
     }
     const guard=()=>internal?workspaceMatches(target,target.workspaceEpoch):validTarget(target);const s=await connection(target,sender,guard);
     if(message.action==='vault-import-totp') {

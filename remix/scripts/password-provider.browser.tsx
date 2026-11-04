@@ -6,9 +6,12 @@ import {ChakraProvider} from '@chakra-ui/react';
 import {createMemoryRouter,RouterProvider} from 'react-router';
 import {ThingtimeProvider} from '../app/Providers/ThingtimeProvider';
 import {BrowserPasswordProvider} from '../app/components/Passwords/BrowserPasswordProvider';
+import {prepareBrowserPasskeyRegistration} from '../app/passwords/browserPasskey';
 const ownerId='synthetic-provider-branding';
 const windows=new Map<string,string>();const granted=new Set<string>();let reuseRecentDeviceVerification=true;
-const fixture={holdFill:false,fillHeld:false,releaseFill:null as null|(()=>void),operations:[] as string[],request:null as null|{id:string;type:string;origin:string}};
+const assertionMode=new URLSearchParams(location.search).has('assertion');
+const assertionRecord=assertionMode?prepareBrowserPasskeyRegistration({type:'create',origin:'https://workspace-fixture.test',publicKey:{challenge:'AQID',rp:{id:'workspace-fixture.test',name:'Synthetic site'},user:{id:'BAUG',name:'fixture@example.test',displayName:'Synthetic account'},pubKeyCredParams:[{type:'public-key',alg:-7}]}},true):null;
+const fixture={holdFill:false,fillHeld:false,releaseFill:null as null|(()=>void),holdApproval:false,approvalHeld:false,approvalAborted:false,releaseApproval:null as null|(()=>void),rateLimitApproval:false,operations:[] as string[],request:null as null|{id:string;type:string;origin:string}};
 Object.assign(window,{passwordProviderFixture:fixture});
 document.addEventListener('thingtime:password-provider-request',event=>{const r=JSON.parse((event as CustomEvent).detail);fixture.request={id:r.id,type:r.type,origin:r.origin};});
 window.fetch=async(input,init)=>{
@@ -19,6 +22,29 @@ window.fetch=async(input,init)=>{
  if(url.pathname==='/api/v1/passwords'&&init?.body){
   const body=JSON.parse(String(init.body));if(body.expectedOwnerId!==ownerId)return Response.json({ok:false},{status:403});fixture.operations.push(body.operation);
   const result=(values:Record<string,unknown>)=>Response.json({ok:true,ownerId,...values});
+  if(assertionRecord){
+   const id='synthetic-assertion',record=await assertionRecord;
+   if(body.operation==='catalog')return body.cursor==='later'?result({catalog:[{id,title:'Synthetic site passkey',username:'fixture',relyingParty:'workspace-fixture.test',credentialId:record.response.id}],nextCursor:null}):result({catalog:[],nextCursor:'later'});
+   if(body.operation==='verification-status')return result({window:'never',entryWindow:'global',required:false,settings:{window:'never',revision:'fixture-revision',reuseRecentDeviceVerification:true}});
+   if(body.operation==='verify-passkey'){
+    if(body.password!==''||body.context?.entryId!==id||body.context?.purpose!=='get'||body.context?.rp!=='workspace-fixture.test')return Response.json({ok:false},{status:403});
+    if(fixture.holdApproval){
+     fixture.approvalHeld=true;
+     try{await new Promise<void>((resolve,reject)=>{
+      const abort=()=>{fixture.approvalAborted=true;reject(init?.signal?.reason);};
+      fixture.releaseApproval=()=>{init?.signal?.removeEventListener('abort',abort);resolve();};
+      init?.signal?.addEventListener('abort',abort,{once:true});
+      if(init?.signal?.aborted)abort();
+     });}finally{fixture.approvalHeld=false;fixture.releaseApproval=null;}
+    }
+    if(fixture.rateLimitApproval)return Response.json({ok:false,error:'Please wait before verifying again.'},{status:429,headers:{'Retry-After':'120'}});
+    return result({verified:true,requestId:body.requestId,sessionBinding:'A'.repeat(43)});
+   }
+   if(body.operation==='read'){
+    if(body.id!==id||body.passkeySession?.context?.entryId!==id||body.passkeySession?.binding!=='A'.repeat(43))return Response.json({ok:false},{status:403});
+    return result({id,entry:record.entry,revision:1});
+   }
+  }
   const policy=(id?:string)=>windows.get(id||'global')||'5m';
   const settings=()=>({window:policy(),revision:'fixture-revision',reuseRecentDeviceVerification});
   if(body.operation==='verification-settings'){if(body.window)windows.set(body.id||'global',body.window);if(typeof body.reuseRecentDeviceVerification==='boolean')reuseRecentDeviceVerification=body.reuseRecentDeviceVerification;return result({settings:settings()});}

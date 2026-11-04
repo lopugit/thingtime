@@ -1395,8 +1395,8 @@ export function useApi() {
     // third-party app connections (Reddit, YouTube, Mastodon, …) — link
     // external accounts, browse their feeds, manage AI feed filters
     connections: {
-      providers: useCallback(async () => { await requireThingtimeCapability('api.connections-providers', '2.0.0'); return getJson('/api/v1/connections/providers'); }, []),
-      list: useCallback(async () => { await requireThingtimeCapability('api.connections', '2.0.0'); return getJson('/api/v1/connections'); }, []),
+      providers: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-providers', '2.0.0'); return getJson('/api/v1/connections/providers', options); }, [getJson]),
+      list: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections', '2.0.0'); return getJson('/api/v1/connections', options); }, [getJson]),
       connect: useCallback(
         async (args) => { await requireThingtimeCapability('api.connections', '2.0.0'); return asyncFetcher.submit({ provider: args?.provider, fields: args?.fields }, { action: '/api/v1/connections' }); },
         [asyncFetcher]
@@ -1405,7 +1405,7 @@ export function useApi() {
       // SSO account linking: begin returns the provider's authorize URL — send
       // the browser there; the callback lands back on /connections
       oauthBegin: useCallback(
-        async (args) => { await requireThingtimeCapability('api.connections-oauth-begin', '2.0.0'); return asyncFetcher.submit({ provider: args?.provider }, { action: '/api/v1/connections/oauth/begin' }); },
+        async (args) => { await requireThingtimeCapability('api.connections-oauth-begin', '2.0.0'); return asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId }, { action: '/api/v1/connections/oauth/begin', expectedApiOrigin: args?.expectedApiOrigin }); },
         [asyncFetcher]
       ),
       // the Thingtime-managed virtual YouTube subscription list
@@ -1432,7 +1432,7 @@ export function useApi() {
           ); },
         []
       ),
-      filters: useCallback(async () => { await requireThingtimeCapability('api.connections-filters', '2.0.0'); return getJson('/api/v1/connections/filters'); }, []),
+      filters: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-filters', '2.0.0'); return getJson('/api/v1/connections/filters', options); }, [getJson]),
       saveFilter: useCallback(
         async (args) => {
           await requireThingtimeCapability('api.connections-filters', '2.0.0');

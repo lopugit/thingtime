@@ -710,3 +710,15 @@ restore. `api.files` 1.9.0 / `api.file-sync-batches` 1.3.0 and native fileAccess
 1.17.0 / fileSymbolicLinks 1.0.0 are explicit requirements. Targets are never
 followed. Tests: `symbolicLink.test.ts`, canonical file/route suites and the
 isolated Mac paged HTTP lane described in mobile-file-sync.md.
+
+### Files browser and sync folder publication
+
+The Files browser includes canonical live `file` Things. Its file actions use
+the private file API and versioned attachment ranges. Moves and Trash use
+the selected Timeline revision and preserve the original file ID and history.
+Browser Upload reuses the existing upload control, then publishes the ready
+attachment with the file API when the destination is in a saved owned sync
+folder. The destination lookup reads only saved sync configurations and exact
+folder ancestry, once per distinct folder in the current operation. Other
+uploads keep their ordinary attachment placement. The sync inventory still
+enumerates only canonical files and folders.

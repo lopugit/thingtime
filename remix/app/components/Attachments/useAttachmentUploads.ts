@@ -312,7 +312,8 @@ export const useAttachmentUploads = (
 					uploadId = typeof prepared?.id === 'string' ? prepared.id : null;
 					partSizeBytes = Number(prepared?.partSizeBytes);
 					partCount = Number(prepared?.partCount);
-					if (!uploadId || !Number.isSafeInteger(partSizeBytes) || partSizeBytes <= 0 || !Number.isSafeInteger(partCount) || partCount <= 0) {
+					const readyEmptyFile = purpose === 'file' && file.size === 0 && prepared?.state === 'ready' && partCount === 0;
+					if (!uploadId || !Number.isSafeInteger(partSizeBytes) || partSizeBytes <= 0 || !Number.isSafeInteger(partCount) || (partCount <= 0 && !readyEmptyFile)) {
 						throw new Error('invalid upload plan');
 					}
 					uploadPlansRef.current.set(localId, { uploadId, partSizeBytes, partCount });
