@@ -26,7 +26,7 @@ function fixture(t, { timeout } = {}) {
     isDestroyed() { return !!this.destroyed; }
     destroy() { this.destroyed = true; this.emit('closed'); }
     async loadURL(url) {
-      this.webContents.emit('did-start-navigation', { url, isMainFrame: true });
+      this.webContents.emit('did-start-navigation', { url, isMainFrame: true, isSameDocument: false });
       this.webContents.mainFrame.url = url;
     }
     show() {}
@@ -78,6 +78,19 @@ test('desktop approval verifies the popup, main document, account and exact proo
   assert.throws(() => f.invoke('respond', response), { code: 'INVALID_APPROVAL' });
 });
 
+test('exact-URL startup history replacement keeps the approval document active', async t => {
+  const f = fixture(t);
+  const completion = f.approve();
+  const window = f.popup();
+  const url = window.webContents.mainFrame.url;
+  window.webContents.emit('did-start-navigation', { url, isMainFrame: true, isSameDocument: true });
+  assert.equal(window.isDestroyed(), false);
+  const request = f.invoke('ready', ownerId);
+  const proof = { requestId: request.id, binding: 'B'.repeat(43), context: { purpose: 'fill', rp: 'login.example', origin: website.origin, entryId: request.entryId, requestHash: request.requestHash } };
+  f.invoke('respond', { id: request.id, ownerId, proof });
+  assert.deepEqual(await completion, proof);
+});
+
 test('navigation, authority changes and timeout cancel desktop approval', async t => {
   const f = fixture(t, { timeout: 50 });
   const navigation = f.approve();
@@ -85,6 +98,9 @@ test('navigation, authority changes and timeout cancel desktop approval', async 
   const window = f.popup();
   window.webContents.emit('did-start-navigation', { url: window.webContents.mainFrame.url, isMainFrame: true });
   await assert.rejects(navigation, { code: 'APPROVAL_CANCELLED' });
+  const urlChange = f.approve();
+  f.popup().webContents.emit('did-start-navigation', { url: `${origin}/passwords/provider?view=accounts`, isMainFrame: true, isSameDocument: true });
+  await assert.rejects(urlChange, { code: 'APPROVAL_CANCELLED' });
   const sessionChange = f.approve();
   f.changeContext({ session: {} });
   assert.throws(() => f.invoke('ready', ownerId), { code: 'SESSION_CHANGED' });
