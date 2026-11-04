@@ -110,8 +110,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-11-04: Add Google web OAuth and generic provider file imports, a one-use approved agent handoff with status-only receipts, an editable import/approval UI, and cross-platform Node delivery. Document agent password, OAuth and passkey workflows with distinct live acceptance gates. **Codex (AI)**
-
+- 2026-11-04: Add Google web OAuth and generic provider file imports, a one-use approved agent handoff with status-only receipts, an editable import/approval UI, and cross-platform Node delivery. Document agent password, OAuth and passkey workflows with distinct live acceptance gates. [PR #1341 notes](../PRs/1341-credential-handoff-approved-provider-imports.md). **Codex (AI)**
+- 2026-11-04: Accept Codex's shared OAuth client with its issuer-bound loopback callback so the Thingtime MCP login reaches consent. **Codex (AI)**
 
 - 2026-11-04: Add an editable two-column device dashboard with CPU, RAM, disk capacity/activity and network gauges in the device page and quick view. Device links open the device page by default; file sync remains a separate section and destination. Native Mac measurements negotiate device contracts 1.14.0; missing data stays unavailable and legacy BSON snapshots retain readable, retry-compatible state. [PR #1330 notes](../PRs/1330-device-dashboard-gauges-device-resource-dashboard.md). **Codex (AI)**
 - Save independently encrypted named auth connections for the same external account, select allowed operations, and use or reconnect an exact connection. **Codex (AI)**
