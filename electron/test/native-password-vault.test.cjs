@@ -17,7 +17,7 @@ test('desktop Production settings connect the broker and transport using the exa
   let state = { connection: null };
   const session = { fetch: async (url, options) => {
     seen.push([url, options]);
-    const value = url.startsWith(apiOrigin)
+    const value = new URL(url).origin === apiOrigin
       ? { schemaVersion: 1, origin: apiOrigin, features: { 'api.passwords': { version: '1.7.0' } } }
       : { ok: true, ownerId, catalog: [] };
     return Response.json(value, { headers: { 'x-thingtime-api-fallback': apiOrigin } });
