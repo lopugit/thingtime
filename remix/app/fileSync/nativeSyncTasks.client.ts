@@ -21,7 +21,7 @@ import type { ForegroundSyncInput } from './foregroundSync';
 import type { InventoryIdentity } from './inventoryJournal';
 import { readCloudFolderInventoryPages } from './cloudInventoryPages.client';
 import { readCloudFolderInventory } from './cloudInventory.client';
-import { mobileFolderSource, supportsNativeInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging } from './mobileFolders.client';
+import { mobileFolderSource, supportsNativeInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
 import { createConflictReviewController } from './conflictReviewController';
@@ -64,6 +64,21 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 		let journal: Awaited<ReturnType<typeof openSyncJournal>> | undefined;
 		let releaseWindow: (() => Promise<void>) | undefined, job: SyncJob | null = null;
 		let admissionPending: Promise<SyncJob | null> | undefined;
+		let strictCaptureId: string | undefined;
+		let strictCancellation: Promise<void> | undefined;
+		const cancelStrictCapture = () => {
+			const captureId = strictCaptureId;
+			if (!captureId) return Promise.resolve();
+			return strictCancellation ??= (async () => {
+				const signal = AbortSignal.timeout(10_000);
+				const assertCurrent = () => { signal.throwIfAborted(); checkIdentity(); };
+				const host = await createNativeSyncHost({ ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal, assertCurrent });
+				if (host.origin() !== binding.origin) throw Error('The selected sync server changed.');
+				await host.request(binding.ownerId, { action: 'scan-cancel', rootId: reviewed.configuration.localRootId,
+					inventoryDeviceId: binding.deviceId, captureId, capturePolicy: 'strict-async', excludedPaths: reviewed.configuration.excludedPaths,
+					...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}) }, signal);
+			})();
+		};
 		let disposeProgressCache: (() => void) | undefined;
 		let jobs: ReturnType<Awaited<ReturnType<typeof openSyncJournal>>['jobs']> | undefined;
 		try {
@@ -82,6 +97,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				if (failure) throw failure;
 			};
 			cancelCapture = async () => {
+				await cancelStrictCapture();
 				// Cleanup must outlive the aborted execution host, while retaining
 				// the same account generation, adapter, origin, device and root.
 				const cleanupSignal = AbortSignal.timeout(10_000);
@@ -122,6 +138,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			const currentScope = () => { check(); host.assertCurrent(); return binding; };
 			const runtime = { ...(resources ? { resources } : {}), currentScope, origin: host.origin, fetch: host.fetch, requireCapability: host.requireCapability };
 			const backup = supportsNativeBackupCapture(capabilities) && reviewed.configuration.mode === 'backup' && !reviewed.configuration.propagateDeletes;
+			const strictAsync = !backup && supportsNativeStrictCapture(capabilities);
 			let capturedSource: NativeBackupCapture | undefined;
 			const releaseLocalImport = async (inventory: InventoryIdentity) => {
 				if (!job?.localImport || JSON.stringify(job.localImport.inventory) !== JSON.stringify(inventory)) return;
@@ -150,18 +167,29 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					const changed = await jobs!.capture(job!, crypto.randomUUID()); check();
 					if (!changed) throw Error('The sync job changed before indexing.'); job = changed;
 				}
-				for await (const page of readNativeInventory({ ownerId: binding.ownerId, deviceId: binding.deviceId, rootId: reviewed.configuration.localRootId,
-					excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}), signal, request, ...options, ...(supportsNativeInventoryBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}), ...(backup ? { backupPolicy: reviewed.configuration, captureId: job!.nativeCaptureId,
-						onCaptureStatus: async value => {
+				const captureId = strictAsync ? crypto.randomUUID() : undefined;
+				if (captureId) { strictCaptureId = captureId; strictCancellation = undefined; }
+				let finished = false;
+				try {
+					for await (const page of readNativeInventory({ ownerId: binding.ownerId, deviceId: binding.deviceId, rootId: reviewed.configuration.localRootId,
+						excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}), signal, request, ...options, ...(captureId ? { strictAsync, captureId,
+							onStrictProgress: (indexed: number) => publish({ stage: 'scanning', confirmed: 0, total: 0, indexed }) } : {}),
+							...(supportsNativeInventoryBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}), ...(backup ? { backupPolicy: reviewed.configuration, captureId: job!.nativeCaptureId,
+							onCaptureStatus: async value => {
 							if (value.state === 'complete') capturedSource = value;
 							if (job!.nativeCaptureGeneration === value.generation) return;
 							const resetImport = !!job!.localImport && !!job!.nativeCaptureGeneration;
 							const changed = await jobs!.observeCapture(job!, value.generation); check();
 							if (!changed) throw Error('The sync job changed during indexing.'); job = changed;
 							if (resetImport) throw new NativeInventoryRetryWait('The native scan changed. Its new generation will import separately.');
-						},
-						onProgress: value => publish({ stage: 'scanning', confirmed: 0, total: 0, indexed: value.totalEntries, skipped: value.totalSkipped,
+							},
+							onProgress: value => publish({ stage: 'scanning', confirmed: 0, total: 0, indexed: value.totalEntries, skipped: value.totalSkipped,
 							coverage: value.coverage, consistency: value.consistency }) } : {}) })) yield page;
+					finished = true;
+				} finally {
+					if (captureId && !finished) await cancelStrictCapture().catch(() => {});
+					if (strictCaptureId === captureId) strictCaptureId = undefined;
+				}
 				if (backup && !options?.retainCaptureUntilHandoff) {
 					const changed = await jobs!.capture(job!, null); check();
 					if (!changed) throw Error('The sync job changed after indexing.'); job = changed;

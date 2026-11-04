@@ -61,8 +61,8 @@ export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePol
 	| { action: 'scan-stream'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; ignoreRules?: string; capturePolicy: 'one-way-supported' }
 	| { action: 'scan-stream-finish'; rootId: string; inventoryDeviceId: string; captureId: string; afterSequence: number; excludedPaths?: string[]; ignoreRules?: string; capturePolicy: 'one-way-supported' }
 	| { action: 'scan-changes'; rootId: string; inventoryDeviceId: string; captureId: string; afterSequence: number; pageSize?: number; waitMilliseconds?: number; excludedPaths?: string[]; ignoreRules?: string; capturePolicy: 'one-way-supported' }
-	| { action: 'scan-capture'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; ignoreRules?: string; capturePolicy?: 'backup-supported' }
-	| { action: 'scan-status' | 'scan-cancel'; rootId: string; inventoryDeviceId: string; captureId: string; capturePolicy: 'backup-supported' | 'one-way-supported'; excludedPaths?: string[]; ignoreRules?: string }
+	| { action: 'scan-capture'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; ignoreRules?: string; capturePolicy?: 'backup-supported' | 'strict-async' }
+	| { action: 'scan-status' | 'scan-cancel'; rootId: string; inventoryDeviceId: string; captureId: string; capturePolicy: 'backup-supported' | 'one-way-supported' | 'strict-async'; excludedPaths?: string[]; ignoreRules?: string }
 	| { action: 'scan-skips'; rootId: string; inventoryDeviceId: string; capture: NativeBackupCapture; offset: number; pageSize?: number; ignoreRules?: string; capturePolicy: 'backup-supported' }
 	| { action: 'scan-page'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; offset: number; pageSize?: number; ignoreRules?: string; capturePolicy?: 'backup-supported' }
 	| { action: 'scan-discard'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; ignoreRules?: string; capturePolicy?: 'backup-supported' }
@@ -113,6 +113,7 @@ export type FolderResult = {
 	entries?: SyncEntry[];
 	inspectedEntry?: SyncEntry | null;
 	backupCapture?: NativeBackupStatus;
+	strictCapture?: { id: string; generation: string; state: NativeBackupStatus['state']; indexedEntries: number };
 	skippedPage?: NativeSkippedPage;
 	cancelled?: true;
 	capture?: NativeInventoryCapture;
@@ -180,6 +181,8 @@ export const supportsNativeScanExclusions = (bridge: FolderCapabilities | undefi
 /** Mac 1.8 explicitly negotiates best-effort backup and its complete skip ledger. */
 export const supportsNativeBackupCapture = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 8;
+export const supportsNativeStrictCapture = (bridge: FolderCapabilities | undefined) =>
+	bridge?.platform === 'macos' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.18.0');
 export const supportsNativeIgnoreRules = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 9;
 /** Mac 1.10 adds opt-in byte-bounded inventory batches. */
@@ -194,6 +197,8 @@ export const supportsNativeStreamingIndex = (bridge: FolderCapabilities | undefi
 export const supportsNativeStreamingBatches = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsNativeStreamingIndex(bridge) && (Number(bridge!.fileAccessVersion!.split('.')[1]) > 11 || Number(bridge!.fileAccessVersion!.split('.')[2]) >= 1);
 export function assertNativeScanExclusions(request: FolderRequest, bridge: FolderCapabilities | undefined) {
+	if ('capturePolicy' in request && request.capturePolicy === 'strict-async' && !supportsNativeStrictCapture(bridge))
+		throw Error('Update Thingtime Mac to run strict indexing in the background.');
 	if ((['scan-stream', 'scan-changes', 'scan-stream-finish'].includes(request.action) || ('capturePolicy' in request && request.capturePolicy === 'one-way-supported')) && !supportsNativeStreamingIndex(bridge)) throw Error('Update Thingtime Mac to transfer while indexing.');
 	if ('pageSize' in request && request.pageSize !== undefined) {
 		if (!['scan-page', 'scan-skips', 'scan-changes'].includes(request.action)) throw Error('Invalid native inventory page size action.');
@@ -377,7 +382,9 @@ export function parseMobileFolderResult(
 			'path-collision': 'multiple paths have the same normalized name'
 		};
 		const failure = payload.scanFailure;
-		if ((request.action !== 'scan' && request.action !== 'scan-capture') || payload.rootId !== request.rootId ||
+		const strictStatus = request.action === 'scan-status' && request.capturePolicy === 'strict-async' &&
+			payload.capturePolicy === 'strict-async' && payload.captureId === request.captureId && payload.strictCaptureState === 'interrupted';
+		if ((request.action !== 'scan' && request.action !== 'scan-capture' && !strictStatus) || payload.rootId !== request.rootId ||
 			payload.complete !== false || payload.entries !== undefined || payload.capture !== undefined || payload.inventoryPage !== undefined ||
 			!failure || typeof failure !== 'object' || Array.isArray(failure) ||
 			Object.keys(failure).some(key => !['reason', 'path'].includes(key)) ||
@@ -601,6 +608,27 @@ export function parseMobileFolderResult(
 		verifyScanExclusions(request, payload.excludedPaths);
 		result.changesPage = parseNativeIndexChangesPage(payload.changesPage, request.captureId, 'afterSequence' in request ? request.afterSequence : 0, request.action === 'scan-changes' ? request.pageSize : undefined);
 		if (request.action === 'scan-cancel') { if (!['interrupted', 'complete'].includes(result.changesPage.state)) throw Error('Native streaming cancellation was not confirmed.'); result.cancelled = true; }
+	} else if ((request.action === 'scan-capture' || request.action === 'scan-status' || request.action === 'scan-cancel') && request.capturePolicy === 'strict-async') {
+		if (payload.rootId !== request.rootId || payload.capturePolicy !== 'strict-async' || payload.captureId !== request.captureId ||
+			payload.backupCapture !== undefined || payload.entries !== undefined || payload.inventoryPage !== undefined)
+			throw Error('Native strict capture scope or policy changed.');
+		verifyScanExclusions(request, payload.excludedPaths);
+		if (request.action === 'scan-cancel') {
+			if (payload.cancelled !== true || payload.complete !== false || payload.capture !== undefined) throw Error('Native strict capture cancellation was not confirmed.');
+			result.cancelled = true;
+		} else {
+			const state = payload.strictCaptureState, generation = payload.captureGeneration;
+			if (!['running', 'complete', 'interrupted'].includes(state) || payload.complete !== (state === 'complete') || (state !== 'complete' && payload.capture !== undefined))
+				throw Error('Native strict capture state changed.');
+			const descriptor = parseNativeInventoryCapture({ id: request.captureId, generation, totalEntries: payload.indexedEntries });
+			result.strictCapture = { id: descriptor.id, state, generation: descriptor.generation, indexedEntries: descriptor.totalEntries };
+			if (state === 'complete') {
+				const capture = parseNativeInventoryCapture(payload.capture);
+				if (capture.coverage !== undefined || capture.id !== request.captureId || capture.generation !== generation || capture.totalEntries !== descriptor.totalEntries)
+					throw Error('Native strict capture identity or coverage changed.');
+				result.capture = capture;
+			}
+		}
 	} else if (request.action === 'scan-status') {
 		if (payload.rootId !== request.rootId || payload.capturePolicy !== 'backup-supported' || payload.capture !== undefined || payload.entries !== undefined)
 			throw Error('Native backup capture scope or policy changed.');
