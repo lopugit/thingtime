@@ -1,5 +1,24 @@
 # API endpoints and capabilities
 
+`api.devices` and `api.devices-node-state` 1.14.0 add optional host resource
+measurements to the existing device state mirror. `DeviceResources.swift`
+samples host counters, `ThingtimeAPIClient` sends the fields only to a
+compatible paired origin, and `normalizeDeviceState` validates the scalar
+allowlist for writes and the owner-only read projection. Older snapshots omit
+these fields. Run `test:devices`, `test:api-capabilities`, and the
+`DeviceResourcesTests` Swift suite. See the [native node guide](../../macos/ThingtimeNode/README.md).
+
+`api.devices-sync-control` 1.1.0 adds `/api/v1/devices/sync-control` for the
+account browser and installed sync worker. `deviceSyncControl.ts` authenticates
+the owner and current device pairing, delivers an immutable request once, and
+accepts a result only from its claiming lease. Protected `device-sync-control`
+Things reuse the device queue/unique-key indexes, secure BinData payloads and
+shared control TTL; no new collection or index is introduced. File bytes and
+native grants remain on the device. Optional owner-private `roots[].sourcePath`
+location metadata survives the encrypted status result; it grants no ancestor
+access and never appears in a public manifest. Run `test:devices`, `test:api-capabilities`
+and `test:schemas`; see [browser device sync](../browser-device-sync.md).
+
 `api.admin-mongodb-connections` 1.1.0 registers the private administrator
 `GET /api/v1/admin/mongodb/connections` in the docs registry and Nitro map.
 The shared `useApi` client negotiates it against the selected origin. Its reply
@@ -523,6 +542,7 @@ the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
 
+
 ## Mapbox provider integration
 
 `POST /api/v1/maps` negotiates `api.maps` 1.0.0. `api/utils/maps/route.ts`
@@ -548,3 +568,44 @@ existing protected scheduler. Both manifests derive versions from apiDocs.ts.
 The dispatcher records allowlisted storage failure codes without logging response
 bodies. See [storage recovery](../storage-recovery.md) for transactional queue,
 worker, controller gates and the scheduled production monitor.
+
+
+Connections catalog, account/list, unlink, feed, filters and OAuth begin/callback
+publish independent 2.0.0 contracts through `apiDocs.ts` and both generated
+manifests. The existing `useApi` connection methods negotiate these requirements.
+There is no new endpoint. Owner-private encrypted grants replace shared tokens;
+OAuth app configuration is exact-origin/environment scoped. Read the auth map,
+README social OAuth setup and TESTING before provider acceptance.
+## Environment gateway and index readiness
+
+The negotiated ingress contract and connection-mode policy are summarized at the
+top of this map. `app/api/utils/deployment/environmentGateway.ts` owns bounded discovery,
+admission and pool draining; `server/utils/environmentGateway.ts` validates
+origin-preserving signed relays before the normal route authorization path.
+`server/middleware/environment-gateway.ts`, the SPA fallback and capability
+handler retain local discovery/static serving while routing data operations.
+`mongodb/indexLifecycle.ts` and `indexMaintenance.mts` coordinate durable index
+readiness without blocking read-only authentication. Existing admin migration
+status/run contracts and Lopu background-task contracts carry their deliberate
+compatible patch versions in both generated manifests.
+
+Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
+the built `test:environment-gateway:acceptance` runner. See
+[the gateway runbook](../environment-api-gateway.md) for server settings,
+environment partitioning and outstanding live rollout acceptance.
+
+Named Connections management is opt-in at `api.connections`,
+`api.connections-oauth-begin`, `api.connections-oauth-callback` and
+`api.connections-unlink` 2.1. `POST /api/v1/connections/named`
+(`api.connections-named` 1.0) verifies exact actor, origin, connection ID and
+a fixed operation. Token envelopes never cross the response boundary.
+Generic Things 1.46.3 also keeps private account and named grant metadata
+behind the origin-scoped Connections API. See
+`test:connections:oauth` and `test:api-capabilities`.
+
+Connection provider artwork negotiates `api.connections-provider-icon` 1.0.0.
+`GET /api/v1/connections/provider-icon?provider=<built-in-id>` serves cached
+PNG bytes, 204 when unavailable, or 404 for an unknown provider. This public
+asset stays on the document origin without opening a data-plane connection or
+forwarding user headers to the provider. Verify both manifests and route
+registration with `test:api-capabilities` and `test:connections:built`.

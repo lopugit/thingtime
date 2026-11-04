@@ -81,7 +81,8 @@ export async function runPasswordVerificationIntegration({load,vite,origin,owner
   const forbidden=await things.action({request:new Request(origin+'/api/v1/things',{method:'POST',headers:{Origin:origin,Cookie:cookies(),'Content-Type':'application/json'},body:JSON.stringify({id:randomUUID(),thingtime:['password-verification-device'],crystal:{verified:true}})})});
   assert.ok(forbidden.status>=400,'Generic Things cannot mint device authority');
   const previews=await passwords.loader({request:new Request(origin+'/api/v1/passwords?previews=1',{headers:{Cookie:cookies()}})});assert.equal(previews.status,200);
-  const preview=(await previews.json()).entries.find((value:any)=>value.id===id);assert.equal(preview.username,'fixture@example.invalid');assert.deepEqual(Object.keys(preview).sort(),['id','passwordType','revision','title','updatedAt','username']);
+  const preview=(await previews.json()).entries.find((value:any)=>value.id===id);assert.equal(preview.username,'fixture@example.invalid');assert.deepEqual(Object.keys(preview).sort(),['id','passwordType','revision','title','updatedAt','username','websiteIcon']);
+  if(process.env.THINGTIME_EXTENSION_ACCOUNTS_UI==='1')await(await import('./password-extension-accounts.integration')).runExtensionAccountsUI({vite,load,ownerId,username,password,invoke});
   if(process.argv.includes('--verification-ui'))await(await import('./password-verification-ui.integration')).runPasswordVerificationUI({vite,load,ownerId,username,password,invoke});
   console.log('PASS: real disposable API verification; settings alone refuse; explicit Never enrollment; cross-site global reuse; exact-entry/purpose/origin fencing; entry Always; Lock; logout/new login durable trust; Forget/re-enroll; timed approval; protected generic writes; allowlisted usernames.');
 }

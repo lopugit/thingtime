@@ -114,7 +114,7 @@ export const MONGODB_CONNECTION_SNAPSHOT_ID_PREFIX = 'mongodb-connection-snapsho
 export const ERROR_LOG_ID_PREFIX = 'error-log-';
 // One root expiry policy for disposable control Things; excludes content and
 // invitations whose expiry must perform cleanup/refunds before deletion.
-export const EPHEMERAL_CONTROL_THINGTIMES = ['migration-diagnostic', ERROR_LOG_THINGTIME, MONGODB_CONNECTION_SNAPSHOT_THINGTIME] as const;
+export const EPHEMERAL_CONTROL_THINGTIMES = ['migration-diagnostic', ERROR_LOG_THINGTIME, 'device-sync-control', MONGODB_CONNECTION_SNAPSHOT_THINGTIME] as const;
 export const MIGRATION_DIAGNOSTIC_THINGTIME = 'migration-diagnostic';
 export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
 
@@ -1075,7 +1075,7 @@ const postSchema: ThingtimeSchema = {
 };
 
 const fileSchema: ThingtimeSchema = {
-  id: 'file', version: 1, kind: 'crystal', collection: null, title: 'File',
+  id: 'file', version: 2, kind: 'crystal', collection: null, title: 'File',
   summary: 'A stable file identity with retained attachment versions and Timeline history.',
   detail: 'The dedicated file writer changes the current content atomically using an expected revision and immutable operation identity. Bytes remain separately accounted attachment Things linked by parentId/targetId. Trash retains content until an explicit retention workflow removes it.',
   createdVia: 'POST /api/v1/files',
@@ -1083,7 +1083,8 @@ const fileSchema: ThingtimeSchema = {
   fields: [
     { name: 'name', type: 'string', required: true, max: 255, description: 'Editable filename.' },
     { name: 'trashed', type: 'boolean', required: true, description: 'Recoverable trash state; retained bytes remain accounted.' },
-    { name: 'content', type: 'object', required: true, description: 'Verified attachment identity, opaque content version, byte size and multipart fingerprint.' }
+    { name: 'content', type: 'object', required: true, description: 'Verified attachment identity, opaque content version, byte size and multipart fingerprint.' },
+    { name: 'symbolicLink', type: 'object', required: false, description: 'Optional inert posix-symlink-v1 metadata; targetBase64 is canonical raw POSIX readlink bytes matching the attachment payload. Never dereference.' }
   ]
 };
 
@@ -3882,7 +3883,7 @@ const deviceStateSchema: ThingtimeSchema = {
 		{ name: 'revision', type: 'number', required: true, min: 1, description: 'Node-monotonic snapshot revision.' },
 		{ name: 'stateHash', type: 'string', required: true, description: 'Canonical content hash used for exact retry reconciliation.' },
 		{ name: 'snapshotHash', type: 'string', required: true, description: 'Canonical hash of the complete state plus connector snapshot.' },
-		{ name: 'state', type: 'record', required: true, description: 'Bounded locked, volume, brightness, battery and safe open-app summary.' },
+		{ name: 'state', type: 'record', required: true, description: 'Bounded lock, volume, brightness, battery, safe open-app summary and optional host resource measurements.' },
 		{ name: 'observedAt', type: 'date', required: true, description: 'Server receipt timestamp.' }
 	],
 	example: { revision: 42, state: { locked: false, volume: 0.5, brightness: 0.8, openApps: [] } }
@@ -3908,6 +3909,23 @@ const deviceConnectorSchema: ThingtimeSchema = {
 		revision: 42,
 		connector: { id: 'chatgpt-desktop', kind: 'chatgpt', label: 'ChatGPT', status: 'connected', capabilities: ['session.read'] }
 	}
+};
+
+const deviceSyncControlSchema: ThingtimeSchema = {
+  id: 'device-sync-control', version: 1, kind: 'crystal', collection: null,
+  title: 'Device sync control', summary: 'Private delivery state for managing installed sync jobs from any browser.',
+  detail: 'Protected home control Thing. Commands and replies are secure BinData, never generic searchable content. The exact owner/device/request identity is immutable. One claim token owns completion; requests are never re-leased. Execution expires after two minutes and the operation marker is retained for ten minutes by the shared disposable-control TTL.',
+  createdVia: 'POST /api/v1/devices/sync-control',
+  fields: [
+    { name: 'requestId', type: 'string', required: true, description: 'Immutable client operation identity.' },
+    { name: 'digest', type: 'string', required: true, description: 'Hash of the validated command.' },
+    { name: 'deviceCommandKey', type: 'string', required: true, description: 'Shared indexed command queue identity.' },
+    { name: 'pairingHash', type: 'string', required: true, description: 'Binding to the current paired device session.' },
+    { name: 'status', type: 'string', required: true, description: 'pending, processing, complete or error.' },
+    { name: 'deadlineAt', type: 'date', required: true, description: 'Deadline beyond which the request cannot execute or disclose its result.' },
+    { name: 'leaseHash', type: 'string', required: false, description: 'Hash of the sole claiming worker token.' }
+  ],
+  example: { requestId: 'sync-status-1', status: 'pending' }
 };
 
 const deviceCommandSchema: ThingtimeSchema = {
@@ -4237,6 +4255,7 @@ const passkeyAppLinkThingSchema: ThingtimeSchema = {
 export const EXTERNAL_CONNECTION_THINGTIME = [
   'external-account',
   'external-account-link',
+  'external-auth-connection',
   'external-post',
   'external-post-source',
   'feed-filter',
@@ -4252,6 +4271,7 @@ export const DEVICE_THINGTIME = [
 	'device-state',
 	'device-connector',
 	'device-command',
+	'device-sync-control',
 	'device-command-event',
 	'device-ai-live-state',
 	'device-approval',
@@ -4262,7 +4282,7 @@ export const DEVICE_THINGTIME = [
 // Thing kinds are bounded operational machinery and remain writable while an
 // account is full; the durable device/state/connector/screen mirror and all
 // imported chat rows stay ordinary quota-billed content.
-export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
+export const DEVICE_CONTROL_THINGTIME = ['device-sync-control', 'device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
 
 // Historical chats have a dedicated atomic lifecycle, never generic CRUD.
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
@@ -4653,6 +4673,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
 	deviceStateSchema,
 	deviceConnectorSchema,
 	deviceCommandSchema,
+	deviceSyncControlSchema,
 	deviceCommandEventSchema,
 	deviceAiLiveStateSchema,
 	deviceApprovalSchema,

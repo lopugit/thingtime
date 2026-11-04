@@ -31,7 +31,8 @@ const projection = {
 	'crystal.kind': 1,
 	'crystal.type': 1,
 	'crystal.trashed': 1,
-	'crystal.content': 1
+	'crystal.content': 1,
+	'crystal.symbolicLink': 1
 };
 const owned = (doc: any, ownerId: string) =>
 	doc &&
@@ -250,6 +251,6 @@ export function readCloudInventoryNode(doc: any, ownerId: string, parentId: stri
 	}
 	if (doc.thingtime?.length !== 1 || doc.thingtime[0] !== 'file') fail(409, 'A cloud file has an ambiguous kind.');
 	try { return { kind: 'file', path, file: parseCloudFile({ id: doc.shareId, revision: doc.timelineHeadId,
-		name, folderId: parentId, trashed: doc.crystal.trashed, content: doc.crystal.content }) }; }
+		name, folderId: parentId, trashed: doc.crystal.trashed, content: doc.crystal.content, ...(doc.crystal.symbolicLink === undefined ? {} : { symbolicLink: doc.crystal.symbolicLink }) }) }; }
 	catch { return fail(409, 'A cloud file has invalid content metadata; no partial scan was returned.'); }
 }

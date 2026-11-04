@@ -1,3 +1,5 @@
+import { passwordWebsiteOrigins } from '~/passwords/icons';
+import { passwordWebsiteOrigins as passwordAutofillOrigins } from '~/passwords/websites';
 import { openPasswordIcon, sealPasswordIcon } from './icons';
 import { deletePasswordFiles } from './files';
 import { BSON, ObjectId } from 'mongodb';
@@ -43,8 +45,8 @@ export async function listPasswords(ownerId: string, cursor?: string | null, que
   const entries = previews || page.some(doc=>doc.crystal.encryptedIcon) ? await withUserVaultKey(ownerId, key => page.map(doc => {
     const entry = previews ? validatePasswordEntry(JSON.parse(openVaultValue(ownerId, key, doc.shareId, 'secret', doc.crystal.encryptedValue, PASSWORD_STORAGE_DOCUMENT_BYTES))) : null;
     const username = entry ? passwordPreviewUsername(entry) : '';
-    const icon = openPasswordIcon(ownerId, key, doc.shareId, doc.crystal.encryptedIcon, PASSWORD_STORAGE_DOCUMENT_BYTES);
-    return { ...project(doc), ...(icon ? { icon } : {}), ...(username ? {username} : {}) };
+    const icon = openPasswordIcon(ownerId, key, doc.shareId, doc.crystal.encryptedIcon, PASSWORD_STORAGE_DOCUMENT_BYTES) || entry?.icon;
+    return { ...project(doc), ...(icon ? { icon } : {}), ...(username ? {username} : {}), ...(!icon && entry && passwordWebsiteOrigins(entry).length ? {websiteIcon:true} : {}) };
   })) : page.map(project);
   return { entries, nextCursor: docs.length > 50 ? pageCursor(docs[49]) : null };
 }
@@ -66,10 +68,9 @@ export async function passwordCatalog(ownerId: string, cursor?: string | null) {
   const page = await exportPasswordPage(ownerId, cursor);
   const catalog = page.entries.map(({ id, entry }) => {
     const value = (id: string) => entry.fields.find(field => field.id === id)?.value || '';
-    const domains = [...new Set(entry.fields.filter(field => field.type === 'url').flatMap(field => {
-      try { const url = new URL(field.value); return url.protocol === 'https:' && !url.username && !url.password && url.hostname.length <= 253 ? [url.hostname.toLowerCase()] : []; } catch { return []; }
-    }))];
-    return { id, title: entry.title, username: passwordPreviewUsername(entry), domains,
+    const origins = passwordAutofillOrigins(entry.fields);
+    const domains = [...new Set(origins.map(origin => new URL(origin).hostname.toLowerCase()))];
+    return { id, title: entry.title, username: passwordPreviewUsername(entry), domains, origins,
       fillEligible: isPasswordFillEntry(entry), hasPassword: entry.passwordType !== 'passkey' && !!value('password'), hasTotp: entry.fields.some(field => field.type === 'totp' && field.value),
       ...(entry.passwordType === 'passkey' ? { relyingParty: value('relyingParty'), credentialId: value('credentialId'), userHandle: value('userHandle') } : {}) };
   });

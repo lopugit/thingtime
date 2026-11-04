@@ -413,6 +413,18 @@ export const HtmlThingRenderer = ({ node }: { node: HtmlThingNode }) => {
 	return <>{renderNode(node, 0, 0, state)}</>;
 };
 
+// Authored images may keep a local fallback while a source loads or fails.
+// The fallback is a static same-origin asset: it does not carry user data or
+// expand the shared-media dependency graph to a second arbitrary source URL.
+function HtmlBlockImage({ elementProps, fallback }: { elementProps: Record<string, any>; fallback: string }) {
+ const [ready, setReady] = React.useState(false);
+ const [failed, setFailed] = React.useState(false);
+ const src = !failed && typeof elementProps.src === 'string' ? elementProps.src : undefined;
+ return <img {...elementProps} src={src || fallback} alt={typeof elementProps.alt === 'string' ? elementProps.alt : ''} referrerPolicy="no-referrer" loading="lazy" decoding="async"
+  style={{ ...elementProps.style, ...(!ready && src && { background: `center / contain no-repeat url("${fallback}")`, color: 'transparent' }) }}
+  onLoad={() => setReady(true)} onError={() => setFailed(true)} />;
+}
+
 /** Individual Builder elements share the exact HTML allowlist and URL policy. */
 export function HtmlBlockElement({ tag, attributes, editorProps, children }: {
  tag: string; attributes?: Record<string, unknown>; editorProps?: Record<string, any>; children?: React.ReactNode;
@@ -431,5 +443,9 @@ export function HtmlBlockElement({ tag, attributes, editorProps, children }: {
  const merged = { ...props, ...editorProps, style: { ...(props.style as React.CSSProperties), ...editorProps?.style } };
  if (FIELD_TAGS.has(safeTag)) return <HtmlTemplateField tag={safeTag as 'input' | 'textarea' | 'select'} fieldProps={merged}>{safeTag === 'select' ? children : undefined}</HtmlTemplateField>;
  if (safeTag === 'a') return <ComponentLink {...merged}>{children}</ComponentLink>;
+ const fallback = attributes?.['data-tt-image-fallback'];
+ if (safeTag === 'img' && typeof fallback === 'string' && /^\/[a-zA-Z0-9_/-]+\.(?:png|svg|webp)$/.test(fallback) && !fallback.startsWith('//')) {
+  return <HtmlBlockImage key={String(props.src ?? '')} elementProps={merged} fallback={fallback} />;
+ }
  return React.createElement(safeTag, merged, VOID_TAGS.has(safeTag) ? undefined : children);
 }

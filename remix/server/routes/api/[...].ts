@@ -173,6 +173,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/chats/updates': () => import('../../../app/routes/api/v1/chats/updates/_updates'),
 	'v1/devices': () => import('../../../app/routes/api/v1/devices/_devices'),
 	'v1/devices/approvals': () => import('../../../app/routes/api/v1/devices/approvals/_approvals'),
+	'v1/devices/sync-control': () => import('../../../app/routes/api/v1/devices/sync-control/_sync-control'),
 	'v1/devices/commands': () => import('../../../app/routes/api/v1/devices/commands/_commands'),
 	'v1/devices/events': () => import('../../../app/routes/api/v1/devices/events/_events'),
 	'v1/devices/node/commands': () => import('../../../app/routes/api/v1/devices/node/commands/_commands'),
@@ -200,7 +201,9 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/connections/filters': () => import('../../../app/routes/api/v1/connections/filters/_filters'),
   'v1/connections/oauth/begin': () => import('../../../app/routes/api/v1/connections/oauth/begin/_begin'),
   'v1/connections/oauth/callback': () => import('../../../app/routes/api/v1/connections/oauth/callback/_callback'),
+  'v1/connections/provider-icon': () => import('../../../app/routes/api/v1/connections/provider-icon/_provider-icon'),
   'v1/connections/providers': () => import('../../../app/routes/api/v1/connections/providers/_providers'),
+  'v1/connections/named': () => import('../../../app/routes/api/v1/connections/named/_named'),
   'v1/connections/unlink': () => import('../../../app/routes/api/v1/connections/unlink/_unlink'),
   'v1/connections/youtube/channels': () => import('../../../app/routes/api/v1/connections/youtube/channels/_channels'),
   'v1/connections/youtube/search': () => import('../../../app/routes/api/v1/connections/youtube/search/_search'),
@@ -401,6 +404,15 @@ export default defineHandler(async (event) => {
     }
 
     return jsonResponse(createApiDocPayload(doc, new URL(event.req.url).origin));
+  }
+
+  // Fixed public provider artwork is an asset of the document origin. It
+  // never reads the account, selected data plane, or fallback API.
+  if (path === 'v1/connections/provider-icon') {
+    if (method !== 'GET' && method !== 'HEAD') return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD' } });
+    const route = await routeModules['v1/connections/provider-icon']();
+    const response = normalizeResponse(await route.loader!({ request: event.req }));
+    return method === 'HEAD' ? new Response(null, { status: response.status, headers: response.headers }) : response;
   }
 
   if (shouldProxyApiToFallback(event.req)) {

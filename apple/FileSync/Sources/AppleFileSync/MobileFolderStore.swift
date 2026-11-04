@@ -65,6 +65,21 @@ public final class MobileFolderStore {
         guard let grant = try list(scope).first(where: { $0.id == id }) else { throw Failure.unavailable }
         return grant
     }
+    /// Owner-only display metadata for the exact selected grant. It is never a
+    /// relative IO path, and resolving it grants no access to parent directories.
+    /// Do not disclose a stale bookmark's former location as current access.
+    public func sourcePath(_ scope: FileSyncOwnerScope, id: String) throws -> String? {
+        let selected = try grant(scope, id: id)
+        guard selected.sourceKind == nil else { return nil }
+        var stale = false
+        guard let url = try? FolderBookmark.resolve(selected.bookmark, stale: &stale), !stale, url.isFileURL else { return nil }
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+              values.isDirectory == true, values.isSymbolicLink != true else { return nil }
+        do { try MobileFolderReader.checkAccess(bookmark: selected.bookmark) } catch { return nil }
+        return url.path
+    }
     public func remove(_ scope: FileSyncOwnerScope, id: String) throws {
         let rows = try list(scope).filter { $0.id != id }; try persist(scope, rows)
     }

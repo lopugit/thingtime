@@ -335,16 +335,18 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 	await runs.prepareCloud(spec, configuration, value => preparing('cloud', value.prepared, value.total)); check();
 	input.progressSession?.({ scope: structuredClone(scope), run: structuredClone(spec) });
 	const planningCoverage = await inventory.coverage(spec.plan.local);
-	let state = await runs.begin(spec); const retain = spec.review?.kind === 'retain';
+	let state = await runs.begin(spec);
+ if (!state.directions) state = await runs.backfillDirections(spec) ?? state;
+ const retain = spec.review?.kind === 'retain';
 	const report = (value: PagedRunProgress, stage: ForegroundSyncProgress['stage'] = retain ? 'retaining' : 'transferring') => {
-		state = value; input.progress({ stage, confirmed: value.confirmed, total: value.operations, ...(planningCoverage ? { coverage: planningCoverage.coverage, skipped: planningCoverage.totalSkipped, consistency: planningCoverage.consistency } : {}) });
+		state = value; input.progress({ stage, confirmed: value.confirmed, total: value.operations, directions: value.directions, totalFinal: true, ...(planningCoverage ? { coverage: planningCoverage.coverage, skipped: planningCoverage.totalSkipped, consistency: planningCoverage.consistency } : {}) });
 	};
 	const port = await createPagedCloudSyncPort(spec, configuration, runs, {
 		currentScope: input.currentScope, signal, localTarget,
 		transfer: input.transfer,
 		readLocal,
 		openSource,
-		progress: (path, bytes, size) => { check(); input.progress({ stage: retain ? 'retaining' : 'transferring', confirmed: state.confirmed, total: state.operations, path, bytes, size, ...(planningCoverage ? { coverage: planningCoverage.coverage, skipped: planningCoverage.totalSkipped, consistency: planningCoverage.consistency } : {}) }); }
+		progress: (path, bytes, size, direction) => { check(); input.progress({ stage: retain ? 'retaining' : 'transferring', confirmed: state.confirmed, total: state.operations, directions: state.directions, totalFinal: true, direction, path, bytes, size, ...(planningCoverage ? { coverage: planningCoverage.coverage, skipped: planningCoverage.totalSkipped, consistency: planningCoverage.consistency } : {}) }); }
 	}, runtime);
 	const done = await executePreparedPagedSyncRun(spec, scope, runs, port, { signal, changed: p => report(p) }); check();
 	if (retain) { await runs.finishRetention(spec); report(done, 'retained'); return { spec, progress: done }; }

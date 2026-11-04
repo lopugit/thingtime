@@ -76,9 +76,12 @@ fn streams_real_content_prunes_dependencies_and_does_not_import_gitignore() {
     assert!(!rows
         .iter()
         .any(|r| r["path"].as_str().unwrap().contains("node_modules")));
-    assert!(values
+    assert!(rows.iter().any(|r| r["path"] == "outside"
+        && r["symbolicLink"]["format"] == "posix-symlink-v1"
+        && r["symbolicLink"]["targetBase64"] == "Lw=="));
+    assert!(!rows
         .iter()
-        .any(|v| v["gap"]["path"] == "outside" && v["gap"]["reason"] == "symlink"));
+        .any(|r| r["path"].as_str().unwrap().starts_with("outside/")));
 }
 
 #[test]
@@ -361,4 +364,38 @@ fn task_owned_backup_reports_actual_worker_ceiling_and_fractional_cpu_measuremen
         measured <= 0.4,
         "task index CPU exceeded its one-third allocation: {measured}"
     );
+}
+
+#[test]
+fn symlink_targets_are_opaque_even_for_broken_loops_and_non_utf8() {
+    use sha2::{Digest, Sha256};
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    let root = TempDir::new().unwrap();
+    let targets: Vec<(&str, &[u8], &str)> = vec![
+        ("broken", b"../missing", "Li4vbWlzc2luZw=="),
+        ("loop", b"loop", "bG9vcA=="),
+        (
+            "absolute",
+            b"/private/nonexistent",
+            "L3ByaXZhdGUvbm9uZXhpc3RlbnQ=",
+        ),
+        ("raw", &[255, 254, 47, 97], "//4vYQ=="),
+    ];
+    for (name, target, _) in &targets {
+        symlink(OsStr::from_bytes(target), root.path().join(name)).unwrap();
+    }
+    let values = events(root.path(), "");
+    let rows: Vec<_> = values.iter().filter_map(|v| v.get("entry")).collect();
+    assert_eq!(rows.len(), targets.len());
+    for (name, target, encoded) in targets {
+        let row = rows.iter().find(|v| v["path"] == name).unwrap();
+        assert_eq!(row["symbolicLink"]["targetBase64"], encoded);
+        assert_eq!(row["size"], target.len());
+        assert_eq!(
+            row["fingerprint"]["sha256"],
+            format!("{:x}", Sha256::digest(Sha256::digest(target)))
+        );
+    }
+    assert!(!values.iter().any(|v| v.get("gap").is_some()));
 }

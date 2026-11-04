@@ -4075,3 +4075,56 @@ If pause persistence fails, current work still stops and automatic restart stays
 blocked in this process until explicit Resume. The error states that reopening
 may resume work when the pause could not be saved. Other connections and accounts
 retain their own state.
+
+## POSIX symbolic-link file versions
+
+`api.files` 1.9.0 and `api.file-sync-batches` 1.3.0 preserve optional
+`symbolicLink: { format: "posix-symlink-v1", targetBase64 }` on file sources,
+canonical File Things and Timeline versions. Links use individual canonical file
+operations rather than the bulk upload optimization; bulk observations preserve
+their metadata, and existing regular-file digest formats remain unchanged. The attachment payload is exactly
+raw POSIX `readlink` target bytes. Canonical base64 preserves non-UTF8 targets;
+empty targets, NUL bytes and unknown metadata fields are refused. Relative,
+absolute, outside-root and dangling targets remain inert: sync never reads or
+writes the referenced item. The server checks metadata against the ready
+attachment's exact size and multipart fingerprint before binding it.
+
+A symbolic link differs from an ordinary file containing the same bytes.
+Regular-to-link and link-to-regular changes therefore reconcile normally;
+reviewing and restoring a historical link carries its original metadata under
+the current revision and immutable operation guards. Native link I/O requires
+Mac fileAccess 1.17.0 and fileSymbolicLinks 1.0.0. New tagged uploads negotiate
+the new server contract before opening source bytes or granting an upload.
+Older server capabilities remain insufficient, even if the route exists.
+
+The popup-free Mac acceptance uses fresh synthetic roots, a disposable replica
+and the actual compiled Nitro middleware. Build with
+`NITRO_PRESET=node_middleware pnpm --dir remix run build:server`, build the
+`MacFolderSyncFixture` target, then run
+`pnpm --dir remix run test:files:mac-paged`. Its runner owns the middleware HTTP
+listener, signs only a temporary test executable and removes its test storage.
+Checks include equal-payload kind transitions, dangling/non-UTF8 links, target
+integrity refusal, outside-target preservation and Timeline restore after a
+native restart. This is adapter/API evidence, not installed-app or unsupported
+physical-filesystem acceptance.
+
+## Mac strict inventory capture
+
+The app-owned Mac runner negotiates native folder access 1.18.0 before using
+the `strict-async` capture policy. `scan-capture` starts a scoped native job
+and returns its ID, generation, and state. Each `scan-status` request can
+return a provisional count for progress. Only a complete status includes an
+inventory descriptor, which the runner uses with the existing paged import.
+`scan-cancel` cancels the exact job. Older native versions retain the existing
+synchronous capture protocol.
+
+Two-way sync uses the existing strict Swift scan, which keeps rows private
+through authorization and a final replay of root and entry stamps. If a file
+changes, the grant is revoked, or the job is cancelled, reconciliation cannot
+use the partial inventory to infer deletions. The runner records the exact capture ID before dispatch. If cancellation
+cannot be confirmed, Pause or Resume retries cleanup for that same ID and
+original folder settings before replacing it. The scan continues independently
+of the short control request deadlines under the existing monitored job
+lifetime and device resource policy. Commander continues to handle best-effort
+backup and one-way streaming. Using its discovery for strict two-way capture
+requires proving namespace completeness before publishing a generation.

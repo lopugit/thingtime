@@ -1,3 +1,5 @@
+import { parseSymbolicLink } from './symbolicLink';
+import { emptySyncDirections, parseSyncDirections, addSyncDirection, removeUnconfirmedSyncDirection, type SyncDirectionalTotals } from './directionalProgress';
 import { eligibleFolderBatchWrite, parseFolderBatchDescriptor, type FolderBatchDescriptor, type FolderParentRef } from './folderBatch';
 import type { FolderBatchGate, PriorityReadiness } from './priorityReadiness';
 import { eligibleUploadBatchWrite, parseUploadBatchDescriptor, UPLOAD_BATCH_FILES, UPLOAD_BATCH_BYTES, UPLOAD_BATCH_DESCRIPTOR_BYTES, type UploadBatchDescriptor } from './uploadBatch';
@@ -28,7 +30,8 @@ export const PAGED_RUN_HEADS = 'sync-paged-run-heads';
 export const PAGED_RUN_STORES = ['sync-paged-runs', 'sync-paged-operations'] as const;
 const stores = [SYNC_PRIORITY_STORE, JOURNAL_RETENTION_STORE, RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, ...PAGED_RUN_STORES, PAGED_RUN_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE, PAGED_CHECKPOINT_HEADS, 'runs'];
 export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration; streaming?: { source: 'local' | 'remote'; captureId: string } };
-export type PagedRunProgress = { phase: 'preparing' | 'ready' | 'running' | 'complete'; read: number; total: number; operations: number; confirmed: number };
+export type PagedRunProgress = { phase: 'preparing' | 'ready' | 'running' | 'complete'; read: number; total: number; operations: number; confirmed: number; directions?: SyncDirectionalTotals };
+const directionMigrationsByDatabase = new WeakMap<IDBDatabase, Map<string, Promise<PagedRunProgress | undefined>>>();
 type SortKey = [number, number, string];
 export type CloudBindingProgress = { prepared: number; total: number; phase: 'preparing' | 'ready' };
 type CloudPreparation = { configuration: FileSyncConfiguration; root: CloudInventoryRoot; prepared: number; after: SortKey | null };
@@ -54,11 +57,11 @@ export const parsePagedRunSpec = (value: PagedRunSpec): PagedRunSpec => {
 	return { id: value.id, plan, ...(value.streaming ? { streaming: { source: value.streaming.source, captureId: value.streaming.captureId } } : {}), ...(value.review === undefined ? {} : { review: parsePagedRunReview(value.review) }), ...(configuration ? { configuration } : {}) };
 };
 const inputs = (spec: PagedRunSpec) => [spec.plan.local, spec.plan.remote, spec.plan.baseline.local, spec.plan.baseline.remote];
-const progress = ({ phase, read, total, operations, confirmed }: Header): PagedRunProgress => ({ phase, read, total, operations, confirmed });
+const progress = ({ phase, read, total, operations, confirmed, directions }: Header): PagedRunProgress => ({ phase, read, total, operations, confirmed, ...(directions ? { directions: structuredClone(directions) } : {}) });
 const orderKey = (op: SyncOperation): SortKey => syncMutationOrderKey(op.mutation);
 const entry = (e: SyncEntry): SyncEntry => ({ path: e.path, id: e.id, version: e.version, kind: e.kind, size: e.size, sha256: e.sha256,
 	...(e.fingerprint ? { fingerprint: { algorithm: e.fingerprint.algorithm, partSizeBytes: e.fingerprint.partSizeBytes,
-		partCount: e.fingerprint.partCount, sha256: e.fingerprint.sha256 } } : {}) });
+		partCount: e.fingerprint.partCount, sha256: e.fingerprint.sha256 } } : {}), ...(e.symbolicLink ? { symbolicLink: parseSymbolicLink(e.symbolicLink) } : {}) });
 const receiptValue = (r: SyncReceipt): SyncReceipt => ({ operationId: r.operationId,
 	scope: { origin: r.scope.origin, ownerId: r.scope.ownerId, dataPlane: r.scope.dataPlane, rootId: r.scope.rootId, deviceId: r.scope.deviceId },
 	entry: r.entry === null ? null : entry(r.entry) });
@@ -92,6 +95,10 @@ export const validatePagedRunHeader = (h: Header, spec: PagedRunSpec, scope: Syn
 		(h.scheduling ? (after !== null && !validOrder(after)) : h.confirmed === 0 ? after !== null : !Array.isArray(after) || after.length !== 3 || ![0, 1].includes(after[0]) ||
 			!Number.isInteger(after[1]) || !validSyncPath(after[2]) || after[1] !== after[2].split('/').length * (after[0] === 0 ? 1 : -1)))
 		throw Error('Paged sync run changed or is unavailable.');
+	if (h.directions) {
+  const d = parseSyncDirections(h.directions);
+  if (d.upload.operations + d.download.operations !== h.operations || d.upload.confirmed + d.download.confirmed !== h.confirmed) throw Error('Directional sync progress count changed.');
+ }
 	if (!!spec.streaming !== !!h.stream) throw Error('Invalid streaming sync progress.');
 	if (h.stream) {
 		const stream = h.stream;
@@ -432,7 +439,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 					const root = { rootId: spec.configuration!.remoteFolderId, rootRevision: 'per-entry' };
 					validateCloudConfiguration(spec.configuration!, spec, scope, root);
 					const h: Header = { spec, scope: key, instance: crypto.randomUUID(), planInstance: 'streaming', phase: 'running', read: 0, total: 0,
-						operations: 0, confirmed: 0, next: null, revision: 0, confirmedThrough: null, scheduling: freshScheduling(),
+						operations: 0, confirmed: 0, directions: emptySyncDirections(), next: null, revision: 0, confirmedThrough: null, scheduling: freshScheduling(),
 						cloud: { configuration: spec.configuration!, root, prepared: 0, after: null }, stream: { sequence: 0, generation: null, terminal: false, conflicts: 0 } };
 					tx.objectStore(PAGED_RUN_HEADS).add(spec.id, key); registerJournalMetadata(tx, access, key, 'run', spec.id, h.instance); save(h, tx); done(progress(h));
 				} catch (error) { fail(error); } };
@@ -477,7 +484,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 										tx.objectStore(INVENTORY_PIN_STORE).put(true, [key, capture.id, spec.id, 'run']);
 										if (--pending) return;
 										const h: Header = { spec, scope: key, instance: crypto.randomUUID(), planInstance: p.instance, phase: 'preparing',
-											read: 0, total: p.decisions, operations: 0, confirmed: 0, next: null, revision: 0, confirmedThrough: null,
+											read: 0, total: p.decisions, operations: 0, confirmed: 0, directions: emptySyncDirections(), next: null, revision: 0, confirmedThrough: null,
 											...(spec.review ? { review: { pages: 0, entries: 0, complete: false, matched: 0 } } : {}) };
 										tx.objectStore(PAGED_RUN_HEADS).add(spec.id, key);
 										tx.objectStore(PLAN_PIN_STORE).add(true, [key, spec.plan.id, spec.id]);
@@ -523,6 +530,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			for (const operation of operations) tx.objectStore(PAGED_RUN_STORES[1]).add(
 				{ scope: key, run: spec.id, path: syncPathKey(operation.mutation.path), operation, receipt: null } satisfies Row,
 				[key, spec.id, ...orderKey(operation)]);
+			if (h.directions) for (const operation of operations) addSyncDirection(h.directions, operation);
 			const next: Header = { ...h, read: h.read + page.decisions.length, operations: h.operations + operations.length,
 				next: page.next, revision: h.revision + 1, phase: page.next ? 'preparing' : 'ready',
 				...(h.review ? { review: { ...h.review, matched: h.review.matched + conflicts.length } } : {}) };
@@ -679,9 +687,48 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			save(h, tx); done(cloudProgress(h));
 		});
 	};
+    let directionMigrations = directionMigrationsByDatabase.get(db);
+    if (!directionMigrations) { directionMigrations = new Map(); directionMigrationsByDatabase.set(db, directionMigrations); }
+    /** Explicit resume migration. Display reads never start it. Each transaction
+     * reads <=128 rows and releases its locks before yielding or checking abort. */
+    const backfillDirections = (value: PagedRunSpec): Promise<PagedRunProgress | undefined> => {
+        check();
+        const spec = parsePagedRunSpec(value), migrationKey = key + "\u0000" + spec.id, existing = directionMigrations!.get(migrationKey);
+        if (existing) return existing;
+        const migration = (async () => {
+            const initial = await withHeader(spec, 'readonly', (h, _tx, done) => done({ instance: h.instance, revision: h.revision, progress: progress(h) })) as { instance: string; revision: number; progress: PagedRunProgress };
+            if (initial.progress.directions) return initial.progress;
+            const totals = emptySyncDirections();
+            for (const storeName of [PAGED_RUN_STORES[1], REVIEW_STORE]) {
+                const prefix: IDBValidKey[] = storeName === REVIEW_STORE ? [key, spec.id, 'history'] : [key, spec.id];
+                let after: IDBValidKey | undefined;
+                for (;;) {
+                    check();
+                    const page = await withHeader(spec, 'readonly', (h, tx, done, fail) => {
+                        if (h.instance !== initial.instance || h.revision !== initial.revision) { done(null); return; }
+                        const range = (keyRange ?? globalThis.IDBKeyRange).bound(after ?? prefix, [...prefix, []], after !== undefined, false);
+                        readPage<Row>(tx.objectStore(storeName), range, 128, (rows, keys) => done({ rows, keys }), fail);
+                    }) as { rows: Row[]; keys: IDBValidKey[] } | null;
+                    if (!page) return undefined;
+                    for (const record of page.rows) { check(); addSyncDirection(totals, row(record, spec).operation); }
+                    if (page.rows.length < 128) break;
+                    after = page.keys.at(-1);
+                    await new Promise(resolve => setTimeout(resolve, 5));
+                }
+            }
+            return withHeader(spec, 'readwrite', (h, tx, done) => {
+                if (h.instance !== initial.instance || h.revision !== initial.revision || totals.upload.operations + totals.download.operations !== h.operations || totals.upload.confirmed + totals.download.confirmed !== h.confirmed) { done(undefined); return; }
+                h.directions = totals; save(h, tx); done(progress(h));
+            }) as Promise<PagedRunProgress | undefined>;
+        })();
+        directionMigrations!.set(migrationKey, migration);
+        void migration.finally(() => { if (directionMigrations!.get(migrationKey) === migration) directionMigrations!.delete(migrationKey); }).catch(() => {});
+        return migration;
+    };
+
 	return {
 		get scope() { return structuredClone(scope); },
-		begin, step, read, beginCloud, stepCloud,
+		begin, step, read, beginCloud, stepCloud, backfillDirections,
 		/** Upgrade only structural initial uploads that could never execute.
 		 * Retire metadata atomically; large operation rows are collected later. */
 		async retireUnstartedInitialUpload(value: PagedRunSpec, expected: FileSyncConfiguration): Promise<boolean> {
@@ -802,6 +849,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 							events.add(true, [key, spec.id, 'used-operation', operation.id]);
 							ops.add({ scope: key, run: spec.id, path: syncPathKey(operation.mutation.path), operation, receipt: null, canonicalDispatched: false, cloud: effective } satisfies Row, [key, spec.id, ...orderKey(operation)]);
 							events.add(operation.id, [key, spec.id, 'pending', ...orderKey(operation)]); events.add(operation.id, [key, spec.id, 'pending-path', syncPathKey(operation.mutation.path)]);
+							if (h.directions) addSyncDirection(h.directions, operation);
 							h.operations++; h.cloud!.prepared++; h.cloud!.after = orderKey(operation); h.confirmedThrough = null;
 							h.scheduling!.index = 0; h.scheduling!.after = null; delete h.scheduling!.streamScan;
 						}
@@ -897,7 +945,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 						tx.objectStore(REVIEW_STORE).add({ scope: key, run: spec.id, instance: h.instance, operation: r.operation, cause: 'source-supersession' }, [key, spec.id, 'folder-supersession', operationId]);
 					tx.objectStore(REVIEW_STORE).add({ ...r, unpublished: true, conflict }, [key, spec.id, 'history', operationId]);
 					ops.delete([key, spec.id, ...orderKey(r.operation)]);
-					tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending', ...orderKey(r.operation)]); tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending-path', r.path]); h.operations--; h.cloud!.prepared--; if (!h.operations) h.cloud!.after = null;
+					tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending', ...orderKey(r.operation)]); tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending-path', r.path]); if (h.directions) removeUnconfirmedSyncDirection(h.directions, r.operation); h.operations--; h.cloud!.prepared--; if (!h.operations) h.cloud!.after = null;
 					h.scheduling!.reserved = null; h.scheduling!.canonical = false; h.confirmedThrough = null; if (conflict) h.stream.conflicts++;
 					if (h.stream.terminal && h.operations === h.confirmed) h.phase = 'complete'; h.revision++; save(h, tx); done(progress(h));
 					};
@@ -1565,6 +1613,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 					const commit = (primaryKey: IDBValidKey, scheduled: boolean) => {
 						op.confirmed = true; r.receipt = saved; ops.put(r, primaryKey);
 						if (h.stream) { tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending', ...orderKey(op)]); tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending-path', r.path]); }
+						if (h.directions) addSyncDirection(h.directions, op, true);
 						h.confirmed++; h.revision++;
 						if (scheduled) {
 							if (h.scheduling!.canonical) h.confirmedThrough = orderKey(op);

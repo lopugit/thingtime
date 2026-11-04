@@ -72,7 +72,8 @@ export function parseCloudWrite(value: CloudWrite): CloudWrite {
 		folderId: row.folderId,
 		attachmentId: 'pending',
 		contentVersion: '0'.repeat(64),
-		trashed: m.kind === 'trash'
+		trashed: m.kind === 'trash',
+		...((m.kind === 'copy' ? m.source.symbolicLink : row.before?.symbolicLink) ? { symbolicLink: m.kind === 'copy' ? m.source.symbolicLink : row.before!.symbolicLink } : {})
 	});
 	return row;
 }
@@ -109,7 +110,8 @@ export function cloudWriteCommit(write: CloudWrite, content: CloudFile['content'
 		folderId: write.folderId,
 		attachmentId: content.attachmentId,
 		contentVersion: content.version,
-		trashed: m.kind === 'trash'
+		trashed: m.kind === 'trash',
+		...((m.kind === 'copy' ? m.source.symbolicLink : write.before?.symbolicLink) ? { symbolicLink: m.kind === 'copy' ? m.source.symbolicLink : write.before!.symbolicLink } : {})
 	});
 }
 

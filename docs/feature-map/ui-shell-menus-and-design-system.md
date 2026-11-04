@@ -13,6 +13,12 @@ The web app is Vite + React Router (non-framework mode) + Nitro; `entry.client.t
 mounts with `createRoot`. Chakra UI primitives are wrapped by Thingtime's own
 components; reuse them instead of adding parallel versions.
 
+Device sync management is available to the signed-in device owner in browsers
+through `DeviceSyncPanel` and `RemoteDeviceSync`, independently of local pairing.
+The installed app retains direct controls for its own device. Remote controls use
+editable settings blocks and the existing configuration form; see
+[browser device sync](../browser-device-sync.md) and its browser/installed checks.
+
 ## Where the code lives
 
 | Concern | Path |
@@ -31,6 +37,7 @@ components; reuse them instead of adding parallel versions.
 | Password surfaces | `app/root.tsx` keeps `/passwords/provider` in the focused authorization shell; `/passwords` and `/settings/passwords` retain navigation while hiding floating assistant/developer launchers that can cover narrow credential controls. |
 | Custom drawer links and Thing attachments | `app/components/Nav/Drawer/drawerCustomItems.ts`, `customDrawerBlocks.ts`, `CustomDrawerItems.tsx`, and `useDrawer.tsx`; account-scoped device entries use parent IDs for arbitrary-depth menus, shared Commander search, individually editable Builder blocks. Add finishes both the root list and active submenu and creates in that parent. Submenu controls bind to each row’s available direct children (including migrated authored templates); leaf links and Add + stay available. Submenus stay below the root list with Back and ancestor navigation. Settings exposes parent selection, sibling ordering and the actual menu template, saved as a private webpage Thing through `SettingsDocumentHost`, with scoped legacy device-layout recovery and editable template migrations. `scripts/custom-drawer-acceptance.mjs` checks matched row styling, real API/browser persistence and nested Builder edits; its `nested` scope covers deeper menu navigation |
 | Device menu and full page | `app/components/Things/ThingsPage.tsx`, `ThingsViews.tsx`, `app/components/Devices/deviceNavigation.ts`, `DeviceDetailsDrawer.tsx` (one shared details tree for drawer and page) |
+| Device dashboard | `app/components/Devices/DeviceDashboard.tsx` binds the paired device’s optional observations into the private, editable `deviceDashboardBlocks.ts` layout in both views. `deviceResourceMetrics.ts` keeps unknowns separate from measured zero and derives the network arc from the download/upload split. |
 | Desktop footer build identity | `app/components/Nav/Footer.tsx` reads `thingtimeDesktop.getInfo().buildIdentity` from the packaged `electron/dist/web/metadata.json`; remote-origin status remains separate |
 | Design tokens / CSS vars | `var(--tt-*)` tokens (surface, border, muted, ink, accent, radius); rainbow text in `app/theme/rainbow.ts` |
 | Shared native selects | `app/Providers/Chakra/Components/Select.tsx`, registered in `theme.tsx`; Chakra `Select` consumers (including Character posting and CI providers) inherit runtime colors, borders, radii and keyboard focus; Theme Studio controls the focus border and two-color glow through `theme/tokens.ts` and `theme/customise.ts` |
@@ -59,6 +66,12 @@ components; reuse them instead of adding parallel versions.
    that menus stay clickable (no drag start) and reachable under the nav.
 
 ## Shared navigation and Builder controls
+
+`Nav/Nav.tsx` shares Back and Forward with the Electron titlebar. The
+web navbar adds Refresh and exposes all three in standalone browsers and the
+iOS app’s selected URL view.
+Back and Forward traverse the current tab history and Refresh reloads the
+current document. See the shared page shell checklist in `TESTING.md`.
 
 Builder-authored Things carry the composable `builder-thing` schema in the
 existing `thingtime` array. Shared Builder classification also recognizes legacy

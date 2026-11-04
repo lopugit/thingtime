@@ -5,13 +5,14 @@ const path = require('node:path');
 const children = new WeakMap();
 function transferProcess(governor) {
     let state = children.get(governor);
-    if (state) { state.child.send({ kind: 'policy', policy: governor.policy }); return state; }
+    if (state) { state.child.send({ kind: 'policy', policy: governor.policy, totalBytesPerSecond: governor.totalBytesPerSecond }); return state; }
     // Electron's executable supports Node mode; use a minimal environment and
     // private IPC. No owner cookies or app tokens are copied into the child.
     const child = fork(path.join(__dirname, 'folder-transfer-worker.cjs'), [], {
         env: { PATH: process.env.PATH ?? '/usr/bin:/bin', ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'ignore', 'ignore', 'ipc'], serialization: 'advanced'
     });
     state = { child, pending: new Map(), idle: null }; children.set(governor, state);
+    governor.onPolicyChange = () => { if (child.connected) child.send({ kind: 'policy', policy: governor.policy, totalBytesPerSecond: governor.totalBytesPerSecond }, () => {}); };
     child.on('message', async message => {
         if (message.kind === 'authority') {
             let accepted = false, target;
@@ -26,8 +27,8 @@ function transferProcess(governor) {
         }
         if (message.kind === 'reply') state.pending.get(message.id)?.(message);
     });
-    child.on('exit', () => { children.delete(governor); clearTimeout(state.idle); for (const finish of [...state.pending.values()]) finish({ error: 'transport' }); });
-    child.send({ kind: 'policy', policy: governor.policy }); return state;
+    child.on('exit', () => { if (children.get(governor) === state) { children.delete(governor); governor.onPolicyChange = undefined; } clearTimeout(state.idle); for (const finish of [...state.pending.values()]) finish({ error: 'transport' }); });
+    child.send({ kind: 'policy', policy: governor.policy, totalBytesPerSecond: governor.totalBytesPerSecond }); return state;
 }
 async function governedFetch(governor, fetchUpload, target, options, check = () => {}) {
     if (!governor) {

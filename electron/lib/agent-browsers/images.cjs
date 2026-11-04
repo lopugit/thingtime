@@ -69,6 +69,9 @@ class BrowserImages extends EventEmitter {
           job.controller.signal.throwIfAborted();
           await fs.copyFile(path.join(this.sourceRoot, file), path.join(context, file));
         }
+        // Serve the packaged node_middleware entry with the same loopback
+        // listener/error contract used by the signed installed application.
+        await fs.copyFile(path.join(__dirname, '..', 'renderer-server.cjs'), path.join(context, 'renderer-server.cjs'));
         const includesApplication = await copyApplication(this.applicationRoot, path.join(context, 'app'), { signal: job.controller.signal });
         job.controller.signal.throwIfAborted();
         job.public.state = 'building'; this.emit('change');

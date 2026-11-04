@@ -4,7 +4,7 @@ const failure = message => ({ok: false, error: message});
 const metadata = value => ({id: value.id, title: typeof value.title === 'string' ? value.title : '', username: typeof value.username === 'string' ? value.username : '', domains: Array.isArray(value.domains) ? value.domains.filter(v => typeof v === 'string') : [], hasPassword: value.hasPassword === true, fillEligible: value.fillEligible === true});
 /** A live owned first-party document is the credential source. No cookie access,
  * authenticated cross-origin fetch, secret persistence, or URL-based tab search. */
-export function createVaultController(api, {settings, workspace, currentDocument, randomUUID = () => crypto.randomUUID()}) {
+export function createVaultController(api, {settings, workspace, currentDocument, accountIdentity = () => null, accountAdmission = async () => true, randomUUID = () => crypto.randomUUID()}) {
   const sessions = new Map();
   const byProvider = new Map();
   const pending = new Map();
@@ -50,13 +50,16 @@ export function createVaultController(api, {settings, workspace, currentDocument
   }
   async function requestCurrent(r) {
     const s=r.session;
+    if(s.identity&&JSON.stringify(s.identity)!==JSON.stringify(accountIdentity()))return false;
     if(r.cancelled||sessions.get(key(s.target))!==s||!r.responding&&pending.get(r.id)!==r||!await validTarget(s.target))return false;
     if(r.workspaceBound&&!await workspaceMatches(s.target,r.workspaceEpoch))return false;
     return !r.cancelled&&sessions.get(key(s.target))===s&&(!r.workspaceBound||!workspace.generation||workspace.generation()===r.workspaceEpoch);
   }
   async function connection(target, caller, guard = async () => true) {
+    if(!await accountAdmission())throw new Error('Unlock the Thingtime browser workspace to reconnect.');
     const config = await settings();
     if (config.autofillEnabled === false) throw new Error('Saved-account offers are disabled in Config.');
+    if (!await accountAdmission())throw new Error('Unlock the Thingtime browser workspace to reconnect.');
     if (!await guard()) throw new Error('The selected website changed.');
     const origin = safeOrigin(config.origin); if (!origin) throw new Error('Choose a trusted Thingtime origin.');
     let s = sessions.get(key(target));
@@ -67,7 +70,7 @@ export function createVaultController(api, {settings, workspace, currentDocument
     }
     if (s && !Number.isInteger(s.providerTabId)) throw new Error('The vault connection is opening.');
     if (!s) {
-      s = {target, providerOrigin:origin, caller, catalog:null, ownerId:null, providerTabId:null, providerWindowId:null};
+      s = {identity:accountIdentity(),target, providerOrigin:origin, caller, catalog:null, ownerId:null, providerTabId:null, providerWindowId:null};
       sessions.set(key(target), s);
       const stored = await api.storage.local.get('workspacePreferences');
       const p = workspacePreferences(stored.workspacePreferences);
@@ -78,6 +81,7 @@ export function createVaultController(api, {settings, workspace, currentDocument
       s.providerTabId = tab.id; s.providerWindowId = win.id; byProvider.set(tab.id, s); await checkpoint();
       void api.tabs.sendMessage(tab.id,{action:'vault-provider-init'},{frameId:0}).catch(()=>{});
     }
+    if (!await accountAdmission())throw new Error('Unlock the Thingtime browser workspace to reconnect.');
     if (!await guard()) throw new Error('The selected website changed.');
     return s;
   }
@@ -89,7 +93,7 @@ export function createVaultController(api, {settings, workspace, currentDocument
     await api.windows.update(s.providerWindowId,{focused:true}).catch(()=>{});
     if(!await requestCurrent(r)){pending.delete(r.id);r.cancelled=true;r.resolve(failure('The selected website changed.'));return;}
     r.delivered=true;
-    await api.tabs.sendMessage(s.providerTabId, {action:'vault-provider-request', request:{version:1,id:r.id,type:r.type,origin:s.target.origin,target:{tabId:s.target.tabId,frameId:0,documentId:s.target.documentId},...(r.entryId?{entryId:r.entryId}:{}),...(r.totp?{totp:r.totp}:{}),...(r.query?{query:r.query}:{}),...(r.cursor?{cursor:r.cursor}:{}),presentation:{fontSize:workspacePreferences(stored.workspacePreferences).fontSize}}}, {documentId:s.providerDocumentId});
+    await api.tabs.sendMessage(s.providerTabId, {action:'vault-provider-request', request:{version:1,id:r.id,type:r.type,origin:s.target.origin,target:{tabId:s.target.tabId,frameId:0,documentId:s.target.documentId},...(r.entryId?{entryId:r.entryId}:{}),...(r.totp?{totp:r.totp}:{}),...(r.query?{query:r.query}:{}),...(r.cursor?{cursor:r.cursor}:{}),...(s.identity?.ownerId?{expectedOwnerId:s.identity.ownerId}:{}),presentation:{fontSize:workspacePreferences(stored.workspacePreferences).fontSize}}}, {documentId:s.providerDocumentId});
   }
   async function begin(s, request) {
     if ([...pending.values()].some(r => r.session === s)) return failure('Finish the current Thingtime request first.');
@@ -123,6 +127,7 @@ export function createVaultController(api, {settings, workspace, currentDocument
       if (!await requestCurrent(r)) { pending.delete(r.id);r.cancelled=true;r.resolve(failure('The selected website changed.'));return {ok:false}; }
       r.responding=true;
       pending.delete(r.id); await api.alarms.clear(`vault:${r.id}`);
+      if (s.identity?.ownerId&&s.identity.ownerId!==message.ownerId) { r.resolve(failure('The selected Thingtime account changed.'));await close(s);return {ok:false}; }
       if (message.error || typeof message.ownerId !== 'string' || (s.ownerId && s.ownerId!==message.ownerId)) { r.resolve(failure('Thingtime could not complete this request. Reconnect and try again.')); await close(s); return {ok:true}; }
       s.ownerId=message.ownerId;
       if (r.type==='catalog') {
@@ -136,8 +141,8 @@ export function createVaultController(api, {settings, workspace, currentDocument
         else {
           await focus(s);
           if (s.ownerId!==message.ownerId || !await requestCurrent(r)) { values.username=''; values.password=''; r.resolve(failure('The vault or requesting page changed.')); return {ok:true}; }
-          const result=await api.tabs.sendMessage(s.target.tabId,{action:'vault-fill-values',nonce:r.form.nonce,formId:r.form.formId,origin:s.target.origin,entryId:r.entryId,username:values.username,password:values.password},{documentId:s.target.documentId}).catch(()=>null);
-          r.resolve(result?.ok===true?{ok:true}:failure('The form changed. Choose the account again.'));
+          const result=await api.tabs.sendMessage(s.target.tabId,{action:'vault-fill-values',nonce:r.capture.nonce,targetId:r.capture.targetId,origin:s.target.origin,entryId:r.entryId,username:values.username,password:values.password},{documentId:s.target.documentId}).catch(()=>null);
+          r.resolve(result?.ok===true?{ok:true}:failure('The sign-in fields changed. Choose the account again.'));
           values.username=''; values.password='';
         }
       } else r.resolve({ok:true});
@@ -151,14 +156,20 @@ export function createVaultController(api, {settings, workspace, currentDocument
       if (!s?.providerDocumentId) return {ok:true,target:targetView(target),catalog:[],origin:target.origin};
       if (!await currentDocument(s.providerTabId,s.providerDocumentId,s.providerOrigin,true)) { await close(s); return {ok:true,target:targetView(target),catalog:[],origin:target.origin}; }
       if(internal&&!await workspaceMatches(target,target.workspaceEpoch))return failure('The selected website changed.');
-      return {ok:true,connected:true,target:targetView(target),catalog:s.catalog||[],origin:target.origin};
+      return {ok:true,connected:true,ownerId:s.ownerId,target:targetView(target),catalog:s.catalog||[],origin:target.origin};
     }
     if (!['vault-catalog','vault-fill','vault-import-totp'].includes(message.action)) return {ok:false};
+    if(!await accountAdmission())return failure('Unlock the Thingtime browser workspace to reconnect.');
     if (message.action==='vault-fill') {
       if(typeof message.entryId!=='string' || !message.entryId) return {ok:false};
-      const form=await api.tabs.sendMessage(target.tabId,{action:'vault-prepare',formId:message.formId},{documentId:target.documentId}).catch(()=>null);
-      if(!form?.ok || form.origin!==target.origin || form.actionOrigin!==target.origin || typeof form.nonce!=='string' || !await validTarget(target)) return failure('Choose a visible login form that submits to this website.');
-      const guard=()=>internal?workspaceMatches(target,target.workspaceEpoch):validTarget(target);const s=await connection(target,sender,guard);return begin(s,{type:'fill',entryId:message.entryId,form,workspaceBound:internal,workspaceEpoch:target.workspaceEpoch});
+      const capture=await api.tabs.sendMessage(target.tabId,{action:'vault-prepare',targetId:message.targetId},{documentId:target.documentId}).catch(()=>null);
+      if(!capture?.ok || capture.origin!==target.origin || capture.actionOrigin!==target.origin ||
+        typeof capture.nonce!=='string' || typeof capture.targetId!=='string' ||
+        (message.targetId!==undefined && capture.targetId!==message.targetId) || !await validTarget(target))
+        return failure('Choose an available sign-in field on this website.');
+      const guard=()=>internal?workspaceMatches(target,target.workspaceEpoch):validTarget(target);
+      const s=await connection(target,sender,guard);
+      return begin(s,{type:'fill',entryId:message.entryId,capture,workspaceBound:internal,workspaceEpoch:target.workspaceEpoch});
     }
     const guard=()=>internal?workspaceMatches(target,target.workspaceEpoch):validTarget(target);const s=await connection(target,sender,guard);
     if(message.action==='vault-import-totp') {
@@ -172,5 +183,5 @@ export function createVaultController(api, {settings, workspace, currentDocument
   api.tabs.onUpdated.addListener((id,change)=>{for(const s of sessions.values())if(id===s.providerTabId){if(change.url&&!providerURL(change.url,s.providerOrigin))void close(s);else if(change.status==='complete')void api.tabs.sendMessage(id,{action:'vault-provider-init'},{frameId:0}).catch(()=>{});}});
   api.alarms.onAlarm.addListener(a=>{if(!a.name.startsWith('vault:'))return;const r=pending.get(a.name.slice(6));if(r)void close(r.session);});
   api.storage.onChanged?.addListener((_changes,area)=>{if(area==='local')for(const s of sessions.values())void settings().then(c=>{if(c.origin!==s.providerOrigin||c.autofillEnabled===false)void close(s);});});
-  return {handle:async(...args)=>{try{return await handle(...args);}catch{return failure('The vault or selected website changed. Reconnect and try again.');}}};
+  return {invalidate:()=>{for(const s of [...sessions.values()])void close(s);},handle:async(...args)=>{try{return await handle(...args);}catch{return failure('The vault or selected website changed. Reconnect and try again.');}}};
 }

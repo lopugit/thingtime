@@ -1,3 +1,4 @@
+import {createAccountController} from './accounts.js';
 import {DEFAULT_ORIGIN, PROVIDER_PATH, safeOrigin, providerOrigin, senderOrigin, matchesDocument, validRequest, safeError, hookDiagnostics} from './protocol.js';
 import {createVaultController} from './vault.js';
 import {createWorkspaceController, workspacePreferences, sameWorkspaceTarget} from './workspace.js';
@@ -6,7 +7,8 @@ const pending = new Map();
 const workspace = createWorkspaceController(chrome, safeOrigin);
 chrome.action.onClicked.addListener(tab => { void workspace.open(tab).catch(() => {}); });
 const settings = async () => ({enabled: false, autofillEnabled: true, origin: DEFAULT_ORIGIN, ...await chrome.storage.local.get(['enabled', 'autofillEnabled', 'origin'])});
-const vault = createVaultController(chrome, {settings, workspace, currentDocument});
+const vault = createVaultController(chrome, {settings, workspace, currentDocument, accountIdentity:()=>accounts.current(),accountAdmission:()=>accounts.admit()});
+const accounts = createAccountController(chrome,{settings,invalidate:()=>{vault.invalidate();for(const request of [...pending.values()])void finish(request,errorResult('AbortError','The Thingtime account changed. Choose the account again.'));}});
 const alarmName = id => `passkey:${id}`;
 const send = (tabId, documentId, message) => chrome.tabs.sendMessage(tabId, message, {documentId}).catch(() => null);
 const errorResult = (name, message) => ({error: {name, message}});
@@ -87,6 +89,7 @@ async function start(message, sender, respond) {
     const config = await settings();
     if (!live()) return;
     if (!config.enabled || origin === config.origin) return finish(request, {fallback: true});
+    if (!await accounts.admit()) return finish(request,errorResult('NotAllowedError','Unlock the Thingtime browser workspace to continue.'));
     try { request.providerOrigin = providerOrigin(config.origin); }
     catch { return finish(request, errorResult('SecurityError', 'Select a valid Thingtime origin in the extension.')); }
     const current = await currentDocument(sender.tab.id, sender.documentId, origin);
@@ -100,6 +103,7 @@ async function start(message, sender, respond) {
     if (!live()) return;
     const preferences = workspacePreferences(stored.workspacePreferences);
     request.presentation = {fontSize: preferences.fontSize};
+    request.identity=accounts.current();
     const approval = await chrome.windows.create({url: `${request.providerOrigin}${PROVIDER_PATH}`, type: 'popup', focused: true, width: preferences.width, height: preferences.height});
     const tab = approval.tabs?.[0];
     if (!Number.isInteger(tab?.id)) throw new Error('The approval popup could not open.');
@@ -122,7 +126,8 @@ async function handle(message, sender, respond) {
     && (sender.origin === undefined || sender.origin === chrome.runtime.getURL('').replace(/\/$/, ''));
   if (message?.action === 'vault-open-workspace' && senderOrigin(sender)) { await workspace.open(sender.tab); return respond({ok:true}); }
   if (message?.action?.startsWith('vault-')) return respond(await vault.handle(message, sender, internal));
-  if (message?.action === 'state') { const config = await settings(); return respond({enabled: config.enabled === true, autofillEnabled: config.autofillEnabled !== false, origin: config.origin}); }
+  if (message?.action?.startsWith('accounts-')) return respond(await accounts.handle(message,sender,internal));
+  if (message?.action === 'state') { const config = await settings(); return respond({enabled: config.enabled === true, autofillEnabled: config.autofillEnabled !== false && await accounts.admit(), origin: config.origin}); }
   if (message?.action === 'workspace-state' && internal) {
     const [stored, target] = await Promise.all([chrome.storage.local.get('workspacePreferences'), workspace.target()]);
     return respond({preferences: workspacePreferences(stored.workspacePreferences), target: target ? {origin: target.origin} : null});
@@ -187,7 +192,7 @@ async function handle(message, sender, respond) {
     request.providerDocumentId = sender.documentId; request.delivered = true;
     await checkpoint();
     if (pending.get(request.tabId) !== request) return respond({ok: false});
-    await send(request.providerTabId, request.providerDocumentId, {action: 'provider-request', request: {version: 1, id: request.id, type: request.type, origin: request.origin, publicKey: request.publicKey, presentation: request.presentation}});
+    await send(request.providerTabId, request.providerDocumentId, {action: 'provider-request', request: {version: 1, id: request.id, type: request.type, origin: request.origin, publicKey: request.publicKey, expectedOwnerId:request.identity?.ownerId, presentation: request.presentation}});
     return respond({ok: true});
   }
   if (message.action === 'provider-response' && matchesDocument(request, sender, true) && message.version === 1 && message.id === request.id) {
