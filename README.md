@@ -6784,6 +6784,33 @@ uses its own synthetic sign-in, browser process/profile and loopback18090/18091,
 then closes them; never point this fixture at a personal profile or database.
 
 
+### Named auth connections
+
+In **Connections → Named auth connections**, choose a provider, give the
+connection a name, and select its allowed operations. The same external
+account can appear more than once, even with the same access, and each named
+connection has its own encrypted credential. **Reconnect** uses the same
+named ID and requires the same external account. **Remove local connection**
+retires only that local credential. It does not call provider revocation.
+
+The card separates the scopes requested from the provider, scopes the provider
+explicitly reported, and operations Thingtime permits. Google account supports
+separately selected profile and email reads. Other provider cards currently
+offer saved account identity. Named Google service cards request identity only
+until their service operations are available. Other providers may use their
+normal provider consent scopes.
+Bluesky exchanges the supplied app password for a separate session and stores
+only the session credential. Provider APIs may share grants or enforce their
+own limits. Google can invalidate older refresh tokens and its revoke endpoint
+can affect other grants in the same project. These are provider behaviors and
+do not limit how many named connections Thingtime saves.
+
+The **Use a saved connection** picker calls a fixed server operation using
+the selected ID. API clients negotiate `api.connections-named` 1.0 and
+Connections management 2.1 before using named features. Credentials and
+arbitrary provider requests are never returned or accepted by that contract.
+Existing feed connections are separate and keep their existing behavior.
+
 ### Social OAuth platform vault setup
 
 Connections API 2.0 uses fixed encrypted admin-secret labels, including

@@ -13,6 +13,9 @@ import { isNativeBridgeAvailable } from '~/utils/nativeBridge';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
+import { NamedConnectionPanel } from './NamedConnectionPanel';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { NAMED_CONNECTION_FEATURE, NAMED_CONNECTION_VERSION, type NamedConnectionInput } from '~/connections/namedAccess';
 import { oauthPendingBlocks } from './oauthPendingBlocks';
 import { notifyConnectionOAuthReturn, openConnectionOAuthTab } from './oauthTab.client';
 import { cardStyle, connectedProviderLabel, oauthErrorMessage, type ChannelRef, type Connection } from './shared';
@@ -112,6 +115,8 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
   const [filters, setFilters] = React.useState<FeedFilter[]>(() => ownerId && apiOrigin ? readLocalCache<FeedFilter[]>(filtersCache) || [] : []);
   const [signedOut, setSignedOut] = React.useState(!ownerId);
 
+  const [namedAvailable, setNamedAvailable] = React.useState(false);
+  const [namedCredential, setNamedCredential] = React.useState<NamedConnectionInput>();
   const [connecting, setConnecting] = React.useState<Provider | null>(null);
   const [fieldValues, setFieldValues] = React.useState<Record<string, string>>({});
   const [busy, setBusy] = React.useState(false);
@@ -153,8 +158,13 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     ];
     if (ownerId) {
       const options = { signal, expectedActor: ownerId, expectedApiOrigin: apiOrigin, expectedDataPlane: dataPlane };
-      pending.push(loadConnections(options).then(response => {
-        if (!active()) return;
+      pending.push(requireThingtimeCapability(NAMED_CONNECTION_FEATURE, NAMED_CONNECTION_VERSION)
+        .then(() => true, () => false).then(includeNamed => {
+          if (!active()) return null;
+          setNamedAvailable(includeNamed);
+          return loadConnections(options, includeNamed);
+        }).then(response => {
+        if (!active() || !response) return;
         const connections = response.connections || [];
         setSignedOut(false);
         setConnections(connections);
@@ -195,7 +205,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  const openConnect = async (provider: Provider) => {
+  const openConnect = async (provider: Provider, named?: NamedConnectionInput) => {
     if (!apiOrigin || !isCurrent()) return;
     if (provider.auth === 'oauth2') {
       if (oauthAttempt.current || !ownerId || !isCurrent()) return;
@@ -204,7 +214,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
       if (native || getElectronBridge() || isNativeBridgeAvailable()) {
         setBusy(true);
         try {
-          const response = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin });
+          const response = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin, named });
           if (isCurrent() && response?.authorizeUrl) window.location.href = response.authorizeUrl;
         } catch (error: any) {
           if (isCurrent()) lopu({ title: error?.error || `Could not start the ${provider.name} sign-in`, status: 'error' });
@@ -242,7 +252,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
         oauthAttempt.current = { tab, deadline };
         setOAuthProvider(provider.name);
 
-        const resp = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin });
+        const resp = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin, named });
         if (oauthAttempt.current?.tab !== tab || !isCurrent()) return;
         if (!resp?.authorizeUrl || !tab.navigate(resp.authorizeUrl)) {
           cancelOAuth();
@@ -257,6 +267,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
       }
       return;
     }
+    setNamedCredential(named);
     setConnecting(provider);
     setFieldValues({});
   };
@@ -265,7 +276,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     if (!connecting) return;
     setBusy(true);
     try {
-      const resp = await api.v1.connections.connect({ provider: connecting.id, fields: fieldValues });
+      const resp = await api.v1.connections.connect({ provider: connecting.id, fields: fieldValues, named: namedCredential, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin });
       lopu({
         title: resp.alreadyLinked
           ? `Already connected to ${resp.connection?.account?.displayName} ✨`
@@ -274,6 +285,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
         duration: 6000
       });
       setConnecting(null);
+      setNamedCredential(undefined);
       await refresh();
     } catch (err: any) {
       lopu({ title: err?.error || `Could not connect ${connecting.name} 😞`, status: 'error' });
@@ -287,7 +299,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     const previous = connections;
     setConnections((current) => current.filter((entry) => entry.id !== connection.id));
     try {
-      await api.v1.connections.unlink({ id: connection.id });
+      await api.v1.connections.unlink({ id: connection.id, named: !!connection.named, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin });
       if (!isCurrent() || !apiOrigin) return;
       writeLocalCache(connectionsCache, previous.filter((entry) => entry.id !== connection.id));
       lopu({ title: `Unlinked ${connection.account.displayName} 👋`, status: 'success', duration: 5000 });
@@ -409,6 +421,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     }
   };
 
+  const legacyConnections = connections.filter(connection => !connection.named);
   return (
     <Box
       maxWidth="860px"
@@ -453,10 +466,10 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
       ) : null}
 
       {/* linked accounts */}
-      {!signedOut && connections.length ? (
+      {!signedOut && legacyConnections.length ? (
         <Box display="flex" flexDirection="column" rowGap={3}>
           <Text fontWeight="600">Your connections</Text>
-          {connections.map((connection) => (
+          {legacyConnections.map((connection) => (
             <Flex key={connection.id} {...cardStyle} padding={4} alignItems="center" columnGap={3} flexWrap="wrap" rowGap={2}>
               <Text fontSize="xl">{connection.providerIcon}</Text>
               <Box flex="1" minWidth="200px">
@@ -487,6 +500,21 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
             </Flex>
           ))}
         </Box>
+      ) : null}
+
+      {ownerId && !signedOut && namedAvailable ? (
+        <NamedConnectionPanel scopeKey={scopeKey} providers={providers} connections={connections} busy={busy || !!oauthProvider}
+          start={(providerId, named) => {
+            const provider = providers.find(item => item.id === providerId && item.configured);
+            if (provider) void openConnect(provider, named);
+          }}
+          remove={unlink}
+          use={async (id, operation) => {
+            const response = await api.v1.connections.useNamed({ id, operation, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin });
+            return isCurrent() ? response?.result : undefined;
+          }}
+          onError={(error: any) => lopu({ title: error?.error || error?.message || 'Could not use the connection.', status: 'error' })}
+        />
       ) : null}
 
       {/* provider catalog */}

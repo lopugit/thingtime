@@ -50,6 +50,7 @@ export type OAuthTokens = {
   // is near/past, otherwise the sync surfaces a "reconnect" error
   expiresAt?: string | null;
   scopes?: string[];
+  confirmedScopes?: string[];
   providerUserId?: string | null;
 };
 
@@ -134,7 +135,7 @@ export type ConnectionProvider = {
     // X requires PKCE on its authorization-code flow; the begin/callback core
     // mints an S256 verifier and threads it through the signed state JWT
     pkce?: boolean;
-    buildAuthorizeUrl: (input: { clientId: string; redirectUri: string; state: string; codeChallenge?: string; nonce?: string }) => string;
+    buildAuthorizeUrl: (input: { clientId: string; redirectUri: string; state: string; codeChallenge?: string; nonce?: string; requestedScopes?: readonly string[] }) => string;
     exchangeCode: (input: {
       code: string;
       clientId: string;
@@ -706,7 +707,8 @@ const formOAuthGrant = (config: {
       refreshToken: data.refresh_token ? String(data.refresh_token) : previous?.refreshToken || null,
       expiresAt: expiresAtFrom(data.expires_in),
       tokenType: typeof data.token_type === 'string' ? data.token_type : previous?.tokenType || 'Bearer',
-      scopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean) : previous?.scopes || config.scopes
+      scopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean) : previous?.scopes || config.scopes,
+      confirmedScopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean) : previous?.confirmedScopes
     };
     return config.mapExtra ? config.mapExtra(data, tokens) : tokens;
   };
@@ -1961,21 +1963,24 @@ const tiktokProvider: ConnectionProvider = {
 };
 
 // Google services share one app registration and choose permissions per card.
+export const readConnectionGoogleUserInfo = (tokens: OAuthTokens) =>
+  authedJson('https://openidconnect.googleapis.com/v1/userinfo', { token: tokens.accessToken });
+
 const googleOAuth = (serviceScopes: readonly string[]): NonNullable<ConnectionProvider['oauth']> => {
   const scopes = ['openid', 'profile', 'email', ...serviceScopes];
   return {
     clientIdEnv: 'GOOGLE_CLIENT_ID', clientSecretEnv: 'GOOGLE_CLIENT_SECRET', pkce: true,
-    buildAuthorizeUrl: ({ clientId, redirectUri, state, codeChallenge }) => {
+    buildAuthorizeUrl: ({ clientId, redirectUri, state, codeChallenge, requestedScopes }) => {
       const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
       url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: 'code',
-        scope: scopes.join(' '), access_type: 'offline', prompt: 'select_account consent',
+        scope: (requestedScopes || scopes).join(' '), access_type: 'offline', prompt: 'select_account consent',
         state, code_challenge: codeChallenge || '', code_challenge_method: 'S256' }).toString();
       return url.href;
     },
     ...formOAuthGrant({ tokenUrl: 'https://oauth2.googleapis.com/token', authStyle: 'body', scopes,
       extraExchangeParams: ({ codeVerifier }) => ({ code_verifier: codeVerifier || '' }) }),
     resolveAccountFromTokens: async (tokens) => {
-      const me = await authedJson('https://openidconnect.googleapis.com/v1/userinfo', { token: tokens.accessToken });
+      const me = await readConnectionGoogleUserInfo(tokens);
       if (me.ok === false) return me;
       if (typeof me.data?.sub !== 'string' || !me.data.sub) return fail(502, 'Google did not return an account identity');
       return { ok: true, account: { providerAccountId: me.data.sub,

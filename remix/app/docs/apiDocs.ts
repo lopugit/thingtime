@@ -14199,7 +14199,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections', contractVersion: '2.0.0', featureVersion: '2.0.0',
+    id: 'connections', contractVersion: '2.1.0', featureVersion: '2.1.0',
     group: 'connections',
     title: 'Connections',
     endpoint: '/api/v1/connections',
@@ -14257,7 +14257,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-unlink', contractVersion: '2.0.0', featureVersion: '2.0.0',
+    id: 'connections-unlink', contractVersion: '2.1.0', featureVersion: '2.1.0',
     group: 'connections',
     title: 'Unlink connection',
     endpoint: '/api/v1/connections/unlink',
@@ -14361,7 +14361,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-oauth-begin', contractVersion: '2.0.0', featureVersion: '2.0.0',
+    id: 'connections-named', contractVersion: '1.0.0', featureVersion: '1.0.0',
+    group: 'connections', title: 'Use a named connection',
+    endpoint: '/api/v1/connections/named', methods: ['POST'],
+    summary: 'Runs one allowlisted operation using an exact owner-private named connection.',
+    detail: 'The owner, selected origin, connection ID and allowed operation are checked. Provider credentials are never returned. Use GET /api/v1/connections?includeNamed=1 to list profiles. Provide named: { requestId, name, allowedOperations, reconnectId? } to OAuth begin or credential connect. A new request ID creates a separate credential; reconnectId binds the existing connection and external subject.',
+    auth: { mode: 'session-or-bearer', description: 'Requires the connection owner and matching expectedOwnerId.' },
+    steps: ['Select an exact named connection ID.', 'Choose one of its allowlisted operations.', 'Read only the returned operation result.'],
+    requestExamples: [{ name: 'Read saved account identity', description: 'Use a single named profile.', method: 'POST',
+      body: { id: 'ext-auth-…', operation: 'account.identity', expectedOwnerId: 'owner-id' } }],
+    responseExamples: [{ status: 200, description: 'Allowlisted operation result.', body: { ok: true, result: { provider: 'google', accountId: 'ext-account-…' } } }]
+  }),
+  endpoint({
+    id: 'connections-oauth-begin', contractVersion: '2.1.0', featureVersion: '2.1.0',
     group: 'connections',
     title: 'Begin SSO connect',
     endpoint: '/api/v1/connections/oauth/begin',
@@ -14405,7 +14417,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-oauth-callback', contractVersion: '2.0.0', featureVersion: '2.0.0',
+    id: 'connections-oauth-callback', contractVersion: '2.1.0', featureVersion: '2.1.0',
     group: 'connections',
     title: 'SSO connect callback',
     endpoint: '/api/v1/connections/oauth/callback',

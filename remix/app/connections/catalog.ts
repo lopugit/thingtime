@@ -30,7 +30,8 @@ export const serviceGroupFor = (provider: { id: string; name: string; icon: stri
 };
 
 export const GOOGLE_SERVICES = [
-  { id: 'google', name: 'Google account', about: 'Save your Google identity for later actions. No mail, files, or calendar access.', scopes: [] },
+  { id: 'google', name: 'Google account', about: 'Save your Google identity for later actions. No mail, files, or calendar access.', scopes: [],
+    namedOperations: ['google.profile', 'google.email'] },
   {
     id: 'google-drive',
     name: 'Google Drive',

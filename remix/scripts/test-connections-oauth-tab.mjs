@@ -47,7 +47,9 @@ try {
     };
     const firstOwner = 'oauth-tab-fixture-owner';
     const nextOwner = 'oauth-tab-other-owner';
-    let begins = 0, callbacks = 0, linked = false, holdList, listStarted, listFinished, savedLayout;
+    let begins = 0, callbacks = 0, linked = false, holdList, listStarted, listFinished, pendingNamed;
+    const savedLayouts = new Map();
+    const namedRows = [];
     const account = (name, id) => ({ id: id + '-link', provider: 'facebook-account', providerName: 'Facebook', contentVisibility: 'personal', account: { id, displayName: name, handle: id } });
     const pageErrors = [];
     context.on('page', page => page.on('pageerror', error => pageErrors.push(error.message)));
@@ -64,6 +66,8 @@ try {
       if (url.pathname.endsWith('thingtime-capabilities.json')) {
         const features = Object.fromEntries(['connections', 'connections-providers', 'connections-filters', 'connections-oauth-begin'].map(name => ['api.' + name, { version: '2.0.0' }]));
         Object.assign(features, {
+          'api.connections': { version: '2.1.0' }, 'api.connections-oauth-begin': { version: '2.1.0' },
+          'api.connections-oauth-callback': { version: '2.1.0' }, 'api.connections-named': { version: '1.0.0' },
           'api.mongodb-endpoint': { version: '1.1.0' }, 'api.webpages-resolve': { version: '1.6.0' },
           'api.actions-run': { version: '1.7.0' }, 'api.things': { version: '1.36.0' }
         });
@@ -72,18 +76,21 @@ try {
       if (url.pathname.startsWith(endpoint)) observedOrigins.push(route.request().headers()['x-thingtime-expected-api-origin']);
       if (url.pathname === endpoint + '/providers') {
         const configured = route.request().headers()['x-thingtime-expected-api-origin'] !== selectedOrigin;
-        return json(route, { providers: [{ id: 'facebook-account', name: 'Facebook', icon: 'f', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Link a social account', fields: [] }] });
+        return json(route, { providers: [{ id: 'facebook-account', name: 'Facebook', icon: 'f', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Link a social account', fields: [] },
+          ...(configured ? [{ id: 'google', name: 'Google account', icon: 'g', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Link a Google account', fields: [] }] : [])] });
       }
       if (url.pathname === '/api/v1/webpages/resolve') {
+        const savedLayout = savedLayouts.get(url.searchParams.get('id'));
         return savedLayout && route.request().headers()['x-thingtime-expected-actor'] === firstOwner
           ? json(route, { ok: true, source: 'user', page: savedLayout }) : route.fulfill({ status: 404 });
       }
       if (url.pathname === '/api/v1/things' && route.request().method() === 'POST') {
         const body = route.request().postDataJSON();
         assert.equal(route.request().headers()['x-thingtime-expected-actor'], firstOwner);
-        assert.equal(body.crystal.pageKey, 'settings-connections-oauth-pending');
+        assert.ok(['settings-connections-oauth-pending', 'settings-named-auth-connections'].includes(body.crystal.pageKey));
         assert.deepEqual(body.acl, ['tt:user']);
-        savedLayout = { id: body.shareId, author: { id: firstOwner }, updatedAt: '2026-11-04T00:00:00Z', crystal: body.crystal };
+        const savedLayout = { id: body.shareId, author: { id: firstOwner }, updatedAt: '2026-11-04T00:00:00Z', crystal: body.crystal };
+        savedLayouts.set(body.crystal.pageKey, savedLayout);
         return json(route, { ok: true, thing: savedLayout });
       }
       if (url.pathname === endpoint + '/filters') {
@@ -102,18 +109,36 @@ try {
           await holdList;
           return json(route, { connections: [account('Late previous owner connection', 'late')] }).catch(() => {}).finally(listFinished);
         }
-        return json(route, { connections: linked ? [account('OAuth fixture account', 'fixture')] : [] });
+        return json(route, { connections: [...(linked ? [account('OAuth fixture account', 'fixture')] : []),
+          ...(url.searchParams.get('includeNamed') === '1' ? namedRows : [])] });
       }
       if (url.pathname === endpoint + '/oauth/begin') {
         const body = route.request().postDataJSON();
-        assert.deepEqual(body, { provider: 'facebook-account', expectedOwnerId: 'oauth-tab-fixture-owner' });
+        if (body.named) {
+          assert.equal(body.expectedOwnerId, firstOwner);
+          assert.equal(body.provider, 'google');
+          assert.ok(body.named.allowedOperations.includes('google.profile'));
+          pendingNamed = body.named;
+        } else assert.deepEqual(body, { provider: 'facebook-account', expectedOwnerId: 'oauth-tab-fixture-owner' });
         begins++;
         return json(route, { authorizeUrl: providerOrigin + '/authorize' });
       }
       if (url.pathname === callbackPath) {
         callbacks++;
+        if (pendingNamed && !url.searchParams.has('error')) {
+          namedRows.push({ ...account('Named provider identity', 'same-google-subject'), id: 'named-' + namedRows.length,
+            provider: 'google', providerName: 'Google account', named: { name: pendingNamed.name, requestedScopes: ['openid', 'profile'],
+              grantedScopes: ['openid', 'profile'], allowedOperations: pendingNamed.allowedOperations } });
+          pendingNamed = undefined;
+          return route.fulfill({ status: 302, headers: { location: origin + '/connections?connected=google' } });
+        }
         if (!url.searchParams.has('error')) linked = true;
         return route.fulfill({ status: 302, headers: { location: origin + '/connections?' + (linked ? 'connected=facebook-account' : 'oauthError=declined') } });
+      }
+      if (url.pathname === endpoint + '/named') {
+        const body = route.request().postDataJSON();
+        assert.deepEqual(body, { id: 'named-1', operation: 'google.profile', expectedOwnerId: firstOwner });
+        return json(route, { ok: true, result: { name: 'Named profile result' } });
       }
       if (url.pathname.startsWith('/api/')) return json(route, { ok: true });
       return route.continue();
@@ -142,7 +167,7 @@ try {
         await page.getByRole('button', { name: 'Close builder', exact: true }).click();
         await host.getByRole('button', { name: 'Save layout', exact: true }).click();
         await host.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
-        assert.ok(savedLayout);
+        assert.ok(savedLayouts.has('settings-connections-oauth-pending'));
         await page.reload();
         await signIn.waitFor();
       }
@@ -210,6 +235,48 @@ try {
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
       await page.screenshot({ path: join(evidence, label + '-returned.png'), fullPage: true });
+      holdList = undefined;
+      await page.evaluate(owner => window.changeFixtureConnectionOwner(owner), firstOwner);
+      const namedHost = page.locator('[data-settings-document="named-auth-connections"]');
+      await namedHost.getByRole('button', { name: 'Add named connection' }).waitFor();
+      if (label === 'desktop') {
+        await namedHost.getByRole('button', { name: 'Edit layout', exact: true }).click();
+        await namedHost.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
+        const drawer = page.getByTestId('builder-drawer');
+        for (const [id, value] of [['named-name-label', 'Purpose name'], ['named-access-label', 'Choose approved operations']]) {
+          await drawer.getByRole('combobox', { name: 'Select block', exact: true }).selectOption(id);
+          const field = drawer.getByRole('textbox', { name: 'Block text', exact: true });
+          await field.fill(value); await field.blur();
+        }
+        await page.getByRole('button', { name: 'Close builder', exact: true }).click();
+        await namedHost.getByRole('button', { name: 'Save layout', exact: true }).click();
+        await namedHost.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
+        assert.ok(savedLayouts.has('settings-named-auth-connections'));
+        await page.reload();
+      }
+      for (const name of ['Reading profile', 'Second profile']) {
+        await namedHost.getByRole('button', { name: 'Add named connection' }).click();
+        await namedHost.getByRole('combobox', { name: 'Provider', exact: true }).selectOption('google');
+        if (label === 'desktop') {
+          await namedHost.getByText('Purpose name', { exact: true }).waitFor();
+          await namedHost.getByText('Choose approved operations', { exact: true }).waitFor();
+        }
+        await namedHost.getByRole('textbox', { name: 'Connection name' }).fill(name);
+        await namedHost.getByRole('checkbox', { name: 'Google profile name and photo' }).check();
+        const newPage = context.waitForEvent('page');
+        await namedHost.getByRole('button', { name: 'Continue to sign in' }).click();
+        const authorization = await newPage;
+        await authorization.waitForURL(providerOrigin + '/authorize');
+        await authorization.getByRole('link', { name: 'Continue' }).click();
+        await namedHost.getByRole('heading', { name, exact: true }).waitFor();
+      }
+      assert.equal(namedRows.length, 2);
+      await namedHost.getByRole('combobox', { name: 'Connection', exact: true }).selectOption('named-1');
+      await namedHost.getByRole('button', { name: 'Google profile name and photo' }).click();
+      await namedHost.getByText('name: Named profile result').waitFor();
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+      await page.screenshot({ path: join(evidence, label + '-named-connections.png'), fullPage: true });
       if (label === 'desktop') {
         holdList = undefined;
         await page.close();
@@ -258,7 +325,7 @@ try {
         await hosted.close();
       }
       assert.deepEqual(pageErrors, []);
-      console.log(`PASS ${label}: blocked, declined, abandoned, successful, provider opener isolation, cached owner paint, late-response and sign-out fences`);
+      console.log(`PASS ${label}: blocked, declined, abandoned, successful, provider opener isolation, account/origin fences, named connection create/use, and layout persistence`);
     } finally {
       await context.close();
     }

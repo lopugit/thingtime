@@ -6,6 +6,8 @@ import { getAuthOtpsCollection } from '../mongodb/collections';
 import { connectionVaultConfigured } from './tokenVault';
 import { resolvePublicOrigin } from '../auth/publicOrigin';
 import { oauthGrantMatches } from './oauthConfig';
+import { prepareNamedIntent, saveNamedConnection, type NamedIntent } from './namedConnections';
+import { namedGoogleProvider, parseNamedConnectionInput, requestedNamedGoogleScopes } from '../../../connections/namedAccess';
 import { upsertAccountAndLink, type PublicConnection } from './connections';
 import { connectionProviderById, oauthCredsFor } from './providers';
 import { fail, pkceVerifierFor, type Fail, type OAuthErrorCode } from './shared';
@@ -57,7 +59,7 @@ const consumeState = async (nonce: string, expiresAt: number): Promise<boolean> 
 
 export const beginOAuth = async (
   user: SessionUser,
-  input: { provider?: unknown },
+  input: { provider?: unknown; named?: unknown },
   requestOrigin: string
 ): Promise<{ ok: true; authorizeUrl: string; provider: string } | Fail> => {
   if (!user.sessionBinding) return fail(401, 'Sign in to Thingtime before connecting an account.');
@@ -69,6 +71,10 @@ export const beginOAuth = async (
   if (!creds) {
     return fail(503, 'This service is not configured for this Thingtime origin and environment.');
   }
+  const prepared = input.named === undefined ? null : await prepareNamedIntent(user, provider, input.named, requestOrigin);
+  if (prepared?.ok === false) return prepared;
+  const intent = prepared?.intent;
+  const requestedScopes = intent && namedGoogleProvider(provider.id) ? requestedNamedGoogleScopes(intent.allowedOperations) : undefined;
   const { redirectUri } = creds;
   // PKCE (X requires it): the S256 verifier is derived from a server secret and
   // this nonce, so only the nonce rides the state JWT through the provider round
@@ -78,11 +84,17 @@ export const beginOAuth = async (
   const nonce = randomUUID();
   const codeVerifier = provider.oauth.pkce ? pkceVerifierFor(provider.id, nonce) : null;
   const codeChallenge = codeVerifier ? createHash('sha256').update(codeVerifier).digest('base64url') : undefined;
-  const state = await signPurposeToken(STATE_PURPOSE, { sub: user.id, provider: provider.id, nonce, sessionBinding: user.sessionBinding, redirectUri, clientId: creds.clientId, oauthBinding: creds.binding, oauthOrigin: creds.origin, oauthEnvironment: creds.environment }, STATE_TTL);
+  const authorize = (state: string) => provider.oauth!.buildAuthorizeUrl({ clientId: creds.clientId, redirectUri, state, codeChallenge, nonce, requestedScopes });
+  const namedScopes = intent ? (requestedScopes || (new URL(authorize('intent')).searchParams.get('scope') || '').split(/[ ,]+/).filter(Boolean)) : undefined;
+  if (intent) await (await getAuthOtpsCollection()).insertOne({
+    challenge: `connections-named-intent:${nonce}`, purpose: 'connections-named-intent', ownerId: user.id,
+    provider: provider.id, intent, requestedScopes: namedScopes, expiresAt: new Date(Date.now() + 15 * 60 * 1000)
+  });
+  const state = await signPurposeToken(STATE_PURPOSE, { sub: user.id, provider: provider.id, nonce, sessionBinding: user.sessionBinding, redirectUri, clientId: creds.clientId, oauthBinding: creds.binding, oauthOrigin: creds.origin, oauthEnvironment: creds.environment, ...(intent ? { namedRequestId: intent.requestId } : {}) }, STATE_TTL);
   return {
     ok: true,
     provider: provider.id,
-    authorizeUrl: provider.oauth.buildAuthorizeUrl({ clientId: creds.clientId, redirectUri, state, codeChallenge, nonce })
+    authorizeUrl: authorize(state)
   };
 };
 
@@ -118,10 +130,21 @@ export const completeOAuth = async (
   const creds = await oauthCredsFor(provider, requestOrigin);
   if (!creds) return { ...fail(400, `${provider.name} is not configured on this deployment`), oauthCode: 'provider' };
   if (!oauthGrantMatches(claims, creds) || claims.redirectUri !== creds.redirectUri) return { ...fail(409, 'The service connection settings changed. Start again.'), oauthCode: 'state' };
+  const storedIntent = claims.namedRequestId === undefined ? null : await (await getAuthOtpsCollection()).findOne({
+    challenge: `connections-named-intent:${nonce}`, purpose: 'connections-named-intent', ownerId: user.id,
+    provider: provider.id, expiresAt: { $gt: new Date() }
+  });
+  const named = storedIntent ? parseNamedConnectionInput(provider.id, storedIntent.intent) : null;
+  if (claims.namedRequestId !== undefined && (!named || named.requestId !== claims.namedRequestId ||
+      !Array.isArray(storedIntent?.requestedScopes) || !storedIntent.requestedScopes.every((scope: unknown) => typeof scope === 'string')))
+    return { ...fail(400, 'The named connection state is invalid.'), oauthCode: 'state' };
+  const namedIntent = named ? { ...named, expectedAccountId: (storedIntent!.intent as NamedIntent).expectedAccountId,
+    expectedRevision: (storedIntent!.intent as NamedIntent).expectedRevision } : null;
+  const consumptionKey = namedIntent ? createHash('sha256').update(JSON.stringify([user.id, provider.id, namedIntent.requestId])).digest('hex') : nonce;
   const { redirectUri } = creds;
   // Recomputed, not read back out of the state — the same derivation beginOAuth
   // used, keyed by the nonce the signature covers.
-  if (!/^[a-f0-9-]{36}$/.test(nonce) || typeof claims.exp !== 'number' || !await consumeState(nonce, claims.exp)) {
+  if (!/^[a-f0-9-]{36}$/.test(nonce) || typeof claims.exp !== 'number' || !await consumeState(consumptionKey, claims.exp)) {
     return { ...fail(400, 'This sign-in response has already been used.'), oauthCode: 'state' };
   }
   if (params.error) return { ...fail(400, 'The provider declined the sign-in'), oauthCode: 'declined' };
@@ -144,7 +167,9 @@ export const completeOAuth = async (
     oauthOrigin: creds.origin, oauthEnvironment: creds.environment };
   const resolved = await provider.oauth.resolveAccountFromTokens(tokens);
   if (resolved.ok === false) return { ...resolved, oauthCode: 'exchange' };
-  const linked = await upsertAccountAndLink(user, provider, resolved.account, tokens);
-  if (linked.ok === false) return { ...linked, oauthCode: 'failed' };
+  const linked = namedIntent
+    ? await saveNamedConnection(user, provider, resolved.account, tokens, namedIntent, storedIntent!.requestedScopes as string[], creds.origin, creds.environment)
+    : await upsertAccountAndLink(user, provider, resolved.account, tokens);
+  if (linked.ok === false) return { ...linked, oauthCode: linked.status === 403 ? 'permissions' : 'failed' };
   return { ok: true, connection: linked.connection, provider: provider.id };
 };

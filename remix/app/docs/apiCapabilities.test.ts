@@ -891,14 +891,24 @@ test('private MongoDB connection inventory is registered with matching independe
 test('owner-private connections publish their breaking vault contract on both manifests and all active routes', () => {
   const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
   const manifest = thingtimeCapabilityManifest('https://connections.example');
-  for (const id of ['connections', 'connections-providers', 'connections-unlink', 'connections-feed', 'connections-filters', 'connections-oauth-begin', 'connections-oauth-callback']) {
+  const versions = { connections: '2.1.0', 'connections-providers': '2.0.0', 'connections-unlink': '2.1.0',
+    'connections-feed': '2.0.0', 'connections-filters': '2.0.0', 'connections-oauth-begin': '2.1.0',
+    'connections-oauth-callback': '2.1.0', 'connections-named': '1.0.0' };
+  for (const [id, version] of Object.entries(versions)) {
     const doc = apiEndpointDocs.find(doc => doc.id === id)!;
-    assert.equal(legacy.features[`api.${id}`], '2.0.0');
-    assert.equal(manifest.features[`api.${id}`].version, '2.0.0');
-    assert.equal(doc.contractVersion, '2.0.0');
+    assert.equal(legacy.features[`api.${id}`], version);
+    assert.equal(manifest.features[`api.${id}`].version, version);
+    assert.equal(doc.contractVersion, version);
     assert.equal(typeof routeModules[doc.endpoint.replace('/api/', '')], 'function');
     assert.ok(manifest.operations.some(op => op.feature === `api.${id}` && op.path === doc.endpoint));
   }
   for (const version of ['2.0.0', '2.0.1', '2.1.0']) assert.equal(capabilitySatisfies(version, '2.0.0'), true);
   for (const version of [undefined, '1.0.0', '3.0.0']) assert.equal(capabilitySatisfies(version, '2.0.0'), false);
+});
+
+test('named connection clients require the additive management contracts', () => {
+  assert.equal(capabilitySatisfies('2.0.0', '2.1.0'), false);
+  assert.equal(capabilitySatisfies('2.1.0', '2.1.0'), true);
+  assert.equal(capabilitySatisfies('2.2.0', '2.1.0'), true);
+  assert.equal(capabilitySatisfies('3.0.0', '2.1.0'), false);
 });

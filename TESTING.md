@@ -13950,6 +13950,14 @@ separate from deterministic discovery/lease tests.
 
 ### Social OAuth vault and owner isolation
 
+- Named connections: create two profiles to the same Google account with
+  different operations and two named profiles with the same operation. Verify
+  distinct IDs and exact-provider response, no feed admission, replay refusal,
+  partial consent rejection, wrong-subject reconnect refusal, cross-owner
+  denial, selected-grant refresh and local sibling-independent removal.
+  Verify the name and access blocks can be selected separately in Builder.
+  Keep provider consent and installed native acceptance separate.
+
 - Run `test:connections:oauth-tab` in isolated Chromium on desktop and phone
   viewports. The fixture renders the real Connections page with synthetic
   transport. Verify the original URL and page remain in place, the provider has
