@@ -13950,6 +13950,23 @@ separate from deterministic discovery/lease tests.
 
 ### Social OAuth vault and owner isolation
 
+- Run `test:connections:oauth-tab` in isolated Chromium on desktop and phone
+  viewports. The fixture renders the real Connections page with synthetic
+  transport. Verify the original URL and page remain in place, the provider has
+  no opener, a blocked tab starts no OAuth request, and decline or completion
+  lets the original page retry or reload its authorized saved connections.
+  Close the provider tab without consenting and use **Stop waiting** to retry.
+  An unacknowledged callback tab remains available as a normal Connections
+  page. Switch accounts while the previous owner's Connections read is held,
+  then deliver the late response and sign out. Confirm no previous-owner
+  accounts or filters remain and a same-owner reload keeps its cached paint.
+  Edit the pending status and Stop waiting blocks separately in Builder,
+  save and reload, then exercise the customized control. Keep real provider
+  consent and native browser handoff acceptance separate from this fixture.
+  With a mocked desktop bridge, hold or omit the selected API origin and
+  verify no Connections API reads or sign-in control appear. Switch origins
+  and confirm the old provider readiness and saved accounts do not carry over.
+
 - Run `pnpm --dir remix run test:connections`, `test:connections:oauth` and `test:api-capabilities`.
   `test:connections:oauth` boots its own disposable replica with clean environment,
   real registration/admin-vault/connection Request handlers and only a synthetic
