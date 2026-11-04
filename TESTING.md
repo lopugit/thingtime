@@ -14346,3 +14346,6 @@ the isolated real-API/browser command and the metadata-only session boundary.
   exact final bytes and one published file. Wrong owner, cloud revision or range
   must remain terminal. Check the phase-only `folder-sync.log` diagnostic
   without logging request URLs, credentials, paths, or payload bytes.
+- [ ] Close the dedicated transfer worker as a saved folder job dispatches a
+  request or reuses an idle worker. Verify the app stays open, interrupted work
+  can resume through a replacement worker, and the file publishes once.
