@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
 import { defineNitroConfig } from 'nitro/config';
 
@@ -10,9 +11,9 @@ import {
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/thingtimeCapabilities.ts';
 import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore.ts';
 
-const publicDir = new URL('./dist', import.meta.url).pathname;
-const embedDir = new URL('./dist/embed', import.meta.url).pathname;
-const designDocsDir = new URL('../docs/design', import.meta.url).pathname;
+const publicDir = fileURLToPath(new URL('./dist', import.meta.url));
+const embedDir = fileURLToPath(new URL('./dist/embed', import.meta.url));
+const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
 const apiHandler = './server/routes/api/[...].ts';
 const chatGptDiscoveryHandler = './server/routes/chatgpt-discovery.ts';
 const thingtimeCapabilitiesHandler = './server/handlers/thingtime-capabilities.ts';
