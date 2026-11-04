@@ -120,7 +120,9 @@ so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
 `passwords/browserPasskey.ts` validates RP/origin/options and implements ES256;
 `browserProviderCeremony.ts` owns policy-checked `verify-passkey`, catalog selection,
-retry identity and durable readback. `BrowserPasswordProvider.tsx` serves
+retry identity and durable readback. Once a sign-in choice is selected, approval
+reads only that exact credential before and after signing. Registration still
+checks the current catalog for site exclusions before saving. `BrowserPasswordProvider.tsx` serves
 `/passwords/provider` with editable `browserProviderBlocks.ts`. Chromium transport
 and trusted tab/document checks live in `browser-extension/`; package with
 `build:password-extension`, test with `test:password-extension` and

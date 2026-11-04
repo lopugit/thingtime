@@ -10685,6 +10685,14 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Check website/RP/account labels, fresh Thingtime password verification, durable
   exact-ID vault readback/reload, and server verification of registration and
   assertion. A guide, saved reference or synthetic transport is not acceptance.
+- [ ] Browser sign-in with a remembered device and a vault spanning multiple
+  catalog pages: select a matching passkey from a later page and approve without
+  a password. After the click, verify one approval and two reads of that entry
+  with no second catalog scan. Replace the selected credential after discovery;
+  withhold the assertion even if the replacement is also allowed by the site.
+- [ ] Return a 429 with a long Retry-After or hold an approval response. Show a
+  recoverable error without hidden backoff and withhold any late assertion when
+  the website cancels or its request expires. Bulk transfers still back off.
 - [ ] Reject wrong passwords, foreign/public-suffix RPs and disallowed credential
   IDs. Cancel, abort, navigate either tab, switch Thingtime account, expire the
   request and interrupt the extension worker; no stale response or duplicate
