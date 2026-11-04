@@ -1,3 +1,5 @@
+import { isGatewayDataPath } from '../../server/utils/environmentGateway';
+import { CONNECTION_ICON_FEATURE, CONNECTION_ICON_PATH, CONNECTION_ICON_VERSION } from '../connections/providerIcons';
 import { FILE_SYNC_RESOURCE_REQUIREMENTS } from '~/fileSync/configuration';
 import { fileSyncDownloadRequirements } from '~/fileSync/signedDownloadTarget';
 import { MOBILE_DEVICE_REQUIREMENTS } from '../devices/platform';
@@ -916,4 +918,19 @@ test('named connection clients require the additive management contracts', () =>
   assert.equal(capabilitySatisfies('2.1.0', '2.1.0'), true);
   assert.equal(capabilitySatisfies('2.2.0', '2.1.0'), true);
   assert.equal(capabilitySatisfies('3.0.0', '2.1.0'), false);
+});
+
+
+test('provider icons negotiate their own public route without changing OAuth contracts', () => {
+  const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
+  const manifest = thingtimeCapabilityManifest('https://connections.example');
+  assert.equal(typeof routeModules['v1/connections/provider-icon'], 'function');
+  assert.equal(isGatewayDataPath(CONNECTION_ICON_PATH), false);
+  assert.equal(isGatewayDataPath('/api/v1/connections'), true);
+  assert.equal(legacy.features[CONNECTION_ICON_FEATURE], CONNECTION_ICON_VERSION);
+  assert.equal(manifest.features[CONNECTION_ICON_FEATURE].version, CONNECTION_ICON_VERSION);
+  assert.ok(manifest.operations.some(operation => operation.feature === CONNECTION_ICON_FEATURE && operation.path === CONNECTION_ICON_PATH && operation.methods.includes('GET')));
+  assert.equal(capabilitySatisfies('1.1.0', CONNECTION_ICON_VERSION), true);
+  assert.equal(capabilitySatisfies(undefined, CONNECTION_ICON_VERSION), false);
+  assert.equal(capabilitySatisfies('2.0.0', CONNECTION_ICON_VERSION), false);
 });

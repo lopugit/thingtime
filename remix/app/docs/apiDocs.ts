@@ -14153,6 +14153,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'connections-provider-icon', contractVersion: '1.0.0', featureVersion: '1.0.0',
+    group: 'connections',
+    title: 'Connection provider icon',
+    endpoint: '/api/v1/connections/provider-icon',
+    summary: 'Returns a sanitized PNG discovered from a built-in connection provider’s official public site.',
+    detail: 'The provider parameter is a built-in catalog ID, never a URL. Anonymous discovery uses only fixed public brand sites and sends no account data. Public icons are cached; callers keep a local fallback when a provider does not publish an accessible icon.',
+    auth: { mode: 'none', description: 'Public presentation asset. No user data.' },
+    methods: ['GET'],
+    steps: ['Request an icon using the built-in provider ID.', 'Render the PNG as a decorative image next to the provider name.'],
+    requestExamples: [{ name: 'Google Docs icon', method: 'GET', description: 'Resolve the official Docs product mark.', query: { provider: 'google-docs' } }],
+    responseExamples: [
+      { status: 200, description: 'Sanitized PNG.', headers: { 'Content-Type': 'image/png' } },
+      { status: 204, description: 'The official icon is currently unavailable.' },
+      { status: 404, description: 'This provider has no built-in public brand source.' },
+    ]
+  }),
+  endpoint({
     id: 'connections-providers', contractVersion: '2.0.0', featureVersion: '2.0.0',
     group: 'connections',
     title: 'Connection providers',
