@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { MobileFolderAccess } from './MobileFolderAccess';
 import { getNativeBridge, nativeBridgeReadyEvent } from '~/utils/nativeBridge';
 import { requestMobileDevice, supportsMobileDevice, type MobileDeviceStatus } from './mobileDeviceBridge';
+import { deviceThingsPageHref } from './deviceNavigation';
 
 const observations = new Map<string, MobileDeviceStatus>();
 
@@ -65,7 +66,7 @@ function MobileDeviceConnection({ ownerId, onPaired }: { ownerId: string; onPair
 					<Text fontSize="12px" color="var(--tt-muted, #71717a)" marginTop={1}>File and photo access remain off until you select what to sync.</Text>
 				</Box>
 				<Flex gap={2} wrap="wrap">
-					{isPaired ? <Button as={Link} to={`/things?device=${encodeURIComponent(status.deviceId!)}`} size="sm" variant="outline">View device</Button> : null}
+					{isPaired ? <Button as={Link} to={deviceThingsPageHref(status.deviceId!)} size="sm" variant="outline">View device</Button> : null}
 					<Button size="sm" isDisabled={busy} onClick={() => void run(isPaired ? 'status' : 'pair')}>
 						{busy ? 'Connecting…' : isPaired ? 'Check connection' : status?.state === 'pending' ? 'Resume pairing' : status?.state === 'revoked' ? 'Reconnect device' : 'Add this device'}
 					</Button>

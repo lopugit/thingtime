@@ -173,7 +173,6 @@ export type ThingsDevicePresentation = {
 	selectedDeviceId?: string | null;
 	deviceMenuId?: string | null;
 	onDeviceSelect?: (deviceId: string) => void;
-	onDeviceOpen?: (deviceId: string) => void;
 	onDeviceContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 };
 
@@ -329,7 +328,6 @@ export const ThingsGridView = ({
 	selectedDeviceId = null,
 	deviceMenuId = null,
 	onDeviceSelect,
-	onDeviceOpen,
 	onDeviceContextMenu
 }: {
   items: ThingsThing[];
@@ -345,7 +343,6 @@ export const ThingsGridView = ({
 					controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
 					key={`device:${state.deviceId}`}
 					onSelect={onDeviceSelect || noopDeviceSelect}
-					onOpen={onDeviceOpen}
 					onContextMenu={onDeviceContextMenu}
 					pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 					pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
@@ -426,7 +423,6 @@ export const ThingsListView = ({
 	selectedDeviceId = null,
 	deviceMenuId = null,
 	onDeviceSelect,
-	onDeviceOpen,
 	onDeviceContextMenu
 }: {
   items: ThingsThing[];
@@ -446,7 +442,6 @@ export const ThingsListView = ({
 							controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
 							key={`device:${state.deviceId}`}
 							onSelect={onDeviceSelect || noopDeviceSelect}
-					onOpen={onDeviceOpen}
 					onContextMenu={onDeviceContextMenu}
 							pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 							pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
@@ -579,7 +574,6 @@ export const ThingsColumnsView = ({
 	selectedDeviceId = null,
 	deviceMenuId = null,
 	onDeviceSelect,
-	onDeviceOpen,
 	onDeviceContextMenu
 }: {
   // folder ids by depth; index 0 is always null (the root)
@@ -616,7 +610,6 @@ export const ThingsColumnsView = ({
 										controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
 										key={`device:${state.deviceId}`}
 										onSelect={onDeviceSelect || noopDeviceSelect}
-					onOpen={onDeviceOpen}
 					onContextMenu={onDeviceContextMenu}
 										pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 										pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
