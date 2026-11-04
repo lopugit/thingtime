@@ -67,18 +67,31 @@ try {
         const features = Object.fromEntries(['connections', 'connections-providers', 'connections-filters', 'connections-oauth-begin'].map(name => ['api.' + name, { version: '2.0.0' }]));
         Object.assign(features, {
           'api.connections': { version: '2.1.0' }, 'api.connections-oauth-begin': { version: '2.1.0' },
-          'api.connections-oauth-callback': { version: '2.1.0' }, 'api.connections-named': { version: '1.0.0' },
+          'api.connections-oauth-callback': { version: '2.1.0' }, 'api.connections-provider-icon': { version: '1.0.0' }, 'api.connections-named': { version: '1.0.0' },
           'api.mongodb-endpoint': { version: '1.1.0' }, 'api.webpages-resolve': { version: '1.6.0' },
           'api.actions-run': { version: '1.7.0' }, 'api.things': { version: '1.36.0' }
         });
         return json(route, { schemaVersion: 1, origin, features });
+      }
+      if (url.pathname === '/connection-provider-fallback.svg') return route.fulfill({ path: join(root, 'public/connection-provider-fallback.svg'), contentType: 'image/svg+xml' });
+      if (url.pathname === '/fixture-brand-override.png') {
+        return route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/B9sAAAAASUVORK5CYII=', 'base64') });
+      }
+      if (url.pathname === endpoint + '/provider-icon') {
+        assert.equal(route.request().headers().referer, undefined);
+        const provider = url.searchParams.get('provider');
+        if (provider === 'lemmy') return route.fulfill({ status: 204 });
+        if (process.env.THINGTIME_TEST_PROVIDER_ICON_DIR) return route.fulfill({ path: join(process.env.THINGTIME_TEST_PROVIDER_ICON_DIR, provider + '.png'), contentType: 'image/png' });
+        return route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/B9sAAAAASUVORK5CYII=', 'base64') });
       }
       if (url.pathname.startsWith(endpoint)) observedOrigins.push(route.request().headers()['x-thingtime-expected-api-origin']);
       if (url.pathname === endpoint + '/providers') {
         const configured = route.request().headers()['x-thingtime-expected-api-origin'] !== selectedOrigin;
         return json(route, { providers: [{ id: 'facebook-account', name: 'Facebook', icon: 'f', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Link a social account', fields: [] },
           ...(configured ? [{ id: 'google', name: 'Google account', icon: 'g', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Link a Google account', fields: [] },
-            { id: 'google-drive', name: 'Google Drive for documents shared with this workspace', icon: 'g', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Select Drive scopes', fields: [] }] : [])] });
+            { id: 'google-drive', name: 'Google Drive for documents shared with this workspace', icon: 'g', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Select Drive scopes', fields: [] },
+            ...[['google-gmail', 'Gmail'], ['google-docs', 'Google Docs'], ['google-sheets', 'Google Sheets'], ['lemmy', 'Lemmy']].map(([id, name]) =>
+              ({ id, name, icon: '', auth: 'oauth2', configured, contentVisibility: 'personal', about: `Connect ${name}`, fields: [] }))] : [])] });
       }
       if (url.pathname === '/api/v1/webpages/resolve') {
         const savedLayout = savedLayouts.get(url.searchParams.get('id'));
@@ -88,7 +101,7 @@ try {
       if (url.pathname === '/api/v1/things' && route.request().method() === 'POST') {
         const body = route.request().postDataJSON();
         assert.equal(route.request().headers()['x-thingtime-expected-actor'], firstOwner);
-        assert.ok(['settings-connections-oauth-pending', 'settings-named-auth-connections'].includes(body.crystal.pageKey));
+        assert.ok(['settings-connections-oauth-pending', 'settings-named-auth-connections', 'settings-connections-provider-catalog'].includes(body.crystal.pageKey));
         assert.deepEqual(body.acl, ['tt:user']);
         const savedLayout = { id: body.shareId, author: { id: firstOwner }, updatedAt: '2026-11-04T00:00:00Z', crystal: body.crystal };
         savedLayouts.set(body.crystal.pageKey, savedLayout);
@@ -151,8 +164,49 @@ try {
       page.setDefaultTimeout(12000);
       const initial = origin + '/connections?keep=1';
       await page.goto(initial);
-      const signIn = page.getByRole('button', { name: 'Default sign-in with Facebook' });
+      const signIn = page.getByRole('button', { name: /Default sign-in with Facebook/ });
       await signIn.waitFor();
+      const catalogHost = page.locator('[data-settings-document="connections-provider-catalog"]');
+      const logo = '[data-block-id="connections-provider-logo"]';
+      const facebookCard = signIn.locator('..');
+      const mark = facebookCard.locator(logo);
+      await mark.scrollIntoViewIfNeeded();
+      await page.waitForFunction(() => [...document.querySelectorAll('[data-block-id="connections-provider-logo"]')].some(img => img.src.includes('provider=facebook') && img.naturalWidth > 0));
+      const driveMark = page.getByRole('button', { name: /Default sign-in with Lemmy/ }).locator('..').locator(logo);
+      await driveMark.scrollIntoViewIfNeeded();
+      await driveMark.locator('xpath=self::*[contains(@src,"connection-provider-fallback.svg")]').waitFor();
+      for (const icon of [mark, driveMark]) {
+        const bounds = await icon.boundingBox();
+        assert.deepEqual([bounds.width, bounds.height], [24, 24]);
+        assert.equal(await icon.getAttribute('aria-hidden'), 'true');
+      }
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      assert.equal(await page.evaluate(() => scrollY + innerHeight >= document.documentElement.scrollHeight - 2 && document.documentElement.scrollWidth <= innerWidth + 1), true);
+      await page.screenshot({ path: join(evidence, `provider-icons-${label}.png`), fullPage: true });
+      await page.evaluate(() => window.scrollTo(0, 0));
+      if (label === 'desktop') {
+        await catalogHost.getByRole('button', { name: 'Edit provider cards', exact: true }).click();
+        await catalogHost.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
+        const drawer = page.getByTestId('builder-drawer');
+        const picker = drawer.getByRole('combobox', { name: 'Select block', exact: true });
+        for (const [id, value] of [['title', 'Service: {item.name}'], ['description', 'Details: {item.about}'], ['connect', 'Continue: {item.buttonLabel}']]) {
+          await picker.selectOption('connections-provider-' + id);
+          await drawer.getByRole('textbox', { name: 'Block text', exact: true }).fill(value);
+        }
+        await picker.selectOption('connections-provider-logo');
+        assert.equal(await drawer.getByRole('button', { name: 'Upload file' }).isEnabled(), true);
+        assert.equal(await drawer.getByRole('textbox', { name: 'Element src' }).count(), 0);
+        await drawer.getByRole('button', { name: 'Use URL instead' }).click();
+        await drawer.getByRole('textbox', { name: 'Element src' }).fill('/fixture-brand-override.png');
+        await catalogHost.getByRole('button', { name: 'Save layout', exact: true }).click();
+        await catalogHost.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
+        await page.reload();
+        await signIn.waitFor();
+        await catalogHost.getByRole('heading', { name: 'Service: Facebook', exact: true }).waitFor();
+        await catalogHost.getByText('Details: Link a social account', { exact: true }).waitFor();
+        await catalogHost.getByRole('button', { name: 'Continue: Default sign-in with Facebook', exact: true }).waitFor();
+        await catalogHost.locator(logo + '[src="/fixture-brand-override.png"]').first().waitFor();
+      }
       const pendingCopy = label === 'desktop' ? 'Complete Facebook sign-in in your new tab.' : 'Finish signing in to Facebook in the new tab.';
       const stopCopy = label === 'desktop' ? 'End sign-in wait' : 'Stop waiting';
       if (label === 'desktop') {

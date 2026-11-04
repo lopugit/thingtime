@@ -14010,6 +14010,17 @@ separate from deterministic discovery/lease tests.
   Never reuse real-account credentials in isolated fixture browsers. Passing the
   synthetic tests does not establish real Google/Meta or installed-app acceptance.
 
+- Connections provider marks: at desktop and narrow mobile widths, scroll the
+  catalog through its last card. Compare Google, Gmail, Drive, Docs, Sheets,
+  Calendar and Facebook to their official sites. Confirm identical card icon
+  dimensions while loading and when an icon response fails, with no horizontal
+  overflow or duplicate accessible name. Check that the credential form repeats
+  the provider's mark and sign-in buttons still select the same providers. Demo
+  and generic RSS should use the local mark. No browser request should reach a
+  third-party icon host. In **Edit provider cards**, select the image, title,
+  description and Connect button separately. Verify Upload appears first and
+  that a URL override, title and button edits persist across save and reload.
+
 ### Mac symlinks and collapsed connection progress — 2026-11-03
 
 - [x] Preserve opaque relative, absolute, broken, looping and non-UTF8 link targets through native scan/read and cloud metadata; distinguish an ordinary file containing the same bytes. Do not follow a link or a symlink ancestor outside the selected grant.

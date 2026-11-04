@@ -13,9 +13,12 @@ import { isNativeBridgeAvailable } from '~/utils/nativeBridge';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
+import { ConnectionProviderIcon } from './ConnectionProviderIcon';
+import { connectionIconUrl, CONNECTION_ICON_FEATURE, CONNECTION_ICON_VERSION } from '~/connections/providerIcons';
 import { NamedConnectionPanel } from './NamedConnectionPanel';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { NAMED_CONNECTION_FEATURE, NAMED_CONNECTION_VERSION, type NamedConnectionInput } from '~/connections/namedAccess';
+import { providerCatalogBlocks } from './providerCatalogBlocks';
 import { oauthPendingBlocks } from './oauthPendingBlocks';
 import { notifyConnectionOAuthReturn, openConnectionOAuthTab } from './oauthTab.client';
 import { cardStyle, connectedProviderLabel, oauthErrorMessage, type ChannelRef, type Connection } from './shared';
@@ -74,6 +77,18 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
   origin: string; apiOrigin: string; native: boolean; ownerId?: string; dataPlane: string | null; scopeKey: string; generation: number;
 }) {
   const api = useApi();
+  const [providerIconOrigin, setProviderIconOrigin] = React.useState('');
+  React.useEffect(() => {
+    if (!origin) return;
+    let current = true;
+    // Icons are public presentation from the document origin, independent of
+    // the API server selected for the signed-in account and OAuth actions.
+    void requireThingtimeCapability(CONNECTION_ICON_FEATURE, CONNECTION_ICON_VERSION, origin).then(() => {
+      if (current) setProviderIconOrigin(origin);
+    }).catch(() => { /* Older or unavailable servers retain the local mark. */ });
+    return () => { current = false; };
+  }, [origin]);
+  const providerIconsEnabled = !!origin && providerIconOrigin === origin;
   const lopu = useLopu();
   const notify = React.useRef(lopu);
   notify.current = lopu;
@@ -425,6 +440,16 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     }
   };
 
+  const canConnect = (provider: Provider) => provider.configured && !signedOut && !busy &&
+    (provider.auth !== 'oauth2' || (!!ownerId && !oauthProvider));
+  const providerRows = providers.map(provider => ({
+    id: provider.id, name: provider.name, about: provider.about,
+    iconUrl: connectionIconUrl(provider.id, providerIconsEnabled),
+    disabled: !canConnect(provider), buttonOpacity: canConnect(provider) ? 1 : 0.55,
+    buttonBackground: connecting?.id === provider.id ? 'var(--tt-border, #e2e8f0)' : 'transparent',
+    buttonLabel: !provider.configured ? 'Needs setup' : provider.auth === 'oauth2' ? `Default sign-in with ${provider.name}` :
+      provider.auth === 'credential' ? 'Connect default account' : 'Connect',
+  }));
   const legacyConnections = connections.filter(connection => !connection.named);
   return (
     <Box
@@ -536,40 +561,25 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
             </TransientBlockHost>}
           </SettingsDocumentHost>
         ) : null}
-        <Box display="grid" gridTemplateColumns={['minmax(0, 1fr)', 'repeat(2, minmax(0, 1fr))', 'repeat(3, minmax(0, 1fr))']} gap={3}>
-          {providers.map((provider) => (
-            <Box key={provider.id} {...cardStyle} padding={4} display="flex" flexDirection="column" rowGap={2}>
-              <Flex alignItems="center" columnGap={2}>
-                <Text fontSize="xl">{provider.icon}</Text>
-                <Text fontWeight="600">{provider.name}</Text>
-              </Flex>
-              <Text fontSize="sm" color="var(--tt-muted, #6b7280)" flex="1">
-                {provider.about}
-              </Text>
-              <Button
-                size="sm"
-                borderRadius="999px"
-                whiteSpace="normal"
-                height="auto"
-                minHeight="32px"
-                paddingY={2}
-                isDisabled={!provider.configured || signedOut || busy || (provider.auth === 'oauth2' && (!ownerId || !!oauthProvider))}
-                onClick={() => openConnect(provider)}
-                variant={connecting?.id === provider.id ? 'solid' : 'outline'}
-              >
-                {!provider.configured ? 'Needs setup' : provider.auth === 'oauth2' ? `Default sign-in with ${provider.name}` : provider.auth === 'credential' ? 'Connect default account' : 'Connect'}
-              </Button>
-            </Box>
-          ))}
-        </Box>
+        <SettingsDocumentHost documentKey="connections-provider-catalog" title="Connection provider cards" editLayoutLabel="Edit provider cards" defaultDocument={providerCatalogBlocks}
+          scopeKey={scopeKey} showLayoutControls={!!ownerId && !signedOut} allowMediaUploads>
+          {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing}
+            scope={{ catalog: { providers: providerRows }, ...(editing && { item: providerRows[0] }) }} actions={{ connect: ({ inputs }) => {
+              const provider = providers.find(candidate => candidate.id === inputs.provider);
+              if (provider && canConnect(provider)) return openConnect(provider);
+            } }}>
+            <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
+          </TransientBlockHost>}
+        </SettingsDocumentHost>
       </Box>
 
       {/* connect form */}
       {connecting ? (
         <Box {...cardStyle} padding={5} display="flex" flexDirection="column" rowGap={3}>
-          <Text fontWeight="600">
-            {connecting.icon} Connect {connecting.name}
-          </Text>
+          <Flex alignItems="center" columnGap={2}>
+            <ConnectionProviderIcon provider={connecting.id} enabled={providerIconsEnabled} />
+            <Text fontWeight="600">Connect {connecting.name}</Text>
+          </Flex>
           {connecting.fields.map((field) => (
             <Box key={field.key}>
               <Text fontSize="sm" fontWeight="500" marginBottom={1}>
