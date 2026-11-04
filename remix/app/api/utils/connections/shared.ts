@@ -24,7 +24,7 @@ export const fail = (status: number, error: string): Fail => ({ ok: false, statu
 // client mirror, and oauthErrorCopy.test.ts pins the two sets equal so adding
 // one here without copy there fails the suite rather than silently degrading
 // to the generic line.
-export const OAUTH_ERROR_CODES = ['declined', 'state', 'session', 'provider', 'exchange', 'rateLimited', 'failed'] as const;
+export const OAUTH_ERROR_CODES = ['declined', 'state', 'session', 'provider', 'exchange', 'permissions', 'rateLimited', 'failed'] as const;
 export type OAuthErrorCode = (typeof OAUTH_ERROR_CODES)[number];
 
 export const sha48 = (parts: string[]): string => {
