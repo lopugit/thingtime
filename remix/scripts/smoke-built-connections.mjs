@@ -16,17 +16,19 @@ if (process.argv[2] !== '--worker') {
   const bundle = resolve(import.meta.dirname, '../.vercel/output/functions/__server.func/index.mjs');
   const { default: app } = await import(pathToFileURL(bundle).href);
   assert.equal(typeof app.fetch, 'function');
-  const features = ['connections-providers', 'connections', 'connections-unlink', 'connections-feed', 'connections-filters', 'connections-oauth-begin', 'connections-oauth-callback'];
+  const features = { 'connections-providers': '2.0.0', connections: '2.1.0', 'connections-unlink': '2.1.0',
+    'connections-feed': '2.0.0', 'connections-filters': '2.0.0', 'connections-oauth-begin': '2.1.0',
+    'connections-oauth-callback': '2.1.0', 'connections-named': '1.0.0' };
   for (const path of ['/.well-known/thingtime-capabilities.json', '/api/v1/capabilities']) {
     const response = await app.fetch(new Request('https://thingtime.test' + path), { waitUntil() {} });
     assert.equal(response.status, 200, path);
     assert.match(response.headers.get('content-type') || '', /application\/json/);
     const body = await response.json();
     if (path.startsWith('/.well-known')) assert.equal(body.origin, 'https://thingtime.test');
-    for (const feature of features) {
+    for (const [feature, expected] of Object.entries(features)) {
       const version = body.features['api.' + feature];
-      assert.equal(typeof version === 'string' ? version : version.version, '2.0.0');
+      assert.equal(typeof version === 'string' ? version : version.version, expected);
     }
   }
-  console.log('PASS: both compiled Vercel manifest handlers return JSON and all seven Connections 2.0.0 contracts; synthetic runtime only.');
+  console.log('PASS: both compiled Vercel manifest handlers return JSON and all Connections contracts; synthetic runtime only.');
 }

@@ -1396,16 +1396,35 @@ export function useApi() {
     // external accounts, browse their feeds, manage AI feed filters
     connections: {
       providers: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-providers', '2.0.0'); return getJson('/api/v1/connections/providers', options); }, [getJson]),
-      list: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections', '2.0.0'); return getJson('/api/v1/connections', options); }, [getJson]),
+      list: useCallback(async (options?: ThingRequestOptions, includeNamed = false) => {
+        await requireThingtimeCapability('api.connections', includeNamed ? '2.1.0' : '2.0.0');
+        return getJson('/api/v1/connections' + (includeNamed ? '?includeNamed=1' : ''), options);
+      }, [getJson]),
       connect: useCallback(
-        async (args) => { await requireThingtimeCapability('api.connections', '2.0.0'); return asyncFetcher.submit({ provider: args?.provider, fields: args?.fields }, { action: '/api/v1/connections' }); },
+        async (args) => { await requireThingtimeCapability('api.connections', args?.named ? '2.1.0' : '2.0.0'); return asyncFetcher.submit({
+          provider: args?.provider, fields: args?.fields, named: args?.named, expectedOwnerId: args?.expectedOwnerId
+        }, { action: '/api/v1/connections', expectedApiOrigin: args?.expectedApiOrigin }); },
         [asyncFetcher]
       ),
-      unlink: useCallback(async (args) => { await requireThingtimeCapability('api.connections-unlink', '2.0.0'); return asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/connections/unlink' }); }, [asyncFetcher]),
+      unlink: useCallback(async (args) => {
+        await requireThingtimeCapability('api.connections-unlink', args?.named ? '2.1.0' : '2.0.0');
+        return asyncFetcher.submit({ id: args?.id, expectedOwnerId: args?.expectedOwnerId },
+          { action: '/api/v1/connections/unlink', expectedApiOrigin: args?.expectedApiOrigin });
+      }, [asyncFetcher]),
+      useNamed: useCallback(async (args) => {
+        await requireThingtimeCapability('api.connections-named', '1.0.0');
+        return asyncFetcher.submit({ id: args.id, operation: args.operation, expectedOwnerId: args.expectedOwnerId },
+          { action: '/api/v1/connections/named', expectedActor: args.expectedOwnerId, expectedApiOrigin: args.expectedApiOrigin });
+      }, [asyncFetcher]),
       // SSO account linking: begin returns the provider's authorize URL — send
       // the browser there; the callback lands back on /connections
       oauthBegin: useCallback(
-        async (args) => { await requireThingtimeCapability('api.connections-oauth-begin', '2.0.0'); return asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId }, { action: '/api/v1/connections/oauth/begin', expectedApiOrigin: args?.expectedApiOrigin }); },
+        async (args) => {
+          await requireThingtimeCapability('api.connections-oauth-begin', args?.named ? '2.1.0' : '2.0.0');
+          if (args?.named) await requireThingtimeCapability('api.connections-oauth-callback', '2.1.0');
+          return asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId, named: args?.named },
+            { action: '/api/v1/connections/oauth/begin', expectedApiOrigin: args?.expectedApiOrigin });
+        },
         [asyncFetcher]
       ),
       // the Thingtime-managed virtual YouTube subscription list
