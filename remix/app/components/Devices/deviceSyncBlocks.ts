@@ -41,7 +41,7 @@ export const deviceSyncOverviewBlocks: WebpageBlock[] = [
 				css: { display: 'flex', gap: '8px', 'flex-wrap': 'wrap' },
 				children: [
 					{ ...text('device-sync-all-things', 'a', 'All Things', { href: '/things' }), css: linkStyle },
-					{ ...text('device-sync-settings-link', 'a', 'Device settings', { href: '{deviceSync.settingsHref}' }), css: linkStyle },
+					{ ...text('device-sync-settings-link', 'a', 'Device page', { href: '{deviceSync.settingsHref}' }), css: linkStyle },
 					{ ...text('device-sync-activity-link', 'a', 'Activity manager', { href: '/things?activity=1' }), css: linkStyle },
 					{ ...text('device-sync-files-link', 'a', 'Browse synced files', { href: '{deviceSync.filesHref}' }), css: linkStyle }
 				]

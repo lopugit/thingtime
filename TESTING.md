@@ -13530,7 +13530,42 @@ separate from deterministic discovery/lease tests.
 
 - [x] 2026-10-21 isolated fixture acceptance: `test-sync-pause-ui.mjs` passed at1440×1000 and390×844 with both Pause controls enabled during held journal reads, immediate abort/stopping, durable pause after reload, stable focused priority draft under1000 progress updates, invalid CPU101 blocking Save until25, config3 upload2.5Kbps=312.5bytes/s, independently edited/saved Builder labels/unit option and resource-status CPU/concurrency fields. Current12% CPU /2 transfers /3 index workers /312.5bytes/s cap rendered; paused observations explicitly said saved, not current. No horizontal overflow or page errors; screenshots/results in the chosen evidence directory. This is isolated fixture evidence, not installed native governor acceptance.
 
+## Device dashboard host resources
+
+- Run the native `DeviceResourcesTests` and Remix `test:devices` and
+  `test:api-capabilities`. Cover unknown first-sample rates, zero traffic,
+  CPU tick rollover, interface and drive changes, counter resets, older origins,
+  and rejection of private labels or invalid resource measurements.
+- Pair the signed installed Mac node to a compatible origin. After two
+  heartbeats, compare the owner-only device snapshot and rendered dashboard
+  with CPU, disk read/write, and network activity over a comparable interval,
+  physical memory
+  from `sysctl hw.memsize` and `vm_stat`, and startup volume total minus
+  filesystem free space from `df -k /System/Volumes/Data`. Check unavailable
+  network capacity, reload the selected device, and verify the owner sees
+  measured values while another account cannot retrieve its snapshot.
+
 ## Device sync browsing and collapsed settings — 2026-10-22
+
+### Device dashboard and navigation
+
+- [ ] In Things grid, list and columns, open a paired device by click, Enter and
+  touch. The device page opens with its dashboard; the checkbox and modifier
+  selection stay in the library. Open **Quick view** from the device menu,
+  expand it to its page, and reload the direct page link. Open **File sync &
+  backup** in both views and verify it leads to the dedicated sync page.
+  Verify the **Device page** link returns from sync and **Open synced files**
+  remains a separate device menu action.
+- [ ] At desktop and 375px widths, verify both views show the same two rows of
+  two circular gauges above the collapsible controls. Compare the rendered CPU,
+  RAM, startup volume, disk I/O and network rates with the exact owned device snapshot
+  and with independent device readings. Distinguish measured zero, missing
+  readings, and offline last-known values. Network fill shows the split between
+  measured receive/send traffic; it does not claim link utilization. Scroll
+  both surfaces to the bottom and verify floating launchers leave controls clear.
+- [ ] Select and edit a nested label, circular gauge and value or caption through
+  **Edit layout**. Save and reload the same private settings Thing; both views
+  use the saved layout and still display the device's current readings.
 
 ### Browser management and remote execution — 2026-10-23
 

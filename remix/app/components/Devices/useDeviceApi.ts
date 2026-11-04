@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 import type { DevicePlatform } from '../../devices/platform';
 
 import { createApiFailure, readApiResponsePayload } from '~/hooks/apiFailure';
-import type { DeviceBattery } from './deviceTypes';
+import type { DeviceBattery, DeviceResources } from './deviceTypes';
 
 export const PUBLIC_DEVICE_COMMAND_KINDS = [
 	'filesystem',
@@ -109,6 +109,7 @@ export type PublicDeviceState = {
 	appleMusic?: { isInstalled: boolean; isRunning: boolean };
 	spotify?: { isInstalled: boolean; isRunning: boolean };
 	chromeYouTube?: { isInstalled: boolean; isRunning: boolean };
+	resources?: DeviceResources;
 	observedAt: string;
 	updatedAt: string;
 };
