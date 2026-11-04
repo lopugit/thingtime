@@ -732,6 +732,14 @@ points, not the individual files.
   repository's supported merge queue or auto-merge where appropriate. Verify the
   actual merge and record the merge SHA. Direct pushes or other direct ref
   updates to `main` still require explicit authorization.
+- When user-requested feature work reaches a verified completed state, merge
+  its PR into `main` as a required completion step, even when the user did not
+  write "please merge into main when complete." Complete the normal PR process,
+  required checks and reviews, and verify the actual merge before reporting the
+  feature complete. An explicit task-specific instruction to keep work local,
+  stop at review, use another integration branch, or hold the merge takes
+  precedence. If merging is genuinely blocked, preserve the branch and PR,
+  report the exact remaining blocker, and do not claim full delivery.
 - The deployed CI controller on `github-actions` remains a separate runtime
   surface. Inspect it before changing CI and distinguish merging source into
   `main` from updating the deployed controller.
