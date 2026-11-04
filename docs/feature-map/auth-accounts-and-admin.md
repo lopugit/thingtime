@@ -120,9 +120,14 @@ so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
 `passwords/browserPasskey.ts` validates RP/origin/options and implements ES256;
 `browserProviderCeremony.ts` owns policy-checked `verify-passkey`, catalog selection,
-retry identity and durable readback. `BrowserPasswordProvider.tsx` serves
+retry identity and durable readback. Once a sign-in choice is selected, approval
+reads only that exact credential before and after signing. Registration still
+checks the current catalog for site exclusions before saving. `BrowserPasswordProvider.tsx` serves
 `/passwords/provider` with editable `browserProviderBlocks.ts`. Chromium transport
-and trusted tab/document checks live in `browser-extension/`; package with
+and trusted tab/document checks live in `browser-extension/`. The shared
+captured target in `content-vault.js` covers form-owned inputs and standalone
+sign-in steps, with field identity and action checks before preparation and
+delivery. Package with
 `build:password-extension`, test with `test:password-extension` and
 `test:passwords`. Browser acceptance must use the real local API/vault and an
 independent relying party; unit signatures and synthetic UI alone are insufficient.
@@ -363,8 +368,18 @@ session/client/callback; `connections.ts` transactionally stores owner-scoped
 accounts and `tokenVault.ts` encrypts their grants through the existing account
 vault. Shared legacy credentials require reconnect, preserving the caller's link
 ID. Public-source sharing remains intact. Google identity/service cards and
-Facebook identity/posts cards select separate grants. Run `test:connections` and
-`test:api-capabilities`; see README social OAuth setup and TESTING acceptance.
+Facebook identity/posts cards select separate grants. `ConnectionsPage.tsx` opens
+sign-in in a user-initiated tab and `oauthTab.client.ts` removes the opener
+before provider navigation. The existing callback route verifies the live
+session and saves the grant. A tab-local random channel sends a same-origin
+refresh hint, and the initiating page reloads its authorized list. Connections
+and filter caches are scoped to owner, API origin and data plane. An identity
+change retires in-flight reads and their visible state. `oauthPendingBlocks.ts`
+defines the independently editable status and Stop waiting control through the
+shared settings document host. Native hosts retain their original external
+navigation handoff. Run
+`test:connections`, `test:connections:oauth-tab`, and `test:api-capabilities`;
+see README social OAuth setup and TESTING acceptance.
 
 Browser extension accounts: `BrowserExtensionAccountBridge.tsx` projects the
 canonical `api.auth-accounts` roster into the selected first-party document;

@@ -10696,6 +10696,16 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Check website/RP/account labels, fresh Thingtime password verification, durable
   exact-ID vault readback/reload, and server verification of registration and
   assertion. A guide, saved reference or synthetic transport is not acceptance.
+- [ ] Browser sign-in with a remembered device and a vault spanning multiple
+  catalog pages: select a matching passkey from a later page and approve without
+  a password. After the click, verify one approval and two reads of that entry
+  with no second catalog scan. Replace the selected credential after discovery;
+  withhold the assertion even if the replacement is also allowed by the site.
+- [ ] Return a 429 with a long Retry-After or hold an approval response. Show a
+  recoverable error without hidden backoff and withhold any late assertion when
+  the website cancels or its request expires. While approval is held, click
+  Cancel and verify it aborts the fetch and emits one cancellation only. Bulk
+  transfers still back off.
 - [ ] Reject wrong passwords, foreign/public-suffix RPs and disallowed credential
   IDs. Cancel, abort, navigate either tab, switch Thingtime account, expire the
   request and interrupt the extension worker; no stale response or duplicate
@@ -13951,6 +13961,23 @@ separate from deterministic discovery/lease tests.
 
 ### Social OAuth vault and owner isolation
 
+- Run `test:connections:oauth-tab` in isolated Chromium on desktop and phone
+  viewports. The fixture renders the real Connections page with synthetic
+  transport. Verify the original URL and page remain in place, the provider has
+  no opener, a blocked tab starts no OAuth request, and decline or completion
+  lets the original page retry or reload its authorized saved connections.
+  Close the provider tab without consenting and use **Stop waiting** to retry.
+  An unacknowledged callback tab remains available as a normal Connections
+  page. Switch accounts while the previous owner's Connections read is held,
+  then deliver the late response and sign out. Confirm no previous-owner
+  accounts or filters remain and a same-owner reload keeps its cached paint.
+  Edit the pending status and Stop waiting blocks separately in Builder,
+  save and reload, then exercise the customized control. Keep real provider
+  consent and native browser handoff acceptance separate from this fixture.
+  With a mocked desktop bridge, hold or omit the selected API origin and
+  verify no Connections API reads or sign-in control appear. Switch origins
+  and confirm the old provider readiness and saved accounts do not carry over.
+
 - Run `pnpm --dir remix run test:connections`, `test:connections:oauth` and `test:api-capabilities`.
   `test:connections:oauth` boots its own disposable replica with clean environment,
   real registration/admin-vault/connection Request handlers and only a synthetic
@@ -14072,3 +14099,16 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - In an isolated account, upload a small file to a saved sync folder and a nested folder. Verify the canonical file appears in Files, has a creation event in History, and is enumerated by the sync inventory. Verify an ordinary Files upload outside a sync folder still uses the existing attachment path.
 - Download a canonical file, compare its bytes, and move it within the cloud. Verify the file ID and History survive the move. A stale selected revision or a destination name collision must leave the source intact. Verify a cross-device move trashes the cloud source only after the destination write is confirmed.
 - On desktop and mobile, open Files at the exact sync folder and verify both an existing synced file and a new upload display and open from the existing row and menu controls. A rendered row and a canonical inventory result do not establish a native cloud-to-local transfer.
+
+### Browser password autofill on multi-step sign-in pages
+
+- [ ] Run `node browser-extension/test/vault-target-browser.mjs /absolute/path/to/playwright/index.mjs`
+  with an isolated Chromium runtime. Fill the username step and the form-less
+  password step with synthetic data. Confirm Thingtime dispatches no submit.
+- [ ] While approval is pending, replace the password node with an identical
+  field or change an associated form's action to another origin. The new field
+  remains blank. Disabled, read-only, new-password and one-time-code controls
+  stay ineligible even when autocomplete has multiple tokens.
+- [ ] Open the chooser over a modal at desktop, 375px and 320px. Confirm it fits,
+  Escape closes it, and focus returns to its button. A real site sign-in and a
+  native-provider operation require separate acceptance.

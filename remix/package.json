@@ -90,6 +90,7 @@
     "test:ci-control": "node --import tsx --test app/api/utils/ciControl/*.test.ts app/components/Admin/CIControl/*.test.ts app/components/Admin/previewRetentionSettingsBlocks.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/ciControl/stackChat*.test.mts",
     "test:connections:built": "node scripts/smoke-built-connections.mjs",
     "test:connections:oauth": "node scripts/test-connections-oauth.mjs",
+		"test:connections:oauth-tab": "node scripts/test-connections-oauth-tab.mjs",
     "test:connections": "node --experimental-test-module-mocks --import tsx --test app/api/utils/connections/*.test.ts app/api/utils/connections/*.test.mts app/components/Connections/*.test.ts",
     "test:dependencies": "node --test scripts/ensure-dependencies.test.js scripts/worktree-bootstrap.test.cjs",
     "test:desktop-oauth": "node --import tsx --test app/api/utils/apps/desktopOAuthCore.test.ts && node --import tsx --test app/api/utils/apps/accountScopes.test.ts app/api/utils/apps/widgetClient.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/auth/scopedUser.test.mjs app/api/utils/auth/resolveActor.oauth.test.mjs app/api/utils/auth/oauthTokenRoute.test.mjs",
