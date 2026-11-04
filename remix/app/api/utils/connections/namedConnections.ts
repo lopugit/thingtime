@@ -52,7 +52,8 @@ export async function saveNamedConnection(
     if (existing && (!intent.reconnectId || existing.crystal?.grantRevision === intent.requestId)) {
       if (existing.parentId !== accountId || existing.crystal?.origin !== origin ||
           existing.crystal?.environment !== environment || existing.crystal?.name !== intent.name ||
-          JSON.stringify(existing.crystal?.allowedOperations) !== JSON.stringify(intent.allowedOperations))
+          JSON.stringify(existing.crystal?.allowedOperations) !== JSON.stringify(intent.allowedOperations) ||
+          JSON.stringify(existing.crystal?.requestedScopes) !== JSON.stringify(requestedScopes))
         return fail(409, 'This connection request was already used. Start a new connection.');
       const currentAccount = await collection.findOne(accountIdentity, { session });
       if (!currentAccount) return fail(409, 'The original account is no longer available.');

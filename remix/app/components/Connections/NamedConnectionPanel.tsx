@@ -20,14 +20,18 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
   const named = connections.filter(connection => connection.named);
   const [draft, setDraft] = React.useState<Draft | null>(null);
   const [active, setActive] = React.useState('');
-  const [result, setResult] = React.useState('');
+  const [result, setResult] = React.useState<{ signature: string; text: string } | null>(null);
   const [using, setUsing] = React.useState(false);
   const useGeneration = React.useRef(0);
   const selected = named.find(connection => connection.id === active) || named[0];
+  const selectionSignature = JSON.stringify([selected?.id, selected?.named]);
+  const activeSignature = React.useRef(selectionSignature);
+  activeSignature.current = selectionSignature;
   const options = draft ? namedOperationsFor(draft.provider) : [];
   const permissions = draft ? namedProviderPermissions(draft.provider) : [];
   const initialScopes = (provider: string) => namedFacebookProvider(provider) ? ['public_profile'] : [];
   const begin = (provider: string, connection?: Connection) => {
+    if (connection) { useGeneration.current++; setResult(null); }
     setDraft({ provider, requestId: crypto.randomUUID(), name: connection?.named?.name || '',
       allowedOperations: connection?.named?.allowedOperations || ['account.identity'],
       requestedScopes: connection?.named?.requestedScopes.filter(scope => namedProviderPermissions(provider).some(option => option.scope === scope)) || initialScopes(provider), ...(connection ? { reconnectId: connection.id } : {}) });
@@ -43,15 +47,16 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
     {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={`${scopeKey}:${draft?.requestId || 'view'}`} enabled={!editing}
       onError={() => onError(new Error('Could not run that connection action.'))}
       scope={{ named: {
-        rows, canUse: !!selected, active: selected?.id || '', operations: selected?.named?.allowedOperations.map(id => ({ id, label: namedAccess[id].label })) || [],
-        result, providers: candidates.map(provider => ({ id: provider.id, label: provider.name })),
+        rows, canUse: !!selected, active: selected?.id || '', activeName: selected?.named?.name || '', operations: selected?.named?.allowedOperations.map(id => ({ id, label: namedAccess[id].label })) || [],
+        result: result?.signature === selectionSignature ? result.text : '', providers: candidates.map(provider => ({ id: provider.id, label: provider.name })),
         permissionOptions: permissions.map(({ scope, label }) => ({ id: scope, label,
           selected: draft?.requestedScopes.includes(scope) || false, required: scope === 'public_profile' })),
         hasPermissions: !!permissions.length,
         permissionNotice: permissions.length ? 'Choose the scopes to request from this provider. Saved scopes do not enable a Thingtime action on their own.'
           : 'Custom provider scopes are unavailable for this provider. Its standard consent applies.',
         editing: !!draft || editing, formTitle: draft?.reconnectId ? 'Reconnect the same account' : 'New sign-in',
-        reconnecting: !!draft?.reconnectId, provider: draft?.provider || candidates[0]?.id || '', name: draft?.name || '',
+        reconnecting: !!draft?.reconnectId, provider: draft?.provider || candidates[0]?.id || '',
+        providerLabel: candidates.find(candidate => candidate.id === draft?.provider)?.name || '', name: draft?.name || '',
         options: options.map(id => ({ id, label: namedAccess[id].label, selected: draft?.allowedOperations.includes(id) || false }))
       } }}
       actions={{
@@ -64,7 +69,7 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
           const target = named.find(item => item.id === inputs.id);
           if (!target || busy) return;
           useGeneration.current++;
-          setResult('');
+          setResult(null);
           await remove(target);
         },
         provider: ({ value }) => {
@@ -102,7 +107,7 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
           start(provider, { ...intent, name: name.trim() });
           setDraft(null);
         },
-        select: ({ value }) => { if (typeof value === 'string' && named.some(item => item.id === value)) { useGeneration.current++; setActive(value); setResult(''); } },
+        select: ({ value }) => { if (typeof value === 'string' && named.some(item => item.id === value)) { useGeneration.current++; setActive(value); setResult(null); } },
         use: async ({ inputs, signal }) => {
           const operation = inputs.id as NamedOperation;
           if (using || busy || !selected?.named?.allowedOperations.includes(operation)) return;
@@ -110,9 +115,9 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
           setUsing(true);
           try {
             const response = await use(selected.id, operation);
-            if (!signal.aborted && generation === useGeneration.current && response)
-              setResult(Object.entries(response).map(([key, value]) => `${key}: ${value ?? 'Unavailable'}`).join(' · '));
-          } catch (error) { if (!signal.aborted && generation === useGeneration.current) onError(error); }
+            if (!signal.aborted && generation === useGeneration.current && activeSignature.current === selectionSignature && response)
+              setResult({ signature: selectionSignature, text: Object.entries(response).map(([key, value]) => `${key}: ${value ?? 'Unavailable'}`).join(' · ') });
+          } catch (error) { if (!signal.aborted && generation === useGeneration.current && activeSignature.current === selectionSignature) onError(error); }
           finally { setUsing(false); }
         }
       }}>

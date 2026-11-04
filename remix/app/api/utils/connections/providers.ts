@@ -708,7 +708,8 @@ const formOAuthGrant = (config: {
       expiresAt: expiresAtFrom(data.expires_in),
       tokenType: typeof data.token_type === 'string' ? data.token_type : previous?.tokenType || 'Bearer',
       scopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean) : previous?.scopes || config.scopes,
-      confirmedScopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean) : previous?.confirmedScopes
+      confirmedScopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean)
+        : Object.prototype.hasOwnProperty.call(data, 'scope') ? [] : previous?.confirmedScopes
     };
     return config.mapExtra ? config.mapExtra(data, tokens) : tokens;
   };

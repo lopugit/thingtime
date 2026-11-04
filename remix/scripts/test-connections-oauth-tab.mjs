@@ -78,7 +78,7 @@ try {
         const configured = route.request().headers()['x-thingtime-expected-api-origin'] !== selectedOrigin;
         return json(route, { providers: [{ id: 'facebook-account', name: 'Facebook', icon: 'f', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Link a social account', fields: [] },
           ...(configured ? [{ id: 'google', name: 'Google account', icon: 'g', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Link a Google account', fields: [] },
-            { id: 'google-drive', name: 'Google Drive', icon: 'g', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Select Drive scopes', fields: [] }] : [])] });
+            { id: 'google-drive', name: 'Google Drive for documents shared with this workspace', icon: 'g', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Select Drive scopes', fields: [] }] : [])] });
       }
       if (url.pathname === '/api/v1/webpages/resolve') {
         const savedLayout = savedLayouts.get(url.searchParams.get('id'));
@@ -257,16 +257,29 @@ try {
         await page.reload();
       }
       await namedHost.getByText('Choose a provider for named access', { exact: true }).click();
-      await namedHost.getByRole('button', { name: 'Add Google Drive connection' }).click();
+      await namedHost.getByRole('button', { name: 'Add Google Drive for documents shared with this workspace connection' }).click();
       await namedHost.getByRole('textbox', { name: 'Connection name' }).fill('Drive metadata fixture');
       await namedHost.getByRole('checkbox', { name: 'View file metadata' }).check();
       assert.ok(await namedHost.getByRole('checkbox', { name: 'View file metadata' }).isChecked());
       assert.equal(await namedHost.getByRole('checkbox', { name: 'Google profile name and photo' }).count(), 0);
       await namedHost.getByText('Provider permissions to request', { exact: true }).scrollIntoViewIfNeeded();
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+      const overflow = await page.evaluate(() => {
+        if (document.documentElement.scrollWidth <= innerWidth + 1) return [];
+        return [...document.querySelectorAll('body *')].filter(element => element.getBoundingClientRect().right > innerWidth + 1)
+          .slice(0, 8).map(element => element.getAttribute('data-block-id') || element.tagName);
+      });
+      assert.deepEqual(overflow, [], 'Long provider names must not overflow the permission form');
+      const catalog = page.getByText('Connect a 3rd party app', { exact: true }).locator('..');
+      const catalogBounds = await catalog.boundingBox();
+      assert.ok(catalogBounds);
+      for (const card of await catalog.getByRole('button', { name: /^Default sign-in with/ }).all()) {
+        const bounds = await card.locator('..').boundingBox();
+        assert.ok(bounds && bounds.x >= catalogBounds.x - 1 && bounds.x + bounds.width <= catalogBounds.x + catalogBounds.width + 1,
+          'Provider card must fit within the Connections content column');
+      }
       await page.screenshot({ path: join(evidence, label + '-named-permission-form.png'), fullPage: true });
       await namedHost.getByRole('button', { name: 'Cancel', exact: true }).click();
-      for (const name of ['Reading profile', 'Second profile']) {
+      for (const name of ['Reading profile', 'Second profile with a long descriptive name for research notes']) {
         await namedHost.getByRole('button', { name: 'Add named connection' }).click();
         await namedHost.getByRole('combobox', { name: 'Provider', exact: true }).selectOption('google');
         if (label === 'desktop') {
@@ -288,6 +301,7 @@ try {
       await namedHost.getByRole('button', { name: 'Google profile name and photo' }).click();
       await namedHost.getByText('name: Named profile result').waitFor();
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      assert.equal(await page.evaluate(() => scrollY + innerHeight >= document.documentElement.scrollHeight - 2), true);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
       await page.screenshot({ path: join(evidence, label + '-named-connections.png'), fullPage: true });
       await writeFile(join(evidence, label + '-named-rendered-result.json'), JSON.stringify({
@@ -298,6 +312,12 @@ try {
         drivePicker: { metadataSelected: true, identityOperationAvailable: true, profileOperationAvailable: false },
         separateBuilderLabelsSaved: label === 'desktop'
       }, null, 2));
+      await namedHost.getByRole('combobox', { name: 'Connection', exact: true }).selectOption('named-0');
+      assert.equal(await namedHost.getByText('name: Named profile result').count(), 0, 'Result cannot appear under another connection');
+      const second = namedHost.getByRole('article').filter({ hasText: 'Second profile with a long descriptive name for research notes' });
+      await second.getByRole('button', { name: 'Reconnect', exact: true }).click();
+      assert.equal(await namedHost.getByText('name: Named profile result').count(), 0);
+      await namedHost.getByRole('button', { name: 'Cancel', exact: true }).click();
       if (label === 'desktop') {
         holdList = undefined;
         await page.close();

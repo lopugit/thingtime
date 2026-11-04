@@ -4,7 +4,7 @@ const element = (id: string, tag: string, text = '', props: Record<string, unkno
   ({ id, type: 'element', tag, text, props, css });
 const button = (id: string, text: string, operation: string, input: Record<string, unknown> = {}) =>
   element(id, 'button', text, { type: 'button', 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation, ...input } },
-    { 'min-height': '44px', padding: '6px 12px', 'border-radius': '8px', border: '1px solid var(--tt-border, #ddd)' });
+    { 'min-height': '44px', 'max-width': '100%', 'white-space': 'normal', 'overflow-wrap': 'anywhere', padding: '6px 12px', 'border-radius': '8px', border: '1px solid var(--tt-border, #ddd)' });
 const collection = (id: string, itemsPath: string, children: WebpageBlock[], transparent = false): WebpageBlock =>
   ({ id, type: 'collection', props: { itemsPath, transparent, size: 'all', hideSearch: true, hideSize: true, hideCount: true }, children });
 const when = (id: string, arg: string, children: WebpageBlock[]): WebpageBlock =>
@@ -35,18 +35,19 @@ export const namedConnectionBlocks: WebpageBlock[] = [
   ] },
   when('named-form', 'named.editing', [{
     id: 'named-form-group', type: 'element', tag: 'fieldset',
-    css: { display: 'grid', gap: '8px', padding: '12px', 'min-width': '0', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '12px' },
+    css: { display: 'grid', 'grid-template-columns': 'minmax(0, 1fr)', gap: '8px', padding: '12px', 'min-width': '0', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '12px' },
     children: [
       element('named-form-title', 'legend', '{named.formTitle}'),
       element('named-provider-label', 'label', 'Provider', { htmlFor: 'named-provider-select' }),
       { id: 'named-provider-picker', type: 'element', tag: 'select',
         props: { id: 'named-provider-select', 'aria-label': 'Provider', value: '{named.provider}', disabled: '{named.reconnecting}',
           'data-tt-action': '$transient', 'data-tt-action-inputs': { operation: 'provider' } },
-        css: { 'min-height': '44px', border: '1px solid var(--tt-border, #ddd)' },
+        css: { 'min-height': '44px', width: '100%', 'min-width': '0', 'max-width': '100%', border: '1px solid var(--tt-border, #ddd)' },
         children: [collection('named-provider-options', 'named.providers', [element('named-provider-option', 'option', '{item.label}', { value: '{item.id}' })], true)] },
+      element('named-provider-selected', 'p', '{named.providerLabel}', {}, { 'overflow-wrap': 'anywhere', 'font-size': '14px' }),
       element('named-name-label', 'label', 'Connection name', { htmlFor: 'named-connection-name' }),
       element('named-name-field', 'input', '', { id: 'named-connection-name', name: 'connection-name', 'aria-label': 'Connection name', defaultValue: '{named.name}' },
-        { 'min-height': '44px', padding: '6px 8px', border: '1px solid var(--tt-border, #ddd)' }),
+        { 'min-height': '44px', width: '100%', 'min-width': '0', padding: '6px 8px', border: '1px solid var(--tt-border, #ddd)' }),
       element('named-provider-scope-label', 'p', 'Provider permissions to request', {}, { 'font-weight': '600' }),
       element('named-provider-scope-notice', 'p', '{named.permissionNotice}'),
       when('named-provider-scope-available', 'named.hasPermissions', [
@@ -78,7 +79,9 @@ export const namedConnectionBlocks: WebpageBlock[] = [
     element('named-consumer-label', 'label', 'Connection', { htmlFor: 'named-use-select' }),
     { id: 'named-consumer-select', type: 'element', tag: 'select', props: { id: 'named-use-select', 'aria-label': 'Connection', value: '{named.active}',
       'data-tt-action': '$transient', 'data-tt-action-inputs': { operation: 'select' } },
+      css: { width: '100%', 'min-width': '0', 'max-width': '100%', 'min-height': '44px' },
       children: [collection('named-consumer-options', 'named.rows', [element('named-consumer-option', 'option', '{item.name}', { value: '{item.id}' })], true)] },
+    element('named-consumer-selected-name', 'p', '{named.activeName}', {}, { 'overflow-wrap': 'anywhere', 'font-size': '14px' }),
     collection('named-consumer-operations', 'named.operations', [button('named-run-operation', '{item.label}', 'use', { id: '{item.id}' })], true),
     element('named-result', 'p', '{named.result}', { role: 'status' }, { 'overflow-wrap': 'anywhere' })
   ])
