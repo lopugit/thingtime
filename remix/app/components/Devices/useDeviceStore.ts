@@ -7,6 +7,7 @@ import { apiErrorMessage, hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 
 import { readDeviceDetailCache, readDeviceListCache, writeDeviceDetailCache, writeDeviceListCache } from './deviceCache';
 import { createDeviceRuntimeState, deviceActionPolicy, reconcileDeviceCommand } from './deviceCore';
+import { readDeviceResources } from './deviceResourceMetrics';
 import type { DeviceActionControl, DeviceActionIntent, DeviceControlResolver } from './DeviceStateGrid';
 import type {
 	DeviceActionKind,
@@ -446,6 +447,7 @@ const publicDeviceToSnapshot = (device: PublicDevice): DeviceSnapshot | null => 
 			spotify: device.state?.spotify,
 			chromeYouTube: device.state?.chromeYouTube,
 			powerTimers: device.state?.powerTimers,
+			resources: readDeviceResources(device.state?.resources),
 			battery: device.state?.battery
 				? {
 					...device.state.battery,

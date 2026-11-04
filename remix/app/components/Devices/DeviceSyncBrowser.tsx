@@ -14,7 +14,7 @@ import { SettingsSection } from '../Settings/SettingsSection';
 import { DesktopFolderAccess } from './DesktopFolderAccess';
 import { RemoteDeviceSync } from './RemoteDeviceSync';
 import { getElectronBridge } from '~/utils/electronBridge';
-import { deviceSyncPageHref } from './deviceNavigation';
+import { deviceThingsPageHref } from './deviceNavigation';
 import { deviceSyncFolders, deviceSyncedFilesHref, type DeviceSyncFolder } from './deviceSyncNavigation';
 
 const cache = new Map<string, DeviceSyncFolder[]>();
@@ -125,7 +125,7 @@ function DeviceSyncBrowserContent({
 							status,
 							error,
 							empty: loading || error || !allowed ? 'No verified folder list is available yet.' : 'No saved sync connections for this device yet.',
-							settingsHref: deviceSyncPageHref(deviceId),
+							settingsHref: deviceThingsPageHref(deviceId),
 							filesHref: deviceSyncedFilesHref(deviceId)
 						}
 					}}
