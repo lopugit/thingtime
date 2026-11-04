@@ -1216,16 +1216,31 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			}, true);
 		},
 
+		/** Progress retains the exact completed early pass referenced by the strict plan. */
+		async earlyProgressSource(value: PagedRunSpec): Promise<PagedRunSpec | null> {
+			const spec = parsePagedRunSpec(value), id = spec.plan.earlyRunId;
+			if (!id) return null;
+			return withHeader(spec, 'readonly', (_h, tx, done, fail) => {
+				const get = tx.objectStore(PAGED_RUN_STORES[0]).get([key, id]);
+				get.onsuccess = () => { try {
+					check(); const h: Header = get.result, early = parsePagedRunSpec(h?.spec);
+					validate(h, early);
+					if (early.id !== id || early.streaming?.source !== 'both' || h.phase !== 'complete' ||
+						early.configuration?.localRootId !== spec.configuration?.localRootId ||
+						early.configuration?.remoteFolderId !== spec.configuration?.remoteFolderId)
+						throw Error('Early sync progress belongs to different folders.');
+					done(early);
+				} catch (error) { fail(error); } };
+			}, true);
+		},
+
 		async retireCompletedStream(value: PagedRunSpec) {
 			const spec = parsePagedRunSpec(value);
-			return withHeader<void>(spec, 'readwrite', (h, tx, done, fail) => {
+			if (spec.streaming?.source === 'both') return; // Maintenance owns the strict progress dependency.
+			return withHeader<void>(spec, 'readwrite', (h, tx, done) => {
 				if (!h.stream?.terminal || h.phase !== 'complete') throw Error('Preserve unfinished streaming receipts.');
-				const pointer = tx.objectStore(PAGED_RUN_HEADS).get(streamReconciliationKey(key));
-				pointer.onsuccess = () => { try {
-					check();
-					if (pointer.result !== spec.id) retireJournalMetadata(tx, key, 'run', spec.id, PAGED_RUN_STORES[0], h);
-					done(undefined);
-				} catch (error) { fail(error); } };
+				retireJournalMetadata(tx, key, 'run', spec.id, PAGED_RUN_STORES[0], h);
+				done(undefined);
 			}, true);
 		},
 

@@ -55,10 +55,14 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 	const access = { scope, currentScope: input.currentScope, signal, cleanup: 'foreground' as const }, inventory = input.journal.inventory(access),
 		plans = input.journal.plans(access), runs = input.journal.pagedRuns(access), checkpoints = input.journal.pagedCheckpoints(access), drafts = input.journal.reviewDrafts(access);
 	let earlyProgress: PagedRunProgress | undefined;
-	const publish = (value: ForegroundSyncProgress) => input.progress(earlyProgress ? {
-		...value, confirmed: value.confirmed + earlyProgress.confirmed, total: value.total + earlyProgress.operations,
-		directions: combineSyncDirections(earlyProgress.directions, value.directions)
-	} : value);
+	const publish = (value: ForegroundSyncProgress) => input.progress({
+		...value,
+		totalFinal: value.totalFinal ?? !['checking', 'scanning', 'reviewing'].includes(value.stage),
+		...(earlyProgress ? {
+			confirmed: value.confirmed + earlyProgress.confirmed, total: value.total + earlyProgress.operations,
+			directions: combineSyncDirections(earlyProgress.directions, value.directions)
+		} : {})
+	});
 	await authorize();
 	// A previous interrupted plan can leave millions of obsolete rows. Bound
 	// startup cleanup so that backlog cannot starve the user's next transfer.

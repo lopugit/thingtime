@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { IDBKeyRange } from 'fake-indexeddb';
+import { openSyncJournal } from './journal.client';
+import { projectSyncProgress, type SyncProgressDescriptor } from './progressProjection';
+import { createJournalSyncProgressSource } from './progressProjection.client';
 import { cloudFileSyncEntry, type CloudFile } from './cloudFile';
 import { fingerprintSource } from './contentFingerprint';
 import type { SyncReceipt } from './execute';
@@ -81,6 +85,7 @@ async function fixture(path?: string) {
 test('new files and one-sided file edits in both directions confirm while both initial feeds remain open; strict seal publishes agreement', { timeout: 10000 }, async () => {
 	const x = await fixture();
 	let remote = await x.putCloud('download.bin', [5, 6, 7]);
+	let previousEarly: SyncProgressDescriptor['run'] | null = null;
 	for (let phase = 0; phase < 2; phase++) {
 		if (phase) {
 			await x.f.revise([11, 12]);
@@ -95,7 +100,10 @@ test('new files and one-sided file edits in both directions confirm while both i
 			(activity.direction === 'upload' ? firstUpload : firstDownload).resolve();
 		};
 		let completed: Parameters<typeof x.input.progress>[0] | undefined;
-		x.input.progress = value => { if (value.stage === 'complete') completed = value; };
+		let descriptor: SyncProgressDescriptor | undefined;
+		x.input.progressSession = value => { descriptor = value; };
+		const progress: Parameters<typeof x.input.progress>[0][] = [];
+		x.input.progress = value => { progress.push(value); if (value.stage === 'complete') completed = value; };
 		const oldHead = await x.checkpoints().current();
 		const run = x.run();
 		await both;
@@ -111,6 +119,18 @@ test('new files and one-sided file edits in both directions confirm while both i
 		assert.equal(completed?.total, 2);
 		assert.equal(completed?.directions?.upload.confirmed, 1);
 		assert.equal(completed?.directions?.download.confirmed, 1);
+		assert.ok(progress.some(value => value.stage === 'scanning' && value.confirmed === 2 && value.totalFinal === false));
+		const provisional = progress.filter(value => value.indexState === 'complete');
+		assert.ok(provisional.length > 0 && provisional.every(value => value.totalFinal === false));
+		assert.equal(completed?.totalFinal, true);
+		assert.ok(descriptor && !descriptor.run.streaming);
+		const open: typeof openSyncJournal = () => openSyncJournal(x.f.factory, 'thingtime-file-sync-v1', IDBKeyRange);
+		const tree = await projectSyncProgress(createJournalSyncProgressSource(descriptor, () => scope, open));
+		assert.deepEqual([tree.parent.files, tree.parent.operations, tree.parent.confirmed, tree.parent.unchanged], [2, 2, 2, 0]);
+		assert.deepEqual(tree.rows.map(row => [row.files, row.operations, row.confirmed]), [[1, 1, 1], [1, 1, 1]]);
+		if (previousEarly) await assert.rejects(x.runs().readConfirmed(previousEarly), /changed or is unavailable/);
+		previousEarly = await x.runs().earlyProgressSource(descriptor.run);
+		assert.ok(previousEarly);
 		assert.notDeepEqual(await x.checkpoints().current(), oldHead);
 		assert.equal(await x.runs().streamAwaitingReconciliation(), null);
 	}

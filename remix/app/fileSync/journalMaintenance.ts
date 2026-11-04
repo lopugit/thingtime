@@ -43,6 +43,7 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 			throw Error('Invalid cleanup cursor.');
 		return transaction(stores, 'readwrite', (tx, done, fail) => {
 			const activePlans = new Set<string>(), activeInputs = new Set<string>();
+			const earlyProgressRuns = new Set<string>();
 			let active: string | undefined, retained: string | undefined, review: string | undefined, baseline: PagedCheckpointHead | undefined, ready = 5;
 			const result: MaintenanceProgress = { examined: 0, deleted: 0, retired: 0, done: false, next: after ?? null };
 			const get = <T>(store: string, id: IDBValidKey, next: (v: T) => void) => {
@@ -64,9 +65,10 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 					case 'checkpoint': next(row.id !== active && row.id !== baseline?.runId && h.phase === 'published'); return;
 					case 'run': {
 						const run = h as PagedRunHeader;
-						if (row.id === active || row.id === retained || row.id === baseline?.runId) { next(false); return; }
+						if (row.id === active || row.id === retained || row.id === baseline?.runId || row.id === early || earlyProgressRuns.has(row.id)) { next(false); return; }
 						if (row.retiring) { next(true); return; }
 						if (run.phase !== 'complete') { next(false); return; }
+						if (run.spec.streaming?.source === 'both') { next(true); return; }
 						if (run.retained) { next(true); return; }
 						get<PagedCheckpointHeader | undefined>(PAGED_CHECKPOINT_DRAFTS, [key, row.id], c => {
 							if (!c) { next(false); return; }
@@ -160,6 +162,7 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 						if (run.spec.id !== id || (id === baseline?.runId && run.phase !== 'complete') || (id === retained && !run.retained))
 							throw Error('Protected sync run identity changed.');
 						const plan = run.spec.plan; activePlans.add(plan.id);
+						if (plan.earlyRunId) earlyProgressRuns.add(plan.earlyRunId);
 						for (const input of [plan.local, plan.remote, plan.baseline.local, plan.baseline.remote]) activeInputs.add(input.id);
 						if (id !== active) { visit(index + 1); return; }
 						get<PagedCheckpointHeader | undefined>(PAGED_CHECKPOINT_DRAFTS, [key, id], draft => {

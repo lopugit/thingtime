@@ -136,6 +136,7 @@ export async function streamingFileFixture(path = 'first.bin') {
 		input,
 		scope,
 		journal: base.journal,
+		factory: base.factory,
 		entry: () => structuredClone(entry),
 		files,
 		objects,

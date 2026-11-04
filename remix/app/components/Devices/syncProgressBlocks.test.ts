@@ -145,3 +145,16 @@ test('resource status keeps effective fields individually editable and distingui
  assert.match(unknown.cpu, /unavailable/); assert.doesNotMatch(unknown.cpu, /0%/);
  assert.match(syncResourceStatusDisplay(undefined, 'running').syncResources.transfers, /unavailable/);
 });
+
+test('a completed download keeps its durable direction after active samples end', () => {
+	const directions = {
+		upload: { operations: 0, confirmed: 0, bytesTotal: '0', bytesConfirmed: '0' },
+		download: { operations: 2, confirmed: 2, bytesTotal: '12', bytesConfirmed: '12' },
+	};
+	const result = syncProgressDisplay({}, { stage: 'complete', total: 2, confirmed: 2, directions }, 'complete', true).sync;
+	assert.equal(result.transferTitle, '2. Download files and folders');
+	assert.match(result.uploadDescription, /Complete.*2 \/ 2 operations confirmed/);
+	const provisional = syncProgressDisplay({}, { stage: 'checking', total: 0, confirmed: 0, totalFinal: false }, 'running', false, '', '', false, false, 'two-way').sync;
+	assert.equal(provisional.transferTitle, '2. Transfer files and folders');
+	assert.match(provisional.uploadDescription, /Total may grow/);
+});

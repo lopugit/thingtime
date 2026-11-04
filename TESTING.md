@@ -14325,6 +14325,11 @@ the isolated real-API/browser command and the metadata-only session boundary.
   repeats the check for one-sided edits from a sealed baseline, and exercises
   stale hints, conflicting edits, lost replies, cancellation, authority loss,
   and a deletion between strict planning and checkpoint capture.
+- Run `npm --prefix remix run test:files:two-way-progress-ui` with the MCP
+  workspace's Playwright and its Chromium installed. The isolated desktop and
+  narrow viewport checks use the real progress viewer and journal, including a
+  download still active during another index frame, provisional discovery,
+  confirmed nested totals after strict planning, and the final direction label.
 - In the signed Mac app, use a disposable connection with deletion propagation
   off and a late large file to keep the Rust scanner active. Create a small
   local-only file and a small cloud-only file in already covered paths or new

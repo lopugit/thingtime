@@ -4147,3 +4147,7 @@ infers deletion from a missing feed entry. Transfers use the existing upload
 and native publication guards, resource controls, and durable operation IDs.
 Confirmed copies carry their source and destination stamps into strict planning
 and checkpoint verification; they do not publish a checkpoint on their own.
+The folder progress view includes these receipts after strict planning without
+counting the same discovered path twice. Totals stay provisional through
+strict discovery, and the transfer heading follows the saved directions after
+the live byte sample ends.

@@ -105,7 +105,7 @@ export async function streamForegroundSync(
 	const coverage = () => ({
 		...(priorityReadiness ? { priorityReadiness } : {}),
 		indexState,
-		totalFinal: indexState === 'complete' && indexed === state.read,
+		totalFinal: !twoWay && indexState === 'complete' && indexed === state.read,
 		...(!twoWay ? { direction: local ? ('upload' as const) : ('download' as const) } : {}),
 		...(skipped === undefined ? {} : { skipped, coverage: 'partial' as const, consistency: 'per-entry' as const })
 	});
