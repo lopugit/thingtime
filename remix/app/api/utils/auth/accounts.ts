@@ -1,5 +1,6 @@
-import { ensureIndexes, getRostersCollection } from '../mongodb/collections';
+import { getRostersCollection } from '../mongodb/collections';
 
+import { appendAccountHintPointer } from './accountHintsCookie';
 import { clearAccountsCookie, parseAccountsCookie, serializeAccountsCookie } from './accountsCookie';
 import { authCookie, clearAuthCookie, serializeAuthCookie } from './authCookie';
 import { resolveSessionUser, resolveTokenUser } from './getCurrentUser';
@@ -70,7 +71,7 @@ export type ResolvedRoster = {
   active: RosterAccount | null;
 };
 
-type RosterWriteResult = { cookies: string[]; conflict: boolean };
+type RosterWriteResult = { cookies: string[]; conflict: boolean; rosterId: string | null };
 
 const toEntries = (accounts: Array<{ userId: string; jti: string; addedAt: Date }>): RosterEntry[] =>
   accounts.map(({ userId, jti, addedAt }) => ({ userId, jti, addedAt }));
@@ -91,6 +92,15 @@ const findLiveRosterDoc = async (rosterId: string): Promise<RosterDoc | null> =>
   if (!doc) return null;
   if (doc.expiresAt && new Date(doc.expiresAt).getTime() < Date.now()) return null;
   return doc as unknown as RosterDoc;
+};
+
+// Entries of a live roster doc by id, for the cross-deployment account-hints
+// resolver (accountHints.ts). Read-only: each entry still has to pass
+// resolveSessionUser before anything about it is surfaced, so this exposes
+// nothing the switcher's own resolution path wouldn't.
+export const getLiveRosterEntries = async (rosterId: string): Promise<RosterEntry[]> => {
+  const doc = await findLiveRosterDoc(rosterId);
+  return doc ? doc.entries : [];
 };
 
 // Resolve the full roster for a request: the OWNED roster doc's entries plus
@@ -200,10 +210,10 @@ export const persistRoster = async (
       const filter = expectedVersion ? { rosterId, version: expectedVersion } : { rosterId };
       const res = await rosters.deleteOne(filter);
       if (expectedVersion && res.deletedCount === 0 && (await rosters.findOne({ rosterId }))) {
-        return { cookies: [], conflict: true };
+        return { cookies: [], conflict: true, rosterId: null };
       }
     }
-    return { cookies: [await clearAccountsCookie()], conflict: false };
+    return { cookies: [await clearAccountsCookie()], conflict: false, rosterId: null };
   }
 
   const stored = toEntries(entries);
@@ -216,19 +226,16 @@ export const persistRoster = async (
       $set: { entries: stored, updatedAt: now, expiresAt, version }
     });
     if (res.matchedCount > 0) {
-      return { cookies: [await serializeAccountsCookie(rosterId)], conflict: false };
+      return { cookies: [await serializeAccountsCookie(rosterId)], conflict: false, rosterId };
     }
     // Guarded miss = a concurrent write moved the version → conflict. An
     // unguarded miss = the doc vanished (TTL/logout-all) → fall through to
     // mint a fresh one.
-    if (expectedVersion) return { cookies: [], conflict: true };
+    if (expectedVersion) return { cookies: [], conflict: true, rosterId: null };
   }
 
-  // Memoised no-op after the first call; guarantees the rosters unique + TTL
-  // indexes exist even in a process that only ever serves logins (register is
-  // otherwise the only caller of ensureIndexes).
-  await ensureIndexes();
-
+  // Rosters' unique + TTL indexes are guaranteed by the boot-time warmup
+  // (server/plugins/mongo-warmup) — no per-request ensure needed here.
   const created: RosterDoc = {
     rosterId: crypto.randomUUID(),
     type: 'tt.roster',
@@ -239,7 +246,7 @@ export const persistRoster = async (
     expiresAt
   };
   await rosters.insertOne(created);
-  return { cookies: [await serializeAccountsCookie(created.rosterId)], conflict: false };
+  return { cookies: [await serializeAccountsCookie(created.rosterId)], conflict: false, rosterId: created.rosterId };
 };
 
 // Set-Cookie values that persist pruning/self-healing done by resolveRoster,
@@ -267,19 +274,19 @@ export const mintAccountToken = (account: RosterAccount) =>
 const mutateRoster = async (
   request: Request,
   mutate: (roster: ResolvedRoster) => Promise<Array<{ userId: string; jti: string; addedAt: Date }>>
-): Promise<{ roster: ResolvedRoster; entries: RosterEntry[]; cookies: string[] }> => {
+): Promise<{ roster: ResolvedRoster; entries: RosterEntry[]; cookies: string[]; rosterId: string | null }> => {
   for (let attempt = 0; attempt < MAX_ROSTER_WRITE_ATTEMPTS; attempt++) {
     const roster = await resolveRoster(request);
     const entries = toEntries(await mutate(roster));
     const guard = attempt < MAX_ROSTER_WRITE_ATTEMPTS - 1 ? roster.readVersion : undefined;
     const res = await persistRoster(roster.rosterId, entries, guard);
-    if (!res.conflict) return { roster, entries, cookies: res.cookies };
+    if (!res.conflict) return { roster, entries, cookies: res.cookies, rosterId: res.rosterId };
   }
   // Unreachable: the last iteration passes no guard and cannot conflict.
   const roster = await resolveRoster(request);
   const entries = toEntries(await mutate(roster));
   const res = await persistRoster(roster.rosterId, entries);
-  return { roster, entries, cookies: res.cookies };
+  return { roster, entries, cookies: res.cookies, rosterId: res.rosterId };
 };
 
 // Merge a freshly-created login/register session into the browser's roster:
@@ -292,7 +299,7 @@ export const mergeAccountSession = async (
   request: Request,
   next: { userId: string; jti: string }
 ): Promise<string[]> => {
-  const { cookies } = await mutateRoster(request, async (roster) => {
+  const { cookies, rosterId } = await mutateRoster(request, async (roster) => {
     const replaced = roster.accounts.filter((account) => account.userId === next.userId);
     await Promise.all(replaced.map((account) => revokeSession(account.jti)));
     return [
@@ -300,6 +307,10 @@ export const mergeAccountSession = async (
       { userId: next.userId, jti: next.jti, addedAt: new Date() }
     ];
   });
+  // Every sign-in path (login, register, passkey, assume, temporary) rides
+  // this merge, so the cross-deployment hint pointer updates here: one place,
+  // never forgotten. See accountHintsCookie.ts for the trust model.
+  if (rosterId) cookies.push(await appendAccountHintPointer(request, rosterId));
   return cookies;
 };
 

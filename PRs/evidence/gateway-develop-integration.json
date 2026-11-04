@@ -1,0 +1,47 @@
+{
+  "observedAt": "2026-10-26T06:15:22.375187+00:00",
+  "scope": "develop integration from f41cf65629fe98423405de4bea4e5894f59ccb46; PR1221 and dedicated source 992447b9c",
+  "unitTests": {
+    "gateway": 14,
+    "collections": 81,
+    "indexLifecycleMocks": 5,
+    "capabilities": 113,
+    "lopuLifecycle": 42
+  },
+  "nodeServerBuild": true,
+  "changedTsTsxLint": true,
+  "limitations": [
+    "Repository ESLint parser rejects .mts syntax; Node regression tests passed.",
+    "Live environment configuration, owner bootstrap and alias activation are not covered by this local fixture."
+  ],
+  "acceptance": {
+    "ok": true,
+    "transport": "built-nitro",
+    "viteRootDocs": true,
+    "registration": true,
+    "authCookies": true,
+    "crossSiteRefused": true,
+    "writes": true,
+    "dedicatedOwnHandler": true,
+    "dedicatedShellMetadata": true,
+    "independentDedicatedDatabase": true,
+    "dedicatedIndexCommands": {
+      "creates": 138,
+      "drops": 51,
+      "peak": 2
+    },
+    "promotion": true,
+    "rollback": true,
+    "followerMongoDials": 0,
+    "initializedIndexCommands": {
+      "creates": 138,
+      "drops": 51,
+      "peak": 2
+    },
+    "unchangedColdIndexCommands": {
+      "creates": 0,
+      "drops": 0,
+      "peak": 0
+    }
+  }
+}

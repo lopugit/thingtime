@@ -2,7 +2,7 @@ import { getAuthToken } from './authCookie';
 import { serviceAccountAuthenticationAllowed } from './getCurrentUser';
 import { verifyJwt } from './jwt';
 import { getLiveSession } from './sessions';
-import { findUserById, toPublicUser } from './users';
+import { findUserById, toPublicUserWithStorage } from './users';
 import type { PublicUser } from './users';
 
 export type ServiceAccountAuthResult =
@@ -49,5 +49,5 @@ export const getCurrentServiceAccount = async (request: Request): Promise<Servic
   if (user.accountKind !== 'service') return serviceRequired();
   if (!serviceAccountAuthenticationAllowed(user)) return unauthorized();
 
-  return { ok: true, user: toPublicUser(user) };
+	return { ok: true, user: await toPublicUserWithStorage(user) };
 };

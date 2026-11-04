@@ -2,6 +2,7 @@ import React from 'react';
 import { smarts } from '../smarts';
 import localforage from 'localforage';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
+import { shouldIgnoreGlobalKeydown } from '~/utils/editableTarget';
 import { parse, stringify } from 'flatted';
 
 // @ts-ignore
@@ -80,7 +81,17 @@ export const useThingtimeLine = (Everything) => {
 			// @undoRedoEventKeyShortcutEventListener
 			// if ctrl + z, restore thingtime from localstorage timeline
 
-			if ((e?.ctrlKey || e?.metaKey) && e?.key === 'z') {
+			// inside editable targets the browser's native undo/redo must win —
+			// hijacking it there mutates unrelated thingtime state while the
+			// user is trying to fix a typo. Shared guard so every app-wide
+			// keydown listener bails on the same rule (see utils/editableTarget).
+			if (shouldIgnoreGlobalKeydown(e)) {
+				return;
+			}
+
+			// Shift+Z reports key 'Z' in most browsers, so lowercase before
+			// matching or the redo combo never reaches the redo branch
+			if ((e?.ctrlKey || e?.metaKey) && e?.key?.toLowerCase() === 'z') {
 				e?.preventDefault();
 
 				const eventType = e.shiftKey ? 'redo' : 'undo';
@@ -180,7 +191,6 @@ export const useThingtimeLine = (Everything) => {
 					namespace: 'undoRedo'
 				});
 
-				const debugUuid = Math.random().toString(36).substring(2, 15);
 				// log the timemachine update value
 
 				// setThingtime without undoRedo
@@ -255,7 +265,6 @@ export const useThingtimeLine = (Everything) => {
 					namespace: 'undoRedo'
 				});
 
-				const debugUuid = Math.random().toString(36).substring(2, 15);
 				// log the timemachine update value
 
 				// setThingtime without undoRedo
@@ -305,7 +314,7 @@ export interface TimelineScaffold {
 export const newTimeline = (key: string = 'default', scaffold?: TimelineScaffold) => {
 	const timeline: Timeline = {
 		key: key,
-		uuid: Math.random().toString(36).substring(2, 15), // generate a random UUID
+		uuid: crypto.randomUUID(), // generate a random UUID
 		past: [],
 		present: null,
 		future: [],

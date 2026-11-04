@@ -3,6 +3,7 @@ import { Box, Flex, Text } from '@chakra-ui/react';
 
 import { registerKindRenderer } from './kindRegistry';
 import type { KindRenderContext } from './kindRegistry';
+import { leadingEmoji, splashEmoji } from '~/components/Feed/emojiSplash';
 import {
 	Avatar,
 	BodyText,
@@ -174,46 +175,90 @@ const FaqRenderer = ({ value }: { value: FaqValue; context: KindRenderContext })
 
 type PollValue = { question: string; options: Array<{ label: string; votes: number }>; totalVotes: number; closesAt: string };
 
-const PollRenderer = ({ value }: { value: PollValue; context: KindRenderContext }) => {
-	const [picked, setPicked] = React.useState<number | null>(null);
-	const total = value.totalVotes + (picked !== null ? 1 : 0);
+// One-tap live voting when the host wires context.poll (PostCard supplies the
+// server tally + an optimistic vote handler): tap to vote, tap another option
+// to move your vote, tap your own again to remove it. The bars animate via
+// ProgressBar's width transition. Logged-out viewers (canVote false) see
+// results only. Surfaces with no vote pipeline (docs galleries, previews)
+// keep the original self-contained demo behavior.
+const PollRenderer = ({ value, context }: { value: PollValue; context: KindRenderContext }) => {
+	const live = context.poll;
+	// untrusted surfaces (rich comments) get no live vote wiring, so the tappable
+	// demo there would paint a fake vote that never reaches the server — render
+	// static results instead; the demo stays for trusted gallery/docs surfaces
+	const demo = !live && !context.untrusted;
+	const [demoPick, setDemoPick] = React.useState<number | null>(null);
+
+	const viewerVote = live ? live.viewerVote : demo ? demoPick : null;
+	const counts = live
+		? value.options.map((_option, idx) => live.counts[idx] || 0)
+		: value.options.map((option, idx) => option.votes + (demo && demoPick === idx ? 1 : 0));
+	const total = live ? live.totalVotes : value.totalVotes + (demo && demoPick !== null ? 1 : 0);
+	// results reveal on your vote ("vote once, watch the bars fill") — or right
+	// away for viewers who can't vote (logged out / untrusted static)
+	const showResults = viewerVote !== null || (live ? !live.canVote : !demo);
+	const tappable = live ? live.canVote || !!live.onVote : demo && demoPick === null;
+
+	const handleTap = (idx: number, anchor?: HTMLElement | null) => {
+		if (live) {
+			// the splash thunk resolves the option's emoji here (the renderer owns
+			// the adapted labels) but FIRES in the host's vote handler, behind its
+			// login/in-flight guards — only a tap that lands a vote on this option
+			// (new or moved) bursts; dropped taps and unvotes stay quiet
+			// (motion-gated inside splashEmoji)
+			live.onVote?.(idx, () => splashEmoji(leadingEmoji(value.options[idx]?.label) ?? '🗳️', anchor));
+			return;
+		}
+		if (demo && demoPick === null) setDemoPick(idx);
+	};
 
 	return (
 		<KindCard>
 			<CardTitle size="sm">🗳️ {value.question}</CardTitle>
 			<Flex flexDirection="column" marginTop={3} rowGap={2}>
 				{value.options.map((option, idx) => {
-					const votes = option.votes + (picked === idx ? 1 : 0);
+					const votes = counts[idx] || 0;
 					const percent = total ? Math.round((votes / total) * 100) : 0;
+					const mine = viewerVote === idx;
 
 					return (
 						<Box
 							key={idx}
 							as="button"
 							type="button"
-							cursor={picked === null ? 'pointer' : 'default'}
+							cursor={tappable ? 'pointer' : 'default'}
 							textAlign="left"
-							onClick={() => picked === null && setPicked(idx)}
+							aria-pressed={mine}
+							aria-label={`Vote for ${option.label}`}
+							borderRadius="var(--tt-radius-sm, 9px)"
+							transition="background 0.12s ease"
+							_hover={tappable ? { background: 'var(--tt-surface-alt, #f5f5f7)' } : undefined}
+							paddingX={1}
+							paddingY={0.5}
+							marginX={-1}
+							onClick={(event: React.MouseEvent<HTMLElement>) => handleTap(idx, event.currentTarget)}
 						>
-							<Flex justifyContent="space-between" marginBottom={1}>
-								<Text color="var(--tt-ink, #16161a)" fontSize="sm" fontWeight={picked === idx ? 800 : 600}>
-									{picked === idx ? '✓ ' : ''}
+							<Flex justifyContent="space-between" columnGap={2} marginBottom={1}>
+								<Text color={mine ? 'var(--tt-accent, hotpink)' : 'var(--tt-ink, #16161a)'} fontSize="sm" fontWeight={mine ? 800 : 600}>
+									{mine ? '✓ ' : ''}
 									{option.label}
 								</Text>
-								{picked !== null ? (
-									<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" fontWeight={700}>
-										{percent}%
+								{showResults ? (
+									<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" fontWeight={700} flexShrink={0}>
+										{percent}% · {votes.toLocaleString()}
 									</Text>
 								) : null}
 							</Flex>
-							<ProgressBar value={picked !== null ? percent : 0} tone={picked === idx ? 'accent' : 'info'} />
+							<ProgressBar value={showResults ? percent : 0} tone={mine ? 'accent' : 'info'} />
 						</Box>
 					);
 				})}
 			</Flex>
-			<Flex columnGap={2} marginTop={3}>
-				<MutedMono>{total.toLocaleString()} votes</MutedMono>
+			<Flex columnGap={2} marginTop={3} alignItems="baseline">
+				<MutedMono>{total.toLocaleString()} {total === 1 ? 'vote' : 'votes'}</MutedMono>
 				{value.closesAt ? <MutedMono>· closes {maybeTimeAgo(value.closesAt)}</MutedMono> : null}
+				{!showResults && tappable ? <MutedMono>· tap an option to vote</MutedMono> : null}
+				{live && viewerVote !== null ? <MutedMono>· tap your pick again to unvote</MutedMono> : null}
 			</Flex>
 		</KindCard>
 	);

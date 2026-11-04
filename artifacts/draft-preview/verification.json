@@ -1,0 +1,70 @@
+{
+  "ok": true,
+  "hash": "a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c",
+  "diagnostics": [
+    {
+      "level": "info",
+      "code": "SCHEMA_NORMALIZED",
+      "message": "Canonical schema normalization applied to: affirmation-page, affirmation-card"
+    },
+    {
+      "level": "info",
+      "code": "VALIDATED",
+      "message": "Canonical schema validated; dependencies supplied in bundle; no persistence or network assets."
+    }
+  ],
+  "root": "affirmation-page",
+  "rendererHash": "26f88aa765ce13a1d7573fae9897e993732776d3bd3cddda16b98213b569ffd3",
+  "browserVersion": "149.0.7827.55",
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1000,
+      "deviceScaleFactor": 1,
+      "crop": {
+        "x": 520,
+        "y": 220,
+        "width": 400,
+        "height": 560
+      },
+      "text": "I don't compare\nmyself to others\nbecause I am\nnot meant to be\na copy of anyone else.\n\nI was born to be me,\nan original,\none-of-a-kind.\n\nI am happy to be me.",
+      "nodeCount": 3,
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "deviceScaleFactor": 1,
+      "crop": {
+        "x": 24,
+        "y": 182.59375,
+        "width": 342,
+        "height": 478.796875
+      },
+      "text": "I don't compare\nmyself to others\nbecause I am\nnot meant to be\na copy of anyone else.\n\nI was born to be me,\nan original,\none-of-a-kind.\n\nI am happy to be me.",
+      "nodeCount": 3,
+      "overflow": false
+    },
+    {
+      "width": 320,
+      "height": 844,
+      "deviceScaleFactor": 1,
+      "crop": {
+        "x": 24,
+        "y": 231.59375,
+        "width": 272,
+        "height": 380.796875
+      },
+      "text": "I don't compare\nmyself to others\nbecause I am\nnot meant to be\na copy of anyone else.\n\nI was born to be me,\nan original,\none-of-a-kind.\n\nI am happy to be me.",
+      "nodeCount": 3,
+      "overflow": false
+    }
+  ],
+  "artifacts": [
+    "thingtime-draft.json",
+    "viewport-1440x1000.png",
+    "card.png",
+    "viewport-390x844.png",
+    "viewport-320x844.png"
+  ]
+}

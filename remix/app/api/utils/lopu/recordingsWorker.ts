@@ -1,0 +1,290 @@
+import { randomUUID } from 'node:crypto';
+import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
+import { runWithMongoEndpoint } from '../mongodb/endpoint';
+import { createThing } from '../things/things';
+import { MAX_COMMENT_CHARS } from '~/schemas/registry';
+import {
+	RECORDING_JOB_KIND,
+	RECORDING_SETTINGS_KIND,
+	RECORDING_REMINDER_KIND,
+	RECORDING_LEASE_MS,
+	RECORDING_MAX_ATTEMPTS,
+	recordingRetryAt,
+	recordingFailureMessage
+} from './recordingsCore';
+import {
+	discoverRecordingUploads,
+	getRecordingSettings,
+	recordingControlDoc,
+	recordingId,
+	recordingJobState,
+	recordingSource,
+	recordingStateBlob,
+	type RecordingJobState
+} from './recordingsStore';
+import { analyzeRecording, recordingProviderStatus, transcribeRecording } from './recordingsProvider';
+import { recordingConnectionStatus } from './recordingsConnections';
+import { assertPersonalRecordingJob, PersonalRecordingUnavailable } from './personalRecordingAuth';
+
+class RecordingPaused extends Error {}
+
+const assertActive = async (job: any) => {
+	await assertPersonalRecordingJob(job);
+	const settings = await getRecordingSettings(job.ownerId);
+	if (!settings.enabled) throw new RecordingPaused('Recording automation is switched off.');
+	if ((job.runtimeDeviceId || null) !== settings.runtimeDeviceId) throw new RecordingPaused('The selected recording processor changed.');
+	if (!(await recordingSource(job))) throw new RecordingPaused('The recording is unavailable or no longer private.');
+};
+
+// This hook commits the content, quota charge, and job checkpoint together.
+// A process dying after commit cannot recreate a comment/todo on its next run.
+const checkpointHook = (job: any, state: RecordingJobState, reminder?: { id: string; title: string }) => async (_doc: unknown, session: any) => {
+	await assertPersonalRecordingJob(job, session);
+	const things = await getHomeThingsCollection();
+	const source = await recordingSource(job, session);
+	if (!source) throw new RecordingPaused('The source recording is no longer private.');
+	const active = await things.updateOne(
+		{
+			shareId: recordingId('settings', job.ownerId),
+			ownerId: job.ownerId,
+			thingtime: RECORDING_SETTINGS_KIND,
+			'crystal.enabled': true,
+			'crystal.runtimeDeviceId': job.runtimeDeviceId || null
+		},
+		{ $inc: { recordingWriteFence: 1 } },
+		{ session }
+	);
+	if (!active.matchedCount) throw new RecordingPaused('Recording automation is switched off.');
+	// Touch the source inside the same transaction to serialize against deletion
+	// or ACL changes, rather than authorizing a private write from an old snapshot.
+	for (const doc of new Map([source.post, source.attachment].map((item) => [String(item._id), item])).values())
+		await things.updateOne({ _id: doc._id }, { $inc: { recordingWriteFence: 1 } }, { session });
+	const updated = await things.updateOne(
+		{ shareId: job.shareId, lease: job.lease },
+		{
+			$set: { secure: recordingStateBlob(state), updatedAt: new Date() }
+		},
+		{ session }
+	);
+	if (!updated.matchedCount) throw new RecordingPaused('Another worker owns this recording.');
+	if (reminder) {
+		const id = recordingId('reminder', job.ownerId, reminder.id);
+		await things.updateOne(
+			{ shareId: id, ownerId: job.ownerId, thingtime: RECORDING_REMINDER_KIND },
+			{
+				$setOnInsert: {
+					...recordingControlDoc(RECORDING_REMINDER_KIND, id, job.ownerId, { enabled: true, sourcePostId: job.targetId }, reminder.id),
+					nextRunAt: new Date()
+				}
+			},
+			{ session, upsert: true }
+		);
+	}
+};
+
+const saveState = async (job: any, state: RecordingJobState, stage: string) => {
+	await assertPersonalRecordingJob(job);
+	const result = await (
+		await getHomeThingsCollection()
+	).updateOne(
+		{ shareId: job.shareId, lease: job.lease },
+		{
+			$set: { secure: recordingStateBlob(state), 'crystal.stage': stage, updatedAt: new Date() }
+		}
+	);
+	if (!result.matchedCount) throw new RecordingPaused('Another worker owns this recording.');
+};
+
+const transcriptParts = (text: string) => {
+	const chars = MAX_COMMENT_CHARS - 70;
+	// Split by code points so surrogate pairs cannot be broken at a boundary.
+	const characters = Array.from(text);
+	const chunks: string[] = [];
+	let chunk = '';
+	for (const character of characters) {
+		if (chunk.length + character.length > chars) {
+			chunks.push(chunk);
+			chunk = '';
+		}
+		chunk += character;
+	}
+	if (chunk) chunks.push(chunk);
+	return chunks;
+};
+
+export const recordingTranscriptState = (state: RecordingJobState, transcript: string): RecordingJobState => {
+	if (state.transcript) {
+		if (state.transcript !== transcript) throw new TypeError('The saved transcript cannot be replaced.');
+		return state;
+	}
+	return { ...state, transcript, commentIds: transcriptParts(transcript).map(() => randomUUID()) };
+};
+
+export type RecordingWorkerDependencies = { transcribe: typeof transcribeRecording; analyze: typeof analyzeRecording };
+
+export const processRecordingJob = async (
+	job: any,
+	deps: RecordingWorkerDependencies = { transcribe: transcribeRecording, analyze: analyzeRecording }
+) => {
+	const things = await getHomeThingsCollection();
+	let state = recordingJobState(job);
+	let failureStage: 'transcription' | 'analysis' | 'save' = 'transcription';
+	try {
+		if (Number(job.crystal.attempts) > RECORDING_MAX_ATTEMPTS) throw new Error('Retry limit reached.');
+		await assertActive(job);
+		if (!state.transcript) {
+			state = recordingTranscriptState(state, await deps.transcribe(job.ownerId, job.crystal.attachmentId, () => assertActive(job)));
+			failureStage = 'save';
+			await assertActive(job);
+			await saveState(job, state, 'transcribed');
+		}
+		const parts = transcriptParts(state.transcript);
+		failureStage = 'save';
+		while (state.commentIndex < parts.length) {
+			await assertActive(job);
+			const index = state.commentIndex;
+			const next = { ...state, commentIndex: index + 1 };
+			const created = await createThing(
+				job.ownerId,
+				{
+					shareId: state.commentIds[index],
+					thingtime: ['comment'],
+					targetId: job.targetId,
+					crystal: { text: `🦄 Lopu transcription${parts.length > 1 ? ` (${index + 1}/${parts.length})` : ''}\n\n${parts[index]}` }
+				},
+				{ id: job.ownerId },
+				null,
+				{ afterInsert: checkpointHook(job, next) }
+			);
+			if (created.ok === false) {
+				// createThing returns transaction failures as result unions. Recheck
+				// consent/privacy so a rolled-back opt-out is visibly paused.
+				await assertActive(job);
+				throw new Error(created.error);
+			}
+			state = next;
+		}
+		let settings = await getRecordingSettings(job.ownerId);
+		if (!state.insights) {
+			failureStage = 'analysis';
+			await assertActive(job);
+			state.insights =
+				settings.createNotes || settings.createTodos
+					? (await deps.analyze(state.transcript, () => assertActive(job), job.ownerId)).map((item) => ({ ...item, id: randomUUID() }))
+					: [];
+			failureStage = 'save';
+			await assertActive(job);
+			await saveState(job, state, 'organized');
+		}
+		while (state.insightIndex < state.insights.length) {
+			failureStage = 'save';
+			await assertActive(job);
+			settings = await getRecordingSettings(job.ownerId);
+			const item = state.insights[state.insightIndex];
+			const selected = item.kind === 'todo' ? settings.createTodos : settings.createNotes;
+			const next = { ...state, insightIndex: state.insightIndex + 1, resultIds: selected ? [...state.resultIds, item.id] : state.resultIds };
+			if (selected) {
+				const created = await createThing(
+					job.ownerId,
+					{
+						shareId: item.id,
+						thingtime: ['data'],
+						acl: ['tt:user'],
+						tags: [job.targetId === job.crystal.attachmentId ? 'recording' : 'apple-watch', 'lopu', item.kind],
+						crystal: {
+							systemType: 'lopu-recording-insight',
+							type: item.kind,
+							title: item.title,
+							name: item.title,
+							description: item.description,
+							sourcePostId: job.targetId,
+							evidence: item.evidence,
+							...(item.kind === 'todo' ? { completed: false } : {})
+						}
+					},
+					{ id: job.ownerId },
+					null,
+					{ afterInsert: checkpointHook(job, next, item.kind === 'todo' ? item : undefined) }
+				);
+				if (created.ok === false) {
+					await assertActive(job);
+					throw new Error(created.error);
+				}
+			} else await saveState(job, next, 'organizing');
+			state = next;
+		}
+		// The durable, quota-billed comments/Things are the long-term content.
+		// Drop private scratch text from operational state once no retry needs it.
+		const receipt = { commentIds: state.commentIds, commentIndex: state.commentIndex, insightIndex: state.insightIndex, resultIds: state.resultIds };
+		const finish = async (session?: any) => {
+			await assertPersonalRecordingJob(job, session);
+			return things.updateOne(
+				{ shareId: job.shareId, lease: job.lease },
+				{
+					$set: { 'crystal.status': 'done', 'crystal.stage': 'done', secure: recordingStateBlob(receipt), updatedAt: new Date() },
+					$unset: { lease: '', leaseUntil: '', nextRunAt: '', 'crystal.error': '' }
+				},
+				{ session }
+			);
+		};
+		const completed = job.runtimeDeviceId ? await withHomeMongoTransaction(finish) : await finish();
+		if (!completed.matchedCount) throw new RecordingPaused('Another worker owns this recording.');
+		return 'done';
+	} catch (error) {
+		const paused = error instanceof RecordingPaused || error instanceof PersonalRecordingUnavailable;
+		const failed = Number(job.crystal.attempts) >= RECORDING_MAX_ATTEMPTS;
+		const status = paused ? 'paused' : failed ? 'failed' : 'retry';
+		// Provider/S3 exceptions can include signed URLs. Only our own fixed,
+		// actionable error text leaves the worker; no raw exception is persisted.
+		await things.updateOne(
+			{ shareId: job.shareId, lease: job.lease },
+			{
+				$set: {
+					'crystal.status': status,
+					'crystal.error': paused
+						? 'Paused: enable automation and keep the source recording private to retry.'
+						: recordingFailureMessage(error, failureStage),
+					updatedAt: new Date(),
+					nextRunAt: recordingRetryAt(Number(job.crystal.attempts), new Date())
+				},
+				$unset: { lease: '', leaseUntil: '' }
+			}
+		);
+		return status;
+	}
+};
+
+export const runRecordingAutomation = async () =>
+	runWithMongoEndpoint(null, async () => {
+		const queued = await discoverRecordingUploads();
+		// Each job resolves only its owner's selected connections. An operator's
+		// missing default key must not block a user with their own API credentials.
+		const things = await getHomeThingsCollection();
+		const outcomes: string[] = [];
+		let providerConfigured = recordingProviderStatus().configured;
+		// One bounded job per invocation: a worst-case provider turn cannot exceed
+		// the serverless request budget by starting a second long job near its end.
+		for (let index = 0; index < 1; index++) {
+			const now = new Date();
+			const job = await things.findOneAndUpdate(
+				{
+					thingtime: RECORDING_JOB_KIND,
+					// Personal jobs must never fall through to a cloud credential,
+					// even when their device is offline or its lease has expired.
+					runtimeDeviceId: { $exists: false },
+					nextRunAt: { $lte: now },
+					'crystal.status': { $in: ['queued', 'retry', 'processing'] },
+					$or: [{ leaseUntil: { $exists: false } }, { leaseUntil: { $lte: now } }]
+				},
+				{
+					$set: { lease: randomUUID(), leaseUntil: new Date(now.getTime() + RECORDING_LEASE_MS), 'crystal.status': 'processing', updatedAt: now },
+					$inc: { 'crystal.attempts': 1 }
+				},
+				{ sort: { nextRunAt: 1, shareId: 1 }, returnDocument: 'after' }
+			);
+			if (!job) break;
+			providerConfigured = (await recordingConnectionStatus(job.ownerId)).configured;
+			outcomes.push(await processRecordingJob(job));
+		}
+		return { queued, processed: outcomes.length, outcomes, providerConfigured };
+	});

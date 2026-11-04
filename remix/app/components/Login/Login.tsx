@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import { Flex, Button, FormControl, Input, Spinner, InputGroup, InputRightElement, Box } from '@chakra-ui/react';
-import { Link as RouterLink, useNavigate } from 'react-router';
+import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 
+import { useSsoHub } from '../Account/useSsoHub';
+import { beginSsoRedirect } from '../Account/ssoNavigation';
 import { useApi } from '~/hooks/useApi';
+import { isPasskeyCancel, passkeyErrorMessage, passkeysSupported, useAccountHints, usePasskeyAuth, usePasskeyAutofill } from '~/hooks/usePasskeys';
 import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
 import { consumeAuthReturnTo } from '~/utils/authReturn';
+import { AccountHintRow } from '../Account/AccountHints';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useLopu } from '../Lopu/useLopu';
 import { Icon } from '../Icon/Icon';
@@ -36,6 +40,7 @@ const inputSx = {
 // becomes an in-place mode toggle via onSwitchMode.
 export const Login = (props) => {
 	const { embedded, onSuccess, onSwitchMode } = props || {};
+	const sso = useSsoHub();
 
 	const { thingtime } = useThingtime();
 
@@ -43,8 +48,12 @@ export const Login = (props) => {
 	const defaultTestUsername = thingtime?.devKit?.testUsers?.default?.username || '';
 	const defaultTestPassword = thingtime?.devKit?.testUsers?.default?.password || '';
 
-	const [username, setUsername] = useState(devMode ? defaultTestUsername : '');
-	const [password, setPassword] = useState(devMode ? defaultTestPassword : '');
+	// ?u=<username> — the auto-login popup's "continue as" prefill.
+	const [searchParams] = useSearchParams();
+	const prefilledUsername = (!embedded && searchParams.get('u')) || '';
+
+	const [username, setUsername] = useState(prefilledUsername || (devMode ? defaultTestUsername : ''));
+	const [password, setPassword] = useState(devMode && !prefilledUsername ? defaultTestPassword : '');
 
 	const [passwordVisible, setPasswordVisible] = useState(devMode ? true : false);
 
@@ -74,6 +83,92 @@ export const Login = (props) => {
 	const lopu = useLopu();
 	const navigate = useNavigate();
 
+	const passwordInputRef = React.useRef(null);
+
+	// Shared landing for every successful login (password, passkey button,
+	// passkey autofill): toast + host callback or return-to navigation.
+	const handleLoggedIn = React.useCallback(
+		(user) => {
+			lopu({
+				title: `Welcome back, ${user?.username || 'friend'}! ✨`,
+				status: 'success',
+				duration: 5000,
+			});
+			if (onSuccess) {
+				onSuccess(user);
+			} else {
+				navigate(consumeAuthReturnTo('/'), { replace: true });
+			}
+		},
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[onSuccess, navigate]
+	);
+
+	const { loginWithPasskey, cancelPasskey } = usePasskeyAuth();
+	const [passkeyLoading, setPasskeyLoading] = React.useState(false);
+
+	// Conditional UI: while the form is idle, one background ceremony arms the
+	// browser's own passkey autofill (Safari/iCloud Keychain, Chrome, 1Password
+	// surface their popup on the username field). Resolves only if the user
+	// picks a passkey there. Standalone /login only — the embedded "Add
+	// account" form renders while ALREADY signed in, where an armed background
+	// request just invites surprise passkey popups (the modal 🔑 button still
+	// works there).
+	usePasskeyAutofill(!sso.foreign && !otpChallenge && !embedded && !loading && !passkeyLoading, (resp) => handleLoggedIn(resp?.user), (error) => {
+		lopu({ title: 'Passkey sign-in failed', description: passkeyErrorMessage(error), status: 'error', duration: 6000 });
+	});
+
+	const handlePasskeyLogin = async () => {
+		if (sso.foreign && sso.hub) {
+			try { beginSsoRedirect(sso.hub, window.location, window.sessionStorage); }
+			catch { lopu({ title: 'Could not open sign-in', description: 'Open this page in Safari or Chrome and try again.', status: 'info' }); }
+			return;
+		}
+		if (passkeyLoading) return;
+		setPasskeyLoading(true);
+		try {
+			const resp = await loginWithPasskey();
+			if (resp?.ok) handleLoggedIn(resp.user);
+		} catch (err) {
+			// The user explicitly clicked the button, so even a "cancelled"
+			// outcome gets gentle feedback: the browser reports a failed
+			// cross-device (QR/Bluetooth) handoff with the SAME error as a user
+			// cancel, and dead air after scanning a QR reads as broken.
+			if (err?.name === 'AbortError') return;
+			if (isPasskeyCancel(err)) {
+				lopu({
+					title: 'Passkey sign-in didn’t complete 🤏',
+					description: passkeyErrorMessage(err),
+					status: 'info',
+					duration: 5000,
+				});
+			} else {
+				lopu({
+					title: 'Passkey login failed',
+					description: passkeyErrorMessage(err),
+					status: 'error',
+					duration: 6000,
+				});
+			}
+		} finally {
+			setPasskeyLoading(false);
+		}
+	};
+
+	// Accounts signed in on other Thingtime deployments (cross-deployment
+	// hints) — picking one prefills the username and focuses the password.
+	const { hints } = useAccountHints();
+	const hintSuggestions = hints.filter((hint) => !hint.alreadyHere);
+	const pickHint = (hint) => {
+		setUsername(hint.user.username);
+		setPassword('');
+		try {
+			passwordInputRef.current?.focus();
+		} catch {
+			// focus is best-effort
+		}
+	};
+
 	// DevKit prefill: fills the form when devKit.loginPrefill changes (_ts)
 	const loginPrefill = thingtime?.devKit?.loginPrefill;
 	React.useEffect(() => {
@@ -96,6 +191,7 @@ export const Login = (props) => {
 			return;
 		}
 
+		cancelPasskey();
 		setLoading(true);
 
 		try {
@@ -256,12 +352,41 @@ export const Login = (props) => {
 						</>
 					) : (
 						<>
+							{hintSuggestions.length ? (
+								<Flex
+									flexDirection="column"
+									background="var(--tt-surface-alt, #f5f5f7)"
+									borderRadius="var(--tt-radius-md, 12px)"
+									padding={2}
+									gap={0}
+								>
+									<Box
+										fontSize="10px"
+										fontFamily="mono"
+										fontWeight="600"
+										letterSpacing="0.1em"
+										textTransform="uppercase"
+										color="var(--tt-muted, #9a9aa6)"
+										paddingX={2}
+										paddingTop={1}
+									>
+										Signed in elsewhere on Thingtime
+									</Box>
+									{hintSuggestions.slice(0, 3).map((hint) => (
+										<AccountHintRow key={hint.user.id} hint={hint} onPick={pickHint} pickLabel="Use" />
+									))}
+								</Flex>
+							) : null}
+
 							<FormControl>
 								<Input
 									sx={inputSx}
 									onChange={(e) => setUsername(e?.target?.value)}
 									placeholder="💌 Username"
 									type="username"
+									// "webauthn" opts this field into the browser's conditional
+									// passkey autofill (iCloud Keychain / 1Password popup)
+									autoComplete="username webauthn"
 									value={username}
 								/>
 							</FormControl>
@@ -269,10 +394,12 @@ export const Login = (props) => {
 							<FormControl>
 								<InputGroup>
 									<Input
+										ref={passwordInputRef}
 										sx={inputSx}
 										onChange={(e) => setPassword(e?.target?.value)}
 										placeholder="Password 🔑"
 										type={passwordVisible ? 'text' : 'password'}
+										autoComplete="current-password"
 										value={password}
 									/>
 									<InputRightElement>
@@ -313,6 +440,35 @@ export const Login = (props) => {
 					>
 						{otpChallenge ? 'Verify code ✨' : embedded ? 'Add account ✨' : 'Login ✨'}
 					</Button>
+
+					{passkeyLoading ? <Button type="button" variant="ghost" size="sm" onClick={cancelPasskey}>Cancel passkey sign-in</Button> : null}
+					{!otpChallenge && (sso.foreign ? !!sso.hub : passkeysSupported()) ? (
+						<Button
+							type="button"
+							onClick={handlePasskeyLogin}
+							isLoading={passkeyLoading}
+							loadingText="Waiting for your passkey…"
+							display="flex"
+							justifyContent="center"
+							width="100%"
+							variant="outline"
+							fontFamily="heading"
+							fontWeight="600"
+							color="var(--tt-text, #5a5a66)"
+							borderColor="var(--tt-border, #ececef)"
+							borderRadius="var(--tt-radius-md, 12px)"
+							_hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
+							cursor="pointer"
+							transition="all 150ms ease-in-out"
+							paddingX={4}
+							paddingY={2}
+							height="auto"
+							minHeight="40px"
+							whiteSpace="normal"
+						>
+							{sso.foreign ? `Continue with ${sso.name} 🌈` : 'Sign in with a passkey 🔑'}
+						</Button>
+					) : null}
 
 					{otpChallenge ? (
 						<Box
