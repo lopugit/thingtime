@@ -352,6 +352,16 @@ editable safe username cards. See [the contract](../password-verification-prefer
 
 ## Social OAuth connections
 
+Linux/Windows native password delivery: `electron/lib/native-passwords` owns
+OS-encrypted connection/retry state, task scope and private IPC; the shipped
+`password-agent.mjs` negotiates `native.passwords` 1.0.0. Browser delivery uses
+the shared isolated Chromium driver and exact-document checks. The existing
+editable fill approval returns only a per-request proof to a sender-bound native
+window; vault `fill` remains protected by the entry verification policy.
+`api.passwords` 1.7.0 adds exact catalog `origins` for metadata-only discovery.
+macOS Apple provider behavior remains separate. See
+[contract and runtime checks](../native-password-agent.md).
+
 `connections/oauthConfig.ts` resolves fixed encrypted platform-secret labels by
 exact origin and data environment. `oauth.ts` binds single-use state to the live
 session/client/callback; `connections.ts` transactionally stores owner-scoped

@@ -1,6 +1,7 @@
 import { getNativeBridge } from '~/utils/nativeBridge';
 export type NativePasswordConnection = 'connected' | 'disconnected' | 'differentSession' | 'unavailable' | 'unsupportedOrigin';
-export type NativePasswordResult = { ok: boolean; message?: string; connection?: NativePasswordConnection };
+export type NativePasswordResult = { ok: boolean; message?: string; connection?: NativePasswordConnection; mode?: 'system' | 'scopedDesktop'; availability?: 'keyringUnavailable' };
+export const nativePasswordMode = (): 'system' | 'scopedDesktop' => typeof window !== 'undefined' && (window as any).thingtimeDesktop?.passwordsMode === 'scopedDesktop' ? 'scopedDesktop' : 'system';
 export const nativePasswordConnectionEvent = 'thingtime:password-provider-changed';
 const compatible = (version: unknown, minor = 0) => typeof version === 'string' && /^1\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version) && Number(version.split('.')[1]) >= minor;
 export function hasNativePasswordProvider() {
