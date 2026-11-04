@@ -13957,7 +13957,9 @@ separate from deterministic discovery/lease tests.
   denial, selected-grant refresh and local sibling-independent removal.
   Verify separate provider-scope and allowed-operation selection and deny a
   scope borrowed from another provider card. Exercise declined Meta permissions
-  and an in-flight provider result released after its scope is reduced.
+  and an in-flight provider result released after its scope is reduced. Confirm
+  that refreshing to a different authorization snapshot and back never restores
+  an old operation result, and reconnect clears a visible result.
   Verify named and canonical private IDs have no generic Things read path.
   Verify the name and access blocks can be selected separately in Builder.
   Keep provider consent and installed native acceptance separate.

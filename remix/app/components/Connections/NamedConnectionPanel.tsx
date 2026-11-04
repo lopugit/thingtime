@@ -27,6 +27,10 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
   const selectionSignature = JSON.stringify([selected?.id, selected?.named]);
   const activeSignature = React.useRef(selectionSignature);
   activeSignature.current = selectionSignature;
+  React.useLayoutEffect(() => {
+    useGeneration.current++;
+    setResult(null);
+  }, [selectionSignature]);
   const options = draft ? namedOperationsFor(draft.provider) : [];
   const permissions = draft ? namedProviderPermissions(draft.provider) : [];
   const initialScopes = (provider: string) => namedFacebookProvider(provider) ? ['public_profile'] : [];

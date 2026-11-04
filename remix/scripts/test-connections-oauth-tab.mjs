@@ -312,9 +312,21 @@ try {
         drivePicker: { metadataSelected: true, identityOperationAvailable: true, profileOperationAvailable: false },
         separateBuilderLabelsSaved: label === 'desktop'
       }, null, 2));
-      await namedHost.getByRole('combobox', { name: 'Connection', exact: true }).selectOption('named-0');
-      assert.equal(await namedHost.getByText('name: Named profile result').count(), 0, 'Result cannot appear under another connection');
       const second = namedHost.getByRole('article').filter({ hasText: 'Second profile with a long descriptive name for research notes' });
+      const refreshWithoutRemount = async () => {
+        const authorization = await begin();
+        await authorization.getByRole('link', { name: 'Continue' }).click();
+      };
+      namedRows[1].named.grantedScopes = ['openid'];
+      await refreshWithoutRemount();
+      await second.getByText('Provider confirmed: openid', { exact: true }).waitFor();
+      assert.equal(await namedHost.getByText('name: Named profile result').count(), 0);
+      namedRows[1].named.grantedScopes = ['openid', 'profile'];
+      await refreshWithoutRemount();
+      await second.getByText('Provider confirmed: openid, profile', { exact: true }).waitFor();
+      assert.equal(await namedHost.getByText('name: Named profile result').count(), 0, 'Restoring old scope metadata must not restore the old result');
+      await namedHost.getByRole('button', { name: 'Google profile name and photo' }).click();
+      await namedHost.getByText('name: Named profile result').waitFor();
       await second.getByRole('button', { name: 'Reconnect', exact: true }).click();
       assert.equal(await namedHost.getByText('name: Named profile result').count(), 0);
       await namedHost.getByRole('button', { name: 'Cancel', exact: true }).click();
