@@ -1,6 +1,7 @@
 import React from 'react';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { CHARACTER_HEADER, useCharacterScope } from '../../Characters/CharacterScope';
 import { ComponentLocalControl, NativeControlsEnabled } from '../NativeComponentControls';
 import { ComponentDataScope } from '../ComponentSelect';
 import { useThingSource } from '../liveComponent';
@@ -8,7 +9,7 @@ import { useWebpageRuntime } from '../webpageRuntime';
 import { collectionSource } from '../collectionSource';
 import { resolveTemplate } from '~/components/ComponentsLibrary/componentTemplate';
 import { loadMapbox } from './mapboxSdk';
-import { activeMapboxNavigation, mapboxFavouritePoints, mapboxHeight, mapboxOrderedRoutePoints, mapboxPoints, mapboxRoute, mapboxStyle, publicMapboxToken, validCoordinates, type LngLat, type MapboxPoint } from './mapboxData';
+import { activeMapboxNavigation, mapboxFavouritePoints, mapboxHeight, markerSelection, mapboxOrderedRoutePoints, mapboxPoints, mapboxRoute, mapboxStyle, publicMapboxToken, validCoordinates, type LngLat, type MapboxPoint } from './mapboxData';
 import { updateMapboxOverlay, type MapboxOverlayData } from './mapboxOverlay';
 import { observeMapboxContainer } from './mapboxResize';
 
@@ -29,6 +30,9 @@ type MapProps = {
 	selectedRoutePointId?: unknown;
 	onSelectQuery?: unknown;
 	onRouteSelectQuery?: unknown;
+	onSelectState?: unknown;
+	onRouteSelectState?: unknown;
+	queryScope?: unknown;
 	focusPoint?: unknown;
 	focusZoom?: unknown;
 	transientRoute?: unknown;
@@ -46,11 +50,12 @@ export function ComponentMapbox(props: MapProps) {
 
 function MapboxViewport({ vaultId, styleUrl, center, zoom, points, route, fitBounds, height, title,
 	favouritesSource, routeSource, showFavourites, selectedFavouriteId, selectedRoutePointId,
-	onSelectQuery, onRouteSelectQuery, focusPoint, focusZoom, transientRoute, routeId }: MapProps) {
+	onSelectQuery, onRouteSelectQuery, onSelectState, onRouteSelectState, queryScope, focusPoint, focusZoom, transientRoute, routeId }: MapProps) {
 	const enabled = React.useContext(NativeControlsEnabled);
 	const scope = React.useContext(ComponentDataScope);
 	const local = React.useContext(ComponentLocalControl);
 	const runtime = useWebpageRuntime();
+	const characterId = useCharacterScope()?.id;
 	const source = (value: unknown) => {
 		try { return { binding: collectionSource(resolveTemplate(value, { ...scope, query: runtime.query })), error: '' }; }
 		catch { return { binding: null, error: 'Map source configuration is invalid.' }; }
@@ -90,14 +95,14 @@ function MapboxViewport({ vaultId, styleUrl, center, zoom, points, route, fitBou
 	const label = typeof title === 'string' && title.trim() ? title : 'Map';
 	const onSelectRef = React.useRef<(point: MapboxPoint) => void>(() => {});
 	onSelectRef.current = (point) => {
-		const key = point.group === 'route' ? onRouteSelectQuery : onSelectQuery;
-		if (typeof key === 'string') local?.({ op: 'query', params: { ...runtime.query, [key]: point.id } });
+		const selection = markerSelection(point, { onSelectState, onRouteSelectState, onSelectQuery, onRouteSelectQuery, queryScope }, runtime.query);
+		if (selection) local?.(selection);
 	};
 	const applyData = () => {
 		if (!readyRef.current || !mapRef.current || !glRef.current) return;
 		const data = dataRef.current;
 		const boundsKey = JSON.stringify({ points: (data.fitPoints ?? data.points).map((point) => point.coordinates), route: data.route, fit: data.fitBounds });
-		pinsRef.current = updateMapboxOverlay(mapRef.current, glRef.current, pinsRef.current, { ...data, fitBounds: data.fitBounds && boundsKey !== boundsKeyRef.current, onSelect: (point) => onSelectRef.current(point) });
+		pinsRef.current = updateMapboxOverlay(mapRef.current, glRef.current, pinsRef.current, { ...data, characterId, fitBounds: data.fitBounds && boundsKey !== boundsKeyRef.current, onSelect: (point) => onSelectRef.current(point) });
 		boundsKeyRef.current = boundsKey;
 		const prior = viewportRef.current;
 		if ((!data.fitBounds || (!data.points.length && !data.route)) &&
@@ -127,7 +132,7 @@ function MapboxViewport({ vaultId, styleUrl, center, zoom, points, route, fitBou
 				if (!live) return;
 				const response = await fetch('/api/v1/maps', {
 					method: 'POST', credentials: 'same-origin', cache: 'no-store',
-					headers: { 'Content-Type': 'application/json' },
+					headers: { 'Content-Type': 'application/json', ...(characterId ? { [CHARACTER_HEADER]: characterId } : {}) },
 					body: JSON.stringify({ operation: 'browser-config', vaultId: id }), signal: abort.signal
 				});
 				if (!response.ok) throw new Error('Map configuration is unavailable.');
@@ -172,7 +177,7 @@ function MapboxViewport({ vaultId, styleUrl, center, zoom, points, route, fitBou
 			boundsKeyRef.current = '';
 			focusRef.current.key = '';
 		};
-	}, [enabled, id, style]);
+	}, [enabled, id, style, characterId]);
 
 	React.useEffect(() => { applyDataRef.current(); }, [dataKey]);
 	const focusKey = JSON.stringify(focusPoint);

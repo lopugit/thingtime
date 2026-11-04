@@ -16,6 +16,7 @@ import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { isExternalHref, isSafeUrl } from '../Kinds/safeUrl';
 import { HtmlThingRenderer, HtmlBlockElement } from '../Kinds/HtmlThingRenderer';
+import { ComponentUploadEnabled } from './ComponentUpload';
 import { NativeControlsEnabled } from './NativeComponentControls';
 import { defaultsFromArgs, sanitizeArgSpecs, resolveTemplate } from '../ComponentsLibrary/componentTemplate';
 import { type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
@@ -950,6 +951,7 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
  const element = <HtmlBlockElement tag={block.tag || 'div'} attributes={{ ...attributes, ...(editing && ['details', 'dialog'].includes(block.tag || '') ? { open: true } : {}) }} editorProps={editorProps}>
   {typeof text === 'string' || typeof text === 'number' ? (editing && !text && block.text ? block.text : text) : null}{block.children ? children : null}{slot ? slot({ scope, editing }) : null}
  </HtmlBlockElement>;
+ if (block.tag === 'tt-upload') return <ComponentUploadEnabled.Provider value={!!props.interactive && !editing && runtime.source === 'user' && !runtime.sharedRun}>{element}</ComponentUploadEnabled.Provider>;
  return block.tag === 'tt-media-pipeline' || block.tag === 'tt-mapbox' || block.tag === 'tt-form' || block.tag === 'tt-change' || block.tag === 'tt-select'
   ? <NativeControlsEnabled.Provider value={block.tag === 'tt-form' ? editing || props.interactive !== false : ['tt-mapbox', 'tt-change', 'tt-select'].includes(block.tag || '') ? !!props.interactive && !editing : props.interactive !== false && !editing}>{element}</NativeControlsEnabled.Provider>
   : element;

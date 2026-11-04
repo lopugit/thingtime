@@ -1,5 +1,14 @@
 # UI shell, menus and design system
 
+Saved map workspaces use the shared `$ui` query action with `scope: 'page'`
+for dynamic tabs, filtering and details while retaining URL deep-link defaults.
+`webpageRuntime.tsx` clears transient query and form state at actual navigation or
+account/database access changes. Editable `tt-upload` elements reuse the normal
+attachment picker; Mapbox markers compose a photo, icon, wrapping label and
+optional icon strip. `node remix/scripts/routes-map.browser.mjs` checks these
+interactions on desktop/mobile with synthetic replies and an isolated browser;
+live saved-page acceptance is required separately.
+
 Admin MongoDB connections reuses the existing admin category/deep-link model and
 the private settings-document Builder host. `mongoConnectionInventoryBlocks.ts`
 contains editable search, freshness filter, metric, deployment, feature, runtime
