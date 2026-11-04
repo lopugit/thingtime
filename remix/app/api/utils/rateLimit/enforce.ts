@@ -52,7 +52,7 @@ const resetFrom = (requests: Date[], now: Date, windowMs: number): Date => {
 };
 
 // Atomically record one hit for `key` if under `limit` within `windowMs`.
-const consume = async (key: string, limit: number, windowMs: number): Promise<RateLimitOutcome> => {
+const consume = async (key: string, limit: number, windowMs: number, cost = 1): Promise<RateLimitOutcome> => {
   const now = new Date();
   const windowStart = new Date(now.getTime() - windowMs);
   const expiresAt = new Date(now.getTime() + windowMs);
@@ -65,8 +65,8 @@ const consume = async (key: string, limit: number, windowMs: number): Promise<Ra
   );
 
   const updated = await coll.findOneAndUpdate(
-    { key, $expr: { $lt: [{ $size: activeRequestsExpr(windowStart) }, limit] } },
-    [{ $set: { requests: { $concatArrays: [activeRequestsExpr(windowStart), [now]] }, updatedAt: now, expiresAt } }],
+    { key, $expr: { $lte: [{ $add: [{ $size: activeRequestsExpr(windowStart) }, cost] }, limit] } },
+    [{ $set: { requests: { $concatArrays: [activeRequestsExpr(windowStart), Array.from({ length: cost }, () => now)] }, updatedAt: now, expiresAt } }],
     { returnDocument: 'after' }
   );
 
@@ -130,13 +130,16 @@ export const enforceFixedRateLimit = async (
 	request: Request,
 	name: string,
 	identity: string | null,
-	rule: { limit: number; windowMs: number }
+	rule: { limit: number; windowMs: number; cost?: number }
 ): Promise<RateLimitOutcome> => {
 	const limit = Math.max(1, Math.min(100, Math.floor(rule.limit)));
+	// Internal callers can reserve multiple units atomically (for example bytes
+	// of anonymously staged metadata). Never read a cost directly from input.
+	const cost = Math.max(1, Math.min(limit, Math.ceil(rule.cost ?? 1)));
 	const windowMs = Math.max(1_000, Math.min(24 * 60 * 60 * 1000, Math.floor(rule.windowMs)));
 	const who = identity || `ip:${getRequestIp(request)}`;
 	try {
-		return await consume(hash(`fixed:${name}:${who}`), limit, windowMs);
+		return await consume(hash(`fixed:${name}:${who}`), limit, windowMs, cost);
 	} catch (error: any) {
 		console.error(`[rate-limit] fixed enforcement unavailable for ${name} — failing closed:`, error?.message || error);
 		return { allowed: false, limit, remaining: 0, resetAt: new Date().toISOString(), unavailable: true };

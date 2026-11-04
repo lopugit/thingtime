@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 import { vaultRequest } from '../auth/vaultRequest';
 import { resolvePublicOrigin } from '../auth/publicOrigin';
 import { getDeploymentDataEnvironment } from '../deployment/dataEnvironment';
+import { GOOGLE_OAUTH_CREDENTIAL_CALLBACK_PATH, GOOGLE_OAUTH_CREDENTIAL_LABEL } from '../../../credentials/importContract';
 
-export const oauthCallbackPath = '/api/v1/connections/oauth/callback';
+export const oauthCallbackPath = GOOGLE_OAUTH_CREDENTIAL_CALLBACK_PATH;
 export type OAuthClientConfig = {
   clientId: string; clientSecret: string; redirectUri: string;
   origin: string; environment: string; binding: string;
@@ -11,7 +12,7 @@ export type OAuthClientConfig = {
 };
 // Fixed selectors only. Multiple service cards intentionally share one app.
 const labels: Record<string, string> = {
-  GOOGLE_CLIENT_ID: 'connections-google-oauth', FACEBOOK_APP_ID: 'connections-facebook-oauth',
+  GOOGLE_CLIENT_ID: GOOGLE_OAUTH_CREDENTIAL_LABEL, FACEBOOK_APP_ID: 'connections-facebook-oauth',
   INSTAGRAM_APP_ID: 'connections-instagram-oauth', TIKTOK_CLIENT_KEY: 'connections-tiktok-oauth',
   REDDIT_CLIENT_ID: 'connections-reddit-oauth', MASTODON_CLIENT_ID: 'connections-mastodon-oauth',
   TWITCH_CLIENT_ID: 'connections-twitch-oauth', X_CLIENT_ID: 'connections-x-oauth',

@@ -416,3 +416,19 @@ metadata. Connections renders a local link mark while pending or unavailable.
 The provider catalog uses a separate Settings Builder document with one editable
 repeated card template. Its logo has normal upload and optional URL controls;
 its Connect block calls the same scoped, synchronous OAuth gesture handler.
+
+## Agent provider credential import
+
+`api.credentials-import` 1.0.0 supplies a write-only admin-vault file import and
+account/origin/destination-bound CLI handoff. `credentials/importContract.ts` is
+the shared contract; `api/utils/credentials/{importCore,importService}.ts` own
+validation and transactional one-use approval/receipt state. Browser operations
+require a live root administrator cookie and exact expected actor; CLI operations
+use a short-lived S256 proof. `components/CredentialImport` composes editable
+settings blocks with a transient secret adapter. The existing admin integrations
+view embeds direct import; `/credentials/import` is the approval page.
+
+Run `test:credentials-import`, `test:credentials-import:browser` and the built
+replica-set `test:credentials-import:acceptance`, plus capability/gateway tests.
+Read [the agent credential runbook](../agent-credential-workflows.md) and the
+provider-import checklist in `TESTING.md` for live account acceptance.

@@ -609,3 +609,15 @@ PNG bytes, 204 when unavailable, or 404 for an unknown provider. This public
 asset stays on the document origin without opening a data-plane connection or
 forwarding user headers to the provider. Verify both manifests and route
 registration with `test:api-capabilities` and `test:connections:built`.
+
+## Write-only credential handoff
+
+The shared `api.credentials-import` 1.0.0 contract accompanies seven registered
+`/api/v1/credentials/import/{start,status,inspect,approve,revoke,upload,direct}`
+operations, each explicitly versioned in the canonical docs registry and present
+in both generated manifests. Browser clients and `scripts/credential-import.ts`
+negotiate the selected origin. The signed home gateway binds the exact import
+headers; generic origin fallback and background dispatch are refused. Responses
+are private/no-store and project only destination metadata/status/receipts.
+See [the runbook](../agent-credential-workflows.md); run the credential, gateway
+and API-capability checks and smoke the built Nitro discovery/route family.
