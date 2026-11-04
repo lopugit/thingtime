@@ -1,4 +1,4 @@
-import { streamOneWayForegroundSync } from './streamingForegroundSync';
+import { streamForegroundSync } from './streamingForegroundSync';
 import { assertBackupCapturePolicy, parseNativeBackupCapture, type NativeBackupCapture } from './nativeInventory';
 import { foregroundSyncContext } from './foregroundSyncContext';
 import { runForegroundCloudSync, type ForegroundSyncInput, type ForegroundSyncProgress } from './foregroundSync';
@@ -35,18 +35,21 @@ const identity = (source: 'local' | 'remote'): InventoryIdentity => ({ id: crypt
 /** Called inside the foreground root lock, including review and checkpoint
  * publication. Android keeps its existing runner while its work is deferred. */
 export async function runPagedForegroundCloudSync(reviewed: SavedFileSyncConfiguration, scope: SyncScope, input: ForegroundSyncInput, signal: AbortSignal) {
-	const streamed = await streamOneWayForegroundSync(reviewed, scope, input, signal);
+	const runs = input.journal.pagedRuns({ scope, currentScope: input.currentScope, signal, cleanup: 'foreground' });
+	let early = await runs.streamAwaitingReconciliation();
+	const streamed = early ?? await streamForegroundSync(reviewed, scope, input, signal);
 	if (streamed) await input.releaseLocalImport?.(streamed.plan.local);
-	const result = await runPagedForegroundTransfer(reviewed, scope, input, signal);
+	early ??= await runs.streamAwaitingReconciliation();
+	const result = await runPagedForegroundTransfer(reviewed, scope, input, signal, early);
 	// Drain obsolete observations only after the transfer has published its
 	// checkpoint or retained receipts. Every page still checks scope and pins;
 	// interruption leaves the retired cursor recoverable on the next run.
-	if (streamed) await input.journal.pagedRuns({ scope, currentScope: input.currentScope, signal, cleanup: 'foreground' }).retireCompletedStream(streamed);
+	if (streamed) await runs.retireCompletedStream(streamed);
 	await input.journal.maintenance({ scope, currentScope: input.currentScope, signal, cleanup: 'foreground' }).collect();
 	return result;
 }
 
-async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, scope: SyncScope, input: ForegroundSyncInput, signal: AbortSignal) {
+async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, scope: SyncScope, input: ForegroundSyncInput, signal: AbortSignal, early: PagedRunSpec | null) {
 	const { configuration, check, authorize, scanCloud, readLocal, openSource, runtime, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	const access = { scope, currentScope: input.currentScope, signal, cleanup: 'foreground' as const }, inventory = input.journal.inventory(access),
 		plans = input.journal.plans(access), runs = input.journal.pagedRuns(access), checkpoints = input.journal.pagedCheckpoints(access), drafts = input.journal.reviewDrafts(access);
@@ -81,6 +84,12 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		throw Error('An unfinished transfer belongs to different settings. Restore its original settings before retrying; its work has been preserved.');
 	if (draft && JSON.stringify(draft.spec.configuration) !== JSON.stringify(configuration))
 		throw Error('A saved conflict review belongs to different settings. Restore its original settings before retrying or cancelling it.');
+	// A deliberate root change cannot inherit receipts from the old pair.
+	if (early && (early.configuration?.localRootId !== configuration.localRootId ||
+		early.configuration.remoteFolderId !== configuration.remoteFolderId)) {
+		await runs.releaseEarlyAfterRootChange(early, configuration);
+		early = null;
+	}
 	if (draft && active && (draft.spec.id !== active.spec.id || (active.spec.review
 		? draft.progress.phase !== 'sealed' || draft.progress.kind !== active.spec.review.kind || draft.progress.count !== active.spec.review.count
 		: draft.progress.phase !== 'reviewing' || draft.progress.count !== 0)))
@@ -225,10 +234,11 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		const local = input.beginLocalImport ? await input.beginLocalImport(purpose) : identity('local'), remote = identity('remote');
 		await importObservations(local, remote, false, !!input.beginLocalImport);
 		const spec: PagedPlanSpec = { id: crypto.randomUUID(), local, remote, baseline,
-			policy: { mode: configuration.mode, propagateDeletes: configuration.propagateDeletes }, excludedPaths: configuration.excludedPaths, ...(configuration.ignoreRules ? { ignoreRules: configuration.ignoreRules } : {}) };
+			policy: { mode: configuration.mode, propagateDeletes: configuration.propagateDeletes }, ...(early ? { earlyRunId: early.id } : {}), excludedPaths: configuration.excludedPaths, ...(configuration.ignoreRules ? { ignoreRules: configuration.ignoreRules } : {}) };
 		preparing('index-plan');
 		const result = await plans.build(spec, value => preparing(value.phase === 'indexing' ? 'index-plan' : 'plan',
-			value.phase === 'indexing' ? value.indexed : value.planned, value.phase === 'indexing' ? undefined : value.indexed));
+			value.phase === 'indexing' ? value.indexed : value.planned, value.phase === 'indexing' ? undefined : value.indexed),
+			early ? paths => runs.earlyReceiptsForPaths(early!, paths) : undefined);
 		// Every whole-tree compatibility boundary must stay bounded. The native
 		// paged path can keep its plan, review and baseline on disk throughout.
 		if (result.indexed > MAX_SYNC_SCAN_ENTRIES &&
@@ -290,6 +300,8 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		await checkpoints.changeRoots(configuration.localRootId, configuration.remoteFolderId);
 		const head = await checkpoints.current(); check();
 		let baseline = draft?.spec.plan.baseline ?? head?.baseline;
+		if (draft && draft.spec.plan.earlyRunId !== early?.id)
+			throw Error('Early sync reconciliation evidence changed while this review was saved.');
 		if (draft && head && JSON.stringify(draft.spec.plan.baseline) !== JSON.stringify(head.baseline))
 			throw Error('The baseline changed while this conflict review was saved. Its choices were preserved.');
 		if (!baseline) {

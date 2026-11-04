@@ -1,3 +1,4 @@
+import { CLOUD_SYNC_DESTINATION_REQUIREMENTS, ExactCloudSyncDestinationChanged, SYNC_DESTINATION_CHANGED } from './cloudSyncDestination';
 import { createSyncTransferDeadline } from './syncTransferDeadline';
 import { supportsSyncUploadStreaming, SYNC_STREAM_UPLOAD_UNAVAILABLE } from './browserSyncUpload';
 import { readCloudPathEntry } from './cloudPath.client';
@@ -67,10 +68,12 @@ async function readCloudFailure(response: Response, check: () => void): Promise<
     } catch { check(); } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 /** Diagnostics are fixed vocabulary only; never retain arbitrary response text. */
-async function cloudConflict(response: Response, url: URL, mutation: boolean, check: () => void): Promise<Error> {
+async function cloudConflict(response: Response, url: URL, mutation: boolean, check: () => void, guarded: boolean): Promise<Error> {
     const label = cloudOperation(url, mutation);
     const operation = label === 'upload-parts' ? 'cloud-request' : label;
     const value = await readCloudFailure(response, check);
+    if (guarded && url.pathname === '/api/v1/files' && mutation && value?.ok === false && value.code === SYNC_DESTINATION_CHANGED)
+        return new ExactCloudSyncDestinationChanged();
     let code = 'conflict_unknown', retryable = false;
     if (value?.ok === false) {
         if (uploadWaitCodes.has(value.code) || value.code === 'upload_unavailable') code = value.code;
@@ -154,7 +157,7 @@ export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, 
 			return null;
 		}
 		if (!response.ok) {
-			if (response.status === 409) throw await cloudConflict(response, url, body !== undefined, check);
+			if (response.status === 409) throw await cloudConflict(response, url, body !== undefined, check, !!(body && typeof body === 'object' && 'syncDestination' in body));
             if (response.status === 403) throw await cloudForbidden(response, url, body !== undefined, check);
             if (response.status === 408 || response.status === 429 || (response.status >= 500 && response.status <= 599))
                 throw await cloudTemporaryFailure(response, url, body !== undefined, scope, check);
@@ -211,7 +214,8 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 	const negotiate = () => negotiateRequirements({ ...CLOUD_TRANSFER_REQUIREMENTS, ...(retained ? CLOUD_FILE_RETENTION_REQUIREMENTS : {}),
 		...((m.kind === 'copy' ? m.source.symbolicLink : write.before?.symbolicLink) ? { 'api.files': '1.9.0' } : {}),
 		...(empty ? { 'api.files': '1.8.1',
-			'api.attachment-upload-complete': '1.5.0', 'api.attachment-content': '1.16.0' } : {}) });
+			'api.attachment-upload-complete': '1.5.0', 'api.attachment-content': '1.16.0' } : {}),
+		...(write.guardDestination ? CLOUD_SYNC_DESTINATION_REQUIREMENTS : {}) });
 	const fileId = write.before?.id ?? write.operation.id;
 	const receipt = (value: unknown): SyncReceipt => {
 		const file = parseCloudFile(value);
@@ -435,10 +439,11 @@ export function createCloudFolderTransport(runtime: CloudTransportRuntime, saved
 		id: write.operation.id,
 		operationId: write.operation.id,
 		name: m.path.split('/').at(-1),
-		folderId: write.folderId
+		folderId: write.folderId,
+		...(write.guardDestination ? { syncDestination: { rootId: write.cloudRootId!, path: m.path } } : {})
 	});
 	const { json, negotiate } = cloudRequests(runtime, scope, signal);
-	const ready = () => negotiate({ ...CLOUD_FOLDER_REQUIREMENTS, 'api.actions-run': '1.7.0', 'api.mongodb-endpoint': '1.1.0' });
+	const ready = () => negotiate({ ...CLOUD_FOLDER_REQUIREMENTS, ...(write.guardDestination ? CLOUD_SYNC_DESTINATION_REQUIREMENTS : {}), 'api.actions-run': '1.7.0', 'api.mongodb-endpoint': '1.1.0' });
 	const receipt = (value: unknown): SyncReceipt => {
 		const folder = parseCloudFolder(value);
 		if (folder.id !== input.id || folder.name !== input.name || folder.folderId !== input.folderId)

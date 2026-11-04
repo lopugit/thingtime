@@ -71,13 +71,13 @@ export const createFilesHandlers = (
 					url.searchParams.getAll('kind').length > 1 || [...url.searchParams.keys()].some(key => !['id', 'operationId', 'kind'].includes(key)) ||
 					(url.searchParams.has('kind') && (url.searchParams.get('kind') !== 'retained-version' || !url.searchParams.has('operationId')))))
 					return json({ ok: false, error: 'Use id with an optional operationId; retained-version requires both' }, { status: 400 });
-				const body = mutation ? await readJsonBody(request, 8192) : undefined;
+				const body = mutation ? await readJsonBody(request, 32 * 1024) : undefined;
 				const result = mutation
 					? body?.kind === 'folder'
 						? await deps.folders.create(user.id, body)
 						: await deps.service.commit(user.id, body)
 					: await deps.service.read(user.id, url.searchParams.get('id'), url.searchParams.get('operationId') ?? undefined, url.searchParams.get('kind') === 'retained-version');
-				return result.ok === false ? json({ ok: false, error: result.error }, { status: result.status }) : json(result);
+				return result.ok === false ? json({ ok: false, error: result.error, ...('code' in result ? { code: result.code } : {}) }, { status: result.status }) : json(result);
 			});
 	return { loader: handle(false), action: handle(true) };
 };
