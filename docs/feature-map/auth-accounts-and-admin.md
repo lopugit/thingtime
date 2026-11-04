@@ -124,7 +124,10 @@ retry identity and durable readback. Once a sign-in choice is selected, approval
 reads only that exact credential before and after signing. Registration still
 checks the current catalog for site exclusions before saving. `BrowserPasswordProvider.tsx` serves
 `/passwords/provider` with editable `browserProviderBlocks.ts`. Chromium transport
-and trusted tab/document checks live in `browser-extension/`; package with
+and trusted tab/document checks live in `browser-extension/`. The shared
+captured target in `content-vault.js` covers form-owned inputs and standalone
+sign-in steps, with field identity and action checks before preparation and
+delivery. Package with
 `build:password-extension`, test with `test:password-extension` and
 `test:passwords`. Browser acceptance must use the real local API/vault and an
 independent relying party; unit signatures and synthetic UI alone are insufficient.

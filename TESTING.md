@@ -14065,3 +14065,16 @@ the isolated real-API/browser command and the metadata-only session boundary.
   reconcile, and that stopping a second scan preserves both sides. Change a
   file during the private scan and verify that no deletion is inferred from an
   incomplete inventory.
+
+### Browser password autofill on multi-step sign-in pages
+
+- [ ] Run `node browser-extension/test/vault-target-browser.mjs /absolute/path/to/playwright/index.mjs`
+  with an isolated Chromium runtime. Fill the username step and the form-less
+  password step with synthetic data. Confirm Thingtime dispatches no submit.
+- [ ] While approval is pending, replace the password node with an identical
+  field or change an associated form's action to another origin. The new field
+  remains blank. Disabled, read-only, new-password and one-time-code controls
+  stay ineligible even when autocomplete has multiple tokens.
+- [ ] Open the chooser over a modal at desktop, 375px and 320px. Confirm it fits,
+  Escape closes it, and focus returns to its button. A real site sign-in and a
+  native-provider operation require separate acceptance.
