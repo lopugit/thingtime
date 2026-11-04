@@ -14051,3 +14051,17 @@ the isolated real-API/browser command and the metadata-only session boundary.
   controls. In Builder, edit the heading and session notice independently, save
   and reload. Preserve account controls, responsive layout and existing workspace
   size/font preferences. Installed personal-profile acceptance is a separate check.
+
+### Mac strict inventory job
+
+- [ ] Run `swift test --package-path macos/ThingtimeNode --filter MacFolderSyncTests`
+  and `npm --prefix remix run test:file-sync`. The native regression advances the
+  job clock beyond 270 seconds while the inventory remains private, then checks
+  that only a sealed generation can be paged. The browser protocol rejects
+  interruption, generation substitution, and partial backup coverage.
+- [ ] In the signed Mac app, run two-way sync on an isolated test folder whose
+  first scan takes longer than the previous request deadline at the configured
+  scan rate. Confirm that indexing continues, that the first verified entries
+  reconcile, and that stopping a second scan preserves both sides. Change a
+  file during the private scan and verify that no deletion is inferred from an
+  incomplete inventory.

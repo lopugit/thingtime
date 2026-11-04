@@ -21,6 +21,8 @@ export type SyncJob = {
 	retryAt?: number;
 	/** Bound by this job's full scope and immutable reviewed revision/settings. */
 	nativeCaptureId?: string;
+	/** Retained until exact native cleanup is confirmed, including after Stop. */
+	strictCaptureId?: string;
 	nativeCaptureGeneration?: string;
 	nativeCaptureRestarts?: number;
 	/** A committed import prefix belongs to this exact admission and purpose. */
@@ -42,6 +44,17 @@ export async function pauseSyncJobAdmission(jobs: Pick<ReturnType<typeof syncJob
 	}
 	throw Error('The sync job changed while stopping. Please retry.');
 }
+/** A lost cleanup reply cannot authorize replacing the native capture ID. */
+export async function retireStrictCapture(
+	jobs: Pick<ReturnType<typeof syncJobJournal>, 'strictCapture'>,
+	job: SyncJob,
+	cancel: (job: SyncJob) => Promise<void>,
+) {
+	if (!job.strictCaptureId) return job;
+	await cancel(job);
+	return jobs.strictCapture(job, null);
+}
+
 export function upgradeSyncJobJournal(db: IDBDatabase) {
 	if (!db.objectStoreNames.contains(STORE)) {
 		const store = db.createObjectStore(STORE, { keyPath: 'key' });
@@ -64,6 +77,8 @@ function validate(value: SyncJob): SyncJob {
 		(value.state === 'scheduled' && (value.intervalMs === undefined || value.nextRunAt === undefined)) ||
 		(value.retryAt !== undefined && (!Number.isSafeInteger(value.retryAt) || value.retryAt < 0)) ||
 		(value.nativeCaptureId !== undefined && (typeof value.nativeCaptureId !== 'string' || !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(value.nativeCaptureId) || value.reviewed?.configuration.mode !== 'backup' || value.reviewed?.configuration.propagateDeletes !== false)) ||
+		(value.strictCaptureId !== undefined && (value.nativeCaptureId !== undefined || typeof value.strictCaptureId !== 'string' ||
+			!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(value.strictCaptureId))) ||
 		(value.nativeCaptureGeneration !== undefined && (!value.nativeCaptureId || typeof value.nativeCaptureGeneration !== 'string' || !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(value.nativeCaptureGeneration))) ||
 		(value.nativeCaptureRestarts !== undefined && (!value.nativeCaptureGeneration || !Number.isSafeInteger(value.nativeCaptureRestarts) || value.nativeCaptureRestarts < 0 || value.nativeCaptureRestarts > 1)) ||
 		typeof value.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value.id) ||
@@ -136,6 +151,11 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 			const { nativeCaptureId: _old, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, ...rest } = current;
 			return { ...rest, ...(id === null ? {} : { nativeCaptureId: id }) };
 		}),
+		strictCapture: (expected: SyncJob, id: string | null) => change(expected, current => {
+			if (id !== null && (current.state !== 'runnable' || current.strictCaptureId !== undefined)) return null;
+			const { strictCaptureId: _old, ...rest } = current;
+			return id === null ? rest : { ...rest, strictCaptureId: id };
+		}),
 		observeCapture: (expected: SyncJob, generation: string) => change(expected, current => {
 			if (current.state !== 'runnable' || !current.nativeCaptureId) return null;
 			const restarts = (current.nativeCaptureRestarts ?? 0) + (current.nativeCaptureGeneration && current.nativeCaptureGeneration !== generation ? 1 : 0);
@@ -166,6 +186,7 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 			request.onsuccess = () => {
 				try {
 					const previous = request.result ? validate(request.result) : null;
+					if (previous?.strictCaptureId) throw Error('Confirm the previous strict inventory cleanup before admitting a new scan.');
 					const unfinished = previous && previous.state !== 'complete' && previous.nextRunAt === undefined;
 					const policyChanged = !!unfinished && JSON.stringify(previous.reviewed.configuration) !== JSON.stringify(reviewed.configuration);
 					if (policyChanged && previous.state !== 'paused')
@@ -190,6 +211,7 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 			current => {
 				if (current.state !== 'runnable') return null;
 				if (state !== 'complete') return { ...current, state };
+				if (current.strictCaptureId) throw Error('Strict inventory cleanup has not been confirmed.');
 				const { localImport: _import, nativeCaptureId: _capture, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, ...rest } = current;
 				return { ...rest, state };
 			}),
@@ -200,6 +222,7 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 		}),
 		finish: (expected: SyncJob, now: number) => change(expected, current => {
 			if (current.state !== 'runnable') return null;
+			if (current.strictCaptureId) throw Error('Strict inventory cleanup has not been confirmed.');
 			if (!Number.isSafeInteger(now) || now < 0) throw Error('Invalid sync completion time.');
 			const { retryAt: _retry, nativeCaptureId: _capture, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, localImport: _import, ...rest } = current;
 			return current.intervalMs === undefined ? { ...rest, state: 'complete' } :

@@ -4107,3 +4107,24 @@ Checks include equal-payload kind transitions, dangling/non-UTF8 links, target
 integrity refusal, outside-target preservation and Timeline restore after a
 native restart. This is adapter/API evidence, not installed-app or unsupported
 physical-filesystem acceptance.
+
+## Mac strict inventory capture
+
+The app-owned Mac runner negotiates native folder access 1.18.0 before using
+the `strict-async` capture policy. `scan-capture` starts a scoped native job
+and returns its ID, generation, and state. Each `scan-status` request can
+return a provisional count for progress. Only a complete status includes an
+inventory descriptor, which the runner uses with the existing paged import.
+`scan-cancel` cancels the exact job. Older native versions retain the existing
+synchronous capture protocol.
+
+Two-way sync uses the existing strict Swift scan, which keeps rows private
+through authorization and a final replay of root and entry stamps. If a file
+changes, the grant is revoked, or the job is cancelled, reconciliation cannot
+use the partial inventory to infer deletions. The runner records the exact capture ID before dispatch. If cancellation
+cannot be confirmed, Pause or Resume retries cleanup for that same ID and
+original folder settings before replacing it. The scan continues independently
+of the short control request deadlines under the existing monitored job
+lifetime and device resource policy. Commander continues to handle best-effort
+backup and one-way streaming. Using its discovery for strict two-way capture
+requires proving namespace completeness before publishing a generation.
