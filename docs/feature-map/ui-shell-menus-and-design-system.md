@@ -66,6 +66,11 @@ editable settings blocks and the existing configuration form; see
 
 ## Shared navigation and Builder controls
 
+`Nav/Nav.tsx` shares Back and Forward with the Electron titlebar. The
+standalone web navbar adds Refresh and exposes all three on desktop and mobile.
+Back and Forward traverse the current tab history and Refresh reloads the
+current document. See the shared page shell checklist in `TESTING.md`.
+
 Builder-authored Things carry the composable `builder-thing` schema in the
 existing `thingtime` array. Shared Builder classification also recognizes legacy
 canonical Builder kinds and app folders. Owner opening is separate from the
