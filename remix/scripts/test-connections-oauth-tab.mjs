@@ -233,9 +233,15 @@ try {
           await hosted.waitForFunction(() => typeof window.resolveFixtureDesktopInfo === 'function');
           await hosted.evaluate(value => window.resolveFixtureDesktopInfo({ apiOrigin: value }), selected);
         };
+        // The cache can paint the account and provider before all three reads
+        // reach the network. Drain this generation before counting new reads.
+        const firstOriginReads = Promise.all([endpoint, endpoint + '/providers', endpoint + '/filters'].map(path =>
+          hosted.waitForResponse(response => new URL(response.url()).pathname === path &&
+            response.request().headers()['x-thingtime-expected-api-origin'] === origin)));
         await selectOrigin(origin);
         await hosted.getByText('OAuth fixture account').waitFor();
         await hosted.getByRole('button', { name: 'Sign in with Facebook' }).waitFor();
+        await firstOriginReads;
         const beforeSwitch = observedOrigins.length;
         await hosted.evaluate(async () => {
           window.resolveFixtureDesktopInfo = undefined;
