@@ -1,6 +1,7 @@
 # Device folder sync from a browser
 
-Open **Things → device → Device sync & backup → Manage sync connections**
+Open **Things → device → File sync & backup → Open device sync & backup →
+Manage sync connections**
 while signed into the account that owns the device. The management entry no
 longer depends on a local Electron bridge or pairing on the viewing computer.
 The installed app continues to use its direct local controls for its own device.

@@ -108,14 +108,14 @@ ignore the marker when enforcing content-kind exclusivity. Coverage lives in
 | Dialogs (new folder, rename, move, share, delete, preview) | `app/components/Things/ThingsDialogs.tsx` |
 | Export/import dialogs | `ThingExportDialog.tsx`, `ThingImportDialog.tsx` |
 | Universal Thing page `/thing/:id` | `app/routes/thing.tsx` |
-| Device page `/things?device=<id>&deviceView=page` | `app/components/Things/ThingsPage.tsx` selects the same `DeviceDetailsDrawer.tsx` content used in the drawer; device cards/rows have a navigation-only right-click menu |
+| Device page `/things?device=<id>&deviceView=page` | Device cards and rows link to the dedicated page. `ThingsPage.tsx` shares `DeviceDetailsDrawer.tsx` and the top dashboard with the explicit Quick view (`deviceView=quick`); the device menu also links to sync and saved files. |
 
 Shared item activation is defined in `browseInteraction.ts`: ordinary clicks
 open once; Cmd/Ctrl/Shift clicks select, and title links retain native
 middle-click navigation. `ThingsViews.tsx` supplies labelled hover/focus
 checkboxes and action menus for Things, files and devices in every layout;
 coarse-pointer controls remain visible. Device controls are siblings of their
-primary button to preserve independent keyboard and pointer actions.
+primary link to preserve independent keyboard and pointer actions.
 `FolderTree.tsx` reuses those controls only when browsing handlers are supplied;
 Move dialog pickers remain independent. Its folder button expands children in
 place, while modifier clicks select and context controls preserve location.
