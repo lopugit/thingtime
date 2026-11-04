@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -47,7 +47,9 @@ try {
     };
     const firstOwner = 'oauth-tab-fixture-owner';
     const nextOwner = 'oauth-tab-other-owner';
-    let begins = 0, callbacks = 0, linked = false, holdList, listStarted, listFinished, savedLayout;
+    let begins = 0, callbacks = 0, linked = false, holdList, listStarted, listFinished, pendingNamed;
+    const savedLayouts = new Map();
+    const namedRows = [];
     const account = (name, id) => ({ id: id + '-link', provider: 'facebook-account', providerName: 'Facebook', contentVisibility: 'personal', account: { id, displayName: name, handle: id } });
     const pageErrors = [];
     context.on('page', page => page.on('pageerror', error => pageErrors.push(error.message)));
@@ -64,6 +66,8 @@ try {
       if (url.pathname.endsWith('thingtime-capabilities.json')) {
         const features = Object.fromEntries(['connections', 'connections-providers', 'connections-filters', 'connections-oauth-begin'].map(name => ['api.' + name, { version: '2.0.0' }]));
         Object.assign(features, {
+          'api.connections': { version: '2.1.0' }, 'api.connections-oauth-begin': { version: '2.1.0' },
+          'api.connections-oauth-callback': { version: '2.1.0' }, 'api.connections-named': { version: '1.0.0' },
           'api.mongodb-endpoint': { version: '1.1.0' }, 'api.webpages-resolve': { version: '1.6.0' },
           'api.actions-run': { version: '1.7.0' }, 'api.things': { version: '1.36.0' }
         });
@@ -72,18 +76,22 @@ try {
       if (url.pathname.startsWith(endpoint)) observedOrigins.push(route.request().headers()['x-thingtime-expected-api-origin']);
       if (url.pathname === endpoint + '/providers') {
         const configured = route.request().headers()['x-thingtime-expected-api-origin'] !== selectedOrigin;
-        return json(route, { providers: [{ id: 'facebook-account', name: 'Facebook', icon: 'f', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Link a social account', fields: [] }] });
+        return json(route, { providers: [{ id: 'facebook-account', name: 'Facebook', icon: 'f', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Link a social account', fields: [] },
+          ...(configured ? [{ id: 'google', name: 'Google account', icon: 'g', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Link a Google account', fields: [] },
+            { id: 'google-drive', name: 'Google Drive for documents shared with this workspace', icon: 'g', auth: 'oauth2', configured, contentVisibility: 'personal', about: 'Select Drive scopes', fields: [] }] : [])] });
       }
       if (url.pathname === '/api/v1/webpages/resolve') {
+        const savedLayout = savedLayouts.get(url.searchParams.get('id'));
         return savedLayout && route.request().headers()['x-thingtime-expected-actor'] === firstOwner
           ? json(route, { ok: true, source: 'user', page: savedLayout }) : route.fulfill({ status: 404 });
       }
       if (url.pathname === '/api/v1/things' && route.request().method() === 'POST') {
         const body = route.request().postDataJSON();
         assert.equal(route.request().headers()['x-thingtime-expected-actor'], firstOwner);
-        assert.equal(body.crystal.pageKey, 'settings-connections-oauth-pending');
+        assert.ok(['settings-connections-oauth-pending', 'settings-named-auth-connections'].includes(body.crystal.pageKey));
         assert.deepEqual(body.acl, ['tt:user']);
-        savedLayout = { id: body.shareId, author: { id: firstOwner }, updatedAt: '2026-11-04T00:00:00Z', crystal: body.crystal };
+        const savedLayout = { id: body.shareId, author: { id: firstOwner }, updatedAt: '2026-11-04T00:00:00Z', crystal: body.crystal };
+        savedLayouts.set(body.crystal.pageKey, savedLayout);
         return json(route, { ok: true, thing: savedLayout });
       }
       if (url.pathname === endpoint + '/filters') {
@@ -102,18 +110,37 @@ try {
           await holdList;
           return json(route, { connections: [account('Late previous owner connection', 'late')] }).catch(() => {}).finally(listFinished);
         }
-        return json(route, { connections: linked ? [account('OAuth fixture account', 'fixture')] : [] });
+        return json(route, { connections: [...(linked ? [account('OAuth fixture account', 'fixture')] : []),
+          ...(url.searchParams.get('includeNamed') === '1' ? namedRows : [])] });
       }
       if (url.pathname === endpoint + '/oauth/begin') {
         const body = route.request().postDataJSON();
-        assert.deepEqual(body, { provider: 'facebook-account', expectedOwnerId: 'oauth-tab-fixture-owner' });
+        if (body.named) {
+          assert.equal(body.expectedOwnerId, firstOwner);
+          assert.equal(body.provider, 'google');
+          assert.ok(body.named.allowedOperations.includes('google.profile'));
+          assert.deepEqual(body.named.requestedScopes, ['profile']);
+          pendingNamed = body.named;
+        } else assert.deepEqual(body, { provider: 'facebook-account', expectedOwnerId: 'oauth-tab-fixture-owner' });
         begins++;
         return json(route, { authorizeUrl: providerOrigin + '/authorize' });
       }
       if (url.pathname === callbackPath) {
         callbacks++;
+        if (pendingNamed && !url.searchParams.has('error')) {
+          namedRows.push({ ...account('Named provider identity', 'same-google-subject'), id: 'named-' + namedRows.length,
+            provider: 'google', providerName: 'Google account', named: { name: pendingNamed.name, requestedScopes: ['openid', 'profile'],
+              grantedScopes: ['openid', 'profile'], allowedOperations: pendingNamed.allowedOperations } });
+          pendingNamed = undefined;
+          return route.fulfill({ status: 302, headers: { location: origin + '/connections?connected=google' } });
+        }
         if (!url.searchParams.has('error')) linked = true;
         return route.fulfill({ status: 302, headers: { location: origin + '/connections?' + (linked ? 'connected=facebook-account' : 'oauthError=declined') } });
+      }
+      if (url.pathname === endpoint + '/named') {
+        const body = route.request().postDataJSON();
+        assert.deepEqual(body, { id: 'named-1', operation: 'google.profile', expectedOwnerId: firstOwner });
+        return json(route, { ok: true, result: { name: 'Named profile result' } });
       }
       if (url.pathname.startsWith('/api/')) return json(route, { ok: true });
       return route.continue();
@@ -124,7 +151,7 @@ try {
       page.setDefaultTimeout(12000);
       const initial = origin + '/connections?keep=1';
       await page.goto(initial);
-      const signIn = page.getByRole('button', { name: 'Sign in with Facebook' });
+      const signIn = page.getByRole('button', { name: 'Default sign-in with Facebook' });
       await signIn.waitFor();
       const pendingCopy = label === 'desktop' ? 'Complete Facebook sign-in in your new tab.' : 'Finish signing in to Facebook in the new tab.';
       const stopCopy = label === 'desktop' ? 'End sign-in wait' : 'Stop waiting';
@@ -142,7 +169,7 @@ try {
         await page.getByRole('button', { name: 'Close builder', exact: true }).click();
         await host.getByRole('button', { name: 'Save layout', exact: true }).click();
         await host.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
-        assert.ok(savedLayout);
+        assert.ok(savedLayouts.has('settings-connections-oauth-pending'));
         await page.reload();
         await signIn.waitFor();
       }
@@ -210,6 +237,99 @@ try {
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
       await page.screenshot({ path: join(evidence, label + '-returned.png'), fullPage: true });
+      holdList = undefined;
+      await page.evaluate(owner => window.changeFixtureConnectionOwner(owner), firstOwner);
+      const namedHost = page.locator('[data-settings-document="named-auth-connections"]');
+      await namedHost.getByRole('button', { name: 'Add named connection' }).waitFor();
+      if (label === 'desktop') {
+        await namedHost.getByRole('button', { name: 'Edit layout', exact: true }).click();
+        await namedHost.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
+        const drawer = page.getByTestId('builder-drawer');
+        for (const [id, value] of [['named-name-label', 'Purpose name'], ['named-access-label', 'Choose approved operations']]) {
+          await drawer.getByRole('combobox', { name: 'Select block', exact: true }).selectOption(id);
+          const field = drawer.getByRole('textbox', { name: 'Block text', exact: true });
+          await field.fill(value); await field.blur();
+        }
+        await page.getByRole('button', { name: 'Close builder', exact: true }).click();
+        await namedHost.getByRole('button', { name: 'Save layout', exact: true }).click();
+        await namedHost.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
+        assert.ok(savedLayouts.has('settings-named-auth-connections'));
+        await page.reload();
+      }
+      await namedHost.getByText('Choose a provider for named access', { exact: true }).click();
+      await namedHost.getByRole('button', { name: 'Add Google Drive for documents shared with this workspace connection' }).click();
+      await namedHost.getByRole('textbox', { name: 'Connection name' }).fill('Drive metadata fixture');
+      await namedHost.getByRole('checkbox', { name: 'View file metadata' }).check();
+      assert.ok(await namedHost.getByRole('checkbox', { name: 'View file metadata' }).isChecked());
+      assert.equal(await namedHost.getByRole('checkbox', { name: 'Google profile name and photo' }).count(), 0);
+      await namedHost.getByText('Provider permissions to request', { exact: true }).scrollIntoViewIfNeeded();
+      const overflow = await page.evaluate(() => {
+        if (document.documentElement.scrollWidth <= innerWidth + 1) return [];
+        return [...document.querySelectorAll('body *')].filter(element => element.getBoundingClientRect().right > innerWidth + 1)
+          .slice(0, 8).map(element => element.getAttribute('data-block-id') || element.tagName);
+      });
+      assert.deepEqual(overflow, [], 'Long provider names must not overflow the permission form');
+      const catalog = page.getByText('Connect a 3rd party app', { exact: true }).locator('..');
+      const catalogBounds = await catalog.boundingBox();
+      assert.ok(catalogBounds);
+      for (const card of await catalog.getByRole('button', { name: /^Default sign-in with/ }).all()) {
+        const bounds = await card.locator('..').boundingBox();
+        assert.ok(bounds && bounds.x >= catalogBounds.x - 1 && bounds.x + bounds.width <= catalogBounds.x + catalogBounds.width + 1,
+          'Provider card must fit within the Connections content column');
+      }
+      await page.screenshot({ path: join(evidence, label + '-named-permission-form.png'), fullPage: true });
+      await namedHost.getByRole('button', { name: 'Cancel', exact: true }).click();
+      for (const name of ['Reading profile', 'Second profile with a long descriptive name for research notes']) {
+        await namedHost.getByRole('button', { name: 'Add named connection' }).click();
+        await namedHost.getByRole('combobox', { name: 'Provider', exact: true }).selectOption('google');
+        if (label === 'desktop') {
+          await namedHost.getByText('Purpose name', { exact: true }).waitFor();
+          await namedHost.getByText('Choose approved operations', { exact: true }).waitFor();
+        }
+        await namedHost.getByRole('textbox', { name: 'Connection name' }).fill(name);
+        await namedHost.getByRole('checkbox', { name: 'Profile name and photo', exact: true }).check();
+        await namedHost.getByRole('checkbox', { name: 'Google profile name and photo' }).check();
+        const newPage = context.waitForEvent('page');
+        await namedHost.getByRole('button', { name: 'Continue to sign in' }).click();
+        const authorization = await newPage;
+        await authorization.waitForURL(providerOrigin + '/authorize');
+        await authorization.getByRole('link', { name: 'Continue' }).click();
+        await namedHost.getByRole('heading', { name, exact: true }).waitFor();
+      }
+      assert.equal(namedRows.length, 2);
+      await namedHost.getByRole('combobox', { name: 'Connection', exact: true }).selectOption('named-1');
+      await namedHost.getByRole('button', { name: 'Google profile name and photo' }).click();
+      await namedHost.getByText('name: Named profile result').waitFor();
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      assert.equal(await page.evaluate(() => scrollY + innerHeight >= document.documentElement.scrollHeight - 2), true);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+      await page.screenshot({ path: join(evidence, label + '-named-connections.png'), fullPage: true });
+      await writeFile(join(evidence, label + '-named-rendered-result.json'), JSON.stringify({
+        viewport: { width, height }, permissionForm: label + '-named-permission-form.png',
+        savedCards: label + '-named-connections.png', selectedOperation: 'google.profile', selectedId: 'named-1',
+        renderedResult: await namedHost.getByText('name: Named profile result').textContent(),
+        namedProfiles: namedRows.map(row => ({ id: row.id, name: row.named.name, requested: row.named.requestedScopes, confirmed: row.named.grantedScopes, allowed: row.named.allowedOperations })),
+        drivePicker: { metadataSelected: true, identityOperationAvailable: true, profileOperationAvailable: false },
+        separateBuilderLabelsSaved: label === 'desktop'
+      }, null, 2));
+      const second = namedHost.getByRole('article').filter({ hasText: 'Second profile with a long descriptive name for research notes' });
+      const refreshWithoutRemount = async () => {
+        const authorization = await begin();
+        await authorization.getByRole('link', { name: 'Continue' }).click();
+      };
+      namedRows[1].named.grantedScopes = ['openid'];
+      await refreshWithoutRemount();
+      await second.getByText('Provider confirmed: openid', { exact: true }).waitFor();
+      assert.equal(await namedHost.getByText('name: Named profile result').count(), 0);
+      namedRows[1].named.grantedScopes = ['openid', 'profile'];
+      await refreshWithoutRemount();
+      await second.getByText('Provider confirmed: openid, profile', { exact: true }).waitFor();
+      assert.equal(await namedHost.getByText('name: Named profile result').count(), 0, 'Restoring old scope metadata must not restore the old result');
+      await namedHost.getByRole('button', { name: 'Google profile name and photo' }).click();
+      await namedHost.getByText('name: Named profile result').waitFor();
+      await second.getByRole('button', { name: 'Reconnect', exact: true }).click();
+      assert.equal(await namedHost.getByText('name: Named profile result').count(), 0);
+      await namedHost.getByRole('button', { name: 'Cancel', exact: true }).click();
       if (label === 'desktop') {
         holdList = undefined;
         await page.close();
@@ -220,7 +340,7 @@ try {
         const nativeRequests = observedOrigins.length;
         await hosted.goto(initial);
         await hosted.waitForFunction(() => typeof window.resolveFixtureDesktopInfo === 'function');
-        assert.equal(await hosted.getByRole('button', { name: 'Sign in with Facebook' }).count(), 0);
+        assert.equal(await hosted.getByRole('button', { name: 'Default sign-in with Facebook' }).count(), 0);
         assert.equal(observedOrigins.length, nativeRequests);
         await hosted.evaluate(() => window.resolveFixtureDesktopInfo({}));
         assert.equal(observedOrigins.length, nativeRequests);
@@ -240,7 +360,7 @@ try {
             response.request().headers()['x-thingtime-expected-api-origin'] === origin)));
         await selectOrigin(origin);
         await hosted.getByText('OAuth fixture account').waitFor();
-        await hosted.getByRole('button', { name: 'Sign in with Facebook' }).waitFor();
+        await hosted.getByRole('button', { name: 'Default sign-in with Facebook' }).waitFor();
         await firstOriginReads;
         const beforeSwitch = observedOrigins.length;
         await hosted.evaluate(async () => {
@@ -249,7 +369,7 @@ try {
         });
         await hosted.waitForFunction(() => typeof window.resolveFixtureDesktopInfo === 'function');
         assert.equal(await hosted.getByText('OAuth fixture account').count(), 0);
-        assert.equal(await hosted.getByRole('button', { name: 'Sign in with Facebook' }).count(), 0);
+        assert.equal(await hosted.getByRole('button', { name: 'Default sign-in with Facebook' }).count(), 0);
         assert.equal(observedOrigins.length, beforeSwitch);
         await hosted.evaluate(value => window.resolveFixtureDesktopInfo({ apiOrigin: value }), selectedOrigin);
         await hosted.getByText('Selected API connection').waitFor();
@@ -258,7 +378,7 @@ try {
         await hosted.close();
       }
       assert.deepEqual(pageErrors, []);
-      console.log(`PASS ${label}: blocked, declined, abandoned, successful, provider opener isolation, cached owner paint, late-response and sign-out fences`);
+      console.log(`PASS ${label}: blocked, declined, abandoned, successful, provider opener isolation, account/origin fences, named connection create/use, and layout persistence`);
     } finally {
       await context.close();
     }

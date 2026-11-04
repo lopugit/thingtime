@@ -35,6 +35,12 @@ const makeCollection = (docs: Doc[]) => ({
   async countDocuments(query: Doc) {
     return docs.filter((doc) => matches(doc, query)).length;
   },
+  async updateOne(query: Doc, update: Doc) {
+    const doc = docs.find(entry => matches(entry, query));
+    if (!doc) return { matchedCount: 0 };
+    for (const [key, value] of Object.entries(update.$inc || {})) doc[key] = (doc[key] || 0) + value;
+    return { matchedCount: 1 };
+  },
   async deleteOne(query: Doc) {
     const index = docs.findIndex((doc) => matches(doc, query));
     if (index === -1) return { deletedCount: 0 };

@@ -28,7 +28,7 @@ export const action = async ({ request }: { request: Request }) => withVaultRequ
     );
   const result = await beginOAuth(
     { ...user, sessionBinding: (await oauthSessionBinding(request)) || undefined },
-    { provider: body?.provider },
+    { provider: body?.provider, named: body?.named },
     requestOrigin(request)
   );
   if (result.ok === false) {

@@ -367,7 +367,14 @@ exact origin and data environment. `oauth.ts` binds single-use state to the live
 session/client/callback; `connections.ts` transactionally stores owner-scoped
 accounts and `tokenVault.ts` encrypts their grants through the existing account
 vault. Shared legacy credentials require reconnect, preserving the caller's link
-ID. Public-source sharing remains intact. Google identity/service cards and
+ID. `namedConnections.ts` stores independent owner/link-bound envelopes in
+`external-auth-connection` rows beneath the canonical account identity. Named
+rows never confer legacy feed or cached source access. `oauth.ts` keeps the
+private label in the server-side intent and signs the request identity. The
+`connections/named` operation dispatcher gates the exact selected grant and
+returns allowlisted results. `NamedConnectionPanel.tsx` and
+`namedConnectionBlocks.ts` provide editable profile controls and selection.
+Public-source sharing remains intact. Google identity/service cards and
 Facebook identity/posts cards select separate grants. `ConnectionsPage.tsx` opens
 sign-in in a user-initiated tab and `oauthTab.client.ts` removes the opener
 before provider navigation. The existing callback route verifies the live

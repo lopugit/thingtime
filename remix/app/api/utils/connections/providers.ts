@@ -50,6 +50,7 @@ export type OAuthTokens = {
   // is near/past, otherwise the sync surfaces a "reconnect" error
   expiresAt?: string | null;
   scopes?: string[];
+  confirmedScopes?: string[];
   providerUserId?: string | null;
 };
 
@@ -134,7 +135,7 @@ export type ConnectionProvider = {
     // X requires PKCE on its authorization-code flow; the begin/callback core
     // mints an S256 verifier and threads it through the signed state JWT
     pkce?: boolean;
-    buildAuthorizeUrl: (input: { clientId: string; redirectUri: string; state: string; codeChallenge?: string; nonce?: string }) => string;
+    buildAuthorizeUrl: (input: { clientId: string; redirectUri: string; state: string; codeChallenge?: string; nonce?: string; requestedScopes?: readonly string[] }) => string;
     exchangeCode: (input: {
       code: string;
       clientId: string;
@@ -706,7 +707,9 @@ const formOAuthGrant = (config: {
       refreshToken: data.refresh_token ? String(data.refresh_token) : previous?.refreshToken || null,
       expiresAt: expiresAtFrom(data.expires_in),
       tokenType: typeof data.token_type === 'string' ? data.token_type : previous?.tokenType || 'Bearer',
-      scopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean) : previous?.scopes || config.scopes
+      scopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean) : previous?.scopes || config.scopes,
+      confirmedScopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean)
+        : Object.prototype.hasOwnProperty.call(data, 'scope') ? [] : previous?.confirmedScopes
     };
     return config.mapExtra ? config.mapExtra(data, tokens) : tokens;
   };
@@ -1683,6 +1686,13 @@ const githubProvider: ConnectionProvider = {
 
 const GRAPH = 'https://graph.facebook.com/v23.0';
 
+export async function readConnectionFacebookPermissions(tokens: OAuthTokens): Promise<string[] | undefined> {
+  const result = await authedJson(`${GRAPH}/me/permissions?fields=permission,status`, { token: tokens.accessToken });
+  if (result.ok === false || !Array.isArray(result.data?.data)) return undefined;
+  return result.data.data.flatMap((item: { permission?: unknown; status?: unknown }) =>
+    item?.status === 'granted' && typeof item.permission === 'string' ? [item.permission] : []);
+}
+
 const facebookProvider: ConnectionProvider = {
   id: 'facebook',
   name: 'Facebook posts',
@@ -1695,8 +1705,8 @@ const facebookProvider: ConnectionProvider = {
   oauth: {
     clientIdEnv: 'FACEBOOK_APP_ID',
     clientSecretEnv: 'FACEBOOK_APP_SECRET',
-    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
-      `https://www.facebook.com/v23.0/dialog/oauth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&response_type=code&scope=${encodeURIComponent('public_profile,user_posts')}`,
+    buildAuthorizeUrl: ({ clientId, redirectUri, state, requestedScopes }) =>
+      `https://www.facebook.com/v23.0/dialog/oauth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&response_type=code&scope=${encodeURIComponent(requestedScopes?.join(',') || 'public_profile,user_posts')}`,
     exchangeCode: async ({ code, clientId, clientSecret, redirectUri }) => {
       const short = await fetchJson(
         `${GRAPH}/oauth/access_token?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${encodeURIComponent(clientSecret)}&code=${encodeURIComponent(code)}`
@@ -1766,9 +1776,9 @@ const facebookAccountProvider: ConnectionProvider = {
   about: 'Save your Facebook identity for later actions. Requests your public profile; no posts permission.',
   oauth: {
     ...facebookProvider.oauth!,
-    buildAuthorizeUrl: ({ clientId, redirectUri, state }) => {
+    buildAuthorizeUrl: ({ clientId, redirectUri, state, requestedScopes }) => {
       const url = new URL('https://www.facebook.com/v23.0/dialog/oauth');
-      url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, state, response_type: 'code', scope: 'public_profile' }).toString();
+      url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, state, response_type: 'code', scope: requestedScopes?.join(',') || 'public_profile' }).toString();
       return url.href;
     },
     exchangeCode: async (input) => {
@@ -1961,21 +1971,24 @@ const tiktokProvider: ConnectionProvider = {
 };
 
 // Google services share one app registration and choose permissions per card.
+export const readConnectionGoogleUserInfo = (tokens: OAuthTokens) =>
+  authedJson('https://openidconnect.googleapis.com/v1/userinfo', { token: tokens.accessToken });
+
 const googleOAuth = (serviceScopes: readonly string[]): NonNullable<ConnectionProvider['oauth']> => {
   const scopes = ['openid', 'profile', 'email', ...serviceScopes];
   return {
     clientIdEnv: 'GOOGLE_CLIENT_ID', clientSecretEnv: 'GOOGLE_CLIENT_SECRET', pkce: true,
-    buildAuthorizeUrl: ({ clientId, redirectUri, state, codeChallenge }) => {
+    buildAuthorizeUrl: ({ clientId, redirectUri, state, codeChallenge, requestedScopes }) => {
       const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
       url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: 'code',
-        scope: scopes.join(' '), access_type: 'offline', prompt: 'select_account consent',
+        scope: (requestedScopes || scopes).join(' '), access_type: 'offline', prompt: 'select_account consent',
         state, code_challenge: codeChallenge || '', code_challenge_method: 'S256' }).toString();
       return url.href;
     },
     ...formOAuthGrant({ tokenUrl: 'https://oauth2.googleapis.com/token', authStyle: 'body', scopes,
       extraExchangeParams: ({ codeVerifier }) => ({ code_verifier: codeVerifier || '' }) }),
     resolveAccountFromTokens: async (tokens) => {
-      const me = await authedJson('https://openidconnect.googleapis.com/v1/userinfo', { token: tokens.accessToken });
+      const me = await readConnectionGoogleUserInfo(tokens);
       if (me.ok === false) return me;
       if (typeof me.data?.sub !== 'string' || !me.data.sub) return fail(502, 'Google did not return an account identity');
       return { ok: true, account: { providerAccountId: me.data.sub,
