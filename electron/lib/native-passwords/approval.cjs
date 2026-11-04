@@ -81,7 +81,8 @@ function createNativePasswordApproval({ BrowserWindow, ipcMain, preload, context
       window.webContents.on('will-redirect', blockNavigation);
       window.webContents.on('did-start-navigation', details => {
         if (!details.isMainFrame) return;
-        if (operation.started || details.url !== url) cancel(operation);
+        // React Router seeds history state at the same URL without replacing the document.
+        if (details.url !== url || (operation.started && details.isSameDocument !== true)) return cancel(operation);
         operation.started = true;
       });
       window.webContents.on('render-process-gone', () => cancel(operation));
