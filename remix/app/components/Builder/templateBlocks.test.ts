@@ -96,6 +96,7 @@ test('route controls expand into separately editable fields and repeated rows wi
   { tag: 'tt-form', props: { identityName: 'id' }, children: [
    { tag: 'label', children: ['Address', { tag: 'tt-change', props: { inputPath: 'query', 'data-tt-action': 'suggest', 'data-tt-action-inputs': { vaultId: '{vaultId}' } }, children: [{ tag: 'input', props: { name: 'query', value: '{query.value}' } }] }] },
    { tag: 'tt-select', props: { name: 'favoriteId', optionsPath: 'result.favorites', labelPath: 'crystal.title' } },
+   { tag: 'tt-upload', props: { name: 'markerAvatar', imageOnly: true, value: { ttArg: 'result.record.crystal.markerAvatar' } } },
    { tag: 'button', ttAction: 'save-stop', children: ['Save stop'] }
   ] },
   { tag: 'tt-collection', props: { itemsPath: 'result.items', itemTemplate: { ttTemplate: { tag: 'article', children: [
@@ -107,10 +108,11 @@ test('route controls expand into separately editable fields and repeated rows wi
  ] }, kind => `${kind}-${++nextId}`);
  const flat = (rows: any[]): any[] => rows.flatMap(row => [row, ...flat(row.children || [])]);
  const all = flat(blocks);
- for (const tag of ['tt-style', 'tt-form', 'tt-change', 'input', 'tt-select', 'button', 'strong', 'tt-mapbox'])
+ for (const tag of ['tt-style', 'tt-form', 'tt-change', 'input', 'tt-select', 'tt-upload', 'button', 'strong', 'tt-mapbox'])
   assert.ok(all.some(row => row.tag === tag), tag);
  assert.equal(new Set(all.map(row => row.id)).size, all.length);
  assert.equal(requiresEditableIntrinsicContract(blocks), true);
+ assert.equal(requiresEditableIntrinsicContract(blocks, ['tt-upload']), true);
  assert.ok(all.some(row => row.type === 'collection' && row.props?.itemsPath === 'last.result.suggestions' && row.props?.maxItems === 20));
  assert.ok(all.some(row => row.props?.['data-tt-action'] === 'remove-stop' && row.props?.['data-tt-action-inputs']?.id === '{item.id}'));
  const saved = sanitizeWebpageBlocks([{ id: 'scope', type: 'container', source: { action: 'read-route', inputs: { routeId: '{query.routeId}' } }, args: { vaultId: 'vault-reference' }, children: blocks }]);

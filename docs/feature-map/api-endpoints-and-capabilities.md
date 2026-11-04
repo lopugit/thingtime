@@ -612,3 +612,15 @@ PNG bytes, 204 when unavailable, or 404 for an unknown provider. This public
 asset stays on the document origin without opening a data-plane connection or
 forwarding user headers to the provider. Verify both manifests and route
 registration with `test:api-capabilities` and `test:connections:built`.
+
+## Dynamic map workspaces
+
+`api.things` 1.47.0 / `api.things-update` 1.16.0 accept editable `tt-upload` blocks.
+`api.webpages-resolve` 1.9.0 identifies the updated page contract.
+`PageActionSurface` and `webpageRuntime` support `$ui` query `scope: page`;
+`Builder/Maps/` renders custom marker text, labels, icon lists and authorized
+attachment avatars. `useWebpage` negotiates the upload save minimums.
+`GET /things` numeric summaries reuse canonical ACL-checked `listThings` pages
+through `api/utils/things/numericSummary.ts`, with exact schema/parent filters,
+no item-count cap and no partial success. Run the summary, map overlay/data,
+local UI, Webpage and capability tests plus live saved-page acceptance.
