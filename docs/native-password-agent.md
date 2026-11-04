@@ -102,6 +102,10 @@ immediately before delivery, and refuses navigation/replacement. Cross-origin
 iframes, ambiguous fields and unsupported native apps require another supported
 integration. The destination website necessarily receives a filled password;
 the requesting agent does not. No browser profile, cookie or session is imported.
+Ubuntu's Snap Chromium uses a unique task directory under
+`~/snap/chromium/common/thingtime-native-passwords`, within its existing
+confinement. Release removes that task directory; existing Chromium profiles
+remain separate.
 
 ## GNOME login keyring consumer
 

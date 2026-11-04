@@ -1,6 +1,7 @@
 'use strict';
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const os = require('node:os');
 const { spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const { BrowserDriver } = require('../agent-browsers/runtime/browser-driver.cjs');
@@ -10,7 +11,7 @@ const { privateDirectory } = require('./store.cjs');
 async function browserExecutable(platform = process.platform) {
   // Ubuntu's installed Google Chrome has a vendor sandbox path. Prefer it to
   // developer Chromium builds which may be unable to use restricted userns.
-  const candidates = platform === 'linux' ? ['/usr/bin/google-chrome', '/opt/google/chrome/chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'] : platform === 'win32' ? [
+  const candidates = platform === 'linux' ? ['/usr/bin/google-chrome', '/opt/google/chrome/chrome', '/usr/bin/chromium', '/snap/bin/chromium', '/usr/bin/chromium-browser'] : platform === 'win32' ? [
     path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Google/Chrome/Application/chrome.exe'),
     path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Microsoft/Edge/Application/msedge.exe'),
     path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Microsoft/Edge/Application/msedge.exe'),
@@ -18,22 +19,41 @@ async function browserExecutable(platform = process.platform) {
   for (const candidate of candidates) {
     try {
       const real = await fs.realpath(candidate), stat = await fs.stat(real);
-      if (stat.isFile() && (platform === 'win32' || stat.uid === 0 && !(stat.mode & 0o022))) return real;
+      if (stat.isFile() && (platform === 'win32' || stat.uid === 0 && !(stat.mode & 0o022))) {
+        // Snap dispatches by the invoked alias. Resolving this link for launch
+        // would run plain snapd, not Chromium. Its target is still verified.
+        if (candidate === '/snap/bin/chromium') {
+          if (!['/usr/bin/snap', '/usr/lib/snapd/snapd'].includes(real)) continue;
+          const parent = await fs.stat('/snap/bin'), alias = await fs.lstat(candidate);
+          if (parent.uid !== 0 || parent.mode & 0o022 || alias.uid !== 0) continue;
+          return candidate;
+        }
+        return real;
+      }
     } catch { /* Try the next supported installation, never a PATH command. */ }
   }
   fail('BROWSER_UNAVAILABLE', 'Install Chromium or Google Chrome on Linux, or Chrome or Edge on Windows.');
 }
+function browserProfileRoot(directory, executable, id, home = os.userInfo().homedir) {
+  // Snap confinement permits its own common directory, not another app's
+  // hidden profile. Only this unique child is used and removed on release.
+  return path.join(executable === '/snap/bin/chromium' ? path.join(home, 'snap/chromium/common/thingtime-native-passwords') : directory, id);
+}
 class PasswordBrowser {
   constructor({ directory, executable = browserExecutable, driver = new BrowserDriver(), headless = false }) {
-    this.root = path.join(directory, randomUUID()); this.driver = driver; this.executable = executable; this.headless = headless;
+    this.id = randomUUID(); this.directory = directory; this.root = path.join(directory, this.id); this.driver = driver; this.executable = executable; this.headless = headless;
   }
   async open(target, url) {
     const parsed = new URL(url || `${target.origin}/`);
     if (parsed.origin !== target.origin || parsed.username || parsed.password) fail('TARGET_CHANGED', 'The browser URL must belong to the authorized website.');
+    const executable = await this.executable();
+    this.root = browserProfileRoot(this.directory, executable, this.id);
+    if (executable === '/snap/bin/chromium') await privateDirectory(path.dirname(this.root));
     await privateDirectory(this.root);
     const environment = Object.fromEntries(['PATH', 'HOME', 'USER', 'LOGNAME', 'DISPLAY', 'WAYLAND_DISPLAY', 'DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'XDG_SESSION_TYPE', 'XAUTHORITY', 'LANG', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'ProgramFiles', 'ProgramFiles(x86)'].filter(key => process.env[key]).map(key => [key, process.env[key]]));
     try {
-      await this.driver.launch({ executable: await this.executable(), root: this.root, headless: this.headless, environment, logger: () => {} });
+      if (executable === '/snap/bin/chromium') environment.HOME = os.userInfo().homedir;
+      await this.driver.launch({ executable, root: this.root, headless: this.headless, environment, logger: () => {} });
       const created = await this.driver.call('newPage'); this.page = this.driver.page(created.id);
       await this.page.goto(parsed.href, { waitUntil: 'domcontentloaded', timeout: 30000 });
       if (new URL(this.page.url()).origin !== target.origin) fail('TARGET_CHANGED', 'The website redirected to a different origin. Authorize that exact origin separately.');
@@ -211,4 +231,4 @@ async function unlockKeyring(password, previous, assertCurrent) {
     fail('CONSUMER_REFUSED', 'The existing GNOME login keyring did not confirm it was unlocked.');
   }
 }
-module.exports = { PasswordBrowser, browserExecutable, unlockKeyring, keyringState };
+module.exports = { PasswordBrowser, browserExecutable, browserProfileRoot, unlockKeyring, keyringState };
