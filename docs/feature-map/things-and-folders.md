@@ -701,6 +701,10 @@ measurement projections; client and worker require `api.devices-sync-control`
 mailbox retains ownership, leases and immutable saves. Focused protocol/client,
 worker, session and `deviceSyncControl` tests cover paused changes, no folder/job
 side effects, stale replies and shared polling. See browser-device-sync.md.
+The installed Mac dashboard shares one Activity Manager sampler per active
+local run. It reads the existing rootless resources lane while visible, and
+Electron projects current worker samples from the same device governor without
+changing limits. Stale transfer, scan and memory measurements expire.
 
 POSIX symbolic-link metadata lives in `fileSync/symbolicLink.ts`; `SyncEntry`
 content/stamp equality includes link kind and exact raw target identity.

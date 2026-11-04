@@ -146,9 +146,9 @@ export function useApi() {
     files: {
       read: useCallback(async (scope: TimelineScope, id: string, options?: { signal?: AbortSignal }) => {
         if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
-        await requireThingtimeCapability('api.files', '1.0.0');
-        await requireThingtimeCapability('api.actions-run', '1.7.0');
-        await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+        await requireThingtimeCapability('api.files', '1.0.0', scope.apiOrigin);
+        await requireThingtimeCapability('api.actions-run', '1.7.0', scope.apiOrigin);
+        await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0', scope.apiOrigin);
         const result = await getJson(`/api/v1/files${toQuery({ id })}`, { ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
         const file = parseCloudFile(result?.file);
         if (file.id !== id) throw Error('File identity changed.');
@@ -157,8 +157,8 @@ export function useApi() {
       commit: useCallback(async (scope: TimelineScope, input: CloudFileCommit, options?: { signal?: AbortSignal }) => {
         if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
         const command = parseCloudFileCommit(input);
-        await requireThingtimeCapability('api.files', command.symbolicLink ? '1.9.0' : '1.0.0');
-        await requireThingtimeCapability('api.actions-run', '1.7.0');
+        await requireThingtimeCapability('api.files', command.symbolicLink ? '1.9.0' : '1.0.0', scope.apiOrigin);
+        await requireThingtimeCapability('api.actions-run', '1.7.0', scope.apiOrigin);
         return asyncFetcher.submit(command, { action: '/api/v1/files', ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
       }, [asyncFetcher])
     },
@@ -869,7 +869,7 @@ export function useApi() {
 							sizeBytes: number;
 							purpose?: AttachmentUploadPurpose;
 						},
-						options?: { signal?: AbortSignal }
+						options?: ThingRequestOptions
 					) => {
 						await requireThingtimeCapability('api.attachment-uploads', args.purpose === 'file' || args.purpose === 'file-import' ? '1.5.0' : '1.4.1');
 						if (args.purpose === 'file' || args.purpose === 'file-import') await requireThingtimeCapability('api.attachment-upload-complete', '1.4.0');
@@ -886,7 +886,7 @@ export function useApi() {
 							},
 							{
 								action: '/api/v1/attachments/uploads',
-								signal: options?.signal,
+								...options,
 								errorContext: 'prepare a file upload'
 							}
 						);
@@ -908,12 +908,12 @@ export function useApi() {
 					[asyncFetcher]
 				),
 				complete: useCallback(
-					async (args: { uploadId: string }, options?: { signal?: AbortSignal }) => {
+					async (args: { uploadId: string }, options?: ThingRequestOptions) => {
 						const ret = asyncFetcher.submit(
 							{ uploadId: args?.uploadId },
 							{
 								action: '/api/v1/attachments/uploads/complete',
-								signal: options?.signal,
+								...options,
 								errorContext: 'verify a file upload'
 							}
 						);
@@ -923,12 +923,12 @@ export function useApi() {
 					[asyncFetcher]
 				),
 				abort: useCallback(
-					async (args: { uploadId: string }, options?: { signal?: AbortSignal }) => {
+					async (args: { uploadId: string }, options?: ThingRequestOptions) => {
 						const ret = asyncFetcher.submit(
 							{ uploadId: args?.uploadId },
 							{
 								action: '/api/v1/attachments/uploads/abort',
-								signal: options?.signal,
+								...options,
 								errorContext: 'cancel a file upload'
 							}
 						);

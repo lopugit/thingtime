@@ -11530,6 +11530,12 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [x] Installed Android History/export/restore acceptance (checkpoints below).
 - [ ] Installed iOS and Mac History/download/restore acceptance; local device
   retained-version browsing and content-ID search across folders.
+- [ ] In the signed Mac app, open History for an isolated file with distinct
+  original and current bytes. When the renderer is on loopback and the
+  selected API uses a different origin, select the original version, choose
+  **Review restore** then **Restore this version**, and verify the saved
+  receipt and matching hash after a two-way pull. Confirm a previously selected
+  API origin cannot replay the pending restore key.
 
 ### Installed file History and effect replay — 2026-10-17
 
@@ -13320,6 +13326,12 @@ separate from deterministic discovery/lease tests.
 - 2026-10-20 (PR #1062): isolated real Mongo empty-file acceptance passed through upload, zero-byte object download, fingerprint, commit/replay, restore and immutable receipt/access checks; live S3 and installed home-upload acceptance remain pending.
 
 
+
+### Mac Files upload from the bundled app
+
+- [x] Run `node --test electron/test/attachment-upload.test.cjs` and the Remix `desktopAttachmentUpload.test.ts`. A loopback receiver with no CORS allowance gets a signed PUT with exact bytes, length and checksum and no Origin or cookies. Check owner, frame, origin and destination refusal, bounded chunks, cancellation and corruption.
+- [ ] In the signed installed Mac app, use Files → Upload to add a nonempty synthetic file to an isolated cloud folder, download through the paired folder sync, and compare hashes. Verify the same Files action on the HTTPS site.
+
 ### Desktop upload-part CORS recovery — 2026-10-20
 
 - [x] Reproduce the missing Mac upload-part adapter: negotiated native capability must choose scoped IPC instead of a loopback browser S3 PUT. Corrupted upload/source receipts must fail closed.
@@ -14159,6 +14171,13 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ### Mac strict inventory job
 
+- [ ] During a signed Mac transfer long enough to sample, open **Total Sync &
+  Backup usage**. Verify positive directional throughput while a file is still
+  running, that the configured limits do not change during refresh, and that
+  paused or completed measurements expire. Confirm Activity Manager shows one
+  **Local Sync resource usage** sampler across open placements and that hiding
+  the app or disabling the entry stops it. Keep the inputs focused while values
+  refresh, then switch account or device and check that prior values disappear.
 - [ ] Run `swift test --package-path macos/ThingtimeNode --filter MacFolderSyncDialogTests`.
   Verify the folder chooser opens as a sheet, leaves the main actor responsive,
   dismisses its own sheet on cancellation, and permits a second chooser.

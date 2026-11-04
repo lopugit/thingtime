@@ -1,6 +1,6 @@
 # 57 — Shared Rust filesystem index and sync
 
-Status: implementation complete; integration, publication and installed acceptance in progress. [Plan](../../PLAN/shared-rust-index-sync.md).
+Status: shared engine implemented and exercised in signed macOS builds. Final integrated verification and protected merge are tracked in [PR #1327](https://github.com/lopugit/thingtime/pull/1327). [Plan](../../PLAN/shared-rust-index-sync.md).
 
 - [x] Audit current search, folder browsing and local/remote sync producers.
 - [x] Start isolated branch from freshly fetched main; preserve existing work.
@@ -13,9 +13,11 @@ Status: implementation complete; integration, publication and installed acceptan
 - [x] Connect authorized watcher invalidations and bounded recovery.
 - [ ] Verify shared resource governance and warm-cache performance.
 - [x] Add iOS in-process Rust and platform observation adapters.
-- [ ] Run regression suites, migration and isolated browser/device acceptance.
-- [ ] Merge through protected PR checks and verify final signed installations.
-- [ ] Verify synthetic upload/download with paths and Timeline retained.
+- [x] Run shared Rust, Commander, Swift, iOS simulator, web Sync and release contract regressions.
+- [x] Install signed Commander and Thingtime on macOS and verify their running binaries.
+- [x] Verify synthetic upload/download byte equality, native consent, window-close continuation, pause and restart, and retained Timeline versions.
+- [ ] Verify Timeline restore, ordinary Files upload and live Sync measurements on the final integrated signed build.
+- [ ] Merge through protected PR checks and verify production deployment.
 
 ## TODO at a later date
 
@@ -24,4 +26,4 @@ Status: implementation complete; integration, publication and installed acceptan
 Mac inventory routing, Rust persistence and other-platform acceptance are
 separate gates. Do not mark them complete based on one backend's unit tests.
 
-Verified: top-level local Cargo workspace; 119 Rust tests passed (one opt-in stress test skipped); embedded Swift scan/symlink/cancellation acceptance; iOS simulator backup/restart + capability tests 2/2. iOS strict two-way folder coverage remains unavailable and is refused explicitly; deletion-free Backup and PhotoKit use Rust. No signed installation of this migration yet.
+The top-level Cargo workspace passed 119 Rust tests, with one opt-in stress test skipped. The embedded Swift fixture exercised scanning, symlinks and cancellation. Both iOS simulator backup/restart and capability tests passed. iOS refuses strict two-way folder coverage while deletion-free Backup and PhotoKit use Rust. On macOS, signed Commander passed a disposable index fixture and signed Thingtime completed an isolated 1 MiB byte round trip. The Mac's requested limits are 40 Mbps for shared transfer and scanning, with a 15% CPU target. Home remains paused.
