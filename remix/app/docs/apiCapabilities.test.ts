@@ -886,3 +886,19 @@ test('private MongoDB connection inventory is registered with matching independe
   for (const version of ['1.1.0', '1.1.1', '1.2.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), true);
   for (const version of [undefined, '1.0.0', '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
 });
+
+
+test('owner-private connections publish their breaking vault contract on both manifests and all active routes', () => {
+  const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
+  const manifest = thingtimeCapabilityManifest('https://connections.example');
+  for (const id of ['connections', 'connections-providers', 'connections-unlink', 'connections-feed', 'connections-filters', 'connections-oauth-begin', 'connections-oauth-callback']) {
+    const doc = apiEndpointDocs.find(doc => doc.id === id)!;
+    assert.equal(legacy.features[`api.${id}`], '2.0.0');
+    assert.equal(manifest.features[`api.${id}`].version, '2.0.0');
+    assert.equal(doc.contractVersion, '2.0.0');
+    assert.equal(typeof routeModules[doc.endpoint.replace('/api/', '')], 'function');
+    assert.ok(manifest.operations.some(op => op.feature === `api.${id}` && op.path === doc.endpoint));
+  }
+  for (const version of ['2.0.0', '2.0.1', '2.1.0']) assert.equal(capabilitySatisfies(version, '2.0.0'), true);
+  for (const version of [undefined, '1.0.0', '3.0.0']) assert.equal(capabilitySatisfies(version, '2.0.0'), false);
+});

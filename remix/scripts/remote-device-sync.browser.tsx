@@ -5,9 +5,10 @@ import { Box, ChakraProvider } from '@chakra-ui/react';
 import { SyncFolderCard } from '../app/components/Devices/SyncFolderCard';
 import { DeviceSyncPanel } from '../app/components/Devices/DeviceSyncBrowser';
 import { apiEndpointDocs } from '../app/docs/apiDocs';
+import type { RemoteSyncStatus } from '../app/fileSync/remoteSyncProtocol';
+
 // Browser fixture uses the canonical registry, without importing server gateway runtime.
 const fixtureCapabilities = (origin: string) => ({ schemaVersion: 1, origin, features: Object.fromEntries(apiEndpointDocs.map(doc => [`api.${doc.id}`, { version: doc.featureVersion ?? '1.0.0' }])) });
-import type { RemoteSyncStatus } from '../app/fileSync/remoteSyncProtocol';
 
 // This fixture has no native bridge, credentials, file access or real backend.
 // Every application fetch is handled here; unknown requests fail closed.
