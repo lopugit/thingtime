@@ -212,6 +212,12 @@ for testing; never import personal browser sessions or production credentials.
 
 ## Native Password AutoFill
 
+Linux and Windows desktop bridge 1.3.0 provides scoped browser autofill and a
+private agent CLI with direct credential delivery, OS-encrypted state and the
+existing per-entry verification policy. It does not advertise system-wide
+AutoFill or passkeys. See [the native password agent contract](native-password-agent.md)
+for prerequisites, first-sign-in limits, supported consumers and packaging.
+
 Native provider code is present in `apple/Passwords` and
 `apple/PasswordProvider`; the desktop bridge negotiates the installed provider.
 This checkout does not expose an iOS native-password bridge; web-only behavior

@@ -1,5 +1,16 @@
 # TESTING.md — per-area manual test checklists
 
+## Linux and Windows native password bridge
+
+- [ ] Build the intended platform package, install with the existing profile preserved, launch with the normal Chromium sandbox, and negotiate the shipped `native.passwords` 1.0.0 manifest. macOS still reports its existing Apple bridge 1.2.0.
+- [ ] Verify OS-backed encryption (Linux libsecret/KWallet; Windows DPAPI), private file permissions/ACLs, and refusal of Linux basic_text or unavailable keyring. Keep first keyring initialization and first Thingtime sign-in distinct from broker availability.
+- [ ] Connect the exact signed-in owner/API origin, approve a bounded task, generate/save/read back a synthetic credential, and retry the same request ID without creating a different password. No secret appears in CLI output, logs, screenshots or grant metadata.
+- [ ] On the installed app, approve the real editable per-entry verification view; wrong password and cancellation deliver nothing. Confirm current-password Always policy and remembered-device policy remain effective. Inspect desktop/narrow/error states and scroll top to bottom without overflow.
+- [ ] Fill an authorized HTTPS top-level document and compare the destination values with the isolated vault source internally. Refuse wrong origin/account/port, cross-origin form, iframe, hidden/ambiguous field, changed document, stale approval and revoked grant. Never submit automatically.
+- [ ] On Linux, use a separate synthetic D-Bus/HOME keyring to verify locked → unlocked on the same daemon, wrong-password refusal, wrong peer refusal and revocation immediately before delivery. Do not use or reset a real login keyring for this test.
+- [ ] Sign out, switch account/API origin, disconnect, expire/release scope and quit; verify grant invalidation and task-browser/profile cleanup. Validate the Windows named pipe and actual DPAPI on a Windows runner separately from a personal-account GUI acceptance.
+- [ ] Record installed personal-account/service sign-in and required passkey presence separately. A successful synthetic API, runtime or package check is not that acceptance.
+
 ## Builder Thing navigation (2026-10-29)
 
 - [ ] Create a page, Component, Action, Schema, data Thing and app folder through Builder. Exact-ID API reads and reloads retain `builder-thing` in the existing `thingtime` array without replacing their other schemas. Ordinary data created outside Builder remains ordinary data.
