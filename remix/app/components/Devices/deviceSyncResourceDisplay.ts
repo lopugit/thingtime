@@ -40,11 +40,11 @@ export function liveDeviceResourceDisplay(input: {
  const scan = idle ? 0 : show ? mbps(resources?.scanBytesPerSecond) : null;
  const nativeCurrent = sampleCurrent && (!idle || sourceSampleAge! <= 1_000);
  return {
-  idle, stale, heartbeatCurrent, sampleCurrent, heartbeatExpiry, sampleExpiry,
-  measurementAt: idle ? observedAt : measuredAt,
+  idle, stale, lastNative: !!measuredAt && !nativeCurrent, heartbeatCurrent, sampleCurrent, heartbeatExpiry, sampleExpiry,
+  measurementAt: idle && nativeCurrent ? observedAt : measuredAt ?? (idle ? observedAt : undefined),
   upload, download, scan, transfer: upload == null || download == null ? null : upload + download,
-  cpu: (show || nativeCurrent) && resources?.cpuStatus === 'measured' ? resources.cpuPercent : null,
-  memory: show || nativeCurrent ? mib(resources?.memoryBytes) : null
+  cpu: !!measuredAt && resources?.cpuStatus === 'measured' ? resources.cpuPercent : null,
+  memory: measuredAt ? mib(resources?.memoryBytes) : null
  };
 }
 
