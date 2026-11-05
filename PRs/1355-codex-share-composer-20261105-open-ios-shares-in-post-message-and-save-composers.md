@@ -121,5 +121,17 @@ cancellation, stale sessions and unauthorized scoped callers are refused.
 Multipart completion carries only uploadId, and signing pages until every part
 is addressed. The nine additive minors are documented in incoming-sharing.md
 and tested against both generated manifests and client requirement maps.
-Focused parser/authorization coverage passes 22 tests. Final built real-API
-checks above the former body thresholds are recorded before source freeze.
+Focused parser/authorization coverage passes 22 tests. The final sanitized built server passed real HTTP checks above the former
+768/256/64/32/16 KiB thresholds: Post 810,107 bytes, Data create/update
+810,116/810,075, comment 270,055, message send/edit 70,110/70,094, link
+20,066, upload 20,138, annotation 20,094 and file commit 34,334. Every write
+returned 200 and exact independent reads retained the full values. Zero-byte
+completion sent an 83-byte uploadId-only body; the file receipt retained its
+34,000-character name and attachment binding. An anonymous 810,044-byte write
+returned 401 and the private exact read returned 404. Both built manifest
+origins advertised all nine expected minors. No runtime correction was needed.
+
+After merging current main, a real Save-picker smoke created and navigated a
+parent and nested folder, verified exact parent IDs, retained the /share route
+and confirmed reachable Save here without submitting content. Integrated
+TypeScript and the 20 focused merged navigation/Save tests pass.

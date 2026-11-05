@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { SHARED_CONTENT_REQUIREMENTS } from '../../../utils/sharedContentCapabilities';
 import { apiEndpointDocs, apiV1DocsRouteKeys, apiV1RouteKeys, createApiCapabilitiesManifest } from '../../../docs/apiDocs';
 import { capabilitySatisfies } from './capabilityContract';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from './thingtimeCapabilities';
@@ -687,6 +688,7 @@ test('authenticated shared-content body contracts publish deliberate minors in b
  for (const [feature,version] of Object.entries(expected)) {
   assert.equal(source.features[feature],version); assert.equal(runtime.features[feature].version,version);
   assert.equal(apiEndpointDocs.find(doc => `api.${doc.id}`===feature)?.contractVersion,version);
+  assert.equal(SHARED_CONTENT_REQUIREMENTS[feature as keyof typeof SHARED_CONTENT_REQUIREMENTS],version);
   const [major,minor]=version.split('.').map(Number);
   assert.equal(capabilitySatisfies(`${major}.${minor-1}.99`,version),false);
   assert.equal(capabilitySatisfies(`${major}.${minor}.1`,version),true);

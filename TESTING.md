@@ -14588,6 +14588,12 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ## Incoming sharing: post, message and save
 
+- Run `npm --prefix remix run test:shared-content`. In an isolated real-API
+  fixture, run `remix/scripts/shared-body-acceptance.mjs` above the former
+  768/256/64/32/16 KiB body thresholds and compare exact readback for all nine
+  changed route contracts. Check anonymous/scoped denial before consuming a
+  body, malformed UTF-8 and cancellation; unrelated control budgets must remain.
+
 - From the real iOS system share sheet, select Thingtime for a link, text, photo,
   Live Photo, PDF, video, audio, ZIP, custom UTI and mixed files/folders. The first
   screen is New post with the content prefilled; no Saved locally dead end.
@@ -14650,4 +14656,3 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - [ ] Open Edit app, choose a saved page or exact Thing ID, test load-more,
       unavailable target refusal, keyboard navigation and narrow modal scrolling.
       Scroll each view top to bottom and verify no overflow/clipping.
-

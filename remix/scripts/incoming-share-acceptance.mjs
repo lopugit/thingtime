@@ -70,7 +70,7 @@ try {
  const owner = await register('incoming-share-owner'), recipient = await register('incoming-share-recipient');
  await stop(server); server = start(process.execPath, [join(source, '.output/server/index.mjs')], { ADMIN_USERNAMES: 'incoming-share-owner' }); await ready(server);
  const manifest = (await api('/.well-known/thingtime-capabilities.json')).data;
- assert.equal(manifest.origin, origin); assert.equal(manifest.features['api.chats-messages'].version, '1.3.0');
+ assert.equal(manifest.origin, origin); assert.equal(manifest.features['api.chats-messages'].version, '1.4.0');
  const chat = (await api('/api/v1/chats', { chatType: 'dm', memberIds: [recipient.data.user.id] }, owner.cookie)).data.chat;
  assert(chat.id);
  const vite = start(process.execPath, ['--input-type=module', '-e', `import {createServer} from 'vite'; const server=await createServer({envFile:false,server:{host:'127.0.0.1',port:${ports.web},strictPort:true}});await server.listen();`], { NODE_ENV: 'development' }, source);

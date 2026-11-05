@@ -81,7 +81,9 @@ and `api.attachment-upload-complete` 1.7.0. Their ready zero-part upload is
 verified through the ordinary storage lifecycle and retains draft expiry.
 Authenticated shared-content JSON uses incremental fatal UTF-8 decoding after
 authorization and rate admission, without an application byte ceiling. Numeric
-budgets remain on unrelated control requests. Annotation, external-link and file
+budgets remain on unrelated control requests. The complete JSON value still
+materializes in runtime memory; upstream transport and storage constraints must
+produce explicit errors rather than truncation. Annotation, external-link and file
 metadata negotiate `api.attachment-annotate` 1.3.0, `api.attachment-link` 1.2.0
 and `api.files` 1.12.0. Multipart signing pages every part; completion sends only
 `uploadId` and the server enumerates all parts.
@@ -102,3 +104,9 @@ path and the native system-sheet harness in `iOS/scripts/share-acceptance.sh`.
 The full acceptance matrix is in [TESTING.md](../TESTING.md#incoming-sharing-post-message-and-save).
 Signed app/TestFlight availability and physical-device acceptance must be
 recorded independently before claiming complete delivery.
+
+Final transport acceptance on the sanitized built server verifies all nine
+changed route families above their former JSON budgets, exact long-value
+readbacks, uploadId-only zero-byte completion and anonymous/private refusals.
+Both API and UI-origin manifests expose the expected minors. This evidence uses
+only disposable accounts, replica-set storage and local attachment bytes.
