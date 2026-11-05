@@ -5941,6 +5941,20 @@ It must still verify the exact uploaded hash/receipt before seal, strict resume,
 and no replay. It does not establish native download acceptance.
 The debug-only Swift fixture observes identity admission/HTTP clock boundaries;
 digest-worker timing includes worker admission, IPC and scheduling.
+The follow-up fixture schedules fresh post-receipt native-page observations
+without awaiting them in the transfer consumer, then drains and asserts them
+before resume/success. It records immutable-operation READY/claim/receipt phases,
+per-session native request intervals and original identity-check provenance.
+Run `macos/ThingtimeNode/.build/debug/MacFolderSyncFixture --self-test-timing`
+after building the fixture to check native clock/request association.
+
+The instrumented 6 November full proof passed: `local.bin` READY 7.703s, claim
+13.670s, server PUT 19.024s. Six completed native calls after claim spent 4.522s
+in identity admission, 0.301s in identity HTTP and 0.075s in other native service.
+This uses the real shared 3-request/second identity scheduler after synthetic
+warm-up, not a cold installed-app baseline. No rate/authentication or production
+concurrency change is included. See the [qualified phase evidence](PRs/1363-codex-native-sync-fixture-lanes-canonical-native-two-way-proof.md#instrumented-follow-up).
+
 
 The fixture pipe multiplexes request IDs against one production native manager.
 `scan-changes` has an independent polling lane; active requests remain serialized,
