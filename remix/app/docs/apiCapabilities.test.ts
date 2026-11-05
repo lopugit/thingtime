@@ -733,9 +733,9 @@ test('filesystem clients negotiate all additive file contracts on both origin ma
 });
 
 test('the local development object-storage route is advertised and registered like every executable endpoint', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.attachment-local-object'], '1.0.1');
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-local-object'], '1.1.0');
 	const discovery = thingtimeCapabilityManifest('https://local.test');
-	assert.equal(discovery.features['api.attachment-local-object'].version, '1.0.1');
+	assert.equal(discovery.features['api.attachment-local-object'].version, '1.1.0');
 	assert.ok(discovery.operations.some((operation) => operation.feature === 'api.attachment-local-object' && operation.path === '/api/v1/attachments/local-object' && operation.methods.includes('PUT')));
 	assert.ok(routeModules['v1/attachments/local-object']);
 });

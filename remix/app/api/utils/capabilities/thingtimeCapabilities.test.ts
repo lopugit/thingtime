@@ -695,3 +695,14 @@ test('authenticated shared-content body contracts publish deliberate minors in b
   assert.equal(capabilitySatisfies(`${major+1}.0.0`,version),false);
  }
 });
+
+test('local native range scope publishes its additive contract on both manifests', () => {
+  const feature = 'api.attachment-local-object';
+  assert.equal(createApiCapabilitiesManifest().features[feature], '1.1.0');
+  const runtime = thingtimeCapabilityManifest('https://local-storage.test');
+  assert.equal(runtime.features[feature].version, '1.1.0');
+  assert.ok(runtime.operations.some(operation => operation.feature === feature && operation.path === '/api/v1/attachments/local-object' && operation.methods.includes('GET')));
+  for (const version of ['1.1.0', '1.1.1', '1.2.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), true);
+  for (const version of [undefined, '1.0.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
+
+});

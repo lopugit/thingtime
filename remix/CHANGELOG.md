@@ -114,6 +114,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-11-06: Remove application JSON body ceilings from authenticated shared-content writes after authorization and rate admission; retain strict UTF-8 decoding, cancellation and unrelated control budgets. Negotiate nine deliberate minor contracts, enumerate upload completion parts server-side, and verify all native share controls above the software keyboard. [Evidence and release boundaries](../PRs/1355-codex-share-composer-20261105-open-ios-shares-in-post-message-and-save-composers.md). **Codex (AI)**
 
+- 2026-11-06: Local attachment storage now signs exact-version native download ranges for 60 seconds, requiring the exact Range header and trusted HTTPS origin; whole-object replay and altered range authority are refused. — Codex (AI)
+
+
 - 2026-11-06: Supply the real Node argument-vector shape in the parallel
   workspace bootstrap test VM after early password-agent CLI discovery was
   added. This repairs the release test fixture without changing app startup,

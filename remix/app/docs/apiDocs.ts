@@ -6403,18 +6403,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-local-object',
-		contractVersion: '1.0.1',
+		contractVersion: '1.1.0',
+		// 1.1.0: range-only native GET authority binds exact version/Range for 60s.
 		// 1.0.1: optional THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN mints absolute
 		// URLs for native and script clients; exact versions carry ETag /
 		// Last-Modified and answer If-None-Match with 304; a PUT whose body ends
 		// early is a 400; foreign version ids read as absent objects.
-		featureVersion: '1.0.1',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Local development object storage',
 		endpoint: '/api/v1/attachments/local-object',
 		summary: 'Filesystem stand-in for the private S3 bucket: serves the server-signed part-upload and download URLs when THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR is set on a developer machine; 404 everywhere else.',
 		detail:
-			'Never active in deployments: the module refuses to start when Vercel environment variables are present (a non-retryable storage configuration failure), and without the directory variable every request answers 404. URLs are minted only by the attachment service (upload part signing and downloads) and carry a ten-minute HMAC signature over every parameter; they are root-relative by default and absolute when THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN names the dev server origin (native uploaders and scripts need the absolute form, exactly like a presigned S3 URL). PUT stores one multipart part after verifying the signed length and SHA-256 checksum — a body that ends early is a 400, never an unhandled error; GET/HEAD stream one exact object version with Range support, the signed Content-Type/Content-Disposition, an ETag and Last-Modified (If-None-Match answers 304). Object keys, upload ids and version ids are validated against fixed grammars so no request can reach outside the storage directory; a version id the stand-in never minted reads as an absent object. Quota, moderation, ACL and copy behaviour are unchanged — they only ever see the AttachmentS3 interface.',
+			'Never active in deployments: the module refuses to start when Vercel environment variables are present (a non-retryable storage configuration failure), and without the directory variable every request answers 404. URLs are minted only by the attachment service (upload part signing and downloads) and carry a ten-minute HMAC signature over every parameter; they are root-relative by default and absolute when THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN names the dev server origin (native uploaders and scripts need the absolute form, exactly like a presigned S3 URL). PUT stores one multipart part after verifying the signed length and SHA-256 checksum — a body that ends early is a 400, never an unhandled error; GET/HEAD stream one exact object version with Range support, the signed Content-Type/Content-Disposition, an ETag and Last-Modified (If-None-Match answers 304). Object keys, upload ids and version ids are validated against fixed grammars so no request can reach outside the storage directory; a version id the stand-in never minted reads as an absent object. Native range targets use a separate 60-second HMAC scope binding the exact object key, immutable version, and Range header. Only GET with the exact signed Range is accepted; HEAD, missing/changed Range and whole-object replay are refused. Range targets are private/no-store, cannot revalidate as 304, and refuse ranges beyond the stored size rather than clamping them. Native target issuance still requires a configured absolute HTTPS origin and all ordinary owner/version/fingerprint checks. Quota, moderation, ACL and copy behaviour are unchanged — they only ever see the AttachmentS3 interface.',
 		auth: {
 			mode: 'none',
 			description: 'Authorization is the short-lived signature minted by the attachment service after its own audience checks. Callers never construct these URLs.'
