@@ -112,6 +112,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Resolve the iOS release Cargo executable through rustup and provision device plus both simulator targets before native tests. Cover Homebrew/custom toolchain paths and missing-executable refusal with an executable workflow regression. **Codex (AI)**
+
 - 2026-11-06: Preserve complete authenticated shared content and Timeline copy/export/compare/checkout without arbitrary content ceilings. Retain authorization, rate admission, canonical depth, storage accounting and request/event/part controls. Negotiate combined Action 1.42 and Timeline 1.19.2; verify a full Unicode Data lifecycle with HTTP bodies over 7 MB and visible share controls above the keyboard. [Evidence and release boundaries](../PRs/1355-codex-share-composer-20261105-open-ios-shares-in-post-message-and-save-composers.md). **Codex (AI)**
 
 - 2026-11-06: Add editable rich fields, context menus and map scale/group controls; keep Editor.js in Builder viewport documents, flush the latest form snapshot, and defer hidden rich editors until first visibility. [Implementation and acceptance](../PRs/1364-codex-builder-rich-text-context-menu-add-authored-rich-text-fields-context-menus-and-map-marker-controls.md). **Codex (AI)**

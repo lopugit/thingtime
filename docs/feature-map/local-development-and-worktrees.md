@@ -177,6 +177,12 @@ Swift/Rust fixture (`apple/FileSync/test-embedded-rust.sh`) and affected native
 host suites before signing and installing. Release listeners include changes in
 this directory for every consuming app.
 
+The iOS TestFlight workflow resolves the stable Cargo executable through rustup,
+preserves custom toolchain homes and installs device plus arm64/x86_64 simulator
+targets before its pre-credential native tests. Its executable setup regression
+is `node --test iOS/scripts/tests/rust-release-toolchain.test.mjs`; the fixture
+runs the actual workflow step without downloading a toolchain or using secrets.
+
 The early Mac sync fixture uses `scripts/mac-fixture-tls.mjs` and the test-only
 `mac-fixture-worker-trust.cjs` preload for ephemeral HTTPS byte storage on 28313.
 API/native identity remain on 28311; only the exact canonical transfer-worker
