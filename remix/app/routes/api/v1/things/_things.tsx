@@ -21,8 +21,10 @@ import {
   appShapeProjections,
   createPost,
   createThing,
+  countThings,
   deleteThing,
   getThing,
+  getThings,
   listThings,
   toPublicPosts,
   toPublicThings,
@@ -109,7 +111,21 @@ export const loader = async ({ request }: { request: Request }) => {
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
 
-  if (params.has('maxCrystalField') || params.has('excludeArchived')) {
+  if (params.has('ids') && (params.getAll('ids').length !== 1 || Array.from(params.keys()).some(key => key !== 'ids' && key !== 'key') || params.getAll('key').length > 1))
+    return json({ ok: false, error: 'ids requires an exact batch read without list or projection parameters' }, { status: 400, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
+
+  const countRequested = params.get('count') === 'true';
+  const countKeys = new Set(['count', 'thingtime', 'schemaId', 'parentId', 'target', 'folder', 'appId', 'builderApp', 'excludeArchived', 'key']);
+  if (['count', 'excludeArchived'].some(key => params.getAll(key).length > 1 || (params.has(key) && params.get(key) !== 'true' && params.get(key) !== 'false')) ||
+      (countRequested && Array.from(params.keys()).some(key => !countKeys.has(key) || params.getAll(key).length !== 1)))
+    return json({ ok: false, error: 'Invalid unpaged Things count or archive filter' }, { status: 400, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
+  if (countRequested && !viewer?.id) return json({ ok: false, error: 'Sign in to count Things' }, { status: 401, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
+
+  if (params.has('offset') && (params.getAll('offset').length !== 1 || !/^(0|[1-9][0-9]*)$/.test(params.get('offset') || '') ||
+      !Number.isSafeInteger(Number(params.get('offset'))) || ['id', 'cursor', 'commentProjection', 'archive', 'sharedRoot', 'maxCrystalField'].some(key => params.has(key))))
+    return json({ ok: false, error: 'offset requires an ordinary un-cursored list and a nonnegative safe integer' }, { status: 400, headers: cors });
+
+  if (params.has('maxCrystalField')) {
     const headers = { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' };
     // Account-scoped OAuth tokens use PAT-shaped authorization with CORS.
     const kind = actor.kind === 'pat' && actor.cors ? 'app' : actor.kind;
@@ -161,11 +177,20 @@ export const loader = async ({ request }: { request: Request }) => {
     }
   }
 
+  if (params.has('ids')) {
+    const headers = { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' };
+    let ids: unknown;
+    try { ids = JSON.parse(params.get('ids')!); }
+    catch { return json({ ok: false, error: 'ids must be a JSON array of Thing ID strings' }, { status: 400, headers }); }
+    const result = await getThings(viewer, ids, app, { signal: request.signal });
+    return json(result.ok === false ? { ok: false, error: result.error } : result, { status: result.ok === false ? result.status : 200, headers });
+  }
+
   const id = (params.get('id') || '').trim();
   if (['schemaId', 'parentId', 'builderApp'].some(key => params.getAll(key).length > 1)) return json({ ok: false, error: 'Crystal filters must be supplied once' }, { status: 400, headers: cors });
   if (params.has('builderApp') && params.get('builderApp') !== 'true') return json({ ok: false, error: 'builderApp must be true' }, { status: 400, headers: cors });
   if (id) {
-    if (params.has('schemaId') || params.has('parentId') || params.has('builderApp')) return json({ ok: false, error: 'Crystal filters apply to Thing lists only' }, { status: 400, headers: cors });
+    if (params.has('schemaId') || params.has('parentId') || params.has('builderApp') || params.has('count') || params.has('excludeArchived')) return json({ ok: false, error: 'Crystal filters apply to Thing lists only' }, { status: 400, headers: cors });
     // commentSort=top|new|old re-orders the shipped comment page of the post
     // projection (round 2 S7); absent keeps the default page, a typo is a 400
     // (never a silently re-ordered thread)
@@ -188,7 +213,8 @@ export const loader = async ({ request }: { request: Request }) => {
     );
   }
 
-  const result = await listThings(
+  const count = countRequested;
+  const result = await (count ? countThings : listThings)(
     viewer,
     {
       commentProjection,
@@ -197,18 +223,21 @@ export const loader = async ({ request }: { request: Request }) => {
       parentId: params.get('parentId'),
       targetId: (params.get('target') || '').trim() || null,
       folder: (params.get('folder') || '').trim() || null,
-      cursor: params.get('cursor'),
-      limit: Number(params.get('limit')) || undefined,
+      cursor: count ? undefined : params.get('cursor'),
+      limit: count ? undefined : Number(params.get('limit')) || undefined,
       appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null,
-      builderAppOnly: params.get('builderApp') === 'true'
+      builderAppOnly: params.get('builderApp') === 'true',
+      excludeArchived: params.get('excludeArchived') === 'true',
+      offset: params.has('offset') ? Number(params.get('offset')) : undefined
     },
     app,
-    { archiveOwnerId: actor.kind === 'user' && user?.accountKind === 'user' ? user.id : undefined }
+    { archiveOwnerId: actor.kind === 'user' && user?.accountKind === 'user' ? user.id : undefined, signal: request.signal }
   );
   if (result.ok === false) {
-    return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
+    return json({ ok: false, error: result.error }, { status: result.status, headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } });
   }
-  return json({ ok: true, things: result.things, nextCursor: result.nextCursor, ...(result.comments ? { comments: result.comments } : {}) }, { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } });
+  if ('count' in result) return json(result, { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } });
+  return json({ ok: true, things: result.things, nextCursor: result.nextCursor, ...('offset' in result ? { offset: result.offset, nextOffset: result.nextOffset } : {}), ...(result.comments ? { comments: result.comments } : {}) }, { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } });
 };
 
 // One endpoint, full CRUD (the GET loader above is the R):

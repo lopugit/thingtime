@@ -1,3 +1,4 @@
+import { requiresCollectionPagingContract } from './savedCollectionContract';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { requiresEditableBlockContract, requiresEditableIntrinsicContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
@@ -68,6 +69,7 @@ export const loadWebpageClient = async (target: WebpageTarget): Promise<WebpageL
 		if (!response.ok) return { status: 'error' };
 		const data = await response.json();
 		if (data?.ok !== true || !Object.prototype.hasOwnProperty.call(data, 'page')) return { status: 'error' };
+		if (requiresCollectionPagingContract(data.page?.crystal?.blocks)) await requireThingtimeCapability('api.webpages-resolve', '1.11.0');
 		return {
 			status: 'ready',
 			data: {
@@ -391,7 +393,10 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
-				if (requiresEditableIntrinsicContract(blocks, ['tt-upload'])) {
+				if (requiresCollectionPagingContract(blocks)) {
+					await requireThingtimeCapability('api.things', '1.49.0');
+					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.18.0');
+				} else if (requiresEditableIntrinsicContract(blocks, ['tt-upload'])) {
 					await requireThingtimeCapability('api.things', '1.47.0');
 					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.16.0');
 				} else if (requiresEditableIntrinsicContract(blocks)) {

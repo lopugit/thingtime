@@ -643,3 +643,34 @@ attachment avatars. `useWebpage` negotiates the upload save minimums.
 through `api/utils/things/numericSummary.ts`, with exact schema/parent filters,
 no item-count cap and no partial success. Run the summary, map overlay/data,
 local UI, Webpage and capability tests plus live saved-page acceptance.
+
+
+`api.things` 1.49.0 advertises exact authenticated counts (`count=true`), shared
+literal archive filtering, and visible ordinal list windows (`offset`) on the
+existing Things endpoint. Both manifests derive this additive contract from
+`apiDocs.ts`; count and list reuse the same canonical scope and exact ACL gates.
+See [Things and folders](things-and-folders.md#exact-authorized-counts-and-visible-offset-windows)
+for query and response semantics, performance limits, and real replica coverage.
+
+
+`api.maps` 1.1.0 adds exact-address `autocomplete:false`, allowlisted geocoding
+confidence/accuracy metadata, and correlated `queries` batches on the existing
+owner/Vault-scoped suggest operation. Batch inputs are validated before key
+access, duplicate addresses share provider calls, processing chunks are not a
+product cap, and failures never return partial results. Permanent results retain
+the exact expected-selection and storage-policy contract. See [Maps](../maps.md).
+
+`api.things` 1.49.0 also adds ordered authenticated `ids` JSON-array exact reads
+on the existing GET endpoint. Missing/denied/protected positions are null;
+canonical ACLs and projections are shared with single reads. This remains a
+registered read-only Action request. URL/response transport limits require
+chunkable clients, never truncation or a maximum dataset size.
+
+
+`api.actions-run` 1.40.0 adds unary `ttExpr:["encodeURIComponent",value]`
+for authored URL components. It accepts string/nullish inputs, refuses other
+types and malformed UTF-16 without leaking the value, and retains the existing
+expression output budget. Programs using it negotiate execution protocol 1.40;
+encoding performs no HTTP operation. Both capability manifests derive this
+version from the canonical registry. Run expression, browser Action protocol
+and capability tests.
