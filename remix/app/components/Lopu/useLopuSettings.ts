@@ -72,7 +72,7 @@ export const LOPU_SETTINGS_PATH = 'settings.lopu';
 
 export const LOPU_SETTINGS_DEFAULTS: LopuSettings = {
  management: 'server',
-	launcher: true,
+	launcher: false,
 	dock: 'free',
 	dockMode: 'overlay',
 	attachCurrentPage: true,
@@ -366,7 +366,7 @@ export const writeLopuWindowGeometry = (geometry: LopuWindowGeometry): void => {
 // ---------------------------------------------------------------------------
 
 export const useLopuSettings = () => {
-	const { thingtime, setThingtime, loading } = useThingtime();
+	const { thingtime, setThingtime, loading, flushThingtimePersistence, canPersistThingtime } = useThingtime();
 
 	const rawSettings = thingtime?.settings?.lopu;
 	const settings = React.useMemo(() => normalizeLopuSettings(rawSettings), [rawSettings]);
@@ -402,8 +402,17 @@ export const useLopuSettings = () => {
 	const setLauncher = React.useCallback(
 		(value: boolean) => {
 			setLopuSetting('launcher', !!value);
+			// This explicit preference action must reach the canonical local store
+			// before a reload can cancel the provider's ordinary debounced save.
+			// The flush drains queued mutations and retains the provider's account
+			// checks; hydration-time edits keep its normal queued autosave behavior.
+			if (canPersistThingtime) {
+				void flushThingtimePersistence?.().catch(() => {
+					// The persistence coordinator reports failures and retains dirty work.
+				});
+			}
 		},
-		[setLopuSetting]
+		[setLopuSetting, flushThingtimePersistence, canPersistThingtime]
 	);
 
 	const setDock = React.useCallback(
