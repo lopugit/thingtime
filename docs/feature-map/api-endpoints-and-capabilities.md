@@ -724,6 +724,14 @@ Timeline block traversal removes the hidden 1,200-block/24-level write and
 comparison limits; existing Component authorization and capture contracts remain.
 Both manifests derive these PATCH versions from the canonical endpoint registry.
 
+The bounded Mac byte transport negotiates independent native
+`fileSingleUploadVersion` 1.0.0; it does not add HTTP endpoints or alter existing
+API feature versions. The host/client continue to negotiate the selected origin's
+attachment start/part/complete/content contracts and use those canonical routes.
+The native proof includes attachment identity/version/size/fingerprint only;
+publication remains the existing guarded Files contract. See the
+[compound transport contract](../mobile-file-sync.md#bounded-compound-mac-upload-transport--2026-11-06).
+
 
 ## Shared-content request transport
 

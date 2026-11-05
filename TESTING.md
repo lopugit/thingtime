@@ -14782,3 +14782,33 @@ the isolated real-API/browser command and the metadata-only session boundary.
   parent scroll must stay in the correct document. Reframe/reopen and exercise
   two fields; failed/slow editor-module loading must allow a fresh open without
   stale editor initialization or a second app runtime.
+
+### Mac compound single-part upload regression
+
+- Run `node --test electron/test/folder-upload-single.test.cjs` and the existing
+  folder upload/batch/duplex suites; run the file-sync suite and Swift
+  `MacSingleUploadOperationTests` plus `MacFolderSyncTests` with the canonical
+  Rust fixture helper built. Exercise regular-source replacement, truncation
+  and growth at emission, PUT and stored-proof boundaries; ready attachments
+  still require final strong source verification.
+- Verify missing/older/breaking `fileSingleUploadVersion`, empty/large/multipart
+  sources, symbolic links and custom mutation policies use the existing path.
+  Revoke the account, grant, configuration or active frame during a held PUT;
+  require cancellation and no file publication. Lose a PUT reply and recover the
+  original attachment/request. Reject malformed or foreign stored content.
+- Keep the single-file reservation and exact guarded destination revision.
+  Create or revise a destination before publication; retain the conflict. The
+  publication hook runs exactly once for a successful guarded commit, and an
+  accepted receipt replay neither reads nor uploads the source again.
+- Compare one canonical warm `test:files:mac-paged -- --two-way-early
+  --normal-early-budget` run with the retained baseline using identical shared
+  identity admission, global 5,000,000 B/s transfer/scan and CPU 15% policies.
+  Keep one persistent fixture process and record native callback boundaries;
+  a compound request spans PUT, so its whole duration is not pre-PUT latency.
+
+- Native Release packaging regression: run
+  `node --test electron/test/native-bundle-build.test.cjs`, then the canonical
+  signed local build with its isolated native cache. Explicit shipped-product
+  compilation must exclude test-only `@testable` fixtures; a failed product or
+  missing shipped executable must stop before staging/replacement. Verify all
+  three Swift binaries and the Rust helper through the signed-bundle verifier.

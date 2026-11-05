@@ -3,7 +3,7 @@ import { parseDeviceSyncResourcePolicy } from './deviceResourcePolicy';
 import { syncRequestHasPacing, parseSyncResourceStatus, type SyncResourceStatus } from './resourceGovernor';
 import { parseNativeFolderBatchResult } from './folderBatch';
 import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './streamingIndex';
-import { parseNativeUploadBatchResult } from './uploadBatch';
+import { parseNativeUploadBatchResult, UPLOAD_BATCH_FILE_BYTES } from './uploadBatch';
 import { canonicalIgnoreRules, createSyncIgnorePolicy } from './syncIgnore';
 import { nativeInventoryPageSize, parseNativeBackupStatus, parseNativeSkippedPage, parseNativeInventoryCapture, parseNativeInventoryPage, type NativeBackupStatus, type NativeBackupCapture, type NativeSkippedPage, type NativeInventoryCapture, type NativeInventoryPage } from './nativeInventory';
 import { canonicalNativeScanExclusions, isNativeScanExcluded } from './nativeScanExclusions';
@@ -53,6 +53,7 @@ export type MobileWriteApproval = { scope: SyncScope; configurationRevision: str
 export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePolicy').DeviceSyncResourcePolicy; resourceLimits?: import('./configuration').FileSyncResourceLimits; resourceScope?: string } & (
 	| { action: 'validate-folder-batch'; rootId: string; batch: Omit<import('./folderBatch').NativeFolderBatchInput, 'remainingMs'>; remainingMs: number }
 	| { action: 'upload-batch'; rootId: string; batch: import('./uploadBatch').NativeUploadBatchInput }
+	| { action: 'upload-single'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'upload-file'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
 	| { action: 'list' | 'choose' | 'conditions' | 'resources' | 'prepare-upload' }
@@ -95,6 +96,7 @@ export type FolderResult = {
 	resources?: SyncResourceStatus;
 	uploadedBatch?: import('./uploadBatch').NativeUploadBatchResult;
 	validatedFolderBatch?: import('./folderBatch').NativeFolderBatchResult;
+	uploadedSingle?: { attachmentId: string; version: string; size: number; fingerprint: ContentFingerprint; payloadBytes: number | null };
 	uploadedFile?: { fingerprint: ContentFingerprint };
 	uploadedPart?: { sha256: string; payloadBytes?: number };
 	writeApproval?: MobileWriteApproval;
@@ -128,6 +130,7 @@ export type FolderCapabilities = Pick<
 	| 'fileResourceLimitsVersion'
 	| 'fileDownloadVersion'
 	| 'fileUploadVersion'
+	| 'fileSingleUploadVersion'
 	| 'fileUploadBatchVersion'
 	| 'fileFolderBatchVersion'
 	| 'fileAccessVersion'
@@ -239,6 +242,7 @@ export const supportsNativePathInspection = (bridge: FolderCapabilities | undefi
 	const minimum = bridge?.platform === 'macos' ? 4 : bridge?.platform === 'ios' ? 2 : undefined;
 	return minimum !== undefined && /^1\.\d+\.\d+$/.test(bridge?.fileAccessVersion ?? '') && Number(bridge!.fileAccessVersion!.split('.')[1]) >= minimum;
 };
+export const supportsNativeSingleUpload = (bridge: FolderCapabilities | undefined) => bridge?.platform === 'macos' && capabilitySatisfies(bridge.fileSingleUploadVersion ?? '', '1.0.0');
 export const supportsNativeFileUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsNativePartUploads(bridge) && Number(bridge!.fileUploadVersion!.split('.')[1]) >= 2;
 export const supportsNativeBackgroundUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
@@ -412,6 +416,14 @@ export function parseMobileFolderResult(
 	if (['scan', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-page', 'scan-skips', 'scan-discard', 'scan-stream', 'scan-changes', 'scan-stream-finish'].includes(request.action)) {
 		const rules = canonicalIgnoreRules('ignoreRules' in request ? request.ignoreRules : undefined);
 		if (rules !== (payload.ignoreRules === undefined ? '' : payload.ignoreRules)) throw Error('Native scan ignore rules changed.');
+	}
+	if (request.action === 'upload-single') {
+		const file = payload.uploadedSingle, upload = request.upload;
+		if (!validFileUpload(upload) || upload.source.size > UPLOAD_BATCH_FILE_BYTES || payload.rootId !== request.rootId || !file ||
+			file.attachmentId !== upload.uploadId || !/^[a-f0-9]{64}$/.test(file.version) || file.size !== upload.source.size ||
+			!validContentFingerprint(file.fingerprint, file.size) || !equalContentFingerprints(file.fingerprint, upload.source.fingerprint!) ||
+			(file.payloadBytes !== null && file.payloadBytes !== 0 && file.payloadBytes !== file.size)) throw Error('Invalid native single upload receipt.');
+		result.uploadedSingle = structuredClone(file);
 	}
 	if (request.action === 'upload-file') {
 		const file = payload.uploadedFile,
@@ -780,6 +792,7 @@ export function requestMobileFolders(
 		return Promise.reject(Error('Inventory pages require a supported Mac or iOS app.'));
 	if (request.action === 'inspect' && (!supportsNativePathInspection(bridge) || !validSyncPath(request.path)))
 		return Promise.reject(Error('Path inspection requires a supported app and a relative path.'));
+	if (request.action === 'upload-single' && (!supportsNativeSingleUpload(bridge) || !validFileUpload(request.upload) || request.upload.source.size > UPLOAD_BATCH_FILE_BYTES)) return Promise.reject(Error('Unsupported native single upload.'));
 	if (request.action === 'upload-file' && (!supportsNativeFileUploads(bridge) || !validFileUpload(request.upload)))
 		return Promise.reject(Error('Native file upload requires a supported app and a canonical source.'));
 	if (request.action === 'upload-part' && (!supportsNativePartUploads(bridge) || !validPartUpload(request.upload)))
@@ -1042,6 +1055,16 @@ export function mobileFolderSource(
 		if (result.chunk!.size !== entry.size) throw Error('Native source changed.');
 	};
 	return {
+		...(entry.size > 0 && entry.size <= UPLOAD_BATCH_FILE_BYTES && !entry.symbolicLink && supportsNativeSingleUpload(bridge) ? {
+			uploadSingle: async (upload: NativeFileUpload, callerSignal?: AbortSignal) => {
+				const active = callerSignal ? AbortSignal.any([signal, callerSignal]) : signal;
+				active.throwIfAborted();
+				const result = await request(ownerId, { action: 'upload-single', rootId, upload: { ...upload, source: entry } }, active);
+				active.throwIfAborted();
+				if (!result.uploadedSingle) throw Error('Native single upload receipt is missing.');
+				return result.uploadedSingle;
+			}
+		} : {}),
 		...(entry.size > 0 && supportsNativeFileUploads(bridge)
 			? {
 					uploadFile: async (upload: NativeFileUpload, callerSignal?: AbortSignal, progress?: (bytes: number, total: number) => void) => {

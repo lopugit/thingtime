@@ -19,6 +19,7 @@ export type ThingtimeNativeBridge = {
   fileDownloadVersion?: string;
   fileUploadVersion?: string;
   fileUploadBatchVersion?: string;
+  fileSingleUploadVersion?: string;
   fileFolderBatchVersion?: string;
   fileStagingVersion?: string;
   filePublicationVersion?: string;

@@ -189,6 +189,12 @@ API/native identity remain on 28311; only the exact canonical transfer-worker
 child receives the public test CA. `mac-fixture-tls.test.mjs` covers correct,
 wrong and missing CA trust plus unrelated-child isolation. No OS trust changes.
 
+Native Release packaging uses the explicit shipping-product set in
+`macos/ThingtimeNode/scripts/build-bundle.sh`, shared by build, executable checks
+and copying. Test-only Swift fixtures remain in the debug lane. Run
+`electron/test/native-bundle-build.test.cjs` for required-product failure/missing
+executable refusal before staging, then the canonical signed bundle verification.
+
 Fixture phase evidence uses `FixtureReceiptObservations` and request timing in
 `mac-fixture-transport.mjs`; native clock provenance lives only in the
 `Tests/MacFolderSyncFixture` executable (`--self-test-timing`). Proof observers
