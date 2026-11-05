@@ -14612,5 +14612,14 @@ the isolated real-API/browser command and the metadata-only session boundary.
   composer, menus, folder dialog and toolbar customisation. No hidden Send/Save,
   clipped labels or overlap. Edit a toolbar icon, label, action and pixel block
   individually, save/reload, then restore the task fixture.
+- On the actual iOS keyboard, check the existing Post button's center hit target
+  above the context toolbar before submitting. Persist a non-secret exact-result
+  receipt before test cleanup; DOM innerText line wrapping is not a stored-text
+  equality check.
+- Create more than 500 comments through supported APIs in an isolated fixture.
+  Verify exact direct/thread counts, bounded default/new/old/top preview windows,
+  tie ordering and complete cursor access. Include large comment bodies, nested
+  replies, overlapping selected roots, reactions and moderation/ACL refusals.
+  A processing page size must never become a total comment limit.
 - Record web fixture, simulator, signed build, TestFlight processing and physical
   device evidence separately. A fake native bridge proves the web adapter only.
