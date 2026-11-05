@@ -5,13 +5,14 @@ const { TransferWorkerDisconnected } = require('./folder-transfer-process.cjs');
 const { stageFolderDownload } = require('./folder-download.cjs');
 const { uploadFolderPart, uploadRetry, retryableUploadFailure } = require('./folder-upload.cjs');
 const { validateFolderBatchInput, validateFolderBatchReply } = require('./folder-validate-batch.cjs');
+const { uploadFolderSingle } = require('./folder-upload-single.cjs');
 const { uploadFolderBatch } = require('./folder-upload-batch.cjs');
 const { BATCH_FAILURE_FIELDS } = require('./folder-sync-diagnostics.cjs');
 const { stageRangeMetadata } = require('./folder-stream.cjs');
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
 const { randomUUID } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
-const ACTIONS = new Set(['validate-folder-batch', 'upload-batch', 'resources', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-download', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
+const ACTIONS = new Set(['validate-folder-batch', 'upload-batch', 'upload-single', 'resources', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-download', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
 const supportsBatchPages = version => {
     const parts = typeof version === 'string' && version.length <= 32 && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(version);
     return !!parts && parts[1] === '1' && Number.isSafeInteger(Number(parts[2])) && Number.isSafeInteger(Number(parts[3])) && Number(parts[2]) >= 10;
@@ -274,6 +275,7 @@ class DesktopFolderSync {
             apiOrigin: context.apiOrigin, ownerId: input.ownerId, deviceId: input.deviceId,
             supported: supportsBatchPages(value?.capabilities?.fileAccessVersion),
             folders: /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value?.capabilities?.fileFolderBatchVersion ?? ''),
+            single: /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value?.capabilities?.fileSingleUploadVersion ?? ''),
             bulk: /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value?.capabilities?.fileUploadBatchVersion ?? ''),
             // Public feature negotiation belongs to this exact live binding,
             // never to an authorization TTL or an account/device grant.
@@ -328,15 +330,15 @@ class DesktopFolderSync {
         const lane = input.action === 'scan-changes' ? 'streamWaiter' : input.action === 'resources' ? 'resourceRequest' : 'active';
         const state = { context, folderDeadline: input.action === 'validate-folder-batch' ? this.now() + input.remainingMs : null, input: structuredClone(input), abort: new AbortController(), dispatched: false, lane, phase: 'admission' };
         const policy = state.input.resourceLimits ?? { cpuPercent: 15, uploadBytesPerSecond: 625000, downloadBytesPerSecond: 625000 };
-        const governedPayload = policy && ((['upload-part', 'upload-batch'].includes(input.action) && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||
+        const governedPayload = policy && ((['upload-part', 'upload-batch', 'upload-single'].includes(input.action) && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||
             (input.action === 'stage-download' && (policy.downloadBytesPerSecond || policy.cpuPercent)) ||
             (['stage-finish', 'publish'].includes(input.action) && policy.cpuPercent));
         const timer = governedPayload ? null : setTimeout(() => this.cancel(state), state.folderDeadline === null ? this.timeoutMs : Math.min(this.timeoutMs, input.remainingMs)); timer?.unref?.();
-        const verify = async () => {
+        const verify = async (externalSignal) => {
             const previousPhase = state.phase;
             state.phase = 'account-verification';
             this.assertCurrent(state);
-            const signal = AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]);
+            const signal = AbortSignal.any([state.abort.signal, ...(externalSignal ? [externalSignal] : []), AbortSignal.timeout(20_000)]);
             await timing.measure('account', () => this.verifyAccount(context, signal)); this.assertCurrent(state);
             state.phase = previousPhase;
         };
@@ -379,7 +381,7 @@ class DesktopFolderSync {
                 if (!this.samePageCapability(context, state.input)?.supported)
                     throw new Error('This native host does not support larger inventory pages. Update Thingtime and reconnect.');
             }
-            if (state.input.action === 'upload-part') {
+            if (['upload-part', 'upload-single'].includes(state.input.action)) {
                 state.phase = 'capability-verification';
                 let manifest = this.samePageCapability(context, state.input)?.apiCapabilities;
                 if (!manifest) {
@@ -396,6 +398,7 @@ class DesktopFolderSync {
                 state.input.remainingMs = Math.floor(state.folderDeadline - this.now());
                 validateFolderBatchInput(state.input, context);
             }
+            if (state.input.action === 'upload-single' && !this.samePageCapability(context, state.input)?.single) throw new Error('This native host does not support compound single uploads.');
             if (state.input.action === 'upload-batch') {
                 const capability = this.samePageCapability(context, state.input);
                 if (!capability?.bulk || !/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(capability.apiCapabilities?.features?.['api.file-sync-batches']?.version ?? ''))
@@ -408,7 +411,7 @@ class DesktopFolderSync {
             }
             state.phase = 'native-request';
             state.dispatched = true;
-            const value = state.input.action === 'upload-batch' ? await uploadFolderBatch({ input: state.input, context, signal: state.abort.signal,
+            const value = state.input.action === 'upload-single' ? await uploadFolderSingle({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, fetchUpload: this.fetchUpload, signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); } }) : state.input.action === 'upload-batch' ? await uploadFolderBatch({ input: state.input, context, signal: state.abort.signal,
                 assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, fetchUpload: this.fetchUpload, refreshPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); } }) :
                 state.input.action === 'upload-part' ? await uploadFolderPart({ input: state.input, context,
                 signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), fetchUpload: this.fetchUpload,
@@ -429,6 +432,7 @@ class DesktopFolderSync {
                     value.capabilities = { ...value.capabilities, fileDownloadVersion: '1.0.1' };
                 if (/^1\.([2-9]|[1-9][0-9]+)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileAccessVersion ?? ''))
                     value.capabilities = { ...value.capabilities, fileUploadVersion: '1.1.0' };
+                if (!/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileSingleUploadVersion ?? '') || !/^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(apiCapabilities?.features?.['api.attachment-upload-parts']?.version ?? '')) delete value.capabilities?.fileSingleUploadVersion;
             }
             await verify();
             if (!value || typeof value !== 'object' || value.requestId !== input.requestId || value.ownerId !== input.ownerId ||

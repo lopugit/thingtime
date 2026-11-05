@@ -310,3 +310,18 @@ metadata, never an executable relative file path or a grant to any ancestor.
 The bookmark and current owner verification remain authoritative; no public
 capability manifest contains a physical path. Existing cloud destinations are
 not renamed, moved or migrated by this additive native response.
+
+The folder context additionally advertises `fileSingleUploadVersion` 1.0.0.
+`upload-single` reuses the existing authenticated duplex callback channel for
+bounded regular files and performs fresh entry/exit identity checks and strong
+source reads around emission, PUT and stored verification. This transport never
+owns publication: it returns an exact attachment content proof to the original
+single-file executor. Other sources/hosts retain the existing path; see
+[the compound contract](../../docs/mobile-file-sync.md#bounded-compound-mac-upload-transport--2026-11-06).
+
+The canonical bundle builder explicitly compiles only the shipped Swift products
+`ThingtimeNode`, `ThingtimeNodeBridge` and `ThingtimeSpeech` in Release, then checks
+and copies that same product set before signing. Test-only fixture executables
+can retain private `@testable` instrumentation in their separate debug lane.
+`electron/test/native-bundle-build.test.cjs` proves a failed required product and
+a missing executable both stop before any staged bundle replacement.

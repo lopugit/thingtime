@@ -198,7 +198,7 @@ async function startNative() {
         try {
             assert.ok(line.length <= 1_000_000);
             const value = JSON.parse(line);
-            if (value.type !== 'chunk') {
+            if (value.type !== 'chunk' && value.type !== 'batch') {
                 const action = transport.pending.get(value.requestId)?.payload.action;
                 if (action && Number.isFinite(value.serviceMs) && value.serviceMs >= 0) {
                     const metric = nativeServiceTiming[action] ??= { count: 0, totalMs: 0, maxMs: 0 };
@@ -251,7 +251,7 @@ async function stopNative() {
 		nativeExit = undefined;
 	}
 }
-async function send(payload: any, signal?: AbortSignal) {
+async function send(payload: any, signal?: AbortSignal, options: any = {}) {
     assert.ok(native && nativeTransport);
     nativeCalls++;
     markEarlyRequest('native ' + payload.action);
@@ -259,7 +259,7 @@ async function send(payload: any, signal?: AbortSignal) {
     if (payload.action === 'read-range') { counts.streams++; counts.streamedBytes += payload.length; }
     if (payload.action === 'publish') counts.publishes++;
     if (payload.action === 'stage-range') { counts.stageRanges++; counts.stagedBytes += payload.bytes.length; }
-    return nativeTransport.request(payload, signal);
+    return nativeTransport.request(payload, signal, options);
 }
 const signal = new AbortController().signal;
 let canonicalHost: Awaited<ReturnType<typeof createMacFixtureHost>> | undefined;

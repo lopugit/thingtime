@@ -680,3 +680,12 @@ test('desktop advertises the signed download recovery patch on compatible stagin
     const reply = await f.host.request(f.event, f.input({ action: 'context' }));
     assert.equal(reply.capabilities.fileDownloadVersion, '1.0.1');
 });
+
+test('compound upload dispatch requires an independently negotiated native capability', async () => {
+ const f = fixture();
+ f.run(async (_method, request) => ({ ...request, roots: [], capabilities: { fileAccessVersion: '1.19.0' } }));
+ await f.host.request(f.event, f.input({ action: 'context', origin: undefined }));
+ const before = f.calls.length;
+ await assert.rejects(f.host.request(f.event, f.input({ action: 'upload-single', rootId: randomUUID() })), /support/);
+ assert.equal(f.calls.length, before);
+});

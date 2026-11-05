@@ -112,6 +112,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Exercise iOS inventory regressions through its supported backup mode and explicitly verify strict-watcher refusal; retain macOS strict coverage and all paging, policy, integrity and cancellation assertions. Full iOS runtime: 262 tests, zero failures, 10 existing opt-in skips. **Codex (AI)**
+
+- 2026-11-06: Add an independently negotiated bounded Mac compound byte upload beneath the existing guarded single-file commit, preserving fresh identity checks, callback-time authority and shared resources. Larger/custom-policy sources retain their existing transport. [PR 1375 verification](../PRs/1375-native-compound-upload-reduce-mac-upload-latency.md).
+- 2026-11-06: Keep private Swift fixtures out of the canonical Release bundle build; compile/check/copy the same explicit shipped-product set and refuse failed or missing binaries before staging. [PR 1375](../PRs/1375-native-compound-upload-reduce-mac-upload-latency.md).
 - 2026-11-06: Resolve the iOS release Cargo executable through rustup and provision device plus both simulator targets before native tests. Cover Homebrew/custom toolchain paths and missing-executable refusal with an executable workflow regression. **Codex (AI)**
 
 - 2026-11-06: Preserve complete authenticated shared content and Timeline copy/export/compare/checkout without arbitrary content ceilings. Retain authorization, rate admission, canonical depth, storage accounting and request/event/part controls. Negotiate combined Action 1.42 and Timeline 1.19.2; verify a full Unicode Data lifecycle with HTTP bodies over 7 MB and visible share controls above the keyboard. [Evidence and release boundaries](../PRs/1355-codex-share-composer-20261105-open-ios-shares-in-post-message-and-save-composers.md). **Codex (AI)**

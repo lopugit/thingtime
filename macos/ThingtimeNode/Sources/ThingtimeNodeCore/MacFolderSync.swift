@@ -6,7 +6,7 @@ import Foundation
 @MainActor
 public final class MacFolderSync {
     public static let version = "1.19.0"
-    private static let supportedActions: Set<String> = ["validate-folder-batch", "upload-batch", "resources", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
+    private static let supportedActions: Set<String> = ["validate-folder-batch", "upload-batch", "upload-single", "resources", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
@@ -31,6 +31,7 @@ public final class MacFolderSync {
         let captureId: String?; let capture: MobileFolderInventory.Capture?; let inventoryDeviceId: String?
         let trash: MobileSyncTrash.Request?; let restore: MobileSyncTrash.Restore?; let cursor: String?
         let batch: JSONValue?
+        let upload: MacSingleUploadOperation.Request?
         let resourceLimits: SyncResourceLimits?; let resourceScope: String?
         let deviceResourceLimits: DeviceSyncResourcePolicy?
         let remainingMs: Int?
@@ -507,7 +508,7 @@ public final class MacFolderSync {
         let resourceControl = r.action == "resources" && r.rootId == nil
         guard resourceControl ? resourceRequest == nil : (waiting ? streamWaiter == nil : active == nil) else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
         guard Self.supportedActions.contains(r.action) else { throw MobileFolderStore.Failure.invalid }
-        guard (r.action == "read-range") == (stream != nil), (r.action == "stage-range") == (receive != nil), (r.action == "upload-batch") == (batchCallback != nil) else { throw MobileFolderStore.Failure.invalid }
+        guard (r.action == "read-range") == (stream != nil), (r.action == "stage-range") == (receive != nil), (["upload-batch", "upload-single"].contains(r.action)) == (batchCallback != nil) else { throw MobileFolderStore.Failure.invalid }
         let task = Task {
             let began = ProcessInfo.processInfo.systemUptime
             var failure: Error?
@@ -544,7 +545,7 @@ public final class MacFolderSync {
         if resourceControl { resourceRequest = (r.requestId, r.ownerId, r.deviceId, task) }
         else if waiting { streamWaiter = (r.requestId, r.ownerId, r.deviceId, task) }
         else { active = (r.requestId, r.ownerId, r.deviceId, task) }
-        let governedPayload = (r.action == "upload-batch" && (r.resourceLimits?.uploadBytesPerSecond != nil || r.resourceLimits?.cpuPercent != nil)) ||
+        let governedPayload = (["upload-batch", "upload-single"].contains(r.action) && (r.resourceLimits?.uploadBytesPerSecond != nil || r.resourceLimits?.cpuPercent != nil)) ||
             (["stage-finish", "publish"].contains(r.action) && r.resourceLimits?.cpuPercent != nil)
         let timeout = Task {
             if governedPayload { return }
@@ -662,6 +663,7 @@ public final class MacFolderSync {
         } else if r.action == "context" {
             var capabilities: [String: JSONValue] = ["fileAccessVersion": .string(Self.version), "fileSymbolicLinksVersion": .string("1.0.0"), "fileStagingVersion": .string("1.1.0"), "filePublicationVersion": .string("1.2.0")]
             if inventories.supportsResourceGovernance { capabilities["fileResourceLimitsVersion"] = .string("1.1.0") }
+            capabilities["fileSingleUploadVersion"] = .string("1.0.0")
             capabilities["fileUploadBatchVersion"] = .string("1.0.0")
             capabilities["fileFolderBatchVersion"] = .string("1.0.0")
             if trash != nil, approveTrash != nil { capabilities["fileTrashVersion"] = .string(approveRestore == nil ? "1.1.1" : "1.2.1") }
@@ -737,6 +739,24 @@ public final class MacFolderSync {
                     }
                     try current(); inspectedGrant = grant
                     result["validatedFolderBatch"] = .object(["ok": .bool(true), "version": .number(1), "batchId": .string(batch.batchId), "digest": .string(batch.digest), "results": .array(rows)])
+                }
+                else if r.action == "upload-single" {
+                    guard let upload = r.upload, let batchCallback, grant.sourceKind == nil else { throw MobileFolderStore.Failure.invalid }
+                    let (network, chargingOnly) = try upload.policy(owner: owner, root: root, device: r.deviceId, limits: r.resourceLimits)
+                    let bookmark = grant.bookmark
+                    func current() throws {
+                        try Task.checkCancellation()
+                        let current = try store.grant(owner, id: root), status = conditions()
+                        guard current.bookmark == bookmark, current.sourceKind == nil,
+                              ["wifi", "cellular", "ethernet"].contains(status.network), network != "wifi" || status.network == "wifi",
+                              !chargingOnly || status.charging == true else { throw MobileFolderStore.Failure.changed }
+                    }
+                    try current()
+                    result["uploadedSingle"] = try await MacSingleUploadOperation.run(upload,
+                        check: { try await MainActor.run { try current() } }, read: { sha in
+                            try await self.worker { try MobileFolderBulkReader.read(bookmark: bookmark, expected: upload.source, sha256: sha) }
+                        }, callback: batchCallback)
+                    try current(); inspectedGrant = grant
                 }
                 else if r.action == "upload-batch" {
                     guard let raw = r.batch, let batchCallback, grant.sourceKind == nil else { throw MobileFolderStore.Failure.invalid }

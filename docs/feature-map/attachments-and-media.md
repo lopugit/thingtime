@@ -1,5 +1,14 @@
 # Attachments and media
 
+The shared `MobileFolderInventoryTests` use macOS strict capture and iOS's
+explicit supported backup mode for persisted paging/integrity assertions.
+The real embedded iOS transport must advertise no strict watcher coverage and
+refuse strict capture, async strict preparation and inline strict preparation.
+`MobileFolderBridge.startInventoryCapture` requires `backup-supported` for
+folders and calls `prepareBackup`/`sealBackup`; legacy strict calls still refuse.
+Run that suite on both platforms and Rust workspace tests; see `TESTING.md`
+"Shared Rust filesystem index and sync" for the separate coverage guarantees.
+
 ## Incoming shares
 
 The iOS system Share extension hosts the ordinary `/share` web composer through
@@ -747,3 +756,16 @@ contract with a separate 60-second HMAC GET scope bound to the immutable version
 and exact Range. Native target issuance preserves owner/fingerprint gates and
 requires an absolute HTTPS storage origin. Run `localAttachmentStorage.test.ts`
 and `attachments.test.ts` for scope refusal, byte correctness and owner checks.
+
+### Mac compound transport
+
+`MacSingleUploadOperation.swift`, `folder-upload-single.cjs` and the shared
+`FingerprintSource.uploadSingle` negotiate `fileSingleUploadVersion` 1.0.0 for
+a bounded regular-file transport under the existing single-file executor.
+Strong source checks surround emission, PUT and stored verification. Current
+account/configuration/grant authority and shared resources remain mandatory;
+publication stays in `cloudTransport.ts`'s guarded `/files` path. Larger files,
+symbolic links, custom hooks and unsupported capabilities retain their existing
+transport. Run `MacSingleUploadOperationTests`, `folder-upload-single.test.cjs`,
+`nativeUpload.client.test.ts` and `cloudTransport.test.ts`; see the dated
+[transport contract](../mobile-file-sync.md#bounded-compound-mac-upload-transport--2026-11-06).
