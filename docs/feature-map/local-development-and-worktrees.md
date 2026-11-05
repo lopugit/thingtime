@@ -188,3 +188,9 @@ Native Release packaging uses the explicit shipping-product set in
 and copying. Test-only Swift fixtures remain in the debug lane. Run
 `electron/test/native-bundle-build.test.cjs` for required-product failure/missing
 executable refusal before staging, then the canonical signed bundle verification.
+
+Fixture phase evidence uses `FixtureReceiptObservations` and request timing in
+`mac-fixture-transport.mjs`; native clock provenance lives only in the
+`Tests/MacFolderSyncFixture` executable (`--self-test-timing`). Proof observers
+must drain before success/resume while leaving the consumer unblocked. Shipping
+Swift sources, authorization, rates and native active-slot policy are unchanged.

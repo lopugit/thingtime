@@ -101,3 +101,9 @@ The fixture and private identity admission actor remain test-only/internal.
 The new regression executes the canonical shell entry with isolated commands:
 a required product failure and a missing executable both stop before staging.
 The final signed build/install remain subject to ordinary validation and PR gates.
+
+The merged timing/provenance PR 1373 was integrated after signed staging.
+All shipped/build inputs remain byte-identical to the verified `e675e702` tree;
+only fixture/documentation/graph integration is involved. The same-process
+duplex and conditional ordinary-request dispatch are retained. The existing
+verified signed bundle is reused rather than rebuilding unchanged runtime code.
