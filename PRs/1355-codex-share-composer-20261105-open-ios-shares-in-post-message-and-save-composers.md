@@ -211,9 +211,10 @@ Final source checks include TypeScript, 150 capability/client contracts,
 (341 + 31). Scoped lint has zero errors; inherited hook/mixed-operator warnings
 remain reported in the logs. No new native Post publication was performed.
 
-Graph retention is temporarily two complete snapshots for this PR's main
-baseline/current output, to avoid generated rename conflicts during CI. Exactly
-one alias is active; the project default and global policy are unchanged. The
+Graph retention temporarily preserves the three complete baseline variants
+inherited from main plus this PR's current output (four archives total), to avoid
+generated rename conflicts during CI. Exactly one snapshot is active; the
+project default and global policy are unchanged. The
 final refresh is structural only, with the semantic coverage limitation above.
 
 The final read-only main refresh contained only native-sync fixture and
