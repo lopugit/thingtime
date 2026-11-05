@@ -13903,6 +13903,14 @@ separate from deterministic discovery/lease tests.
   fields, same-account source refresh before asynchronous editor delivery, literal
   legacy `<...>`, empty documents and unsafe rich links. Repeat in the actual
   Builder iframe/owner document with selection, toolbar, Escape and focus checks.
+- [ ] Open a selected marker menu, reconcile the same source/point scope, then
+  activate a delayed command. Preserve the same native popup and keyboard focus,
+  discover newly conditional triggers/items, and retain distinct member IDs.
+  Disable, replace the actual content slot or remove its owner: close the old
+  popup. Repeat desktop/mobile and Builder iframe; Action capture stopping
+  propagation must still dismiss after native form/input snapshot capture. Native
+  required-field refusal and rich-adapter refusal must keep the popup visible;
+  preserve native validation focus, repair the fields and verify one exact save.
 - [ ] Verify right-click and ContextMenu/Shift+F10 never fire the primary marker
   action; ordinary touch trigger opens the same menu. Authored grid display must
   not expose closed popovers. Test viewport corners, desktop/mobile bottom scroll,
