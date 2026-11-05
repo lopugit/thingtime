@@ -105,3 +105,7 @@ test('favourite and stop selection can use separate local state without changing
 		op: 'query', scope: 'page', params: { routeId: 'current', favoriteId: 'a' }
 	});
 });
+
+test('marker selection can atomically navigate to its related view', () => {
+ assert.deepEqual(markerSelection({ group: 'favourite', id: 'item' }, { onSelectQuery: 'favoriteId', onSelectQueryParams: { view: 'favourites' }, queryScope: 'page' }, { view: 'routes' }), { op: 'query', scope: 'page', params: { view: 'favourites', favoriteId: 'item' } });
+});

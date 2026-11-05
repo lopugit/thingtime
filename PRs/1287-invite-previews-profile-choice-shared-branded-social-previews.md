@@ -211,3 +211,9 @@ Final scoped merge review preserved main's current floating-Lopu preference,
 settings persistence and regression fixtures; unrelated older branch versions
 were not allowed to roll back that delivered behavior. Final preview suite:
 65 tests plus 3 generator tests passed.
+
+During release, main advanced through PR1351 collection paging. The integration
+retains that behavior and advertises the passive shared-root correction as
+Things1.49.1 and Actions1.40.1 over its newer contracts. Preview versions remain
+metadata1.2.0/card1.4.0. This integration does not roll back collection paging,
+map capabilities or the floating-Lopu preference.
