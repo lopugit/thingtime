@@ -14311,6 +14311,15 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ### Mac strict inventory job
 
+- [ ] Native upload-batch peers must verify only the submitted receipt subset.
+  Force the first admission window to expire after accepted bodies begin, then
+  complete all 256 files through fresh request identities with the same original
+  descriptor/operation IDs and stored receipts. Assert exactly one PUT per file,
+  both identity checks per window, retryable deadline rows, and no PUT admission
+  after expiry. Run the six `MacUploadBatchOperationTests` and canonical upload
+  batch journal recovery tests; never widen production deadlines to make a
+  host-dependent test pass. These synthetic checks do not establish live server
+  grant acceptance or identify an uninstrumented CI cancellation's cause.
 - [ ] On desktop and narrow mobile, expand a folder, open a connection draft,
   type without saving and keep input focus while an automatic check starts and
   finishes. The same input, expansion, scroll anchor and unsaved text must stay

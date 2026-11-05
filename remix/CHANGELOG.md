@@ -112,6 +112,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Correct the native upload-batch test peer to verify only requested
+  upload receipts. Exercise admission expiry and completion of all 256 files
+  across fresh bounded requests with retained operation IDs, receipt reuse and
+  no duplicate PUTs. Production expiry, authorization and resource policy are
+  unchanged; this is a test-only release follow-up.
+  **Codex (AI)**
+
 - 2026-11-06: Keep Mac folder settings mounted independently of background
   sync runs, preserve focused unsaved connection drafts while automatic checks
   run, and retain scoped resource measurements with explicit historical labels
