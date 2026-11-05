@@ -58,18 +58,25 @@ const blocks: WebpageBlock[] = [
 	}, text: 'Open a deep link' }
 ];
 
+const markerCommand = { tag: 'button', props: { type: 'button', 'data-tt-action': '$ui',
+ 'data-tt-action-inputs': JSON.stringify({ op: 'query', scope: 'page', params: { markerId: '{point.id}', markerCommand: '{point.id}' } }) }, children: ['Use marker'] };
+const markerContentSlot = (tag: string) => ({ tag, props: { 'data-tt-menu-slot': 'content', style: { display: 'grid' } }, children: [markerCommand, { ttIf: { arg: 'sourceRevision', then: { tag: 'button', props: { type: 'button' }, children: ['Refreshed marker action'] } } }] });
 const markerComponents = buildComponentsByRef({
-	refs: { 'saved-marker': 'resolved-marker', 'other-component': 'resolved-other', 'missing-marker': null },
-	components: [
-		{ id: 'resolved-marker', crystal: { args: [{ name: 'badge', type: 'string', default: '' }], render: {
-			tag: 'div', children: [
-				{ tag: 'button', props: { 'aria-pressed': '{point.selected}', type: 'button', 'data-tt-action': '$ui', 'data-tt-action-inputs': JSON.stringify({ op: 'query', scope: 'page', params: { markerId: '{point.id}' } }) }, children: ['{badge} · {point.label}'] },
-				{ tag: 'p', children: ['Row: {item.crystal.markerLabel}'] },
-				{ tag: 'input', props: { 'aria-label': 'Draft {point.label}' } }
-			]
-		} } },
-		{ id: 'resolved-other', crystal: { render: { tag: 'p', children: ['Unexpected row-selected component'] } } }
-	]
+ refs: { 'saved-marker': 'resolved-marker', 'other-component': 'resolved-other', 'missing-marker': null },
+ components: [
+  { id: 'resolved-marker', crystal: { args: [{ name: 'badge', type: 'string', default: '' }, { name: 'menuDisabled', type: 'boolean', default: false }, { name: 'alternateSlot', type: 'boolean', default: false }, { name: 'sourceRevision', type: 'number', default: 0 }], render: {
+   tag: 'tt-menu', props: { contextMenu: true, name: 'Commands for {point.label}', disabled: { ttArg: 'menuDisabled' } }, children: [
+    { tag: 'div', props: { 'data-tt-menu-slot': 'target' }, children: [
+     { tag: 'button', props: { 'aria-pressed': '{point.selected}', type: 'button', 'data-tt-action': '$ui', 'data-tt-action-inputs': JSON.stringify({ op: 'query', scope: 'page', params: { markerId: '{point.id}' } }) }, children: ['{badge} · {point.label}'] }
+    ] },
+    { ttIf: { arg: 'alternateSlot', then: markerContentSlot('section'), else: markerContentSlot('div') } },
+    { tag: 'p', children: ['Row: {item.crystal.markerLabel}'] },
+    { tag: 'input', props: { 'aria-label': 'Draft {point.label}' } },
+    { ttIf: { arg: 'point.selected', then: { tag: 'button', props: { type: 'button', 'data-tt-menu-trigger': true, 'aria-label': 'Marker commands for {point.label}', style: { minWidth: 44, minHeight: 44, position: 'absolute', left: '50%', top: '100%', transform: 'translateX(-50%)' } }, children: ['More'] } } },
+   ]
+  } } },
+  { id: 'resolved-other', crystal: { render: { tag: 'p', children: ['Unexpected row-selected component'] } } }
+ ]
 });
 
 function ComposedFixture() {
@@ -80,13 +87,26 @@ function ComposedFixture() {
 	const [selected, setSelected] = React.useState<string | null>(null);
 	const [note, setNote] = React.useState('Authored marker note');
 	const [hovered, setHovered] = React.useState<string | null>(null);
+ const [pulse, setPulse] = React.useState(0);
+ const [menuDisabled, setMenuDisabled] = React.useState(false);
+ const [alternateSlot, setAlternateSlot] = React.useState(false);
+ React.useEffect(() => {
+  const owner = window as unknown as { fixtureMarkerRefresh?: (kind: 'scope' | 'disabled' | 'slot') => void };
+  const update = (kind: 'scope' | 'disabled' | 'slot') => {
+   if (kind === 'disabled') setMenuDisabled(value => !value);
+   else if (kind === 'slot') setAlternateSlot(value => !value);
+   else setPulse(value => value + 1);
+  };
+  owner.fixtureMarkerRefresh = update;
+  return () => { if (owner.fixtureMarkerRefresh === update) delete owner.fixtureMarkerRefresh; };
+ }, []);
 	const authored: WebpageBlock[] = [{
 		id: 'composed-map', type: 'element', tag: 'tt-mapbox', props: {
 			title: 'Composed fixture map', height: 430, vaultId: 'synthetic-vault', favouritesSource: { action: 'fixture-favourites' },
 			showFavourites: show, selectedFavouriteId: '{query.markerId}'
 		}, children: [
 			{ id: 'marker-note', type: 'element', tag: 'p', text: note },
-			{ id: 'marker-content', type: 'component', component: 'saved-marker', args: { badge: '{fixtureBadge}' } },
+			{ id: 'marker-content', type: 'component', component: 'saved-marker', args: { badge: '{fixtureBadge}', menuDisabled, alternateSlot, sourceRevision: pulse } },
 			{ id: 'missing-marker-content', type: 'component', component: 'missing-marker' }
 		]
 	}];
@@ -94,6 +114,7 @@ function ComposedFixture() {
 		{ id: 'composed-details', type: 'condition', condition: { arg: 'query.markerId' }, children: [
 			{ id: 'composed-details-text', type: 'element', tag: 'p', text: 'Selected marker: {query.markerId}', props: { 'data-tt-reveal': '{query.markerId}' } }
 		] },
+		{ id: 'marker-command', type: 'element', tag: 'p', text: 'Marker command: {query.markerCommand}' },
 		{ id: 'details-spacer', type: 'element', tag: 'div', css: { height: '520px' } }
 	];
 	const markerView = <WebpageBlocksRenderer blocks={authored} componentsByRef={markerComponents} interactive={!editing} chrome={editing ? {
@@ -101,11 +122,12 @@ function ComposedFixture() {
 		onInsert: () => {}, onMove: () => {}
 	} : undefined} />;
 	return <>
+  <p>Marker refresh: {pulse}; menu disabled: {String(menuDisabled)}; alternate slot: {String(alternateSlot)}</p>
 		<button type="button" onClick={() => setShow(!show)}>{show ? 'Remove fixture markers' : 'Restore fixture markers'}</button>
 		<button type="button" onClick={() => setFramed(true)}>Render map in viewport iframe</button>
 		<button type="button" onClick={() => setEditing(!editing)}>{editing ? 'View marker composition' : 'Edit marker composition'}</button>
 		{editing ? <><p>Selected block: {selected}</p><input aria-label="Edit selected marker note" disabled={selected !== 'marker-note'} value={note} onChange={event => setNote(event.target.value)} /></> : null}
-		<ComponentDataScope.Provider value={{ ...parentScope, fixtureBadge: 'Saved' }}>
+		<ComponentDataScope.Provider value={{ ...parentScope, fixtureBadge: 'Saved', fixturePulse: pulse, fixtureMenuDisabled: menuDisabled, fixtureAlternateSlot: alternateSlot }}>
 			{framed ? <BuilderViewport size={{ width: 390, height: 844 }}>{markerView}</BuilderViewport> : markerView}
 			<div aria-label="Fixture detail scroll" style={{ height: 105, overflow: 'auto' }}>
 				<WebpageBlocksRenderer blocks={detail} componentsByRef={{}} interactive />
