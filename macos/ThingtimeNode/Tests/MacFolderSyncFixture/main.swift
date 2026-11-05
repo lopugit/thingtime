@@ -93,6 +93,10 @@ final class StreamWriter: @unchecked Sendable {
             choose: { selected }, approve: { _ in true },
             chooseSource: config.photoFixture == true ? { .photos } : nil,
             photos: PhotoLibraryReader(provider: FixturePhotoResources(directory: selected), transport: transport), inventories: MobileFolderInventory(directory: config.directory.appendingPathComponent("inventory"), transport: transport, database: database), approveTrash: { _ in true }, approveRestore: { _, _ in true }, conditions: { .init(network: "wifi", charging: true) })
+        // Resource preferences for synthetic identities belong only to this
+        // disposable fixture. Remove their exact keys on normal shutdown.
+        var fixturePolicyKeys = Set<String>()
+        defer { for key in fixturePolicyKeys { UserDefaults.standard.removeObject(forKey: key) } }
         if config.batchFixture == true {
             guard let input = try NodeFolderStreamInput.header(.standardInput, maximumBytes: 600_000) else { throw MobileFolderStore.Failure.invalid }
             let request = try JSONDecoder().decode(JSONValue.self, from: input)
@@ -112,6 +116,11 @@ final class StreamWriter: @unchecked Sendable {
             do {
                 guard input.count <= 524_288 else { throw MobileFolderStore.Failure.limit }
                 let request = try JSONDecoder().decode(JSONValue.self, from: input)
+                if case .object(let fields) = request, fields["deviceResourceLimits"] != nil,
+                   case .string(let owner) = fields["ownerId"], case .string(let device) = fields["deviceId"] {
+                    let scope = try JSONEncoder().encode([config.base.absoluteString, owner, device]).base64EncodedString()
+                    fixturePolicyKeys.insert("thingtime.sync.resources.v1." + scope)
+                }
                 let stream: (@Sendable (Data) throws -> Void)?
                 if case .object(let fields) = request, fields["action"] == .string("read-range") {
                     let writer = StreamWriter(); stream = { try writer.receive($0) }
