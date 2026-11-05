@@ -12587,6 +12587,7 @@ resume unfinished Android gates only when requested.
 
 ### Mac paged foreground acceptance
 
+- [ ] Run `THINGTIME_SCAN_PAGE_BENCHMARK=1 swift test --package-path apple/FileSync --filter MobileFolderInventoryTests/testLargeCapturePagesReopenAndRetainExactObservation` with the source-built indexer. For 10,001 entries, require exactly 79 bounded `page` helper requests and zero separate `status` requests while reading, with complete paths/hashes and reopened-root checks. Record elapsed page-read time and compare only like-for-like fixture, build and host conditions; one helper process still starts for each page. Keep cancellation, scope, root identity and sealed/provisional coverage refusal tests green.
 - Run `pnpm --dir remix run test:files:mac-paged` after building the current
   Nitro server and `MacFolderSyncFixture` (README runbook). Require paged native
   and cloud observations, exact byte hashes, original operation receipts after
@@ -13235,6 +13236,7 @@ separate from deterministic discovery/lease tests.
 
 ### 2026-10-19 · Legacy one-time sync recovery
 
+- [ ] An automatic job in attention must display its persisted allowlisted failure category after reload; a legacy job without a saved category must say the cause is unavailable, never claim settings changed. A current configuration mismatch may show changed-settings advice only when the journal's exact reviewed configuration actually differs. Explicit Retry and Pause must preserve the saved interval, and a stale failure callback must not undo Pause. Do not retain raw native/server error text, local paths or URLs in the journal or rendered message. Exercise the actual standardized cloud 403/409 error format as well as bare status codes.
 - [x] A persisted one-time job in attention state remains explicitly stoppable after reopening, even without an automatic interval. Changing ignore settings cannot replace it until Stop is durably saved; stale callbacks cannot complete its replacement. `syncJobJournal.test.ts` passes 17 checks.
 - [x] `node remix/scripts/test-stopped-sync-job-recovery.mjs /tmp/thingtime-stopped-sync-job-acceptance` passes10 isolated desktop/mobile checks: Save starts nothing; Stop survives reload; zero-operation attention restarts under exact v2rules and schedules its next cycle; pending accepted writes remain fenced with no duplicate. All three states pass top-to-bottom overflow checks at1440/390px.
 - [ ] Repeat the Stop and restart transition in the installed signed Mac app with the existing home backup, then verify real indexing and transfer progress.
@@ -14448,6 +14450,16 @@ the isolated real-API/browser command and the metadata-only session boundary.
   repeats the check for one-sided edits from a sealed baseline, and exercises
   stale hints, conflicting edits, lost replies, cancellation, authority loss,
   and a deletion between strict planning and checkpoint capture.
+- For an isolated native+HTTP timing diagnostic, run
+  `pnpm --dir remix run test:files:mac-paged -- --two-way-early --normal-early-budget`.
+  Record first local change, admitted operation, first PUT, and the first
+  native/HTTP request stages separately. This calibration uses 5,000,000 B/s
+  scan and transfer, CPU 15%, and a 2,500,000 B/s Rust scan reservation;
+  require exact upload/download receipts while the same capture is still
+  running and unsealed, then one strict checkpoint with no duplicate transfer.
+  The default `--two-way-early` proof deliberately uses a slower 400,000 B/s
+  scan ceiling to hold its late file open. The `--wide` fixture has no change
+  feeds, so its first PUT measures full paged capture rather than early start.
 - Run `npm --prefix remix run test:files:two-way-progress-ui` with the MCP
   workspace's Playwright and its Chromium installed. The isolated desktop and
   narrow viewport checks use the real progress viewer and journal, including a

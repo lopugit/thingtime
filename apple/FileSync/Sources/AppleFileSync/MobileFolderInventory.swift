@@ -433,18 +433,25 @@ public struct MobileFolderInventory: Sendable {
         }
     }
 
-    private func readRecord<T>(_ scope: Scope, capture: Capture, bookmark: Data, ignoreRules: String?,
-                               work: (Record, RustInventoryClient, RustInventoryClient.Status) throws -> T) throws -> T {
+    private func withReadableRecord<T>(_ scope: Scope, capture: Capture, bookmark: Data, ignoreRules: String?,
+                                       work: (Record, RustInventoryClient) throws -> T) throws -> T {
         let client = try requireClient(), rules = try MobileFolderIgnoreRules(ignoreRules).text
         return try record(scope, id: capture.id, bookmark: bookmark) { current, _, _ in
             guard let current, current.phase == "complete", current.generation == capture.generation,
                   current.policy != Self.stream, MobileFolderIgnoreRules.sameText(current.ignoreRules, rules) else { throw Failure.changed }
             return try withRoot(bookmark, expected: current.rootIdentity) { _ in
-                let status = try client.requireStatus(scope, generation: current.generation)
-                guard status.coverage == (current.policy == Self.backup ? "provisional" : "sealed"),
-                      try self.capture(current, status: status) == capture else { throw Failure.changed }
-                return try work(current, client, status)
+                return try work(current, client)
             }
+        }
+    }
+
+    private func readRecord<T>(_ scope: Scope, capture: Capture, bookmark: Data, ignoreRules: String?,
+                               work: (Record, RustInventoryClient, RustInventoryClient.Status) throws -> T) throws -> T {
+        try withReadableRecord(scope, capture: capture, bookmark: bookmark, ignoreRules: ignoreRules) { current, client in
+            let status = try client.requireStatus(scope, generation: current.generation)
+            guard status.coverage == (current.policy == Self.backup ? "provisional" : "sealed"),
+                  try self.capture(current, status: status) == capture else { throw Failure.changed }
+            return try work(current, client, status)
         }
     }
 
@@ -452,13 +459,15 @@ public struct MobileFolderInventory: Sendable {
                      pageSize: Int? = nil) throws -> Page {
         let limit = try Self.pageLimit(pageSize)
         guard offset >= 0, offset < capture.totalEntries || (offset == 0 && capture.totalEntries == 0) else { throw Failure.changed }
-        return try readRecord(scope, capture: capture, bookmark: bookmark, ignoreRules: ignoreRules) { record, client, status in
+        return try withReadableRecord(scope, capture: capture, bookmark: bookmark, ignoreRules: ignoreRules) { record, client in
             let rules = try MobileFolderIgnoreRules(record.ignoreRules)
             var entries: [MobileFolderReader.Entry] = [], bytes = 16_384
             while entries.count < limit {
                 let at = offset + entries.count, want = min(512, limit - entries.count)
-                let page = try client.page(scope, generation: record.generation, offset: at, limit: want)
-                guard page.totalEntries == capture.totalEntries, page.rootVersion == status.rootVersion, page.coverage == status.coverage,
+                let (page, status) = try client.checkedPage(scope, generation: record.generation, offset: at, limit: want)
+                guard status.coverage == (record.policy == Self.backup ? "provisional" : "sealed"),
+                      try self.capture(record, status: status) == capture,
+                      page.totalEntries == capture.totalEntries,
                       page.entries.count <= want, at + page.entries.count <= capture.totalEntries,
                       page.nextOffset == (at + page.entries.count < capture.totalEntries ? at + page.entries.count : nil),
                       !page.entries.isEmpty || capture.totalEntries == 0 else { throw Failure.changed }
