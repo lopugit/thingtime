@@ -83,7 +83,7 @@ private final class XPCService: NSObject, ThingtimeNodeXPCProtocol {
 
     func bulk(_ data: Data, callback: ThingtimeNodeBatchCallback, withReply reply: @escaping (Data) -> Void) {
         guard let request = try? NodeWireCodec.decodeRequest(data), request.method == "folder-sync.request",
-              case .object(let fields) = request.parameters, fields["action"] == .string("upload-batch") else {
+              case .object(let fields) = request.parameters, [JSONValue.string("upload-batch"), .string("upload-single")].contains(fields["action"] ?? .null) else {
             reply(Self.encoded(.failure(id: "", code: "invalid_request", message: "Invalid folder batch."))); return
         }
         Task {

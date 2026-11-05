@@ -1001,7 +1001,7 @@ class ThingtimeNodeIntegration {
 		const paths = this.paths();
 		await this.verifyForRequest(paths);
 		const staging = method === 'folder-sync.request' && parameters.action === 'stage-range';
-		const batching = method === 'folder-sync.request' && parameters.action === 'upload-batch';
+		const batching = method === 'folder-sync.request' && ['upload-batch', 'upload-single'].includes(parameters.action);
         const policy = parameters.resourceLimits;
         const governedPayload = method === 'folder-sync.request' && policy &&
             ((batching && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||

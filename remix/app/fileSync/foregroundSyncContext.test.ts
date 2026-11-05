@@ -32,3 +32,11 @@ test('only explicitly lazy native source construction omits the redundant IO aut
  controller.abort(); await assert.rejects(context.openSource(f.local[0])); assert.equal(opened, 2);
  f.journal().close();
 });
+
+test('custom mutation authorization never receives the compound native approval', async () => {
+ const f = await foregroundFixture(), input = f.input();
+ assert.ok(foregroundSyncContext(saved, scope, input, new AbortController().signal).runtime.nativeUploadApproval);
+ input.runtime.authorizeMutation = async () => {};
+ assert.equal(foregroundSyncContext(saved, scope, input, new AbortController().signal).runtime.nativeUploadApproval, undefined);
+ f.journal().close();
+});

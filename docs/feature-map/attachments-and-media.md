@@ -731,3 +731,16 @@ contract with a separate 60-second HMAC GET scope bound to the immutable version
 and exact Range. Native target issuance preserves owner/fingerprint gates and
 requires an absolute HTTPS storage origin. Run `localAttachmentStorage.test.ts`
 and `attachments.test.ts` for scope refusal, byte correctness and owner checks.
+
+### Mac compound transport
+
+`MacSingleUploadOperation.swift`, `folder-upload-single.cjs` and the shared
+`FingerprintSource.uploadSingle` negotiate `fileSingleUploadVersion` 1.0.0 for
+a bounded regular-file transport under the existing single-file executor.
+Strong source checks surround emission, PUT and stored verification. Current
+account/configuration/grant authority and shared resources remain mandatory;
+publication stays in `cloudTransport.ts`'s guarded `/files` path. Larger files,
+symbolic links, custom hooks and unsupported capabilities retain their existing
+transport. Run `MacSingleUploadOperationTests`, `folder-upload-single.test.cjs`,
+`nativeUpload.client.test.ts` and `cloudTransport.test.ts`; see the dated
+[transport contract](../mobile-file-sync.md#bounded-compound-mac-upload-transport--2026-11-06).

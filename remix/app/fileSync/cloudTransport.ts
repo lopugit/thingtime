@@ -1,3 +1,4 @@
+import { UPLOAD_BATCH_FILE_BYTES } from './uploadBatch';
 import { CLOUD_SYNC_DESTINATION_REQUIREMENTS, ExactCloudSyncDestinationChanged, SYNC_DESTINATION_CHANGED } from './cloudSyncDestination';
 import { createSyncTransferDeadline } from './syncTransferDeadline';
 import { supportsSyncUploadStreaming, SYNC_STREAM_UPLOAD_UNAVAILABLE } from './browserSyncUpload';
@@ -281,8 +282,9 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			const plan = contentPartPlan(source.size);
 			const nativeApproval = runtime.nativeUploadApproval && sameSyncScope(runtime.nativeUploadApproval.scope, scope) ? runtime.nativeUploadApproval : undefined;
 			const nativeUpload = nativeApproval ? source.uploadFile : undefined;
+			const compound = nativeApproval && source.size > 0 && source.size <= UPLOAD_BATCH_FILE_BYTES && plan.partCount === 1 ? source.uploadSingle : undefined;
 			const pacedUploads = !!runtime.resources && !!(runtime.resources.limits.uploadBytesPerSecond || runtime.resources.limits.cpuPercent);
-			if (source.size > 0 && pacedUploads && !nativeUpload && !source.uploadPart && !supportsSyncUploadStreaming()) throw Error(SYNC_STREAM_UPLOAD_UNAVAILABLE);
+			if (source.size > 0 && pacedUploads && !nativeUpload && !compound && !source.uploadPart && !supportsSyncUploadStreaming()) throw Error(SYNC_STREAM_UPLOAD_UNAVAILABLE);
 			const checkedNativePart = source.nativePartSourceChecks === true && !!source.uploadPart && typeof source.verify === 'function' && !nativeUpload;
 			if (!nativeUpload && !source.uploadPart && plan.partSizeBytes > 32 * 1024 * 1024) throw Error('This file requires native streaming upload support.');
 			const sourceCheck = async () => {
@@ -291,7 +293,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 				check();
 				if (source.size !== m.source.size) throw Error('Source file changed.');
 			};
-			await sourceCheck();
+			if (!compound) await sourceCheck();
 			const started = await json('/api/v1/attachments/uploads', {
 				requestId: write.operation.id,
 				filename: m.path.split('/').at(-1),
@@ -307,6 +309,15 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			// send them into a native multipart loop or complete an empty MPU.
 			if (source.size === 0 && upload.state !== 'ready')
 				throw Error('The server has not durably stored the empty file; retain this run.');
+			if (compound && nativeApproval) {
+				transferred?.(null);
+				const content = await compound({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(nativeApproval) }, signal);
+				check();
+				if ((content.payloadBytes !== null && content.payloadBytes !== 0 && content.payloadBytes !== source.size) || content.attachmentId !== upload.id || content.size !== source.size || !/^[a-f0-9]{64}$/.test(content.version) ||
+					!equalContentFingerprints(content.fingerprint, m.source.fingerprint!)) throw Error('Native uploaded bytes do not match the planned fingerprint.');
+				transferred?.(content.payloadBytes); progress?.(source.size, source.size);
+				return commit({ attachmentId: content.attachmentId, version: content.version, size: content.size, fingerprint: content.fingerprint });
+			}
 			if (upload.state === 'ready') transferred?.(0);
 			if (upload.state !== 'ready' && nativeUpload && nativeApproval) {
 				// Older native whole-file progress includes already-retained bytes.

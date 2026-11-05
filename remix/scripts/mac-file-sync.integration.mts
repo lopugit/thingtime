@@ -9,7 +9,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { MacFixtureTransport, FixtureIdentityTiming, FixturePageObservers } from './mac-fixture-transport.mjs';
+import { MacFixtureTransport, FixtureIdentityTiming, FixturePageObservers, FixtureReceiptObservations, fixtureActionLabel, fixturePathLabel } from './mac-fixture-transport.mjs';
 import { createMacFixtureHost, macFixtureWorkerOptions, macFixtureRuntime } from './mac-fixture-host.mts';
 import { createFixtureTLSFetch } from './mac-fixture-tls.mjs';
 import { saveDeviceSyncResourcePolicy, deviceResourceKey, readDeviceSyncResourcePolicy } from '../app/fileSync/deviceResourcePolicy';
@@ -81,7 +81,26 @@ const cookies = new Map<string, string>();
 let native: ChildProcessWithoutNullStreams | undefined;
 let nativeTransport: MacFixtureTransport | undefined;
 const nativeIdentityTiming = new FixtureIdentityTiming();
-const nativeIdentityCalls: { complete: boolean; admissionMs?: number; httpMs?: number; attempts?: number }[] = [];
+const nativeIdentityCalls: Record<string, unknown>[] = [];
+const nativeRequestTimings: Record<string, unknown>[] = [];
+const nativeServiceCalls: { session: number; requestId: string; action: string; path: string; lane: string; startedMs: number; endedMs: number }[] = [];
+const phaseTimings: { phase: string; path: string; operationId: string | null; at: number }[] = [];
+const preparedCounts = new Map<string, number>();
+let nativeSession = 0, transferRunStartedAtMonotonic = 0;
+const recordPhase = (phase: string, path: string | undefined, operationId?: string, at = performance.now()) => {
+    phaseTimings.push({ phase, path: fixturePathLabel(path), operationId: operationId ?? null, at });
+};
+const nativeConcurrency = () => {
+    let peak = 0;
+    for (const session of new Set(nativeServiceCalls.map(call => call.session))) {
+        let active = 0;
+        const points = nativeServiceCalls.filter(call => call.session === session && call.lane === 'active')
+            .flatMap(call => [[call.startedMs, 1], [call.endedMs, -1]]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+        for (const [, delta] of points) { active += delta; peak = Math.max(peak, active); }
+    }
+    return { policyActiveSlotLimit: 1, observedActiveRequestPeak: peak,
+        policySource: 'MacFolderSync.swift:506-508', scope: 'top-level native service calls; index/CPU work and control lanes may overlap' };
+};
 const nativeServiceTiming: Record<string, { count: number; totalMs: number; maxMs: number }> = {};
 let nativeExit: Promise<void> | undefined,
 	nativeCalls = 0,
@@ -151,13 +170,16 @@ async function api(route: string, body?: unknown, method = body === undefined ? 
 	catch (cause) { throw Error(`Acceptance response ${method} ${new URL(route, base).pathname} failed`, { cause }); }
 }
 async function startNative() {
+    const session = ++nativeSession;
     const observeIdentityTiming = nativeIdentityTiming.beginSession();
     let lastVerifyCalls = 0, priorCooldownCount = 0, priorCooldownSeconds = 0;
+    const seenIdentityChecks = new Set<number>(), seenServiceCalls = new Set<string>();
 	native = spawn(process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN || path.resolve('../macos/ThingtimeNode/.build/debug/MacFolderSyncFixture'), [path.join(directory, 'native.json')]);
 	const current = native;
     nativeTransport = new MacFixtureTransport({
         write: (frame: Buffer) => current.stdin.write(frame),
-        createStream: (payload: any) => new FolderStream({ id: payload.requestId, method: 'folder-sync.request', parameters: payload })
+        createStream: (payload: any) => new FolderStream({ id: payload.requestId, method: 'folder-sync.request', parameters: payload }),
+        observeRequest: (event: any) => { if (earlyFixture) nativeRequestTimings.push({ ...event, session }); }
     });
     const transport = nativeTransport;
     nativeExit = new Promise((resolve, reject) => {
@@ -176,7 +198,7 @@ async function startNative() {
         try {
             assert.ok(line.length <= 1_000_000);
             const value = JSON.parse(line);
-            if (value.type !== 'chunk') {
+            if (value.type !== 'chunk' && value.type !== 'batch') {
                 const action = transport.pending.get(value.requestId)?.payload.action;
                 if (action && Number.isFinite(value.serviceMs) && value.serviceMs >= 0) {
                     const metric = nativeServiceTiming[action] ??= { count: 0, totalMs: 0, maxMs: 0 };
@@ -190,7 +212,17 @@ async function startNative() {
                 cooldownCount += count - priorCooldownCount; cooldownSeconds += seconds - priorCooldownSeconds;
                 priorCooldownCount = count; priorCooldownSeconds = seconds;
                 observeIdentityTiming(value.identityTiming);
-                nativeIdentityCalls.push(...(value.identityCalls ?? []));
+                for (const call of value.identityCalls ?? []) {
+                    assert.ok(Number.isSafeInteger(call.checkId) && call.checkId > 0);
+                    if (!seenIdentityChecks.has(call.checkId)) { seenIdentityChecks.add(call.checkId); nativeIdentityCalls.push({ ...call, session }); }
+                }
+                if (earlyFixture && value.nativeRequestTiming && !seenServiceCalls.has(value.requestId)) {
+                    seenServiceCalls.add(value.requestId);
+                    const timing = value.nativeRequestTiming;
+                    assert.ok(['active','poll','resources'].includes(timing.lane) && Number.isFinite(timing.startedMs) && Number.isFinite(timing.endedMs) && timing.endedMs >= timing.startedMs);
+                    nativeServiceCalls.push({ session, requestId: value.requestId, action: fixtureActionLabel(timing.action),
+                        path: fixturePathLabel(timing.path), lane: timing.lane, startedMs: timing.startedMs, endedMs: timing.endedMs });
+                }
             }
             transport.receive(value);
         } catch { transport.close(Error('Invalid native fixture frame')); }
@@ -219,7 +251,7 @@ async function stopNative() {
 		nativeExit = undefined;
 	}
 }
-async function send(payload: any, signal?: AbortSignal) {
+async function send(payload: any, signal?: AbortSignal, options: any = {}) {
     assert.ok(native && nativeTransport);
     nativeCalls++;
     markEarlyRequest('native ' + payload.action);
@@ -227,7 +259,7 @@ async function send(payload: any, signal?: AbortSignal) {
     if (payload.action === 'read-range') { counts.streams++; counts.streamedBytes += payload.length; }
     if (payload.action === 'publish') counts.publishes++;
     if (payload.action === 'stage-range') { counts.stageRanges++; counts.stagedBytes += payload.bytes.length; }
-    return nativeTransport.request(payload, signal);
+    return nativeTransport.request(payload, signal, options);
 }
 const signal = new AbortController().signal;
 let canonicalHost: Awaited<ReturnType<typeof createMacFixtureHost>> | undefined;
@@ -703,6 +735,7 @@ try {
 		const proof = new Map<string, { receipt: import('../app/fileSync/execute').SyncReceipt; at: number; nativeState: string; index: ReturnType<typeof nativeIndex>; receiptCommittedAtMonotonic: number; nativePageObservedAtMonotonic: number; nativePageObservationSequence: number }>();
 		let notify!: () => void;
 		const both = new Promise<void>(resolve => { notify = resolve; });
+        const receiptObservations = new FixtureReceiptObservations();
 
 		let capture: string | undefined;
         const nativePagesObserved = new FixturePageObservers();
@@ -746,21 +779,33 @@ try {
 					const runs = journal.pagedRuns(access);
 					return { ...runs, appendStream: async (spec, event, binding, conflict, track) => {
 						const result = await runs.appendStream(spec, event, binding, conflict, track);
-						if (binding && firstAdmittedMs === null) {
+                        const priorPrepared = preparedCounts.get(spec.id) ?? 0;
+                        assert.ok(result.operations >= priorPrepared && result.operations <= priorPrepared + 1, 'Unattributed durable preparation count');
+                        const becameReady = !!binding && result.operations === priorPrepared + 1;
+                        preparedCounts.set(spec.id, result.operations);
+                        recordPhase('append', event.entry.path, binding?.write.operation.id);
+                        if (becameReady) recordPhase('ready', event.entry.path, binding!.write.operation.id);
+						if (becameReady && firstAdmittedMs === null) {
 							firstAdmittedMs = Date.now() - transferRunStartedAt;
 							firstAdmittedPath = event.entry.path;
 						}
 						return result;
-					}, confirm: async (spec, receipt) => {
-						const result = await runs.confirm(spec, receipt);
-                        const receiptCommittedAtMonotonic = performance.now();
+					}, claimNext: async (...args: Parameters<typeof runs.claimNext>) => {
+                        const startedAt = performance.now(), operation = await runs.claimNext(...args);
+                        if (operation) { recordPhase('claim-start', operation.mutation.path, operation.id, startedAt); recordPhase('claim', operation.mutation.path, operation.id); }
+                        return operation;
+                    }, confirm: async (spec, receipt) => receiptObservations.confirm(receipt.operationId,
+                        () => runs.confirm(spec, receipt), async (_result: unknown, receiptCommittedAtMonotonic: number) => {
+                        recordPhase('receipt-durable', receipt.entry?.path, receipt.operationId, receiptCommittedAtMonotonic);
 						const name = receipt.entry?.path;
 						if (spec.streaming?.source === 'both' && (name === 'local.bin' || name === 'remote.bin')) {
 							assert.ok(capture);
                             // Observe the next actual feed result after this receipt;
                             // never enqueue a competing proof-only long poll.
+                            recordPhase('proof-observation-start', name, receipt.operationId);
                             const observation = await nativePagesObserved.next(current, receiptCommittedAtMonotonic);
                             assert.ok(observation.observedAt >= receiptCommittedAtMonotonic);
+                            recordPhase('proof-observed', name, receipt.operationId, observation.observedAt);
                             const page = observation.page;
 							const index = nativeIndex();
 							if (!index || index.mode !== 'backup' || index.indexed !== 0 || index.coverage !== 'scanning' ||
@@ -770,15 +815,14 @@ try {
                                 nativePageObservedAtMonotonic: observation.observedAt, nativePageObservationSequence: observation.sequence });
 							if (proof.size === (uploadStartDiagnostic ? 1 : 2)) notify();
 						}
-						return result;
-					} };
+					}) };
 				} } : journal
 			};
 		};
 		const controller = new AbortController(), current = AbortSignal.any([controller.signal, proofTimeout]),
 			stop = new Error(uploadStartDiagnostic ? 'Stop after the upload-start diagnostic receipt' : 'Stop after the two before-seal confirmations');
         const serverPutBaseline = (await serverPuts()).length;
-		transferRunStartedAt = Date.now();
+		transferRunStartedAt = Date.now(); transferRunStartedAtMonotonic = performance.now();
         earlyIdentityStartTotalMs = nativeIdentityTiming.totalMs;
 		console.log('MAC_PAGED_STAGE early-input-start');
 		const firstInput = await input(current, true);
@@ -786,7 +830,7 @@ try {
 		const running = runPagedForegroundCloudSync(saved, scope, firstInput, current);
 		void running.catch(() => {});
 		try {
-			await Promise.race([both, running.then(() => { throw Error('Early sync finished before its required receipts were observed.'); })]);
+			await Promise.race([both, receiptObservations.failed, running.then(() => { throw Error('Early sync finished before its required receipts were observed.'); })]);
 			const upload = proof.get('local.bin')!, download = proof.get('remote.bin');
             assert.ok(upload);
             if (!uploadStartDiagnostic) { assert.ok(download); assert.equal(upload.index?.generation, download.index?.generation); }
@@ -801,6 +845,8 @@ try {
 			const cancelledAt = Date.now(), originalCapture = capture;
 			controller.abort(stop);
 			await assert.rejects(running, error => error === stop);
+            await receiptObservations.drain();
+            assert.equal(receiptObservations.pending.size, 0, 'Drain every proof before resume and success');
 			assert.ok(originalCapture);
 			const stopped = await governedRequest(fixture.userId, { action: 'scan-cancel', rootId: nativeRoot, inventoryDeviceId: deviceId!,
 				captureId: originalCapture, capturePolicy: 'one-way-supported', excludedPaths: [] }, AbortSignal.timeout(15000));
@@ -834,7 +880,8 @@ try {
                     canonicalDesktopManager: true, canonicalRendererHost: true, canonicalTransferWorkerSelected: true,
                     tlsTrust: fixture.tls ? "ephemeral CA scoped to exact canonical child; setup byte fetch scoped to TLS origin; no OS trust changes" : "none",
                     rendererDevicePolicy: readDeviceSyncResourcePolicy(deviceResourceKey(base.origin, fixture.userId, deviceId!)) },
-                hostTimings, boundaryTimings, nativeIdentityCalls, nativeTransportTiming: nativeTransport?.timings, nativeServiceTiming, nativeIdentityTiming, earlyIdentityStartTotalMs,
+                phaseTimings, transferRunStartedAtMonotonic, nativeRequestTimings, nativeServiceCalls, nativeConcurrency: nativeConcurrency(),
+                proofObservationBlocksConsumer: false, hostTimings, boundaryTimings, nativeIdentityCalls, nativeTransportTiming: nativeTransport?.timings, nativeServiceTiming, nativeIdentityTiming, earlyIdentityStartTotalMs,
                 nativeLatency, httpLatency, httpRequests, nativeCalls, verifyCalls, cooldownCount, cooldownSeconds,
 				resourceLimits: { scanBytesPerSecond, transferBytesPerSecond: 5_000_000, cpuPercent: 15, effectiveRustScanBytesPerSecond: scanBytesPerSecond / 2 }, blockerBytes,
 				upload: { at: upload.at, receiptCommittedAtMonotonic: upload.receiptCommittedAtMonotonic, nativePageObservedAtMonotonic: upload.nativePageObservedAtMonotonic, nativePageObservationSequence: upload.nativePageObservationSequence, nativeState: upload.nativeState, index: upload.index, operationId: upload.receipt.operationId, revision: remote.revision, sha256: hash(localBytes) },
@@ -849,12 +896,13 @@ try {
                     canonicalDesktopManager: true, canonicalRendererHost: true, canonicalTransferWorkerSelected: true,
                     tlsTrust: fixture.tls ? "ephemeral CA scoped to exact canonical child; setup byte fetch scoped to TLS origin; no OS trust changes" : "none",
                     rendererDevicePolicy: readDeviceSyncResourcePolicy(deviceResourceKey(base.origin, fixture.userId, deviceId!)) },
-                hostTimings, boundaryTimings, nativeIdentityCalls, nativeTransportTiming: nativeTransport?.timings, nativeServiceTiming, nativeIdentityTiming, earlyIdentityStartTotalMs,
+                phaseTimings, transferRunStartedAtMonotonic, nativeRequestTimings, nativeServiceCalls, nativeConcurrency: nativeConcurrency(),
+                proofObservationBlocksConsumer: false, hostTimings, boundaryTimings, nativeIdentityCalls, nativeTransportTiming: nativeTransport?.timings, nativeServiceTiming, nativeIdentityTiming, earlyIdentityStartTotalMs,
                 nativeLatency, httpLatency, httpRequests, nativeCalls, verifyCalls, cooldownCount, cooldownSeconds,
 				resourceLimits: { scanBytesPerSecond, effectiveRustScanBytesPerSecond: scanBytesPerSecond / 2 },
 				index: nativeIndex(), counts }));
 			throw error;
-		} finally { controller.abort(stop); await running.catch(() => {}); }
+		} finally { controller.abort(stop); await running.catch(() => {}); await receiptObservations.drain().catch(() => {}); }
 	} else if (symlinksOnly) {
 		await run(); await exerciseSymbolicLinks();
 		console.log(JSON.stringify({ok:true, scenario:'Mac symlink round trip',nativeCalls,verifyCalls,nativePages,cloudPages,counts,checks:['regular-link-regular-kind-transitions','raw-target-bytes-no-follow','dangling-and-non-utf8-links','link-metadata-attachment-integrity','link-timeline-restore-after-restart','stable-convergence'],picker:'fixture',keychain:'not-used'}));
