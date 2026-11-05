@@ -141,6 +141,7 @@ export type ThingsItemAction =
 
 export type ThingsItemHandlers = {
   compact?: boolean;
+  builderMode?: boolean;
   menuZIndex?: number;
   itemHref?: (thing: ThingsThing) => string;
   itemMenuFor?: (thing: ThingsThing) => import('../Thingtime/ContextMenu/contextMenuModel').ThingContextMenuModel;
@@ -402,6 +403,10 @@ export const ThingsGridView = ({
               {formatWhen(thing.updatedAt)}
             </Text>
           </Flex>
+          {handlers.builderMode && isBuilderApp(thing) && <Flex gap={2} wrap="wrap" justifyContent="center" onClick={event => event.stopPropagation()}>
+            <Button as={Link} to={thingBuilderHref(thing, handlers.ownerId) || `/builder?folder=${encodeURIComponent(thing.id)}&kind=all`} size="sm" variant="outline">Browse</Button>
+            {thing.author?.id === handlers.ownerId && <Button size="sm" variant="ghost" onClick={() => handlers.onItemAction(thing, 'edit')}>Edit app</Button>}
+          </Flex>}
           <RecordingThingTranscript thing={thing} />
         </Flex>
       );
