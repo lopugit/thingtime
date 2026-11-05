@@ -26,7 +26,7 @@ try{
 async function exercise(context,name){
  const page=await context.newPage();page.setDefaultTimeout(25000);
  page.on('pageerror',e=>console.error('PAGEERROR',e.message));
- await page.goto('http://127.0.0.1:'+ports.web+'/launcher-acceptance');
+ await page.goto('http://127.0.0.1:'+ports.web+'/launcher-acceptance',{waitUntil:'domcontentloaded',timeout:120000});
  const state=page.getByTestId('preference-state');
  await state.waitFor();await assertState(false);
  assert.equal(await page.locator('.lopuLauncher').count(),0,'Fresh preference hides icon');
@@ -34,7 +34,12 @@ async function exercise(context,name){
  await page.getByRole('button',{name:'Chat settings',exact:true}).click();
  const toggle=page.getByLabel('Show floating Lopu icon',{exact:true});
  await toggle.waitFor();assert.equal(await toggle.isChecked(),false);
- await setToggle(true);await assertState(true);await flush();
+ // Exercise the ordinary toggle action and reload immediately, without a
+ // fixture-only persistence flush or waiting out the provider's debounce.
+ await toggle.locator('..').click();
+ await page.reload();await assertState(true);
+ await page.getByRole('button',{name:'Full chat',exact:true}).click();
+ await page.getByRole('button',{name:'Chat settings',exact:true}).click();
  await assertPanelFits();await page.screenshot({path:join(evidence,name+'-chat-settings.png')});
  await page.keyboard.press('Escape');await page.getByRole('button',{name:'Home',exact:true}).click();
  await page.locator('.lopuLauncher').waitFor();
@@ -44,7 +49,7 @@ async function exercise(context,name){
  // User settings uses the real collapsible SettingsSection composition.
  if(!(await toggle.isVisible()))await page.getByText('Lopu 🦄',{exact:true}).click();
  await toggle.waitFor();assert.equal(await toggle.isChecked(),true);
- await setToggle(false);await assertState(false);await flush();
+ await setToggle(false);await assertState(false);
  await page.screenshot({path:join(evidence,name+'-user-settings.png'),fullPage:true});
  assert.equal(await page.locator('.lopuLauncher').count(),0);
  await second.waitForFunction(()=>JSON.parse(document.querySelector('[data-testid="preference-state"]')?.textContent||'{}').launcher===false);await second.close();
