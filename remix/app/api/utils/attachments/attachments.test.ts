@@ -2850,3 +2850,40 @@ test('sync upload origin is saved before byte authority and exact legacy retries
   assert.equal((await service.start('user-1', input)).ok, true);
   assert.equal(stamps, 1); assert.equal(creates, 1);
 });
+
+test('local provider mints HTTPS native targets only after exact owner and version verification', async () => {
+	const { mkdtemp, rm } = await import('node:fs/promises');
+	const { tmpdir } = await import('node:os');
+	const { join } = await import('node:path');
+	const { createHash } = await import('node:crypto');
+	const { createLocalAttachmentStorage } = await import('./localAttachmentStorage');
+	const { attachmentContentVersion } = await import('./contentFingerprint');
+	const directory = await mkdtemp(join(tmpdir(), 'tt-local-native-target-'));
+	try {
+		const clock = new Date();
+		const local = createLocalAttachmentStorage({ directory, origin: 'https://localhost:28471' }, () => clock.getTime());
+		const bytes = Buffer.from('exact local range bytes');
+		const objectKey = 'objects/attachment-1';
+		const { uploadId } = await local.createMultipartUpload({ objectKey, attachmentId: 'attachment-1' });
+		const signed = await local.signUploadPart({ objectKey, uploadId, partNumber: 1, checksumSha256: createHash('sha256').update(bytes).digest('base64'), contentLength: bytes.length });
+		assert.equal((await local.handleRequest(new Request(signed.url, { method: 'PUT', body: bytes, headers: signed.headers }))).status, 200);
+		const { versionId } = await local.completeMultipartUpload({ objectKey, uploadId, parts: await local.listParts({ objectKey, uploadId }) });
+		const doc = attachmentDoc({ attachmentPurpose: 'file', attachmentState: 'ready', attachmentExpiresAt: undefined, objectVersionId: versionId, objectSizeBytes: bytes.length });
+		const service = createAttachmentService({ store: { getById: async () => doc } as any, now: () => clock, customMongoActive: () => false, getS3: () => local });
+		const range = { version: attachmentContentVersion(doc.shareId, objectKey, versionId), offset: 2, length: 7 };
+		for (const viewer of [null, { id: 'other-account' }]) {
+			const denied = await service.downloadTarget(viewer, doc.shareId, range);
+			assert.equal(denied.ok, false);
+			if (!denied.ok) assert.equal(denied.status, viewer ? 404 : 400);
+		}
+		const result = await service.downloadTarget({ id: doc.ownerId }, doc.shareId, range);
+		assert.equal(result.ok, true);
+		if (result.ok) {
+			assert.equal(new URL(result.target.url).protocol, 'https:');
+			const response = await local.handleRequest(new Request(result.target.url, { headers: result.target.headers }));
+			assert.equal(response.status, 206);
+			assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes.subarray(2, 9));
+			assert.equal((await local.handleRequest(new Request(result.target.url))).status, 403);
+		}
+	} finally { await rm(directory, { recursive: true, force: true }); }
+});

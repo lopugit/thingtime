@@ -12,6 +12,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-06: Builder app cards open their declared saved Thing entry point through independent read checks; explicit Browse/Edit remains, and kind/search/view changes retain the current app scope.
+
 - 2026-11-04: Add Linux/Windows scoped desktop password delivery with a private agent CLI, OS-encrypted retry state, exact-origin catalog metadata (`api.passwords` 1.7.0), and the existing editable per-entry approval policy. Preserve the macOS Apple provider; system-wide autofill, passkey export and first-sign-in handoff are not advertised. See [implementation and acceptance](../PRs/1328-codex-native-autofill-linux-windows-add-scoped-native-password-delivery.md). **Codex (AI)**
 
 - 2026-11-03: Resolve social OAuth apps from exact-origin/environment encrypted platform-vault entries; isolate encrypted multi-account grants per owner and fence callback replay, client changes and refresh/disconnect races. Preserve existing connection UI and legacy link IDs on reconnect. Real provider/deployed acceptance remains separate.
@@ -110,8 +112,38 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Add disposable HTTPS attachment bytes with an ephemeral CA scoped to the exact canonical transfer-worker child; reject missing/wrong trust and preserve normal TLS, native authorization and two-way proof semantics. No OS trust or shipping launcher changes. Original full two-way before-seal proof passes at 5 MB/s and 15% CPU; first native server-received PUT 19.030s, synthetic scope only. [PR 1363 evidence](../PRs/1363-codex-native-sync-fixture-lanes-canonical-native-two-way-proof.md). **Codex (AI)**
+
 - 2026-11-06: Compose the canonical desktop host/transfer worker in early sync acceptance, negotiate real capabilities and composite authorization, verify renderer/native resource parity, and record safe per-call/server-observed timings. Make the disposable Mac sync fixture multiplex native request IDs so polling can overlap inspect/read through the existing production lanes. Add cancellation/EOF transport regressions and safe queue/service/identity timing aggregates; retain all identity and exact-byte acceptance checks. **Codex (AI)**
 
+- 2026-11-06: Local attachment storage now signs exact-version native download ranges for 60 seconds, requiring the exact Range header and trusted HTTPS origin; whole-object replay and altered range authority are refused. — Codex (AI)
+
+- 2026-11-06: Supply the real Node argument-vector shape in the parallel
+  workspace bootstrap test VM after early password-agent CLI discovery was
+  added. This repairs the release test fixture without changing app startup,
+  credentials or development/stable profile separation.
+  **Codex (AI)**
+
+- 2026-11-06: Correct the native upload-batch test peer to verify only requested
+  upload receipts. Exercise admission expiry and completion of all 256 files
+  across fresh bounded requests with retained operation IDs, receipt reuse and
+  no duplicate PUTs. Production expiry, authorization and resource policy are
+  unchanged; this is a test-only release follow-up.
+  **Codex (AI)**
+
+- 2026-11-06: Keep Mac folder settings mounted independently of background
+  sync runs, preserve focused unsaved connection drafts while automatic checks
+  run, and retain scoped resource measurements with explicit historical labels
+  until a fresh sample arrives. Background refresh uses one inline indicator;
+  saving still waits for the active run to finish.
+  **Codex (AI)**
+
+- 2026-11-06: Move the Thingtime Node `@main` entry out of Swift's special
+  `main.swift` file so the release workflow's clean `swift test` build compiles
+  the executable as a test dependency. Supply the isolated Rust indexer to
+  photo-original tests and preflight it in the release workflow. The signed app
+  behavior is unchanged.
+  **Codex (AI)**
 
 - 2026-11-06: Return validated native inventory status with each bounded Rust
   page so large Mac scans avoid a second helper launch per page. The matched

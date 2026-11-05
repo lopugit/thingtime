@@ -2997,7 +2997,10 @@ email whose link points at the attacker.
       An unsigned or expired `local-object` URL answers 403; with the variable
       unset every request answers 404; the module throws when `VERCEL` is set.
       `npm --prefix remix run test:attachments` covers the multipart, copy,
-      signature and traversal cases without a server.
+      signature and traversal cases without a server. Native range targets must
+      return exact 206 bytes for the signed version and Range; altered key,
+      version, method, expiry, signature, or missing/changed Range must fail.
+      Range-only URLs must never serve a whole object or a clamped range.
 - [ ] Download all (PR: download-all attachments): a post with two or more
       stored attachments shows a `Download all · N files · size` pill under its
       gallery/file rows (single-file posts and linked-only galleries show none).
@@ -14311,6 +14314,39 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ### Mac strict inventory job
 
+- [ ] Electron bootstrap VM fixtures must model `process.argv` as an array,
+  even when testing ordinary startup without CLI arguments. Run
+  `node --test electron/test/dev-workspace.test.cjs`; parallel development
+  must keep its own name/profile, and packaged startup must keep the stable app.
+- [ ] Native upload-batch peers must verify only the submitted receipt subset.
+  Force the first admission window to expire after accepted bodies begin, then
+  complete all 256 files through fresh request identities with the same original
+  descriptor/operation IDs and stored receipts. Assert exactly one PUT per file,
+  both identity checks per window, retryable deadline rows, and no PUT admission
+  after expiry. Run the six `MacUploadBatchOperationTests` and canonical upload
+  batch journal recovery tests; never widen production deadlines to make a
+  host-dependent test pass. These synthetic checks do not establish live server
+  grant acceptance or identify an uninstrumented CI cancellation's cause.
+- [ ] On desktop and narrow mobile, expand a folder, open a connection draft,
+  type without saving and keep input focus while an automatic check starts and
+  finishes. The same input, expansion, scroll anchor and unsaved text must stay
+  mounted. Save remains disabled during an active run and the saved connection
+  stays unchanged. Retry automatic sync must also retain the settings subtree.
+- [ ] With an existing resource measurement, refresh policy/status without a
+  new sample: retain readings with an explicit last-measured label. Idle CPU
+  and memory must never pretend to be current. A cold start stays unknown;
+  account/origin/device authority changes clear prior protected measurements.
+  Run `node remix/scripts/test-sync-continuity-ui.mjs` and
+  `node remix/scripts/test-device-sync-resources-ui.mjs` for isolated browser
+  regressions; verify the installed native path separately.
+- [ ] Before publishing a signed Mac release, build the disposable Rust indexer
+  fixture with `cargo build --locked --manifest-path filesystem-indexer/Cargo.toml
+  -p commander-indexer`, set `THINGTIME_TEST_COMMANDER_INDEXER` to that exact
+  executable, then run `swift test --package-path macos/ThingtimeNode` from a
+  clean SwiftPM scratch directory. The executable target must compile when
+  imported by its tests; its `@main` entry cannot live in Swift's special
+  `main.swift` file. The photo-original tests must use the isolated fixture
+  index database rather than depend on an installed app helper.
 - [ ] During a signed Mac transfer long enough to sample, open **Total Sync &
   Backup usage**. Verify positive directional throughput while a file is still
   running, that the configured limits do not change during refresh, and that
@@ -14455,9 +14491,13 @@ the isolated real-API/browser command and the metadata-only session boundary.
   failed host construction from leaking a digest observer. This does not replace
   a later full native timestamp/receipt acceptance run.
   Before timing, require an owned signed HTTPS download target from the selected
-  storage provider. Local attachment storage currently lacks that prerequisite;
-  record it as unavailable, never disable the negotiated native path or count a
-  failed partial run as a latency result.
+  storage provider. The disposable local provider uses HTTPS port 28313 with an
+  ephemeral private CA; API/native identity stay on HTTP port 28311. Require the
+  TLS regression to accept the exact canonical child and reject wrong/no CA,
+  and verify unrelated forks receive no extra trust. Cleanup all task keys,
+  certificates and listeners; never modify OS trust, disable verification or
+  relax shipping child environment filters. Missing prerequisites remain a
+  failure, never a reason to downgrade the native path.
   The separate `--upload-start-diagnostic` mode keeps a canonical two-way
   connection with an initially empty synthetic cloud folder; require exact
   upload hash/receipt, unsealed capture and strict no-replay resume. Its explicit
@@ -14591,3 +14631,19 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - Compare/restore Components nested inside containers, elements, collections and
   inactive conditions. Match stable block IDs, preserve duplicate-ID refusal,
   reject ancestor cycles and permit reused objects/lists in separate positions.
+
+### Builder app launch and scope regression
+
+- [ ] Create two independent private apps with identically named pages and data.
+      Set the first app's entry point, save/reload, then activate its card/title
+      on desktop/mobile: the live page opens. Browse and Edit app remain explicit.
+- [ ] Browse into each app; type a query, change every kind/view/display/sort/group
+      chip, then Back/Forward/reload. The folder and query persist; no other app's
+      records appear. All apps is the explicit route back to the global catalogue.
+- [ ] Remove entry metadata: primary activation browses contents. Missing,
+      inaccessible, invalid and cyclic/folder targets show a clear recoverable
+      error; access to the app never grants target access. No navigation runs an
+      Action or changes data, membership, audiences or grants.
+- [ ] Open Edit app, choose a saved page or exact Thing ID, test load-more,
+      unavailable target refusal, keyboard navigation and narrow modal scrolling.
+      Scroll each view top to bottom and verify no overflow/clipping.

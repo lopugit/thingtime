@@ -2574,6 +2574,8 @@ for those also set the dev server's origin and restart:
 
 ```sh
 THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://127.0.0.1:10000   # this checkout's Nitro port (npm run web-ports)
+# Native signed range downloads require a trusted HTTPS origin instead.
+# Range targets last at most 60 seconds and require the exact signed Range header.
 ```
 
 Exact object versions are immutable, so the stand-in answers with an `ETag`
@@ -5917,13 +5919,19 @@ server receipt of the worker's request; it is not renderer fetch invocation.
 The observer normalizes the native HTTP PUT target and separates runs with an
 append-position barrier. Its focused regression uses the real native network
 uploader and verifies that signed query values and body bytes are never logged.
-Exact end-to-end native PUT timing still requires a passing combined acceptance
-run; observer unit coverage alone is not that evidence.
+The 6 November canonical full two-way fixture run passed with first server-received
+native PUT at 19.030s; [PR 1363 evidence](PRs/1363-codex-native-sync-fixture-lanes-canonical-native-two-way-proof.md)
+records source fingerprints and its synthetic-only scope. Observer unit coverage
+alone is not end-to-end timing evidence.
 The canonical two-way proof requires a storage provider that supplies signed
 HTTPS download ranges. It checks that real capability before starting its timing
-run. The local attachment-storage adapter currently lacks `signDownloadRange`,
-so this canonical path reports a prerequisite failure rather than downgrading
-to renderer download/staging or claiming a successful measurement.
+run. The disposable fixture serves the canonical local attachment provider on
+HTTPS port 28313 while API and native identity stay on HTTP loopback port 28311.
+A fresh private one-day CA trusts only setup byte requests and the exact canonical
+transfer-worker child through a fixture-only preload. Other children and shipping
+launch code remain unchanged; certificate verification stays enabled. The fixture
+removes its keys, certificates and processes after completion. Focused tests must
+reject wrong and missing CA trust; no OS/keychain trust is installed.
 For upload-start attribution without exercising unsupported download storage, use
 `pnpm --dir remix run test:files:mac-paged -- --two-way-early --normal-early-budget --upload-start-diagnostic`.
 This keeps the canonical two-way connection but starts with an empty synthetic
@@ -5948,7 +5956,7 @@ Build the current server and non-shipping Swift fixture, then run:
 
 ```sh
 swift build --package-path macos/ThingtimeNode --product MacFolderSyncFixture
-(cd remix && NITRO_PRESET=node-server pnpm exec nitro build)
+NITRO_PRESET=node_middleware pnpm --dir remix run build:server
 pnpm --dir remix run test:files:mac-paged
 ```
 

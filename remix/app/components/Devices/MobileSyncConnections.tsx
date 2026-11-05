@@ -770,7 +770,7 @@ function Connections({
 								</Button>
 							)}
 						</Box>
-						<Button size="sm" minHeight="40px" variant="outline" isDisabled={busy || !!draft?.pending || !ready} onClick={() => open(saved.id)}>
+						<Button size="sm" minHeight="40px" variant="outline" isDisabled={viewBusy || !!draft?.pending || !ready} onClick={() => open(saved.id)}>
 							Edit
 						</Button>
 						{running ? (
@@ -839,7 +839,7 @@ function Connections({
             ))}
 			{[...retainedDrafts.current.values()].map(draft => (
 				<SyncEditorPlacement key={draft.id} targetId={connections.some(saved => saved.id === draft.id) ? `${editorPrefix}-${draft.id}` : undefined}><Box hidden={selectedId !== draft.id} marginTop={4} border="1px solid var(--tt-border, #ececef)" borderRadius="12px" padding={3}>
-					<SyncConfigurationForm sourcePathsAvailable={supportsNativeSourcePaths(capabilities)} draft={draft} roots={roots} folders={folders} disabled={busy || draft.pending || !ready} scopeKey={`${key}:${generation}:${draft.id}`} accountTransport={reviewTransport} onChange={edit} onResourceValidityChange={valid => { resourceValidity.current.set(draft.id, valid); if (selectedId === draft.id) setResourceDraftValid(valid); }} />
+					<SyncConfigurationForm sourcePathsAvailable={supportsNativeSourcePaths(capabilities)} draft={draft} roots={roots} folders={folders} disabled={viewBusy || draft.pending || !ready} scopeKey={`${key}:${generation}:${draft.id}`} accountTransport={reviewTransport} onChange={edit} onResourceValidityChange={valid => { resourceValidity.current.set(draft.id, valid); if (selectedId === draft.id) setResourceDraftValid(valid); }} />
 					{folderCursor && (
 						<Button size="sm" minHeight="40px" marginTop={2} isDisabled={busy} onClick={() => void run(() => load('folders', folderCursor))}>
 							More cloud folders

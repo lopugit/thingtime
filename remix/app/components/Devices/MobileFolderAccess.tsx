@@ -1,7 +1,7 @@
 import { supportsNativeSourcePaths, validNativeSourcePath } from '~/fileSync/mobileFolders.client';
 import { nativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Spinner, Text } from '@chakra-ui/react';
 import { requestMobileFolders, supportsMobileFolders, type FolderRequest, type MobileFolder } from '~/fileSync/mobileFolders.client';
 import type { FolderHost } from '~/fileSync/desktopFolders.client';
 import { getNativeBridge } from '~/utils/nativeBridge';
@@ -82,7 +82,7 @@ function FolderAccess({ ownerId, deviceId, host, active = true }: FolderAccessPr
 			<Flex align="center" justify="space-between" gap={2} wrap="wrap">
 				<Box flex="1" minWidth={{ base: '100%', sm: '180px' }}>
 					<Text fontSize="13px" fontWeight={700}>
-						Folder access
+						Folder access {busy ? <Spinner as="span" size="xs" marginLeft={2} role="status" aria-label="Refreshing folder access" /> : null}
 					</Text>
 					<Text fontSize="12px" color="var(--tt-muted, #71717a)">
 						Choose folders this account can use on this device. Selection alone does not start uploads.

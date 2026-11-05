@@ -11,6 +11,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { MacFixtureTransport, FixtureIdentityTiming, FixturePageObservers } from './mac-fixture-transport.mjs';
 import { createMacFixtureHost, macFixtureWorkerOptions, macFixtureRuntime } from './mac-fixture-host.mts';
+import { createFixtureTLSFetch } from './mac-fixture-tls.mjs';
 import { saveDeviceSyncResourcePolicy, deviceResourceKey, readDeviceSyncResourcePolicy } from '../app/fileSync/deviceResourcePolicy';
 import { NATIVE_INVENTORY_BATCH_ENTRIES } from '../app/fileSync/nativeInventory';
 import { supportsNativeStreamingBatches } from '../app/fileSync/mobileFolders.client';
@@ -74,6 +75,7 @@ const fixture = JSON.parse(await readFile(fixturePath, 'utf8')),
 assert.equal(base.protocol, 'http:');
 assert.equal(base.hostname, '127.0.0.1');
 assert.equal(base.origin, fixture.base);
+const setupByteFetch: typeof fetch = fixture.tls ? createFixtureTLSFetch(fixture.tls.origin, fixture.tls.caFile) : fetch;
 const directory = await mkdtemp(path.join(tmpdir(), 'thingtime-mac-sync-live-'));
 const cookies = new Map<string, string>();
 let native: ChildProcessWithoutNullStreams | undefined;
@@ -115,7 +117,7 @@ const sessionFetch: typeof fetch = async (url, init = {}) => {
 	if (init.method === 'PUT') counts.puts++;
 	let response: Response;
 	const started = Date.now();
-	try { response = await fetch(target, { ...init, headers, redirect: 'error', signal: init.signal ?? AbortSignal.timeout(target.pathname === '/api/v1/things/import' ? 120000 : 30000) }); }
+	try { response = await setupByteFetch(target, { ...init, headers, redirect: 'error', signal: init.signal ?? AbortSignal.timeout(target.pathname === '/api/v1/things/import' ? 120000 : 30000) }); }
 	catch (cause) { throw Error(`Acceptance HTTP ${init.method ?? 'GET'} ${target.pathname} failed`, { cause }); }
 	finally {
 		const elapsed = Date.now() - started, metric = httpLatency[requestClass] ?? { count: 0, totalMs: 0, maxMs: 0 };
@@ -830,6 +832,7 @@ try {
 				firstLocalChangeMs, firstAdmittedMs, firstAdmittedPath, serverPutBaseline, serverPutEvents: await serverPuts(), firstPutMs: firstTransferMs, firstPutObservation: 'server-received native transfer-worker PUT', earlyFirstRequestMs,
                 parity: { capabilities: caps, nativeOperationGuards: true, compositeAuthorization: true, customMutationHook: false,
                     canonicalDesktopManager: true, canonicalRendererHost: true, canonicalTransferWorkerSelected: true,
+                    tlsTrust: fixture.tls ? "ephemeral CA scoped to exact canonical child; setup byte fetch scoped to TLS origin; no OS trust changes" : "none",
                     rendererDevicePolicy: readDeviceSyncResourcePolicy(deviceResourceKey(base.origin, fixture.userId, deviceId!)) },
                 hostTimings, boundaryTimings, nativeIdentityCalls, nativeTransportTiming: nativeTransport?.timings, nativeServiceTiming, nativeIdentityTiming, earlyIdentityStartTotalMs,
                 nativeLatency, httpLatency, httpRequests, nativeCalls, verifyCalls, cooldownCount, cooldownSeconds,
@@ -844,6 +847,7 @@ try {
 				firstAdmittedPath, serverPutBaseline, serverPutEvents: await serverPuts(), firstPutMs: firstTransferMs, firstPutObservation: 'server-received native transfer-worker PUT', earlyFirstRequestMs,
                 parity: { capabilities: caps, nativeOperationGuards: true, compositeAuthorization: true, customMutationHook: false,
                     canonicalDesktopManager: true, canonicalRendererHost: true, canonicalTransferWorkerSelected: true,
+                    tlsTrust: fixture.tls ? "ephemeral CA scoped to exact canonical child; setup byte fetch scoped to TLS origin; no OS trust changes" : "none",
                     rendererDevicePolicy: readDeviceSyncResourcePolicy(deviceResourceKey(base.origin, fixture.userId, deviceId!)) },
                 hostTimings, boundaryTimings, nativeIdentityCalls, nativeTransportTiming: nativeTransport?.timings, nativeServiceTiming, nativeIdentityTiming, earlyIdentityStartTotalMs,
                 nativeLatency, httpLatency, httpRequests, nativeCalls, verifyCalls, cooldownCount, cooldownSeconds,
