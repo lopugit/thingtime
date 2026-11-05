@@ -14793,3 +14793,10 @@ the isolated real-API/browser command and the metadata-only session boundary.
   identity admission, global 5,000,000 B/s transfer/scan and CPU 15% policies.
   Keep one persistent fixture process and record native callback boundaries;
   a compound request spans PUT, so its whole duration is not pre-PUT latency.
+
+- Native Release packaging regression: run
+  `node --test electron/test/native-bundle-build.test.cjs`, then the canonical
+  signed local build with its isolated native cache. Explicit shipped-product
+  compilation must exclude test-only `@testable` fixtures; a failed product or
+  missing shipped executable must stop before staging/replacement. Verify all
+  three Swift binaries and the Rust helper through the signed-bundle verifier.

@@ -90,3 +90,14 @@ current structural refresh with bounded retention. The compound/cloud-file and
 custom-policy/client regressions passed again against the integrated tree.
 The added custom-policy fixture is explicitly typed as `ForegroundSyncInput` so
 its optional mutation hook is checked by the raw TypeScript run.
+
+## Release-entry correction
+
+Canonical signed staging exposed an existing package-wide Release build of the
+private `@testable` fixture. The bundle entry now explicitly builds only its
+three shipped Swift products and reuses that set for executable checks/copying;
+all existing signing identifiers, entitlements and fail-closed behavior remain.
+The fixture and private identity admission actor remain test-only/internal.
+The new regression executes the canonical shell entry with isolated commands:
+a required product failure and a missing executable both stop before staging.
+The final signed build/install remain subject to ordinary validation and PR gates.
