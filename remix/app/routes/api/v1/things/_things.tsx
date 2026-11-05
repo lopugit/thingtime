@@ -1,8 +1,8 @@
 import { withFoundPostBrowser, foundPostVisitIp } from '~/api/utils/things/foundPostRequest';
-import { json } from '~/api/http';
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT, json } from '~/api/http';
 
-import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
-import { appCorsHeaders, appDataPreflight } from '~/api/utils/apps/cors';
+import { actorCors, actorPat, actorUser, inspectActorForBody, resolveActor } from '~/api/utils/auth/resolveActor';
+import { appCorsHeaders, appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
 import {
   createReadyAttachmentPostInsertHook,
   inspectReadyAttachmentsForPost,
@@ -73,11 +73,6 @@ const patScopeFor = (method: string, body: any): string | string[] => {
   if (method === 'DELETE') return 'things.delete';
   return 'things.read';
 };
-
-// Crystal payloads are small (text + image URLs + listing), but every thing
-// also carries the schema-free `extended` sidecar (up to EXTENDED_MAX_BYTES =
-// 512KB, enforced by sanitizeExtended) — the body cap leaves headroom for both.
-const MAX_BODY_BYTES = 768 * 1024;
 
 const csv = (value: string | null): string[] =>
   (value || '')
@@ -263,22 +258,20 @@ export const action = async ({ request }: { request: Request }) => {
   const preflight = appDataPreflight(request, 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   if (preflight) return preflight;
 
-  // The 413 fires before any actor resolution (an oversized payload must not
-  // consume a PAT use), so its CORS headers come straight from the Origin.
-  const contentLength = Number(request.headers.get('content-length') || 0);
-  if (contentLength > MAX_BODY_BYTES) {
-    return json(
-      { ok: false, error: 'Post payload too large' },
-      { status: 413, headers: appCorsHeaders(request.headers.get('Origin')) }
-    );
-  }
-
-  // Body before auth: the PAT scope a mutation needs depends on what the body
-  // says it is (a POST carrying thingtime ['reaction'] is a react, not a
-  // create), and a missing scope must 403 BEFORE a use is consumed.
   const method = request.method.toUpperCase();
-  const body = await request.json().catch(() => ({}));
-
+  const candidates = method === 'POST' ? ['things.create', 'things.comment', 'things.react'] : [patScopeFor(method, {})];
+  const ingressActor = await inspectActorForBody(request, candidates);
+  if (ingressActor instanceof Response) return ingressActor;
+  if (ingressActor.kind === 'anonymous') return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  const ingressUser = actorUser(ingressActor)!;
+  const ingressKey = rateLimitKeyFor({}, ingressUser.accountKind);
+  const ingressLimit = await enforceRateLimit(request, ingressKey, ingressActor.kind === 'app' ? ingressActor.rateIdentity : `user:${ingressUser.id}`);
+  if (!ingressLimit.allowed) {
+    const init = rateLimitedResponseInit(ingressLimit);
+    return json({ ok: false, error: 'You’re doing that too fast — take a breather 🌸' }, { ...init, headers: { ...init.headers, ...actorCors(ingressActor) } });
+  }
+  const body = await readJsonBodyWithCors(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT, actorCors(ingressActor));
+  // Exact permission and atomic token-use admission precede every effect.
   const actor = await resolveActor(request, { thingsScope: patScopeFor(method, body) });
   if (actor instanceof Response) return actor;
   if (actor.kind === 'anonymous') {
@@ -298,9 +291,10 @@ export const action = async ({ request }: { request: Request }) => {
   // one is exempt (service-account provisioning is unauthenticated, so
   // accountKind confers no trust); service accounts just get a higher ceiling.
   // App actors consume their own per-(user, app) windows.
-  const limit = await enforceRateLimit(
+  const operationKey = rateLimitKeyFor(body, user.accountKind);
+  const limit = operationKey === ingressKey ? ingressLimit : await enforceRateLimit(
     request,
-    rateLimitKeyFor(body, user.accountKind),
+    operationKey,
     actor.kind === 'app' ? actor.rateIdentity : `user:${user.id}`
   );
   if (!limit.allowed) {

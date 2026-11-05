@@ -289,7 +289,7 @@ final class MobileFolderInventoryTests: XCTestCase {
         XCTAssertEqual(try store.capture(scope, id: id, bookmark: bookmark), capture)
         try Data("later edit".utf8).write(to: source.appendingPathComponent("file-0"))
         let database = directory.deletingLastPathComponent().appendingPathComponent(".shared-index/filesystem-index.sqlite3")
-        let transport = PageCountingTransport(base: RustProcessInventoryTransport(helper: try RustIndexFixture.executable(), database: database))
+        let transport = PageCountingTransport(base: try RustIndexFixture.transport(database: database))
         let reopened = MobileFolderInventory(directory: directory, transport: transport, database: database)
         var offset = 0, paths = Set<String>(), pages = 0
         let pageStarted = Date()
@@ -491,11 +491,11 @@ final class MobileFolderInventoryTests: XCTestCase {
 }
 
 private final class PageCountingTransport: RustInventoryTransport, @unchecked Sendable {
-    private let base: RustProcessInventoryTransport
+    private let base: any RustInventoryTransport
     private let lock = NSLock()
     private var counts: [String: Int] = [:]
 
-    init(base: RustProcessInventoryTransport) { self.base = base }
+    init(base: any RustInventoryTransport) { self.base = base }
 
     func count(_ operation: String) -> Int {
         lock.lock(); defer { lock.unlock() }

@@ -25,7 +25,7 @@ export function componentRichTextHasContent(document: EditorJsDoc): boolean {
 		if (typeof value === 'string' && inlineHtmlToText(value).trim()) return true;
 		if (!value || typeof value !== 'object' || seen.has(value)) continue;
 		seen.add(value);
-		if (Array.isArray(value)) pending.push(...value);
+		if (Array.isArray(value)) for (const child of value) pending.push(child);
 		else
 			for (const key of ['text', 'content', 'title', 'message', 'caption', 'code', 'url', 'source', 'embed', 'items', 'file']) {
 				if (Object.prototype.hasOwnProperty.call(value, key)) pending.push((value as Record<string, unknown>)[key]);

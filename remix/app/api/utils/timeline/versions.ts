@@ -1,8 +1,8 @@
+import { copyTimelineContent } from '../../../timeline/contentJson.ts';
 import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from '../../../timeline/snapshotParts.ts';
 import { readTimelineSnapshot } from './snapshotParts.ts';
 import { createHash } from 'node:crypto';
-import { copyBoundedJson } from '../../../utils/boundedJson.ts';
-import { PUBLISHED_PREVIEW_MAX_BYTES, TIMELINE_UNDO_LABEL, parseVersionRequest, type VersionRequest } from '../../../timeline/publishedVersion.ts';
+import { TIMELINE_UNDO_LABEL, parseVersionRequest, type VersionRequest } from '../../../timeline/publishedVersion.ts';
 import type { TimelineEntry, TimelineSnapshot } from '../../../timeline/contract.ts';
 import { mergeVersionValues, versionContent, versionContentEquals } from '../../../timeline/versions.ts';
 import { getThingsCollection, withMongoTransaction } from '../mongodb/collections';
@@ -362,7 +362,7 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 		};
 		try {
 			if (request.command === 'preview-version')
-				copyBoundedJson(preview, { maxBytes: PUBLISHED_PREVIEW_MAX_BYTES, maxDepth: 100, maxNodes: 800_000 }, 'Version comparison');
+				copyTimelineContent(preview, 'Version comparison', 4);
 		} catch {
 			return reject(413, 'This comparison is too large to preview. Its recorded versions are still retained.');
 		}

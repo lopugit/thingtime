@@ -1,4 +1,6 @@
-import { copyBoundedJson, type JsonValue } from '../utils/boundedJson.ts';
+import { TIMELINE_SNAPSHOT_MAX_BYTES } from './snapshotParts.ts';
+import type { JsonValue } from '../utils/boundedJson.ts';
+import { copyTimelineContent } from './contentJson.ts';
 import type { TimelineSnapshot } from './contract.ts';
 import { FOLDER_PLACEMENT_ADAPTER, folderPlacementValue } from './folderPlacement.ts';
 
@@ -10,14 +12,13 @@ const own = (value: object, key: string) => Object.prototype.hasOwnProperty.call
 const present = (value: JsonValue): VersionValue => ({ present: true, value });
 const equal = (a: VersionValue, b: VersionValue) => JSON.stringify(a) === JSON.stringify(b);
 const record = (value: VersionValue): value is { present: true; value: Record<string, JsonValue> } => value.present && value.value !== null && typeof value.value === 'object' && !Array.isArray(value.value);
-const copy = (value: unknown): JsonValue => copyBoundedJson(value, { maxBytes: 4 * 1024 * 1024, maxDepth: 90, maxNodes: 100_000, sortKeys: true }, 'Version content');
+const copy = (value: unknown): JsonValue => copyTimelineContent(value, 'Version content', 0, TIMELINE_SNAPSHOT_MAX_BYTES);
 
 /** Deterministic three-way merge. Absent properties differ from null. Arrays
  * remain atomic so reorders/deletions never silently change index identities. */
 export function mergeVersionValues(base: unknown, current: unknown, incoming: unknown, choices: VersionChoices = {}) {
- const conflicts: VersionConflict[] = []; const used = new Set<string>(); let visits = 0;
+ const conflicts: VersionConflict[] = []; const used = new Set<string>();
  const merge = (a: VersionValue, b: VersionValue, c: VersionValue, path: string[]): VersionValue => {
-  if (++visits > 100_000) throw new Error('This merge is too large to preview.');
   if (equal(b, c)) return b;
   if (equal(a, b)) return c;
   if (equal(a, c)) return b;

@@ -61,14 +61,7 @@ const collection = {
   countDocuments: async (query: any) => { reads.push({ query, count: true }); return rows.filter(row => matches(row, query)).length; },
   aggregate: (pipeline: any[]) => {
     aggregates.push(pipeline);
-    assert.equal(pipeline.length, 3, 'no graph/reply/count hydration is permitted');
-    const top = pipeline[2].$group.docs.$topN;
-    assert.equal(top.n, 26);
-    return { toArray: async () => {
-      const groups = new Map<string, any[]>();
-      for (const row of rows.filter(row => matches(row, pipeline[0].$match))) groups.set(row.targetId, [...(groups.get(row.targetId) || []), row]);
-      return [...groups].map(([id, docs]) => ({ _id: id, docs: sortRows(docs.map(doc => ({ ...doc, discussionAttachmentOrder: Number.isSafeInteger(doc.attachmentSortIndex) && doc.attachmentSortIndex >= 0 ? doc.attachmentSortIndex : Number.MAX_SAFE_INTEGER })), top.sortBy).slice(0, top.n) }));
-    } };
+    throw new Error('Discussion pages must not aggregate attachment bodies');
   }
 };
 mock.module('../mongodb/collections', { namedExports: { getThingsCollection: async () => collection, getHomeThingsCollection: async () => collection, getUsersCollection: async () => collection, withMongoTransaction: async () => { throw new Error('No writes'); } } });
@@ -100,7 +93,10 @@ test('each page authorizes children before hydration and never reads siblings, r
   assert.equal(result.comments?.[0].targetId, 'root'); unknownTotals(result.comments![0]);
   assert.equal(reads.filter(read => read.query.thingtime === 'user').length, 1, 'authors batched once');
   assert.equal(reads.some(read => read.query.shareId?.$in?.includes('private-author')), false, 'denied child never hydrates author');
-  assert.equal(aggregates.length, 1); assert.deepEqual(aggregates[0][0].$match.$and[1].$or.map((row: any) => row.targetId), ['visible']);
+  assert.equal(aggregates.length, 0);
+  const attachmentReads = reads.filter(read => read.query.$and?.some((clause: any) => clause.thingtime === 'attachment'));
+  assert.equal(attachmentReads.length, 1);
+  assert.deepEqual(attachmentReads[0].query.$and[1].$or.map((row: any) => row.targetId), ['visible']);
   assert.equal(reads.filter(read => read.query.shareId?.$in?.includes('root')).length, 2, 'ACL and audience each coalesce ancestry, never per child');
 });
 
@@ -165,15 +161,17 @@ test('linked references are batched and private or app-scoped linked records rem
   assert.equal(reads.filter(read => read.query.shareId?.$in?.includes('public-link')).length, 1);
 });
 
-test('attachment hydration is bounded per source, owner/purpose/ACL/moderation fenced and strips private storage metadata', async () => {
+test('attachment hydration preserves every authorized source attachment and strips private storage metadata', async () => {
   rows.push(comment('with-files'));
   const file = (id: string, extra: any = {}) => doc(id, { thingtime: ['attachment'], targetId: 'with-files', acl: ['tt:inherit'], attachmentPurpose: 'comment', attachmentState: 'ready',
     crystal: { name: 'file.png', contentType: 'image/png', size: 1, mediaKind: 'image' }, objectKey: 'never-public', uploadId: 'private-upload', ...extra });
   for (let i = 0; i < 30; i++) rows.push(file(`file-${String(i).padStart(2, '0')}`, { attachmentSortIndex: i }));
   rows.push(file('foreign', { ownerId: 'stranger' }), file('private', { acl: ['tt:user'] }), file('wrong-purpose', { attachmentPurpose: 'post' }), file('blocked-file', { moderation: { status: 'blocked' } }));
   const result = await page(); assert.equal(result.ok, true); if (!result.ok) return;
-  assert.equal(result.comments![0].attachments.length, 25); assert.equal(result.comments![0].attachmentsTruncated, true);
-  assert.equal(result.things[0].attachments?.length, 25); assert.equal(aggregates.length, 1);
+  assert.equal(result.comments![0].attachments.length, 30); assert.equal(result.comments![0].attachmentsTruncated, undefined);
+  assert.deepEqual(result.comments![0].attachments.map((file: any) => file.id), Array.from({ length: 30 }, (_, index) => `file-${String(index).padStart(2, '0')}`));
+  assert.equal(result.things[0].attachments?.length, 30); assert.equal(aggregates.length, 0);
+  assert.equal(reads.filter(read => read.query.$and?.some((clause: any) => clause.thingtime === 'attachment')).length, 1);
   const text = JSON.stringify(result); for (const secret of ['never-public', 'private-upload', 'foreign', 'wrong-purpose', 'blocked-file']) assert.equal(text.includes(secret), false, secret);
 });
 
@@ -230,7 +228,8 @@ test('a full 20-item page uses fixed batch work and the next page returns the re
   const first = await page({ limit: 20 }); assert.equal(first.ok, true); if (!first.ok) return;
   assert.equal(first.comments?.length, 20); assert.ok(first.nextCursor);
   assert.equal(reads.filter(read => read.limit).length, 1); assert.equal(reads.find(read => read.limit)?.limit, 21);
-  assert.equal(reads.filter(read => read.query.thingtime === 'user').length, 1); assert.equal(aggregates.length, 1);
+  assert.equal(reads.filter(read => read.query.thingtime === 'user').length, 1); assert.equal(aggregates.length, 0);
+  assert.equal(reads.filter(read => read.query.$and?.some((clause: any) => clause.thingtime === 'attachment')).length, 1);
   assert.equal(reads.filter(read => read.query.shareId?.$in?.includes('root')).length, 2);
   const second = await page({ limit: 20, cursor: first.nextCursor }); assert.equal(second.ok, true); if (!second.ok) return;
   assert.equal(second.comments?.length, 5); assert.equal(second.nextCursor, null);
