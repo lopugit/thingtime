@@ -191,6 +191,9 @@ destination under the same transaction and ancestor locks used by the
 canonical file and folder writers. Early two-way cloud writes negotiate
 `api.files` 1.10.0 before using that guard. The strict paged plan and
 checkpoint remain responsible for reconciliation and agreement.
+`app/fileSync/cloudIndexChanges.client.ts` validates Timeline deltas against
+the same sync entry contract as snapshots: nonempty files require multipart
+fingerprints, while canonical zero-byte files use the empty SHA-256 identity.
 
 
 `FilesystemThingsBrowser.tsx` adapts ephemeral remote inode entries into the
