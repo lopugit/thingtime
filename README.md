@@ -2574,6 +2574,8 @@ for those also set the dev server's origin and restart:
 
 ```sh
 THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://127.0.0.1:10000   # this checkout's Nitro port (npm run web-ports)
+# Native signed range downloads require a trusted HTTPS origin instead.
+# Range targets last at most 60 seconds and require the exact signed Range header.
 ```
 
 Exact object versions are immutable, so the stand-in answers with an `ETag`
