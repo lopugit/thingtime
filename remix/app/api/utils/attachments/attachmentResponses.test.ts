@@ -72,3 +72,21 @@ test('subspace image uploads require public approval even with private upload ap
     assert.equal(called, false);
   }
 });
+
+
+test('durable request cancellation requires full user auth while legacy Watch cleanup remains available', async () => {
+	let calls = 0, body: Record<string,unknown> = { requestId: 'original-request' };
+	const action = createAttachmentMutationAction({ rateKey: 'attachments.delete', requestIdRequiresFullUser: true,
+		service: async () => { calls++; return { ok: true }; }
+	}, { getUser: async () => user, enforceLimit: async () => allowedLimit, readBody: async () => body });
+	const request = (watch: boolean) => new Request('https://thingtime.com/api/v1/attachments/uploads/abort', {
+		method: 'POST', headers: { 'Content-Type': 'application/json', ...(watch ? { Authorization: 'Bearer ttnode_example' } : {}) }, body: '{}'
+	});
+	assert.equal((await action({ request: request(true) })).status, 403); assert.equal(calls, 0);
+	assert.equal((await action({ request: request(false) })).status, 200);
+	body = { id: 'existing-file', retainReceipt: true, expectedUpdatedAt: '2026-10-16T00:00:00.000Z' };
+	assert.equal((await action({ request: request(true) })).status, 403); assert.equal(calls, 1);
+	assert.equal((await action({ request: request(false) })).status, 200);
+	body = { uploadId: 'legacy-upload' };
+	assert.equal((await action({ request: request(true) })).status, 200); assert.equal(calls, 3);
+});

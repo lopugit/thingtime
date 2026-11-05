@@ -1,0 +1,46 @@
+✔ owned content preserves matching retained subspace display context without borrowing a different destination (42.357878ms)
+✔ retained post snapshots exclude credentials and never acquire ownership or sync state (10.249954ms)
+✔ bounded post pages are atomic and older reads cannot replace newer retained content (177.442066ms)
+✔ Saved uses only local membership, bookmarks order, scoped pagination and preserved authors (15.346156ms)
+✔ projection and nested membership preserve content without transferring authority (1.082078ms)
+✔ known refusals prune all nested copies and fence older in-flight reads (14.950929ms)
+✔ canonical comment-only projections retain their exact kind and target without becoming generic posts (5.114339ms)
+✔ late feed refusals fence captured roots and nested reads while preserving pending authored work (58.113035ms)
+✔ a captured pending owned-only feed post cannot return after deletion without a read-cache watermark (18.119672ms)
+✔ a captured synced owned-only feed post cannot return after deletion without a read-cache watermark (9.869207ms)
+✔ deleting an owned root clears retained descendants and shared references in the same transaction (122.820387ms)
+✔ account creates and updates commit locally first and sync canonical content (48.914624ms)
+✔ lost responses replay one immutable identity after database reopen (19.730047ms)
+✔ typing during sync retains newer edits and advances from the acknowledged server version (22.623082ms)
+✔ two tabs claim a write once and an invalidated identity cannot acknowledge it (23.883672ms)
+✔ remote conflicts preserve edits and cannot retry as an overwrite (36.999027ms)
+✔ anonymous and foreign content cannot sync; parents sync before children (35.849786ms)
+✔ sync acknowledgements preserve the editor token and remote clocks do not hide new versions (46.01526ms)
+✔ local tag normalization matches canonical server writes, including lost-response readback (8.979484ms)
+✔ conflict review fences both versions and keep-local uses the reviewed server version (51.381481ms)
+✔ keep-remote is an explicit local replacement and invalidates old editor tokens (24.815723ms)
+✔ a definitive validation refusal can be corrected, while ambiguous outcomes retain their frozen request (21.011509ms)
+✔ an orphaned queue entry is quarantined instead of stalling every other pending write (10.519825ms)
+✔ account moves commit placement and sync intent atomically, survive reopen and wait for new destinations (122.897168ms)
+✔ account batch move rolls back content and queue together on cycles or missing sync bases (41.768672ms)
+✔ a move during an ambiguous write preserves the frozen retry and syncs the later placement afterward (51.153728ms)
+✔ a remote edit conflicts with an offline move and reviewed keep-local preserves both local content and destination (45.884445ms)
+✔ schema-based data waits for its copied definition after a failed schema sync (16.524102ms)
+✔ catalogue batches retain canonical owned content atomically without replacing pending edits or deletions (29.452248ms)
+✔ account post and reply submissions commit locally, preserve replay identity and sync parents first (64.486927ms)
+✔ retained foreign discussions allow local reply storage but never grant server write permission (13.159673ms)
+✔ read refusal retires synced owned projections and fences older reads without discarding pending authorship (40.785477ms)
+✔ a post waits for linked device Things before attempting its account create (42.681165ms)
+✔ device feed pages all matching roots with canonical filters and stable chronology (110.007928ms)
+✔ device cursors bind workspace, source, filters and selected profile (17.822715ms)
+✔ device feed never infers live membership, community ranks, or unknown filters (3.480363ms)
+✔ anonymous feed reads owned roots offline, trains its local profile and fences retired facades (101.344086ms)
+✔ account feed merges owned work and retained reads without restoring refused, deleted or foreign-plane posts (104.187549ms)
+ℹ tests 38
+ℹ suites 0
+ℹ pass 38
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3370.369057

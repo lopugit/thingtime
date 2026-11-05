@@ -1,0 +1,108 @@
+{
+  "checks": [
+    "normal account reader exact synthetic canonical encrypted data remains visible offline",
+    "real cross-tab identity invalidation unmounts old reader while root response is held",
+    "1440/390/320px top-to-bottom scrolling without horizontal overflow; exact reader subject/body inside viewport and unobscured at sampled points; normal fixed controls retained",
+    "next root-confirmed account opens its separate saved reader; same message ID does not reuse previous selection; old partition retained unchanged"
+  ],
+  "renderedReaders": [
+    {
+      "width": 1440,
+      "documentWidth": 1440,
+      "targets": [
+        {
+          "text": "ACCOUNT B subject",
+          "x": 373,
+          "y": 265.796875,
+          "width": 950,
+          "height": 30,
+          "right": 1323,
+          "bottom": 295.796875,
+          "unobscured": true
+        },
+        {
+          "text": "ACCOUNT B private body",
+          "x": 373,
+          "y": 409.796875,
+          "width": 950,
+          "height": 25.1875,
+          "right": 1323,
+          "bottom": 434.984375,
+          "unobscured": true
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "documentWidth": 390,
+      "targets": [
+        {
+          "text": "ACCOUNT B subject",
+          "x": 33,
+          "y": 265.796875,
+          "width": 324,
+          "height": 30,
+          "right": 357,
+          "bottom": 295.796875,
+          "unobscured": true
+        },
+        {
+          "text": "ACCOUNT B private body",
+          "x": 33,
+          "y": 409.796875,
+          "width": 324,
+          "height": 25.1875,
+          "right": 357,
+          "bottom": 434.984375,
+          "unobscured": true
+        }
+      ]
+    },
+    {
+      "width": 320,
+      "documentWidth": 320,
+      "targets": [
+        {
+          "text": "ACCOUNT B subject",
+          "x": 33,
+          "y": 265.1875,
+          "width": 254,
+          "height": 30,
+          "right": 287,
+          "bottom": 295.1875,
+          "unobscured": true
+        },
+        {
+          "text": "ACCOUNT B private body",
+          "x": 33,
+          "y": 409.1875,
+          "width": 254,
+          "height": 25.1875,
+          "right": 287,
+          "bottom": 434.375,
+          "unobscured": true
+        }
+      ]
+    }
+  ],
+  "proof": {
+    "a": [
+      {
+        "subject": "ACCOUNT A subject",
+        "text": "ACCOUNT A private body"
+      }
+    ],
+    "b": [
+      {
+        "subject": "ACCOUNT B subject",
+        "text": "ACCOUNT B private body"
+      }
+    ]
+  },
+  "mail": [],
+  "errors": [],
+  "limits": [
+    "synthetic disposable account transition on one loopback origin",
+    "no provider mail, native transport, selected-origin change, or installed-app acceptance"
+  ]
+}

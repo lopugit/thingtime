@@ -1,0 +1,28 @@
+{
+  "checkedOn": "2026-10-23",
+  "availableToolDiscovery": {
+    "match": "thingtime|render_and_export|draft-preview against tool names and descriptions",
+    "matchingTools": []
+  },
+  "pluginDiscovery": {
+    "tool": "plugin_management_search_plugins",
+    "query": "Thingtime",
+    "plugins": [],
+    "additionalQueries": {
+      "stdio": [],
+      "local MCP": "Only unrelated service plugins were returned; none offered a local stdio bridge or arbitrary MCP-server registration."
+    }
+  },
+  "registrationCapability": "The available plugin-management workflow provides catalog discovery, suggestions, dependency/permission inspection and existing-app management. No available tool registers an arbitrary local MCP server in this chat.",
+  "localStdioAcceptance": true,
+  "chatHostAcceptance": false,
+  "reason": "This chat has no connected Thingtime MCP tool or discoverable Thingtime plugin. Local SDK stdio results do not demonstrate this host's artifact attachment transport.",
+  "finalToolRecheck": {
+    "at": "2026-10-23T09:45:39.959097+00:00",
+    "availableToolCount": 313,
+    "thingtimeTools": [],
+    "localStdioRegistrationTools": [],
+    "genericResourceReadersDoNotRegisterServers": true,
+    "query": "thingtime|register.*mcp|mcp.*register|stdio.*server|local.*mcp.*server against available tool names and descriptions"
+  }
+}

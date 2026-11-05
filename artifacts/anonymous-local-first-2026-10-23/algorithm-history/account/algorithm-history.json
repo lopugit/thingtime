@@ -1,0 +1,67 @@
+{
+  "formatVersion": 1,
+  "exportedAt": "2026-10-23T07:03:02.339Z",
+  "event": {
+    "actorId": "6adb0694a8437e16e573fb02",
+    "after": {
+      "adapter": "algorithm-content",
+      "value": {
+        "crystal": {
+          "description": "",
+          "emoji": "🧠",
+          "eventCount": 0,
+          "lastTrainedAt": null,
+          "name": "History profile 087cff",
+          "weights": {
+            "authors": {},
+            "tags": {},
+            "types": {}
+          }
+        },
+        "folderId": null
+      },
+      "version": 1
+    },
+    "before": null,
+    "branchId": "device-workspace-1d147686-1331-471c-825b-61bc6496bdfb",
+    "clientId": "workspace-1d147686-1331-471c-825b-61bc6496bdfb",
+    "dependencies": [],
+    "formatVersion": 1,
+    "id": "device-event-bf4dd9d5-e807-4b35-a938-2a0724ce4432",
+    "label": "Created Thing on this device",
+    "mode": "draft",
+    "occurredAt": "2026-10-23T07:02:50.322Z",
+    "operation": "create",
+    "operationId": "c2d8eb7c-c01c-4219-a611-b806a27994bf",
+    "ownerId": "6adb0694a8437e16e573fb02",
+    "parentIds": [],
+    "source": "client",
+    "thingId": "0ac771a1-8264-4b25-b6cc-ed0a4fff2c83"
+  },
+  "receipt": null,
+  "content": {
+    "adapter": "algorithm-content",
+    "value": {
+      "crystal": {
+        "description": "",
+        "emoji": "🧠",
+        "eventCount": 0,
+        "lastTrainedAt": null,
+        "name": "History profile 087cff",
+        "weights": {
+          "authors": {},
+          "tags": {},
+          "types": {}
+        }
+      },
+      "folderId": null
+    },
+    "version": 1
+  },
+  "notes": [],
+  "name": null,
+  "context": {
+    "source": "device",
+    "complete": false
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "image": "sha256:5c17ff3d0158b726b014ea37d18286ed6bf9187db9f650ff51e17b35f4a315be",
+  "budgets": {
+    "startupMs": 90000,
+    "shutdownMs": 10000,
+    "cleanupMs": 35000,
+    "sessionSeconds": 150,
+    "scenarioMs": 180000,
+    "testMs": 420000
+  },
+  "scenarios": [
+    {
+      "scenario": "stdin EOF",
+      "name": "thingtime-render-7e446a2f-cf55-4f24-b941-0e7aed7356ce",
+      "code": 0,
+      "signal": null,
+      "containerRemoved": true,
+      "volumeRemoved": true,
+      "privateDirectoryRemoved": true
+    },
+    {
+      "scenario": "process-group SIGKILL",
+      "name": "thingtime-render-b4806fda-a77c-4dff-8345-fe949bb01214",
+      "code": null,
+      "signal": "SIGKILL",
+      "containerRemoved": true,
+      "volumeRemoved": true,
+      "privateDirectoryRemoved": true
+    },
+    {
+      "scenario": "independent GNU timeout",
+      "exitCode": 137,
+      "containerRemoved": true,
+      "volumeRequiresGuardian": true
+    }
+  ],
+  "scope": "Actual Docker lifecycle acceptance; no model or browser/render call; exact-argument recording CLI shim"
+}

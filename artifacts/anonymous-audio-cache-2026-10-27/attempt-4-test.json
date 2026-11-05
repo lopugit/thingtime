@@ -1,0 +1,8 @@
+{
+  "reason": "Reviewed context routing with serviceWorker ownership; 30s bounded waits and route.fetch; shipped Playwright contract and safe HTTP/DOM failure checkpoints",
+  "hashes": {
+    "remix/app/components/Attachments/AudioAttachmentPlayer.browser.test.ts": "ef9fb00c20a0a85af6654dc9c4295d7ad3eb23f9279a09f27b31d109502760d9",
+    "tmp/continuation/audio-player.test.mjs": "273a01514f1c77f230992d226dee8e006a558b4c80566ecc6635454df19b2a8b",
+    "artifacts/anonymous-audio-cache-2026-10-27/run.cjs": "1512ef18fea3c3cec35cc1a9faa3730605ad46d5dc8c534dd304901c523f37e3"
+  }
+}

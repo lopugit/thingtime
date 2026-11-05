@@ -4,14 +4,23 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 
 import { PageHeader, PageShell } from '~/components/Layout/PageShell';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
+import { useDebouncedSearchDraft } from '~/hooks/useDebouncedSearchDraft';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { workspaceStorageBinding, workspaceStorageIdentity, subscribeWorkspaceStorage } from '~/local-workspace/storageStatus.client';
+import { deviceNotificationHistory, retryNotificationHistory, subscribeNotificationHistory } from '~/local-workspace/notifications.client';
+import { NotificationPages } from '~/local-workspace/notificationPages';
+import { notificationHistoryAccess, subscribeNotificationHistoryAccess } from '~/local-workspace/notificationHistoryAccess';
+import { workspaceDatabase } from '~/local-workspace/runtime.client';
+import { workspaceScopeKey } from '~/local-workspace/storage';
 import { NOTIFICATION_CATEGORIES, NOTIFICATION_CATEGORY_META, isNotificationCategory, isNotificationType } from '~/schemas/registry';
 import { NotificationRow } from './NotificationRow';
 import {
   NOTIFICATION_TYPES_BY_CATEGORY,
   NOTIFICATION_TYPE_META,
+  deviceSyncStatus,
   hasActiveNotificationFilters,
   notificationFiltersToParams,
   notificationFiltersToQuery,
@@ -31,7 +40,7 @@ import {
 // (social / engagement / feed / system), a type dropdown, unread-only, free
 // text search, and a from/to day window. Optimistic first paint: the
 // unfiltered first page seeds synchronously from localStorage
-// (tt-notif-history-<viewer>, swept on logout) and reconciles in the
+// (workspace-scoped tt-notif-history cache, swept on logout) and reconciles in the
 // background; a filter change keeps the current rows dimmed until the fresh
 // page lands, so nothing ever flashes empty. Clicking a row marks it read
 // optimistically and follows its click-through; "Mark all read" clears the
@@ -56,14 +65,20 @@ type HistoryPage = {
   unreadCount: number;
   bellUnreadCount: number;
   nextCursor: string | null;
+  pendingCount: number;
+  failedCount: number;
+  cachedHistory?: boolean;
+  retainedHistory?: boolean;
+  savedAt?: number;
+  queryKey?: string;
 };
 
-const EMPTY_PAGE: HistoryPage = { at: 0, items: [], total: null, unreadCount: 0, bellUnreadCount: 0, nextCursor: null };
+const EMPTY_PAGE: HistoryPage = { at: 0, items: [], total: null, unreadCount: 0, bellUnreadCount: 0, nextCursor: null, pendingCount: 0, failedCount: 0 };
 
-const readCachedPage = (key: string): HistoryPage | null => {
+const readCachedPage = (key: string, queryKey: string): HistoryPage | null => {
   const entry = readLocalCache<HistoryPage>(key);
   if (!entry || typeof entry.at !== 'number' || !Array.isArray(entry.items)) return null;
-  return { ...EMPTY_PAGE, ...entry };
+  return { ...EMPTY_PAGE, ...entry, cachedHistory: true, savedAt: entry.savedAt || entry.at, queryKey };
 };
 
 const toPage = (resp: any): HistoryPage => ({
@@ -72,7 +87,9 @@ const toPage = (resp: any): HistoryPage => ({
   total: typeof resp?.total === 'number' ? resp.total : null,
   unreadCount: typeof resp?.historyUnreadCount === 'number' ? resp.historyUnreadCount : 0,
   bellUnreadCount: typeof resp?.unreadCount === 'number' ? resp.unreadCount : 0,
-  nextCursor: typeof resp?.nextCursor === 'string' ? resp.nextCursor : null
+  nextCursor: typeof resp?.nextCursor === 'string' ? resp.nextCursor : null,
+  pendingCount: resp?.pendingCount || 0, failedCount: resp?.failedCount || 0,
+  cachedHistory: resp?.cachedHistory === true, retainedHistory: resp?.retainedHistory !== false, savedAt: resp?.savedAt
 });
 
 const dedupeById = (items: NotificationItem[]): NotificationItem[] => {
@@ -93,7 +110,17 @@ const Chip = (props: { active: boolean; onClick: () => void; children: React.Rea
 );
 
 export const NotificationsPage = () => {
-  const user = useCurrentUser();
+  const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+  const currentUser = useCurrentUser();
+  const [params] = useSearchParams();
+  const hasAccountWorkspace = workspaceStorageBinding()?.scope.kind === 'account';
+  const account = hasAccountWorkspace && params.get('source') !== 'device';
+  return <NotificationsHistory key={`${identity}:${account}`} account={account} hasAccountWorkspace={hasAccountWorkspace} canReadAccount={!!currentUser && !currentUser.temporary} />;
+};
+
+const NotificationsHistory = ({ account, hasAccountWorkspace, canReadAccount }: { account: boolean; hasAccountWorkspace: boolean; canReadAccount: boolean }) => {
+  const user = useWorkspaceUser();
+  const binding = workspaceStorageBinding();
   const api = useApi();
   const lopu = useLopu();
   const navigate = useNavigate();
@@ -102,10 +129,11 @@ export const NotificationsPage = () => {
   const filters = React.useMemo(() => parseNotificationFilters(searchParams), [searchParams]);
   const filtersKey = notificationFiltersToParams(filters).toString();
   const active = hasActiveNotificationFilters(filters);
-  const cacheKey = user ? notificationHistoryCacheKey(user.id) : null;
-  const bellCacheKey = user ? `tt-notif-unread-${user.id}` : null;
+  const cacheKey = binding ? notificationHistoryCacheKey(JSON.stringify([workspaceScopeKey(binding.scope), account ? 'account' : 'device'])) : null;
+  const bellCacheKey = account && user ? `tt-notif-unread-${user.id}` : null;
 
-  const [page, setPage] = React.useState<HistoryPage>(() => (cacheKey && !active ? readCachedPage(cacheKey) : null) || EMPTY_PAGE);
+  const mayReadCached = !account || (!!binding && notificationHistoryAccess(binding.scope).canReadCached());
+  const [page, setPage] = React.useState<HistoryPage>(() => (mayReadCached && cacheKey && !active ? readCachedPage(cacheKey, filtersKey) : null) || EMPTY_PAGE);
   // a spinner only on a true cold start — nothing cached, nothing loaded yet
   const [loading, setLoading] = React.useState(!!user && page.items.length === 0);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -113,79 +141,93 @@ export const NotificationsPage = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [marking, setMarking] = React.useState(false);
   const [revision, setRevision] = React.useState(0);
+  const [retrying, setRetrying] = React.useState(false);
 
   React.useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const recorded = (event: Event) => {
-      if ((event as CustomEvent).detail?.userId !== user?.id) return;
+    const watchedBinding = workspaceStorageBinding();
+    const unsubscribe = watchedBinding ? subscribeNotificationHistory(watchedBinding.scope, () => {
       clearTimeout(timer);
       timer = setTimeout(() => setRevision(value => value + 1), 300);
-    };
+    }) : () => {};
+    const unwatchAccess = account && watchedBinding ? subscribeNotificationHistoryAccess(watchedBinding.scope, () => {
+      if (notificationHistoryAccess(watchedBinding.scope).canReadCached()) return;
+      seqRef.current++;
+      setPage(EMPTY_PAGE);
+      if (cacheKey) clearLocalCache(cacheKey);
+      setLoading(false); setRefreshing(false); setLoadingMore(false);
+      setError('Account history access changed. Retry a fresh account read.');
+    }) : () => {};
     const failed = (event: Event) => {
-      if ((event as CustomEvent).detail?.userId === user?.id) setError('A recent message could not be saved to history. Check your connection.');
+      if ((event as CustomEvent).detail?.userId === user?.id) setError('A recent message could not be saved on this device. Check site storage permissions and available space.');
     };
-    window.addEventListener('thingtime:notification-recorded', recorded);
+    const reconnect = () => setRevision(value => value + 1);
+    window.addEventListener('online', reconnect);
     window.addEventListener('thingtime:notification-save-failed', failed);
     return () => {
       clearTimeout(timer);
-      window.removeEventListener('thingtime:notification-recorded', recorded);
+      unsubscribe(); unwatchAccess();
+      window.removeEventListener('online', reconnect);
       window.removeEventListener('thingtime:notification-save-failed', failed);
     };
-  }, [user?.id]);
+  }, [user?.id, binding?.identity, account, cacheKey]);
 
   const seqRef = React.useRef(0);
   const apiRef = React.useRef(api);
   apiRef.current = api;
+  const listRef = React.useRef<(args: any) => Promise<any>>(() => Promise.reject(new Error('Workspace unavailable')));
+  listRef.current = account ? async args => {
+    if (!binding || binding.scope.kind !== 'account') throw new Error('Account workspace unavailable');
+    const { savedOnly, ...query } = args;
+    return new NotificationPages(workspaceDatabase(), binding.scope, binding.lease).read(query, () => api.v1.notifications.list(query), savedOnly === true || !canReadAccount);
+  } : async args => {
+    if (!binding) return Promise.reject(new Error('Workspace unavailable'));
+    binding.lease.assertCurrent();
+    return deviceNotificationHistory(binding.scope).list(args);
+  };
+  React.useEffect(() => () => { seqRef.current++; }, []);
   const pageRef = React.useRef(page);
   pageRef.current = page;
 
   const updateFilters = React.useCallback(
     (next: NotificationFilters) => {
-      setSearchParams(notificationFiltersToParams(next), { replace: true });
+      const params = notificationFiltersToParams(next);
+      params.set('source', account ? 'account' : 'device');
+      setSearchParams(params, { replace: true });
     },
-    [setSearchParams]
+    [setSearchParams, account]
   );
 
-  // search box: local draft, debounced into the URL (the URL is the truth)
-  const [qDraft, setQDraft] = React.useState(filters.q);
-  React.useEffect(() => {
-    setQDraft(filters.q);
-  }, [filters.q]);
-  React.useEffect(() => {
-    const trimmed = qDraft.replace(/\s+/g, ' ').trim();
-    if (trimmed === filters.q) return;
-    const timer = window.setTimeout(() => updateFilters({ ...filters, q: trimmed }), 300);
-    return () => window.clearTimeout(timer);
-    // filters is derived from the URL; qDraft drives this effect
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qDraft]);
+  // Preserve edits while an older local search commit is reaching the URL.
+  const [qDraft, setQDraft] = useDebouncedSearchDraft('q', filters.q);
 
   // first page — per viewer + filter set; the unfiltered view seeds from cache
   React.useEffect(() => {
     const seq = ++seqRef.current;
+    setLoadingMore(false);
     if (!user) {
       setPage(EMPTY_PAGE);
       setLoading(false);
       setRefreshing(false);
       return;
     }
-    const seeded = cacheKey && !active ? readCachedPage(cacheKey) : null;
-    if (seeded) setPage(seeded);
+    const seeded = mayReadCached && cacheKey && !active ? readCachedPage(cacheKey, filtersKey) : null;
+    if (pageRef.current.items.length === 0 && seeded) setPage(seeded);
     setLoading(!seeded && pageRef.current.items.length === 0);
     setRefreshing(true);
     setError(null);
-    apiRef.current.v1.notifications
-      .list({ history: 1, limit: PAGE_SIZE, withTotal: 1, ...notificationFiltersToQuery(filters) })
+    listRef.current({ history: 1, limit: PAGE_SIZE, withTotal: 1, ...notificationFiltersToQuery(filters) })
       .then((resp: any) => {
         if (seq !== seqRef.current) return;
-        const next = toPage(resp);
+        const next = { ...toPage(resp), queryKey: filtersKey };
         setPage(next);
-        if (cacheKey && !active) writeLocalCache(cacheKey, next);
+        if (cacheKey && !active && (!account || (binding && notificationHistoryAccess(binding.scope).canReadCached()))) writeLocalCache(cacheKey, next);
         if (bellCacheKey) writeLocalCache(bellCacheKey, next.bellUnreadCount);
       })
       .catch((err: any) => {
         if (seq !== seqRef.current) return;
-        setError(err?.error || 'Could not load your notifications — try again in a moment.');
+        if ([401, 403, 409].includes(err?.status) || (account && binding && !notificationHistoryAccess(binding.scope).canReadCached())) { setPage(EMPTY_PAGE); if (cacheKey) clearLocalCache(cacheKey); }
+        setError(err?.error || err?.message || 'Could not load your notifications — try again in a moment.');
       })
       .finally(() => {
         if (seq !== seqRef.current) return;
@@ -194,31 +236,41 @@ export const NotificationsPage = () => {
       });
     // filtersKey is the URL-derived identity of `filters`; cache keys follow user.id
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, filtersKey, revision]);
+  }, [user?.id, filtersKey, revision, canReadAccount]);
+
+  const previousQuery = page.items.length > 0 && page.queryKey !== filtersKey;
 
   const loadMore = async () => {
-    if (!page.nextCursor || loadingMore) return;
+    if (!page.nextCursor || loadingMore || previousQuery) return;
     const seq = seqRef.current;
     setLoadingMore(true);
     try {
-      const resp: any = await apiRef.current.v1.notifications.list({
+      const resp: any = await listRef.current({
         limit: PAGE_SIZE,
         history: 1,
         cursor: page.nextCursor,
+        withTotal: 1,
+        ...(account && page.cachedHistory ? { savedOnly: true } : {}),
         ...notificationFiltersToQuery(filters)
       });
       if (seq !== seqRef.current) return;
       const more = toPage(resp);
-      setPage((prev) => ({ ...prev, items: dedupeById([...prev.items, ...more.items]), nextCursor: more.nextCursor }));
+      setPage((prev) => {
+        const next = { ...prev, items: dedupeById([...prev.items, ...more.items]), nextCursor: more.nextCursor, cachedHistory: prev.cachedHistory || more.cachedHistory };
+        if (cacheKey && !active && (!account || (binding && notificationHistoryAccess(binding.scope).canReadCached()))) writeLocalCache(cacheKey, next);
+        return next;
+      });
     } catch (err: any) {
-      lopu({ title: 'Could not load older notifications 😔', description: err?.error, status: 'error', duration: 6000 });
+      if (seq !== seqRef.current) return;
+      if ([401, 403, 409].includes(err?.status) || (account && binding && !notificationHistoryAccess(binding.scope).canReadCached())) { setPage(EMPTY_PAGE); if (cacheKey) clearLocalCache(cacheKey); }
+      setError(err?.error || err?.message || 'Could not load older notifications. Retry to refresh this history.');
     } finally {
       if (seq === seqRef.current) setLoadingMore(false);
     }
   };
 
   const handleRowClick = (item: NotificationItem) => {
-    if (!item.readAt) {
+    if (account && !page.cachedHistory && !item.readAt) {
       const now = new Date().toISOString();
       setPage((prev) => ({
         ...prev,
@@ -250,20 +302,28 @@ export const NotificationsPage = () => {
     }
   };
 
+  const retrySavedMessages = async () => {
+    if (!binding || retrying) return;
+    setRetrying(true);
+    try { await retryNotificationHistory(binding.scope); setRevision(value => value + 1); }
+    catch { setError('Could not retry saved messages. Check your account and device storage, then retry.'); }
+    finally { setRetrying(false); }
+  };
+
   const resetFilters = () => {
     setQDraft('');
-    setSearchParams(new URLSearchParams(), { replace: true });
+    setSearchParams(new URLSearchParams({ source: account ? 'account' : 'device' }), { replace: true });
   };
 
   const today = new Date().toISOString().slice(0, 10);
-  const hasUnread = page.unreadCount > 0 || page.items.some((row) => !row.readAt);
+  const hasUnread = account && !previousQuery && !page.cachedHistory && (page.unreadCount > 0 || page.items.some((row) => !row.readAt));
 
   return (
     <PageShell width={760}>
       <PageHeader
         eyebrow="Thingtime · everything that reached you 🔔"
         title="Notifications 🔔"
-        subtitle="Every notification you've received — social, engagement, feed, and system notes from Lopu. Filter by category or type, search, pick a window, and jump back to what happened."
+        subtitle={account ? "Your account's notifications, including social activity and system notes." : "Lopu messages saved in this workspace on this device. Search them even when you are offline."}
         after={
           <Button size="xs" variant="outline" onClick={() => navigate('/settings')}>
             Settings ⚙️
@@ -273,8 +333,18 @@ export const NotificationsPage = () => {
 
       {user ? (
         <>
+          <Flex role="group" aria-label="History source" gap={2} flexWrap="wrap">
+            <Button size="sm" aria-pressed={!account} variant={!account ? 'solid' : 'outline'} onClick={() => setSearchParams({ source: 'device' })}>On this device</Button>
+            {hasAccountWorkspace && <Button size="sm" aria-pressed={account} variant={account ? 'solid' : 'outline'} onClick={() => setSearchParams({ source: 'account' })}>Account history</Button>}
+          </Flex>
+          {!account && <Text fontSize="xs" color={MUTED} role="status">
+            {user?.localOnly ? 'Anonymous messages stay on this device and never sync to an account.' : deviceSyncStatus(page.pendingCount, page.failedCount)}
+          </Text>}
+          {!account && !user.localOnly && (page.pendingCount > 0 || page.failedCount > 0) && <Button size="sm" alignSelf="flex-start" onClick={retrySavedMessages} isLoading={retrying}>Retry account sync</Button>}
+          {account && page.cachedHistory && <Text role="status" fontSize="sm" color={MUTED}>Showing previously downloaded account history{page.savedAt ? ` from ${new Date(page.savedAt).toLocaleString()}` : ''}. New activity requires a connection. <Button size="sm" variant="link" onClick={() => setRevision(value => value + 1)} isDisabled={refreshing}>Retry</Button></Text>}
+          {account && page.retainedHistory === false && <Text role="status" fontSize="sm" color={MUTED}>Account history loaded, but could not be saved for offline use. Check device storage.</Text>}
           {/* filters — the URL is the source of truth */}
-          <Flex flexDirection="column" rowGap={3} background={CARD} border={BORDER} borderRadius={RADIUS} padding={[3, 4]}>
+          <Flex data-lopu-launcher-clearance flexDirection="column" rowGap={3} background={CARD} border={BORDER} borderRadius={RADIUS} padding={[3, 4]}>
             <Flex role="group" aria-label="Category" columnGap={1} rowGap={1} flexWrap="wrap">
               <Chip active={filters.category === 'all'} onClick={() => updateFilters(withNotificationCategory(filters, 'all'))}>
                 All
@@ -368,6 +438,8 @@ export const NotificationsPage = () => {
             </Flex>
           </Flex>
 
+          {previousQuery && <Text role="status" fontSize="sm" color={MUTED}>Showing results from your previous filters while this query loads. If it fails, retry or change the filters.</Text>}
+
           {/* summary + bulk action */}
           <Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap" paddingX={1}>
             <Text fontSize="xs" color={MUTED} aria-live="polite">
@@ -375,7 +447,7 @@ export const NotificationsPage = () => {
                 ? loading
                   ? 'Loading…'
                   : `${page.items.length} shown`
-                : `${page.total.toLocaleString()} ${page.total === 1 ? 'notification' : 'notifications'}${active ? ' match' : ''}`}
+                : `${page.total.toLocaleString()} ${page.total === 1 ? 'notification' : 'notifications'}${previousQuery ? ' from previous filters' : active ? ' match' : ''}`}
               {' · '}
               {page.unreadCount.toLocaleString()} unread
             </Text>
@@ -401,7 +473,7 @@ export const NotificationsPage = () => {
                 <Text fontSize="xs" color="var(--tt-danger, #d6455a)">
                   {error}
                 </Text>
-                <Button size="xs" variant="outline" onClick={() => updateFilters({ ...filters })}>
+                <Button size="xs" variant="outline" onClick={() => setRevision(value => value + 1)}>
                   Retry
                 </Button>
               </Flex>
@@ -422,7 +494,7 @@ export const NotificationsPage = () => {
                   {active ? 'Nothing matches these filters' : 'All quiet — nothing here yet'}
                 </Text>
                 <Text fontSize="xs" color={MUTED} textAlign="center" paddingX={6}>
-                  {active ? 'Loosen a filter or clear them all.' : 'Follows, comments, reactions, mentions, and your action runs will collect here.'}
+                  {active ? 'Loosen a filter or clear them all.' : account ? 'Follows, comments, reactions, mentions, and your action runs will collect here.' : 'Messages shown by Lopu will collect here.'}
                 </Text>
                 {active && (
                   <Button size="xs" variant="outline" marginTop={2} onClick={resetFilters}>
@@ -436,17 +508,17 @@ export const NotificationsPage = () => {
               <NotificationRow key={item.id} item={item} onClick={handleRowClick} />
             ))}
 
-            {page.nextCursor && !loading && (
+            {page.nextCursor && !loading && !previousQuery && (
               <Center paddingTop={2} paddingBottom={1}>
-                <Button size="sm" variant="outline" isLoading={loadingMore} onClick={loadMore}>
-                  Load older
+                <Button size="sm" variant="outline" isLoading={loadingMore} isDisabled={refreshing} onClick={loadMore}>
+                  {account && page.cachedHistory ? 'Load saved older notifications' : 'Load older'}
                 </Button>
               </Center>
             )}
           </Flex>
 
           <Text fontSize="10px" color={MUTED} paddingX={1}>
-            Your history is saved even when push or email is off. Delivery settings never hide or delete these records.
+            {account ? 'Your history is saved even when push or email is off. Delivery settings never hide or delete these records.' : 'Device history uses browser storage. Clearing site data removes these local copies.'}
           </Text>
         </>
       ) : (

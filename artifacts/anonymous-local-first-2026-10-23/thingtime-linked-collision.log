@@ -1,0 +1,18 @@
+✔ exact canonical link retries preserve ID, expiry, current annotations and version after binding (11.185008ms)
+✔ link requests reject changed immutable tuples and share neither owner nor upload identity (2.5846ms)
+✔ concurrent request retries create one link, while legacy duplicate URLs still mint separately (3.122702ms)
+✔ cancelled, deleting and expired link requests never recreate or renew a draft (1.574566ms)
+✔ cancellation racing link insertion wins the shared unique identity (0.830662ms)
+✔ durable unbound linked cleanup fences the target, purpose, fingerprint and current version (8.500724ms)
+✔ durable bound linked cleanup fences the target, purpose, fingerprint and current version (3.295058ms)
+✔ legacy, import and profile links cannot opt into request-ID deletion (6.041549ms)
+✔ closed link input and custom-plane refusal run before storage or object access (2.028417ms)
+✔ a linked request cannot be replayed through the byte upload service (2.943754ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2685.187881

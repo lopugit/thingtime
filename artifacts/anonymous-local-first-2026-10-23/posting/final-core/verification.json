@@ -1,0 +1,17 @@
+{
+  "offlineReload": true,
+  "privateDraftSync": true,
+  "immutableTemplateRetry": true,
+  "failedDraftWrites": 1,
+  "independentPrivatePost": "37c96650-28a8-4a7b-8bf2-fd55b704ac46",
+  "postSyncedBeforeDraftReleased": true,
+  "retirementConverged": true,
+  "templatePreserved": true,
+  "viewports": [
+    1440,
+    390,
+    320
+  ],
+  "errors": [],
+  "offlineWrites": []
+}

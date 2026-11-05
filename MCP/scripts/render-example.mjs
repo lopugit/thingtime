@@ -6,7 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 const output = resolve(process.argv[2] || 'draft-artifacts');
 const client = new Client({ name: 'thingtime-draft-example', version: '1.0.0' });
-await client.connect(new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(new URL('../dist/index.js', import.meta.url))] }));
+await client.connect(new StdioClientTransport({
+  command: process.execPath, args: [fileURLToPath(new URL('../dist/index.js', import.meta.url))],
+  // The SDK deliberately filters inherited environment variables. Forward only
+  // the configured browser cache location, never the full host environment.
+  env: process.env.PLAYWRIGHT_BROWSERS_PATH ? { PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH } : undefined
+}));
 try {
   const content = JSON.parse(await readFile(new URL('../test/fixtures/affirmation.transfer.json', import.meta.url), 'utf8'));
   const result = await client.callTool({ name: 'thingtime_render_and_export', arguments: { content, root: 'affirmation-page', crop: { enabled: true, blockId: 'card' } } });

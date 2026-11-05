@@ -1,4 +1,5 @@
 import { registerRenderExport } from './renderExport.js';
+import { createIsolatedRenderer, type IsolatedRenderer } from './isolatedRender.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { connectorInfo, importArchive, ingestCurrentConversation } from './importer.js';
@@ -16,20 +17,25 @@ const textResult = (value: unknown) => ({
   structuredContent: value as Record<string, unknown>
 });
 
-export function createServer(store = new SnapshotStore()): McpServer {
+export function createServer(store = new SnapshotStore(), renderer: IsolatedRenderer = createIsolatedRenderer()): McpServer {
   const server = new McpServer(
     { name: 'thingtime-mcp', version: '0.1.0' },
     { instructions: 'Import only data the user explicitly provides or places in an allowlisted root. List summaries before reading conversation content. Never request or expose passwords, cookies, API keys, or session tokens.' }
   );
 
-  registerRenderExport(server);
+  registerRenderExport(server, renderer.execute);
+  const close = server.close.bind(server);
+  server.close = async () => { try { await renderer.close(); } finally { await close(); } };
+  server.server.onclose = () => { void renderer.close().catch(() => {}); };
 
   server.registerTool('thingtime_capabilities', {
     title: 'Thingtime MCP capabilities',
-    description: 'Explain supported desktop chat capture paths and current safety boundaries.',
-    inputSchema: z.object({})
+    description: 'Describe supported chat import and isolated native render capabilities and their safety boundaries.',
+    inputSchema: z.object({}),
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true }
   }, async () => textResult({
     renderExport: 'thingtime_render_and_export: no-login offline native draft rendering, canonical JSON and embedded PNG resources. See MCP/README.md.',
+    renderIsolation: renderer.capabilities,
     hostHandoff: 'Any MCP host can explicitly send its current conversation using thingtime_ingest_current_chat.',
     archiveImport: 'User-selected JSON exports can be imported from THINGTIME_MCP_ALLOWED_ROOTS.',
     connectors: connectorInfo(),

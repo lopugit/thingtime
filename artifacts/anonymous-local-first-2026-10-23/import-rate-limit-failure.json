@@ -1,0 +1,8 @@
+{
+  "ok": false,
+  "phase": "additional importer cleanup-assertion rerun on reused isolated acceptance-complete backend",
+  "failure": "Too many sign-up attempts — take a breather 🌸",
+  "occurredBeforeImport": true,
+  "rateLimitChanged": false,
+  "followUp": "The next new disposable final-remote backend passed the same importer and cleanup assertions without any rate-limit changes; see import-verification.json."
+}

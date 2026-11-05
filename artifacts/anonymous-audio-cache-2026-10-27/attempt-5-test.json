@@ -1,0 +1,8 @@
+{
+  "reason": "Exact reviewed archive path and mandatory SHA/source/client contract checks before claim; prior4 attempts explicitly nonacceptance",
+  "hashes": {
+    "remix/app/components/Attachments/AudioAttachmentPlayer.browser.test.ts": "ef9fb00c20a0a85af6654dc9c4295d7ad3eb23f9279a09f27b31d109502760d9",
+    "tmp/continuation/audio-player.test.mjs": "273a01514f1c77f230992d226dee8e006a558b4c80566ecc6635454df19b2a8b",
+    "artifacts/anonymous-audio-cache-2026-10-27/run.cjs": "9c5e788c89ac3b164ad8cc0a30247dad892c91b8292b0d99608d30d4f2c70c2a"
+  }
+}

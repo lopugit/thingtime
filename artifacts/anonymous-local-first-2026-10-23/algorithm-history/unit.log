@@ -1,0 +1,18 @@
+✔ an export is the immutable event and receipt, its six restorable keys, its notes and its name (6.302287ms)
+✔ compact versions resolve through their saved ancestor and deletions export their before-image (3.152497ms)
+✔ unknown or foreign versions are null; drafts and effects refuse; oversized retained parts refuse before any part is read (2.706745ms)
+✔ approved algorithm archives retain actual draft receipts and deletion content without promoting provenance (10.429023ms)
+✔ algorithm History captures validated profiles, training, library edits and deletions without observation or authority data (96.560616ms)
+✔ algorithm restore preserves current library metadata and selection, with exact retry after later edits (90.143093ms)
+✔ algorithm undo and three-way merge preserve independent edits and require fresh conflict choices (150.747464ms)
+✔ algorithm History refuses deleted recovery, forged protected kinds and retired identity (16.399532ms)
+✔ algorithm content, selection and History roll back together when History cannot persist (58.158899ms)
+✔ account algorithm restore stays device-authored and independent of content synchronization and account selection (90.730371ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1296.114397

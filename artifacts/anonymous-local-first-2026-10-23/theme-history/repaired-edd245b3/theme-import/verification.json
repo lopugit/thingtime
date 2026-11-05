@@ -1,0 +1,71 @@
+{
+  "checks": [
+    "normal file importer saves and reloads theme offline",
+    "canonical offline folder export preserves remapped theme and tokens",
+    "independent background writers preserve private folder placement without changing selection"
+  ],
+  "errors": [],
+  "writes": [
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false
+    }
+  ],
+  "viewports": [
+    1440,
+    390,
+    320
+  ]
+}

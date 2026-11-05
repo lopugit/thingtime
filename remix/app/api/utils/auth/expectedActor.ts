@@ -5,7 +5,7 @@ export async function enforceExpectedActor(request: Request, currentUser: (reque
 	const expected = request.headers.get(EXPECTED_ACTOR_HEADER);
 	if (expected === null) return null;
 	if (!expected || expected.length > 128 || (await currentUser(request))?.id !== expected) {
-		return Response.json({ ok: false, error: 'The active account changed. Run the action again.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
+		return Response.json({ ok: false, code: 'ACTOR_CHANGED', error: 'The active account changed. Run the action again.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
 	}
 	return null;
 }

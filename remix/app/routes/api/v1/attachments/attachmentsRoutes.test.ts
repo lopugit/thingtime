@@ -5,6 +5,7 @@ import { createAttachmentMutationAction, isSameOriginAttachmentRequest } from '~
 import { createAttachmentDetectionBackfillAction } from './backfill-detected-types/_backfill-detected-types';
 import { createAttachmentCleanupLoader } from './cleanup/_cleanup';
 import { createAttachmentContentLoader } from './content/_content';
+import { createAttachmentLinkAction } from './link/_link';
 
 const endpoint = 'https://thingtime.example/api/v1/attachments/uploads';
 const allowed = async () => ({
@@ -781,6 +782,141 @@ test('retained ranges recheck the current session after reading and cannot becom
 	assert.equal(reads, 1);
 });
 
+for (const purpose of ['file','recording'] as const) test('explicit owned-'+purpose+' retention is full-user, same-origin and unscoped while ordinary cache reads keep their gates', async () => {
+ let principal:any=user, calls=0;
+ const file={purpose,ownerId:'user-1',updatedAt:'2026-10-17T00:00:00.000Z',folderId:null,attachment:{id:'file',name:'file.txt',size:3,contentType:'text/plain',mediaKind:'file' as const}};
+ const route=createAttachmentContentLoader({getUser:async()=>principal,enforceLimit:allowed as any,enrichViewer:async viewer=>viewer,
+  download:async (_viewer,_id,download,retainedVersion,retain)=>{calls++;assert.equal(download,true);assert.equal(retainedVersion,undefined);assert.equal(retain,true);return {ok:true,url:'https://private.test/secret',expiresAt:'later',cacheKey:'a'.repeat(64),version:'a'.repeat(64),size:3,contentType:'application/octet-stream',disposition:'attachment',image:false,retention:file};}});
+ const url='https://thingtime.example/api/v1/attachments/content?id=file&cache=retain&download=1';
+ const response=await route({request:new Request(url,{headers:{Origin:'https://thingtime.example'}})});
+ assert.equal(response.status,200);assert.deepEqual(await response.json(),{ok:true,cacheKey:'a'.repeat(64)+':original',size:3,file});assert.match(response.headers.get('Cache-Control')!,/private.*no-store/);
+ for(const query of ['&key=x','&sharedRoot=root','&width=64'])assert.equal((await route({request:new Request(url+query)})).status,400);
+ assert.equal((await route({request:new Request(url,{headers:{Origin:'https://foreign.test'}})})).status,403);
+ for(const value of [null,{id:'service',accountKind:'service'}]) {principal=value;assert.equal((await route({request:new Request(url)})).status,401);}
+ assert.equal(calls,1);
+});
+
+test('owned-original streaming preserves private authorization and backpressure above the media-cache budget', async () => {
+ const size = 70 * 1024 * 1024, block = new Uint8Array(1024 * 1024).fill(137);
+ let principal: any = user, owner = user.id, fetched = 0, produced = 0, cancelled = 0, upstreamSignal: AbortSignal | null | undefined;
+ const route = createAttachmentContentLoader({getUser: async () => principal, enforceLimit: allowed as any, enrichViewer: async viewer => viewer,
+  download: async (_viewer, _id, download, retainedVersion, retain) => {
+   assert.equal(download, true); assert.equal(retainedVersion, undefined); assert.equal(retain, true);
+   return {ok: true, url: 'https://private.test/signed-original', expiresAt: 'later', cacheKey: 'a'.repeat(64), version: 'a'.repeat(64), size,
+    contentType: 'application/octet-stream', disposition: 'attachment', image: false,
+    retention: {purpose: 'file', ownerId: owner, updatedAt: '2026-10-18T00:00:00Z', folderId: null,
+     attachment: {id: 'file', name: 'large.bin', size, contentType: 'application/octet-stream', mediaKind: 'file'}}};
+  },
+  fetchObject: async (url, init) => {
+   fetched++; assert.equal(url, 'https://private.test/signed-original'); assert.equal(init?.redirect, 'error'); upstreamSignal = init?.signal;
+   return new Response(new ReadableStream({pull(controller) {produced++; controller.enqueue(block);}, cancel() {cancelled++;}}, {highWaterMark: 0}));
+  }});
+ const url = 'https://thingtime.example/api/v1/attachments/content?id=file&cache=retain-bytes&download=1';
+ for (const value of [null, {id: 'service', accountKind: 'service'}]) {principal = value; assert.equal((await route({request: new Request(url)})).status, 401);}
+ principal = user;
+ for (const query of ['&key=x','&sharedRoot=page','&width=64']) assert.equal((await route({request: new Request(url + query)})).status, 400);
+ assert.equal((await route({request: new Request(url.replace('&download=1', ''))})).status, 400);
+ assert.equal((await route({request: new Request(url, {headers: {Origin: 'https://foreign.test'}})})).status, 403);
+ owner = 'foreign'; assert.equal((await route({request: new Request(url)})).status, 404); owner = user.id;
+ assert.equal(fetched, 0);
+ const controller = new AbortController();
+ const response = await route({request: new Request(url, {headers: {Origin: 'https://thingtime.example'}, signal: controller.signal})});
+ assert.equal(response.status, 200); assert.match(response.headers.get('Cache-Control')!, /private.*no-store/);
+ assert.equal(response.headers.get('Content-Length'), String(size)); assert.equal(response.headers.get('ETag'), '"' + 'a'.repeat(64) + ':original:v1"');
+ assert.equal(response.headers.get('Location'), null); assert.equal(produced, 0, 'Do not read bytes before the consumer asks');
+ const reader = response.body!.getReader(); assert.deepEqual((await reader.read()).value, block); assert.equal(produced, 1);
+ controller.abort(); assert.equal(upstreamSignal?.aborted, true);
+ await reader.cancel(); reader.releaseLock(); assert.equal(cancelled, 1);
+});
+
+test('owned-original streaming preserves rate refusal and ordinary media cache bounds', async () => {
+ let fetched = 0;
+ const download = async () => ({ok: true as const, url: 'https://private.test/original', expiresAt: 'later', cacheKey: 'a'.repeat(64), version: 'a'.repeat(64), size: 70 * 1024 * 1024, contentType: 'application/octet-stream', disposition: 'attachment', image: false});
+ const route = createAttachmentContentLoader({getUser: async () => user, enforceLimit: allowed as any, enrichViewer: async viewer => viewer, download,
+  fetchObject: async () => {fetched++; throw Error('Must not read storage');}});
+ assert.equal((await route({request: new Request('https://thingtime.example/api/v1/attachments/content?id=file&cache=bytes&download=1')})).status, 413);
+ const refused = createAttachmentContentLoader({getUser: async () => user, enforceLimit: async () => ({allowed: false, unavailable: true}) as any, download});
+ assert.equal((await refused({request: new Request('https://thingtime.example/api/v1/attachments/content?id=file&cache=retain-bytes&download=1')})).status, 503);
+ assert.equal(fetched, 0);
+});
+
+test('shared original streams pin receipts, preserve backpressure above 16 MiB and reauthorize before EOF', async () => {
+ const size = 17 * 1024 * 1024, block = new Uint8Array(1024 * 1024).fill(37);
+ let fetched = 0, produced = 0, reads = 0, cancelled = 0;
+ const route = createAttachmentContentLoader({getUser: async () => null, enforceLimit: allowed as any, enrichViewer: async viewer => viewer,
+  download: async (viewer, id, download, retainedVersion, retain) => {
+   reads++; assert.equal(viewer?.sharedRoot, 'page'); assert.equal(viewer?.id, ''); assert.ok(viewer?.linkKeys?.has('synthetic-link'));
+   assert.equal(id, 'file'); assert.equal(download, true); assert.equal(retainedVersion, undefined); assert.ok(!retain);
+   return {ok: true, url: 'https://private.test/pinned', expiresAt: 'later', cacheKey: 'a'.repeat(64), version: 'b'.repeat(64), size,
+    contentType: 'application/octet-stream', disposition: 'attachment', image: false};
+  }, fetchObject: async (_url, init) => {
+   fetched++; assert.equal(init?.redirect, 'error');
+   return new Response(new ReadableStream({pull(controller) {
+    if (produced === 17) controller.close(); else { produced++; controller.enqueue(block); }
+   }, cancel() {cancelled++;}}, {highWaterMark: 0}), {headers: {'Content-Length': String(size)}});
+  }});
+ const url = 'https://thingtime.example/api/v1/attachments/content?id=file&download=1&cache=original-bytes&sharedRoot=page&key=synthetic-link';
+ assert.equal((await route({request: new Request(url)})).status, 412); assert.equal(fetched, 0);
+ const response = await route({request: new Request(url, {headers: {'If-Match': '"' + 'a'.repeat(64) + ':original:v1"'}})});
+ assert.equal(response.status, 200); assert.equal(produced, 0); assert.equal(response.headers.get('Location'), null);
+ assert.match(response.headers.get('Cache-Control')!, /private.*no-store/); assert.equal(response.headers.get('Content-Length'), String(size));
+ const reader = response.body!.getReader(); let bytes = 0;
+ for (;;) {const part = await reader.read(); if (part.done) break; bytes += part.value.length;}
+ assert.equal(bytes, size); assert.equal(reads, 3); assert.equal(cancelled, 0);
+});
+
+test('shared original streams reject mixed modes, changed authority/version and malformed storage bytes', async () => {
+ const url = 'https://thingtime.example/api/v1/attachments/content?id=file&download=1&cache=original-bytes&sharedRoot=page';
+ const headers = {'If-Match': '"' + 'a'.repeat(64) + ':original:v1"'};
+ for (const failure of ['revoked', 'changed', 'truncated', 'excess', 'encoding', 'upstream-length', 'rate', 'cancel'] as const) {
+  let downloads = 0, cancelled = 0;
+  const route = createAttachmentContentLoader({getUser: async () => null,
+   enforceLimit: (async () => failure === 'rate' ? {allowed: false, unavailable: true} : {allowed: true}) as any,
+   enrichViewer: async viewer => viewer,
+   download: async () => {
+    if (++downloads > 1 && failure === 'revoked') return {ok: false, status: 404, error: 'Attachment not found'};
+    return {ok: true, url: 'https://private.test/pinned', expiresAt: 'later', cacheKey: 'a'.repeat(64),
+     version: (downloads > 1 && failure === 'changed' ? 'c' : 'b').repeat(64), size: failure === 'cancel' ? 6 : 3, contentType: 'application/octet-stream', disposition: 'attachment', image: false};
+   }, fetchObject: async () => {
+    let sent = false;
+    return new Response(new ReadableStream({pull(controller) {if (sent) controller.close(); else {sent = true; controller.enqueue(new Uint8Array(failure === 'truncated' ? 1 : failure === 'excess' ? 4 : 3));}}, cancel() {cancelled++;}}, {highWaterMark: 0}),
+     {headers: failure === 'encoding' ? {'Content-Encoding': 'gzip'} : failure === 'upstream-length' ? {'Content-Length': '9'} : {}});
+   }});
+  for (const suffix of ['&width=64', '&cache=bytes', '&fingerprint=1', '&retained=1', '&range=1', '&character=other', '&id=other'])
+   assert.equal((await route({request: new Request(url + suffix, {headers})})).status, 400);
+  const abort = new AbortController(), response = await route({request: new Request(url, {headers, signal: abort.signal})});
+  if (failure === 'rate') {assert.equal(response.status, 503); assert.equal(downloads, 0);}
+  else if (['encoding', 'upstream-length'].includes(failure)) {assert.equal(response.status, 502); assert.equal(cancelled, 1);}
+  else if (failure === 'cancel') {const reader = response.body!.getReader(); await reader.read(); abort.abort(); await reader.cancel(); assert.equal(cancelled, 1);}
+  else await assert.rejects(response.arrayBuffer(), /Original stream/);
+ }
+});
+
+test('shared original progress budgets distinguish upstream inactivity, consumer backpressure and total expiry', async () => {
+ const url = 'https://thingtime.example/api/v1/attachments/content?id=file&download=1&cache=original-bytes';
+ const headers = {'If-Match': '"' + 'a'.repeat(64) + ':original:v1"'};
+ const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+ for (const mode of ['idle', 'progress', 'total', 'authority', 'bad-length'] as const) {
+  let count = 0, cancelled = 0, principals = 0;
+  const route = createAttachmentContentLoader({getUser: async () => { if (++principals > 1 && mode === 'authority') await new Promise(() => {}); return null; }, enforceLimit: allowed as any, enrichViewer: async viewer => viewer,
+   originalStreamPolicy: {idleMs: mode === 'idle' ? 5 : 30, totalMs: mode === 'total' ? 20 : mode === 'authority' ? 60 : 500},
+   download: async () => ({ok: true, url: 'https://private.test/original', expiresAt: 'later', cacheKey: 'a'.repeat(64), version: 'b'.repeat(64), size: 6, contentType: 'application/octet-stream', disposition: 'attachment', image: false}),
+   fetchObject: async () => new Response(new ReadableStream({async pull(controller) {
+    if (mode === 'idle') return new Promise(() => {});
+    await pause(5); if (count++ === 6) controller.close(); else controller.enqueue(new Uint8Array([count]));
+   }, cancel() {cancelled++; return new Promise<void>(() => {});}}, {highWaterMark: 0}), {headers: mode === 'bad-length' ? {'Content-Length': '99'} : {}})
+  });
+  const response = await Promise.race([route({request: new Request(url, {headers})}), pause(100).then(() => {throw Error('Cancellation delayed the response');})]);
+  if (mode === 'bad-length') {assert.equal(response.status, 502); assert.equal(cancelled, 1); continue;}
+  if (mode === 'idle') {await assert.rejects(response.arrayBuffer(), /Original stream/); assert.equal(cancelled, 1); continue;}
+  if (mode === 'authority') {await assert.rejects(response.arrayBuffer(), /Original stream/); continue;}
+  const reader = response.body!.getReader(); await reader.read();
+  await pause(mode === 'total' ? 30 : 60);
+  if (mode === 'total') await assert.rejects(reader.read(), /Original stream/);
+  else {let bytes = 1; for (;;) {const part = await reader.read(); if (part.done) break; bytes += part.value.length;} assert.equal(bytes, 6);}
+ }
+});
+
 test('Character media selectors reuse session authorization and never fall back to public access', async () => {
   let header: string | null = null;
   let downloaded = false;
@@ -808,4 +944,28 @@ test('signed target mode accepts only full owner session and one closed exact ra
  assert.equal(calls, 1);
  const anonymous = createAttachmentContentLoader({ getUser: async () => null, enforceLimit: allowed as any, downloadTarget: async () => { throw Error('anonymous cannot request targets'); } });
  assert.equal((await anonymous({ request: new Request('https://thingtime.example/api/v1/attachments/content?' + query) })).status, 404);
+});
+
+test('retry-safe link route retains full-user, origin, rate and private-response fences without upload approval', async () => {
+  let calls = 0;
+  const service = async (ownerId: string, body: unknown) => {
+    calls++; assert.equal(ownerId, user.id); assert.equal((body as any).url, 'https://example.invalid/a.png');
+    return { ok: false as const, status: 409, error: 'Fixture receipt conflict' };
+  };
+  const body = { url: 'https://example.invalid/a.png', requestId: 'link-request' };
+  const route = (viewer: any = user, limit: any = allowed) => createAttachmentLinkAction({ getUser: async () => viewer, enforceLimit: limit }, service);
+  for (const [viewer, status] of [[null, 401], [{ ...user, accountKind: 'service' }, 403]]) {
+    const response = await route(viewer)({ request: post(body) }); assert.equal(response.status, status);
+    assert.equal(response.headers.get('Cache-Control'), 'private, no-store, max-age=0');
+  }
+  assert.equal((await route()({ request: post(body, { Origin: 'https://attacker.invalid' }) })).status, 403);
+  assert.equal((await route()({ request: post(body, { Authorization: 'Bearer ttnode_fixture' }) })).status, 403);
+  assert.equal((await route(user, async () => ({ allowed: false, unavailable: true }))({ request: post(body) })).status, 503);
+  assert.equal(calls, 0);
+  const response = await route({ ...user, publicUploadsEnabled: false, privateUploadsEnabled: false })({ request: post(body) });
+  assert.equal(response.status, 409); assert.equal(calls, 1);
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store, max-age=0');
+  // Existing scoped Watch behavior for non-idempotent links remains unchanged.
+  assert.equal((await route()({ request: post({ url: body.url }, { Authorization: 'Bearer ttnode_fixture' }) })).status, 409);
+  assert.equal(calls, 2);
 });

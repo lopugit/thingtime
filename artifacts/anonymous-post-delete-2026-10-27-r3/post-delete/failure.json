@@ -1,0 +1,9 @@
+{
+  "phase": "anonymous",
+  "error": "Error: locator.waitFor: Error: strict mode violation: getByText('Anonymous child removed with parent.', { exact: true }) resolved to 2 elements:\n    1) <p class=\"chakra-text cha-zu3qe3\">Anonymous child removed with parent.</p> aka getByRole('paragraph').filter({ hasText: 'Anonymous child removed with' })\n    2) <textarea rows=\"1\" placeholder=\"Write a comment… 💬\" class=\"chakra-textarea cha-1k32xja\">Anonymous child removed with parent.</textarea> aka getByRole('textbox', { name: 'Write a comment… 💬' })\n\nCall log:\n  - waiting for getByText('Anonymous child removed with parent.', { exact: true }) to be visible\n",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\nTHINGTIME · POST 📌\nPost 📌\nL\nLocal workspace\n@local · \njust now\n🔒\nonly the author can see this post\n\nAnonymous post and media deleted on device.\n\n1\n0\nL\n\nLocal workspace\n\njust now\n\nAnonymous child removed with parent.\n\n0\nPost as\nLocal workspace\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "checks": [],
+  "bounds": [],
+  "mutations": [],
+  "errors": []
+}

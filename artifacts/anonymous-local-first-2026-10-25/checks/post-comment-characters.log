@@ -1,0 +1,11 @@
+✔ the real submit hook retires retained explicit and composer Character callbacks before HTTP (71.864ms)
+✔ retained Character callbacks cannot borrow another root, plane or later session (2.955708ms)
+✔ Character posting remains server-authorized while owner replies stay available offline (181.447ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2805.908167

@@ -1,0 +1,22 @@
+✖ native account history retains an offline message through reconnect refusal, explicit retry, two tabs and cold reload (54327.907304ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 54403.960549
+
+✖ failing tests:
+
+test at ../account.test.mjs:10:1
+✖ native account history retains an offline message through reconnect refusal, explicit retry, two tabs and cold reload (54327.907304ms)
+  locator.waitFor: Timeout 30000ms exceeded.
+  Call log:
+    - waiting for getByRole('button', { name: /^History retained item 27(?: \(unread\))?$/ }) to be visible
+  
+      at TestContext.<anonymous> (/tmp/check/account.test.mjs:192:94) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('button', { name: /^History retained item 27(?: \\(unread\\))?$/ }) to be visible" ]
+  }

@@ -1,0 +1,86 @@
+{
+  "moduleParity": [
+    {
+      "target": "app/components/Mail/MailPage.tsx",
+      "hits": [
+        {
+          "map": "app/public/assets/mail-D-sy60Uo.js.map",
+          "matches": true,
+          "mapSha256": "73d714d951a6318181f1223d1baab1202c1b15f0b44ac973484282f06b23b66f"
+        }
+      ]
+    },
+    {
+      "target": "app/mail/useMailWorkspace.ts",
+      "hits": [
+        {
+          "map": "app/public/assets/index-Bc2MY_2n.js.map",
+          "matches": true,
+          "mapSha256": "d5df7b088267960c02a0c321f6413ab0eefdcabdbe8f954ffc1a2ee2232e4a49"
+        }
+      ]
+    },
+    {
+      "target": "app/mail/useMail.ts",
+      "hits": [
+        {
+          "map": "app/public/assets/index-Bc2MY_2n.js.map",
+          "matches": true,
+          "mapSha256": "d5df7b088267960c02a0c321f6413ab0eefdcabdbe8f954ffc1a2ee2232e4a49"
+        }
+      ]
+    },
+    {
+      "target": "app/mail/localStore.ts",
+      "hits": [
+        {
+          "map": "app/public/assets/index-Bc2MY_2n.js.map",
+          "matches": true,
+          "mapSha256": "d5df7b088267960c02a0c321f6413ab0eefdcabdbe8f954ffc1a2ee2232e4a49"
+        }
+      ]
+    },
+    {
+      "target": "app/mail/workspace.client.ts",
+      "hits": [
+        {
+          "map": "app/public/assets/index-Bc2MY_2n.js.map",
+          "matches": true,
+          "mapSha256": "d5df7b088267960c02a0c321f6413ab0eefdcabdbe8f954ffc1a2ee2232e4a49"
+        }
+      ]
+    },
+    {
+      "target": "app/local-workspace/runtime.client.ts",
+      "hits": [
+        {
+          "map": "app/public/assets/runtime.client-gX05s3hj.js.map",
+          "matches": true,
+          "mapSha256": "7d27e9d341d6adb223702737d4f2a74e0091f0164769c926ad56c460fab9faa3"
+        }
+      ]
+    },
+    {
+      "target": "app/utils/rootIdentity.ts",
+      "hits": [
+        {
+          "map": "app/public/assets/runtime.client-gX05s3hj.js.map",
+          "matches": true,
+          "mapSha256": "7d27e9d341d6adb223702737d4f2a74e0091f0164769c926ad56c460fab9faa3"
+        }
+      ]
+    },
+    {
+      "target": "app/entry.client.tsx",
+      "hits": [
+        {
+          "map": "app/public/assets/index-Bc2MY_2n.js.map",
+          "matches": true,
+          "mapSha256": "d5df7b088267960c02a0c321f6413ab0eefdcabdbe8f954ffc1a2ee2232e4a49"
+        }
+      ]
+    }
+  ],
+  "applicationTarSha256": "0a847337609cd760c3188d784375f57a2d1eadb495ccad86b1c2799429d3a0d5",
+  "scope": "module sourcesContent equality only, not package identity"
+}

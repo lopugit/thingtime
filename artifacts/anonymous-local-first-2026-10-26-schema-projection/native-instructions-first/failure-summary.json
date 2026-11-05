@@ -1,0 +1,46 @@
+{
+  "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n200 !== 413\n",
+  "phase": "resumable account upload and independent readback",
+  "phaseMarks": [
+    {
+      "phase": "oversized Settings input readiness",
+      "elapsedMs": 237569
+    },
+    {
+      "phase": "oversized paragraph Settings save",
+      "elapsedMs": 237968
+    },
+    {
+      "phase": "12000-hard-line native paste and undo",
+      "elapsedMs": 238386
+    },
+    {
+      "phase": "12000-hard-line local Settings save",
+      "elapsedMs": 242187
+    },
+    {
+      "phase": "oversized status responsive layout",
+      "elapsedMs": 242629
+    },
+    {
+      "phase": "oversized offline reload",
+      "elapsedMs": 244347
+    },
+    {
+      "phase": "resumable account upload and independent readback",
+      "elapsedMs": 246587
+    }
+  ],
+  "elapsedMs": 299840,
+  "checks": [
+    "offline normal settings save and cold reload retain exact Unicode and disabled rows",
+    "server commits before a lost reply; newer local save completes while reply is held; read acknowledgement avoids duplicate replay",
+    "explicit device conflict choice preserves the reviewed revision and exact content",
+    "explicit account conflict choice preserves the reviewed revision and exact content",
+    "oversized normal Settings save completes locally with pending-sync status at desktop and both phone widths; offline cold reload retains exact Unicode and disabled rows"
+  ],
+  "errors": [],
+  "offlineWrites": [],
+  "screenshotCaptured": true,
+  "bodyReadable": true
+}

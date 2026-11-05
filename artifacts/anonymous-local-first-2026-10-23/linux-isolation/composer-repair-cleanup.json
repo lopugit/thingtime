@@ -1,0 +1,6 @@
+{
+  "namespaceStopped": true,
+  "privateHomeAndDatabaseRemoved": true,
+  "runtimeMetadataRemoved": true,
+  "artifactsRetained": true
+}

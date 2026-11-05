@@ -1,0 +1,18 @@
+{
+  "checkedAt": "2026-10-26T05:50:54.679248+00:00",
+  "head": "14394ee6b39e7bc64ec031fe5ce2f0600851a281",
+  "web": {
+    "run": 40273919621,
+    "conclusion": "success"
+  },
+  "codeql": {
+    "run": 40273919778,
+    "conclusion": "success"
+  },
+  "preview": {
+    "url": "https://pr-1000.previews.dev.thingtime.com",
+    "httpStatus": 200,
+    "sha": "14394ee6b39e7bc64ec031fe5ce2f0600851a281"
+  },
+  "scope": "Previous pushed MCP revision; not CI acceptance for the pending instruction-transfer changes."
+}

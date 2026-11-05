@@ -1,0 +1,47 @@
+✔ native anonymous theme History reviews restore, undo and merge offline (33299.726517ms)
+✖ native account theme History reviews restore, undo and merge offline (1144.150098ms)
+✖ native custom-plane account theme History reviews restore, undo and merge offline (773.34308ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 35655.687529
+
+✖ failing tests:
+
+test at app/local-workspace/themeVersions.browser.test.ts:2:1635
+✖ native account theme History reviews restore, undo and merge offline (1144.150098ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  429 !== 200
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:156:13)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/local-workspace/themeVersions.browser.test.ts:2:1635
+✖ native custom-plane account theme History reviews restore, undo and merge offline (773.34308ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  429 !== 200
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:156:13)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

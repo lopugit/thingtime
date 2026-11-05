@@ -1,0 +1,44 @@
+✔ bytes: ZIP round trip preserves actual bytes, Unicode filenames and manifest (19.50025ms)
+✔ bytes: imports deflated files when a ZIP tool reordered the manifest last (9.446958ms)
+✔ bytes: refuses missing and tampered bytes before creating an archive (2.227292ms)
+✔ bytes: refuses undeclared paths, missing files and zip-slip entries (10.259667ms)
+✔ bytes: checks actual inflated size and digest, not just a valid manifest (8.550208ms)
+✔ bytes: cancellation stops processing without returning a partial bundle (5.185041ms)
+✔ bytes: zero-file manifests do not hide undeclared archive entries (3.976208ms)
+✔ bytes: forged ZIP size headers cannot bypass the streaming output limit (5.119459ms)
+✔ blob: ZIP round trip preserves actual bytes, Unicode filenames and manifest (8.001458ms)
+✔ blob: imports deflated files when a ZIP tool reordered the manifest last (4.590583ms)
+✔ blob: refuses missing and tampered bytes before creating an archive (1.105166ms)
+✔ blob: refuses undeclared paths, missing files and zip-slip entries (6.85ms)
+✔ blob: checks actual inflated size and digest, not just a valid manifest (7.568125ms)
+✔ blob: cancellation stops processing without returning a partial bundle (2.285334ms)
+✔ blob: zero-file manifests do not hide undeclared archive entries (4.24775ms)
+✔ blob: forged ZIP size headers cannot bypass the streaming output limit (4.33975ms)
+✔ large Blob manifests pass the former aggregate ceiling and still require exact actual bytes (7.690833ms)
+✔ ZIP64 preflight honors consumer budgets before reading huge files (0.785ms)
+✔ stored payload ZIP signatures cannot terminate known-length entries (27.361541ms)
+✔ consumer archive budgets reject before reading and Blob processing remains cancellable beyond the old cap (4.803667ms)
+✔ truncated large-file payloads cannot publish a partial Blob bundle (0.875542ms)
+✔ manifest discovery discards skipped stored bytes with manifest first (242.423791ms)
+✔ manifest discovery discards skipped stored bytes with manifest last (213.87575ms)
+✔ manifest discovery discards skipped deflated bytes with manifest first (613.305458ms)
+✔ manifest discovery discards skipped deflated bytes with manifest last (563.672042ms)
+✔ Node refuses unsupported ZIP64 Blob offsets before payload reads while consumer budgets retain priority (3.544041ms)
+✔ Node rejects oversized declared output before inflating a small input (1.927ms)
+✔ Node limit detection checks Blob identity and preserves Chromium/Electron renderers (0.9365ms)
+✔ Node guard accepts uint32 sizes but rejects the exact 4GiB boundary (0.578333ms)
+✔ Node binary conversion and hashing refuse unsupported Blob sizes before any read (1.198792ms)
+✔ ZIP64 planning reserves exact size and offset sentinels and checks overhead (72.568917ms)
+✔ archive arithmetic refuses invalid or imprecise sizes including accumulated overflow (0.591833ms)
+✔ small stored archives remain standard ZIP32 and carry CRC32 (1.316666ms)
+✔ ZIP64 end records are compatible for a small archive (0.329791ms)
+✔ streaming decoder reads ZIP64 local extras split across input chunks (0.839792ms)
+﹣ real 4GiB+1 sparse file exports ZIP64 and Python independently checks every byte (0.570458ms) # SKIP
+ℹ tests 36
+ℹ suites 0
+ℹ pass 35
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 2282.595041

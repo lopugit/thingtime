@@ -1,0 +1,8 @@
+{
+  "before": false,
+  "authenticatedRootActor": "6adf9d135a5929aae970728c",
+  "expectedActor": "6adf9d135a5929aae970728c",
+  "dataPlane": "home",
+  "transport": "actual authenticated root-data succeeded",
+  "simulation": "CDP online signal for network-none loopback runtime"
+}

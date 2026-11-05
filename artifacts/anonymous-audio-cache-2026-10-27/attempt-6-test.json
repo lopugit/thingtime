@@ -1,0 +1,7 @@
+{
+  "reason": "Grounded public-post footer logout route; exact native decode/play assertions; same correct reviewed package",
+  "hashes": {
+    "remix/app/components/Attachments/AudioAttachmentPlayer.browser.test.ts": "ca6d77e8c86371217d9b81c5100c31a2383e870a571aa4d2c249eb1c31ddeedf",
+    "tmp/continuation/audio-player.test.mjs": "8b73647eb194bb1461cc5c9a030037d7585cb0d42432a05aaa4e1d552fc13d7a"
+  }
+}

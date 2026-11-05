@@ -1,7 +1,9 @@
+import { validOptionalLibraryTitle } from '../../../utils/libraryTitle';
 import type { AlgorithmWeights } from '../things/feedRanking';
 
 export type AlgorithmTransferContent = {
   name: string;
+  title?: string | null;
   emoji: string;
   weights: AlgorithmWeights;
   eventCount: number;
@@ -14,10 +16,12 @@ const record = (value: unknown): value is Record<string, unknown> => !!value && 
 /** A portable interest profile is bounded data, never training events to run.
  * Reject instead of truncating, so a successful import preserves every weight. */
 export const parseAlgorithmTransfer = (value: unknown): AlgorithmTransferContent => {
-  if (!record(value) || Object.keys(value).some(key => !['name', 'emoji', 'weights', 'eventCount', 'lastTrainedAt'].includes(key))) {
-    throw new Error('An algorithm transfer contains only name, emoji, weights and training statistics');
+  if (!record(value) || Object.keys(value).some(key => !['name', 'title', 'emoji', 'weights', 'eventCount', 'lastTrainedAt'].includes(key))) {
+    throw new Error('An algorithm transfer contains only name, optional display title, emoji, weights and training statistics');
   }
   const { name, emoji, weights, eventCount, lastTrainedAt } = value;
+  const hasTitle = Object.prototype.hasOwnProperty.call(value, 'title');
+  if (hasTitle && !validOptionalLibraryTitle(value.title)) throw new Error('Invalid algorithm display title');
   if (typeof name !== 'string' || !name.trim() || name !== name.trim() || name.length > 60 ||
     typeof emoji !== 'string' || !emoji.trim() || emoji !== emoji.trim() || [...emoji].length > 3) {
     throw new Error('Invalid algorithm name or emoji');
@@ -39,5 +43,5 @@ export const parseAlgorithmTransfer = (value: unknown): AlgorithmTransferContent
       result[bucket][key] = weight;
     }
   }
-  return { name, emoji, weights: result, eventCount: eventCount as number, lastTrainedAt: lastTrainedAt as string | null };
+  return { name, ...(hasTitle ? { title: value.title as string | null } : {}), emoji, weights: result, eventCount: eventCount as number, lastTrainedAt: lastTrainedAt as string | null };
 };

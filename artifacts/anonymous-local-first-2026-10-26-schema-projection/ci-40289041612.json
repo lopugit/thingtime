@@ -1,0 +1,43 @@
+{
+  "conclusion": "failure",
+  "headSha": "8c690d2984b0cff8322c408625fe2c36488232f5",
+  "jobs": [
+    {
+      "name": "control-plane / Dispatch trusted default-branch controller",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "name": "control-plane / Authorize exact preview source",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "name": "control-plane / Build ${{ matrix.environment }} admin preview without secrets",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "name": "control-plane / Authorize admin-selected preview sources",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "name": "control-plane / Build exact PR bundle without secrets",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "name": "control-plane / Publish admin-selected PR previews",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "name": "control-plane / Publish or reconcile develop S3 preview",
+      "status": "completed",
+      "conclusion": "skipped"
+    }
+  ],
+  "status": "completed",
+  "url": "https://github.com/lopugit/thingtime/actions/runs/40289041612"
+}

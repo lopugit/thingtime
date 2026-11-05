@@ -62,9 +62,9 @@ const createHarness = (options: { thing?: any; legacy?: any; matchedCount?: numb
 		},
 		findUser: async (id: string) => ({ _id: id }),
 		projectUser: async (user: any) => ({ id: String(user._id) } as any),
-		mutateSecure: async (_userId: string, mutate: (secure: any) => void) => {
+		mutateSecure: async (_userId: string, mutate: (secure: any, stored: any) => void) => {
 			const secure = { meta: {} };
-			mutate(secure);
+			mutate(secure, { secure });
 			secureMutations.push(secure);
 			return 'mutated' as const;
 		},

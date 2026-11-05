@@ -1,0 +1,7 @@
+{
+  "scope": "artifacts/anonymous-audio-cache-2026-10-27",
+  "files": 166,
+  "bytes": 2229368,
+  "secretSignatureFindings": [],
+  "scopeNote": "Signature scan only; no credential values printed. Test fixtures generate isolated synthetic credentials in memory and output no secret values."
+}

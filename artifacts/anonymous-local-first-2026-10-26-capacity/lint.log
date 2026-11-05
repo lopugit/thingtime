@@ -1,0 +1,17 @@
+
+> @1.0.0 lint:files /Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix
+> node scripts/ensure-dependencies.js --tool=eslint && eslint -- app/api/utils/algorithms/algorithms.ts app/api/utils/capabilities/requireCapability.client.test.ts app/api/utils/capabilities/thingtimeCapabilities.test.ts app/api/utils/ownedListPage.test.ts app/api/utils/ownedListPage.ts app/api/utils/themes/ownedCapacity.test.mts app/api/utils/themes/ownedListRoutes.test.mts app/api/utils/themes/themeQuota.api.test.ts app/api/utils/themes/themeSyncContract.test.ts app/api/utils/themes/themeSyncContract.ts app/api/utils/themes/themeSyncReceipt.test.ts app/api/utils/themes/themes.ts app/docs/apiCapabilities.test.ts app/docs/apiDocs.ts app/hooks/ownedListClient.test.ts app/hooks/ownedListClient.ts app/hooks/useApi.tsx app/local-workspace/accountAlgorithmFacade.test.ts app/local-workspace/algorithmTransport.client.ts app/local-workspace/algorithmTransport.test.ts app/local-workspace/themeTransport.client.ts app/local-workspace/themeTransport.test.ts app/routes/api/v1/algorithms/_algorithms.tsx app/routes/api/v1/themes/_themes.tsx app/theme/tokens.test.ts app/theme/tokens.ts app/timeline/exportVersion.ts app/timeline/publishedVersion.test.ts app/timeline/publishedVersion.ts app/timeline/themeContent.test.ts app/timeline/themeContent.ts scripts/environment-gateway-acceptance.mjs
+
+⚠️ REMIX FUTURE CHANGE: The `@remix-run/eslint-config` package is deprecated and will not be included in React Router v7.  We recommend moving towards a streamlined ESLint config such as the ones included in the Remix templates. See https://github.com/remix-run/remix/blob/v2/templates/remix/.eslintrc.cjs.
+
+/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/hooks/useApi.tsx
+  171:10  warning  React Hook useCallback has a missing dependency: 'getJson'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/theme/tokens.ts
+  324:24  warning  Unnecessary escape character: \/  no-useless-escape
+
+/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/scripts/environment-gateway-acceptance.mjs
+  49:101  warning  Unnecessary escape character: \"  no-useless-escape
+
+✖ 3 problems (0 errors, 3 warnings)
+

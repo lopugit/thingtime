@@ -1,0 +1,31 @@
+[
+  {
+    "attempt": "baseline-missing-cgroup",
+    "runId": "d834319c-6e6c-4cd8-bbd0-df926564875c",
+    "classification": "fixture/environment",
+    "reason": "All product assertions reached; earlier namespace omitted exact cgroup memory diagnostics, so final memory assertion failed. Final namespace mounts the exact read-only files."
+  },
+  {
+    "attempt": "automatic-recovery-race",
+    "runId": "f81e6721-a3ff-40fb-a898-d04e9aeb128d",
+    "classification": "fixture/environment",
+    "reason": "Fixture assumed the recovery notice persisted after the outage ended. A real background refresh removed it before the second click. Fixture now accepts this only with a healthy resolver response and removed notice; an actual Retry during the outage is still required."
+  },
+  {
+    "attempt": "automatic-recovery-race-retry",
+    "runId": "42ff2322-4066-437c-9646-b9e974dc6bcf",
+    "classification": "fixture/environment",
+    "reason": "Same fixture recovery race at another width; retained matching failure JSON/PNG."
+  },
+  {
+    "attempt": "collision-coverage",
+    "runId": "2af2d9a3-95b1-486e-8b0e-b8d29e95b637",
+    "classification": "fixture/environment",
+    "reason": "Moving the composer check after recovery removed the long-page geometry and did not exercise a physical phone collision. The meaningful coverage assertion correctly rejected the run. Final fixture restores composer checks before recovery and exercises both phone widths."
+  },
+  {
+    "attempt": "registration-rate-limit",
+    "classification": "test-instance capacity",
+    "reason": "Repeated attempts exhausted synthetic signup limits before product checks. Final run uses a fresh isolated test instance with unchanged rate limits; no bypass."
+  }
+]

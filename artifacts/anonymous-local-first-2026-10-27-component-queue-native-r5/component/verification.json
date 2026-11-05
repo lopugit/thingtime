@@ -1,0 +1,883 @@
+{
+  "scope": "normal app worker + real replica API + browser IndexedDB",
+  "ownerId": "6adf9ddc4cd8f29c41f27dcd",
+  "dataPlane": "home",
+  "ids": [
+    "fe2178bd-bc9a-420a-9a35-c3c6dd68239f",
+    "adc61a5d-f4e8-42b2-875a-86a9296e4fc0",
+    "f4cdc7d8-1ee9-4569-8d30-d7440d5c5732"
+  ],
+  "secondPage": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+  "component": "d0f03948-350d-4079-9638-7603f59c8dbd",
+  "writes": [
+    {
+      "id": "f4cdc7d8-1ee9-4569-8d30-d7440d5c5732",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "data"
+        ],
+        "crystal": {
+          "name": "Independent queue data"
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "f4cdc7d8-1ee9-4569-8d30-d7440d5c5732"
+      },
+      "actor": "6adf9ddc4cd8f29c41f27dcd",
+      "plane": "home",
+      "at": 1793039842608,
+      "status": 200,
+      "delivery": "delivered"
+    },
+    {
+      "id": "fe2178bd-bc9a-420a-9a35-c3c6dd68239f",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "component"
+        ],
+        "crystal": {
+          "name": "Acknowledged component control",
+          "library": "custom",
+          "category": "general",
+          "componentKey": "queue-1564d3fc-bc9e-461c-816c-3a254fb5b364",
+          "version": 1,
+          "render": {
+            "tag": "p",
+            "children": "Acknowledged component control"
+          }
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "fe2178bd-bc9a-420a-9a35-c3c6dd68239f"
+      },
+      "actor": "6adf9ddc4cd8f29c41f27dcd",
+      "plane": "home",
+      "at": 1793039843318,
+      "status": 422,
+      "delivery": "refused"
+    },
+    {
+      "id": "fe2178bd-bc9a-420a-9a35-c3c6dd68239f",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "component"
+        ],
+        "crystal": {
+          "name": "Acknowledged component control",
+          "library": "custom",
+          "category": "general",
+          "componentKey": "queue-1564d3fc-bc9e-461c-816c-3a254fb5b364",
+          "version": 1,
+          "render": {
+            "tag": "p",
+            "children": "Acknowledged component control"
+          }
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "fe2178bd-bc9a-420a-9a35-c3c6dd68239f"
+      },
+      "actor": "6adf9ddc4cd8f29c41f27dcd",
+      "plane": "home",
+      "at": 1793039847899,
+      "status": 200,
+      "delivery": "delivered"
+    },
+    {
+      "id": "adc61a5d-f4e8-42b2-875a-86a9296e4fc0",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "webpage"
+        ],
+        "crystal": {
+          "name": "Dependency queue page",
+          "version": 1,
+          "blocks": [
+            {
+              "id": "outer",
+              "type": "container",
+              "direction": "column",
+              "children": [
+                {
+                  "id": "inner",
+                  "type": "container",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "id": "control",
+                      "type": "component",
+                      "component": "fe2178bd-bc9a-420a-9a35-c3c6dd68239f"
+                    },
+                    {
+                      "id": "text",
+                      "type": "element",
+                      "tag": "p",
+                      "text": "Original frozen content"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "adc61a5d-f4e8-42b2-875a-86a9296e4fc0"
+      },
+      "actor": "6adf9ddc4cd8f29c41f27dcd",
+      "plane": "home",
+      "at": 1793039848114,
+      "status": 200,
+      "delivery": "delivered"
+    },
+    {
+      "id": "40ed4498-534b-4411-82cd-80bd6c6aff72",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "data"
+        ],
+        "crystal": {
+          "name": "Independent queue data"
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "40ed4498-534b-4411-82cd-80bd6c6aff72"
+      },
+      "actor": "6adf9ddc4cd8f29c41f27dcd",
+      "plane": "home",
+      "at": 1793039861077,
+      "status": 200,
+      "delivery": "delivered"
+    },
+    {
+      "id": "9de5b878-6305-4fe7-aac8-07d0c5debe21",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "component"
+        ],
+        "crystal": {
+          "name": "Acknowledged component control",
+          "library": "custom",
+          "category": "general",
+          "componentKey": "queue-0bb612a0-dad9-4215-9128-77c8e7b085cd",
+          "version": 1,
+          "render": {
+            "tag": "p",
+            "children": "Acknowledged component control"
+          }
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "9de5b878-6305-4fe7-aac8-07d0c5debe21"
+      },
+      "actor": "6adf9ddc4cd8f29c41f27dcd",
+      "plane": "home",
+      "at": 1793039861297,
+      "status": 200,
+      "delivery": "delivered"
+    },
+    {
+      "id": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "webpage"
+        ],
+        "crystal": {
+          "name": "Dependency queue page",
+          "version": 1,
+          "blocks": [
+            {
+              "id": "outer",
+              "type": "container",
+              "direction": "column",
+              "children": [
+                {
+                  "id": "inner",
+                  "type": "container",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "id": "control",
+                      "type": "component",
+                      "component": "9de5b878-6305-4fe7-aac8-07d0c5debe21"
+                    },
+                    {
+                      "id": "text",
+                      "type": "element",
+                      "tag": "p",
+                      "text": "Original frozen content"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "2b45083a-99d4-4c95-8022-e96e5cf571ec"
+      },
+      "actor": "6adf9ddc4cd8f29c41f27dcd",
+      "plane": "home",
+      "at": 1793039861430,
+      "status": 200,
+      "delivery": "response-dropped",
+      "receipt": {
+        "ok": true,
+        "thing": {
+          "id": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+          "thingtime": [
+            "webpage"
+          ],
+          "author": {
+            "id": "6adf9ddc4cd8f29c41f27dcd",
+            "username": "queue-8c63ca34",
+            "displayName": null,
+            "temporary": false,
+            "avatarUrl": null
+          },
+          "visibility": "private",
+          "acl": [
+            "tt:user"
+          ],
+          "targetId": null,
+          "folderId": null,
+          "crystal": {
+            "name": "Dependency queue page",
+            "version": 1,
+            "blocks": [
+              {
+                "id": "outer",
+                "type": "container",
+                "direction": "column",
+                "children": [
+                  {
+                    "id": "inner",
+                    "type": "container",
+                    "direction": "column",
+                    "children": [
+                      {
+                        "id": "control",
+                        "type": "component",
+                        "component": "9de5b878-6305-4fe7-aac8-07d0c5debe21"
+                      },
+                      {
+                        "id": "text",
+                        "type": "element",
+                        "tag": "p",
+                        "text": "Original frozen content"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "extended": null,
+          "geo": null,
+          "tags": [],
+          "createdAt": "2026-10-26T18:37:41.490Z",
+          "updatedAt": "2026-10-26T18:37:41.490Z",
+          "timelineHeadId": "ec34c7e4-a82d-4244-9821-970d5c42b284"
+        }
+      }
+    },
+    {
+      "id": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "webpage"
+        ],
+        "crystal": {
+          "name": "Dependency queue page",
+          "version": 1,
+          "blocks": [
+            {
+              "id": "outer",
+              "type": "container",
+              "direction": "column",
+              "children": [
+                {
+                  "id": "inner",
+                  "type": "container",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "id": "control",
+                      "type": "component",
+                      "component": "9de5b878-6305-4fe7-aac8-07d0c5debe21"
+                    },
+                    {
+                      "id": "text",
+                      "type": "element",
+                      "tag": "p",
+                      "text": "Original frozen content"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "2b45083a-99d4-4c95-8022-e96e5cf571ec"
+      },
+      "actor": "6adf9ddc4cd8f29c41f27dcd",
+      "plane": "home",
+      "at": 1793039868811,
+      "status": 409,
+      "delivery": "delivered"
+    },
+    {
+      "id": "d0f03948-350d-4079-9638-7603f59c8dbd",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "component"
+        ],
+        "crystal": {
+          "name": "Second dependency control",
+          "library": "custom",
+          "category": "general",
+          "componentKey": "queue-ecd87314-c639-4f10-9f72-031db842e775",
+          "version": 1,
+          "render": {
+            "tag": "p",
+            "children": "Second dependency control"
+          }
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "d0f03948-350d-4079-9638-7603f59c8dbd"
+      },
+      "actor": "6adf9ddc4cd8f29c41f27dcd",
+      "plane": "home",
+      "at": 1793039869212,
+      "status": 422,
+      "delivery": "refused"
+    },
+    {
+      "id": "d0f03948-350d-4079-9638-7603f59c8dbd",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "component"
+        ],
+        "crystal": {
+          "name": "Second dependency control",
+          "library": "custom",
+          "category": "general",
+          "componentKey": "queue-ecd87314-c639-4f10-9f72-031db842e775",
+          "version": 1,
+          "render": {
+            "tag": "p",
+            "children": "Second dependency control"
+          }
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "d0f03948-350d-4079-9638-7603f59c8dbd"
+      },
+      "actor": "6adf9ddc4cd8f29c41f27dcd",
+      "plane": "home",
+      "at": 1793039873183,
+      "status": 200,
+      "delivery": "delivered"
+    },
+    {
+      "id": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+      "method": "PATCH",
+      "body": {
+        "thingtime": [
+          "webpage"
+        ],
+        "crystal": {
+          "name": "Newer local page",
+          "version": 1,
+          "blocks": [
+            {
+              "id": "outer",
+              "type": "container",
+              "direction": "column",
+              "children": [
+                {
+                  "id": "inner",
+                  "type": "container",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "id": "control",
+                      "type": "component",
+                      "component": "d0f03948-350d-4079-9638-7603f59c8dbd"
+                    },
+                    {
+                      "id": "text",
+                      "type": "element",
+                      "tag": "p",
+                      "text": "Newer pending content"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "id": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+        "expectedUpdatedAt": "2026-10-26T18:37:41.490Z",
+        "replaceCrystal": true
+      },
+      "actor": "6adf9ddc4cd8f29c41f27dcd",
+      "plane": "home",
+      "at": 1793039873440,
+      "status": 200,
+      "delivery": "delivered"
+    }
+  ],
+  "reads": [
+    {
+      "id": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+      "at": 1793039861529,
+      "delivery": "aborted-before-send"
+    },
+    {
+      "id": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+      "at": 1793039868889,
+      "delivery": "delivered",
+      "status": 200,
+      "receipt": {
+        "ok": true,
+        "thing": {
+          "id": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+          "thingtime": [
+            "webpage"
+          ],
+          "author": {
+            "id": "6adf9ddc4cd8f29c41f27dcd",
+            "username": "queue-8c63ca34",
+            "displayName": null,
+            "temporary": false,
+            "avatarUrl": null
+          },
+          "audience": {
+            "sourceId": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+            "acl": [
+              "tt:user"
+            ]
+          },
+          "visibility": "private",
+          "acl": [
+            "tt:user"
+          ],
+          "targetId": null,
+          "folderId": null,
+          "crystal": {
+            "name": "Dependency queue page",
+            "version": 1,
+            "blocks": [
+              {
+                "id": "outer",
+                "type": "container",
+                "direction": "column",
+                "children": [
+                  {
+                    "id": "inner",
+                    "type": "container",
+                    "direction": "column",
+                    "children": [
+                      {
+                        "id": "control",
+                        "type": "component",
+                        "component": "9de5b878-6305-4fe7-aac8-07d0c5debe21"
+                      },
+                      {
+                        "id": "text",
+                        "type": "element",
+                        "tag": "p",
+                        "text": "Original frozen content"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "extended": null,
+          "geo": null,
+          "tags": [],
+          "createdAt": "2026-10-26T18:37:41.490Z",
+          "updatedAt": "2026-10-26T18:37:41.490Z",
+          "timelineHeadId": "ec34c7e4-a82d-4244-9821-970d5c42b284",
+          "attachments": []
+        },
+        "post": null,
+        "discussion": {
+          "id": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+          "thingtime": [
+            "webpage"
+          ],
+          "type": "text",
+          "author": {
+            "id": "6adf9ddc4cd8f29c41f27dcd",
+            "username": "queue-8c63ca34",
+            "displayName": null,
+            "temporary": false,
+            "avatarUrl": null
+          },
+          "audience": {
+            "sourceId": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+            "acl": [
+              "tt:user"
+            ]
+          },
+          "visibility": "private",
+          "acl": [
+            "tt:user"
+          ],
+          "text": "",
+          "richText": null,
+          "images": [],
+          "attachments": [],
+          "mediaLayout": null,
+          "listing": null,
+          "thing": null,
+          "tags": [],
+          "title": null,
+          "subspaceMod": null,
+          "comments": [],
+          "repliesLoaded": false,
+          "isShare": false,
+          "shareOf": null,
+          "extended": null,
+          "geo": null,
+          "createdAt": "2026-10-26T18:37:41.490Z",
+          "sourceThingId": "2b45083a-99d4-4c95-8022-e96e5cf571ec"
+        },
+        "parent": null,
+        "root": null,
+        "commentSort": null
+      }
+    }
+  ],
+  "recoveryMethod": "immutable-create409-canonical-get200",
+  "bounds": [
+    {
+      "label": "acknowledged",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "acknowledged",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "acknowledged",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "recovered",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "recovered",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "recovered",
+      "width": 320,
+      "scrollWidth": 320
+    }
+  ],
+  "errors": [],
+  "frozen": {
+    "thingtime": [
+      "webpage"
+    ],
+    "crystal": {
+      "name": "Dependency queue page",
+      "version": 1,
+      "blocks": [
+        {
+          "id": "outer",
+          "type": "container",
+          "direction": "column",
+          "children": [
+            {
+              "id": "inner",
+              "type": "container",
+              "direction": "column",
+              "children": [
+                {
+                  "id": "control",
+                  "type": "component",
+                  "component": "9de5b878-6305-4fe7-aac8-07d0c5debe21"
+                },
+                {
+                  "id": "text",
+                  "type": "element",
+                  "tag": "p",
+                  "text": "Original frozen content"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "extended": null,
+    "tags": [],
+    "folderId": null,
+    "targetId": null,
+    "acl": [
+      "tt:user"
+    ],
+    "visibility": "private",
+    "shareId": "2b45083a-99d4-4c95-8022-e96e5cf571ec"
+  },
+  "frozenOperation": {
+    "id": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+    "operationId": "42ffc12a-dff4-4640-b991-39fa2a9557be",
+    "version": 1,
+    "method": "create",
+    "body": {
+      "thingtime": [
+        "webpage"
+      ],
+      "crystal": {
+        "name": "Dependency queue page",
+        "version": 1,
+        "blocks": [
+          {
+            "id": "outer",
+            "type": "container",
+            "direction": "column",
+            "children": [
+              {
+                "id": "inner",
+                "type": "container",
+                "direction": "column",
+                "children": [
+                  {
+                    "id": "control",
+                    "type": "component",
+                    "component": "9de5b878-6305-4fe7-aac8-07d0c5debe21"
+                  },
+                  {
+                    "id": "text",
+                    "type": "element",
+                    "tag": "p",
+                    "text": "Original frozen content"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "extended": null,
+      "tags": [],
+      "folderId": null,
+      "targetId": null,
+      "acl": [
+        "tt:user"
+      ],
+      "visibility": "private",
+      "shareId": "2b45083a-99d4-4c95-8022-e96e5cf571ec"
+    }
+  },
+  "coldPending": {
+    "id": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+    "operationId": "42ffc12a-dff4-4640-b991-39fa2a9557be",
+    "version": 1,
+    "method": "create",
+    "body": {
+      "thingtime": [
+        "webpage"
+      ],
+      "crystal": {
+        "name": "Dependency queue page",
+        "version": 1,
+        "blocks": [
+          {
+            "id": "outer",
+            "type": "container",
+            "direction": "column",
+            "children": [
+              {
+                "id": "inner",
+                "type": "container",
+                "direction": "column",
+                "children": [
+                  {
+                    "id": "control",
+                    "type": "component",
+                    "component": "9de5b878-6305-4fe7-aac8-07d0c5debe21"
+                  },
+                  {
+                    "id": "text",
+                    "type": "element",
+                    "tag": "p",
+                    "text": "Original frozen content"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "extended": null,
+      "tags": [],
+      "folderId": null,
+      "targetId": null,
+      "acl": [
+        "tt:user"
+      ],
+      "visibility": "private",
+      "shareId": "2b45083a-99d4-4c95-8022-e96e5cf571ec"
+    }
+  },
+  "committedRevision": "2026-10-26T18:37:41.490Z",
+  "final": {
+    "id": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+    "thingtime": [
+      "webpage"
+    ],
+    "author": {
+      "id": "6adf9ddc4cd8f29c41f27dcd",
+      "username": "queue-8c63ca34",
+      "displayName": null,
+      "temporary": false,
+      "avatarUrl": null
+    },
+    "audience": {
+      "sourceId": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+      "acl": [
+        "tt:user"
+      ]
+    },
+    "visibility": "private",
+    "acl": [
+      "tt:user"
+    ],
+    "targetId": null,
+    "folderId": null,
+    "crystal": {
+      "name": "Newer local page",
+      "version": 1,
+      "blocks": [
+        {
+          "id": "outer",
+          "type": "container",
+          "direction": "column",
+          "children": [
+            {
+              "id": "inner",
+              "type": "container",
+              "direction": "column",
+              "children": [
+                {
+                  "id": "control",
+                  "type": "component",
+                  "component": "d0f03948-350d-4079-9638-7603f59c8dbd"
+                },
+                {
+                  "id": "text",
+                  "type": "element",
+                  "tag": "p",
+                  "text": "Newer pending content"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "extended": null,
+    "geo": null,
+    "tags": [],
+    "createdAt": "2026-10-26T18:37:41.490Z",
+    "updatedAt": "2026-10-26T18:37:53.486Z",
+    "timelineHeadId": "a1f71262-0d6a-4087-9cb5-54db2af215b9",
+    "attachments": []
+  }
+}

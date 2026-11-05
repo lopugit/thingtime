@@ -1,0 +1,404 @@
+{
+  "phase": "account",
+  "error": "TimeoutError: locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n  - waiting for getByPlaceholder('Add your thoughts…', { exact: true }) to be visible\n",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\n\nOffline account workspace. Local edits are available; account sync is paused until your session is verified.\n\nReconnect\nReview sync\nTHINGTIME · POST 📌\nPost 📌\nD\ndelete-226063ba\n@delete-226063ba · \njust now\n🔒\nonly the author can see this post\n\nSynthetic owner post deleted offline.\n\n1\nRepost 🔁\nQuote post ✏️\n0\nD\n\ndelete-226063ba\n\njust now\n\nAccount child removed with parent.\n\n0\nPost as\nOffline account workspace\nRecover earlier comment draft\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "checks": [],
+  "bounds": [
+    {
+      "phase": "account",
+      "width": 1440,
+      "quoteStage": "before",
+      "viewport": 1440,
+      "main": {
+        "left": 0,
+        "right": 1440,
+        "width": 1440,
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BODY",
+        "label": null,
+        "placeholder": null
+      }
+    },
+    {
+      "phase": "account",
+      "width": 1440,
+      "quoteStage": "open",
+      "viewport": 1440,
+      "main": {
+        "left": 0,
+        "right": 1440,
+        "width": 1440,
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": {
+        "left": 388.32379150390625,
+        "right": 641.6762084960938,
+        "width": 253.3524169921875,
+        "clientWidth": 258,
+        "scrollWidth": 258,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "focus": {
+        "tag": "TEXTAREA",
+        "label": null,
+        "placeholder": "Add your thoughts…"
+      }
+    },
+    {
+      "phase": "account",
+      "width": 1440,
+      "quoteStage": "after-escape",
+      "viewport": 1440,
+      "main": {
+        "left": 0,
+        "right": 1440,
+        "width": 1440,
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BODY",
+        "label": null,
+        "placeholder": null
+      }
+    },
+    {
+      "phase": "account",
+      "width": 1440,
+      "quoteStage": "trigger-focused",
+      "viewport": 1440,
+      "main": {
+        "left": 0,
+        "right": 1440,
+        "width": 1440,
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BUTTON",
+        "label": "Repost",
+        "placeholder": null
+      }
+    }
+  ],
+  "mutations": [
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "post"
+        ],
+        "crystal": {
+          "type": "text",
+          "text": "Synthetic owner post deleted offline."
+        },
+        "visibility": "private"
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "author": "delete-226063ba",
+        "thingtime": "post",
+        "sort": "newest",
+        "limit": 18,
+        "conditions": [
+          {
+            "field": "thingtime",
+            "op": "ne",
+            "value": "comment"
+          },
+          {
+            "mode": "any",
+            "conditions": [
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2025-10-27T00:00:00.000Z",
+                  "2025-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2024-10-27T00:00:00.000Z",
+                  "2024-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2023-10-27T00:00:00.000Z",
+                  "2023-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2022-10-27T00:00:00.000Z",
+                  "2022-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2021-10-27T00:00:00.000Z",
+                  "2021-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2020-10-27T00:00:00.000Z",
+                  "2020-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2019-10-27T00:00:00.000Z",
+                  "2019-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2018-10-27T00:00:00.000Z",
+                  "2018-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2017-10-27T00:00:00.000Z",
+                  "2017-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2016-10-27T00:00:00.000Z",
+                  "2016-10-27T23:59:59.999Z"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "post"
+        ],
+        "crystal": {
+          "type": "text",
+          "text": "Unrelated retained post proves live Feed rendering."
+        },
+        "visibility": "private"
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "type": "text",
+        "text": "Account child removed with parent.",
+        "images": [],
+        "listing": null,
+        "thing": null,
+        "id": "ffcd4ec0-86b0-4660-af99-8da6969c6502",
+        "shareId": "f73aaf2d-719a-4190-9ef0-bf24233d6f73",
+        "tags": [],
+        "attachmentIds": []
+      }
+    }
+  ],
+  "errors": []
+}

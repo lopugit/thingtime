@@ -20,7 +20,7 @@ const keys = (value: unknown, expected: string[]) =>
 	record(value) && Object.keys(value).length === expected.length && expected.every((key) => own(value, key));
 export const componentBlocks = (snapshot: TimelineSnapshot | null) => (snapshot?.value as any)?.crystal?.blocks ?? [];
 
-export function componentVersion(event: TimelineEvent, blocks: unknown, entries: TimelineEntry[]): ComponentVersion {
+export function componentVersion(event: TimelineEvent, blocks: unknown, entries: Pick<TimelineEntry, 'event'>[]): ComponentVersion {
 	const byId = new Map(entries.map((entry) => [entry.event.id, entry.event]));
 	const recorded = new Map<string, TimelineDependency>();
 	for (const link of event.dependencies) {
@@ -80,7 +80,7 @@ export function parseComponentMergeContext(
 	return { ...value, entries };
 }
 
-export function componentVersionBindings(version: ComponentVersion, entries: TimelineEntry[]) {
+export function componentVersionBindings(version: ComponentVersion, entries: Pick<TimelineEntry, 'event'>[]) {
 	const events = new Map(entries.map((entry) => [entry.event.id, entry.event]));
 	const result: Record<string, any> = Object.create(null);
 	for (const [ref, link] of Object.entries(version)) {

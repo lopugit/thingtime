@@ -1,0 +1,101 @@
+{
+  "hostBoundary": "Actual ephemeral Codex CLI agent host. Does not establish tool availability in the original desktop chat.",
+  "requestedModel": "gpt-6-luna",
+  "requestedReasoningEffort": "low",
+  "modelEvidence": "Explicit CLI invocation; bundled model catalog accepts Luna/low",
+  "startedAt": "2026-10-25T09:18:06.529Z",
+  "endedAt": "2026-10-25T09:18:34.598Z",
+  "processExitCode": 0,
+  "deadlineExceeded": false,
+  "observedTools": [
+    {
+      "server": "thingtime-drafts",
+      "tool": "thingtime_capabilities",
+      "status": "completed"
+    },
+    {
+      "server": "thingtime-drafts",
+      "tool": "thingtime_render_and_export",
+      "status": "completed"
+    },
+    {
+      "server": "thingtime-drafts",
+      "tool": "thingtime_render_and_export",
+      "status": "failed"
+    }
+  ],
+  "canonicalHash": "a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c",
+  "rendererHash": "3f1731131c3dcebf1eb7bb3776dd694ab778edc35ccf36d1273d233b235052f9",
+  "browserVersion": "149.0.7827.0",
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "width": 390,
+      "height": 844
+    },
+    {
+      "width": 320,
+      "height": 844
+    }
+  ],
+  "invalidRequest": {
+    "expectedHostStatus": "failed",
+    "code": "RENDER_EXPORT_FAILED",
+    "artifacts": []
+  },
+  "files": [
+    {
+      "name": "thingtime-draft.json",
+      "bytes": 2031,
+      "sha256": "a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c"
+    },
+    {
+      "name": "viewport-1440x1000.png",
+      "bytes": 116094,
+      "sha256": "37130b20fdd314190ee1e1d57123fcaa6c771d69283686d3a1f39c456851c26c",
+      "dimensions": [
+        1440,
+        1000
+      ]
+    },
+    {
+      "name": "card.png",
+      "bytes": 96582,
+      "sha256": "5a94c5b9f6a6d9fce3bfc01f6911dea28d36a9ffc2067548852c45f62de0946c",
+      "dimensions": [
+        400,
+        560
+      ]
+    },
+    {
+      "name": "viewport-390x844.png",
+      "bytes": 79632,
+      "sha256": "a69f0becd48ecfed25d10ddec052cf8020bf24046062512ac14da978453335bf",
+      "dimensions": [
+        390,
+        844
+      ]
+    },
+    {
+      "name": "viewport-320x844.png",
+      "bytes": 57347,
+      "sha256": "251fc49417d9aa728e4e46db593659e2a035c393dd92eaf94ad95573c381e353",
+      "dimensions": [
+        320,
+        844
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 201755,
+    "cached_input_tokens": 171136,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 861,
+    "reasoning_output_tokens": 0
+  },
+  "usageSource": "turn.completed.usage for this one ephemeral CLI agent run; cached input is a subset of input",
+  "privateRawCaptureRetainedOutsideRepository": true
+}

@@ -1,0 +1,334 @@
+{
+  "checks": [
+    "anonymous: offline delete and cold reload",
+    "anonymous: exact post/comment/media/bytes removed",
+    "anonymous: no HTTP mutation",
+    "account: offline delete and cold reload",
+    "account: lost DELETE reply and exact parent/child server absence",
+    "pending: offline delete and cold reload",
+    "pending: local post/media cancelled without server create"
+  ],
+  "bounds": [
+    {
+      "phase": "anonymous",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "phase": "anonymous",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "phase": "anonymous",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "phase": "account",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "phase": "account",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "phase": "account",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "phase": "pending",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "phase": "pending",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "phase": "pending",
+      "width": 320,
+      "scrollWidth": 320
+    }
+  ],
+  "mutations": [
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "post"
+        ],
+        "crystal": {
+          "type": "text",
+          "text": "Synthetic owner post deleted offline."
+        },
+        "visibility": "private"
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "author": "delete-fdaccd3c",
+        "thingtime": "post",
+        "sort": "newest",
+        "limit": 18,
+        "conditions": [
+          {
+            "field": "thingtime",
+            "op": "ne",
+            "value": "comment"
+          },
+          {
+            "mode": "any",
+            "conditions": [
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2025-10-27T00:00:00.000Z",
+                  "2025-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2024-10-27T00:00:00.000Z",
+                  "2024-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2023-10-27T00:00:00.000Z",
+                  "2023-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2022-10-27T00:00:00.000Z",
+                  "2022-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2021-10-27T00:00:00.000Z",
+                  "2021-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2020-10-27T00:00:00.000Z",
+                  "2020-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2019-10-27T00:00:00.000Z",
+                  "2019-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2018-10-27T00:00:00.000Z",
+                  "2018-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2017-10-27T00:00:00.000Z",
+                  "2017-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2016-10-27T00:00:00.000Z",
+                  "2016-10-27T23:59:59.999Z"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "type": "text",
+        "text": "Account child removed with parent.",
+        "images": [],
+        "listing": null,
+        "thing": null,
+        "id": "e55beed7-7b99-48ba-bae2-1498e4da2bb1",
+        "shareId": "edaf9c3c-2597-4414-90ad-555cd4794836",
+        "tags": [],
+        "attachmentIds": []
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "author": "delete-fdaccd3c",
+        "thingtime": "post",
+        "sort": "newest",
+        "limit": 18,
+        "conditions": [
+          {
+            "field": "thingtime",
+            "op": "ne",
+            "value": "comment"
+          },
+          {
+            "mode": "any",
+            "conditions": [
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2025-10-27T00:00:00.000Z",
+                  "2025-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2024-10-27T00:00:00.000Z",
+                  "2024-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2023-10-27T00:00:00.000Z",
+                  "2023-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2022-10-27T00:00:00.000Z",
+                  "2022-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2021-10-27T00:00:00.000Z",
+                  "2021-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2020-10-27T00:00:00.000Z",
+                  "2020-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2019-10-27T00:00:00.000Z",
+                  "2019-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2018-10-27T00:00:00.000Z",
+                  "2018-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2017-10-27T00:00:00.000Z",
+                  "2017-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2016-10-27T00:00:00.000Z",
+                  "2016-10-27T23:59:59.999Z"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "type": "text",
+        "text": "Account child removed with parent.",
+        "images": [],
+        "listing": null,
+        "thing": null,
+        "id": "e55beed7-7b99-48ba-bae2-1498e4da2bb1",
+        "shareId": "edaf9c3c-2597-4414-90ad-555cd4794836",
+        "tags": [],
+        "attachmentIds": []
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "DELETE",
+      "body": {
+        "id": "edaf9c3c-2597-4414-90ad-555cd4794836",
+        "expectedUpdatedAt": "2026-10-27T00:13:14.853Z",
+        "retainAttachmentReceipts": true
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "DELETE",
+      "body": {
+        "id": "e55beed7-7b99-48ba-bae2-1498e4da2bb1",
+        "expectedUpdatedAt": "2026-10-27T00:13:14.853Z",
+        "retainAttachmentReceipts": true
+      }
+    }
+  ],
+  "errors": []
+}

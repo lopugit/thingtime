@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { getThingsCollection } from '../mongodb/collections';
 import { resolveSharedComposition } from '../actions/sharedComposition';
 import { StorageMutationError } from '../storage/storageCore';
-import { parseRelatedTimelineScope, timelineRelatedId, timelineRelatedRevision } from '../../../timeline/relatedHistory.ts';
+import { createRelatedTimelineScope, validRelatedTimelineRequest } from '../../../timeline/relatedHistory.ts';
 import type { TimelinePageRequest } from '../../../timeline/sync.ts';
 import { readTimelinePage } from './repository.ts';
 
@@ -12,13 +12,7 @@ const defaults = { collection: getThingsCollection, resolve: resolveSharedCompos
 export function createRelatedTimelineReader(overrides: Partial<typeof defaults> = {}) {
 	const deps = { ...defaults, ...overrides };
 	return async (ownerId: string, request: TimelinePageRequest) => {
-		if (
-			!timelineRelatedId(request.thingId) ||
-			!request.related ||
-			(request.relatedRevision !== undefined && !timelineRelatedRevision(request.relatedRevision)) ||
-			((request.before !== null || request.after !== null) && !request.relatedRevision)
-		)
-			throw new StorageMutationError(400, 'storage_invariant', 'Invalid related history request.');
+		if (!validRelatedTimelineRequest(request)) throw new StorageMutationError(400, 'storage_invariant', 'Invalid related history request.');
 		const things = await deps.collection();
 		const root = await things.findOne({ ownerId, shareId: request.thingId, thingtime: 'webpage' }, { projection: { shareId: 1 } });
 		if (!root) throw new StorageMutationError(404, 'storage_invariant', 'Open an owned page to see its related history.');
@@ -31,13 +25,12 @@ export function createRelatedTimelineReader(overrides: Partial<typeof defaults> 
 			.map((doc) => doc.shareId)
 			.sort();
 		const sharedCount = composition.docs.size - thingIds.length;
-		const revision = createHash('sha256')
-			.update(JSON.stringify([request.thingId, thingIds, sharedCount]))
-			.digest('hex');
-		const related = parseRelatedTimelineScope({ rootId: request.thingId, thingIds, revision, sharedCount }, request.thingId);
+		const related = await createRelatedTimelineScope(request.thingId, thingIds, sharedCount, (text) =>
+			createHash('sha256').update(text).digest('hex')
+		);
 		// A changed membership invalidates both paging directions: a newly linked
 		// Thing may have history older than the previous stream's cursor.
-		const reset = request.relatedRevision !== undefined && request.relatedRevision !== revision;
+		const reset = request.relatedRevision !== undefined && request.relatedRevision !== related.revision;
 		const page = await deps.page(things, ownerId, reset ? { ...request, before: null, after: null } : request, thingIds);
 		return { ...page, related, ...(reset ? { reset: true as const } : {}) };
 	};

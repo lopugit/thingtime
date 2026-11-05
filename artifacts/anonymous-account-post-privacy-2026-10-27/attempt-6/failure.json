@@ -1,0 +1,70 @@
+{
+  "message": "TimeoutError: locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n  - waiting for locator('[data-thing-id=\"df84c72b-0624-4ece-a6e9-5e3558d4571c\"]').getByText('Private body edited offline and retained after a cold reload.', { exact: true }) to be visible\n",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\n\nOffline account workspace. Local edits are available; account sync is paused until your session is verified.\n\nReconnect\n\n1 change saved on this device. Offline — sync will resume when connected.\n\nReview sync\nTHINGTIME · POST 📌\nPost 📌\nP\nprivacy-a3cfc163-5f7d-4413-a58c-47ae6f8fb5e9\n@privacy-a3cfc163-5f7d-4413-a58c-47ae6f8fb5e9 · \njust now\n🔒\nonly the author can see this post\n\nPrivate body edited offline and retained after a cold reload.\n\n0\nPost as\nOffline account workspace\nRecover earlier comment draft\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "id": "df84c72b-0624-4ece-a6e9-5e3558d4571c",
+  "errors": [],
+  "writes": [],
+  "network": [
+    {
+      "path": "/api/root-data",
+      "status": 200
+    },
+    {
+      "path": "/api/root-data",
+      "status": 200
+    },
+    {
+      "path": "/api/root-data",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/root-data",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things/reactions-recent",
+      "status": 200
+    }
+  ],
+  "online": false
+}

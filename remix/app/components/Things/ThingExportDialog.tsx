@@ -4,9 +4,10 @@ import { Button, Checkbox, Flex, Modal, ModalBody, ModalCloseButton, ModalConten
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { bundleFromPlan, downloadTransfer } from '~/utils/thingTransfer/browser';
+import type { AccountLocalView } from '~/local-workspace/accountApi.client';
 
-export const ThingExportDialog = ({ ids, linkKey, onClose }: { ids: string[]; linkKey?: string; onClose: () => void }) => {
-  const api = useApi();
+export const ThingExportDialog = ({ ids, linkKey, onClose, localView }: { ids: string[]; linkKey?: string; onClose: () => void; localView?: AccountLocalView }) => {
+  const api = useApi(localView);
   const lopu = useLopu();
   const [format, setFormat] = useState<'zip' | 'json'>('zip');
   const [children, setChildren] = useState(true);
@@ -24,10 +25,10 @@ export const ThingExportDialog = ({ ids, linkKey, onClose }: { ids: string[]; li
     try {
       const result = await api.v1.things.export({ ids, key: linkKey, includeChildren: children, includeDependencies: dependencies, includeFiles: format === 'zip' && files, includeLinks: links }, { signal: controller.signal });
       if (!result?.ok) throw new Error(result?.error || 'Export failed');
-      const bundle = await bundleFromPlan(result.plan, { key: linkKey, signal: controller.signal });
+      const bundle = await bundleFromPlan(result.plan, { originalStream: true, key: linkKey, signal: controller.signal });
       controller.signal.throwIfAborted();
       await downloadTransfer(bundle, format, 'thingtime', controller.signal);
-      if (!controller.signal.aborted) { lopu({ title: 'Download ready', description: 'Import this file to create new private copies.', status: 'success' }); onClose(); }
+      if (!controller.signal.aborted) { lopu({ title: 'Download ready', description: result.localWorkspace ? 'Downloaded the saved device snapshot, including your local edits. Other devices may have newer changes.' : 'Import this file to create new private copies.', status: 'success' }); onClose(); }
     } catch (cause) {
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Export failed');
     } finally { if (!controller.signal.aborted) { setBusy(false); operation.current = null; } }
@@ -39,6 +40,7 @@ export const ThingExportDialog = ({ ids, linkKey, onClose }: { ids: string[]; li
       <ModalCloseButton />
       <ModalBody><Flex direction="column" gap={4}>
         <Text fontSize="sm">Downloads contain portable content, not account credentials or sharing permissions. Importing creates new private copies.</Text>
+        <Text fontSize="sm">Offline downloads use saved device content. Uncached dependencies or folder contents must be downloaded online first.</Text>
         <Select aria-label="Download format" value={format} isDisabled={busy} onChange={(event) => setFormat(event.target.value as 'zip' | 'json')}>
           <option value="zip">ZIP — content + files</option>
           <option value="json">JSON — content + links</option>

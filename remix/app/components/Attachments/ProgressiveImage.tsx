@@ -66,7 +66,7 @@ function ImageContent({ src, alt, sizes = '(max-width: 640px) 100vw, 680px', loa
 		return () => observer.disconnect();
 	}, [visible]);
 	const progressive = variants === true && !fallback;
-	const active = visible && variants !== null;
+	const active = !!src && visible && variants !== null;
 	return (
 		<Box
 			ref={ref}

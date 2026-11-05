@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
-import type { RenderInput, RenderOutput } from './renderExport.js';
+import { renderViewports, type RenderInput, type RenderOutput } from './renderExport.js';
 
 process.once('message', async (input: RenderInput) => {
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
@@ -23,6 +23,10 @@ process.once('message', async (input: RenderInput) => {
     });
     const page = await context.newPage();
     page.setDefaultTimeout(6000);
+    // Loading and parsing the native renderer bundle can exceed a normal UI
+    // operation timeout on a cold CPU. The parent still bounds the entire job
+    // (startup, rendering and all screenshots) to 30 seconds.
+    page.setDefaultNavigationTimeout(15000);
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message.slice(0, 300)));
     await page.goto(`${origin}/draft-preview/index.html`, { waitUntil: 'load' });
@@ -32,10 +36,9 @@ process.once('message', async (input: RenderInput) => {
       document.addEventListener('securitypolicyviolation', () => { document.body.dataset.cspFailure = 'true'; });
     });
     const draft = await page.evaluate(async ({ content, root }) => (window as any).thingtimeDraft.render(content, root), input);
-    const result: RenderOutput = { ...draft, rendererHash: createHash('sha256').update(assets.get('/draft-preview/runner.js')!.body).digest('hex'), browserVersion: browser.version(), images: [], viewports: [] };
+    const result: RenderOutput = { ...draft, rendererHash: createHash('sha256').update(assets.get('/draft-preview/runner.js')!.body).digest('hex'), browserVersion: browser.version(), cropEnabled: input.crop.enabled, images: [], viewports: [] };
     let outputBytes = Buffer.byteLength(result.json);
-    const viewports = [...input.viewports];
-    if (!viewports.some(viewport => viewport.width === 320)) viewports.push({ width: 320, height: 844 });
+    const viewports = renderViewports(input);
     for (const [index, viewport] of viewports.entries()) {
       await page.setViewportSize(viewport);
       await page.evaluate(async () => { await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });

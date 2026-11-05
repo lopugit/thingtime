@@ -1,0 +1,15 @@
+{
+  "session": "6890eebc-d6ef-45bf-af32-73605db5131b",
+  "runtimeImage": "sha256:5c17ff3d0158b726b014ea37d18286ed6bf9187db9f650ff51e17b35f4a315be",
+  "network": "none",
+  "mounts": [],
+  "readOnly": true,
+  "browser": {
+    "browser": "chromium",
+    "buildId": "playwright-1.64.0",
+    "executable": "/ms-playwright/chromium-1248/chrome-linux-arm64/chrome",
+    "provenance": {
+      "source": "mcr.microsoft.com/playwright:v1.64.0-noble"
+    }
+  }
+}

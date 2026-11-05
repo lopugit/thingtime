@@ -60,16 +60,16 @@ test('the Select captures the circle it is leaving before switching to custom', 
   );
 });
 
-test('the fallback ref is seeded from the edited post, so only new posts default to public', () => {
+test('the fallback ref is seeded from the edited post, preserving private local drafts and the edited audience', () => {
   const composer = read('PostComposer.tsx');
   assert.match(
     composer,
-    /const audiencePreviousVisibilityRef = React\.useRef<PostVisibility>\(editPost\?\.visibility \|\| 'public'\)/,
+    /const audiencePreviousVisibilityRef = React\.useRef<PostVisibility>\(editPost\?\.visibility \|\| \(user\?\.localOnly \? 'private' : 'public'\)\)/,
     'seed the undo target exactly like the `visibility` state itself — an edit falls back to what the post was'
   );
   assert.match(
     composer,
-    /const \[visibility, setVisibility\] = React\.useState<PostVisibility>\(editPost\?\.visibility \|\| 'public'\)/,
+    /const \[visibility, setVisibility\] = React\.useState<PostVisibility>\(editPost\?\.visibility \|\| \(user\?\.localOnly \? 'private' : 'public'\)\)/,
     'if the visibility seed ever changes, the undo seed beside it has to change with it'
   );
 });

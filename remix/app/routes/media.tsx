@@ -1,3 +1,4 @@
+import ThingPage from './thing';
 import { sharePathForThing } from '~/components/Sharing/audienceCore';
 import { sharedThingPath } from '~/components/Sharing/sharedMediaCore';
 import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
@@ -8,6 +9,7 @@ import { ArrowLeft, Check, Download, FolderDown, Pencil, X } from 'lucide-react'
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useDataPlane } from '~/hooks/useDataPlane';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { PostCard } from '~/components/Feed/PostCard';
 import { useViewTracking } from '~/components/Feed/useViewTracking';
@@ -40,7 +42,15 @@ type MediaResponse = {
 	parent: PublicPost | null;
 };
 
+// Local attachments have canonical Thing metadata, not a fabricated remote
+// social-post projection. Reuse the universal native Thing preview at this alias.
 export const MediaPage = () => {
+ const { id } = useParams();
+ const user = useCurrentUser(), dataPlane = useDataPlane();
+ const [params] = useSearchParams();
+ return id?.startsWith('local-') ? <ThingPage /> : <AccountMediaPage key={`${id}:${user?.id || ''}:${dataPlane}:${params.toString()}`} />;
+};
+const AccountMediaPage = () => {
 	const { id } = useParams();
 	const [searchParams] = useSearchParams();
 	const linkKey = searchParams.get('key') || '';
@@ -53,6 +63,7 @@ export const MediaPage = () => {
 	const [data, setData] = React.useState<MediaResponse | null>(null);
 	const [error, setError] = React.useState<string | null>(null);
 	const [loading, setLoading] = React.useState(true);
+	const [localThing, setLocalThing] = React.useState(false), [retentionError, setRetentionError] = React.useState('');
 	const { observeView } = useViewTracking();
 
 	// owner display metadata editing (attachments/annotate)
@@ -67,7 +78,7 @@ export const MediaPage = () => {
 		setLoading(true);
 		setError(null);
 		setData(null);
-		setEditing(false);
+		setEditing(false); setLocalThing(false); setRetentionError('');
 
 		const startedAt = Date.now();
 		api.v1.things
@@ -76,6 +87,8 @@ export const MediaPage = () => {
 				if (cancelled) return;
 				const thing = resp?.thing;
 				const attachment = thing ? normalizePublicAttachment({ id: thing.id, ...thing.crystal }) : null;
+				if (attachment && thing?.localOnly === true && !linkKey && !sharedRoot) { setLocalThing(true); return; }
+				setRetentionError(typeof thing?.localRetentionError === 'string' ? thing.localRetentionError : '');
 				if (!attachment || !resp?.post || !thing?.thingtime?.includes?.('attachment')) {
 					setError('This media is missing or private 🌫️');
 					return;
@@ -166,6 +179,8 @@ export const MediaPage = () => {
 			setSaving(false);
 		}
 	};
+
+	if (localThing) return <ThingPage />;
 
 	return (
 		<SharedMediaProvider linkKey={post?.audience?.linkKey || linkKey} sharedRoot={sharedRoot}><Flex
@@ -275,6 +290,8 @@ export const MediaPage = () => {
 						</Flex>
 					</Flex>
 				)}
+
+				{retentionError ? <Text role="status" color="orange.700" fontSize="sm">{retentionError}</Text> : null}
 
 				{/* context row */}
 				{(parentId || attachment) && (

@@ -12,12 +12,16 @@ const { startControlSocket } = require('../lib/agent-browsers/control.cjs');
 async function main() {
   const stateRoot = process.argv[2], socketPath = process.argv[3], dockerSocket = process.argv[4];
   const applicationImage = process.argv[5];
+  // Full-app acceptance may run a second fresh Chromium beside the manager's
+  // viewer. Its test-only budget stays explicit and bounded; default unchanged.
+  const memoryMb = process.argv[6] === undefined ? 2048 : Number(process.argv[6]);
+  if (!Number.isSafeInteger(memoryMb) || memoryMb < 512 || memoryMb > 4096) throw new Error('Test runtime memory must be between 512 and 4096 MiB.');
   if (![stateRoot, socketPath, dockerSocket].every(value => value && path.isAbsolute(value))) throw new Error('Supply absolute fixture state, control socket and Docker socket paths.');
   const engine = await new DockerEngine({ executable: '/opt/homebrew/bin/docker', socketPath: dockerSocket, stateRoot }).initialize();
   const imageId = applicationImage || (await engine.run(['image', 'inspect', 'thingtime-agent-browser:chromium-1.64.0', '--format', '{{.Id}}'])).trim();
   const images = await new BrowserImages({ engine, stateRoot: path.join(stateRoot, 'images') }).initialize();
   const manager = await new AgentBrowserManager({ engine, images, stateRoot, createSession: options => {
-    const session = new BrowserContainer(engine, options), start = session.start.bind(session);
+    const session = new BrowserContainer(engine, { ...options, memoryMb }), start = session.start.bind(session);
     session.start = async () => {
       const proof = await start();
       if (applicationImage) return proof;

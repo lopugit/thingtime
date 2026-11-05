@@ -1,0 +1,8 @@
+{
+  "error": "locator.click: Timeout 20000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: 'ACCOUNT A vault login', exact: true })\n",
+  "errors": [],
+  "checks": [
+    "Same server entry ID read/save by other account returns404; server globally owns entry IDs",
+    "{\"rootUser\":\"6adfcd6fa6fca173a3bf6375\",\"meUser\":\"6adfcd6fa6fca173a3bf6375\",\"rootKeys\":[\"dataPlane\",\"envFromCookie\",\"dataEnvironment\",\"devKitEnv\",\"titlePrefix\",\"user\"]}"
+  ]
+}

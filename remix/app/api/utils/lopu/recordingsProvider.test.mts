@@ -1,3 +1,4 @@
+/* global globalThis */
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, mock, test } from 'node:test';
 import { recordingFailureMessage } from './recordingsCore';
@@ -5,6 +6,8 @@ import { recordingFailureMessage } from './recordingsCore';
 let download: any;
 let settings: any;
 let resolved: string[];
+let selectedModel: string | null;
+let promptModels: string[];
 mock.module(new URL('../attachments/attachments.ts', import.meta.url).href, {
 	namedExports: {
 		getAttachmentDownload: async (viewer: any, id: string, force: boolean) => {
@@ -32,7 +35,7 @@ mock.module(new URL('./recordingsConnections.ts', import.meta.url).href, {
 				provider: id === 'claude' ? 'anthropic' : 'openai',
 				token: `synthetic-${id}`,
 				endpoint: `https://${id}.example.test`,
-				model: null
+				model: selectedModel
 			};
 		}
 	}
@@ -45,13 +48,35 @@ mock.module(new URL('../ai/claudeOAuth.ts', import.meta.url).href, { namedExport
     return {content:[{type:'text',text:JSON.stringify({items:[{kind:'todo',title:'Buy bike tubes',description:'',evidence:'buy bike tubes'}]})}]};
   } } })
 } });
-mock.module(new URL('../settings/lopuPromptSettings.ts', import.meta.url).href, { namedExports: { getLopuPromptSettings: async () => ({ basePrompt: 'Lopu test base', instructions: [] }) } });
+mock.module(new URL('../settings/lopuPromptSettings.ts', import.meta.url).href, { namedExports: { getLopuPromptSettings: async (_ownerId: string, options: { modelId: string }) => {
+	promptModels.push(options.modelId);
+	return { basePrompt: 'Lopu test base', instructions: [] };
+} } });
 const { readRecordingBytes, transcribeRecording, analyzeRecording } = await import('./recordingsProvider');
 
 beforeEach(() => {
 	download = { ok: true, size: 3, contentType: 'audio/wav', url: 'https://storage.example.test/audio?signature=private' };
 	settings = { enabled: true, createNotes: true, createTodos: true, transcriptionProviders: ['limited', 'working'], analysisProviders: ['limited', 'claude'] };
 	resolved = [];
+	selectedModel = null;
+	promptModels = [];
+});
+
+test('recording instructions and the provider request use the same explicitly selected model', async () => {
+	settings.analysisProviders = ['working'];
+	selectedModel = 'synthetic-selected-model';
+	const providerModels: string[] = [];
+	mock.method(globalThis, 'fetch', async (url: any, options: any) => {
+		assert.equal(new URL(String(url)).hostname, 'working.example.test');
+		const body = JSON.parse(options.body);
+		providerModels.push(body.model);
+		assert.deepEqual(promptModels, [selectedModel], 'instructions are validated before the provider request');
+		return Response.json({ choices: [{ message: { content: JSON.stringify({ items: [{ kind: 'todo', title: 'Buy bike tubes', description: '', evidence: 'buy bike tubes' }] }) } }] });
+	});
+	const insights = await analyzeRecording('Please buy bike tubes.', async () => {}, 'owner');
+	assert.equal(insights[0].title, 'Buy bike tubes');
+	assert.deepEqual(providerModels, [selectedModel]);
+	assert.deepEqual(resolved, ['working']);
 });
 
 test('real SDK transcription falls through 429 to the next selected key without duplicate attempts', async () => {

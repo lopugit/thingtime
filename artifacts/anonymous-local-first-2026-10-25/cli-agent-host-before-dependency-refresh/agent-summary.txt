@@ -1,0 +1,3 @@
+I’ll make only the three specified MCP calls, in order, then report their returned evidence.
+
+Acceptance calls completed in order. The valid render succeeded: canonical content hash `a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c`; renderer hash `3f1731131c3dcebf1eb7bb3776dd694ab778edc35ccf36d1273d233b235052f9`. Desktop and mobile viewports rendered without overflow. Artifacts: `viewport-1440x1000.png`, `viewport-390x844.png`, `card.png` (the server also returned `viewport-320x844.png`). The invalid JSON request was rejected: “Draft input is not valid JSON.”

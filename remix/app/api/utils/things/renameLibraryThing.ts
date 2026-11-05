@@ -1,3 +1,4 @@
+import { normalizeLibraryTitle } from '../../../utils/libraryTitle';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { applyUserStorageDelta } from '../storage/userStorage';
@@ -18,8 +19,8 @@ export async function renameLibraryThing(input: {
   const fail = (status: number, error: string) => ({ ok: false as const, status, error });
   if (input.actorKind !== 'user' || input.accountKind !== 'user' || !input.sameOrigin || deps.custom()) return fail(403, 'Rename requires your home Thingtime library');
   if (typeof input.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(input.id) || !input.ownerId ||
-    typeof input.title !== 'string' || !input.title.trim() || input.title.trim().length > 120) return fail(400, 'Choose a title of 1–120 characters');
-  const title = input.title.trim(), id = input.id;
+    normalizeLibraryTitle(input.title) === null) return fail(400, 'Choose a title of 1–120 characters');
+  const title = normalizeLibraryTitle(input.title)!, id = input.id;
   const expected = input.expectedUpdatedAt === undefined ? undefined : typeof input.expectedUpdatedAt === 'string' ? new Date(input.expectedUpdatedAt) : new Date(NaN);
   if (expected && !Number.isFinite(expected.getTime())) return fail(400, 'Invalid rename version');
   const capture = newThingMutationCapture(input.ownerId);

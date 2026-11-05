@@ -1,0 +1,49 @@
+{
+  "startedAt": "2026-10-26T10:44:58.563Z",
+  "endedAt": "2026-10-26T10:47:31.287Z",
+  "scope": "Current merged source; sanitized test environment; outbound network restricted to loopback; synthetic unit fixtures only",
+  "results": [
+    {
+      "command": "test:catalogue",
+      "code": 0,
+      "elapsedMs": 15819,
+      "summary": [
+        "\u2139 tests 23",
+        "\u2139 pass 23",
+        "\u2139 fail 0",
+        "\u2139 skipped 0"
+      ],
+      "log": "/tmp/tt-anonymous-merge-repeat-test-catalogue.log"
+    },
+    {
+      "command": "test:api-capabilities",
+      "code": 1,
+      "elapsedMs": 3600,
+      "summary": [
+        "\u2716 Character profile synchronization publishes matching actor-aware route contracts (17.016292ms)",
+        "\u2139 tests 134",
+        "\u2139 pass 133",
+        "\u2139 fail 1",
+        "\u2139 skipped 0",
+        "\u2716 failing tests:",
+        "\u2716 Character profile synchronization publishes matching actor-aware route contracts (17.016292ms)"
+      ],
+      "log": "/tmp/tt-anonymous-merge-repeat-test-api-capabilities.log"
+    },
+    {
+      "command": "test:local-workspace",
+      "code": 1,
+      "elapsedMs": 133297,
+      "summary": [
+        "\u2716 reconnect retries failed theme reads inside the refresh throttle without granting home content authority (231.774583ms)",
+        "\u2139 tests 951",
+        "\u2139 pass 853",
+        "\u2139 fail 1",
+        "\u2139 skipped 97",
+        "\u2716 failing tests:",
+        "\u2716 reconnect retries failed theme reads inside the refresh throttle without granting home content authority (231.774583ms)"
+      ],
+      "log": "/tmp/tt-anonymous-merge-repeat-test-local-workspace.log"
+    }
+  ]
+}

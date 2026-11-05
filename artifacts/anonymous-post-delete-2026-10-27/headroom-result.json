@@ -1,0 +1,20 @@
+{
+  "jobId": "e084d154-e12d-4161-b24b-673d31ded457",
+  "pid": 2410,
+  "selectedSocket": "/Users/lopu/.colima/thingtime-agents/docker.sock",
+  "startedAt": "2026-10-27T00:43:51.702Z",
+  "deadline": "2026-10-27T00:58:51.703Z",
+  "thresholdBytes": 536870912,
+  "requiredConsecutiveSamples": 2,
+  "status": "headroom",
+  "samples": 2,
+  "consecutive": 2,
+  "lastSample": {
+    "at": "2026-10-27T00:44:06.857Z",
+    "runningContainers": 0,
+    "totalOtherBytes": 0,
+    "eligible": true
+  },
+  "completedAt": "2026-10-27T00:44:06.857Z",
+  "automaticLaunch": false
+}

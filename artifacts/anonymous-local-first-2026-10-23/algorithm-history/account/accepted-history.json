@@ -1,0 +1,257 @@
+{
+  "ok": true,
+  "entries": [
+    {
+      "event": {
+        "actorId": "6adb0694a8437e16e573fb02",
+        "after": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "History profile 087cff",
+              "title": "Library alias 1a4e69",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": null
+          },
+          "version": 1
+        },
+        "before": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "History profile 087cff edited",
+              "title": "Library alias 1a4e69",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": null
+          },
+          "version": 1
+        },
+        "branchId": "device-workspace-1d147686-1331-471c-825b-61bc6496bdfb",
+        "clientId": "workspace-1d147686-1331-471c-825b-61bc6496bdfb",
+        "dependencies": [],
+        "formatVersion": 1,
+        "id": "version-e8f977ff-3973-42fe-b0f7-7cff1fc1641c",
+        "label": "Restored earlier version",
+        "mode": "draft",
+        "occurredAt": "2026-10-23T07:03:13.300Z",
+        "operation": "restore",
+        "operationId": "e9e5fe04ab1a6dd32be48ce305ca58e06bbe8d313c8d4728df831d98725de786",
+        "ownerId": "6adb0694a8437e16e573fb02",
+        "parentIds": [
+          "device-event-e012c79c-be32-49f8-bae5-516549c55134",
+          "device-event-bf4dd9d5-e807-4b35-a938-2a0724ce4432"
+        ],
+        "source": "client",
+        "thingId": "0ac771a1-8264-4b25-b6cc-ed0a4fff2c83"
+      },
+      "receipt": {
+        "acceptedAt": "2026-10-23T07:03:38.658Z",
+        "eventId": "version-e8f977ff-3973-42fe-b0f7-7cff1fc1641c",
+        "formatVersion": 1,
+        "ownerId": "6adb0694a8437e16e573fb02",
+        "position": 1792739018658
+      }
+    },
+    {
+      "event": {
+        "actorId": "6adb0694a8437e16e573fb02",
+        "after": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "History profile 087cff edited",
+              "title": "Library alias 1a4e69",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": null
+          },
+          "version": 1
+        },
+        "before": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "History profile 087cff edited",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": null
+          },
+          "version": 1
+        },
+        "branchId": "device-workspace-1d147686-1331-471c-825b-61bc6496bdfb",
+        "clientId": "workspace-1d147686-1331-471c-825b-61bc6496bdfb",
+        "dependencies": [],
+        "formatVersion": 1,
+        "id": "device-event-e012c79c-be32-49f8-bae5-516549c55134",
+        "label": "Edited Thing on this device",
+        "mode": "draft",
+        "occurredAt": "2026-10-23T07:02:54.658Z",
+        "operation": "update",
+        "operationId": "3619b9e4-b524-4513-8289-9638152da2b0",
+        "ownerId": "6adb0694a8437e16e573fb02",
+        "parentIds": [
+          "device-event-901a0be0-3a73-4d96-806a-c1b75c2de8db"
+        ],
+        "source": "client",
+        "thingId": "0ac771a1-8264-4b25-b6cc-ed0a4fff2c83"
+      },
+      "receipt": {
+        "acceptedAt": "2026-10-23T07:03:37.692Z",
+        "eventId": "device-event-e012c79c-be32-49f8-bae5-516549c55134",
+        "formatVersion": 1,
+        "ownerId": "6adb0694a8437e16e573fb02",
+        "position": 1792739017692
+      }
+    },
+    {
+      "event": {
+        "actorId": "6adb0694a8437e16e573fb02",
+        "after": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "History profile 087cff edited",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": null
+          },
+          "version": 1
+        },
+        "before": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "History profile 087cff",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": null
+          },
+          "version": 1
+        },
+        "branchId": "device-workspace-1d147686-1331-471c-825b-61bc6496bdfb",
+        "clientId": "workspace-1d147686-1331-471c-825b-61bc6496bdfb",
+        "dependencies": [],
+        "formatVersion": 1,
+        "id": "device-event-901a0be0-3a73-4d96-806a-c1b75c2de8db",
+        "label": "Edited Thing on this device",
+        "mode": "draft",
+        "occurredAt": "2026-10-23T07:02:50.771Z",
+        "operation": "update",
+        "operationId": "8c38c4b3-f95f-4932-a2fd-810351c0e896",
+        "ownerId": "6adb0694a8437e16e573fb02",
+        "parentIds": [
+          "device-event-bf4dd9d5-e807-4b35-a938-2a0724ce4432"
+        ],
+        "source": "client",
+        "thingId": "0ac771a1-8264-4b25-b6cc-ed0a4fff2c83"
+      },
+      "receipt": {
+        "acceptedAt": "2026-10-23T07:03:36.574Z",
+        "eventId": "device-event-901a0be0-3a73-4d96-806a-c1b75c2de8db",
+        "formatVersion": 1,
+        "ownerId": "6adb0694a8437e16e573fb02",
+        "position": 1792739016574
+      }
+    },
+    {
+      "event": {
+        "actorId": "6adb0694a8437e16e573fb02",
+        "after": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "History profile 087cff",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": null
+          },
+          "version": 1
+        },
+        "before": null,
+        "branchId": "device-workspace-1d147686-1331-471c-825b-61bc6496bdfb",
+        "clientId": "workspace-1d147686-1331-471c-825b-61bc6496bdfb",
+        "dependencies": [],
+        "formatVersion": 1,
+        "id": "device-event-bf4dd9d5-e807-4b35-a938-2a0724ce4432",
+        "label": "Created Thing on this device",
+        "mode": "draft",
+        "occurredAt": "2026-10-23T07:02:50.322Z",
+        "operation": "create",
+        "operationId": "c2d8eb7c-c01c-4219-a611-b806a27994bf",
+        "ownerId": "6adb0694a8437e16e573fb02",
+        "parentIds": [],
+        "source": "client",
+        "thingId": "0ac771a1-8264-4b25-b6cc-ed0a4fff2c83"
+      },
+      "receipt": {
+        "acceptedAt": "2026-10-23T07:03:34.269Z",
+        "eventId": "device-event-bf4dd9d5-e807-4b35-a938-2a0724ce4432",
+        "formatVersion": 1,
+        "ownerId": "6adb0694a8437e16e573fb02",
+        "position": 1792739014269
+      }
+    }
+  ],
+  "nextBefore": null,
+  "nextAfter": null,
+  "notes": [],
+  "names": []
+}

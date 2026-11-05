@@ -1,0 +1,7 @@
+{
+  "run": "r1",
+  "result": "Docker socket ENOENT at initial stats gate",
+  "browserExecutions": 0,
+  "allocatedResources": 0,
+  "recordedAt": "2026-10-28T10:39:35.978Z"
+}

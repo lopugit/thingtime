@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "localLinks": 33,
+  "missing": [],
+  "untracked": [],
+  "canonicalSha256": "a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c",
+  "pngDimensions": {
+    "card.png": [
+      400,
+      560
+    ],
+    "viewport-1440x1000.png": [
+      1440,
+      1000
+    ],
+    "viewport-390x844.png": [
+      390,
+      844
+    ],
+    "viewport-320x844.png": [
+      320,
+      844
+    ]
+  }
+}

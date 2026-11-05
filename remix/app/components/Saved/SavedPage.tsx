@@ -3,7 +3,10 @@ import { Box, Flex, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { currentAccountWorkspace, isAnonymousWorkspace, subscribeWorkspaceBinding, LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
+import { workspaceScopeKey } from '~/local-workspace/storage';
+import { rootIdentity } from '~/utils/rootIdentity';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { FeedShortcutsContext, useFeedShortcuts } from '~/hooks/useFeedShortcuts';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
@@ -18,18 +21,25 @@ import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 // (GET /api/v1/things/saved). Cards are the SAME PostCards the feed renders,
 // so reactions, comments, polls, and the bookmark itself all work in place.
 // Optimistic first paint: the last-known library seeds synchronously from
-// localStorage (tt-saved-<viewer>) and the fresh library reconciles in the
+// localStorage (tt-saved-<workspace-scope>) and the fresh library reconciles in the
 // background — a skeleton only ever shows on a true cold start (the
 // ExplorePage pattern exactly). Unsaving a card removes it from the list
 // optimistically; a failed unsave restores it in place.
 
-// Cached entries are per-viewer AND timestamped: per-viewer because a library
+// Cached entries are per-workspace AND timestamped: scoped because a library
 // is personal by construction (and can carry private/circle posts — logout
 // sweeps the tt-saved- prefix), timestamped so seeds merge through the
 // viewer's reaction overlay stamped with the entry's write time.
 type CachedLibrary = { at: number; posts: PublicPost[] };
 
-const cacheKeyFor = (viewerId: string | null | undefined) => `tt-saved-${viewerId || 'anon'}`;
+const savedScope = () => {
+ const account = currentAccountWorkspace();
+ return account ? workspaceScopeKey(account) : isAnonymousWorkspace() ? workspaceScopeKey({ kind: 'anonymous' }) : 'pending';
+};
+const subscribeSavedScope = (notify: () => void) => {
+ const unbind = subscribeWorkspaceBinding(notify), unroot = rootIdentity.subscribe(notify);
+ return () => { unbind(); unroot(); };
+};
 
 const readCachedLibrary = (key: string): PublicPost[] => {
   const entry = readLocalCache<CachedLibrary>(key);
@@ -38,17 +48,22 @@ const readCachedLibrary = (key: string): PublicPost[] => {
 };
 
 export const SavedPage = () => {
+  const scope = React.useSyncExternalStore(subscribeSavedScope, savedScope, () => 'pending');
+  return <WorkspaceSavedPage key={scope} cacheKey={`tt-saved-${scope}`} ready={scope !== 'pending'} />;
+};
+const WorkspaceSavedPage = ({ cacheKey, ready }: { cacheKey: string; ready: boolean }) => {
   const api = useApi();
-  const user = useCurrentUser();
+  const workspaceUser = useWorkspaceUser();
+  const user = ready ? workspaceUser : null;
   const lopu = useLopu();
 
   // synchronous cache tier seeds the very first render (flash-free), scoped
   // to THIS viewer's slot and merged through the reaction overlay
-  const cacheKey = cacheKeyFor(user?.id);
   const [posts, setPosts] = React.useState<PublicPost[]>(() => (user ? readCachedLibrary(cacheKey) : []));
   const [loading, setLoading] = React.useState(!!user && posts.length === 0);
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
   const [loadingMore, setLoadingMore] = React.useState(false);
+  const [incomplete, setIncomplete] = React.useState(false), [cacheError, setCacheError] = React.useState('');
 
   // a sequence guard drops stale responses when the viewer changes mid-flight
   const requestSeqRef = React.useRef(0);
@@ -86,6 +101,7 @@ export const SavedPage = () => {
     try {
       const resp = await apiRef.current.v1.things.saved();
       if (seq !== requestSeqRef.current) return;
+      setIncomplete(resp.incomplete === true); setCacheError(resp.localCacheError || '');
       const fresh = mergeReactionOverlays<PublicPost>(startedAt, resp.posts || []);
       removedRef.current.clear();
       setPosts(fresh);
@@ -112,6 +128,7 @@ export const SavedPage = () => {
     try {
       const resp = await apiRef.current.v1.things.saved({ cursor });
       if (seq !== requestSeqRef.current) return;
+      setIncomplete(resp.incomplete === true); setCacheError(resp.localCacheError || '');
       const fresh = mergeReactionOverlays<PublicPost>(startedAt, resp.posts || []);
       setPosts((prev) => {
         const known = new Set(prev.map((post) => post.id));
@@ -141,6 +158,9 @@ export const SavedPage = () => {
       setLoading(!!viewerIdRef.current && seeded.length === 0);
     }
     load();
+    window.addEventListener(LOCAL_WORKSPACE_CHANGED, load);
+    const requests = requestSeqRef;
+    return () => { requests.current++; window.removeEventListener(LOCAL_WORKSPACE_CHANGED, load); };
   }, [load, cacheKey]);
 
   const handlePostChanged = React.useCallback((id: string, next: PostChange) => {
@@ -230,8 +250,11 @@ export const SavedPage = () => {
           </Box>
         </Flex>
 
+        {user?.localOnly && <Text fontSize="sm">Saved on this device only. Nothing is synced to an account.</Text>}
         {user ? (
           <>
+            {incomplete && <Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">Saved on this device. Your online account may contain more saved posts.</Text>}
+            {cacheError && <Text role="alert" fontSize="sm">{cacheError}</Text>}
             <FeedShortcutsContext.Provider value={shortcuts.registry}>
               <PostList
                 posts={posts}

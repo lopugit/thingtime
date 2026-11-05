@@ -1,0 +1,16 @@
+{
+  "latestNativeRun": "attempt-3-reader",
+  "nativeRunPredatesGuardAddition": true,
+  "currentTestByteEqualityToNativeRun": false,
+  "currentTestSha256": "05377a8172eea99ca77632690239191973db21e8a49042db675628b4028d3944",
+  "attempt3TestSha256": "443e1265944a17e28ddeedaa80dd35cc589f4943a4fef1497667e3836423415d",
+  "exactEqualityAfterRemovingOnlyGuardChanges": true,
+  "postExecutionChanges": [
+    "import pure test-origin guard",
+    "validate exact HTTP loopback origin before first health fetch",
+    "health fetch redirect:error"
+  ],
+  "currentGuardVerification": "guard-test.log; no network/browser/runtime launched",
+  "currentScopedLint": "guard-lint.log",
+  "nativeRerunAfterGuardAddition": false
+}

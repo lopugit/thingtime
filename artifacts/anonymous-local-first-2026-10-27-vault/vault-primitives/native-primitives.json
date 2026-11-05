@@ -1,0 +1,12 @@
+{
+  "nativeIndexedDB": true,
+  "syntheticTransport": true,
+  "refreshedPages": 205,
+  "exactReopenedEntries": 205,
+  "delegatedPartitions": 257,
+  "discoveryCancellation": true,
+  "stalePullFenced": true,
+  "quotaRefusal": "injected QuotaExceededError at native IDBObjectStore.put; not actual disk exhaustion",
+  "nativeTransactionRollback": true,
+  "retry": true
+}

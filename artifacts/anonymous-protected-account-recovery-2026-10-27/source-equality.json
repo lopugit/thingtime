@@ -1,0 +1,63 @@
+{
+  "packageSha256": "0a847337609cd760c3188d784375f57a2d1eadb495ccad86b1c2799429d3a0d5",
+  "sourceEquality": {
+    "remix/app/local-workspace/protectedRecovery.ts": {
+      "matches": 1,
+      "equal": true
+    },
+    "remix/app/local-workspace/accountThemes.ts": {
+      "matches": 1,
+      "equal": true
+    },
+    "remix/app/local-workspace/accountAlgorithms.ts": {
+      "matches": 1,
+      "equal": true
+    },
+    "remix/app/local-workspace/accountTimeline.ts": {
+      "matches": 1,
+      "equal": true
+    },
+    "remix/app/local-workspace/things.ts": {
+      "matches": 1,
+      "equal": true
+    },
+    "remix/app/local-workspace/themes.ts": {
+      "matches": 1,
+      "equal": true
+    },
+    "remix/app/local-workspace/algorithms.ts": {
+      "matches": 1,
+      "equal": true
+    }
+  },
+  "archiveSourceEquality": {
+    "remix/app/local-workspace/protectedRecovery.ts": {
+      "matches": 1,
+      "equal": true
+    },
+    "remix/app/local-workspace/accountThemes.ts": {
+      "matches": 1,
+      "equal": true
+    },
+    "remix/app/local-workspace/accountAlgorithms.ts": {
+      "matches": 1,
+      "equal": true
+    },
+    "remix/app/local-workspace/accountTimeline.ts": {
+      "matches": 1,
+      "equal": true
+    },
+    "remix/app/local-workspace/things.ts": {
+      "matches": 1,
+      "equal": true
+    },
+    "remix/app/local-workspace/themes.ts": {
+      "matches": 1,
+      "equal": true
+    },
+    "remix/app/local-workspace/algorithms.ts": {
+      "matches": 1,
+      "equal": true
+    }
+  }
+}

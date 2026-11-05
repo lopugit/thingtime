@@ -1,0 +1,15 @@
+✔ capability negotiation requires this origin and a compatible attachment contract (1.915505ms)
+✔ only managed content and public assets enter the cache policy (390.984163ms)
+✔ pinned sync ranges, fingerprint JSON and actor-scoped requests bypass media caching (1.48285ms)
+✔ cached complete files satisfy byte ranges, suffix ranges and unsatisfiable ranges (123.725297ms)
+✔ incomplete, partial and oversized files never become complete cache entries (62.451777ms)
+✔ unavailable persistent storage degrades to bounded memory, expires and clears (18.939175ms)
+✔ real worker reauthorizes cache hits, deduplicates bytes, respects ranges, revocation and disable (122.539265ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1268.718871

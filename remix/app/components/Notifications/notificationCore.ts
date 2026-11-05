@@ -261,3 +261,12 @@ export const NOTIFICATION_TYPES_BY_CATEGORY: Record<NotificationCategory, Notifi
 // rows can quote private posts and system notes).
 export const NOTIFICATION_HISTORY_CACHE_PREFIX = 'tt-notif-history-';
 export const notificationHistoryCacheKey = (userId: string) => `${NOTIFICATION_HISTORY_CACHE_PREFIX}${userId}`;
+
+// The device-history queue line is a live region, so the settled state must not
+// announce "0 messages waiting to sync" and one row must not be read as plural.
+export const deviceSyncStatus = (pending: number, failed: number) =>
+  `${pending > 0 ? `${pending} ${pending === 1 ? 'message' : 'messages'} waiting to sync. ` : ''}${
+    failed > 0
+      ? `${failed} ${failed === 1 ? 'message' : 'messages'} could not sync; ${failed === 1 ? 'it remains' : 'they remain'} saved here.`
+      : 'Account messages sync after your login is verified.'
+  }`;

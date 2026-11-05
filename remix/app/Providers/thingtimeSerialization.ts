@@ -82,26 +82,26 @@ export const hasPersistedThingtimeRuntimeMethods = (value: unknown): boolean => 
 	return isRecord(value) && [...ROOT_RUNTIME_METHODS].some((key) => Object.prototype.hasOwnProperty.call(value, key));
 };
 
-export const parseThingtimeWithDiagnostics = (text: string): ParsedThingtime => {
-	const diagnostics: ParseDiagnostics = {
-		removedFunctionCount: 0
+/** Strict decoding for editor recovery/import boundaries. The ordinary cached
+ * state reader below retains its historical tolerant fallback. */
+export const decodeThingtime = (text: string): ParsedThingtime => {
+	const diagnostics: ParseDiagnostics = { removedFunctionCount: 0 };
+	const parsed = parseAux(text);
+	if (parsed === undefined) throw new Error('Invalid Thingtime serialization');
+	const value = revivePersistedValue(parsed, diagnostics);
+	return {
+		value: value === INERT_PERSISTED_FUNCTION ? null : value,
+		repaired: diagnostics.removedFunctionCount > 0,
+		...diagnostics
 	};
+};
 
+export const parseThingtimeWithDiagnostics = (text: string): ParsedThingtime => {
 	try {
-		const parsed = parseAux(text);
-		const value = revivePersistedValue(parsed, diagnostics);
-		return {
-			value: value === INERT_PERSISTED_FUNCTION || value === undefined ? null : value,
-			repaired: diagnostics.removedFunctionCount > 0,
-			...diagnostics
-		};
+		return decodeThingtime(text);
 	} catch (error) {
 		console.error('There was an error parsing the thingtime data:', error);
-		return {
-			value: null,
-			repaired: false,
-			removedFunctionCount: 0
-		};
+		return { value: null, repaired: false, removedFunctionCount: 0 };
 	}
 };
 

@@ -1,0 +1,42 @@
+Current package ready; running account-search
+Egress check 203.0.113.1: ENETUNREACH
+Egress check ::ffff:203.0.113.1: ENETUNREACH
+Egress check 2001:db8::1: ENETUNREACH
+Egress check blocked.invalid: EAI_AGAIN
+Checking backend redirect
+Launching isolated browser
+Browser ready
+Browser egress denied http://203.0.113.1/
+Browser egress denied http://[::ffff:203.0.113.1]/
+Browser egress denied http://[2001:db8::1]/
+Browser egress denied http://blocked.invalid/
+Browser egress denied http://127.0.0.1:18725/
+Closing network-proof browser
+Closing network-proof server
+{"interfaces":["loopback"],"denied":[{"host":"203.0.113.1","code":"ENETUNREACH"},{"host":"::ffff:203.0.113.1","code":"ENETUNREACH"},{"host":"2001:db8::1","code":"ENETUNREACH"},{"host":"blocked.invalid","code":"EAI_AGAIN"}],"browserDenied":["http://203.0.113.1/","http://[::ffff:203.0.113.1]/","http://[2001:db8::1]/","http://blocked.invalid/","http://127.0.0.1:18725/"],"backendRedirectDenied":true,"chromiumSandbox":true}
+Server before test: 200
+
+✖ normal account Search retains scoped cached people, subspaces and Things with truthful offline coverage (100008.635375ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 100071.418274
+
+✖ failing tests:
+
+test at ../account-search.test.mjs:10:1
+✖ normal account Search retains scoped cached people, subspaces and Things with truthful offline coverage (100008.635375ms)
+  TimeoutError: Waiting failed: 90000ms exceeded
+      at new WaitTask (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/common/WaitTask.js:46:34)
+      at IsolatedWorld.waitForFunction (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/api/Realm.js:49:26)
+      at CdpFrame.waitForFunction (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/api/Frame.js:585:43)
+      at CdpFrame.<anonymous> (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/util/decorators.js:101:27)
+      at CdpPage.waitForFunction (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/api/Page.js:1540:37)
+      at TestContext.<anonymous> (file:///tmp/check/account-search.test.mjs:73:16)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+Container operation failed: 1

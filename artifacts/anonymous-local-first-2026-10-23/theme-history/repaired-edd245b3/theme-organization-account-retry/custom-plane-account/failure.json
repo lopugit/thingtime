@@ -1,0 +1,197 @@
+{
+  "error": "AssertionError [ERR_ASSERTION]: Conditional synchronization did not complete",
+  "body": "🦄\nthemeorg-014f33d8\n🌈\n🦄\n\n2 changes saved on this device. Waiting to sync with your account.\n\nReview sync\n\nTHINGTIME · THINGS\n\nBrowse files\nUnfiled files\nSelected library\nHome library\n\nHome library on this device. Local edits and imports finish here; account sync runs separately when its matching connection is available.\n\nThings\nNew\nImport…\nPaste\n\nVIEW\n\nGrid\nList\nColumns\n\nSHOW\n\nNames\nPreviews\n\nARRANGE\n\nNewest first\nGroup\n\nKIND\n\n🌀 All\n📁 Folders\n💾 Files\n📝 Posts\n📦 Data\n💎 Schemas\n🧩 Components\n⚡ Actions\n💬 Comments\n🏠 All things\n\n🏠\n\nAll things\n\n🕰️\n\nTimeline\n\nNew folder +\n\n🕰️\n\nTimeline\n\nFOLDER\n\n2m ago\n\n🎨\n\nOffline display Organization peach 65e1c7\n\nTHEME\n\njust now\n\n📦\n\nOrdinary companion a26b4c\n\nDATA\n\njust now\n\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 5ms\n\nMongoDB: connected (1ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nTHEMEORG-014F33D8\n\nProfile\n\nLog out\n\n✉️ email unverified\n\n🦄",
+  "writes": [
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/mongodb/endpoint",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/mongodb/endpoint",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "method": "PATCH"
+    },
+    {
+      "path": "/api/v1/mongodb/endpoint",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "method": "POST"
+    }
+  ],
+  "errors": []
+}

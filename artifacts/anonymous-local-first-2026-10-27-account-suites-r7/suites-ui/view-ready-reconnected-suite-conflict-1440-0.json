@@ -1,0 +1,29 @@
+{
+  "stable": true,
+  "observations": [
+    {
+      "height": 4104,
+      "reviewPanes": 3,
+      "componentReady": true,
+      "notFound": false
+    },
+    {
+      "height": 3903,
+      "reviewPanes": 3,
+      "componentReady": true,
+      "notFound": false
+    },
+    {
+      "height": 4001,
+      "reviewPanes": 3,
+      "componentReady": true,
+      "notFound": false
+    },
+    {
+      "height": 3903,
+      "reviewPanes": 3,
+      "componentReady": true,
+      "notFound": false
+    }
+  ]
+}

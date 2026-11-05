@@ -19,7 +19,7 @@ export function useCollectionSource(raw: unknown) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- serialized authored config
 	}, [key]);
 	const source = config.source;
-	const active = !!source && enabled && (runtime.viewer.signedIn || !!runtime.sharedRun);
+	const active = !!source && enabled && (runtime.canRunSources || !!runtime.sharedRun);
 	const cacheId = `collection:${source?.action || ''}`;
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque access/config boundary
 	const identity = React.useMemo(() => ({}), [runtime.identity, key, active]);
@@ -31,7 +31,7 @@ export function useCollectionSource(raw: unknown) {
 	const initial = React.useMemo(() => {
 		if (!source || !active || runtime.sharedRun) return undefined;
 		try {
-			const cached = readSourceCache(runtime.viewer.id, runtime.pageId, cacheId, key);
+			const cached = readSourceCache(runtime.cacheScope, runtime.pageId, cacheId, key);
 			return cached === undefined ? undefined : appendCollectionPage(source, cached);
 		} catch { return undefined; }
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- identity includes config and runtime access
@@ -48,7 +48,7 @@ export function useCollectionSource(raw: unknown) {
 		const stale = () => current.current !== token;
 		const fail = (error: unknown, terminal = false) => {
 			const failure = sourceFailure(error, !!runtime.sharedRun);
-			if (failure.clear) clearSourceCache(runtime.viewer.id, runtime.pageId, cacheId);
+			if (failure.clear) clearSourceCache(runtime.cacheScope, runtime.pageId, cacheId);
 			setStored((old) => ({ ...old, token, loading: false, terminal, firstFailed: !previous || failure.clear, error: failure.error || 'Install this app to load its records.', ...(failure.clear ? { page: undefined } : {}) }));
 		};
 		try {
@@ -63,8 +63,8 @@ export function useCollectionSource(raw: unknown) {
 			try { page = appendCollectionPage(source, response.result, previous); }
 			catch (error) { fail(error, true); return; }
 			if (!runtime.sharedRun) {
-				if (response.cache === 'no-store') clearSourceCache(runtime.viewer.id, runtime.pageId, cacheId);
-				else if (!previous) writeSourceCache(runtime.viewer.id, runtime.pageId, cacheId, response.result, key);
+				if (response.cache === 'no-store') clearSourceCache(runtime.cacheScope, runtime.pageId, cacheId);
+				else if (!previous) writeSourceCache(runtime.cacheScope, runtime.pageId, cacheId, response.result, key);
 			}
 			setStored({ identity, token, page, loading: false, error: '' });
 		} catch (error) {
@@ -73,7 +73,7 @@ export function useCollectionSource(raw: unknown) {
 			if (inFlight.current === token) inFlight.current = null;
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- depend on the used runtime fields, not unrelated last/query changes
-	}, [source, active, token, identity, initial, runtime.load, runtime.sharedRun, runtime.viewer.id, runtime.pageId, cacheId, key, retry]);
+	}, [source, active, token, identity, initial, runtime.load, runtime.sharedRun, runtime.cacheScope, runtime.pageId, cacheId, key, retry]);
 	React.useEffect(() => {
 		current.current = token;
 		void run();
@@ -90,7 +90,7 @@ export function useCollectionSource(raw: unknown) {
 		bound: raw !== undefined && raw !== null,
 		items: active ? state.page?.items || [] : [],
 		loading: active && (refreshing || state.loading),
-		error: config.error || (!enabled ? '' : !active && source ? 'Sign in to load these records.' : refreshing ? '' : state.error),
+		error: config.error || (!enabled ? '' : !active && source ? 'Open a workspace to load these records.' : refreshing ? '' : state.error),
 		hasMore: active && !state.terminal && (!!state.page?.cursor || !!state.error),
 		loadMore,
 		resetKey: key

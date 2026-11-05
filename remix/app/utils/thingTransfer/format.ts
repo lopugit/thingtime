@@ -6,6 +6,7 @@ import { canonicalLinkedAttachmentUrl, linkedMediaTypeForUrl, MAX_ATTACHMENT_TIT
  */
 export const TRANSFER_FORMAT = 'thingtime.transfer' as const;
 export const TRANSFER_VERSION = 1 as const;
+/** Existing buffered/server processing budgets; fileBytes is not a wire-format limit. */
 export const TRANSFER_LIMITS = { manifestBytes: 16 * 1024 * 1024, things: 1000, files: 2000, fileBytes: 512 * 1024 * 1024, depth: 64 } as const;
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
@@ -91,7 +92,16 @@ const json = (value: unknown, depth = 0): void => {
   }
 };
 
-export const validateTransfer = (value: unknown): ThingTransfer => {
+export type TransferValidationOptions = { maxFileBytes?: number };
+/** Resource-constrained consumers must declare their own aggregate byte budget. */
+export const transferFileByteLimit = (options: TransferValidationOptions = {}): number => {
+  const limit = options.maxFileBytes === undefined ? Number.MAX_SAFE_INTEGER : options.maxFileBytes;
+  if (!Number.isSafeInteger(limit) || limit < 0) return invalid('Invalid transfer file byte budget');
+  return limit;
+};
+
+export const validateTransfer = (value: unknown, options: TransferValidationOptions = {}): ThingTransfer => {
+  const fileByteLimit = transferFileByteLimit(options);
   if (!object(value)) return invalid('This is not a Thingtime transfer');
   keys(value, ['format', 'version', 'roots', 'things', 'files', 'links', 'attachmentOrder']);
   if (value.format !== TRANSFER_FORMAT || value.version !== TRANSFER_VERSION) return invalid('Unsupported Thingtime transfer version');
@@ -137,8 +147,9 @@ export const validateTransfer = (value: unknown): ThingTransfer => {
     if (typeof file.name !== 'string' || !file.name.length || file.name.length > 500 || [...file.name].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) return invalid('Invalid file name');
     if (typeof file.mime !== 'string' || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mime) || file.mime.length > 200) return invalid('Invalid file type');
     if (typeof file.bytes !== 'number' || !Number.isSafeInteger(file.bytes) || file.bytes < 0) return invalid('Invalid file size');
+    if (file.bytes > Number.MAX_SAFE_INTEGER - bytes) return invalid('Transfer file sizes exceed safe integer precision');
     bytes += file.bytes;
-    if (bytes > TRANSFER_LIMITS.fileBytes) return invalid('Transfer files are too large');
+    if (bytes > fileByteLimit) return invalid('Transfer files are too large');
     if (typeof file.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(file.sha256)) return invalid('Invalid file checksum');
     files.add(file.id);
   }
@@ -160,15 +171,15 @@ export const validateTransfer = (value: unknown): ThingTransfer => {
   return value as ThingTransfer;
 };
 
-export const parseTransfer = (text: string): ThingTransfer => {
+export const parseTransfer = (text: string, options: TransferValidationOptions = {}): ThingTransfer => {
   if (text.length > TRANSFER_LIMITS.manifestBytes || new TextEncoder().encode(text).byteLength > TRANSFER_LIMITS.manifestBytes) return invalid('Transfer manifest is too large');
   let value: unknown;
   try { value = JSON.parse(text); } catch { return invalid('This file does not contain valid JSON'); }
-  return validateTransfer(value);
+  return validateTransfer(value, options);
 };
 
-export const serializeTransfer = (value: ThingTransfer): string => {
-  validateTransfer(value);
+export const serializeTransfer = (value: ThingTransfer, options: TransferValidationOptions = {}): string => {
+  validateTransfer(value, options);
   const text = JSON.stringify(value, null, 2);
   if (new TextEncoder().encode(text).byteLength > TRANSFER_LIMITS.manifestBytes) return invalid('Transfer manifest is too large');
   return text;

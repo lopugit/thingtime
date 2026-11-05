@@ -7,6 +7,8 @@ import { StorageMutationError } from '../storage/storageCore.ts';
 import type { TimelineEntry, TimelineEvent, TimelineSnapshot } from '../../../timeline/contract.ts';
 import type { TimelineNote } from '../../../timeline/notes.ts';
 import type { TimelineVersionName } from '../../../timeline/versionNames.ts';
+import { algorithmContentSnapshot } from '../../../timeline/algorithmContent.ts';
+import { parseTimelineVersionExport } from '../../../timeline/exportVersion.ts';
 
 const content = (crystal: any, folderId: string | null = null) => ({ crystal, extended: null, tags: [], geo: null, acl: ['tt:user'], folderId });
 const full = (crystal: any, folderId: string | null = null): TimelineSnapshot => ({ adapter: 'thing-content', version: 1, value: { thingtime: ['data'], ...content(crystal, folderId), targetId: null } });
@@ -73,4 +75,31 @@ test('unknown or foreign versions are null; drafts and effects refuse; oversized
 	const big = await h.service('user-1', 'big');
 	assert.deepEqual(JSON.parse(JSON.stringify(big!.content.value)), content({ title: 'Reassembled' }));
 	assert.deepEqual(h.snapshots, ['big/after']);
+});
+
+test('approved algorithm archives retain actual draft receipts and deletion content without promoting provenance', async () => {
+	const h = harness();
+	const snapshot = algorithmContentSnapshot({ crystal: { name: 'Saved profile', emoji: '🧠', weights: { types: {}, tags: {}, authors: {} }, eventCount: 3, lastTrainedAt: null, title: 'Current library title', shared: true, observations: ['private'] }, folderId: 'folder-1' });
+	for (const deleting of [false, true]) {
+		const id = deleting ? 'algorithm-delete' : 'algorithm-edit';
+		const event = eventFixture(id, { thingId: 'algorithm-1', operation: deleting ? 'delete' : 'create', before: deleting ? snapshot : null, after: deleting ? null : snapshot });
+		const entry = entryFixture(event, 30); h.events.set(id, entry);
+		const result = await h.service('user-1', id); assert.ok(result);
+		assert.deepEqual(result.event, event); assert.deepEqual(result.receipt, entry.receipt);
+		assert.equal(result.event.mode, 'draft'); assert.equal(result.event.source, 'client');
+		assert.deepEqual(result.content, snapshot); assert.equal(result.context, undefined);
+		assert.deepEqual(parseTimelineVersionExport({ ok: true, export: result }, { ownerId: 'user-1', thingId: 'algorithm-1', id }, true).receipt, entry.receipt);
+		assert.equal(await h.service('foreign-owner', id), null);
+	}
+	for (const bad of [
+		{ id: 'foreign-actor', actorId: 'other' },
+		{ id: 'no-client', clientId: null },
+		{ id: 'server-draft', source: 'api' as const }
+	]) {
+		h.events.set(bad.id, entryFixture(eventFixture(bad.id, { ...bad, after: snapshot })));
+		await rejects(h.service('user-1', bad.id), 422, /Only saved versions/);
+	}
+	h.events.set('malformed', entryFixture(eventFixture('malformed', { after: { ...snapshot, value: { ...snapshot.value as any, shared: true } } })));
+	await rejects(h.service('user-1', 'malformed'), 422, /invalid content/);
+	await rejects(h.service('user-1', 'draft'), 422, /Only saved versions/);
 });

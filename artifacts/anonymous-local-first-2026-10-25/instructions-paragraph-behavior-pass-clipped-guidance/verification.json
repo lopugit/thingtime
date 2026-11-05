@@ -1,0 +1,92 @@
+{
+  "checks": [
+    "offline normal settings save and cold reload retain exact Unicode and disabled rows",
+    "server commits before a lost reply; newer local save completes while reply is held; read acknowledgement avoids duplicate replay",
+    "explicit device conflict choice preserves the reviewed revision and exact content",
+    "explicit account conflict choice preserves the reviewed revision and exact content",
+    "oversized normal Settings save stays local with actionable size guidance at desktop and both phone widths; offline cold reload retains exact Unicode and disabled rows",
+    "blocked revision sends no oversized POST or repeated request across a real 60-second retry window; shortening through Settings resumes normal account sync"
+  ],
+  "viewports": [
+    {
+      "left": 325,
+      "right": 1115,
+      "scrollWidth": 1440,
+      "viewport": 1440
+    },
+    {
+      "left": 29,
+      "right": 361,
+      "scrollWidth": 390,
+      "viewport": 390
+    },
+    {
+      "left": 29,
+      "right": 291,
+      "scrollWidth": 320,
+      "viewport": 320
+    },
+    {
+      "label": "capacity guidance",
+      "width": 1440,
+      "left": 325,
+      "right": 1115,
+      "top": 446.375,
+      "bottom": 488.375,
+      "unobscured": true,
+      "viewportHeight": 1000,
+      "contentWidth": 790,
+      "clientWidth": 790,
+      "height": 42,
+      "lineHeight": 21
+    },
+    {
+      "label": "capacity guidance",
+      "width": 390,
+      "left": 29,
+      "right": 361,
+      "top": 41.65625,
+      "bottom": 104.65625,
+      "unobscured": true,
+      "viewportHeight": 844,
+      "contentWidth": 332,
+      "clientWidth": 332,
+      "height": 63,
+      "lineHeight": 21
+    },
+    {
+      "label": "capacity guidance",
+      "width": 320,
+      "left": 29,
+      "right": 291,
+      "top": 380.03125,
+      "bottom": 464.03125,
+      "unobscured": true,
+      "viewportHeight": 844,
+      "contentWidth": 262,
+      "clientWidth": 262,
+      "height": 84,
+      "lineHeight": 21
+    }
+  ],
+  "writes": 4,
+  "lostReplyAcknowledgedWithoutReplay": true,
+  "capacityProof": {
+    "oversizedUtf8Bytes": 119104,
+    "accountUnchangedWhileBlocked": true,
+    "offlineReloadRetained": true,
+    "observedRetryWindowMs": 65008,
+    "repeatInstructionRequests": 0,
+    "shortenedAccountReadback": true,
+    "postByteLengths": [
+      298,
+      378,
+      300,
+      320
+    ]
+  },
+  "anonymousPrivateRows": 0,
+  "anonymousWrite": 401,
+  "errors": [],
+  "offlineWrites": []
+}

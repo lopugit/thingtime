@@ -1,0 +1,328 @@
+🦄
+Login
+🌈
+🦄
+Actions
+⚡ Saved profile browser acceptance
+
+general
+
+v1
+
+private
+
+LOCAL-5E9028F7-DD1B-4C6A-8932-CC7B4F5191A5
+
+Edit definition
+Thing view
+
+TAKES
+
+No inputs
+
+DOES
+
+1
+
+http.request
+
+POST /api/v1/themes in your browser
+
+2
+
+http.request
+
+POST /api/v1/themes in your browser
+
+3
+
+http.request
+
+POST /api/v1/themes/active in your browser
+
+4
+
+http.request
+
+POST /api/v1/algorithms in your browser
+
+5
+
+http.request
+
+POST /api/v1/algorithms/update in your browser
+
+6
+
+http.request
+
+POST /api/v1/algorithms/active in your browser
+
+7
+
+return
+
+Return the result
+
+CAN ACCESS
+
+http.request: POST /api/v1/themes, POST /api/v1/themes/active, POST /api/v1/algorithms, POST /api/v1/algorithms/update, POST /api/v1/algorithms/active
+
+CANNOT ACCESS
+
+🚫 Requests outside the declared API endpoints
+
+LIMITS
+
+⏱ 5s timeout
+
+⏱ 40 operations
+
+⏱ depth 4
+
+⏱ 10 child actions
+
+⏱ 64KB result
+
+⏱ 16KB input
+
+⏱ 20,000 expression evaluations
+
+⏱ 1,000 items per expression list
+
+EFFECTS (DERIVED FROM THE STEPS)
+
+creates /api/v1/themes
+
+creates /api/v1/themes
+
+creates /api/v1/themes/active
+
+creates /api/v1/algorithms
+
+creates /api/v1/algorithms/update
+
+creates /api/v1/algorithms/active
+
+reads POST /api/v1/themes
+
+reads POST /api/v1/themes/active
+
+reads POST /api/v1/algorithms
+
+reads POST /api/v1/algorithms/update
+
+reads POST /api/v1/algorithms/active
+
+updates things
+
+deletes things
+
+RUN
+
+Run action
+
+This action takes no inputs.
+
+ok
+
+42ms · 7 ops
+
+local-5e9028f7-dd1b-4c6a-8932-cc7b4f5191a5:1
+
+http.request
+
+12ms
+
+local-5e9028f7-dd1b-4c6a-8932-cc7b4f5191a5:2
+
+http.request
+
+11ms
+
+local-5e9028f7-dd1b-4c6a-8932-cc7b4f5191a5:3
+
+http.request
+
+1ms
+
+local-5e9028f7-dd1b-4c6a-8932-cc7b4f5191a5:4
+
+http.request
+
+7ms
+
+local-5e9028f7-dd1b-4c6a-8932-cc7b4f5191a5:5
+
+http.request
+
+10ms
+
+local-5e9028f7-dd1b-4c6a-8932-cc7b4f5191a5:6
+
+http.request
+
+1ms
+
+local-5e9028f7-dd1b-4c6a-8932-cc7b4f5191a5:7
+
+return
+
+0ms
+
+{
+  "themeId": "local-ba0525cd-44fe-4f35-b27c-5c6649b7744b",
+  "algorithmId": "local-8fce3574-a4d3-483d-abfc-cecc83dcc65f"
+}
+
+RECENT EXECUTION DETAILS
+
+The latest 50 execution details are saved on this device. They stay private to this local workspace.
+
+ok
+
+This device
+
+10/26/2026, 4:41:04 AM
+
+42ms · 7 ops
+
+DEFINITION
+
+{
+  "name": "Saved profile browser acceptance",
+  "runtime": "browser",
+  "category": "general",
+  "version": 1,
+  "capabilities": [
+    {
+      "capability": "http.request",
+      "endpoints": [
+        "POST /api/v1/themes",
+        "POST /api/v1/themes/active",
+        "POST /api/v1/algorithms",
+        "POST /api/v1/algorithms/update",
+        "POST /api/v1/algorithms/active"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "op": "http.request",
+      "method": "POST",
+      "path": "/api/v1/themes",
+      "feature": "api.themes",
+      "minimumVersion": "1.1.1",
+      "query": {},
+      "body": {
+        "name": "Browser Action theme",
+        "theme": {}
+      }
+    },
+    {
+      "op": "http.request",
+      "method": "POST",
+      "path": "/api/v1/themes",
+      "feature": "api.themes",
+      "minimumVersion": "1.1.1",
+      "query": {},
+      "body": {
+        "id": "$step.1.theme.id",
+        "name": "Browser Action theme edited",
+        "theme": {}
+      }
+    },
+    {
+      "op": "http.request",
+      "method": "POST",
+      "path": "/api/v1/themes/active",
+      "feature": "api.themes-active",
+      "minimumVersion": "1.0.0",
+      "query": {},
+      "body": {
+        "themeId": "$step.1.theme.id"
+      }
+    },
+    {
+      "op": "http.request",
+      "method": "POST",
+      "path": "/api/v1/algorithms",
+      "feature": "api.algorithms",
+      "minimumVersion": "1.1.0",
+      "query": {},
+      "body": {
+        "name": "Browser Action algorithm"
+      }
+    },
+    {
+      "op": "http.request",
+      "method": "POST",
+      "path": "/api/v1/algorithms/update",
+      "feature": "api.algorithms-update",
+      "minimumVersion": "1.1.0",
+      "query": {},
+      "body": {
+        "id": "$step.4.algorithm.id",
+        "name": "Browser Action algorithm edited"
+      }
+    },
+    {
+      "op": "http.request",
+      "method": "POST",
+      "path": "/api/v1/algorithms/active",
+      "feature": "api.algorithms-active",
+      "minimumVersion": "1.1.0",
+      "query": {},
+      "body": {
+        "algorithmId": "$step.4.algorithm.id"
+      }
+    },
+    {
+      "op": "return",
+      "value": {
+        "themeId": "$step.1.theme.id",
+        "algorithmId": "$step.4.algorithm.id"
+      }
+    }
+  ]
+}
+✉️
+CONTACT
+
+connect@thingtime.com
+
+Support Thingtime
+
+© 2026 Thingtime
+
+🌱 git/unknown
+Current Tab
+
+Nitro API: ready
+
+Frontend: ready 2ms
+
+MongoDB: connected (1ms)
+
+🌈
+🦄
+🧙‍♂️
+📖
+DOCS
+
+Legal policies & terms
+
+Docs home
+
+Design mockups
+
+Design system
+
+🌈
+ACCOUNT
+
+Log in
+
+Register
+
+🦄

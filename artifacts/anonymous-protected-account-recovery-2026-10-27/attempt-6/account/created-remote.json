@@ -1,0 +1,120 @@
+{
+  "themes": {
+    "ok": true,
+    "ownerId": "6adfab974b184bb049dfa92f",
+    "dataPlane": "home",
+    "storagePlane": "home",
+    "complete": true,
+    "themes": [
+      {
+        "id": "95e6ea63-e386-463f-be0c-61cff486934a",
+        "name": "Recovery theme deleted",
+        "theme": {
+          "name": "Recovery theme deleted",
+          "colors": {
+            "ink": "#16161a",
+            "text": "#5a5a66",
+            "muted": "#9a9aa6",
+            "faint": "#b6b6c0",
+            "border": "#ececef",
+            "borderLight": "#f0f0f2",
+            "surface": "#fafafb",
+            "surfaceAlt": "#f5f5f7",
+            "surfaceHover": "#ececee",
+            "card": "#ffffff",
+            "pageBg": "#ffffff",
+            "accent": "#553377",
+            "accentTint": "#fff5fa",
+            "accentContrast": "#ffffff",
+            "focusBorder": "#d63384",
+            "focusGlowStart": "#ff69b4",
+            "focusGlowEnd": "#a555e8",
+            "link": "#2f8fd6",
+            "positive": "#2f8f4f",
+            "positiveSoft": "rgba(88, 202, 112, 0.14)",
+            "danger": "#d6455a",
+            "warning": "#ffbc48",
+            "rainbow": [
+              "#f34a4a",
+              "#ffbc48",
+              "#58ca70",
+              "#47b5e6",
+              "#a555e8"
+            ],
+            "darkBg": "#131318",
+            "darkChrome": "#1c1c22",
+            "darkBorder": "#2a2a33",
+            "darkText": "#e6e6ee",
+            "darkMuted": "#8a8a95",
+            "darkAccent": "#59ff9c"
+          },
+          "fonts": {
+            "heading": "Space Grotesk",
+            "body": "Hanken Grotesk",
+            "mono": "JetBrains Mono",
+            "display": ""
+          },
+          "general": {
+            "radiusScale": 1,
+            "borderWidth": 1,
+            "focusGlowBlur": 14,
+            "focusGlowOpacity": 0.24,
+            "shadow": "soft",
+            "motion": true,
+            "animSpeed": 200,
+            "iconStyle": "emoji",
+            "thingsBadgePadding": "small",
+            "thingsBadgeCustomPadding": "3px 8px"
+          },
+          "windows": {
+            "closeColor": "",
+            "minimiseColor": "",
+            "maximiseColor": "",
+            "closeRadius": 3.5,
+            "minimiseRadius": 3.5,
+            "maximiseRadius": 3.5
+          }
+        },
+        "visibility": "private",
+        "createdAt": "2026-10-26T19:36:00.779Z",
+        "updatedAt": "2026-10-26T19:36:00.780Z",
+        "folderId": "83304cef-4e51-4ffe-a1bb-3e0013917342",
+        "title": "Recovered theme library title",
+        "version": "theme-state-v1:08becdb0dbc3ba479164a84a77f55d9987323f210616b99f35e2ed15f2ce4929"
+      }
+    ]
+  },
+  "algorithms": {
+    "ok": true,
+    "ownerId": "6adfab974b184bb049dfa92f",
+    "dataPlane": "home",
+    "storagePlane": "home",
+    "complete": true,
+    "algorithms": [
+      {
+        "id": "ae60e79b-30e6-4151-a65d-1b02ffbbacae",
+        "version": "algorithm-state-v1:b0f66862e88711d312092f9e5e72791e923617366b201a325dc4df9f5d976615",
+        "content": {
+          "name": "Recovery algorithm deleted",
+          "title": "Recovered algorithm library title",
+          "emoji": "🧠",
+          "weights": {
+            "types": {},
+            "tags": {},
+            "authors": {}
+          },
+          "eventCount": 0,
+          "lastTrainedAt": null
+        },
+        "parentId": null,
+        "description": "Disposable local profile",
+        "shared": false,
+        "listed": false,
+        "folderId": "83304cef-4e51-4ffe-a1bb-3e0013917342",
+        "createdAt": "2026-10-26T19:36:00.765Z",
+        "updatedAt": "2026-10-26T19:36:00.766Z",
+        "legacy": false
+      }
+    ]
+  }
+}

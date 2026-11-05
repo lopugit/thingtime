@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
+import type { ModuleOptions as WorkflowModuleOptions } from 'workflow/nitro';
 import { defineNitroConfig } from 'nitro/config';
 
 import { apiV1DocsRouteKeys, apiV1RouteKeys } from './app/docs/apiDocs.ts';
@@ -10,6 +11,7 @@ import {
 } from './app/api/utils/chatgpt/pluginCore.ts';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/thingtimeCapabilities.ts';
 import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore.ts';
+import { draftPreviewCsp } from './scripts/csp.mjs';
 
 const publicDir = fileURLToPath(new URL('./dist', import.meta.url));
 const embedDir = fileURLToPath(new URL('./dist/embed', import.meta.url));
@@ -18,6 +20,9 @@ const apiHandler = './server/routes/api/[...].ts';
 const chatGptDiscoveryHandler = './server/routes/chatgpt-discovery.ts';
 const thingtimeCapabilitiesHandler = './server/handlers/thingtime-capabilities.ts';
 const apiRoutes = [...apiV1RouteKeys, ...apiV1DocsRouteKeys];
+const workflowModuleConfig = {
+  workflow: { dirs: ['workflows', 'app/api/utils'] }
+} satisfies { workflow: WorkflowModuleOptions };
 const desktopMiddleware = /^node[_-]middleware$/.test(process.env.NITRO_PRESET ?? '');
 
 export default defineNitroConfig({
@@ -29,7 +34,14 @@ export default defineNitroConfig({
   // Rolldown's JavaScript loader. The desktop build stages the host package.
   ...(desktopMiddleware && process.platform === 'win32' ? { rolldownConfig: { external: ['@resvg/resvg-js'] } } : {}),
   modules: ['workflow/nitro'],
+  ...workflowModuleConfig,
   compatibilityDate: '2026-07-02',
+  // Node/packaged builds serve these files directly, without Vite or Vercel's
+  // header middleware. The draft document must retain its opaque origin here.
+  routeRules: {
+    '/draft-preview': { headers: { 'Content-Security-Policy': draftPreviewCsp, 'Cache-Control': 'no-store' } },
+    '/draft-preview/**': { headers: { 'Content-Security-Policy': draftPreviewCsp, 'Cache-Control': 'no-store' } }
+  },
   // Browser image engines can be reached through shared schema imports. Do not
   // instantiate their WASM while the API runner is starting.
   wasm: { lazy: true },

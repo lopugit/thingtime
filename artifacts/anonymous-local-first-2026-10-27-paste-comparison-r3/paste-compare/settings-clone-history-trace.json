@@ -1,0 +1,821 @@
+{
+  "scope": "Only duration/name/category/process/thread fields; paste window only",
+  "events": [
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 3301329,
+      "ts": 100954022656,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "EventDispatch",
+      "cat": "devtools.timeline",
+      "dur": 3298747,
+      "ts": 100954022731,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "Editor::HandleKeyboardEvent",
+      "cat": "blink",
+      "dur": 3298435,
+      "ts": 100954023042,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "EventDispatch",
+      "cat": "devtools.timeline",
+      "dur": 3293525,
+      "ts": 100954027948,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "ReplaceSelectionCommand::doApply",
+      "cat": "blink",
+      "dur": 3281314,
+      "ts": 100954028276,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "Document::UpdateStyleAndLayout",
+      "cat": "blink",
+      "dur": 165900,
+      "ts": 100954089598,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "Blink.ForcedStyleAndLayout.UpdateTime",
+      "cat": "blink",
+      "dur": 165882,
+      "ts": 100954089615,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "LocalFrameView::UpdateStyleAndLayout",
+      "cat": "blink",
+      "dur": 165870,
+      "ts": 100954089617,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "Blink.Layout.UpdateTime",
+      "cat": "blink",
+      "dur": 147797,
+      "ts": 100954107665,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "LocalFrameView::layout",
+      "cat": "blink,benchmark",
+      "dur": 147764,
+      "ts": 100954107671,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "Layout",
+      "cat": "devtools.timeline",
+      "dur": 147761,
+      "ts": 100954107673,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "LocalFrameView::performLayout",
+      "cat": "blink,benchmark,rail,disabled-by-default-blink.debug.layout",
+      "dur": 147495,
+      "ts": 100954107934,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 63552,
+      "ts": 100957324217,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "WebFrameWidgetImpl::BeginMainFrame",
+      "cat": "blink",
+      "dur": 56275,
+      "ts": 100957324586,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "EventHandler::handleMouseMoveEvent",
+      "cat": "blink",
+      "dur": 55949,
+      "ts": 100957324647,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "LayoutView::HitTest",
+      "cat": "blink",
+      "dur": 55874,
+      "ts": 100957324661,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "PrePaint",
+      "cat": "devtools.timeline",
+      "dur": 51838,
+      "ts": 100957324833,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "LocalFrameView::RunPrePaintLifecyclePhase",
+      "cat": "blink,benchmark",
+      "dur": 36342,
+      "ts": 100957340328,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "Blink.PrePaint.UpdateTime",
+      "cat": "blink",
+      "dur": 36323,
+      "ts": 100957340337,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 34789,
+      "ts": 100957438747,
+      "pid": 541,
+      "tid": 562
+    },
+    {
+      "name": "Blink.Style.UpdateTime",
+      "cat": "blink",
+      "dur": 18039,
+      "ts": 100954089624,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "UpdateLayoutTree",
+      "cat": "blink,devtools.timeline",
+      "dur": 18029,
+      "ts": 100954089629,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "Document::updateStyle",
+      "cat": "blink,blink_style",
+      "dur": 17991,
+      "ts": 100954089638,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 17739,
+      "ts": 100957402987,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "AsyncTask Run",
+      "cat": "blink",
+      "dur": 17707,
+      "ts": 100957402990,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "FireIdleCallback",
+      "cat": "devtools.timeline",
+      "dur": 17700,
+      "ts": 100957402994,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "IdleSpellCheckController::hotModeInvocation",
+      "cat": "blink",
+      "dur": 17630,
+      "ts": 100957403044,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "LocalFrameView::RunCompositingInputsLifecyclePhase",
+      "cat": "blink,benchmark",
+      "dur": 15490,
+      "ts": 100957324837,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "Blink.CompositingInputs.UpdateTime",
+      "cat": "blink",
+      "dur": 15472,
+      "ts": 100957324839,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 11200,
+      "ts": 100955256866,
+      "pid": 541,
+      "tid": 541
+    },
+    {
+      "name": "FrameSelection::SetSelection",
+      "cat": "blink",
+      "dur": 10816,
+      "ts": 100957310181,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "Document::rebuildLayoutTree",
+      "cat": "blink,blink_style",
+      "dur": 10041,
+      "ts": 100954097561,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 9440,
+      "ts": 100954860464,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 8368,
+      "ts": 100956460556,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "Document::recalcStyle",
+      "cat": "blink,blink_style",
+      "dur": 7916,
+      "ts": 100954089642,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 7340,
+      "ts": 100954460560,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 6996,
+      "ts": 100956660715,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "DisplayLockUtilities::SelectionChanged",
+      "cat": "blink",
+      "dur": 6184,
+      "ts": 100957310554,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 5827,
+      "ts": 100953995862,
+      "pid": 541,
+      "tid": 541
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 5744,
+      "ts": 100957268405,
+      "pid": 575,
+      "tid": 589
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 5599,
+      "ts": 100954261091,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 5461,
+      "ts": 100954394072,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 5012,
+      "ts": 100957474534,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 4531,
+      "ts": 100956263785,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "HitTest",
+      "cat": "blink,devtools.timeline",
+      "dur": 3841,
+      "ts": 100957376674,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 3807,
+      "ts": 100954012278,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "Editor::SyncSelection",
+      "cat": "blink",
+      "dur": 3786,
+      "ts": 100957317210,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 3718,
+      "ts": 100957395990,
+      "pid": 575,
+      "tid": 589
+    },
+    {
+      "name": "WebFrameWidgetImpl::UpdateLifecycle",
+      "cat": "blink",
+      "dur": 3618,
+      "ts": 100957380877,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "ReplacementFragment constructor",
+      "cat": "blink",
+      "dur": 3560,
+      "ts": 100954028296,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 3438,
+      "ts": 100957398869,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 3337,
+      "ts": 100953996201,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "LocalFrameView::RunPaintLifecyclePhase",
+      "cat": "blink,benchmark",
+      "dur": 3302,
+      "ts": 100957381188,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 3280,
+      "ts": 100957392224,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "AsyncTask Run",
+      "cat": "blink",
+      "dur": 3259,
+      "ts": 100957392226,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "EventDispatch",
+      "cat": "devtools.timeline",
+      "dur": 3250,
+      "ts": 100957392232,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "Commit",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 3200,
+      "ts": 100957384498,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 3154,
+      "ts": 100954396576,
+      "pid": 575,
+      "tid": 589
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 3110,
+      "ts": 100956027199,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "Blink.Paint.UpdateTime",
+      "cat": "blink",
+      "dur": 3091,
+      "ts": 100957381190,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "Paint",
+      "cat": "devtools.timeline",
+      "dur": 2953,
+      "ts": 100957381224,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "Paint",
+      "cat": "devtools.timeline",
+      "dur": 2863,
+      "ts": 100957381302,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 2824,
+      "ts": 100956378735,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 2736,
+      "ts": 100956579598,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 2500,
+      "ts": 100957265897,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 2217,
+      "ts": 100957377396,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 2172,
+      "ts": 100956227135,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "Commit",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 2087,
+      "ts": 100957400158,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 2042,
+      "ts": 100957420819,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1989,
+      "ts": 100954012176,
+      "pid": 575,
+      "tid": 589
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1971,
+      "ts": 100957429095,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1865,
+      "ts": 100957077167,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1830,
+      "ts": 100957365786,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1823,
+      "ts": 100957321206,
+      "pid": 632,
+      "tid": 7
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1754,
+      "ts": 100957387791,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1585,
+      "ts": 100957437134,
+      "pid": 541,
+      "tid": 541
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1572,
+      "ts": 100955000343,
+      "pid": 632,
+      "tid": 2
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1552,
+      "ts": 100957114207,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1545,
+      "ts": 100957324894,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "EventDispatch",
+      "cat": "devtools.timeline",
+      "dur": 1529,
+      "ts": 100957387912,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "Commit",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1502,
+      "ts": 100957421341,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1492,
+      "ts": 100957421941,
+      "pid": 541,
+      "tid": 541
+    },
+    {
+      "name": "OverlayInterstitialAdDetector::MaybeFireDetection",
+      "cat": "blink,benchmark",
+      "dur": 1441,
+      "ts": 100957386206,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1433,
+      "ts": 100957402090,
+      "pid": 541,
+      "tid": 541
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1432,
+      "ts": 100957390559,
+      "pid": 541,
+      "tid": 541
+    },
+    {
+      "name": "HitTest",
+      "cat": "blink,devtools.timeline",
+      "dur": 1289,
+      "ts": 100957386346,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1244,
+      "ts": 100957388043,
+      "pid": 541,
+      "tid": 541
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1226,
+      "ts": 100957424237,
+      "pid": 541,
+      "tid": 541
+    },
+    {
+      "name": "Commit",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1226,
+      "ts": 100957429823,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1204,
+      "ts": 100957479554,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1196,
+      "ts": 100954827723,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1149,
+      "ts": 100955511393,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1127,
+      "ts": 100956395687,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1123,
+      "ts": 100957424298,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1118,
+      "ts": 100954020552,
+      "pid": 632,
+      "tid": 1
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1083,
+      "ts": 100956427767,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1079,
+      "ts": 100956212188,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1077,
+      "ts": 100955010689,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1053,
+      "ts": 100954913633,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1053,
+      "ts": 100955029297,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1026,
+      "ts": 100954945958,
+      "pid": 632,
+      "tid": 9
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "dur": 1020,
+      "ts": 100954310493,
+      "pid": 632,
+      "tid": 9
+    }
+  ]
+}

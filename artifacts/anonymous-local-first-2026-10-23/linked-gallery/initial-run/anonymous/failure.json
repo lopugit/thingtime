@@ -1,0 +1,121 @@
+{
+  "error": "TimeoutError: locator.click: Timeout 25000ms exceeded.\nCall log:\n  - waiting for locator('a[href=\"/things?folder=local-b9057e41-a608-4a84-860e-325bc7a60bd5\"]').first()\n",
+  "sourceRoot": "local-b9057e41-a608-4a84-860e-325bc7a60bd5",
+  "copyRoot": "",
+  "sourcePost": "local-897187bd-a445-48d5-bd4d-62579196a50c",
+  "copyPost": "",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\n\nTHINGTIME · THINGS\n\nBrowse files\nUnfiled files\nThings\nNew\nImport…\nPaste\n\nVIEW\n\nGrid\nList\nColumns\n\nSHOW\n\nNames\nPreviews\n\nARRANGE\n\nNewest first\nGroup\n\nKIND\n\n🌀 All\n📁 Folders\n💾 Files\n📝 Posts\n📦 Data\n💎 Schemas\n🧩 Components\n⚡ Actions\n💬 Comments\n🏠 All things\n\n🏠\n\nAll things\n\n🕰️\n\nTimeline\n\n📁\n\nLinked gallery 8edcebd0\n\nNew folder +\n\n🕰️\n\nTimeline\n\nFOLDER\n\njust now\n\n📁\n\nLinked gallery 8edcebd0\n\nFOLDER\n\njust now\n\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "local": {
+    "things": [
+      {
+        "id": "local-1ef8151f-2e1d-49e0-a41f-daf188a23340",
+        "thingtime": [
+          "attachment"
+        ],
+        "crystal": {
+          "name": "stored.txt",
+          "size": 58,
+          "contentType": "text/plain",
+          "mediaKind": "file"
+        },
+        "createdAt": "2026-10-23T09:09:27.529Z",
+        "updatedAt": "2026-10-23T09:09:27.529Z",
+        "revision": 1,
+        "targetId": "local-897187bd-a445-48d5-bd4d-62579196a50c",
+        "localAttachment": {
+          "purpose": "post",
+          "sha256": "cc565f51dd6c83e1c42bce472cf324b6046c71125aeb6bd8b9470e6d5a75a6fa",
+          "order": 1
+        }
+      },
+      {
+        "thingtime": [
+          "post"
+        ],
+        "crystal": {
+          "type": "text",
+          "text": "Private mixed gallery · 独立 🌿 8edcebd0-155c-4f95-bb18-8a5f560e1557",
+          "images": [],
+          "listing": null,
+          "thing": null
+        },
+        "id": "local-897187bd-a445-48d5-bd4d-62579196a50c",
+        "revision": 1,
+        "createdAt": "2026-10-23T09:09:27.529Z",
+        "updatedAt": "2026-10-23T09:09:27.529Z",
+        "folderId": "local-b9057e41-a608-4a84-860e-325bc7a60bd5"
+      },
+      {
+        "thingtime": [
+          "folder"
+        ],
+        "crystal": {
+          "name": "Linked gallery 8edcebd0"
+        },
+        "id": "local-b9057e41-a608-4a84-860e-325bc7a60bd5",
+        "revision": 1,
+        "createdAt": "2026-10-23T09:09:27.529Z",
+        "updatedAt": "2026-10-23T09:09:27.529Z"
+      },
+      {
+        "id": "local-link-067ba28d-abbe-444a-ab82-d0b35299b3c4",
+        "thingtime": [
+          "attachment"
+        ],
+        "crystal": {
+          "name": "second.txt",
+          "size": 0,
+          "contentType": "text/plain",
+          "mediaKind": "file",
+          "filenamePreview": "second-display.txt",
+          "title": "Second URL 🍑",
+          "description": "Second description\nExact spacing.",
+          "url": "https://gallery.example.test/second.txt?view=2"
+        },
+        "targetId": "local-897187bd-a445-48d5-bd4d-62579196a50c",
+        "createdAt": "2026-10-23T09:09:27.529Z",
+        "updatedAt": "2026-10-23T09:09:27.529Z",
+        "revision": 1,
+        "localLinkedAttachment": {
+          "purpose": "post",
+          "order": 0
+        }
+      },
+      {
+        "id": "local-link-e6a659dc-d315-4c79-a6d2-cdead9cee97f",
+        "thingtime": [
+          "attachment"
+        ],
+        "crystal": {
+          "name": "first.txt",
+          "size": 0,
+          "contentType": "text/plain",
+          "mediaKind": "file",
+          "filenamePreview": "first-display.txt",
+          "title": "First URL 🌿",
+          "description": "First description\n第二行",
+          "url": "https://gallery.example.test/first.txt?view=1#leaf"
+        },
+        "targetId": "local-897187bd-a445-48d5-bd4d-62579196a50c",
+        "createdAt": "2026-10-23T09:09:27.529Z",
+        "updatedAt": "2026-10-23T09:09:27.529Z",
+        "revision": 1,
+        "localLinkedAttachment": {
+          "purpose": "post",
+          "order": 2
+        }
+      }
+    ],
+    "files": [],
+    "byteIds": [
+      "editor-tree:root:v1",
+      "local-1ef8151f-2e1d-49e0-a41f-daf188a23340"
+    ]
+  },
+  "lostRequestId": "",
+  "lostReceipt": null,
+  "linkAttempts": [],
+  "writes": [],
+  "externalRequests": [],
+  "errors": []
+}

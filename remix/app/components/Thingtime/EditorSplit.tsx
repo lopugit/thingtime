@@ -1,4 +1,4 @@
-import { ThingDraftPicker } from '~/drafts/ThingDrafts';
+import { ThingDraftPicker, useThingDraftRecovery } from '~/drafts/ThingDrafts';
 import React from 'react';
 import { Box, Flex, Input } from '@chakra-ui/react';
 import { ArrowDown, ArrowUp, Columns2, Ellipsis, Eye, Grip, Paintbrush, PictureInPicture, PictureInPicture2, Rows2 } from 'lucide-react';
@@ -390,6 +390,7 @@ const ResizeGrip = (props: { onPointerDown: (e: React.PointerEvent) => void; tit
 type WindowContext = 'main' | 'frame' | 'maximised';
 
 type WindowActions = {
+	recoverDrafts?: boolean;
 	onPatch: (id: string, patch: Partial<EditorLeaf>) => void;
 	onSplit: (id: string, direction: 'row' | 'column') => void;
 	onClose: (id: string) => void;
@@ -620,6 +621,7 @@ const EditorWindow = (props: {
 }) => {
 	const { leaf, actions, context, chromeless } = props;
 	const { getThingtime, thingtime } = useThingtime();
+	useThingDraftRecovery(leaf.path, !!actions.recoverDrafts);
 
 	// stable identity per path — Thingtime's memos key on this prop, and a
 	// fresh object per render would defeat them all (recompute + log spam on
@@ -1898,6 +1900,7 @@ export const EditorSplit = (props: EditorSplitProps) => {
 
 	const actions = React.useMemo<WindowActions>(
 		() => ({
+			recoverDrafts: !embedded,
 			onPatch: patchLeaf,
 			onSplit: splitById,
 			onClose: closeById,
@@ -1909,7 +1912,7 @@ export const EditorSplit = (props: EditorSplitProps) => {
 			onStartWindowDrag: startWindowDrag,
 			maximisedId
 		}),
-		[patchLeaf, splitById, closeById, minimiseById, toggleMaximise, popOutById, dockInById, moveFrameLayer, startWindowDrag, maximisedId]
+		[embedded, patchLeaf, splitById, closeById, minimiseById, toggleMaximise, popOutById, dockInById, moveFrameLayer, startWindowDrag, maximisedId]
 	);
 
 	const onRatio = React.useCallback(

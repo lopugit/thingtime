@@ -195,3 +195,23 @@ test('analyzer retries a lost moderationFlag without re-running the provider', a
 	assert.equal(flag?.filter?.thingtime, MODERATION_FLAG_THINGTIME);
 	assert.ok(state.updates.some((entry) => entry.update?.$unset?.['moderation.flagPending'] === ''));
 });
+
+test('a delayed image verdict cannot mutate a deleting file or its retained cancellation receipt', async () => {
+	for (const state of ['deleting', 'cancelled']) {
+		let current = readyImageDoc(), flags = 0;
+		const analyze = createAnalyzeReadyAttachment({
+			getThings: (async () => ({ findOne: async () => ({ ...current }), updateOne: async (filter: any, update: any) => {
+				if (filter.thingtime === MODERATION_FLAG_THINGTIME) { flags++; return { modifiedCount: 1 }; }
+				if (filter.attachmentState !== current.attachmentState) return { modifiedCount: 0 };
+				Object.assign(current, update.$set); return { modifiedCount: 1 };
+			} })) as any,
+			getS3: () => ({ signDownload: async () => ({ url: 'https://s3.example/signed' }) }) as any,
+			fetchBytes: async () => new Uint8Array([1]),
+			resolveProvider: async () => ({ kind: 'provider', provider: { name: 'test', model: 'test', analyzeImage: async () => {
+				current = { ...readyImageDoc(), attachmentState: state }; return { nsfw: true, tosViolation: false, categories: ['test'], reason: 'test verdict' };
+			} } }), now: () => NOW
+		});
+		await analyze('attachment-1');
+		assert.equal((current as any).moderation, undefined); assert.equal(flags, 0);
+	}
+});

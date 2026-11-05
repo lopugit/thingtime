@@ -51,10 +51,26 @@ const assertOwner = (scope: TimelineScope, event: TimelineEvent) => {
 	if (event.ownerId !== scope.ownerId) throw new Error('Timeline event belongs to another account');
 };
 const rowBytes = (event: TimelineEvent, receipt: TimelineReceipt | null, recoveryProof?: string) => new TextEncoder().encode(JSON.stringify({ event, receipt, ...(recoveryProof === undefined ? {} : { recoveryProof }) })).byteLength;
-const rowFor = (scope: string, event: TimelineEvent, receipt: TimelineReceipt | null, now: number, recoveryProof?: string): LocalTimelineRow => ({
+export const timelineLocalRow = (scope: string, event: TimelineEvent, receipt: TimelineReceipt | null, now: number, recoveryProof?: string): LocalTimelineRow => ({
 	scope, event, receipt, status: receipt ? 'accepted' : 'pending', accessedAt: now,
 	bytes: rowBytes(event, receipt, recoveryProof), ...(recoveryProof === undefined ? {} : { recoveryProof })
 });
+
+/** Parent and captured-component records must precede their dependent edits. */
+export function orderPendingTimelineRows(rows: LocalTimelineRow[]): LocalTimelineRow[] {
+		const pending = new Map(rows.map(row => [row.event.id, row.event]));
+		const ordered: TimelineEvent[] = []; const visiting = new Set<string>();
+		const visit = (event: TimelineEvent) => {
+			if (!pending.has(event.id)) return;
+			if (visiting.has(event.id)) throw new Error('Timeline pending graph contains a cycle');
+			visiting.add(event.id);
+			for (const parent of [...event.parentIds, ...event.dependencies.map(dependency => dependency.eventId)]) { const dependency = pending.get(parent); if (dependency) visit(dependency); }
+			visiting.delete(event.id); pending.delete(event.id); ordered.push(event);
+		};
+		for (const event of [...pending.values()]) visit(event);
+		const byId = new Map(rows.map(row => [row.event.id, row]));
+		return ordered.map(event => byId.get(event.id)!);
+}
 
 export class TimelineLocalStore {
 	readonly key: string;
@@ -72,7 +88,7 @@ export class TimelineLocalStore {
 	async enqueue(input: TimelineEvent, options: { pinDraft?: boolean } = {}): Promise<void> {
 		const event = parseTimelineEvent(input); assertOwner(this.scope, event);
 		if (event.source !== 'client' || event.actorId !== this.scope.ownerId) throw new Error('Only this account’s client events can be queued');
-		const row = rowFor(this.key, event, null, this.now());
+		const row = timelineLocalRow(this.key, event, null, this.now());
 		const draftKey = options.pinDraft ? JSON.stringify([event.thingId, event.branchId]) : null;
 		if (draftKey && event.mode !== 'draft') throw new Error('Only a draft can be pinned for recovery');
 		row.draftKey = draftKey;
@@ -93,7 +109,7 @@ export class TimelineLocalStore {
 			for (const { event, receipt } of entries) {
 				const existing = byId.get(event.id); assertIdentity(existing, event);
 				if (existing?.receipt && JSON.stringify(existing.receipt) !== JSON.stringify(receipt)) throw new Error('Timeline receipt identity changed');
-				const row = rowFor(this.key, event, receipt, this.now()); row.draftKey = index.find(item => item.id === event.id)?.draftKey ?? null; byId.set(event.id, row); put.set(event.id, row);
+				const row = timelineLocalRow(this.key, event, receipt, this.now()); row.draftKey = index.find(item => item.id === event.id)?.draftKey ?? null; byId.set(event.id, row); put.set(event.id, row);
 			}
 			return { put: [...put.values()], remove: [] };
 		});
@@ -105,7 +121,7 @@ export class TimelineLocalStore {
 		const recovery = parseActionOutcomeRecovery(input); const { event, proof } = recovery;
 		assertOwner(this.scope, event);
 		if (recovery.dataPlane !== this.scope.dataPlane) throw new Error('Action history belongs to another database');
-		const row = rowFor(this.key, event, null, this.now(), proof);
+		const row = timelineLocalRow(this.key, event, null, this.now(), proof);
 		await this.change([event.id], (index, rows) => {
 			const existing = rows.find(item => item.event.id === event.id); assertIdentity(existing, event);
 			if (existing) return { put: [], remove: [] };
@@ -131,18 +147,7 @@ export class TimelineLocalStore {
 	}
 	async pendingWrites(): Promise<LocalTimelineRow[]> {
 		const rows = await this.read({ status: 'pending' });
-		const pending = new Map(rows.map(row => [row.event.id, row.event]));
-		const ordered: TimelineEvent[] = []; const visiting = new Set<string>();
-		const visit = (event: TimelineEvent) => {
-			if (!pending.has(event.id)) return;
-			if (visiting.has(event.id)) throw new Error('Timeline pending graph contains a cycle');
-			visiting.add(event.id);
-			for (const parent of [...event.parentIds, ...event.dependencies.map(dependency => dependency.eventId)]) { const dependency = pending.get(parent); if (dependency) visit(dependency); }
-			visiting.delete(event.id); pending.delete(event.id); ordered.push(event);
-		};
-		for (const event of [...pending.values()]) visit(event);
-		const byId = new Map(rows.map(row => [row.event.id, row]));
-		return ordered.map(event => byId.get(event.id)!);
+		return orderPendingTimelineRows(rows);
 	}
 	async forThing(thingId: string | null): Promise<LocalTimelineRow[]> {
 		return this.forSelection(thingId === null ? undefined : { thingId });

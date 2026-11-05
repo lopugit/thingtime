@@ -131,7 +131,7 @@ export const NotificationsBell = () => {
     if (href) navigate(href);
   };
 
-  if (!user) return null;
+  if (!user || user.temporary) return <Link to="/notifications" aria-label="Notification history"><Center padding={2}><Bell size={20} /></Center></Link>;
 
   return (
     <Popover isOpen={open} onOpen={handleOpen} onClose={() => setOpen(false)} placement="bottom-end" isLazy>
@@ -195,7 +195,7 @@ export const NotificationsBell = () => {
               Notifications 🔔
             </Text>
             <Box flex={1} />
-            <Link to="/notifications" onClick={() => setOpen(false)}>
+            <Link to="/notifications?source=account" onClick={() => setOpen(false)}>
               <Text as="span" fontSize="xs" fontWeight={600} color="var(--tt-accent, #7c5cff)" _hover={{ textDecoration: 'underline' }}>
                 See all →
               </Text>

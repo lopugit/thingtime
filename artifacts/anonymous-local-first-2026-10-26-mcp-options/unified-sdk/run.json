@@ -1,0 +1,16 @@
+{
+  "startedAt": "2026-10-26T05:12:30.864Z",
+  "endedAt": "2026-10-26T05:13:52.703Z",
+  "code": 0,
+  "signal": null,
+  "timeout": false,
+  "log": "/tmp/thingtime-mcp-options-native.log",
+  "args": [
+    "--import",
+    "tsx",
+    "--test",
+    "--test-name-pattern=unified stdio agent",
+    "test/render-export.integration.test.ts"
+  ],
+  "boundary": "Normal MCP SDK client; per-render network-none container. Not desktop namespace acceptance."
+}

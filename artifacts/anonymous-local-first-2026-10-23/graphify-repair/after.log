@@ -1,0 +1,33 @@
+✔ source fingerprint excludes every graphify-out change (991.674761ms)
+✔ source fingerprint never changes the caller's staged index (72.325986ms)
+✔ immutable output variants coexist and richer valid output wins (57.154626ms)
+✔ bounded retention keeps the active snapshot and prunes superseded trees (72.026216ms)
+✔ snapshot retention defaults to one and rejects unsafe values (3.649283ms)
+✔ a large graph collapse requires an explicit force decision (37.299021ms)
+✔ byte-identical output deduplicates to one snapshot (50.913204ms)
+✔ query cache preserves snapshot reuse, portable copying, and pruning (402.517145ms)
+✔ snapshot validation rejects unknown entries and non-directory query caches (41.724691ms)
+✔ an existing artifact path rejects changed portable bytes (46.092046ms)
+✔ mutable semantic cache revisions become immutable coexisting variants (28.948648ms)
+✔ repository ignore policy publishes semantic CAS but not mutable cache (38.345117ms)
+✔ activation replaces a dangling compatibility alias (185.222839ms)
+✔ activation replaces an ignored regular compatibility output (59.68288ms)
+✔ a live repository writer serializes the next writer (611.215196ms)
+✔ independent branch snapshots merge without generated-file conflicts (96.646281ms)
+✔ a merge unions branch snapshots and pruning restores the retention bound (99.795302ms)
+✔ a delayed stale-lock reaper preserves a replacement owner (owner.json) (233.126981ms)
+✔ a delayed stale-lock reaper preserves a replacement owner (owner-00000000-0000-4000-8000-000000000000.json) (237.186147ms)
+✔ concurrent contenders never overlap their critical sections (311.326863ms)
+✔ an exited writer is reclaimed and callback failures release ownership (119.862715ms)
+✔ unknown ownership and a live legacy writer fail closed with a bounded timeout (1.354365ms)
+✔ a routed query holds its snapshot lock until the subprocess finishes (247.781023ms)
+✔ snapshot files are marked read-only so alias writes cannot mutate committed content (1.079488ms)
+✔ working copies of a read-only snapshot are writable again (0.99248ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4643.635782

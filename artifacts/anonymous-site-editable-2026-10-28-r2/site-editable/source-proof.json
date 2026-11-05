@@ -1,0 +1,7 @@
+{
+  "source": "remix/app/local-workspace/siteEditableBlocks.browser.test.ts",
+  "sourceSha256": "66f4535daef445d0e69cadc7b4564edd9e203e8b7c1aea1e8e958b99ec389984",
+  "compiledSha256": "adff080da6cd5ab7471a2d99fb20e43af7d0bc4c37699404687956a521bbeb30",
+  "compiler": "esbuild 0.28.1 transform loader ts format esm target node22",
+  "reason": "all same-origin API method/path capture and composed-control visible/unobscured hit targets"
+}

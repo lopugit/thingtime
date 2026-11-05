@@ -5,6 +5,7 @@ export const TIMELINE_NOTE_CACHE_LIMIT = 1280;
 export const TIMELINE_NOTE_PENDING_LIMIT = 128;
 export type QueuedNoteCommand = { command: TimelineNoteCommand; failure?: { status: number; message: string } | null };
 export type NoteLocalState = {
+	fences?: {scope:string; id:'notes'; revision:number}[];
 	notes: { scope: string; note: TimelineNote; accessedAt: number }[];
 	pending: (QueuedNoteCommand & { scope: string; queuedAt: number })[];
 };
@@ -26,12 +27,32 @@ export class TimelineNoteStore {
 		const check = (scope: string, ownerId?: string, at?: number) => {
 			if (scope !== this.key || (ownerId !== undefined && ownerId !== this.scope.ownerId) || !Number.isFinite(at)) throw new Error('Timeline note cache scope is damaged. Pending commands are preserved.');
 		};
+		const fences=input.fences??[];
+		if(fences.length>1 || fences.some(row=>row.scope!==this.key || row.id!=='notes' || !Number.isSafeInteger(row.revision) || row.revision<0)) throw new Error('Timeline note read fence is damaged.');
 		return {
+			fences,
 			notes: input.notes.map(row => { const note = parseTimelineNote(row.note); check(row.scope, note.ownerId, row.accessedAt); return { ...row, note }; }),
 			pending: input.pending.map(row => { check(row.scope, undefined, row.queuedAt); if (row.failure && (!DEFINITIVE.includes(row.failure.status) || typeof row.failure.message !== 'string' || row.failure.message.length > 512)) throw new Error('Invalid note failure record'); return { ...row, command: parseTimelineNoteCommand(row.command) }; })
 		};
 	}
-	private change(update: (state: NoteLocalState) => NoteLocalState) { return this.backend.changeNoteState(this.key, state => this.validate(update(this.validate(state)))); }
+	private change(update: (state: NoteLocalState) => NoteLocalState) {
+  return this.backend.changeNoteState(this.key, input => {
+   const state=this.validate(input),next=update(state);if(next===state)return state;
+   const revision=(state.fences?.[0]?.revision??0)+1;
+   return this.validate({...next,fences:[{scope:this.key,id:'notes',revision}]});
+  });
+ }
+ async revision() { return this.validate(await this.backend.readNoteState(this.key)).fences?.[0]?.revision??0; }
+ /** Recheck the live queue immediately before sending; a captured pass is not
+  * permission to send an add already acknowledged by another tab, or remove
+  * a note whose add is still waiting/refused. */
+ async ready(input:TimelineNoteCommand) {
+  const command=parseTimelineNoteCommand(input),state=this.validate(await this.backend.readNoteState(this.key));
+  const own=state.pending.find(row=>row.command.operationId===command.operationId);
+  if(!own || own.failure)return false;
+  if(JSON.stringify(own.command)!==JSON.stringify(command))throw new Error('Note command identity changed');
+  return command.command!=='remove-note'||!state.pending.some(row=>noteCommand(row.command)&&timelineNoteId(row.command.operationId)===command.noteId);
+ }
 	async enqueue(input: TimelineNoteCommand): Promise<void> {
 		const command = parseTimelineNoteCommand(input);
 		await this.change(state => {
@@ -57,7 +78,9 @@ export class TimelineNoteStore {
 	async dismissRejected(operationId: string) {
 		await this.change(state => {
 			if (state.pending.some(row => row.command.operationId === operationId && !row.failure)) throw new Error('Sync this command to check its result before dismissing it');
-			return { ...state, pending: state.pending.filter(row => row.command.operationId !== operationId) };
+			const removed=state.pending.find(row=>row.command.operationId===operationId)?.command;
+			const noteId=removed&&noteCommand(removed)?timelineNoteId(removed.operationId):null;
+			return { ...state, pending: state.pending.filter(row => row.command.operationId !== operationId && !(noteId && row.command.command==='remove-note' && row.command.noteId===noteId)) };
 		});
 	}
 	async forEvents(eventIds: string[]): Promise<Map<string, TimelineNote[]>> {
@@ -70,11 +93,13 @@ export class TimelineNoteStore {
 	/** `operationId` acknowledges one queued add/explain command with its exact
 	 * note. `events` makes the server authoritative for those events: cached
 	 * notes they no longer carry are dropped. Reads never consume a queued push. */
-	async accept(inputs: TimelineNote[], options: { operationId?: string; events?: string[] } = {}): Promise<void> {
+	async accept(inputs: TimelineNote[], options: { operationId?: string; events?: string[]; readRevision?:number } = {}): Promise<void> {
 		const notes = inputs.map(parseTimelineNote);
 		if (notes.length > TIMELINE_PAGE_SIZE * TIMELINE_NOTES_PER_EVENT || notes.some(note => note.ownerId !== this.scope.ownerId)) throw new Error('Invalid note response scope');
 		await this.change(state => {
+			if(options.readRevision!==undefined && options.readRevision!==(state.fences?.[0]?.revision??0))return state;
 			const command = options.operationId ? state.pending.find(row => row.command.operationId === options.operationId)?.command : null;
+			if(options.operationId && !command)return state;
 			if (command && (!noteCommand(command) || notes.length !== 1 || notes[0].id !== timelineNoteId(command.operationId) || notes[0].eventId !== command.eventId || notes[0].thingId !== command.thingId || notes[0].author !== (command.command === 'add-note' ? 'owner' : 'lopu') || (command.command === 'add-note' && notes[0].text !== command.text))) throw new Error('Server acknowledged a different note command');
 			const cached = new Map(state.notes.map(row => [row.note.id, row]));
 			const events = options.events ? new Set(options.events) : null; const ids = new Set(notes.map(note => note.id));
@@ -85,7 +110,7 @@ export class TimelineNoteStore {
 				cached.set(note.id, { scope: this.key, note, accessedAt: this.now() });
 			}
 			const kept = [...cached.values()].sort((a, b) => b.accessedAt - a.accessedAt || b.note.createdAt.localeCompare(a.note.createdAt)).slice(0, TIMELINE_NOTE_CACHE_LIMIT);
-			return { notes: kept, pending: state.pending.filter(row => row.command.operationId !== options.operationId) };
+			return { ...state, notes: kept, pending: state.pending.filter(row => row.command.operationId !== options.operationId) };
 		});
 	}
 	/** A removal acknowledgment (or an authoritative read without the note)
@@ -96,7 +121,7 @@ export class TimelineNoteStore {
 			const command = operationId ? state.pending.find(row => row.command.operationId === operationId)?.command : null;
 			if (command && (command.command !== 'remove-note' || noteIds.length !== 1 || noteIds[0] !== command.noteId)) throw new Error('Server acknowledged a different note command');
 			const dropped = new Set(noteIds);
-			return { notes: state.notes.filter(row => !dropped.has(row.note.id)), pending: state.pending.filter(row => row.command.operationId !== operationId) };
+			return { ...state, notes: state.notes.filter(row => !dropped.has(row.note.id)), pending: state.pending.filter(row => row.command.operationId !== operationId) };
 		});
 	}
 	/** Dropping downloaded notes never discards queued work. */
@@ -117,7 +142,8 @@ export function historyNoteViews(ownerId: string, rows: { event: { id: string } 
 		const { command } = row;
 		if (!noteCommand(command) || !loaded.has(command.eventId) || accepted.has(timelineNoteId(command.operationId))) continue;
 		const note: TimelineNote = { formatVersion: 1, id: timelineNoteId(command.operationId), ownerId, eventId: command.eventId, thingId: command.thingId, author: command.command === 'add-note' ? 'owner' : 'lopu', text: command.command === 'add-note' ? command.text : 'Asking Lopu…', createdAt: new Date(row.queuedAt).toISOString() };
-		add({ note, status: 'pending', failure: row.failure ?? null });
+		const removal=queued.find(item=>item.command.command==='remove-note'&&item.command.noteId===note.id);
+		add({ note, status: removal?'removing':'pending', failure: row.failure ?? removal?.failure ?? null, operationId:row.failure?command.operationId:removal?.command.operationId??command.operationId });
 	}
 	for (const [eventId, list] of views) views.set(eventId, list.sort((a, b) => a.note.createdAt.localeCompare(b.note.createdAt) || a.note.id.localeCompare(b.note.id)));
 	return views;

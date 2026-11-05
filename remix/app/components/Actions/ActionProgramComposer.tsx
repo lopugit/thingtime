@@ -2,21 +2,23 @@ import React from 'react';
 import { Box, Button, Flex, Select, Text, Textarea } from '@chakra-ui/react';
 import { useNavigate } from 'react-router';
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { sanitizeActionCrystal } from '~/schemas/registry';
 import { DefinitionValueEditor } from '../Builder/DefinitionEditor/DefinitionValueEditor';
 import { deriveRequiredCapabilities } from './actionInspect';
 import { CARD_STYLES } from '~/theme/card';
 
 export function ActionProgramComposer(props: { initial: Record<string, any>; onClose: () => void; onCreated?: (id: string) => void }) {
- const user = useCurrentUser();
- return <ProgramEditor key={user?.id || 'anonymous'} {...props} />;
+ const scope = useWorkspaceScope();
+ return <ProgramEditor key={scope} {...props} />;
 }
 function ProgramEditor({ initial, onClose, onCreated }: {
  initial: Record<string, any>; onClose: () => void; onCreated?: (id: string) => void;
 }) {
- const api = useApi(); const user = useCurrentUser(); const navigate = useNavigate();
- const identity = React.useRef(user?.id); identity.current = user?.id;
+ const api = useApi(); const user = useWorkspaceUser(); const navigate = useNavigate();
+ const scope = useWorkspaceScope();
+ const identity = React.useRef(scope); identity.current = scope;
  const mounted = React.useRef(true);
  React.useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
  const [source, setSource] = React.useState(() => JSON.stringify(initial, null, 2));
@@ -46,7 +48,7 @@ function ProgramEditor({ initial, onClose, onCreated }: {
   pending.current = true; setSaving(true); setError('');
   const actor = identity.current;
   try {
-   const response = await api.v1.things.create({ thingtime: ['action'], crystal: program, acl: ['tt:user'], expectedActor: actor });
+   const response = await api.v1.things.create({ thingtime: ['action'], crystal: program, acl: ['tt:user'], expectedActor: user?.localOnly ? undefined : user?.id });
    if (!response?.ok || !response.thing?.id) throw new Error(response?.error || 'Could not create the Action');
    if (!mounted.current || identity.current !== actor) return;
    onCreated?.(response.thing.id); navigate(`/actions/${encodeURIComponent(response.thing.id)}`);
@@ -57,10 +59,10 @@ function ProgramEditor({ initial, onClose, onCreated }: {
   <Flex justify="space-between" wrap="wrap" gap={2} mb={4}><Text fontWeight="700">New Action · full program</Text><Button size="sm" onClick={onClose} isDisabled={saving}>Close</Button></Flex>
   <Flex gap={2} mb={4} wrap="wrap">
    <Button size="sm" onClick={() => setMode('fields')} isDisabled={!program}>Fields</Button><Button size="sm" onClick={() => setMode('source')}>Source</Button>
-   <Select size="sm" width="auto" value={program?.runtime || 'server'} aria-label="Action runtime" isDisabled={!program} onChange={(event) => setProgram({ ...program, runtime: event.target.value })}><option value="server">Server</option><option value="browser">Browser</option></Select>
+   <Select size="sm" width="auto" value={program?.runtime || 'server'} aria-label="Action runtime" isDisabled={!program} onChange={(event) => setProgram({ ...program, runtime: event.target.value })}><option value="server">{user?.localOnly ? 'Local data' : 'Server'}</option><option value="browser">Browser</option></Select>
   </Flex>
   {program?.runtime === 'browser' && program?.steps?.some?.((step: any) => typeof step?.op === 'string' && step.op.startsWith('things.')) ? <Text role="alert" fontSize="sm" mb={3}>Replace server Thing steps with request steps before saving a browser program.</Text> : null}
-  <Text fontSize="sm" mb={3}>Edit inputs, steps, expressions and limits. Request steps use your current Thingtime session and the API’s existing permissions.</Text>
+  <Text fontSize="sm" mb={3}>{user?.localOnly ? 'Edit inputs, steps, expressions and limits. Local Actions use only this device workspace. Request steps need a supported local service.' : 'Edit inputs, steps, expressions and limits. Request steps use your current Thingtime session and the API’s existing permissions.'}</Text>
   {mode === 'fields' && program ? <DefinitionValueEditor value={program} onChange={setProgram} /> : <Textarea aria-label="Action program source" rows={20} value={source} onChange={(event) => { setSource(event.target.value); setError(''); }} fontFamily="mono" fontSize="sm" />}
   <Flex gap={2} my={4} wrap="wrap">
    <Button size="sm" isDisabled={!program} onClick={() => addStep('http.request')}>Add request</Button>

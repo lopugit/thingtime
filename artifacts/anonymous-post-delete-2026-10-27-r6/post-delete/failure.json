@@ -1,0 +1,148 @@
+{
+  "phase": "account",
+  "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n0 !== 1\n",
+  "body": "🦄\ndelete-bcf4b8fa\n🌈\n1\n🦄\n\n1 change saved on this device. Waiting to sync with your account.\n\nReview sync\n\n1 draft change saved on this device. Syncing drafts to your private account. Posting is independent.\n\nReview draft sync\nTHINGTIME · POST 📌\nPost 📌\nD\ndelete-bcf4b8fa\n@delete-bcf4b8fa · \njust now\n🔒\nonly the author can see this post\n\nSynthetic owner post deleted offline.\n\n0\nPost as\ndelete-bcf4b8fa\n\nDraft saved on this device ✓\n\nRecover earlier comment draft\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 81ms\n\nMongoDB: connected (10ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nDELETE-BCF4B8FA\n\nProfile\n\nLog out\n\n✉️ email unverified\n\n🦄",
+  "checks": [
+    "anonymous: offline delete and cold reload",
+    "anonymous: exact post/comment/media/bytes removed",
+    "anonymous: no HTTP mutation"
+  ],
+  "bounds": [
+    {
+      "phase": "anonymous",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "phase": "anonymous",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "phase": "anonymous",
+      "width": 320,
+      "scrollWidth": 320
+    }
+  ],
+  "mutations": [
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "post"
+        ],
+        "crystal": {
+          "type": "text",
+          "text": "Synthetic owner post deleted offline."
+        },
+        "visibility": "private"
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "author": "delete-bcf4b8fa",
+        "thingtime": "post",
+        "sort": "newest",
+        "limit": 18,
+        "conditions": [
+          {
+            "field": "thingtime",
+            "op": "ne",
+            "value": "comment"
+          },
+          {
+            "mode": "any",
+            "conditions": [
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2025-10-27T00:00:00.000Z",
+                  "2025-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2024-10-27T00:00:00.000Z",
+                  "2024-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2023-10-27T00:00:00.000Z",
+                  "2023-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2022-10-27T00:00:00.000Z",
+                  "2022-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2021-10-27T00:00:00.000Z",
+                  "2021-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2020-10-27T00:00:00.000Z",
+                  "2020-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2019-10-27T00:00:00.000Z",
+                  "2019-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2018-10-27T00:00:00.000Z",
+                  "2018-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2017-10-27T00:00:00.000Z",
+                  "2017-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2016-10-27T00:00:00.000Z",
+                  "2016-10-27T23:59:59.999Z"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "errors": []
+}

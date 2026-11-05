@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Button, Flex, Heading, Input, SimpleGrid, Text, Textarea } from '@chakra-ui/react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useApi } from '~/hooks/useApi';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { DEFAULT_ALGORITHMS } from '~/components/Feed/defaultAlgorithms';
@@ -14,7 +15,9 @@ export default function Algorithms() {
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
-	const user = useCurrentUser();
+	const accountUser = useCurrentUser();
+	const user = useWorkspaceUser();
+	const localOnly = !!user?.localOnly;
 	const lopu = useLopu();
 	const navigate = useNavigate();
 	const [params, setParams] = useSearchParams();
@@ -79,7 +82,7 @@ export default function Algorithms() {
 		void loadMine();
 	}, [user?.id, loadMine]);
 	const create = async (branch?: Entry) => {
-		if (!user) {
+		if (!user || (branch && !accountUser)) {
 			navigate('/login');
 			return;
 		}
@@ -92,7 +95,7 @@ export default function Algorithms() {
 			setEditing(false);
 			setName('');
 			setDescription('');
-			if (!branch && publish) {
+			if (!localOnly && !branch && publish) {
 				try {
 					await apiRef.current.v1.algorithms.update({ id: response.algorithm.id, listed: true });
 				} catch {
@@ -108,7 +111,7 @@ export default function Algorithms() {
 				status: 'success'
 			});
 		} catch (err: any) {
-			lopu({ title: err?.error || 'Could not create algorithm', status: 'error' });
+			lopu({ title: err?.error || err?.message || 'Could not create algorithm', status: 'error' });
 		} finally {
 			setBusy(null);
 		}
@@ -137,7 +140,7 @@ export default function Algorithms() {
 			await loadMine();
 			await load();
 		} catch (err: any) {
-			lopu({ title: err?.error || 'Could not update algorithm', status: 'error' });
+			lopu({ title: err?.error || err?.message || 'Could not update algorithm', status: 'error' });
 		} finally {
 			setBusy(null);
 		}
@@ -194,14 +197,14 @@ export default function Algorithms() {
 							Starts with a fresh perspective and learns from the posts you read and engage with. Your description helps people discover it; it is not
 							an instruction to the ranking engine.
 						</Text>
-						<label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+						{localOnly ? <Text fontSize="sm" mb={3}>Saved and trained on this device. Nothing is uploaded.</Text> : <><label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
 							<input type="checkbox" checked={publish} onChange={(event) => setPublish(event.target.checked)} />
 							Publish to directory
 						</label>
 						<Text fontSize="xs" mt={2} mb={3}>
 							Publishing or sharing lets others copy your learned interests, including author and topic preferences. Copies remain independent even if
 							you stop sharing.
-						</Text>
+						</Text></>}
 						<Button type="submit" isDisabled={!name.trim() || !!busy} isLoading={busy === 'create'}>
 							Create
 						</Button>
@@ -241,8 +244,7 @@ export default function Algorithms() {
 							Your algorithms
 						</Heading>
 						<Text fontSize="sm" mb={3}>
-							Share links allow copying your learned profile. Publishing also makes the name, description and training count searchable. Unpublishing
-							keeps existing share links working; turn off sharing in Settings to revoke them.
+							{localOnly ? 'Saved on this device. Manage, branch and transfer your algorithms in Settings → Things.' : 'Share links allow copying your learned profile. Publishing also makes its name, description and training count searchable. Turn off sharing in Settings to revoke links.'}
 						</Text>
 						<Flex direction="column" gap={3}>
 							{mine.map((item) => (
@@ -252,23 +254,23 @@ export default function Algorithms() {
 									</Heading>
 									<Text my={2} fontSize="sm">
 										{item.description || 'Learns as you scroll'} · {item.eventCount} signals ·{' '}
-										{item.listed ? 'Published' : item.shared ? 'Link only' : 'Private'}
+										{localOnly ? 'On this device' : item.listed ? 'Published' : item.shared ? 'Link only' : 'Private'}
 									</Text>
 									<Flex gap={2} wrap="wrap">
 										<Button size="sm" isDisabled={!!busy} onClick={() => update(item, 'use')}>
 											Use in feed
 										</Button>
-										<Button size="sm" isDisabled={!!busy} onClick={() => update(item, 'share')}>
+										{!localOnly && <><Button size="sm" isDisabled={!!busy} onClick={() => update(item, 'share')}>
 											Share link
 										</Button>
 										<Button size="sm" isDisabled={!!busy} onClick={() => update(item, item.listed ? 'unpublish' : 'publish')}>
 											{item.listed ? 'Unpublish' : 'Publish to directory'}
-										</Button>
+										</Button></>}
 									</Flex>
 								</Box>
 							))}
 						</Flex>
-						{!mine.length && <Text fontSize="sm">Create your first algorithm or branch a community algorithm below.</Text>}
+						{!mine.length && <Text fontSize="sm">Create your first algorithm, or import one in Settings → Things.</Text>}
 					</Box>
 				)}
 				<Box>

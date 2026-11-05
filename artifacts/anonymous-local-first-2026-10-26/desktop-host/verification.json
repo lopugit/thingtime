@@ -1,0 +1,110 @@
+{
+  "host": "Current Codex desktop chat",
+  "server": "thingtime-drafts",
+  "tool": "thingtime_render_and_export",
+  "metadata": {
+    "ok": true,
+    "hash": "a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c",
+    "diagnostics": [
+      {
+        "level": "info",
+        "code": "SCHEMA_NORMALIZED",
+        "message": "Canonical schema normalization applied to: affirmation-page, affirmation-card"
+      },
+      {
+        "level": "info",
+        "code": "VALIDATED",
+        "message": "Canonical schema validated; dependencies supplied in bundle; no persistence or network assets."
+      }
+    ],
+    "root": "affirmation-page",
+    "rendererHash": "7e4153b5178a1c831556b48eda5cd8100688e5418b768fe74a271b73cf658bc8",
+    "browserVersion": "149.0.7827.0",
+    "viewports": [
+      {
+        "width": 1440,
+        "height": 1000,
+        "deviceScaleFactor": 1,
+        "crop": {
+          "x": 520,
+          "y": 220,
+          "width": 400,
+          "height": 560
+        },
+        "text": "I don't compare\nmyself to others\nbecause I am\nnot meant to be\na copy of anyone else.\n\nI was born to be me,\nan original,\none-of-a-kind.\n\nI am happy to be me.",
+        "nodeCount": 3,
+        "overflow": false
+      },
+      {
+        "width": 390,
+        "height": 844,
+        "deviceScaleFactor": 1,
+        "crop": {
+          "x": 24,
+          "y": 182.59375,
+          "width": 342,
+          "height": 478.796875
+        },
+        "text": "I don't compare\nmyself to others\nbecause I am\nnot meant to be\na copy of anyone else.\n\nI was born to be me,\nan original,\none-of-a-kind.\n\nI am happy to be me.",
+        "nodeCount": 3,
+        "overflow": false
+      },
+      {
+        "width": 320,
+        "height": 844,
+        "deviceScaleFactor": 1,
+        "crop": {
+          "x": 24,
+          "y": 231.59375,
+          "width": 272,
+          "height": 380.796875
+        },
+        "text": "I don't compare\nmyself to others\nbecause I am\nnot meant to be\na copy of anyone else.\n\nI was born to be me,\nan original,\none-of-a-kind.\n\nI am happy to be me.",
+        "nodeCount": 3,
+        "overflow": false
+      }
+    ],
+    "artifacts": [
+      "thingtime-draft.json",
+      "viewport-1440x1000.png",
+      "card.png",
+      "viewport-390x844.png",
+      "viewport-320x844.png"
+    ]
+  },
+  "artifacts": [
+    {
+      "name": "thingtime-draft.json",
+      "bytes": 2031,
+      "sha256": "a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c"
+    },
+    {
+      "name": "viewport-1440x1000.png",
+      "bytes": 116094,
+      "sha256": "37130b20fdd314190ee1e1d57123fcaa6c771d69283686d3a1f39c456851c26c",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "name": "card.png",
+      "bytes": 96582,
+      "sha256": "5a94c5b9f6a6d9fce3bfc01f6911dea28d36a9ffc2067548852c45f62de0946c",
+      "width": 400,
+      "height": 560
+    },
+    {
+      "name": "viewport-390x844.png",
+      "bytes": 79632,
+      "sha256": "a69f0becd48ecfed25d10ddec052cf8020bf24046062512ac14da978453335bf",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "name": "viewport-320x844.png",
+      "bytes": 57347,
+      "sha256": "251fc49417d9aa728e4e46db593659e2a035c393dd92eaf94ad95573c381e353",
+      "width": 320,
+      "height": 844
+    }
+  ]
+}

@@ -1,0 +1,158 @@
+{
+  "label": "reconnected-suite-conflict",
+  "width": 390,
+  "attempt": 0,
+  "ready": {
+    "stable": true,
+    "observations": [
+      {
+        "height": 5140,
+        "reviewPanes": 3,
+        "componentReady": true,
+        "notFound": false
+      },
+      {
+        "height": 5147,
+        "reviewPanes": 3,
+        "componentReady": true,
+        "notFound": false
+      },
+      {
+        "height": 5148,
+        "reviewPanes": 3,
+        "componentReady": true,
+        "notFound": false
+      }
+    ]
+  },
+  "skippedHidden": 3,
+  "roots": [
+    {
+      "marker": "0",
+      "tag": "HTML",
+      "reviewPane": false,
+      "kind": "page",
+      "clientHeight": 844,
+      "scrollHeight": 5148,
+      "maxScroll": 4304,
+      "rect": {
+        "width": 390,
+        "height": 5147.578125
+      },
+      "points": [
+        0,
+        614.8571428571429,
+        1229.7142857142858,
+        1844.5714285714287,
+        2459.4285714285716,
+        3074.285714285714,
+        3689.1428571428573,
+        4304
+      ],
+      "observed": [
+        0,
+        615,
+        1230,
+        1845,
+        2459,
+        3074,
+        3689,
+        4304
+      ]
+    },
+    {
+      "marker": "1",
+      "tag": "PRE",
+      "reviewPane": true,
+      "kind": "pane",
+      "clientHeight": 240,
+      "scrollHeight": 3654,
+      "maxScroll": 3414,
+      "rect": {
+        "width": 324,
+        "height": 240
+      },
+      "points": [
+        0,
+        1707,
+        3414
+      ],
+      "observed": [
+        0,
+        1707,
+        3414
+      ]
+    },
+    {
+      "marker": "2",
+      "tag": "PRE",
+      "reviewPane": true,
+      "kind": "pane",
+      "clientHeight": 240,
+      "scrollHeight": 3618,
+      "maxScroll": 3378,
+      "rect": {
+        "width": 324,
+        "height": 240
+      },
+      "points": [
+        0,
+        1689,
+        3378
+      ],
+      "observed": [
+        0,
+        1689,
+        3378
+      ]
+    },
+    {
+      "marker": "3",
+      "tag": "PRE",
+      "reviewPane": true,
+      "kind": "pane",
+      "clientHeight": 240,
+      "scrollHeight": 3582,
+      "maxScroll": 3342,
+      "rect": {
+        "width": 324,
+        "height": 240
+      },
+      "points": [
+        0,
+        1671,
+        3342
+      ],
+      "observed": [
+        0,
+        1671,
+        3342
+      ]
+    },
+    {
+      "marker": "4",
+      "tag": "PRE",
+      "reviewPane": false,
+      "kind": "pane",
+      "clientHeight": 418,
+      "scrollHeight": 3060,
+      "maxScroll": 2642,
+      "rect": {
+        "width": 358,
+        "height": 420
+      },
+      "points": [
+        0,
+        1321,
+        2642
+      ],
+      "observed": [
+        0,
+        1321,
+        2642
+      ]
+    }
+  ],
+  "phase": "complete",
+  "completedRoots": 5
+}

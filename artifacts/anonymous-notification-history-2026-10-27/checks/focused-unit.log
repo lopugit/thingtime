@@ -1,0 +1,35 @@
+✔ Lopu saves anonymous/offline messages despite blocked cross-tab hints, bounds UTF8, and rejects stale callers (42.763875ms)
+✔ history transport requires live confirmation and retires acknowledgements after an account switch (15.486833ms)
+✔ a delayed local URL echo preserves newer typing and commits it next (1.898417ms)
+✔ back/forward and external replacement cancel a stale pending search (0.371166ms)
+✔ POP to a previously written location is external even if its token is pending (0.308083ms)
+✔ filter replacements preserve typing; reset clears it even when committed q is empty (0.363ms)
+✔ debounced commits preserve current nonquery URL fields and remove blank searches (0.447333ms)
+✔ acknowledgements without newer edits normalize displayed draft text (0.148625ms)
+✔ persisted refusal gates a fresh scope without blocking other owners, origins or planes (1.156917ms)
+✔ new refusals in this context or another tab fence previously started responses (0.361ms)
+✔ unavailable, blocked and silently failing marker storage fail closed (0.330584ms)
+✔ same-context stale refusals notify only their scope and tolerate failed listeners and cleanup (0.261042ms)
+✔ downloaded social pages survive cold reload, preserve exact filters/cursors, and never invent unfetched results (32.238208ms)
+✔ permission refusal retires cached remote projection while independent pending local messages survive (22.286541ms)
+✔ late remote reads cannot persist or project after account retirement (0.687333ms)
+✔ failed purge preserves the original refusal and blocks fresh adapters until fresh authorization (6.856292ms)
+✔ unavailable marker storage blocks cached reads while authorized live reads remain usable (2.970917ms)
+✔ a delayed authorized success cannot reopen history after a newer refusal (6.629917ms)
+✔ anonymous history survives reopening, is redacted before persistence, and never invokes a transport (32.25175ms)
+✔ immutable events preserve distinct equal messages and reject invalid, oversized or foreign account content (12.906417ms)
+✔ lost response retries reuse the same canonical server identity and only one tab holds a live claim (9.378917ms)
+✔ a failed acknowledgement never deletes the local message and bounded retries surface a sync failure (12.953333ms)
+✔ permanent refusal remains local and a lost account confirmation retires without discarding the pending event (7.34025ms)
+✔ stable pagination handles equal timestamps, scopes and filters without dropping or duplicating rows (15.410125ms)
+✔ workspace retirement aborts writes before persistence (1.1565ms)
+✔ redaction expansion remains inside canonical server field and byte limits (27.536667ms)
+✔ explicit retry survives cold reload and preserves event identity after failed reconnect without stealing a live tab claim (8.733916ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 27
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 817.622542

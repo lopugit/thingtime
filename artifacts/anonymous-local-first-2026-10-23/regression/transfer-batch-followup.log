@@ -1,0 +1,16 @@
+✔ reads portable JSON regardless of browser MIME and rejects ordinary JSON (44.107368ms)
+✔ detects ZIP bytes and verifies complete attached content (149.123231ms)
+✔ aborted selection does not publish a stale parsed transfer (1.025341ms)
+✔ multi-file selection keeps overlapping identities and different bytes independent (52.541199ms)
+✔ batch selection validates every file before returning and honors cancellation (6.243434ms)
+✔ more than twelve transfer files remain independent (7.805881ms)
+✔ separate transfers do not consume one combined Thing budget (83.288253ms)
+✔ an oversized individual transfer is still refused inside a batch (4.322123ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1333.52014

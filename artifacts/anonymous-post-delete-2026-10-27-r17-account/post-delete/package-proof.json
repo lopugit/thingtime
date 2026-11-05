@@ -1,0 +1,123 @@
+{
+  "archive": "/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/tmp/continuation/post-delete-app.tar.gz",
+  "sha256": "8ded4a5309bc254a2f6aaa432c3102a850288f2acafe106db4d4723a75085f22",
+  "bytes": 67972906,
+  "entries": 2135,
+  "source": "Fresh sanitized complete client/server build; no account configuration",
+  "checks": [
+    {
+      "file": "remix/app/local-workspace/accountReadRevocation.ts",
+      "map": "actions-CFn03guq.js.map",
+      "equal": true,
+      "sha256": "f681521f0c8e4b4fa6498b242ad950dc9eef71f8fcff19ac742a1ed9691b0b00"
+    },
+    {
+      "file": "remix/app/local-workspace/accountSync.ts",
+      "map": "actions-CFn03guq.js.map",
+      "equal": true,
+      "sha256": "94c9bea3594080ecf5b3beabb256ce374b8faa070aa1dc2440eea96f8060bb62"
+    },
+    {
+      "file": "remix/app/hooks/urlSearchDraft.ts",
+      "map": "notifications-wIPfhTkO.js.map",
+      "equal": true,
+      "sha256": "b7cf7aad96f889e947b494a385c977c786b1f1ce4e34ca64668ed9386a03ab2e"
+    },
+    {
+      "file": "remix/app/hooks/useDebouncedSearchDraft.ts",
+      "map": "notifications-wIPfhTkO.js.map",
+      "equal": true,
+      "sha256": "a5a04a7933d5b7b30dd2b09048377ba5dab6c42a002a7d76ad7312e7b73a4dec"
+    },
+    {
+      "file": "remix/app/local-workspace/notificationHistoryAccess.ts",
+      "map": "notifications-wIPfhTkO.js.map",
+      "equal": true,
+      "sha256": "d99fbaec59c524f35b51cb8aca2a2cbf3ae51b859727215d01fce6cd7d9bc546"
+    },
+    {
+      "file": "remix/app/local-workspace/notificationPages.ts",
+      "map": "notifications-wIPfhTkO.js.map",
+      "equal": true,
+      "sha256": "d164645ffc2c5be2dafc59b6b1ac8442356cef78048a4af90274738d4e8a2114"
+    },
+    {
+      "file": "remix/app/components/Notifications/NotificationsPage.tsx",
+      "map": "notifications-wIPfhTkO.js.map",
+      "equal": true,
+      "sha256": "8787856bec865699dd5acb477990d68331d0f86af0099ef56996168052c4c67b"
+    },
+    {
+      "file": "remix/app/local-workspace/runtime.client.ts",
+      "map": "runtime.client-gX05s3hj.js.map",
+      "equal": true,
+      "sha256": "05b5a9b084502131a86b119ceb4ce7c75499f263a2ff90c56e0d7db54fe96d9a"
+    },
+    {
+      "file": "remix/app/components/Lopu/useLopuLauncherClearance.ts",
+      "map": "index-BXWpe20-.js.map",
+      "equal": true,
+      "sha256": "1b16c76b2fd10ec19f7f3fe73f75098704487208c86b120c26b7a63a97d1b651"
+    },
+    {
+      "file": "remix/app/components/DevKit/DevKit.tsx",
+      "map": "index-BXWpe20-.js.map",
+      "equal": true,
+      "sha256": "c5fa5de29d049fc2ae31fa07d048509bc8005f65906ad90cc3bbc58ade0059bb"
+    },
+    {
+      "file": "remix/app/components/Feed/PostThingMenu.tsx",
+      "map": "ThingDrafts-VNwuiEKl.js.map",
+      "equal": true,
+      "sha256": "b89e680b7f079d42a72664654157d66c574ec7349de20326a83af861be294bb6"
+    },
+    {
+      "file": "remix/app/components/Feed/PostCard.tsx",
+      "map": "ThingDrafts-VNwuiEKl.js.map",
+      "equal": true,
+      "sha256": "46410d80c3e9dd53df3229527a8482d34a36ac207fbd6cd1ca17ca0a8e630b6c"
+    },
+    {
+      "file": "remix/app/local-workspace/notifications.ts",
+      "map": "aiTasks.client-uSKaOGJT.js.map",
+      "equal": true,
+      "sha256": "cb6383c7c3f05edbf951964d491fa049829579884205777b45fc7f46d81e000e"
+    },
+    {
+      "file": "remix/app/local-workspace/notifications.client.ts",
+      "map": "aiTasks.client-uSKaOGJT.js.map",
+      "equal": true,
+      "sha256": "91a398c1cdd0072e3dc5fe06e69c90240246e4110669c455bbfdfaa52ad11637"
+    },
+    {
+      "file": "remix/app/local-workspace/things.ts",
+      "map": "things-C1FtEmjK.js.map",
+      "equal": true,
+      "sha256": "e6f06d7c55955e9f1d2168f5d046d2857e70a55b45e8601c16de6ec0e19f3622"
+    },
+    {
+      "file": "remix/app/local-workspace/storageStatus.client.ts",
+      "map": "useLopu-DaAwAdyn.js.map",
+      "equal": true,
+      "sha256": "c049d227b4aa1ce629ee53ac5fd33b7b7fa3383451c64de76144b1459c7b087a"
+    },
+    {
+      "file": "remix/app/components/Lopu/notificationHistory.client.ts",
+      "map": "useLopu-DaAwAdyn.js.map",
+      "equal": true,
+      "sha256": "8d43e158d5bf45b6c6e4eab7fcfaec85c02ebc3ab9cf343a52940fea340df0b2"
+    },
+    {
+      "file": "remix/app/local-workspace/accountTransport.client.ts",
+      "map": "localCache-C58ilt3c.js.map",
+      "equal": true,
+      "sha256": "7c4515d54d71050c2a55e7376c698510ff23d68388c19075824196e40bc10d7c"
+    },
+    {
+      "file": "remix/app/local-workspace/accountApi.client.ts",
+      "map": "accountApi.client-DUaPm718.js.map",
+      "equal": true,
+      "sha256": "c7188f9cedc6dc43f6e4e9ae5e68ec6f3e01274bdeb5488137ea96034812e775"
+    }
+  ]
+}

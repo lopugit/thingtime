@@ -1,6 +1,8 @@
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { draftRequest } from '~/drafts/draftClient';
+import { createPostTemplateSession } from '~/drafts/postTemplateSession';
+import { workspaceStorageBinding, workspaceStorageIdentity, subscribeWorkspaceStorage } from '~/local-workspace/storageStatus.client';
 import React from 'react';
 import { PersistedThingMenu } from '~/components/Thingtime/ContextMenu/PersistedThingMenu';
 import type { ThingContextSection } from '~/components/Thingtime/ContextMenu/contextMenuModel';
@@ -11,7 +13,7 @@ export type PostArchiveTarget = { id: string; fileCount: number; noun: ArchiveNo
 
 // A post contributes its schema-specific actions to the parent Thing menu.
 // Existing writers/moderation dialogs stay the authority for these actions.
-export function PostThingMenu({ post, mediaThing, isOwner, canModerate, canReport, guestReport, flairs, onOpen, handlers, openHref, archive }: {
+type PostThingMenuProps = {
   post: PublicPost; mediaThing?: boolean; isOwner: boolean; canModerate: boolean; canReport: boolean; guestReport: boolean;
   flairs: Array<{ id: string; label: string; emoji?: string | null; modOnly?: boolean }> | null;
   onOpen: () => void; openHref: string;
@@ -21,24 +23,46 @@ export function PostThingMenu({ post, mediaThing, isOwner, canModerate, canRepor
   handlers: { rename?: (title: string) => void; edit: () => void; delete: () => void; privacy: (value: PostVisibility) => void; report: () => void;
     remove: () => void; moderate: (action: string, extra?: Record<string, unknown>) => void; flair: (id: string | null) => void;
     downloadArchive?: () => void; shareDownloadLink?: () => void };
-}) {
-  const user = useCurrentUser(), lopu = useLopu();
+};
+
+export function PostThingMenu(props: PostThingMenuProps) {
+  const { post } = props;
+  const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
+  const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+  // A new root generation retires callbacks even when the account is unchanged.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const binding = React.useMemo(() => workspaceStorageBinding(), [identity]);
+  const localOnly = workspace?.localOnly === true && post.author?.localOnly === true && post.author.id === workspace.id;
+  const offlineOwner = workspace?.offline === true && post.author?.id === workspace.id;
+  const user = localOnly || offlineOwner ? workspace : accountUser;
+  const actor = binding && user && (binding.scope.kind === 'anonymous' ? localOnly : binding.scope.ownerId === user.id) ? user.id : null;
+  return <PostThingMenuSession key={`${identity}:${actor}:${post.id}`} {...props} actor={actor} binding={binding} localOnly={localOnly} />;
+}
+
+function PostThingMenuSession({ post, mediaThing, isOwner, canModerate, canReport, guestReport, flairs, onOpen, handlers, openHref, archive, actor, binding, localOnly }:
+  PostThingMenuProps & { actor: string | null; binding: ReturnType<typeof workspaceStorageBinding>; localOnly: boolean }) {
+  const lopu = useLopu();
   const [savingTemplate, setSavingTemplate] = React.useState(false);
-  const templateId = React.useRef<string | null>(null);
+  const template = React.useRef<ReturnType<typeof createPostTemplateSession> | null>(null);
+  React.useEffect(() => {
+    if (!actor || !binding) return;
+    const session = createPostTemplateSession(actor, post.id, binding.lease);
+    template.current = session;
+    return () => { session.dispose(); if (template.current === session) template.current = null; };
+  }, [actor, binding, post.id]);
   const saveTemplate = async () => {
-    if (!user || savingTemplate) return;
+    const session = template.current;
+    if (!session || !session.isCurrent() || savingTemplate) return;
     setSavingTemplate(true);
-    templateId.current ||= crypto.randomUUID();
     try {
-      await draftRequest(user.id, { operation: 'from-post', postId: post.id, id: templateId.current });
-      lopu({ title: 'Saved as a reusable template 📋', description: 'Find it under Load drafts & templates when making a post.', status: 'success' });
-      templateId.current = null;
-    } catch (error) { lopu({ title: (error as Error).message, status: 'error' }); }
-    finally { setSavingTemplate(false); }
+      await session.save();
+      if (session.isCurrent()) lopu({ title: 'Saved as a reusable template 📋', description: 'Find it under Load drafts & templates when making a post.', status: 'success' });
+    } catch (error) { if (session.isCurrent()) lopu({ title: (error as Error).message, status: 'error' }); }
+    finally { if (session.isCurrent()) setSavingTemplate(false); }
   };
   const extensions: ThingContextSection[] = [];
-  if (user && !mediaThing && !post.thingtime.includes('comment')) extensions.push({ id: 'templates', actions: [{ id: 'save-template', command: 'save-template', label: savingTemplate ? 'Saving template…' : 'Save as template', icon: '📋', disabled: savingTemplate }] });
-  const files = archive ? buildArchiveMenuSection({ fileCount: archive.fileCount, noun: archive.noun }) : null;
+  if (actor && !mediaThing && !post.thingtime.includes('comment')) extensions.push({ id: 'templates', actions: [{ id: 'save-template', command: 'save-template', label: savingTemplate ? 'Saving template…' : 'Save as template', icon: '📋', disabled: savingTemplate }] });
+  const files = archive && !localOnly ? buildArchiveMenuSection({ fileCount: archive.fileCount, noun: archive.noun }) : null;
   if (files) extensions.push(files);
   const privacy: ThingContextSection = { id: 'privacy', label: 'Privacy', actions: (Object.keys(CIRCLE_META) as PostVisibility[]).map(value => ({
     id: `privacy-${value}`, command: 'privacy', payload: value, label: CIRCLE_META[value].label, icon: CIRCLE_META[value].emoji, selected: post.visibility === value
@@ -60,7 +84,7 @@ export function PostThingMenu({ post, mediaThing, isOwner, canModerate, canRepor
   }
   return <PersistedThingMenu id={post.id} initialThing={post} label={mediaThing ? 'Media options' : 'Post options'} openHref={openHref}
     onOpen={onOpen} onRenamed={handlers.rename} extensions={extensions} capabilities={{ edit: isOwner && !mediaThing, delete: isOwner && !mediaThing,
-      share: isOwner && !mediaThing ? { submenu: { title: 'Share / permissions', sections: [privacy] } } : false }}
+      share: isOwner && !mediaThing && !localOnly ? { submenu: { title: 'Share / permissions', sections: [privacy] } } : false }}
     onAction={({ action }) => {
       const command = action.command;
       if (command === 'save-template') { void saveTemplate(); }

@@ -35,9 +35,9 @@ const readChildren = (kind: 'todo' | 'progress'): SuiteActionDef => ({
 	key: `read-${kind}`, name: `Read task ${kind === 'todo' ? 'todos' : 'updates'}`, category: 'agents', runtime: 'browser',
 	description: 'Reads a cursor page of independent child Things for one task.',
 	inputs: [taskInput, { name: 'cursor', type: 'string', label: 'Cursor', default: '' }],
-	steps: refs => [{ op: 'http.request', method: 'POST', path: '/api/v1/things/search', feature: 'api.things-search', minimumVersion: '1.3.0', query: {},
-		body: { thingtime: 'data', author: '$viewer.username', conditions: [{ field: 'schema', op: 'eq', value: refs.schemaName(kind) }, { field: 'crystal.parentId', op: 'eq', value: '$input.taskId' }], sort: 'newest', cursor: '$input.cursor', limit: 20 } },
-		returnValue({ records: '$step.1.things', nextCursor: '$step.1.nextCursor' })],
+	steps: refs => [{ op: 'http.request', method: 'POST', path: '/api/v1/things/search', feature: 'api.things-search', minimumVersion: '1.4.0', query: {},
+		body: { thingtime: 'data', scope: 'mine', conditions: [{ field: 'schema', op: 'eq', value: refs.schemaName(kind) }, { field: 'crystal.parentId', op: 'eq', value: '$input.taskId' }], sort: 'newest', cursor: '$input.cursor', limit: 20 } },
+		returnValue({ records: '$step.1.things', nextCursor: '$step.1.nextCursor', incomplete: '$step.1.incomplete' })],
 	capabilities: () => [{ capability: 'http.request', endpoints: ['POST /api/v1/things/search'] }]
 });
 
@@ -60,9 +60,9 @@ export const agentTasksSuite: BehaviourSuite = {
 	actions: [createTask, updateTask, addTodo, addProgress, readChildren('todo'), readChildren('progress'), {
 		key: 'recent-tasks', name: 'Read agent tasks', category: 'agents', runtime: 'browser', description: 'Reads your task Things in cursor pages, with no maximum task count.',
 		inputs: [{ name: 'cursor', type: 'string', label: 'Cursor', default: '' }],
-		steps: refs => [{ op: 'http.request', method: 'POST', path: '/api/v1/things/search', feature: 'api.things-search', minimumVersion: '1.3.0', query: {},
-			body: { thingtime: 'data', author: '$viewer.username', conditions: [{ field: 'schema', op: 'eq', value: refs.schemaName('task') }], sort: 'newest', cursor: '$input.cursor', limit: 20 } },
-			returnValue({ tasks: '$step.1.things', nextCursor: '$step.1.nextCursor' })],
+		steps: refs => [{ op: 'http.request', method: 'POST', path: '/api/v1/things/search', feature: 'api.things-search', minimumVersion: '1.4.0', query: {},
+			body: { thingtime: 'data', scope: 'mine', conditions: [{ field: 'schema', op: 'eq', value: refs.schemaName('task') }], sort: 'newest', cursor: '$input.cursor', limit: 20 } },
+			returnValue({ tasks: '$step.1.things', nextCursor: '$step.1.nextCursor', incomplete: '$step.1.incomplete' })],
 		capabilities: () => [{ capability: 'http.request', endpoints: ['POST /api/v1/things/search'] }]
 	}, {
 		key: 'complete-todo', name: 'Complete task todo', category: 'agents', description: 'Marks one todo complete.', inputs: [{ name: 'todoId', type: 'string', label: 'Todo Thing ID', required: true }],
@@ -73,7 +73,7 @@ export const agentTasksSuite: BehaviourSuite = {
 		key: 'task-board', name: 'Agent task board', description: 'An editable task creation form and paginated task cards.', args: [],
 		render: refs => kit.stack([
 			kit.group([kit.field('Task title', kit.input('title')), kit.field('Description', kit.textarea('description')), kit.button('Create task', refs.actionKey('create-task'), {})]),
-			kit.title('Tasks'),
+			kit.title('Tasks'), ifTruthy('result.incomplete', kit.muted('Showing tasks saved on this device. Other account tasks may be available online.')),
 			each('result.tasks', kit.card([kit.strong('{item.crystal.title}'), kit.text('{item.crystal.description}'), kit.pill('{item.crystal.status}'),
 				kit.row([kit.link('Todos and updates', '/p/agent-tasks-detail?taskId={item.id}'), kit.link('Browser controls', '/agent-browsers/{item.id}'), kit.link('Open task Thing', '/thing/{item.id}')]),
 				kit.muted('Task ID: {item.id}')]), { empty: kit.text('Create your first task above.') }),
@@ -85,7 +85,7 @@ export const agentTasksSuite: BehaviourSuite = {
 	}, {
 		key: 'task-todos', name: 'Task todos', description: 'Editable, paginated todo list with completion controls.', args: [],
 		render: refs => kit.stack([
-			kit.title('Todos'), kit.link('Browser controls', '/agent-browsers/{query.taskId}'),
+			kit.title('Todos'), ifTruthy('result.incomplete', kit.muted('Showing todos saved on this device. Other account todos may be available online.')), kit.link('Browser controls', '/agent-browsers/{query.taskId}'),
 			kit.group([kit.field('Todo', kit.input('title')), kit.button('Add todo', refs.actionKey('add-todo'), { taskId: '{query.taskId}' })]),
 			each('result.records', kit.card([kit.strong('{item.crystal.title}'), ifTruthy('item.crystal.done', kit.pill('Complete'), kit.group([kit.button('Mark complete', refs.actionKey('complete-todo'), { todoId: '{item.id}' })]))]), { empty: kit.muted('No todos on this page.') }),
 			kit.row([kit.link('First page', '/p/agent-tasks-detail?taskId={query.taskId}'), ifTruthy('result.nextCursor', kit.button('Next todos', '$ui', { op: 'query', params: { taskId: '{query.taskId}', todoCursor: '{result.nextCursor}' } }))])
@@ -93,7 +93,7 @@ export const agentTasksSuite: BehaviourSuite = {
 	}, {
 		key: 'task-progress', name: 'Task progress', description: 'Editable, paginated progress history.', args: [],
 		render: refs => kit.stack([
-			kit.title('Progress'), kit.group([kit.field('Update', kit.textarea('body')), kit.button('Save update', refs.actionKey('add-progress'), { taskId: '{query.taskId}' })]),
+			kit.title('Progress'), ifTruthy('result.incomplete', kit.muted('Showing updates saved on this device. Other account updates may be available online.')), kit.group([kit.field('Update', kit.textarea('body')), kit.button('Save update', refs.actionKey('add-progress'), { taskId: '{query.taskId}' })]),
 			each('result.records', kit.card([kit.text('{item.crystal.body}'), kit.muted('{item.crystal.createdAt}')]), { empty: kit.muted('No updates on this page.') }),
 			ifTruthy('result.nextCursor', kit.button('Next updates', '$ui', { op: 'query', params: { taskId: '{query.taskId}', progressCursor: '{result.nextCursor}' } }))
 		])

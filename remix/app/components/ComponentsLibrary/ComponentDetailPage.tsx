@@ -1,3 +1,10 @@
+import { useWorkspaceRefresh } from '~/local-workspace/useWorkspaceRefresh';
+import { useWorkspaceDraft } from '~/drafts/useWorkspaceDraft';
+import { restoreComponentSourceDraft } from '~/drafts/componentSourceDraft';
+import { useComponentVersionDraft } from '~/drafts/useComponentVersionDraft';
+import { createWithDraft } from '~/drafts/createWithDraft';
+import { DraftSaveStatus } from '~/drafts/DraftPicker';
+import { materializedSuite, catalogEntriesFor } from './bundledComponentCatalog';
 import React from 'react';
 import { Badge, Box, Button, Center, Flex, Input, Select, Text, Textarea } from '@chakra-ui/react';
 import { ArrowLeft, Link as LinkIcon } from 'lucide-react';
@@ -5,7 +12,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { useActionRunConfirm } from '~/components/Actions/ActionRunConfirm';
 import type { TtActionConfirmHandler, TtActionUnownedHandler } from '~/components/Actions/useTtActionClicks';
-import { installSuiteOnServer, suiteKeyFromActionKey } from '~/components/Builder/installSuite';
+import { installSuiteForWorkspace, suiteKeyFromActionKey } from '~/components/Builder/installSuite';
 import { LiveTemplate, useComponentArgValues, useThingSource } from '~/components/Builder/liveComponent';
 import type { ThingSourceBinding } from '~/components/Builder/liveComponent';
 import { WebpageRuntimeProvider } from '~/components/Builder/webpageRuntime';
@@ -17,13 +24,15 @@ import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl'
 import { BuilderThingMenu } from '~/components/Builder/BuilderThingMenu';
 import { pruneCacheNamespace, readStampedCache, writeStampedCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { workspaceStorageBinding, workspaceStorageIdentity, subscribeWorkspaceStorage } from '~/local-workspace/storageStatus.client';
+import { workspaceScopeKey } from '~/local-workspace/storage';
 // the REGISTRY module (not just the lookups): importing it registers the app
 // suites, so a cold load of /components/app-pokeworld-hud knows the part
 // belongs to an installable app
 import { ALL_SUITES } from '~/schemas/appSuites/index';
-import { materializeSuite, suiteSlug } from '~/schemas/behaviourSuites';
-import type { BehaviourSuite, MaterializedSuite } from '~/schemas/behaviourSuites';
+import { suiteSlug } from '~/schemas/behaviourSuites';
+import type { BehaviourSuite } from '~/schemas/behaviourSuites';
 import { DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS, getThingtimeSchema } from '~/schemas/registry';
 import type { SchemaThingField } from '~/schemas/registry';
 import { describeSchemaField } from '~/schemas/tools';
@@ -32,7 +41,6 @@ import {
   COMPONENT_LIBRARY_LABELS,
   RESERVED_COMPONENT_ID_PREFIX,
   SOURCE_REFRESH_MODES,
-  catalogEntryFrom,
   clampSourceInterval,
   componentTrustFor,
   designRank,
@@ -107,30 +115,12 @@ const describeArg = (spec: ComponentArgSpec): string => {
 // suite — the definitions are static code, and one page asks twice (first
 // paint + the suggested sources).
 
-const materializedSuites = new Map<string, MaterializedSuite>();
-const materializedSuite = (suite: BehaviourSuite): MaterializedSuite => {
-  const cached = materializedSuites.get(suite.key);
-  if (cached) return cached;
-  const built = materializeSuite(suite, 'system');
-  materializedSuites.set(suite.key, built);
-  return built;
-};
 const suiteByKey = (key: string | null): BehaviourSuite | null => (key ? ALL_SUITES.find((suite) => suite.key === key) || null : null);
 const suiteKeyOfComponent = (componentKey: string): string | null => suiteKeyFromActionKey(componentKey, ALL_SUITES);
 
 // the slug a URL key names: the reserved shareId form strips its prefix
 const slugOfKey = (key: string): string =>
   key.startsWith(RESERVED_COMPONENT_ID_PREFIX) ? key.slice(RESERVED_COMPONENT_ID_PREFIX.length) : key;
-
-// a suite component paints from code before the API answers (house rule:
-// never a loading state when a last-known value exists)
-const catalogEntriesFor = (key: string): BrowseComponentEntry[] => {
-  const slug = slugOfKey(key);
-  const suite = suiteByKey(suiteKeyOfComponent(slug));
-  if (!suite) return [];
-  const part = materializedSuite(suite).components.find((component) => component.slug === slug || component.shareId === key);
-  return part ? [catalogEntryFrom(part.shareId, part.crystal)] : [];
-};
 
 const walkBlocks = (blocks: unknown, visit: (block: Record<string, unknown>) => void): void => {
   if (!Array.isArray(blocks)) return;
@@ -278,28 +268,47 @@ const draftFrom = (binding: ThingSourceBinding | null): SourceDraft => ({
 });
 
 const SourceControl = ({
+  componentId,
   binding,
   suggestions,
   onBind
 }: {
+  componentId: string;
   binding: ThingSourceBinding | null;
   suggestions: ThingSourceBinding[];
   onBind: (binding: ThingSourceBinding | null) => void;
 }) => {
   const bindingKey = JSON.stringify(binding);
-  const [draft, setDraft] = React.useState<SourceDraft>(() => draftFrom(binding));
+  const seenBinding = React.useRef(bindingKey);
+  const [draft, setDraftState] = React.useState<SourceDraft>(() => draftFrom(binding));
+  const [draftBinding, setDraftBinding] = React.useState(bindingKey);
+  const [dirty, setDirty] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const recovery = useWorkspaceDraft({ context: `component-source:${componentId}`, surface: 'definition',
+    validateSnapshot: restoreComponentSourceDraft,
+    onRestore: saved => { const value = restoreComponentSourceDraft(saved.snapshot); setDraftState(value.draft); setDraftBinding(value.binding); setDirty(true); }
+  });
+  const setDraft: typeof setDraftState = next => { setDirty(true); setDraftState(next); };
   React.useEffect(() => {
-    setDraft(draftFrom(binding));
-    setError(null);
+    if (seenBinding.current === bindingKey) return;
+    seenBinding.current = bindingKey;
+    setDraftState(draftFrom(binding)); setDraftBinding(bindingKey); setDirty(false); setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bindingKey is the serialised binding
   }, [bindingKey]);
+  const snapshot = JSON.stringify({ draft, binding: draftBinding }), capture = recovery.capture;
+  React.useEffect(() => {
+    if (dirty) capture({ name: 'Component source controls', surface: 'definition', context: recovery.context, snapshot, attachmentIds: [] }, true, true);
+  }, [dirty, snapshot, capture, recovery.context]);
+  const bind = (next: ThingSourceBinding | null) => {
+    onBind(next); setDirty(false); setDraftBinding(JSON.stringify(next)); setDraftState(draftFrom(next));
+    void recovery.retire().catch(() => {});
+  };
 
   const apply = () => {
     const action = draft.action.trim();
     if (!action) {
       setError(null);
-      onBind(null);
+      bind(null);
       return;
     }
     if (!isSourceActionKey(action)) {
@@ -314,7 +323,7 @@ const SourceControl = ({
       return;
     }
     setError(null);
-    onBind({
+    bind({
       action,
       refresh: draft.refresh,
       ...(draft.refresh === 'interval' ? { intervalMs: clampSourceInterval(draft.intervalMs) } : {}),
@@ -325,6 +334,8 @@ const SourceControl = ({
   return (
     <Flex direction="column" gap={2} data-testid="component-source-control">
       <Text {...monoLabel}>data source</Text>
+      <DraftSaveStatus paused={!!recovery.recoveryError} status={recovery.status} error={recovery.error} retry={recovery.retry} />
+      {dirty && draftBinding !== bindingKey ? <Text role="alert" fontSize="sm">The URL binding changed since this draft. Review these controls before binding them. Recovery does not run the Action.</Text> : null}
       <Flex align="center" gap={2} wrap="wrap">
         <Input
           {...fieldProps}
@@ -372,7 +383,7 @@ const SourceControl = ({
           {binding ? 'Rebind' : 'Bind'}
         </Button>
         {binding && (
-          <Button color="var(--tt-muted, #9a9aa6)" onClick={() => onBind(null)} size="sm" variant="ghost" data-testid="component-source-clear">
+          <Button color="var(--tt-muted, #9a9aa6)" onClick={() => bind(null)} size="sm" variant="ghost" data-testid="component-source-clear">
             Clear
           </Button>
         )}
@@ -407,7 +418,7 @@ const SourceControl = ({
               height="24px"
               isDisabled={binding?.action === suggestion.action}
               key={suggestion.action}
-              onClick={() => onBind(suggestion)}
+              onClick={() => bind(suggestion)}
               paddingX={2}
               size="xs"
               variant="unstyled"
@@ -429,12 +440,21 @@ const SourceControl = ({
 // ---------------------------------------------------------------------------
 
 export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean }) => {
+  const params = useParams();
+  const [catalogParams] = useSearchParams();
+  const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+  return <ComponentDetailWorkspace key={`${identity}:${params.key}:${catalogParams.get('catalog') || 'auto'}`} docsFocus={docsFocus} />;
+};
+const ComponentDetailWorkspace = ({ docsFocus }: { docsFocus: boolean }) => {
   const { key: rawKey } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const api = useApi();
   const lopu = useLopu();
-  const user = useCurrentUser();
+  const user = useWorkspaceUser();
+  const workspace = workspaceStorageBinding();
+  const cacheScope = workspace ? workspaceScopeKey(workspace.scope) : null;
+  const catalog = searchParams.get('catalog') || 'auto';
   const viewerId = user?.id || null;
 
   const key = (rawKey || '').trim();
@@ -445,7 +465,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
   apiRef.current = api;
   const lopuRef = React.useRef(lopu);
   lopuRef.current = lopu;
-  const familyCacheKey = familyCacheKeyFor(viewerId, key);
+  const familyCacheKey = familyCacheKeyFor(cacheScope ? `${cacheScope}:${catalog}` : null, key);
   const familyCacheKeyRef = React.useRef(familyCacheKey);
   familyCacheKeyRef.current = familyCacheKey;
 
@@ -465,18 +485,23 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
   }, [key]);
   const [entries, setEntries] = React.useState<BrowseComponentEntry[] | null>(seedEntries);
   const [notFound, setNotFound] = React.useState(false);
+  const [loadError, setLoadError] = React.useState('');
   const requestSeqRef = React.useRef(0);
 
   const loadFamily = React.useCallback(async () => {
     const seq = ++requestSeqRef.current;
+    setLoadError('');
+    let failed = false;
     // the reserved shareId form (component-<slug>) resolves through its
     // stripped componentKey first; a familyKey / componentKey resolves as-is
     const candidates = [...new Set([slugOfKey(key), key])].filter(Boolean);
-    for (const candidate of candidates) {
+    for (const device of (catalog === 'online' ? [false] : catalog === 'device' ? [true] : [true, false])) for (const candidate of candidates) {
       try {
-        const resp = (await apiRef.current.v1.components.browse({ family: candidate })) as BrowseComponentsResponse;
+        const resp = (await apiRef.current.v1.components.browse({ family: candidate, device: device || undefined, limit: 50 })) as BrowseComponentsResponse;
         if (seq !== requestSeqRef.current) return;
-        if (resp?.ok && resp.components.length) {
+        if (!resp?.ok) throw resp;
+        if (resp.components.length) {
+          if (resp.localCacheError) setLoadError(resp.localCacheError);
           setEntries(resp.components);
           setNotFound(false);
           if (familyCacheKeyRef.current) {
@@ -486,16 +511,20 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
           return;
         }
       } catch {
+        failed = true;
         // fall through to the next candidate
       }
     }
     if (seq !== requestSeqRef.current) return;
+    if (failed) { setLoadError('Could not refresh this component. Any previously loaded version is still available.'); return; }
     // a code-catalog part the database has not seeded still renders from
     // code; a stale cache line for a thing that is gone does not
     if (seedRef.current === 'catalog') return;
     setEntries([]);
     setNotFound(true);
-  }, [key]);
+  }, [key, catalog]);
+
+  useWorkspaceRefresh(() => { void loadFamily(); }, catalog !== 'online');
 
   const mountedKeyRef = React.useRef(key);
   React.useEffect(() => {
@@ -505,6 +534,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
       setNotFound(false);
     }
     loadFamily();
+    return () => { requestSeqRef.current += 1; };
   }, [key, loadFamily, seedEntries]);
 
   const sources = React.useMemo(() => {
@@ -575,6 +605,11 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.id]);
 
+  const creating = React.useRef(false);
+  const versionDraft = useComponentVersionDraft(active?.id || '', { values, name: versionName, acl: versionAcl }, saved => {
+    setValues(saved.values); setVersionName(saved.name); setVersionAcl(saved.acl); setVersionOpen(true);
+  }, savingVersion, true);
+
   const docsRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
     if (docsFocus && active && docsRef.current) {
@@ -623,7 +658,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
         return null;
       }
       lopuRef.current({ title: `Installing ${target.emoji} ${target.title}…`, description: 'Your own schemas, controls, actions, and pages.', status: 'info', duration: 4000 });
-      const installed = await installSuiteOnServer(target.key, { onlyMissing });
+      const installed = await installSuiteForWorkspace(target.key, { onlyMissing });
       const href = `/p/${encodeURIComponent(installed.entryPageKey)}`;
       lopuRef.current({
         title: `${target.emoji} ${target.title} installed ✨`,
@@ -689,7 +724,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
   );
 
   const saveVersion = async () => {
-    if (!active) return;
+    if (!active || creating.current) return;
     if (!user) {
       lopuRef.current({ title: 'Sign in to save component versions ✨', status: 'info', duration: 6000 });
       return;
@@ -704,9 +739,10 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
       const value = values[spec.name];
       if (value !== undefined) savedArgs[spec.name] = value;
     }
+    creating.current = true;
     setSavingVersion(true);
     try {
-      const resp: any = await apiRef.current.v1.things.create({
+      const resp: any = await createWithDraft(versionDraft, () => apiRef.current.v1.things.create({
         thingtime: ['component'],
         crystal: {
           name,
@@ -723,14 +759,15 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
           forkOf: active.id
         },
         acl: versionAcl
-      });
+      }));
       if (!resp?.ok) throw resp;
       lopuRef.current({ title: 'Saved a version to your Things ✨', description: 'Your copy fronts this page now — its controls run as you.', status: 'success' });
       // the viewer's new copy joins the family and fronts the page (owner → live)
-      loadFamily();
+      navigate(`/components/${encodeURIComponent(resp.thing.id)}?catalog=device`);
     } catch (err: any) {
-      lopuRef.current({ title: err?.error || 'Version didn’t save — try again 🌈', status: 'error' });
+      lopuRef.current({ title: err?.error || err?.message || 'Version didn’t save — try again 🌈', status: 'error' });
     } finally {
+      creating.current = false;
       setSavingVersion(false);
     }
   };
@@ -768,7 +805,8 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
           </Button>
         </Flex>
 
-        {!active && !notFound && (
+        {loadError && <Flex role="alert" align="center" gap={2} wrap="wrap"><Text>{loadError}</Text><Button size="sm" onClick={() => void loadFamily()}>Retry component</Button></Flex>}
+        {!active && !notFound && !loadError && (
           <Box color="var(--tt-muted, #9a9aa6)" padding={10} textAlign="center">
             Loading component…
           </Box>
@@ -981,7 +1019,8 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
                   </Button>
                 </Flex>
               )}
-              <SourceControl binding={binding} onBind={bindSource} suggestions={suggestions} />
+              <DraftSaveStatus paused={!!versionDraft.recoveryError} status={versionDraft.status} error={versionDraft.error} retry={versionDraft.retry} />
+              <SourceControl key={`${cacheScope}:${active?.id || key}`} componentId={active?.id || key} binding={binding} onBind={bindSource} suggestions={suggestions} />
               <Flex align="center" gap={2} wrap="wrap">
                 {trust === 'stranger' && (
                   <Text color="var(--tt-muted, #9a9aa6)" fontSize="12px" data-testid="component-stranger-hint">
@@ -1010,14 +1049,14 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
                     size="sm"
                     value={versionName}
                   />
-                  <ThingAudienceControl
+                  <ThingAudienceControl localOnly={!!user?.localOnly}
                     acl={versionAcl}
                     label="Who can use this version?"
                     onChange={setVersionAcl}
                     testId="component-detail-version-audience"
                   />
                   <Button alignSelf="flex-end" colorScheme="pink" isLoading={savingVersion} onClick={saveVersion} size="sm">
-                    Save with this audience
+                    {user?.localOnly ? 'Save on this device' : 'Save with this audience'}
                   </Button>
                 </Flex>
               ) : null}
@@ -1183,9 +1222,10 @@ const ArgRow = ({
       {spec.label || spec.name}
     </Text>
     {spec.type === 'boolean' ? (
-      <input checked={!!value} onChange={(event) => onChange(spec, event.target.checked)} type="checkbox" />
+      <input aria-label={spec.label || spec.name} checked={!!value} onChange={(event) => onChange(spec, event.target.checked)} type="checkbox" />
     ) : spec.type === 'enum' ? (
       <select
+        aria-label={spec.label || spec.name}
         onChange={(event) => onChange(spec, event.target.value)}
         style={{ border: '1px solid var(--tt-border, #ececef)', borderRadius: 7, fontSize: 13, padding: '4px 8px' }}
         value={String(value ?? '')}
@@ -1198,6 +1238,7 @@ const ArgRow = ({
       </select>
     ) : (
       <input
+        aria-label={spec.label || spec.name}
         max={spec.max}
         min={spec.min}
         maxLength={spec.maxLength}

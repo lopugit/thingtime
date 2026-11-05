@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box } from '@chakra-ui/react';
+import { Box, Text } from '@chakra-ui/react';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { TransientBlockHost, type TransientBlockActions } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
@@ -8,30 +8,41 @@ import { openPasswordIconBlob } from '~/passwords/icons.client';
 import { PASSWORD_ICON_MIME_TYPES, passwordIconUrl, type PasswordIcon } from '~/passwords/icons';
 import { uploadPasswordFile } from '~/passwords/files.client';
 import { newPasswordFile } from '~/passwords/fileCrypto';
+import type { PasswordStorage } from '~/passwords/storage';
 
-export function PasswordEntryIcon({ ownerId, entryId, icon, size = 32 }: { ownerId: string; entryId: string; icon?: PasswordIcon; size?: number }) {
+/** An explicit device storage adapter never falls back to account or URL transport. */
+export async function openStoredPasswordIconBlob(storage: PasswordStorage, entryId: string, icon: PasswordIcon, signal?: AbortSignal): Promise<Blob> {
+  if (icon.kind !== 'attachment') throw new Error('Upload an icon to keep it available on this device.');
+  const opened = await storage.openFile(entryId, icon.fileId, signal);
+  const mime = ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', ico: 'image/x-icon' } as Record<string, string>)[opened.metadata.name.split('.').at(-1)?.toLowerCase() || ''];
+  if (!mime) { await opened.stream.cancel(); throw new Error('Unsupported icon image.'); }
+  const blob = await new Response(opened.stream).blob(); signal?.throwIfAborted();
+  return new Blob([blob], { type: mime });
+}
+
+export function PasswordEntryIcon({ storage, ownerId, entryId, icon, size = 32 }: { storage?: PasswordStorage; ownerId: string; entryId: string; icon?: PasswordIcon; size?: number }) {
   const scope = `${ownerId}:${entryId}:${JSON.stringify(icon)}`;
   const [image, setImage] = React.useState<{ scope: string; url: string } | null>(null);
   const [failed, setFailed] = React.useState('');
   React.useEffect(() => {
     if (!icon) return;
     const controller = new AbortController(); let url = '';
-    openPasswordIconBlob(ownerId, entryId, icon, controller.signal).then(blob => {
+    (storage ? openStoredPasswordIconBlob(storage, entryId, icon, controller.signal) : openPasswordIconBlob(ownerId, entryId, icon, controller.signal)).then(blob => {
       if (controller.signal.aborted) return;
       url = URL.createObjectURL(blob); setImage({ scope, url });
     }).catch(() => { if (!controller.signal.aborted) setFailed(scope); });
     return () => { controller.abort(); if (url) URL.revokeObjectURL(url); };
-  }, [scope, ownerId, entryId, icon]);
+  }, [scope, ownerId, entryId, icon, storage]);
   const src = image?.scope === scope && failed !== scope ? image.url : '';
   return <Box width={`${size}px`} height={`${size}px`} flexShrink={0} display="grid" placeItems="center" borderRadius="6px" background="var(--tt-muted, #f3f3f5)" overflow="hidden" aria-hidden="true">
     {src ? <img src={src} width={size} height={size} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={() => setFailed(scope)} /> : <svg width={Math.round(size * 0.6)} height={Math.round(size * 0.6)} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>}
   </Box>;
 }
 
-export function PasswordIconEditor(props: { ownerId: string; entryId: string; saved: boolean; icon?: PasswordIcon; website?: string; disabled?: boolean; onChange: (icon: PasswordIcon | undefined) => void; onBusyChange?: (busy: boolean) => void }) {
+export function PasswordIconEditor(props: { storage?: PasswordStorage; ownerId: string; entryId: string; saved: boolean; icon?: PasswordIcon; website?: string; disabled?: boolean; onChange: (icon: PasswordIcon | undefined) => void; onBusyChange?: (busy: boolean) => void }) {
   return <PasswordIconEditorScope key={`${props.ownerId}:${props.entryId}`} {...props} />;
 }
-function PasswordIconEditorScope({ ownerId, entryId, saved, icon, website = '', disabled = false, onChange, onBusyChange }: Parameters<typeof PasswordIconEditor>[0]) {
+function PasswordIconEditorScope({ storage, ownerId, entryId, saved, icon, website = '', disabled = false, onChange, onBusyChange }: Parameters<typeof PasswordIconEditor>[0]) {
   const [showUrl, setShowUrl] = React.useState(false), [busy, setBusy] = React.useState(false), [error, setError] = React.useState('');
   const active = React.useRef(true), pending = React.useRef(false);
   const current = React.useRef({ onChange, onBusyChange }); current.current = { onChange, onBusyChange };
@@ -45,6 +56,7 @@ function PasswordIconEditorScope({ ownerId, entryId, saved, icon, website = '', 
     'icon.remove': () => { if (!disabled && !pending.current) { onChange(undefined); setError(''); } },
     'icon.upload': async ({ readFile, signal }) => {
       if (disabled || pending.current || !saved) return;
+      if (storage) { setError('Icon uploads are not available in the device vault yet. Ordinary password attachments remain available.'); return; }
       const file = readFile('icon-file'); if (!file) return;
       if (!PASSWORD_ICON_MIME_TYPES.includes(file.type) || !/\.(png|jpe?g|webp|gif|ico)$/i.test(file.name)) { setError('Choose a PNG, JPEG, WebP, GIF, or ICO image.'); return; }
       pending.current = true; setBusy(true); onBusyChange?.(true); setError('');
@@ -56,8 +68,8 @@ function PasswordIconEditorScope({ ownerId, entryId, saved, icon, website = '', 
       finally { pending.current = false; if (active.current) { setBusy(false); current.current.onBusyChange?.(false); } }
     }
   };
-  return <Box mt={4}><SettingsDocumentHost documentKey="password-entry-icon" defaultDocument={passwordIconBlocks} migrateBlocks={migratePasswordIconBranding} scopeKey={scopeKey} title="Entry icon layout" layoutEditingDisabled={busy}>
-    {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={{ icon: { showUrl, busy: busy || disabled, cannotUpload: busy || disabled || !saved, unsaved: !saved, cannotWebsite: busy || disabled || !website, cannotRemove: busy || disabled || !icon, error } }} actions={actions} enabled={!editing} onError={() => setError('The icon could not be changed.')}>
+  return <Box mt={4}>{storage && <Text fontSize="sm" mb={2}>Device vault icons do not contact websites. Icon uploads are not available yet; imported icon images remain saved with the archive attachments. You can keep an icon URL as a reference.</Text>}<SettingsDocumentHost documentKey="password-entry-icon" defaultDocument={passwordIconBlocks} migrateBlocks={migratePasswordIconBranding} scopeKey={scopeKey} title="Entry icon layout" layoutEditingDisabled={busy}>
+    {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={{ icon: { showUrl, busy: busy || disabled, cannotUpload: busy || disabled || !saved || !!storage, unsaved: !saved, cannotWebsite: busy || disabled || !website || !!storage, cannotRemove: busy || disabled || !icon, error } }} actions={actions} enabled={!editing} onError={() => setError('The icon could not be changed.')}>
       <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
     </TransientBlockHost>}
   </SettingsDocumentHost></Box>;

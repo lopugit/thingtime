@@ -1,3 +1,5 @@
+import { useLocalApiView } from '~/local-workspace/LocalApiView';
+import { useDataPlane } from '~/hooks/useDataPlane';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
@@ -446,13 +448,15 @@ export const PreviewModal = ({
   onAction: (thing: ThingsThing, action: 'rename' | 'move' | 'share' | 'delete') => void;
 }) => {
   const viewer = useCurrentUser();
+  const localView = useLocalApiView();
+  const selectedPlane = useDataPlane();
   // Ownership IS the trust boundary for the interactive render below. This
   // modal opens on ANY thing the viewer can read — the ?preview=<id> deep link
   // resolves foreign public things too — so a component authored by someone
   // else must render INERT here, exactly like the feed/search surfaces. The
   // check lives inside the modal rather than at the call site so a future
   // caller cannot forget it.
-  const untrusted = !!thing && (!viewer?.id || thing.author?.id !== viewer.id);
+  const untrusted = !!thing && (!viewer?.id || thing.author?.id !== viewer.id || (localView.localPlane === 'home' && selectedPlane !== 'home'));
   return (
   <Modal isOpen={!!thing} onClose={onClose} size="lg" scrollBehavior="inside">
     <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />

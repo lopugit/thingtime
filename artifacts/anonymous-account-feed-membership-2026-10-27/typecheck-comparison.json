@@ -1,0 +1,9 @@
+{
+  "baseline": "tmp/continuation/mail-protected-typecheck.log",
+  "current": "tmp/continuation/feed-membership-typecheck.log",
+  "baselineErrors": 91,
+  "currentErrors": 91,
+  "sameNormalizedDiagnostics": true,
+  "added": [],
+  "removed": []
+}

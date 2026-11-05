@@ -1,0 +1,123 @@
+{
+  "message": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: /^History retained item 27(?: \\(unread\\))?$/ }) to be visible\n",
+  "body": "🦄\nhistoryqa-9a1e2eb9\n🌈\n1\n🦄\n\nTHINGTIME · EVERYTHING THAT REACHED YOU 🔔\n\nNotifications 🔔\nSettings ⚙️\n\nYour account's notifications, including social activity and system notes.\n\nOn this device\nAccount history\nAll\n🤝 Social\n💬 Engagement\n📰 Feed\n⚙️ System\nAll types\n🤝 Friend requests\n💚 Request accepted\n👀 New followers\n👥 Groups\n🙋 Join requests (mods)\n🎉 Join requests accepted\n🎩 Subspace roles\n🚫 Subspace bans\n💬 Comments\n↩️ Replies\n🤣 Reactions\n🔁 Shares\n📣 Mentions\n🧹 Posts removed by mods\n🚩 Reports (mods)\n📰 Posts from people you follow\n🫶 Posts from friends\n⚡ Action runs\n🦄 Recording reminders\n⏰ Lopu reminders\n🦄 New Lopu messages\n🗝️ Successful sign-ins\n🦄 Lopu messages\nUnread only\n\nFrom\n\nTo\n\nReset filters ✕\n\n0 shown · 0 unread\n\nMark all read ✓\n\nAccount history access changed. Retry a fresh account read.\n\nRetry\n\nYour history is saved even when push or email is off. Delivery settings never hide or delete these records.\n\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nHISTORYQA-9A1E2EB9\n\nProfile\n\nLog out\n\n✉️ email unverified\n\n🦄",
+  "errors": [],
+  "historyRequests": [
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?history=1&types=system-message",
+      "status": 200
+    },
+    {
+      "query": "?history=1&limit=30&withTotal=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?history=1&limit=30&withTotal=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=30&history=1&cursor=eyJjcmVhdGVkQXQiOiIyMDI2LTEwLTI2VDIzOjIwOjE3LjE0NFoiLCJzaGFyZUlkIjoibm90aWZpY2F0aW9uLW1lc3NhZ2UtN2ZjOGNlNjRmZTUzNGYxYmFjMDljOTNiNDQyYjcyOTU1MmQwNDFmYzIxYTAzYjg3NGUzN2E2ZmMxZjQzMzM5ZCJ9&withTotal=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=30&history=1&cursor=eyJjcmVhdGVkQXQiOiIyMDI2LTEwLTI2VDIzOjIwOjE3LjE0NFoiLCJzaGFyZUlkIjoibm90aWZpY2F0aW9uLW1lc3NhZ2UtN2ZjOGNlNjRmZTUzNGYxYmFjMDljOTNiNDQyYjcyOTU1MmQwNDFmYzIxYTAzYjg3NGUzN2E2ZmMxZjQzMzM5ZCJ9&withTotal=1",
+      "status": 200
+    },
+    {
+      "query": "?history=1&limit=30&withTotal=1&q=History+retained+item+29",
+      "status": 200
+    },
+    {
+      "query": "?history=1&limit=30&withTotal=1&q=History+retained+item+30",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?history=1&limit=30&withTotal=1&q=History+retained+item+28",
+      "status": 403
+    }
+  ],
+  "sentEventIds": [
+    "7ce3a069-e187-4a7b-bd28-fc655c537423",
+    "7ce3a069-e187-4a7b-bd28-fc655c537423"
+  ]
+}

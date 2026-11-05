@@ -1,0 +1,79 @@
+{
+  "source": "66f45680002103c5850c396cb00d20b2435cbb42",
+  "ciObservedAt": "2026-10-26T19:22:36.199269+00:00",
+  "ciStatus": "success",
+  "runs": {
+    "Web CI": {
+      "conclusion": "success",
+      "createdAt": "2026-10-26T19:14:14Z",
+      "databaseId": 40384911178,
+      "headSha": "66f45680002103c5850c396cb00d20b2435cbb42",
+      "status": "completed",
+      "url": "https://github.com/lopugit/thingtime/actions/runs/40384911178",
+      "workflowName": "Web CI"
+    },
+    "Lopu CodeQL all branches": {
+      "conclusion": "success",
+      "createdAt": "2026-10-26T19:19:15Z",
+      "databaseId": 40385671790,
+      "headSha": "66f45680002103c5850c396cb00d20b2435cbb42",
+      "status": "completed",
+      "url": "https://github.com/lopugit/thingtime/actions/runs/40385671790",
+      "workflowName": "Lopu CodeQL all branches"
+    }
+  },
+  "preview": {
+    "source": "66f45680002103c5850c396cb00d20b2435cbb42",
+    "origin": "https://thingtime-57ckgj549-lopugits-projects.vercel.app",
+    "observedAt": "2026-10-26T19:21:27.859861+00:00",
+    "scope": "GitHub commit-associated immutable preview; public HTTP inspection only",
+    "index": {
+      "status": 200,
+      "bytes": 16524,
+      "appShell": true,
+      "fallback": false,
+      "commitMarkerPresent": false
+    },
+    "capabilities": {
+      "status": 200,
+      "bytes": 74268,
+      "origin": "https://thingtime-57ckgj549-lopugits-projects.vercel.app",
+      "features": {
+        "api.webpages-suites-install": {
+          "version": "1.7.0"
+        },
+        "api.things-export": {
+          "version": "1.18.0"
+        },
+        "api.things-import": {
+          "version": "1.15.0"
+        },
+        "api.attachment-content": {
+          "version": "1.18.0"
+        }
+      }
+    },
+    "scriptIdentity": [
+      {
+        "path": "/tt-boot.js",
+        "status": 200,
+        "bytes": 3822,
+        "sha256": "39a5dfeca672ecb732a7a67facc4553a86993b026b361dd1709446380dbe8c83",
+        "exactSourcePresent": false,
+        "shortSourcePresent": false
+      },
+      {
+        "path": "/assets/index-Bc2MY_2n.js",
+        "status": 200,
+        "bytes": 974423,
+        "sha256": "fd3510ccb2f9397752c5b3e8f0fee81428ddf4b467d18b9a7e02857ff1ad91b2",
+        "exactSourcePresent": false,
+        "shortSourcePresent": false
+      }
+    ]
+  },
+  "limitations": [
+    "Preview commit association comes from GitHub commit status; no literal source marker found in inspected assets.",
+    "Public HTTP checks do not establish deployed functional acceptance."
+  ]
+}

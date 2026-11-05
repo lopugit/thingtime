@@ -1,0 +1,13 @@
+{
+  "head": "64a53cba8ccc06db5baa1a53466ff9359a16ad99",
+  "tscVersion": "Version 5.9.3",
+  "currentLog": "/tmp/thingtime-followup-typecheck.log",
+  "baselineLog": "/tmp/thingtime-followup-baseline-typecheck.log",
+  "baselineExitCode": 2,
+  "currentDiagnosticCount": 91,
+  "baselineDiagnosticCount": 91,
+  "addedCount": 0,
+  "removedCount": 0,
+  "added": [],
+  "removed": []
+}

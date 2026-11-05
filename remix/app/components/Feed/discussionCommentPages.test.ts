@@ -116,3 +116,13 @@ test('generic Thing discussions enable styled collection controls without changi
   assert.match(styles, /\.tt-collection-pagination button/);
   assert.match(styles, /\.tt-collection-controls input/);
 });
+
+
+test('device page coverage and retention failures survive the pager boundary', async () => {
+ const pager = createDiscussionCommentPager();
+ const page = await pager.load(async () => ({ ...response([comment('saved')], null), incomplete: true, localCacheError: 'Quota exceeded' }));
+ assert.equal(page?.incomplete, true); assert.equal(page?.localCacheError, 'Quota exceeded');
+ const gone = createDiscussionCommentPager();
+ await assert.rejects(gone.load(async () => { throw Object.assign(new Error('Gone'), { status: 410 }); }), /Gone/);
+ assert.equal(gone.hasMore, false);
+});

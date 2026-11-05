@@ -1,6 +1,6 @@
 import type { PostComment } from './feedTypes';
 
-type CommentPage = { comments: PostComment[]; nextCursor: string | null };
+type CommentPage = { comments: PostComment[]; nextCursor: string | null; incomplete?: boolean; localCacheError?: string };
 
 /** One cursor chain per discussion/refresh. A failed transport can retry;
  * a malformed or stalled chain stops until the user explicitly refreshes. */
@@ -32,9 +32,9 @@ export function createDiscussionCommentPager() {
         }
         if (next) seen.add(next);
         cursor = next;
-        return { comments: response.comments, nextCursor: next };
+        return { comments: response.comments, nextCursor: next, ...(response.incomplete ? { incomplete: true } : {}), ...(typeof response.localCacheError === 'string' ? { localCacheError: response.localCacheError } : {}) };
       } catch (failure: any) {
-        if ([401, 403, 404].includes(Number(failure?.status))) disposed = true;
+        if ([401, 403, 404, 410].includes(Number(failure?.status))) disposed = true;
         throw failure;
       } finally {
         loading = false;

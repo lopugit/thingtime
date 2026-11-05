@@ -1,0 +1,44 @@
+✔ direct account archive imports retain their byte budget before starting a transaction (6.779625ms)
+✔ archive writer retains inert assistant presentation on fresh private rows (13.083042ms)
+✔ archive writer owns every historical row without minting live recipients or memberships (7.773833ms)
+✔ archive avatars bind fresh uploads in the same accounted transaction (1.12025ms)
+✔ missing, foreign, changed or already bound avatar fails before any archive insertion (5.091167ms)
+✔ quota and concurrent binding errors reject the complete archive transaction (4.413333ms)
+✔ transaction retries keep fresh IDs stable and do not reuse driver-mutated documents (0.61075ms)
+✔ invalid source authority and identity collisions fail before starting storage (0.909666ms)
+✔ archive folder placement fences deletion and refuses foreign, missing and app folders (1.534084ms)
+✔ custom reactions remap only to an owned imported personal emoji (3.468209ms)
+✔ file mapping cannot reuse a source ID, account, Thing ID or missing upload (1.694459ms)
+✔ message files and links preserve mixed gallery ordering without rebinding their sources (1.186334ms)
+✔ archive snapshots are detached from caller mutations during asynchronous storage work (0.34725ms)
+✔ account imports preserve their negotiated byte budget before inspecting or writing files (2.586125ms)
+✔ imports entire archives after folders through the dedicated writer and returns its actual identities (6.502292ms)
+✔ invalid archive authorities and orphan rows are rejected before any writes (0.71ms)
+✔ archive avatars use fresh prepared uploads and are not bound by generic Thing creation (1.668375ms)
+✔ failed later archive uses whole-archive cleanup and retains dependencies when cleanup fails (1.558542ms)
+✔ abort during the final archive commit cleans the returned archive instead of claiming success (0.5985ms)
+✔ imports fresh private linked galleries in mixed attachment order through normal link writers (1.848542ms)
+✔ failed link annotation cleans only the new unbound draft and reports deferred cleanup (0.628209ms)
+✔ imports folders and schemas before dependent data, with private fresh ownership and preserved extended content (0.362625ms)
+✔ rejects forged account records, caller ACL/owner fields, and unresolved structural cycles before writes (0.614792ms)
+✔ failure cleans only newly created records in reverse order and reports failed cleanup (0.49425ms)
+✔ file imports require distinct authorized ready uploads before any Thing writes (0.354041ms)
+✔ failed or uncertain child rollback preserves its earlier folder and schema dependencies (0.586292ms)
+✔ incomplete rollback preserves linked resources and reports them with recovery dependencies (0.484834ms)
+✔ stored-file annotations use a fresh-unbound fence after upload validation and before Thing writes (0.7465ms)
+✔ cancelled imports perform no writes and do not retry creation (3.646625ms)
+✔ imported split-template media preserves saved and page-instance arguments and composes on re-import (24.591875ms)
+✔ import service persists late bindings only after normal ready-upload checks (11.214833ms)
+✔ canonical round trip preserves editable component, exact text and dependency closure (22.482ms)
+✔ private/account/action/assets are rejected in all template branches (3.634958ms)
+✔ missing and ambiguous dependencies, invalid schema, CSS escapes and partial expansion fail (6.154416ms)
+✔ bounded input and explicit root validation (1.005167ms)
+✔ new editable and transient block types cannot enable Actions in anonymous export previews (1.1995ms)
+ℹ tests 36
+ℹ suites 0
+ℹ pass 36
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4966.031875

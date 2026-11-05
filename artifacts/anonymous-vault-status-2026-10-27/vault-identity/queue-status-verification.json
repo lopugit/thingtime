@@ -1,0 +1,15 @@
+{
+  "scope": "actual ReactDOM/Chakra AccountPasswordWorkspace with synthetic local promises; canonical API acceptance is separate",
+  "checks": [
+    "Delayed initial read stays unknown",
+    "Initial failure is explicit",
+    "Refresh button retries failed read",
+    "Equivalent scope retains child form state and known rows",
+    "Refresh failure retains known rows with an honest failure headline",
+    "Vault change resets prior rows before commit and ignores late successful read",
+    "Scope change clears prior titles and ignores late read error",
+    "Unmounted reader cannot resurrect status"
+  ],
+  "pageErrors": [],
+  "requests": []
+}

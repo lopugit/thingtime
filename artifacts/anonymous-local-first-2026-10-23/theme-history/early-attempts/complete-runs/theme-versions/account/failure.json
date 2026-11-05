@@ -1,0 +1,253 @@
+{
+  "error": "TimeoutError: locator.isEnabled: Timeout 25000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: 'Save theme 💾', exact: true })\n",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\n\nOffline account workspace. Local edits are available; account sync is paused until your session is verified.\n\nReconnect\nReview sync\nThemes 🎨\n\nMake Thingtime yours — tweak colours, fonts, and the general feel. Save your look as a theme and share it with a link — or browse public looks in the theme gallery ✨.\n\nPRESETS\n\nAa Thingtime\n\nButton\nCTA\n\nThingtime\n\nAa Thingtime\n\nButton\nCTA\n\nFable\n\nAa Thingtime\n\nButton\nCTA\n\nPrism\n\nAa Thingtime\n\nButton\nCTA\n\nMidnight\n\nCOLOURS\n\nAccent\n\nCTAs + highlights\n\nAccent tint\n\nInk\n\nheadings + borders\n\nBody text\n\nMuted text\n\nPage background\n\nCards\n\nSurface\n\nSurface alt\n\nBorders\n\nLinks\n\nRainbow\n\nthe five brand stops\n\nFONTS\n\nHeadings\n\nSpace Grotesk by default\n\nSystem\nSpace Grotesk\nHanken Grotesk\nJetBrains Mono\nInter\nSora\nFraunces\nInstrument Serif\nNunito\nAtkinson Hyperlegible\nIBM Plex Mono\nFira Code\n\nBody\n\nHanken Grotesk by default\n\nSystem\nSpace Grotesk\nHanken Grotesk\nJetBrains Mono\nInter\nSora\nFraunces\nInstrument Serif\nNunito\nAtkinson Hyperlegible\nIBM Plex Mono\nFira Code\n\nCode\n\nJetBrains Mono by default\n\nSystem\nSpace Grotesk\nHanken Grotesk\nJetBrains Mono\nInter\nSora\nFraunces\nInstrument Serif\nNunito\nAtkinson Hyperlegible\nIBM Plex Mono\nFira Code\n\nLanding display\n\nthe big landing headlines\n\nSystem\nSpace Grotesk\nHanken Grotesk\nJetBrains Mono\nInter\nSora\nFraunces\nInstrument Serif\nNunito\nAtkinson Hyperlegible\nIBM Plex Mono\nFira Code\n\nGENERAL\n\nCorner radius\n\n0 = sharp and brutal\n\n−\n\n1×\n\n＋\n\nBorder weight\n\n−\n\n1px\n\n＋\n\nShadows\n\nSoft\nHard 🧱\n\nIcons\n\nplayful emoji or coloured line icons\n\nEmoji 🥳\nLucide ✦\n\nThings badge padding\n\nView / Show / Arrange / Kind controls\n\nSmall\nMedium\nLarge\nCustom\n\nMotion\n\nrainbow animations\n\nAnimation speed\n\n−\n\n200ms\n\n＋\n\nReset\n\nback to the preset's defaults (clears custom CSS too)\n\nReset customisations\n\nWINDOW BUTTONS\n\nClose\n\nthe red light\n\n−\n\n3.5px\n\n＋\n\nMinimise\n\nthe amber light\n\n−\n\n3.5px\n\n＋\n\nExpand\n\nthe green light\n\n−\n\n3.5px\n\n＋\n\nSAVE A THEME ON THIS DEVICE\n\nShareable\n\nSaving…\n\nThemes save on this device first. Account content and the selected theme synchronize separately.\n\nRefresh account themes\n\n37d1c31a-cc6e-4298-9cbe-379d2715ae40: pending\n\nRetry theme sync\n\nMY THEMES\n\nTransfer\n\nAa Thingtime\n\nButton\nCTA\n\nHistory design 9671bb \n\nsaved on this device · pending\n\nApply\nHistory\nTransfer\nDelete\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "inputs": [
+    {
+      "type": "color",
+      "value": "#885544"
+    },
+    {
+      "type": "text",
+      "value": "#885544"
+    },
+    {
+      "type": "color",
+      "value": "#fff5fa"
+    },
+    {
+      "type": "text",
+      "value": "#fff5fa"
+    },
+    {
+      "type": "color",
+      "value": "#16161a"
+    },
+    {
+      "type": "text",
+      "value": "#16161a"
+    },
+    {
+      "type": "color",
+      "value": "#5a5a66"
+    },
+    {
+      "type": "text",
+      "value": "#5a5a66"
+    },
+    {
+      "type": "color",
+      "value": "#9a9aa6"
+    },
+    {
+      "type": "text",
+      "value": "#9a9aa6"
+    },
+    {
+      "type": "color",
+      "value": "#ffffff"
+    },
+    {
+      "type": "text",
+      "value": "#ffffff"
+    },
+    {
+      "type": "color",
+      "value": "#ffffff"
+    },
+    {
+      "type": "text",
+      "value": "#ffffff"
+    },
+    {
+      "type": "color",
+      "value": "#fafafb"
+    },
+    {
+      "type": "text",
+      "value": "#fafafb"
+    },
+    {
+      "type": "color",
+      "value": "#f5f5f7"
+    },
+    {
+      "type": "text",
+      "value": "#f5f5f7"
+    },
+    {
+      "type": "color",
+      "value": "#ececef"
+    },
+    {
+      "type": "text",
+      "value": "#ececef"
+    },
+    {
+      "type": "color",
+      "value": "#2f8fd6"
+    },
+    {
+      "type": "text",
+      "value": "#2f8fd6"
+    },
+    {
+      "type": "color",
+      "value": "#f34a4a"
+    },
+    {
+      "type": "color",
+      "value": "#ffbc48"
+    },
+    {
+      "type": "color",
+      "value": "#58ca70"
+    },
+    {
+      "type": "color",
+      "value": "#47b5e6"
+    },
+    {
+      "type": "color",
+      "value": "#a555e8"
+    },
+    {
+      "type": "checkbox",
+      "value": "on"
+    },
+    {
+      "type": "color",
+      "value": "#f34a4a"
+    },
+    {
+      "type": "text",
+      "value": "#f34a4a"
+    },
+    {
+      "type": "color",
+      "value": "#ffbc48"
+    },
+    {
+      "type": "text",
+      "value": "#ffbc48"
+    },
+    {
+      "type": "color",
+      "value": "#58ca70"
+    },
+    {
+      "type": "text",
+      "value": "#58ca70"
+    },
+    {
+      "type": "text",
+      "value": ""
+    },
+    {
+      "type": "checkbox",
+      "value": "on"
+    }
+  ],
+  "records": [
+    {
+      "scope": "[\"http://127.0.0.1:18721\",\"home\",\"6adb0700a8437e16e573fb33\"]",
+      "event": {
+        "actorId": "6adb0700a8437e16e573fb33",
+        "after": {
+          "adapter": "theme-content",
+          "value": {
+            "crystal": {
+              "name": "History design 9671bb",
+              "theme": {
+                "colors": {
+                  "accent": "#885544",
+                  "accentContrast": "#ffffff",
+                  "accentTint": "#fff5fa",
+                  "border": "#ececef",
+                  "borderLight": "#f0f0f2",
+                  "card": "#ffffff",
+                  "danger": "#d6455a",
+                  "darkAccent": "#59ff9c",
+                  "darkBg": "#131318",
+                  "darkBorder": "#2a2a33",
+                  "darkChrome": "#1c1c22",
+                  "darkMuted": "#8a8a95",
+                  "darkText": "#e6e6ee",
+                  "faint": "#b6b6c0",
+                  "ink": "#16161a",
+                  "link": "#2f8fd6",
+                  "muted": "#9a9aa6",
+                  "pageBg": "#ffffff",
+                  "positive": "#2f8f4f",
+                  "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                  "rainbow": [
+                    "#f34a4a",
+                    "#ffbc48",
+                    "#58ca70",
+                    "#47b5e6",
+                    "#a555e8"
+                  ],
+                  "surface": "#fafafb",
+                  "surfaceAlt": "#f5f5f7",
+                  "surfaceHover": "#ececee",
+                  "text": "#5a5a66",
+                  "warning": "#ffbc48"
+                },
+                "fonts": {
+                  "body": "Hanken Grotesk",
+                  "display": "",
+                  "heading": "Space Grotesk",
+                  "mono": "JetBrains Mono"
+                },
+                "general": {
+                  "animSpeed": 200,
+                  "borderWidth": 1,
+                  "iconStyle": "emoji",
+                  "motion": true,
+                  "radiusScale": 1,
+                  "shadow": "soft",
+                  "thingsBadgeCustomPadding": "3px 8px",
+                  "thingsBadgePadding": "small"
+                },
+                "name": "History design 9671bb",
+                "windows": {
+                  "closeColor": "",
+                  "closeRadius": 3.5,
+                  "maximiseColor": "",
+                  "maximiseRadius": 3.5,
+                  "minimiseColor": "",
+                  "minimiseRadius": 3.5
+                }
+              }
+            },
+            "folderId": null,
+            "tags": [],
+            "visibility": "private"
+          },
+          "version": 1
+        },
+        "before": null,
+        "branchId": "device-workspace-c913c6da-140a-462c-937b-69338fc86b77",
+        "clientId": "workspace-c913c6da-140a-462c-937b-69338fc86b77",
+        "dependencyCount": 0,
+        "formatVersion": 1,
+        "id": "device-event-db2475de-28a1-4c25-8340-911782ed0d13",
+        "label": "Created Thing on this device",
+        "mode": "draft",
+        "occurredAt": "2026-10-23T07:04:45.240Z",
+        "operation": "create",
+        "operationId": "b2f092e4-83c9-44fc-96ef-5e7e9b6c9dcc",
+        "ownerId": "6adb0700a8437e16e573fb33",
+        "parentCount": 0,
+        "source": "client",
+        "thingId": "37d1c31a-cc6e-4298-9cbe-379d2715ae40"
+      },
+      "receipt": null,
+      "status": "pending",
+      "accessedAt": 1792739085240,
+      "bytes": 1782,
+      "reserve": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     "
+    }
+  ],
+  "errors": [],
+  "writes": []
+}

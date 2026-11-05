@@ -1,0 +1,120 @@
+{
+  "message": "TimeoutError: locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: 'Log out', exact: true })\n",
+  "body": "🦄\naudio-43101009-ce7\n🌈\n🦄\nTHINGTIME · POST 📌\nPost 📌\nA\naudio-author-a0d59f41-3\n@audio-author-a0d59f41-3 · \njust now\n🌐\nanyone can see this post\n\nTwo synthetic ordinary audio tracks.\n\nfixture-track-2.wav\n\n15.7 KiB · WAV audio · Track 2 of 2\n\nUse offline copy\nRemove offline copy\n\nStreaming from Thingtime\n\nDownload original\n\nQUEUE · PLAYS NEXT AUTOMATICALLY\n\n1. fixture-track-1.wav\n2. fixture-track-2.wav\nDownload all · 2 files · 31.3 KiB\n0\nPost as\naudio-43101009-ce7\nRecover earlier comment draft\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 5ms\n\nMongoDB: connected (6ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nAUDIO-43101009-CE7\n\nProfile\n\nLog out\n\n✉️ email unverified\n\n🦄",
+  "postId": "433df590-7071-4ed7-a99f-69127d3e75bd",
+  "ids": [
+    "att_7971aa42d14fe8a17f0bd862b5678ea2e5f61003a86da07ea9dd0b51bf6442b4",
+    "att_4b6dc632eff4b928416e6f717473bdf3bf7cd351c675065174749cadc5e24a2b"
+  ],
+  "requests": [
+    {
+      "id": "att_7971aa42d14fe8a17f0bd862b5678ea2e5f61003a86da07ea9dd0b51bf6442b4",
+      "mode": "validate",
+      "expectedActor": "6adfbf6aebfc932dd81e6544",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_7971aa42d14fe8a17f0bd862b5678ea2e5f61003a86da07ea9dd0b51bf6442b4",
+      "mode": "original-bytes",
+      "expectedActor": "6adfbf6aebfc932dd81e6544",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_4b6dc632eff4b928416e6f717473bdf3bf7cd351c675065174749cadc5e24a2b",
+      "mode": "validate",
+      "expectedActor": "6adfbf6aebfc932dd81e6544",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_4b6dc632eff4b928416e6f717473bdf3bf7cd351c675065174749cadc5e24a2b",
+      "mode": "original-bytes",
+      "expectedActor": "6adfbf6aebfc932dd81e6544",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_4b6dc632eff4b928416e6f717473bdf3bf7cd351c675065174749cadc5e24a2b",
+      "mode": "validate",
+      "expectedActor": "6adfbf6aebfc932dd81e6544",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_7971aa42d14fe8a17f0bd862b5678ea2e5f61003a86da07ea9dd0b51bf6442b4",
+      "mode": "validate",
+      "expectedActor": "6adfbf6aebfc932dd81e6544",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_7971aa42d14fe8a17f0bd862b5678ea2e5f61003a86da07ea9dd0b51bf6442b4",
+      "mode": "original-bytes",
+      "expectedActor": "6adfbf6aebfc932dd81e6544",
+      "plane": "home",
+      "serviceWorker": null
+    }
+  ],
+  "audioResponses": [
+    {
+      "id": "att_7971aa42d14fe8a17f0bd862b5678ea2e5f61003a86da07ea9dd0b51bf6442b4",
+      "mode": null,
+      "status": 206
+    },
+    {
+      "id": "att_7971aa42d14fe8a17f0bd862b5678ea2e5f61003a86da07ea9dd0b51bf6442b4",
+      "mode": "validate",
+      "status": 200
+    },
+    {
+      "id": "att_7971aa42d14fe8a17f0bd862b5678ea2e5f61003a86da07ea9dd0b51bf6442b4",
+      "mode": "original-bytes",
+      "interceptedStatus": 200,
+      "serviceWorker": null
+    },
+    {
+      "id": "att_4b6dc632eff4b928416e6f717473bdf3bf7cd351c675065174749cadc5e24a2b",
+      "mode": null,
+      "status": 206
+    },
+    {
+      "id": "att_4b6dc632eff4b928416e6f717473bdf3bf7cd351c675065174749cadc5e24a2b",
+      "mode": "validate",
+      "status": 200
+    },
+    {
+      "id": "att_4b6dc632eff4b928416e6f717473bdf3bf7cd351c675065174749cadc5e24a2b",
+      "mode": "original-bytes",
+      "status": 200
+    },
+    {
+      "id": "att_4b6dc632eff4b928416e6f717473bdf3bf7cd351c675065174749cadc5e24a2b",
+      "mode": "validate",
+      "status": 200
+    },
+    {
+      "id": "att_7971aa42d14fe8a17f0bd862b5678ea2e5f61003a86da07ea9dd0b51bf6442b4",
+      "mode": null,
+      "status": 206
+    },
+    {
+      "id": "att_7971aa42d14fe8a17f0bd862b5678ea2e5f61003a86da07ea9dd0b51bf6442b4",
+      "mode": "validate",
+      "status": 200
+    },
+    {
+      "id": "att_7971aa42d14fe8a17f0bd862b5678ea2e5f61003a86da07ea9dd0b51bf6442b4",
+      "mode": "original-bytes",
+      "interceptedStatus": 200,
+      "serviceWorker": null
+    },
+    {
+      "id": "att_4b6dc632eff4b928416e6f717473bdf3bf7cd351c675065174749cadc5e24a2b",
+      "mode": null,
+      "status": 206
+    }
+  ],
+  "errors": []
+}

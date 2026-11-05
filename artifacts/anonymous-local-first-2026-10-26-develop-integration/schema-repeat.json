@@ -1,0 +1,18 @@
+{
+  "startedAt": "2026-10-26T09:55:36.192Z",
+  "endedAt": "2026-10-26T09:55:43.771Z",
+  "scope": "Current merged source; sanitized test environment; outbound network restricted to loopback; synthetic unit fixtures only",
+  "results": [
+    {
+      "command": "test:schemas",
+      "code": 0,
+      "elapsedMs": 7565,
+      "summary": [
+        "\u2139 tests 277",
+        "\u2139 pass 277",
+        "\u2139 fail 0",
+        "\u2139 skipped 0"
+      ]
+    }
+  ]
+}

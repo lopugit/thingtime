@@ -1,0 +1,2 @@
+{"ok":true,"aggregateBytes":538968064,"fileBytes":269484032,"files":2,"copies":2,"realMultipart":true,"independentSha256":true,"pinnedOriginalStream":true,"zipRoundtrip":true,"copySurvivesSourceDeletion":true,"networkDenyVerified":true,"quotaRefusalVerified":true,"fixtureAllowanceBytes":4294967296,"productionAccess":false}
+{"cleanup":true,"ok":true,"childrenStopped":true,"portsClosed":true,"directoryGone":true,"stopFailures":0}

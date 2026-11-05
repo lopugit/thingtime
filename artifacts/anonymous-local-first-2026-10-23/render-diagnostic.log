@@ -1,0 +1,7 @@
+{"ms":2658,"stage":"request","value":"/draft-preview/index.html"}
+{"ms":2663,"stage":"fulfilled","value":"/draft-preview/index.html"}
+{"ms":2713,"stage":"request","value":"/draft-preview/runner.js"}
+{"ms":4246,"stage":"fulfilled","value":"/draft-preview/runner.js"}
+{"ms":9198,"stage":"domcontentloaded"}
+{"ms":9198,"stage":"load"}
+{"ms":9224,"stage":"loaded","value":{"ready":"complete","api":true}}

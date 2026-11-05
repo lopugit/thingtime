@@ -1,0 +1,563 @@
+{
+  "runId": "d56d5bf0-555d-4ed6-8d99-ec172900e8fa",
+  "error": "Error: Account copy did not converge: {\"status\":200,\"body\":{\"ok\":true,\"thing\":{\"id\":\"att_e9bef1f04a1051335d66ba8edbffba5288b1615a845d74ed8a08ab25ffc9f005\",\"thingtime\":[\"attachment\"],\"author\":{\"id\":\"6adb276b8d76baae4ed9026d\",\"username\":\"copyfiles-d56d5bf0\",\"displayName\":null,\"temporary\":false,\"avatarUrl\":null},\"audience\":{\"sourceId\":\"att_e9bef1f04a1051335d66ba8edbffba5288b1615a845d74ed8a08ab25ffc9f005\",\"acl\":[\"tt:user\"]},\"visibility\":\"private\",\"acl\":[\"tt:user\"],\"targetId\":null,\"folderId\":null,\"crystal\":{\"name\":\"private-copy.txt\",\"size\":18504,\"contentType\":\"application/octet-stream\",\"mediaKind\":\"file\"},\"extended\":null,\"geo\":null,\"tags\":[],\"createdAt\":\"2026-10-23T09:23:39.115Z\",\"updatedAt\":\"2026-10-23T09:23:40.377Z\"},\"post\":{\"id\":\"att_e9bef1f04a1051335d66ba8edbffba5288b1615a845d74ed8a08ab25ffc9f005\",\"thingtime\":[\"attachment\"],\"type\":\"text\",\"author\":{\"id\":\"6adb276b8d76baae4ed9026d\",\"username\":\"copyfiles-d56d5bf0\",\"displayName\":null,\"temporary\":false,\"avatarUrl\":null},\"audience\":{\"sourceId\":\"att_e9bef1f04a1051335d66ba8edbffba5288b1615a845d74ed8a08ab25ffc9f005\",\"acl\":[\"tt:user\"]},\"visibility\":\"private\",\"acl\":[\"tt:user\"],\"text\":\"\",\"richText\":null,\"images\":[],\"attachments\":[],\"mediaLayout\":null,\"listing\":null,\"thing\":null,\"tags\":[],\"reactionCounts\":{},\"viewerReactions\":[],\"votes\":{\"up\":0,\"down\":0,\"score\":0,\"viewerVote\":null},\"title\":null,\"subspace\":null,\"flair\":null,\"authorFlair\":null,\"subspaceMod\":null,\"commentCount\":0,\"commentCounts\":{\"direct\":0,\"replies\":0,\"total\":0,\"loaded\":0},\"comments\":[],\"shareCount\":0,\"isShare\":false,\"shareOf\":null,\"viewCount\":0,\"viewStats\":{\"impressions\":0,\"avgDwellMs\":0},\"viewerSaved\":false,\"extended\":null,\"geo\":null,\"createdAt\":\"2026-10-23T09:23:39.115Z\"},\"discussion\":null,\"parent\":null,\"root\":null,\"commentSort\":null}}",
+  "screenshot": {
+    "file": "failure-d56d5bf0-555d-4ed6-8d99-ec172900e8fa.png",
+    "sha256": "87fe295f5fb84df47b720b12e0203b1e34dd07f1633dae7e43a10d8515514c65"
+  },
+  "body": "🦄\ncopyfiles-d56d5bf0\n🌈\n🦄\n\n2 file changes saved on this device. Account upload needs attention.\n\nReview file sync\n\nTHINGTIME · THINGS\n\nBrowse files\nSelected library\nHome library\nThings\nNew\nImport…\nPaste\n\nVIEW\n\nGrid\nList\nColumns\n\nSHOW\n\nNames\nPreviews\n\nARRANGE\n\nNewest first\nGroup\n\nKIND\n\n🌀 All\n📁 Folders\n💾 Files\n📝 Posts\n📦 Data\n💎 Schemas\n🧩 Components\n⚡ Actions\n💬 Comments\n🏠 All things\n\n/\n\n📁 Offline file copy d56d5bf0\n\n🏠\n\nAll things\n\n📁\n\nOffline file copy d56d5bf0\n\n📁\n\nOffline file copy d56d5bf0\n\n🕰️\n\nTimeline\n\nNew folder +\n\n📦\n\nIndependent copy data\n\nDATA\n\n2m ago\n\n📄\n\nPrivate copied file\n\nATTACHMENT\n\n2m ago\n\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 54ms\n\nMongoDB: connected (12ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nCOPYFILES-D56D5BF0\n\nProfile\n\nLog out\n\n✉️ email unverified\n\n🦄",
+  "browserOnline": true,
+  "sourceRoot": "82a32f81-3a1f-4c68-8649-c0a4f4454dc0",
+  "copyRoot": "468db8f9-a856-4a2a-9384-8931a3757b76",
+  "sourceFileId": "local-file-c03f010c-6498-49bc-a18a-94a07a45d3cf",
+  "copyFileId": "local-file-36b6a26c-9496-46a9-969a-71fe1a2d1f46",
+  "failedOriginalUploads": 7,
+  "errors": [],
+  "connectivityEvents": [
+    {
+      "phase": "reconnecting",
+      "at": 1792747372511
+    },
+    {
+      "phase": "online",
+      "at": 1792747372527
+    },
+    {
+      "phase": "disconnecting",
+      "at": 1792747376203
+    },
+    {
+      "phase": "offline",
+      "at": 1792747376307
+    },
+    {
+      "phase": "reconnecting",
+      "at": 1792747409250
+    },
+    {
+      "phase": "online",
+      "at": 1792747409357
+    }
+  ],
+  "offlineHttpSuccesses": [],
+  "writes": [
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747412468,
+      "operation": "snapshot",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747412532
+      }
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747412531,
+      "operation": "selection",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747412569
+      }
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747412690,
+      "operation": "snapshot",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747412983
+      }
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747412889,
+      "operation": "selection",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747413049
+      }
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747413311,
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747413357
+      }
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747414251,
+      "operation": "create",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747414315
+      }
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747415149,
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747415194
+      }
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747415404,
+      "operation": "create",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747415504
+      }
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747416528,
+      "operation": "create",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747416612
+      }
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747416611,
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747416650
+      }
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747416841,
+      "operation": "create",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747416939
+      }
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747416907,
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747417001
+      }
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747417874,
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747418172
+      }
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747418333,
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747418413
+      }
+    },
+    {
+      "path": "/api/v1/attachments/uploads",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747419079,
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747419181
+      }
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747419484,
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747419568
+      }
+    },
+    {
+      "path": "/api/v1/attachments/uploads/parts",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747420049,
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747420123
+      }
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747420192,
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747420271
+      }
+    },
+    {
+      "path": "/api/v1/attachments/local-object",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747420213,
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747420238
+      },
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "path": "/api/v1/attachments/uploads/complete",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747420307,
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747420392
+      }
+    },
+    {
+      "path": "/api/v1/attachments/uploads",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747420509,
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 503,
+        "phase": "online",
+        "at": 1792747420517
+      }
+    },
+    {
+      "path": "/api/v1/attachments/uploads",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747421970,
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 503,
+        "phase": "online",
+        "at": 1792747421993
+      }
+    },
+    {
+      "path": "/api/v1/attachments/uploads",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747424274,
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 503,
+        "phase": "online",
+        "at": 1792747424284
+      }
+    },
+    {
+      "path": "/api/v1/attachments/uploads",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747428392,
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 503,
+        "phase": "online",
+        "at": 1792747428400
+      }
+    },
+    {
+      "path": "/api/v1/attachments/uploads",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747436590,
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 503,
+        "phase": "online",
+        "at": 1792747436601
+      }
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747452776,
+      "operation": "snapshot",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747452830
+      }
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747452813,
+      "operation": "selection",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747452848
+      }
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747452897,
+      "operation": "snapshot",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747452959
+      }
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747452936,
+      "operation": "selection",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747452988
+      }
+    },
+    {
+      "path": "/api/v1/attachments/uploads",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747455809,
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 503,
+        "phase": "online",
+        "at": 1792747455820
+      }
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747488386,
+      "operation": "snapshot",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747488439
+      }
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747488801,
+      "operation": "selection",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747488870
+      }
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747488907,
+      "operation": "snapshot",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747488958
+      }
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747488948,
+      "operation": "selection",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747488981
+      }
+    },
+    {
+      "path": "/api/v1/attachments/uploads",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747491997,
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 503,
+        "phase": "online",
+        "at": 1792747492034
+      }
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747552205,
+      "operation": "snapshot",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747552271
+      }
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747552209,
+      "operation": "selection",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747552274
+      }
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747552254,
+      "operation": "snapshot",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747552311
+      }
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "phase": "online",
+      "at": 1792747552276,
+      "operation": "selection",
+      "actor": "6adb276b8d76baae4ed9026d",
+      "plane": "home",
+      "response": {
+        "status": 200,
+        "phase": "online",
+        "at": 1792747552314
+      }
+    }
+  ]
+}

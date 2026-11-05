@@ -1,0 +1,84 @@
+{
+  "checkoutCommit": "b23917ea92e7e6d9ef5dbc7c3792a0289fecfb10",
+  "appBuild": "Existing b23 sanitized production app package; parent verified source equivalence; no application rebuild or installed-app replacement in this subtask",
+  "fixtures": "Opt-in fixture seeds/retries canonical account IndexedDB queue only. Normal app worker and canonical transport perform sync. Neutral same-context control page independently reads real API with verified synthetic actor/home plane.",
+  "result": "1 passed, 0 failed, 0 skipped",
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "width": 390,
+      "height": 844
+    },
+    {
+      "width": 320,
+      "height": 844
+    }
+  ],
+  "renderChecks": {
+    "nonblank": "Exact Component control text required before every capture; original/final page text required after reload",
+    "horizontalOverflow": [
+      {
+        "label": "acknowledged",
+        "width": 1440,
+        "scrollWidth": 1440
+      },
+      {
+        "label": "acknowledged",
+        "width": 390,
+        "scrollWidth": 390
+      },
+      {
+        "label": "acknowledged",
+        "width": 320,
+        "scrollWidth": 320
+      },
+      {
+        "label": "recovered",
+        "width": 1440,
+        "scrollWidth": 1440
+      },
+      {
+        "label": "recovered",
+        "width": 390,
+        "scrollWidth": 390
+      },
+      {
+        "label": "recovered",
+        "width": 320,
+        "scrollWidth": 320
+      }
+    ],
+    "fonts": "document.fonts.ready awaited at each viewport before screenshot; font status string not separately retained",
+    "scroll": "For each capture, scrollable document/nested elements traversed from top in half-height increments to bottom with animation frames; >40000px repeating content guard; top/bottom screenshots retained. Fixture content is short. Scroll distances not separately retained.",
+    "visualInspection": "Recovered desktop1440, mobile390 and narrow320-bottom screenshots visually inspected; visible Component/newer content, no overflow or overlap observed."
+  },
+  "sourceFormatting": "Final fixture/test formatted after acceptance; esbuild minified executable transforms exactly equal to executed sources retained alongside results.",
+  "typecheck": {
+    "scope": "Parent-reported comparison against existing checkout baseline",
+    "rawExit": 2,
+    "baselineDiagnostics": 91,
+    "currentDiagnostics": 91,
+    "added": [],
+    "removed": [],
+    "cleanTypecheck": false,
+    "log": "tmp/continuation/component-native-typecheck.log",
+    "comparison": "tmp/continuation/component-native-typecheck-comparison.json"
+  },
+  "completionBoundary": "Bounded local installed-manager container-browser acceptance only; no production/provider/public-account acceptance, merge, deployment, or plan-complete claim.",
+  "finalSourceSha256": {
+    "remix/app/local-workspace/componentQueue.browser.fixture.ts": "f18e2d2dc62287ca6154aa1158bc085b8f31c39810469f46b19d4bff1047be7c",
+    "remix/app/local-workspace/componentQueue.browser.test.ts": "9250f0ad888f8fd411a188f337448f6621178d315da8216aa5f4a4876275347b"
+  },
+  "lint": {
+    "result": "passed",
+    "exitCode": 0,
+    "scope": [
+      "componentQueue.browser.fixture.ts",
+      "componentQueue.browser.test.ts"
+    ],
+    "warning": "Existing @remix-run/eslint-config deprecation warning"
+  }
+}

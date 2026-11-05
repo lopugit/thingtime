@@ -1,0 +1,26 @@
+✖ native account history retains an offline message through reconnect refusal, explicit retry, two tabs and cold reload (48613.838327ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 48682.6359
+
+✖ failing tests:
+
+test at ../account.test.mjs:10:1
+✖ native account history retains an offline message through reconnect refusal, explicit retry, two tabs and cold reload (48613.838327ms)
+  locator.click: Timeout 30000ms exceeded.
+  Call log:
+    - waiting for getByRole('button', { name: 'Reconnect', exact: true })
+      - locator resolved to <button disabled type="button" class="chakra-button cha-e8ab4z">Reconnect</button>
+    - attempting click action
+      - waiting for element to be visible, enabled and stable
+    - element was detached from the DOM, retrying
+  
+      at TestContext.<anonymous> (/tmp/check/account.test.mjs:99:54) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('button', { name: 'Reconnect', exact: true })", '    - locator resolved to <button disabled type="button" class="chakra-button cha-e8ab4z">Reconnect</button>', '  - attempting click action', '    - waiting for element to be visible, enabled and stable', '  - element was detached from the DOM, retrying' ]
+  }

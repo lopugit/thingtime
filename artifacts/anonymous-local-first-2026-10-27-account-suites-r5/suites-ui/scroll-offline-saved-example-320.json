@@ -1,0 +1,35 @@
+{
+  "label": "offline-saved-example",
+  "width": 320,
+  "skippedHidden": 3,
+  "roots": [
+    {
+      "marker": "0",
+      "tag": "HTML",
+      "kind": "page",
+      "clientHeight": 844,
+      "scrollHeight": 3108,
+      "maxScroll": 2264,
+      "rect": {
+        "width": 320,
+        "height": 3107.953125
+      },
+      "points": [
+        0,
+        566,
+        1132,
+        1698,
+        2264
+      ],
+      "observed": [
+        0,
+        566,
+        1132,
+        1698,
+        2264
+      ]
+    }
+  ],
+  "phase": "complete",
+  "completedRoots": 1
+}

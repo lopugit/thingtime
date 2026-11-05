@@ -1,0 +1,42 @@
+✔ native anonymous theme History reviews restore, undo and merge offline (97339.580366ms)
+✖ native account theme History reviews restore, undo and merge offline (43365.239384ms)
+✖ native custom-plane account theme History reviews restore, undo and merge offline (62100.023388ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 203969.716464
+
+✖ failing tests:
+
+test at app/local-workspace/themeVersions.browser.test.ts:2:1635
+✖ native account theme History reviews restore, undo and merge offline (43365.239384ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(box && box.x >= 0 && box.x + box.width <= width + 1 && box.y >= 0 && box.y + box.height <= (width === 1440 ? 1000 : 844))
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:254:13)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at app/local-workspace/themeVersions.browser.test.ts:2:1635
+✖ native custom-plane account theme History reviews restore, undo and merge offline (62100.023388ms)
+  locator.click: Timeout 25000ms exceeded.
+  Call log:
+    - waiting for getByRole('dialog', { name: 'History', exact: true }).getByRole('button', { name: /Edited Thing/ }).first()
+  
+      at openEdit (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:141:7)
+      at async TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:229:5) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('dialog', { name: 'History', exact: true }).getByRole('button', { name: /Edited Thing/ }).first()" ]
+  }

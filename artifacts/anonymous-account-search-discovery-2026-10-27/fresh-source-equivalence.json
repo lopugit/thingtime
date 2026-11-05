@@ -1,0 +1,38 @@
+{
+  "archiveSha256": "bd61db37b2765d68b817dfdc649dd30b62f39a67fd015441bceaac2519e4e425",
+  "archiveBasename": "audio-search-pre-review-app.tar.gz",
+  "modules": {
+    "remix/app/local-workspace/accountApi.client.ts": {
+      "map": "app/public/assets/accountApi.client-Cz-ggSE2.js.map",
+      "source": "../../app/local-workspace/accountApi.client.ts",
+      "sha256": "6d5397b43283a49bcf00b20fac5fed16ac88bccc029f3a86a105439bb3a716dc",
+      "matches": true
+    },
+    "remix/app/local-workspace/runtime.client.ts": {
+      "map": "app/public/assets/runtime.client-gX05s3hj.js.map",
+      "source": "../../app/local-workspace/runtime.client.ts",
+      "sha256": "05b5a9b084502131a86b119ceb4ce7c75499f263a2ff90c56e0d7db54fe96d9a",
+      "matches": true
+    },
+    "remix/app/components/Search/searchResultSnapshot.ts": {
+      "map": "app/public/assets/search-uYkfOPID.js.map",
+      "source": "../../app/components/Search/searchResultSnapshot.ts",
+      "sha256": "681a65c38c81c1db378e9a69f1a4faa42f637dbddc121facbf9d8f5e862af50b",
+      "matches": true
+    },
+    "remix/app/components/Search/SearchPage.tsx": {
+      "map": "app/public/assets/search-uYkfOPID.js.map",
+      "source": "../../app/components/Search/SearchPage.tsx",
+      "sha256": "868de7e8708e34639e373d5787c17f28981da78efa463cdc2f05aa13265b8517",
+      "matches": true
+    },
+    "remix/app/utils/mediaCache.client.ts": {
+      "map": "app/public/assets/ThingTransferControls-CJGhGD3g.js.map",
+      "source": "../../app/utils/mediaCache.client.ts",
+      "sha256": "618d088420d929cd6a5bb3358916e11fc63600842053a7c6fbb035802558d658",
+      "matches": true
+    }
+  },
+  "missing": [],
+  "boundary": "Exact relevant client sources only; no server-source or whole-package equivalence claim."
+}

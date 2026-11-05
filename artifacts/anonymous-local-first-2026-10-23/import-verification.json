@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "fixture": "isolated-agent-test replica",
+  "contentHash": "a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c",
+  "imported": 2,
+  "freshIds": true,
+  "dependencyRemapped": true,
+  "privateAcl": true,
+  "anonymousReadsDenied": true,
+  "canonicalReexport": true,
+  "cleanupVerified": true
+}

@@ -1,0 +1,29 @@
+[
+  {
+    "id": "10f8c729-6c17-4c1c-8313-995919ef0b97",
+    "scope": "[\"account\",\"http://127.0.0.1:18724\",\"6adff99228f626aa45734ca0\",\"home\"]",
+    "state": "conflict",
+    "deleted": {
+      "id": "10f8c729-6c17-4c1c-8313-995919ef0b97",
+      "revision": 1,
+      "updatedAt": "2026-10-27T01:08:36.958Z"
+    },
+    "retryAt": 1793063396669,
+    "pendingMethod": "delete",
+    "error": "Remote content changed. Your local edits are preserved.",
+    "baseId": "10f8c729-6c17-4c1c-8313-995919ef0b97",
+    "inFlight": null
+  },
+  {
+    "id": "1311a59c-e83e-4561-93a9-4dc02d71103b",
+    "scope": "[\"account\",\"http://127.0.0.1:18724\",\"6adff99228f626aa45734ca0\",\"home\"]",
+    "state": "synced",
+    "deleted": {
+      "id": "1311a59c-e83e-4561-93a9-4dc02d71103b",
+      "revision": 1,
+      "updatedAt": "2026-10-27T01:08:39.775Z"
+    },
+    "retryAt": 0,
+    "inFlight": null
+  }
+]

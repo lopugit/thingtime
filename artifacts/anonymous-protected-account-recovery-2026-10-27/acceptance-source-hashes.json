@@ -1,0 +1,9 @@
+{
+  "remix/app/local-workspace/protectedRecovery.browser.fixture.ts": "9bc0ffca0ddae5ff0d208d5840f9efc078bd7a828554d24df3ac074e4d282807",
+  "remix/app/local-workspace/protectedRecovery.browser.test.ts": "0a5c9a2fa0cacf229066bc509e3ef5352dc033b1c22beb9d7739caff26773416",
+  "tmp/continuation/protected-account.fixture.js": "849b25351cb3ccfc2449a25f6a94ee192c8ba72c0b479aad5fb2e182ad02dec1",
+  "tmp/continuation/protected-account.test.mjs": "497c09073077ee0b6839ddaadcf0eed3dd2d3e244a6722f40df7114341ccfb28",
+  "tmp/continuation/protected-account-run.cjs": "20cd8a0bb1bf6ae9924d3eb07c15575ddb098f5a7efed54389fd00a5ea158c59",
+  "artifacts/anonymous-protected-account-recovery-2026-10-27/prepare.cjs": "c269f9f9b61683eea320b253147227fc648f965515a92c2b3fde27a5c5aadb6c",
+  "artifacts/anonymous-protected-account-recovery-2026-10-27/run.cjs": "00403f4432f5d191258ccc74a84661d50c972058fd6747d4aeca69752a777e17"
+}

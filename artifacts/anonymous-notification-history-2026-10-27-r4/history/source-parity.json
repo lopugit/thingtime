@@ -1,0 +1,57 @@
+{
+  "archive": "/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/tmp/continuation/history-app.tar.gz",
+  "sha256": "87362c1074e42e3041362c35cc5e3bb71c06b91b8e8ff0ce6b24b56b92d5d50f",
+  "bytes": 67972129,
+  "entries": 2135,
+  "source": "Fresh sanitized complete client/server build; no account configuration",
+  "checks": [
+    {
+      "file": "remix/app/local-workspace/storageStatus.client.ts",
+      "map": "useLopu-BlT3kjN0.js.map",
+      "equal": true,
+      "sha256": "c049d227b4aa1ce629ee53ac5fd33b7b7fa3383451c64de76144b1459c7b087a"
+    },
+    {
+      "file": "remix/app/components/Lopu/notificationHistory.client.ts",
+      "map": "useLopu-BlT3kjN0.js.map",
+      "equal": true,
+      "sha256": "8d43e158d5bf45b6c6e4eab7fcfaec85c02ebc3ab9cf343a52940fea340df0b2"
+    },
+    {
+      "file": "remix/app/local-workspace/runtime.client.ts",
+      "map": "runtime.client-gX05s3hj.js.map",
+      "equal": true,
+      "sha256": "05b5a9b084502131a86b119ceb4ce7c75499f263a2ff90c56e0d7db54fe96d9a"
+    },
+    {
+      "file": "remix/app/local-workspace/notifications.ts",
+      "map": "aiTasks.client-DOWIj3U5.js.map",
+      "equal": true,
+      "sha256": "cb6383c7c3f05edbf951964d491fa049829579884205777b45fc7f46d81e000e"
+    },
+    {
+      "file": "remix/app/local-workspace/notifications.client.ts",
+      "map": "aiTasks.client-DOWIj3U5.js.map",
+      "equal": true,
+      "sha256": "91a398c1cdd0072e3dc5fe06e69c90240246e4110669c455bbfdfaa52ad11637"
+    },
+    {
+      "file": "remix/app/local-workspace/notificationHistoryAccess.ts",
+      "map": "notifications-BM4JMCDG.js.map",
+      "equal": true,
+      "sha256": "d99fbaec59c524f35b51cb8aca2a2cbf3ae51b859727215d01fce6cd7d9bc546"
+    },
+    {
+      "file": "remix/app/local-workspace/notificationPages.ts",
+      "map": "notifications-BM4JMCDG.js.map",
+      "equal": true,
+      "sha256": "d164645ffc2c5be2dafc59b6b1ac8442356cef78048a4af90274738d4e8a2114"
+    },
+    {
+      "file": "remix/app/components/Notifications/NotificationsPage.tsx",
+      "map": "notifications-BM4JMCDG.js.map",
+      "equal": true,
+      "sha256": "f37264e175c886116100b35a0b7a1eeb713955412bdbbf93a65e77177aca97c5"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
-	TIMELINE_NOTE_KIND, TIMELINE_NOTE_MAX_BYTES, TIMELINE_NOTES_PER_EVENT, parseTimelineNote, parseTimelineNoteCommand, sortTimelineNotes, timelineNoteId,
+	TIMELINE_NOTE_KIND, TIMELINE_NOTE_MAX_BYTES, TIMELINE_NOTES_PER_EVENT, parseTimelineNote, parseTimelineNoteRemoval, parseTimelineNoteCommand, sortTimelineNotes, timelineNoteId,
 	type TimelineNote, type TimelineNoteAuthor, type TimelineNoteCommand, type TimelineNoteResult
 } from '../../../timeline/notes.ts';
 import { binaryBytes, fromBin, toBin } from '../auth/binary.ts';
@@ -13,20 +13,28 @@ import { readTimelineEntries, timelineEventThingId, timelineFolderId } from './r
 import { explainTimelineEntry } from './explain.ts';
 
 /** One protected relational Thing per note. The event stays immutable: a note
- * points at its event Thing through targetId (shared index) and never becomes
- * a field or array on the event, the Thing or the Timeline folder. */
+	* points at its event Thing through targetId (shared index) and never becomes
+	* a field or array on the event, the Thing or the Timeline folder. */
 const digest = (parts: unknown) => createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 const refuse = (status: number, message: string): never => { throw new StorageMutationError(status, status === 409 ? 'storage_conflict' : 'storage_invariant', message); };
 export const timelineNoteThingId = (ownerId: string, noteId: string) => `timeline-note-${digest([ownerId, noteId])}`;
 export const packTimelineNote = (note: TimelineNote) => ({ timelineNoteVersion: 1, secure: toBin(JSON.stringify(note)) });
 export const noteFromDoc = (doc: any): TimelineNote => {
 	const bytes = binaryBytes(doc?.secure);
-	if (!doc?.thingtime?.includes(TIMELINE_NOTE_KIND) || doc.timelineNoteVersion !== 1 || bytes === null || bytes < 1 || bytes > TIMELINE_NOTE_MAX_BYTES) throw new Error('Invalid Timeline note envelope');
+	if (!doc?.thingtime?.includes(TIMELINE_NOTE_KIND) || doc.timelineNoteRemoved === true || doc.timelineNoteVersion !== 1 || bytes === null || bytes < 1 || bytes > TIMELINE_NOTE_MAX_BYTES) throw new Error('Invalid Timeline note envelope');
 	const note = parseTimelineNote(JSON.parse(fromBin(doc.secure)));
 	const eventShareId = timelineEventThingId(note.ownerId, note.eventId);
 	if (doc.ownerId !== note.ownerId || doc.shareId !== timelineNoteThingId(note.ownerId, note.id) || doc.targetId !== eventShareId || doc.crystal?.name !== 'Note' || doc.crystal?.targetId !== eventShareId || doc.crystal?.linkKind !== TIMELINE_NOTE_KIND)
 		throw new Error('Timeline note envelope does not match its record');
 	return note;
+};
+
+const removedNoteFromDoc = (doc: any) => {
+	const bytes = binaryBytes(doc?.secure);
+	if (doc?.timelineNoteRemoved !== true || doc.timelineNoteVersion !== 1 || bytes === null || bytes < 1 || bytes > TIMELINE_NOTE_MAX_BYTES) throw new Error('Invalid Timeline note removal envelope');
+	const removal = parseTimelineNoteRemoval(JSON.parse(fromBin(doc.secure)));
+	if (!doc.thingtime?.includes(TIMELINE_NOTE_KIND) || doc.ownerId !== removal.ownerId || doc.shareId !== timelineNoteThingId(removal.ownerId, removal.id)) throw new Error('Timeline note removal envelope does not match its record');
+	return removal;
 };
 
 /** ONE bounded owner-scoped query per batch over the shared targetId index; at most 8 notes per event. */
@@ -48,6 +56,7 @@ export function createNoteService(overrides: Partial<typeof dependencies> = {}) 
 	const deps = { ...dependencies, ...overrides };
 	const existing = async (things: any, ownerId: string, noteId: string, session?: any) => {
 		const doc = await things.findOne({ ownerId, thingtime: TIMELINE_NOTE_KIND, shareId: timelineNoteThingId(ownerId, noteId) }, session ? { session } : {});
+		if (doc?.timelineNoteRemoved === true) { removedNoteFromDoc(doc); refuse(409, 'This note was removed. Add a new note instead of retrying the old request.'); }
 		return doc ? noteFromDoc(doc) : null;
 	};
 	/** The operation id is the retry identity: an identical request returns the stored note; a different one is refused. */
@@ -90,11 +99,27 @@ export function createNoteService(overrides: Partial<typeof dependencies> = {}) 
 		const command = parseTimelineNoteCommand(input); const things = await deps.collection();
 		if (command.command === 'remove-note') return deps.transaction(async session => {
 			const doc = await things.findOne({ ownerId, thingtime: TIMELINE_NOTE_KIND, shareId: timelineNoteThingId(ownerId, command.noteId) }, { session });
-			if (!doc) return { ok: true, removed: true, noteId: command.noteId };
-			await things.deleteOne({ shareId: doc.shareId, ownerId }, { session });
-			// Refund only exact current-version accounting; a stale or malformed stamp leaves the ledger to reconciliation.
-			const refund = doc.storageClass === 'content' ? currentContentStorageSizeBytes(doc) : null;
-			if (refund !== null && refund > 0) await deps.debit(ownerId, -refund, session);
+			if (doc?.timelineNoteRemoved === true) { removedNoteFromDoc(doc); return { ok: true, removed: true, noteId: command.noteId }; }
+			if (doc) noteFromDoc(doc);
+			const now = deps.now();
+			const removal = parseTimelineNoteRemoval({ formatVersion: 1, id: command.noteId, ownerId, removedAt: now.toISOString() });
+			// Keep the protected identity, replacing its payload with a small
+			// metered fence. Even a remove arriving before add must prevent a
+			// later retry from creating content under the removed identity.
+			const next: any = {
+				shareId: timelineNoteThingId(ownerId, command.noteId), schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+				thingtime: [TIMELINE_NOTE_KIND], ownerId, acl: ['tt:user'], folderId: timelineFolderId(ownerId), parentId: null, targetId: null,
+				crystal: { name: 'Removed note' }, extended: null, tags: [], createdAt: doc?.createdAt ?? now, updatedAt: now,
+				timelineNoteVersion: 1, timelineNoteRemoved: true, secure: toBin(JSON.stringify(removal))
+			};
+			if (deps.billable()) {
+				const previous = doc ? currentContentStorageSizeBytes(doc) : 0;
+				if (previous === null) refuse(409, 'This note storage needs reconciliation before removal.');
+				next.storageClass = 'content'; next.storageAccountingVersion = USER_STORAGE_ACCOUNTING_VERSION; next.sizeBytes = thingStorageSizeBytes(next);
+				await deps.debit(ownerId, next.sizeBytes - previous!, session);
+			}
+			if (doc) await things.replaceOne({ shareId: doc.shareId, ownerId }, next, { session });
+			else await things.insertOne(next, { session });
 			return { ok: true, removed: true, noteId: command.noteId };
 		});
 		if (command.command === 'add-note') return deps.transaction(session => store(things, session, ownerId, command, 'owner', command.text));

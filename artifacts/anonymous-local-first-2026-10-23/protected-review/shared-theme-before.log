@@ -1,0 +1,26 @@
+✖ Home theme views read shared themes under selected authority and retire in-flight reads on identity change (68.856795ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3014.957803
+
+✖ failing tests:
+
+test at app/local-workspace/accountThemePublicRead.test.ts:2:1173
+✖ Home theme views read shared themes under selected authority and retire in-flight reads on identity change (68.856795ms)
+  Error [WorkspaceError]: Account workspace changed. Reopen this editor before continuing.
+      at Object.assertCurrent (/workspace/thingtime/remix/app/local-workspace/runtime.client.ts:85:10)
+      at assertAccountSyncAllowed (/workspace/thingtime/remix/app/local-workspace/runtime.client.ts:106:31)
+      at Proxy.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountApi.client.ts:230:100)
+      at Object.getShared (/workspace/thingtime/remix/app/local-workspace/accountApi.client.ts:641:168)
+      at async TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountThemePublicRead.test.ts:31:17)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    code: 'WORKSPACE_CHANGED',
+    status: 409,
+    ok: false
+  }

@@ -1,0 +1,207 @@
+{
+  "format": "thingtime.transfer",
+  "version": 1,
+  "roots": [
+    "local-811014af-52c3-43a8-b68a-b2407a61636f",
+    "local-c7889bf1-6d7c-442a-b31a-243b64e349f6",
+    "local-fe1482b1-2d2c-4883-aaed-2378a1aa4d73"
+  ],
+  "things": [
+    {
+      "id": "local-811014af-52c3-43a8-b68a-b2407a61636f",
+      "thingtime": [
+        "action"
+      ],
+      "crystal": {
+        "name": "Saved profile browser acceptance",
+        "runtime": "browser",
+        "category": "general",
+        "version": 1,
+        "capabilities": [
+          {
+            "capability": "http.request",
+            "endpoints": [
+              "POST /api/v1/themes",
+              "POST /api/v1/themes/active",
+              "POST /api/v1/algorithms",
+              "POST /api/v1/algorithms/update",
+              "POST /api/v1/algorithms/active"
+            ]
+          }
+        ],
+        "steps": [
+          {
+            "op": "http.request",
+            "method": "POST",
+            "path": "/api/v1/themes",
+            "feature": "api.themes",
+            "minimumVersion": "1.1.1",
+            "query": {},
+            "body": {
+              "name": "Browser Action theme",
+              "theme": {}
+            }
+          },
+          {
+            "op": "http.request",
+            "method": "POST",
+            "path": "/api/v1/themes",
+            "feature": "api.themes",
+            "minimumVersion": "1.1.1",
+            "query": {},
+            "body": {
+              "id": "$step.1.theme.id",
+              "name": "Browser Action theme edited",
+              "theme": {}
+            }
+          },
+          {
+            "op": "http.request",
+            "method": "POST",
+            "path": "/api/v1/themes/active",
+            "feature": "api.themes-active",
+            "minimumVersion": "1.0.0",
+            "query": {},
+            "body": {
+              "themeId": "$step.1.theme.id"
+            }
+          },
+          {
+            "op": "http.request",
+            "method": "POST",
+            "path": "/api/v1/algorithms",
+            "feature": "api.algorithms",
+            "minimumVersion": "1.1.0",
+            "query": {},
+            "body": {
+              "name": "Browser Action algorithm"
+            }
+          },
+          {
+            "op": "http.request",
+            "method": "POST",
+            "path": "/api/v1/algorithms/update",
+            "feature": "api.algorithms-update",
+            "minimumVersion": "1.1.0",
+            "query": {},
+            "body": {
+              "id": "$step.4.algorithm.id",
+              "name": "Browser Action algorithm edited"
+            }
+          },
+          {
+            "op": "http.request",
+            "method": "POST",
+            "path": "/api/v1/algorithms/active",
+            "feature": "api.algorithms-active",
+            "minimumVersion": "1.1.0",
+            "query": {},
+            "body": {
+              "algorithmId": "$step.4.algorithm.id"
+            }
+          },
+          {
+            "op": "return",
+            "value": {
+              "themeId": "$step.1.theme.id",
+              "algorithmId": "$step.4.algorithm.id"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "local-c7889bf1-6d7c-442a-b31a-243b64e349f6",
+      "thingtime": [
+        "theme"
+      ],
+      "crystal": {
+        "name": "Browser Action theme edited",
+        "theme": {
+          "name": "Browser Action theme edited",
+          "colors": {
+            "ink": "#16161a",
+            "text": "#5a5a66",
+            "muted": "#9a9aa6",
+            "faint": "#b6b6c0",
+            "border": "#ececef",
+            "borderLight": "#f0f0f2",
+            "surface": "#fafafb",
+            "surfaceAlt": "#f5f5f7",
+            "surfaceHover": "#ececee",
+            "card": "#ffffff",
+            "pageBg": "#ffffff",
+            "accent": "hotpink",
+            "accentTint": "#fff5fa",
+            "accentContrast": "#ffffff",
+            "focusBorder": "#d63384",
+            "focusGlowStart": "#ff69b4",
+            "focusGlowEnd": "#a555e8",
+            "link": "#2f8fd6",
+            "positive": "#2f8f4f",
+            "positiveSoft": "rgba(88, 202, 112, 0.14)",
+            "danger": "#d6455a",
+            "warning": "#ffbc48",
+            "rainbow": [
+              "#f34a4a",
+              "#ffbc48",
+              "#58ca70",
+              "#47b5e6",
+              "#a555e8"
+            ],
+            "darkBg": "#131318",
+            "darkChrome": "#1c1c22",
+            "darkBorder": "#2a2a33",
+            "darkText": "#e6e6ee",
+            "darkMuted": "#8a8a95",
+            "darkAccent": "#59ff9c"
+          },
+          "fonts": {
+            "heading": "Space Grotesk",
+            "body": "Hanken Grotesk",
+            "mono": "JetBrains Mono",
+            "display": ""
+          },
+          "general": {
+            "radiusScale": 1,
+            "borderWidth": 1,
+            "focusGlowBlur": 14,
+            "focusGlowOpacity": 0.24,
+            "shadow": "soft",
+            "motion": true,
+            "animSpeed": 200,
+            "iconStyle": "emoji",
+            "thingsBadgePadding": "small",
+            "thingsBadgeCustomPadding": "3px 8px"
+          },
+          "windows": {
+            "closeColor": "",
+            "minimiseColor": "",
+            "maximiseColor": "",
+            "closeRadius": 3.5,
+            "minimiseRadius": 3.5,
+            "maximiseRadius": 3.5
+          }
+        }
+      }
+    },
+    {
+      "id": "local-fe1482b1-2d2c-4883-aaed-2378a1aa4d73",
+      "thingtime": [
+        "feed-algorithm"
+      ],
+      "crystal": {
+        "name": "Browser Action algorithm edited",
+        "emoji": "🧠",
+        "weights": {
+          "types": {},
+          "tags": {},
+          "authors": {}
+        },
+        "eventCount": 0,
+        "lastTrainedAt": null
+      }
+    }
+  ],
+  "files": []
+}

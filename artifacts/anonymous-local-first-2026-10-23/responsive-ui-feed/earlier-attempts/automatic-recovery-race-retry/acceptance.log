@@ -1,0 +1,28 @@
+✖ native post and Thing permalinks preserve audience context and reachable composer controls (41459.239734ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 42061.180651
+
+✖ failing tests:
+
+test at app/components/Sharing/inheritedAudience.browser.test.ts:2:1406
+✖ native post and Thing permalinks preserve audience context and reachable composer controls (41459.239734ms)
+  locator.click: Timeout 20000ms exceeded.
+  Call log:
+    - waiting for getByRole('alert').filter({ hasText: 'Could not refresh your page blocks' }).getByRole('button', { name: 'Retry page blocks', exact: true })
+      - locator resolved to <button type="button" class="chakra-button cha-e8ab4z">Retry page blocks</button>
+    - attempting click action
+      - waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+    - element was detached from the DOM, retrying
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/components/Sharing/inheritedAudience.browser.test.ts:131:85) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('alert').filter({ hasText: 'Could not refresh your page blocks' }).getByRole('button', { name: 'Retry page blocks', exact: true })", '    - locator resolved to <button type="button" class="chakra-button cha-e8ab4z">Retry page blocks</button>', '  - attempting click action', '    - waiting for element to be visible, enabled and stable', '    - element is visible, enabled and stable', '    - scrolling into view if needed', '  - element was detached from the DOM, retrying' ]
+  }

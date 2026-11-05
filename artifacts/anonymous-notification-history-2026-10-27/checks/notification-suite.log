@@ -1,0 +1,94 @@
+
+> test:notifications
+> node --import tsx --test app/api/utils/notifications/*.test.ts app/routes/api/v1/notifications/*.test.ts app/components/Notifications/*.test.ts app/components/Lopu/notificationHistory.test.ts app/components/Watch/*.test.ts app/schemas/notificationCategories.test.ts app/components/Settings/notificationToolsCapabilities.test.ts app/api/utils/watch/watchUploadRecovery.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/notifications/notificationsOnce.test.mts app/api/utils/notifications/persistence.test.mts app/routes/api/v1/notifications/devices/devices.test.mts
+
+✔ limit clamps to the documented window and defaults when absent or junk (1.000666ms)
+✔ cursor and date bounds parse ISO strings and reject everything else (1.778875ms)
+✔ types accept csv or arrays, dedupe, and drop unknown names (0.829208ms)
+✔ category expands to its types and intersects with an explicit type list (0.209542ms)
+✔ unread and search are normalised (0.210083ms)
+✔ search text is matched literally — regex metacharacters are escaped (0.80975ms)
+✔ the push master off means nothing can match (0.222208ms)
+✔ disabled types are excluded, explicit types are intersected with the enabled set (0.472541ms)
+✔ history includes muted types and ignores channel masters without widening ownership (0.514375ms)
+✔ unread, date bounds and the cursor compose into base + page filters (0.31775ms)
+✔ default delivery omits action runs while history retains them (0.173167ms)
+✔ notification history accepts a bounded date range and clamps page size (1.864958ms)
+✔ notification cursor round-trips timestamp and tie-breaker (0.851875ms)
+✔ notification history rejects malformed and inverted windows (0.203709ms)
+✔ push diagnostics distinguish missing configuration, no devices and Apple acceptance (1.061792ms)
+✔ partial rejection retires stale tokens and sanitizes provider failures (0.662917ms)
+✔ transport failures settle as failures and concurrency is capped at four (22.288875ms)
+✔ APNs collapse headers fit the 64-byte limit for test and Unicode reminder IDs (0.648708ms)
+✔ the safe APNs BadCollapseId reason remains visible for diagnosis (0.214291ms)
+✔ normalizes variable-length APNs tokens without hardcoding 32 bytes (1.385292ms)
+✔ rejects malformed tokens, platforms, and environments (0.257833ms)
+✔ re-registering rebinds the device to the current owner and session (1.009875ms)
+✔ builds portable APNs content with a safe Thingtime deep link (0.408ms)
+✔ clamps a long preview so APNs cannot reject the push as too large (0.153583ms)
+✔ recording reminders carry their bounded title and safe recording deep link (0.313083ms)
+✔ record retries have one identity per account; repeated real events are distinct (3.383333ms)
+✔ client history cannot forge audit types, recipient, actor, dates or read state (0.202209ms)
+✔ message text is retained beyond the preview and credentials do not enter stored history (1.25975ms)
+✔ every preset has bounded fixed copy and every registered notification class can be tested (0.920833ms)
+✔ APNs distinguishes quiet, normal and time-sensitive without pretending to be Critical (0.381417ms)
+✔ expired, deleted and cleanup-stuck drafts can restart from retained Watch bytes (0.652667ms)
+✔ live uploads, other bindings and other purposes cannot be restarted by this recovery path (0.1625ms)
+✔ Lopu saves anonymous/offline messages despite blocked cross-tab hints, bounds UTF8, and rejects stale callers (46.505916ms)
+✔ history transport requires live confirmation and retires acknowledgements after an account switch (17.893583ms)
+✔ every notification type has bell copy and lands in exactly one category bucket (1.171708ms)
+✔ people rows read actor + verb, system notes read their headline as Lopu (0.313167ms)
+✔ click-through prefers the note path, then the post, then the actor, and never an external href (0.149417ms)
+✔ filters round-trip through the URL and drop junk (0.435209ms)
+✔ the API query maps days to inclusive local bounds and a type to the types csv (2.104958ms)
+✔ category chips and the type dropdown never contradict each other (0.501167ms)
+✔ the device queue live region never announces a zero count or a plural single row (0.415916ms)
+✔ notification controls require compatible origin-scoped semantic capabilities (2.00975ms)
+✔ new operations are deliberately registered in both manifests (1.867334ms)
+✔ Watch approval negotiates only the features it uses on the selected origin (0.783334ms)
+✔ Watch code input keeps leading zeros and whole pasted codes (0.679166ms)
+✔ Watch code input presents four squares, expanding for legacy codes (0.211167ms)
+✔ signed-out first paint and account switching never expose pending Watch requests (1.533667ms)
+✔ notification pages identify the authenticated account without exposing private fields (0.993708ms)
+✔ every notification type belongs to exactly one known category (11.68625ms)
+✔ unknown types read as social, unknown categories are rejected (0.138416ms)
+✔ merged recording and subspace families retain their independent preference defaults (0.182416ms)
+✔ action-run is the system family: all delivery channels opt-in (0.254333ms)
+ℹ tests 52
+ℹ suites 0
+ℹ pass 52
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2215.033959
+(node:5217) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:5217) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ one committed daily row fans out once with the same notification identity (1.4305ms)
+✔ preferences and a rejected private-todo checkpoint prevent native push (0.196958ms)
+✔ best-effort push failure cannot duplicate the durable daily notification (0.254458ms)
+[notifications] emit failed: settings unavailable
+(node:5219) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:5219) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ single-recipient history is saved even with all delivery disabled or preferences unavailable (1.78975ms)
+✔ quiet system events are saved but do not invoke delivery or preferences (0.312709ms)
+✔ deduplicating bulk delivery never discards repeated events from history (2.182625ms)
+✔ record retries do not overwrite text, ownership or read state (2.459292ms)
+✔ single and bulk push delivery is attached to the serverless request lifetime (0.433625ms)
+✔ bulk push respects muted channel and unread deduplication (0.262584ms)
+(node:5221) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:5221) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ device status is session-owned and contains only counts and configuration availability (16.936583ms)
+✔ registration rejects an account switch before any device mutation (2.274958ms)
+✔ device diagnostics reject anonymous callers (0.667333ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 437.969375

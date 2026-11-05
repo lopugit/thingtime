@@ -1,0 +1,11 @@
+✔ extracts actual CLI event shape and accepts clean expected invalid-call result (6.284917ms)
+✔ rejects incomplete, ambiguous, unsafe, changed and partial artifacts (39.491458ms)
+✔ saves exclusively after complete validation; existing output and bad input preserve data (25.184166ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 147.603208

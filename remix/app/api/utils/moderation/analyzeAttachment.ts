@@ -55,7 +55,8 @@ export type AnalyzeAttachmentResult =
 
 // Stamp the moderation root field. Guarded on the current status so a racing
 // sweep + fire-and-forget pair can't clobber a landed verdict with an older
-// one: verdicts only ever replace 'pending'/absent stamps.
+// one: verdicts only ever replace 'pending'/absent stamps on ready files.
+// A delayed analyzer must never decorate a retained deletion receipt.
 const stampModeration = async (
 	things: Awaited<ReturnType<typeof getHomeThingsCollection>>,
 	shareId: string,
@@ -67,7 +68,7 @@ const stampModeration = async (
 	const overwritable = options.allowOverwriteOf.filter((status): status is ModerationStatus => status !== null);
 	if (overwritable.length) statusClauses.push({ 'moderation.status': { $in: overwritable } });
 	const res = await things.updateOne(
-		{ thingtime: 'attachment', shareId, $or: statusClauses } as any,
+		{ thingtime: 'attachment', shareId, attachmentState: 'ready', $or: statusClauses } as any,
 		{ $set: { moderation, updatedAt: options.now } }
 	);
 	return res.modifiedCount > 0;

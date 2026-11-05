@@ -1,0 +1,9 @@
+{
+  "credentialsMode": "0600",
+  "registeredOrdinaryBeforeAllowlisting": true,
+  "sameAdministratorIdentityAfterServerRestart": true,
+  "privateGrantViaNormalApi": true,
+  "guestRefused": 401,
+  "ordinaryAccountRefused": 403,
+  "credentialValuesOmitted": true
+}

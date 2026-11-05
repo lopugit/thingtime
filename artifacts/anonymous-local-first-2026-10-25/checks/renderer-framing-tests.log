@@ -1,0 +1,11 @@
+﹣ real Docker: stdin EOF, wrapper process-group SIGKILL, independent runtime deadline (0.560417ms) # SKIP
+✔ lifecycle reader preserves trailing fragmented JSON and UTF-8 until newline (4.638ms)
+✔ lifecycle reader rejects malformed complete frames and bounded output overflow (0.393208ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 193.193041

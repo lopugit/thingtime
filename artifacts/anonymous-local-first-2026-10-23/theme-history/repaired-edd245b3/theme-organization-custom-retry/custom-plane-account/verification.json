@@ -1,0 +1,319 @@
+{
+  "checks": [
+    "mixed theme and ordinary move, cold offline folder reload and responsive library",
+    "folder deletion drains theme and ordinary child locally before reconnect",
+    "dedicated theme deletion persists across reload and synchronizes without generic protected writes"
+  ],
+  "customPlane": true,
+  "selectedCustom": "custom-d6d94df5a97be1d4191900bee75e5cb502e7e74638f905ab140f45df7e064dae",
+  "offlineRename": true,
+  "sourceTitle": "Organization peach a16c86",
+  "displayTitle": "Offline display Organization peach a16c86",
+  "writes": [
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742687685
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742688009
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742688141
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742692047
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742692070
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742692214
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742692297
+    },
+    {
+      "path": "/api/v1/mongodb/endpoint",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742694825
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742697471
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742697475
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742697859
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742697906
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742698206
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742698246
+    },
+    {
+      "path": "/api/v1/mongodb/endpoint",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742719129
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742722397
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742722564
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742722713
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742722731
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742723341
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742723676
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742724344
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742725076
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "method": "PATCH",
+      "at": 1792742725859
+    },
+    {
+      "path": "/api/v1/mongodb/endpoint",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742746363
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742749094
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742749142
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742749397
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742749473
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742749842
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742750744
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742750985
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742752780
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742753424
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742814705
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742814708
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742814760
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742814772
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "method": "PATCH",
+      "at": 1792742815887
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "method": "PATCH",
+      "at": 1792742816005
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "method": "DELETE",
+      "at": 1792742816235
+    },
+    {
+      "path": "/api/v1/mongodb/endpoint",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742822734
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742824808
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742824857
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742825000
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742825006
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742825151
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742825336
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST",
+      "at": 1792742825370
+    }
+  ],
+  "deviceReads": [
+    {
+      "offline": false
+    }
+  ],
+  "errors": [],
+  "viewports": [
+    1440,
+    390,
+    320
+  ]
+}

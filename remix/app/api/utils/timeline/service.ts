@@ -1,5 +1,6 @@
+import { readRecordedComponents } from '../../../timeline/recordedComponentReader.ts';
 import { StorageMutationError } from '../storage/storageCore';
-import { COMPONENT_BINDING_PREFIX, MAX_COMPONENT_BINDINGS, readComponentBinding } from '../../../timeline/componentBindings.ts';
+import { COMPONENT_BINDING_PREFIX, MAX_COMPONENT_BINDINGS } from '../../../timeline/componentBindings.ts';
 import {
 	TIMELINE_EVENT_KIND,
 	TIMELINE_EVENT_MAX_BYTES,
@@ -52,35 +53,11 @@ export async function readRecordedComponentEntries(
 	entries = readTimelineEntries,
 	maxBytes = TIMELINE_EVENT_MAX_BYTES - 4096
 ) {
-	const expected = new Map<string, string>();
-	for (const link of wanted) {
-		if (!link.thingId.startsWith(COMPONENT_BINDING_PREFIX) || (expected.has(link.eventId) && expected.get(link.eventId) !== link.thingId))
-			throw new Error('Invalid recorded component links');
-		expected.set(link.eventId, link.thingId);
-	}
-	if (expected.size > MAX_COMPONENT_BINDINGS * 3)
-		throw new StorageMutationError(413, 'storage_invariant', 'Too many recorded components to compare together.');
-	const ids = [...expected.keys()];
-	if (!ids.length) return [];
-	const sizes = await things
-		.find(
-			{ ownerId, thingtime: TIMELINE_EVENT_KIND, shareId: { $in: ids.map((id) => timelineEventThingId(ownerId, id)) } },
-			{ projection: { timelineEntryBytes: 1 } }
-		)
-		.toArray();
-	if (sizes.length !== ids.length || sizes.some((item: any) => !Number.isSafeInteger(item.timelineEntryBytes) || item.timelineEntryBytes < 1))
-		throw new StorageMutationError(409, 'storage_invariant', 'Recorded component metadata is incomplete.');
-	if (sizes.reduce((bytes: number, item: any) => bytes + item.timelineEntryBytes, 0) > maxBytes)
-		throw new StorageMutationError(413, 'storage_invariant', 'These recorded components are too large to preview together.');
-	const found = [];
-	for (let offset = 0; offset < ids.length; offset += 128) found.push(...(await entries(things, ownerId, ids.slice(offset, offset + 128))));
-	if (
-		found.length !== ids.length ||
-		new Set(found.map((item) => item.event.id)).size !== ids.length ||
-		found.some((item) => item.event.ownerId !== ownerId || expected.get(item.event.id) !== item.event.thingId || !readComponentBinding(item.event))
-	)
-		throw new Error('Retained component dependencies are incomplete');
-	return found;
+	return readRecordedComponents({ ownerId, wanted, maxBytes,
+		readSizes: ids => things.find({ ownerId, thingtime: TIMELINE_EVENT_KIND, shareId: { $in: ids.map(id => timelineEventThingId(ownerId, id)) } }, { projection: { timelineEntryBytes: 1 } }).toArray(),
+		readEntries: ids => entries(things, ownerId, ids),
+		error: (status, message) => new StorageMutationError(status, 'storage_invariant', message)
+	});
 }
 
 /** One bounded batch: referenced immutable records in this owner's Timeline.

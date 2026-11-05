@@ -1,0 +1,1361 @@
+{
+  "error": "AssertionError [ERR_ASSERTION]: theme-recovery: dialog stays inside viewport",
+  "stack": "AssertionError [ERR_ASSERTION]: theme-recovery: dialog stays inside viewport\n    at capture (file:///tmp/check/protected.test.mjs:322:53)\n    at async TestContext.<anonymous> (file:///tmp/check/protected.test.mjs:411:7)\n    at async Test.run (node:internal/test_runner/test:1409:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)",
+  "body": "🦄\nprotected-04d9afa6-bc9b-46e2-98af-3d70c36ba58d\n🌈\n🦄\n\nTHINGTIME\n\nHistory\n\nEvery change, in its place. Explore your Things as they were.\n\nSaved to your account\n\nRefresh\nTry a variation\nEverything\nThis Thing\nPage + related\nRecovery theme original\n\nLook\n\nList\nCards\nLine\nFrames\nMessages\nKind\nAll\nPages\nComponents\nData\nPosts\nFiles\nFolders\nActions\nSchemas\nThemes\nAlgorithms\nSource\nAll\nEditor\nAPI\nLopu\nAction\nThingtime\nChange\nAll\nCreated\nEdited\nRestored\nCombined\nRemoved\nActivity\nSaved\nAll\nOn this device\nSynced to account\nLast 30 days · loaded changes\n\n5 of 5 matching changes · 5 loaded. Search and filters apply to this loaded window.\n\nOct 26, 2026\n7:36 PM · You · editor · Variation\nDeleted Thing on this device\n🎨\nRecovered theme library title\ntheme · before removal\nThing\nStructured content\n→\nNot set\nSynced to your account\n7:35 PM · You · editor · Variation\nEdited Thing on this device\n🎨\nRecovered theme library title\ntheme · as of this version\nname\nRecovery theme original\n→\nRecovery theme deleted\ntheme › colors › accent\n#775533\n→\n#553377\ntheme › name\nRecovery theme original\n→\nRecovery theme deleted\nSynced to your account\n7:35 PM · You · editor · Variation\nEdited Thing on this device\n🎨\nRecovered theme library title\ntheme · as of this version\nFolder\nMy Things\n→\n83304cef-4e51-4ffe-a1bb-3e0013917342\nSynced to your account\n7:35 PM · You · editor · Variation\nEdited Thing on this device\n🎨\nRecovered theme library title\ntheme · as of this version\ntitle\nNot set\n→\nRecovered theme library title\nSynced to your account\n7:35 PM · You · editor · Variation\nCreated Thing on this device\n🎨\nRecovery theme original\ntheme · as of this version\nThing\nNot set\n→\nStructured content\nSynced to your account\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 24ms\n\nMongoDB: connected (3ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nPROTECTED-04D9AFA6-BC9B-46E2-98AF-3D70C36BA58D\n\nProfile\n\nLog out\n\n✉️ email unverified\n\n🦄\nVersion details\nDeleted Thing on this device\nClose preview\n\nPrivate variation · Oct 26, 2026, 7:36 PM · Editor\n\nContinues from device-event · Private draft\n\nChanges\nMessage\nVersions\nCompare from this version\n\nThing\n\nBefore: Structured content\n\nAfter: Not set\n\nView dataOpen Thing\nRecover deleted Thing\n\nThis restores the original Thing and link privately. Your deletion and earlier versions stay in History. You can share it again after recovery.\n\nThis Thing will return to the folder recorded in this version.\n\nThing\n\nCurrent: Not set\n\nResult: Structured content\n\nRecover Thing privately\nCancel",
+  "errors": [],
+  "accountRequests": [
+    "GET /api/v1/timeline",
+    "GET /api/v1/timeline",
+    "POST /api/v1/algorithms/sync",
+    "POST /api/v1/themes/sync",
+    "POST /api/v1/algorithms/sync",
+    "POST /api/v1/themes/sync",
+    "GET /api/v1/timeline",
+    "GET /api/v1/timeline",
+    "POST /api/v1/algorithms/sync",
+    "POST /api/v1/themes/sync",
+    "GET /api/v1/things",
+    "POST /api/v1/algorithms/sync",
+    "POST /api/v1/timeline",
+    "POST /api/v1/themes/sync",
+    "POST /api/v1/timeline",
+    "GET /api/v1/things",
+    "GET /api/v1/things",
+    "POST /api/v1/timeline",
+    "POST /api/v1/things",
+    "POST /api/v1/timeline",
+    "POST /api/v1/timeline",
+    "GET /api/v1/things",
+    "POST /api/v1/algorithms/sync",
+    "POST /api/v1/themes/sync",
+    "POST /api/v1/timeline",
+    "POST /api/v1/timeline",
+    "POST /api/v1/algorithms/sync",
+    "POST /api/v1/timeline",
+    "GET /api/v1/things",
+    "GET /api/v1/things",
+    "POST /api/v1/timeline",
+    "POST /api/v1/themes/sync",
+    "POST /api/v1/themes/sync",
+    "POST /api/v1/themes/sync",
+    "GET /api/v1/things",
+    "POST /api/v1/algorithms/sync",
+    "GET /api/v1/timeline",
+    "GET /api/v1/timeline",
+    "POST /api/v1/algorithms/sync",
+    "POST /api/v1/themes/sync",
+    "GET /api/v1/things",
+    "POST /api/v1/algorithms/sync",
+    "POST /api/v1/timeline",
+    "POST /api/v1/themes/sync",
+    "POST /api/v1/algorithms/sync",
+    "POST /api/v1/themes/sync",
+    "POST /api/v1/timeline",
+    "POST /api/v1/algorithms/sync",
+    "POST /api/v1/algorithms/sync",
+    "GET /api/v1/things",
+    "GET /api/v1/things",
+    "GET /api/v1/things",
+    "GET /api/v1/things",
+    "GET /api/v1/things",
+    "POST /api/v1/themes/sync",
+    "POST /api/v1/algorithms/sync",
+    "GET /api/v1/timeline",
+    "GET /api/v1/timeline",
+    "POST /api/v1/algorithms/sync",
+    "POST /api/v1/themes/sync",
+    "POST /api/v1/algorithms/sync",
+    "GET /api/v1/timeline",
+    "POST /api/v1/themes/sync",
+    "GET /api/v1/timeline"
+  ],
+  "seeded": {
+    "profiles": [
+      {
+        "kind": "theme",
+        "id": "95e6ea63-e386-463f-be0c-61cff486934a",
+        "title": "Recovered theme library title",
+        "name": "Recovery theme deleted",
+        "deletionId": "device-event-e69b33b2-b7da-4b8f-b4f5-e48e2de4e467",
+        "expected": {
+          "adapter": "theme-content",
+          "value": {
+            "crystal": {
+              "name": "Recovery theme deleted",
+              "theme": {
+                "colors": {
+                  "accent": "#553377",
+                  "accentContrast": "#ffffff",
+                  "accentTint": "#fff5fa",
+                  "border": "#ececef",
+                  "borderLight": "#f0f0f2",
+                  "card": "#ffffff",
+                  "danger": "#d6455a",
+                  "darkAccent": "#59ff9c",
+                  "darkBg": "#131318",
+                  "darkBorder": "#2a2a33",
+                  "darkChrome": "#1c1c22",
+                  "darkMuted": "#8a8a95",
+                  "darkText": "#e6e6ee",
+                  "faint": "#b6b6c0",
+                  "focusBorder": "#d63384",
+                  "focusGlowEnd": "#a555e8",
+                  "focusGlowStart": "#ff69b4",
+                  "ink": "#16161a",
+                  "link": "#2f8fd6",
+                  "muted": "#9a9aa6",
+                  "pageBg": "#ffffff",
+                  "positive": "#2f8f4f",
+                  "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                  "rainbow": [
+                    "#f34a4a",
+                    "#ffbc48",
+                    "#58ca70",
+                    "#47b5e6",
+                    "#a555e8"
+                  ],
+                  "surface": "#fafafb",
+                  "surfaceAlt": "#f5f5f7",
+                  "surfaceHover": "#ececee",
+                  "text": "#5a5a66",
+                  "warning": "#ffbc48"
+                },
+                "fonts": {
+                  "body": "Hanken Grotesk",
+                  "display": "",
+                  "heading": "Space Grotesk",
+                  "mono": "JetBrains Mono"
+                },
+                "general": {
+                  "animSpeed": 200,
+                  "borderWidth": 1,
+                  "focusGlowBlur": 14,
+                  "focusGlowOpacity": 0.24,
+                  "iconStyle": "emoji",
+                  "motion": true,
+                  "radiusScale": 1,
+                  "shadow": "soft",
+                  "thingsBadgeCustomPadding": "3px 8px",
+                  "thingsBadgePadding": "small"
+                },
+                "name": "Recovery theme deleted",
+                "windows": {
+                  "closeColor": "",
+                  "closeRadius": 3.5,
+                  "maximiseColor": "",
+                  "maximiseRadius": 3.5,
+                  "minimiseColor": "",
+                  "minimiseRadius": 3.5
+                }
+              },
+              "title": "Recovered theme library title"
+            },
+            "folderId": "83304cef-4e51-4ffe-a1bb-3e0013917342",
+            "tags": [],
+            "visibility": "private"
+          },
+          "version": 2
+        }
+      },
+      {
+        "kind": "feed-algorithm",
+        "id": "ae60e79b-30e6-4151-a65d-1b02ffbbacae",
+        "title": "Recovered algorithm library title",
+        "name": "Recovery algorithm deleted",
+        "deletionId": "device-event-c975ab33-6e55-4d81-8798-c89aa184f1c0",
+        "expected": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "Disposable local profile",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "Recovery algorithm deleted",
+              "title": "Recovered algorithm library title",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": "83304cef-4e51-4ffe-a1bb-3e0013917342"
+          },
+          "version": 1
+        }
+      }
+    ],
+    "folderId": "83304cef-4e51-4ffe-a1bb-3e0013917342"
+  },
+  "proof": {
+    "rows": [
+      {
+        "id": "95e6ea63-e386-463f-be0c-61cff486934a",
+        "row": null,
+        "themeState": {
+          "id": "95e6ea63-e386-463f-be0c-61cff486934a",
+          "revision": 5,
+          "base": null,
+          "baseVersion": null,
+          "remoteFolderId": null,
+          "visibility": "private",
+          "state": "synced",
+          "deleted": true,
+          "titleKnown": true,
+          "titleIntent": false,
+          "placementKnown": true,
+          "attempts": 0,
+          "retryAt": 0
+        },
+        "algorithmState": null
+      },
+      {
+        "id": "ae60e79b-30e6-4151-a65d-1b02ffbbacae",
+        "row": null,
+        "themeState": null,
+        "algorithmState": {
+          "id": "ae60e79b-30e6-4151-a65d-1b02ffbbacae",
+          "revision": 5,
+          "base": null,
+          "baseVersion": null,
+          "remoteFolderId": null,
+          "state": "synced",
+          "deleted": true,
+          "retryAt": 0,
+          "attempts": 0
+        }
+      }
+    ],
+    "entries": [
+      {
+        "id": "95e6ea63-e386-463f-be0c-61cff486934a",
+        "entries": [
+          {
+            "scope": "[\"http://127.0.0.1:18724\",\"home\",\"6adfab974b184bb049dfa92f\"]",
+            "event": {
+              "actorId": "6adfab974b184bb049dfa92f",
+              "after": {
+                "adapter": "theme-content",
+                "value": {
+                  "crystal": {
+                    "name": "Recovery theme deleted",
+                    "theme": {
+                      "colors": {
+                        "accent": "#553377",
+                        "accentContrast": "#ffffff",
+                        "accentTint": "#fff5fa",
+                        "border": "#ececef",
+                        "borderLight": "#f0f0f2",
+                        "card": "#ffffff",
+                        "danger": "#d6455a",
+                        "darkAccent": "#59ff9c",
+                        "darkBg": "#131318",
+                        "darkBorder": "#2a2a33",
+                        "darkChrome": "#1c1c22",
+                        "darkMuted": "#8a8a95",
+                        "darkText": "#e6e6ee",
+                        "faint": "#b6b6c0",
+                        "focusBorder": "#d63384",
+                        "focusGlowEnd": "#a555e8",
+                        "focusGlowStart": "#ff69b4",
+                        "ink": "#16161a",
+                        "link": "#2f8fd6",
+                        "muted": "#9a9aa6",
+                        "pageBg": "#ffffff",
+                        "positive": "#2f8f4f",
+                        "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                        "rainbow": [
+                          "#f34a4a",
+                          "#ffbc48",
+                          "#58ca70",
+                          "#47b5e6",
+                          "#a555e8"
+                        ],
+                        "surface": "#fafafb",
+                        "surfaceAlt": "#f5f5f7",
+                        "surfaceHover": "#ececee",
+                        "text": "#5a5a66",
+                        "warning": "#ffbc48"
+                      },
+                      "fonts": {
+                        "body": "Hanken Grotesk",
+                        "display": "",
+                        "heading": "Space Grotesk",
+                        "mono": "JetBrains Mono"
+                      },
+                      "general": {
+                        "animSpeed": 200,
+                        "borderWidth": 1,
+                        "focusGlowBlur": 14,
+                        "focusGlowOpacity": 0.24,
+                        "iconStyle": "emoji",
+                        "motion": true,
+                        "radiusScale": 1,
+                        "shadow": "soft",
+                        "thingsBadgeCustomPadding": "3px 8px",
+                        "thingsBadgePadding": "small"
+                      },
+                      "name": "Recovery theme deleted",
+                      "windows": {
+                        "closeColor": "",
+                        "closeRadius": 3.5,
+                        "maximiseColor": "",
+                        "maximiseRadius": 3.5,
+                        "minimiseColor": "",
+                        "minimiseRadius": 3.5
+                      }
+                    },
+                    "title": "Recovered theme library title"
+                  },
+                  "folderId": "83304cef-4e51-4ffe-a1bb-3e0013917342",
+                  "tags": [],
+                  "visibility": "private"
+                },
+                "version": 2
+              },
+              "before": {
+                "adapter": "theme-content",
+                "value": {
+                  "crystal": {
+                    "name": "Recovery theme original",
+                    "theme": {
+                      "colors": {
+                        "accent": "#775533",
+                        "accentContrast": "#ffffff",
+                        "accentTint": "#fff5fa",
+                        "border": "#ececef",
+                        "borderLight": "#f0f0f2",
+                        "card": "#ffffff",
+                        "danger": "#d6455a",
+                        "darkAccent": "#59ff9c",
+                        "darkBg": "#131318",
+                        "darkBorder": "#2a2a33",
+                        "darkChrome": "#1c1c22",
+                        "darkMuted": "#8a8a95",
+                        "darkText": "#e6e6ee",
+                        "faint": "#b6b6c0",
+                        "focusBorder": "#d63384",
+                        "focusGlowEnd": "#a555e8",
+                        "focusGlowStart": "#ff69b4",
+                        "ink": "#16161a",
+                        "link": "#2f8fd6",
+                        "muted": "#9a9aa6",
+                        "pageBg": "#ffffff",
+                        "positive": "#2f8f4f",
+                        "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                        "rainbow": [
+                          "#f34a4a",
+                          "#ffbc48",
+                          "#58ca70",
+                          "#47b5e6",
+                          "#a555e8"
+                        ],
+                        "surface": "#fafafb",
+                        "surfaceAlt": "#f5f5f7",
+                        "surfaceHover": "#ececee",
+                        "text": "#5a5a66",
+                        "warning": "#ffbc48"
+                      },
+                      "fonts": {
+                        "body": "Hanken Grotesk",
+                        "display": "",
+                        "heading": "Space Grotesk",
+                        "mono": "JetBrains Mono"
+                      },
+                      "general": {
+                        "animSpeed": 200,
+                        "borderWidth": 1,
+                        "focusGlowBlur": 14,
+                        "focusGlowOpacity": 0.24,
+                        "iconStyle": "emoji",
+                        "motion": true,
+                        "radiusScale": 1,
+                        "shadow": "soft",
+                        "thingsBadgeCustomPadding": "3px 8px",
+                        "thingsBadgePadding": "small"
+                      },
+                      "name": "Recovery theme original",
+                      "windows": {
+                        "closeColor": "",
+                        "closeRadius": 3.5,
+                        "maximiseColor": "",
+                        "maximiseRadius": 3.5,
+                        "minimiseColor": "",
+                        "minimiseRadius": 3.5
+                      }
+                    },
+                    "title": "Recovered theme library title"
+                  },
+                  "folderId": "83304cef-4e51-4ffe-a1bb-3e0013917342",
+                  "tags": [],
+                  "visibility": "private"
+                },
+                "version": 2
+              },
+              "branchId": "device-workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "clientId": "workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "dependencies": [],
+              "formatVersion": 1,
+              "id": "device-event-663e5e37-e64f-4eae-a1a7-d4181faccecc",
+              "label": "Edited Thing on this device",
+              "mode": "draft",
+              "occurredAt": "2026-10-26T19:35:56.115Z",
+              "operation": "update",
+              "operationId": "d2dfc1cb-7cae-453d-a3fb-d1d447f30887",
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "parentIds": [
+                "device-event-7f9c6c94-af4e-4bb5-926e-b0d912385567"
+              ],
+              "source": "client",
+              "thingId": "95e6ea63-e386-463f-be0c-61cff486934a"
+            },
+            "receipt": {
+              "acceptedAt": "2026-10-26T19:36:01.864Z",
+              "eventId": "device-event-663e5e37-e64f-4eae-a1a7-d4181faccecc",
+              "formatVersion": 1,
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "position": 1793043361864
+            },
+            "status": "accepted",
+            "accessedAt": 1793043356115,
+            "bytes": 3588
+          },
+          {
+            "scope": "[\"http://127.0.0.1:18724\",\"home\",\"6adfab974b184bb049dfa92f\"]",
+            "event": {
+              "actorId": "6adfab974b184bb049dfa92f",
+              "after": {
+                "adapter": "theme-content",
+                "value": {
+                  "crystal": {
+                    "name": "Recovery theme original",
+                    "theme": {
+                      "colors": {
+                        "accent": "#775533",
+                        "accentContrast": "#ffffff",
+                        "accentTint": "#fff5fa",
+                        "border": "#ececef",
+                        "borderLight": "#f0f0f2",
+                        "card": "#ffffff",
+                        "danger": "#d6455a",
+                        "darkAccent": "#59ff9c",
+                        "darkBg": "#131318",
+                        "darkBorder": "#2a2a33",
+                        "darkChrome": "#1c1c22",
+                        "darkMuted": "#8a8a95",
+                        "darkText": "#e6e6ee",
+                        "faint": "#b6b6c0",
+                        "focusBorder": "#d63384",
+                        "focusGlowEnd": "#a555e8",
+                        "focusGlowStart": "#ff69b4",
+                        "ink": "#16161a",
+                        "link": "#2f8fd6",
+                        "muted": "#9a9aa6",
+                        "pageBg": "#ffffff",
+                        "positive": "#2f8f4f",
+                        "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                        "rainbow": [
+                          "#f34a4a",
+                          "#ffbc48",
+                          "#58ca70",
+                          "#47b5e6",
+                          "#a555e8"
+                        ],
+                        "surface": "#fafafb",
+                        "surfaceAlt": "#f5f5f7",
+                        "surfaceHover": "#ececee",
+                        "text": "#5a5a66",
+                        "warning": "#ffbc48"
+                      },
+                      "fonts": {
+                        "body": "Hanken Grotesk",
+                        "display": "",
+                        "heading": "Space Grotesk",
+                        "mono": "JetBrains Mono"
+                      },
+                      "general": {
+                        "animSpeed": 200,
+                        "borderWidth": 1,
+                        "focusGlowBlur": 14,
+                        "focusGlowOpacity": 0.24,
+                        "iconStyle": "emoji",
+                        "motion": true,
+                        "radiusScale": 1,
+                        "shadow": "soft",
+                        "thingsBadgeCustomPadding": "3px 8px",
+                        "thingsBadgePadding": "small"
+                      },
+                      "name": "Recovery theme original",
+                      "windows": {
+                        "closeColor": "",
+                        "closeRadius": 3.5,
+                        "maximiseColor": "",
+                        "maximiseRadius": 3.5,
+                        "minimiseColor": "",
+                        "minimiseRadius": 3.5
+                      }
+                    },
+                    "title": "Recovered theme library title"
+                  },
+                  "folderId": "83304cef-4e51-4ffe-a1bb-3e0013917342",
+                  "tags": [],
+                  "visibility": "private"
+                },
+                "version": 2
+              },
+              "before": {
+                "adapter": "theme-content",
+                "value": {
+                  "crystal": {
+                    "name": "Recovery theme original",
+                    "theme": {
+                      "colors": {
+                        "accent": "#775533",
+                        "accentContrast": "#ffffff",
+                        "accentTint": "#fff5fa",
+                        "border": "#ececef",
+                        "borderLight": "#f0f0f2",
+                        "card": "#ffffff",
+                        "danger": "#d6455a",
+                        "darkAccent": "#59ff9c",
+                        "darkBg": "#131318",
+                        "darkBorder": "#2a2a33",
+                        "darkChrome": "#1c1c22",
+                        "darkMuted": "#8a8a95",
+                        "darkText": "#e6e6ee",
+                        "faint": "#b6b6c0",
+                        "focusBorder": "#d63384",
+                        "focusGlowEnd": "#a555e8",
+                        "focusGlowStart": "#ff69b4",
+                        "ink": "#16161a",
+                        "link": "#2f8fd6",
+                        "muted": "#9a9aa6",
+                        "pageBg": "#ffffff",
+                        "positive": "#2f8f4f",
+                        "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                        "rainbow": [
+                          "#f34a4a",
+                          "#ffbc48",
+                          "#58ca70",
+                          "#47b5e6",
+                          "#a555e8"
+                        ],
+                        "surface": "#fafafb",
+                        "surfaceAlt": "#f5f5f7",
+                        "surfaceHover": "#ececee",
+                        "text": "#5a5a66",
+                        "warning": "#ffbc48"
+                      },
+                      "fonts": {
+                        "body": "Hanken Grotesk",
+                        "display": "",
+                        "heading": "Space Grotesk",
+                        "mono": "JetBrains Mono"
+                      },
+                      "general": {
+                        "animSpeed": 200,
+                        "borderWidth": 1,
+                        "focusGlowBlur": 14,
+                        "focusGlowOpacity": 0.24,
+                        "iconStyle": "emoji",
+                        "motion": true,
+                        "radiusScale": 1,
+                        "shadow": "soft",
+                        "thingsBadgeCustomPadding": "3px 8px",
+                        "thingsBadgePadding": "small"
+                      },
+                      "name": "Recovery theme original",
+                      "windows": {
+                        "closeColor": "",
+                        "closeRadius": 3.5,
+                        "maximiseColor": "",
+                        "maximiseRadius": 3.5,
+                        "minimiseColor": "",
+                        "minimiseRadius": 3.5
+                      }
+                    },
+                    "title": "Recovered theme library title"
+                  },
+                  "folderId": null,
+                  "tags": [],
+                  "visibility": "private"
+                },
+                "version": 2
+              },
+              "branchId": "device-workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "clientId": "workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "dependencies": [],
+              "formatVersion": 1,
+              "id": "device-event-7f9c6c94-af4e-4bb5-926e-b0d912385567",
+              "label": "Edited Thing on this device",
+              "mode": "draft",
+              "occurredAt": "2026-10-26T19:35:56.044Z",
+              "operation": "update",
+              "operationId": "36f64c5b-f336-4859-8317-a81a5a45189e",
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "parentIds": [
+                "device-event-cd1ed25c-363b-4290-a32b-cc7ff1caa973"
+              ],
+              "source": "client",
+              "thingId": "95e6ea63-e386-463f-be0c-61cff486934a"
+            },
+            "receipt": {
+              "acceptedAt": "2026-10-26T19:36:01.372Z",
+              "eventId": "device-event-7f9c6c94-af4e-4bb5-926e-b0d912385567",
+              "formatVersion": 1,
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "position": 1793043361372
+            },
+            "status": "accepted",
+            "accessedAt": 1793043356044,
+            "bytes": 3556
+          },
+          {
+            "scope": "[\"http://127.0.0.1:18724\",\"home\",\"6adfab974b184bb049dfa92f\"]",
+            "event": {
+              "actorId": "6adfab974b184bb049dfa92f",
+              "after": {
+                "adapter": "theme-content",
+                "value": {
+                  "crystal": {
+                    "name": "Recovery theme original",
+                    "theme": {
+                      "colors": {
+                        "accent": "#775533",
+                        "accentContrast": "#ffffff",
+                        "accentTint": "#fff5fa",
+                        "border": "#ececef",
+                        "borderLight": "#f0f0f2",
+                        "card": "#ffffff",
+                        "danger": "#d6455a",
+                        "darkAccent": "#59ff9c",
+                        "darkBg": "#131318",
+                        "darkBorder": "#2a2a33",
+                        "darkChrome": "#1c1c22",
+                        "darkMuted": "#8a8a95",
+                        "darkText": "#e6e6ee",
+                        "faint": "#b6b6c0",
+                        "focusBorder": "#d63384",
+                        "focusGlowEnd": "#a555e8",
+                        "focusGlowStart": "#ff69b4",
+                        "ink": "#16161a",
+                        "link": "#2f8fd6",
+                        "muted": "#9a9aa6",
+                        "pageBg": "#ffffff",
+                        "positive": "#2f8f4f",
+                        "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                        "rainbow": [
+                          "#f34a4a",
+                          "#ffbc48",
+                          "#58ca70",
+                          "#47b5e6",
+                          "#a555e8"
+                        ],
+                        "surface": "#fafafb",
+                        "surfaceAlt": "#f5f5f7",
+                        "surfaceHover": "#ececee",
+                        "text": "#5a5a66",
+                        "warning": "#ffbc48"
+                      },
+                      "fonts": {
+                        "body": "Hanken Grotesk",
+                        "display": "",
+                        "heading": "Space Grotesk",
+                        "mono": "JetBrains Mono"
+                      },
+                      "general": {
+                        "animSpeed": 200,
+                        "borderWidth": 1,
+                        "focusGlowBlur": 14,
+                        "focusGlowOpacity": 0.24,
+                        "iconStyle": "emoji",
+                        "motion": true,
+                        "radiusScale": 1,
+                        "shadow": "soft",
+                        "thingsBadgeCustomPadding": "3px 8px",
+                        "thingsBadgePadding": "small"
+                      },
+                      "name": "Recovery theme original",
+                      "windows": {
+                        "closeColor": "",
+                        "closeRadius": 3.5,
+                        "maximiseColor": "",
+                        "maximiseRadius": 3.5,
+                        "minimiseColor": "",
+                        "minimiseRadius": 3.5
+                      }
+                    },
+                    "title": "Recovered theme library title"
+                  },
+                  "folderId": null,
+                  "tags": [],
+                  "visibility": "private"
+                },
+                "version": 2
+              },
+              "before": {
+                "adapter": "theme-content",
+                "value": {
+                  "crystal": {
+                    "name": "Recovery theme original",
+                    "theme": {
+                      "colors": {
+                        "accent": "#775533",
+                        "accentContrast": "#ffffff",
+                        "accentTint": "#fff5fa",
+                        "border": "#ececef",
+                        "borderLight": "#f0f0f2",
+                        "card": "#ffffff",
+                        "danger": "#d6455a",
+                        "darkAccent": "#59ff9c",
+                        "darkBg": "#131318",
+                        "darkBorder": "#2a2a33",
+                        "darkChrome": "#1c1c22",
+                        "darkMuted": "#8a8a95",
+                        "darkText": "#e6e6ee",
+                        "faint": "#b6b6c0",
+                        "focusBorder": "#d63384",
+                        "focusGlowEnd": "#a555e8",
+                        "focusGlowStart": "#ff69b4",
+                        "ink": "#16161a",
+                        "link": "#2f8fd6",
+                        "muted": "#9a9aa6",
+                        "pageBg": "#ffffff",
+                        "positive": "#2f8f4f",
+                        "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                        "rainbow": [
+                          "#f34a4a",
+                          "#ffbc48",
+                          "#58ca70",
+                          "#47b5e6",
+                          "#a555e8"
+                        ],
+                        "surface": "#fafafb",
+                        "surfaceAlt": "#f5f5f7",
+                        "surfaceHover": "#ececee",
+                        "text": "#5a5a66",
+                        "warning": "#ffbc48"
+                      },
+                      "fonts": {
+                        "body": "Hanken Grotesk",
+                        "display": "",
+                        "heading": "Space Grotesk",
+                        "mono": "JetBrains Mono"
+                      },
+                      "general": {
+                        "animSpeed": 200,
+                        "borderWidth": 1,
+                        "focusGlowBlur": 14,
+                        "focusGlowOpacity": 0.24,
+                        "iconStyle": "emoji",
+                        "motion": true,
+                        "radiusScale": 1,
+                        "shadow": "soft",
+                        "thingsBadgeCustomPadding": "3px 8px",
+                        "thingsBadgePadding": "small"
+                      },
+                      "name": "Recovery theme original",
+                      "windows": {
+                        "closeColor": "",
+                        "closeRadius": 3.5,
+                        "maximiseColor": "",
+                        "maximiseRadius": 3.5,
+                        "minimiseColor": "",
+                        "minimiseRadius": 3.5
+                      }
+                    }
+                  },
+                  "folderId": null,
+                  "tags": [],
+                  "visibility": "private"
+                },
+                "version": 2
+              },
+              "branchId": "device-workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "clientId": "workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "dependencies": [],
+              "formatVersion": 1,
+              "id": "device-event-cd1ed25c-363b-4290-a32b-cc7ff1caa973",
+              "label": "Edited Thing on this device",
+              "mode": "draft",
+              "occurredAt": "2026-10-26T19:35:56.023Z",
+              "operation": "update",
+              "operationId": "f26dfd87-ebf0-485f-aab1-01674ff961ce",
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "parentIds": [
+                "device-event-dd183f4d-2c73-4b75-a6db-432c9713655b"
+              ],
+              "source": "client",
+              "thingId": "95e6ea63-e386-463f-be0c-61cff486934a"
+            },
+            "receipt": {
+              "acceptedAt": "2026-10-26T19:36:01.177Z",
+              "eventId": "device-event-cd1ed25c-363b-4290-a32b-cc7ff1caa973",
+              "formatVersion": 1,
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "position": 1793043361177
+            },
+            "status": "accepted",
+            "accessedAt": 1793043356023,
+            "bytes": 3482
+          },
+          {
+            "scope": "[\"http://127.0.0.1:18724\",\"home\",\"6adfab974b184bb049dfa92f\"]",
+            "event": {
+              "actorId": "6adfab974b184bb049dfa92f",
+              "after": {
+                "adapter": "theme-content",
+                "value": {
+                  "crystal": {
+                    "name": "Recovery theme original",
+                    "theme": {
+                      "colors": {
+                        "accent": "#775533",
+                        "accentContrast": "#ffffff",
+                        "accentTint": "#fff5fa",
+                        "border": "#ececef",
+                        "borderLight": "#f0f0f2",
+                        "card": "#ffffff",
+                        "danger": "#d6455a",
+                        "darkAccent": "#59ff9c",
+                        "darkBg": "#131318",
+                        "darkBorder": "#2a2a33",
+                        "darkChrome": "#1c1c22",
+                        "darkMuted": "#8a8a95",
+                        "darkText": "#e6e6ee",
+                        "faint": "#b6b6c0",
+                        "focusBorder": "#d63384",
+                        "focusGlowEnd": "#a555e8",
+                        "focusGlowStart": "#ff69b4",
+                        "ink": "#16161a",
+                        "link": "#2f8fd6",
+                        "muted": "#9a9aa6",
+                        "pageBg": "#ffffff",
+                        "positive": "#2f8f4f",
+                        "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                        "rainbow": [
+                          "#f34a4a",
+                          "#ffbc48",
+                          "#58ca70",
+                          "#47b5e6",
+                          "#a555e8"
+                        ],
+                        "surface": "#fafafb",
+                        "surfaceAlt": "#f5f5f7",
+                        "surfaceHover": "#ececee",
+                        "text": "#5a5a66",
+                        "warning": "#ffbc48"
+                      },
+                      "fonts": {
+                        "body": "Hanken Grotesk",
+                        "display": "",
+                        "heading": "Space Grotesk",
+                        "mono": "JetBrains Mono"
+                      },
+                      "general": {
+                        "animSpeed": 200,
+                        "borderWidth": 1,
+                        "focusGlowBlur": 14,
+                        "focusGlowOpacity": 0.24,
+                        "iconStyle": "emoji",
+                        "motion": true,
+                        "radiusScale": 1,
+                        "shadow": "soft",
+                        "thingsBadgeCustomPadding": "3px 8px",
+                        "thingsBadgePadding": "small"
+                      },
+                      "name": "Recovery theme original",
+                      "windows": {
+                        "closeColor": "",
+                        "closeRadius": 3.5,
+                        "maximiseColor": "",
+                        "maximiseRadius": 3.5,
+                        "minimiseColor": "",
+                        "minimiseRadius": 3.5
+                      }
+                    }
+                  },
+                  "folderId": null,
+                  "tags": [],
+                  "visibility": "private"
+                },
+                "version": 2
+              },
+              "before": null,
+              "branchId": "device-workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "clientId": "workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "dependencies": [],
+              "formatVersion": 1,
+              "id": "device-event-dd183f4d-2c73-4b75-a6db-432c9713655b",
+              "label": "Created Thing on this device",
+              "mode": "draft",
+              "occurredAt": "2026-10-26T19:35:55.977Z",
+              "operation": "create",
+              "operationId": "3a23e85a-33dd-493f-9a29-a30e3d1712e2",
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "parentIds": [],
+              "source": "client",
+              "thingId": "95e6ea63-e386-463f-be0c-61cff486934a"
+            },
+            "receipt": {
+              "acceptedAt": "2026-10-26T19:36:00.483Z",
+              "eventId": "device-event-dd183f4d-2c73-4b75-a6db-432c9713655b",
+              "formatVersion": 1,
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "position": 1793043360483
+            },
+            "status": "accepted",
+            "accessedAt": 1793043355977,
+            "bytes": 2084
+          },
+          {
+            "scope": "[\"http://127.0.0.1:18724\",\"home\",\"6adfab974b184bb049dfa92f\"]",
+            "event": {
+              "actorId": "6adfab974b184bb049dfa92f",
+              "after": null,
+              "before": {
+                "adapter": "theme-content",
+                "value": {
+                  "crystal": {
+                    "name": "Recovery theme deleted",
+                    "theme": {
+                      "colors": {
+                        "accent": "#553377",
+                        "accentContrast": "#ffffff",
+                        "accentTint": "#fff5fa",
+                        "border": "#ececef",
+                        "borderLight": "#f0f0f2",
+                        "card": "#ffffff",
+                        "danger": "#d6455a",
+                        "darkAccent": "#59ff9c",
+                        "darkBg": "#131318",
+                        "darkBorder": "#2a2a33",
+                        "darkChrome": "#1c1c22",
+                        "darkMuted": "#8a8a95",
+                        "darkText": "#e6e6ee",
+                        "faint": "#b6b6c0",
+                        "focusBorder": "#d63384",
+                        "focusGlowEnd": "#a555e8",
+                        "focusGlowStart": "#ff69b4",
+                        "ink": "#16161a",
+                        "link": "#2f8fd6",
+                        "muted": "#9a9aa6",
+                        "pageBg": "#ffffff",
+                        "positive": "#2f8f4f",
+                        "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                        "rainbow": [
+                          "#f34a4a",
+                          "#ffbc48",
+                          "#58ca70",
+                          "#47b5e6",
+                          "#a555e8"
+                        ],
+                        "surface": "#fafafb",
+                        "surfaceAlt": "#f5f5f7",
+                        "surfaceHover": "#ececee",
+                        "text": "#5a5a66",
+                        "warning": "#ffbc48"
+                      },
+                      "fonts": {
+                        "body": "Hanken Grotesk",
+                        "display": "",
+                        "heading": "Space Grotesk",
+                        "mono": "JetBrains Mono"
+                      },
+                      "general": {
+                        "animSpeed": 200,
+                        "borderWidth": 1,
+                        "focusGlowBlur": 14,
+                        "focusGlowOpacity": 0.24,
+                        "iconStyle": "emoji",
+                        "motion": true,
+                        "radiusScale": 1,
+                        "shadow": "soft",
+                        "thingsBadgeCustomPadding": "3px 8px",
+                        "thingsBadgePadding": "small"
+                      },
+                      "name": "Recovery theme deleted",
+                      "windows": {
+                        "closeColor": "",
+                        "closeRadius": 3.5,
+                        "maximiseColor": "",
+                        "maximiseRadius": 3.5,
+                        "minimiseColor": "",
+                        "minimiseRadius": 3.5
+                      }
+                    },
+                    "title": "Recovered theme library title"
+                  },
+                  "folderId": "83304cef-4e51-4ffe-a1bb-3e0013917342",
+                  "tags": [],
+                  "visibility": "private"
+                },
+                "version": 2
+              },
+              "branchId": "device-workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "clientId": "workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "dependencies": [],
+              "formatVersion": 1,
+              "id": "device-event-e69b33b2-b7da-4b8f-b4f5-e48e2de4e467",
+              "label": "Deleted Thing on this device",
+              "mode": "draft",
+              "occurredAt": "2026-10-26T19:36:03.627Z",
+              "operation": "delete",
+              "operationId": "8ed8320f-8d1d-41e8-8eaa-78c6be5e0304",
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "parentIds": [
+                "device-event-663e5e37-e64f-4eae-a1a7-d4181faccecc"
+              ],
+              "source": "client",
+              "thingId": "95e6ea63-e386-463f-be0c-61cff486934a"
+            },
+            "receipt": {
+              "acceptedAt": "2026-10-26T19:36:06.873Z",
+              "eventId": "device-event-e69b33b2-b7da-4b8f-b4f5-e48e2de4e467",
+              "formatVersion": 1,
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "position": 1793043366873
+            },
+            "status": "accepted",
+            "accessedAt": 1793043363627,
+            "bytes": 2207
+          }
+        ]
+      },
+      {
+        "id": "ae60e79b-30e6-4151-a65d-1b02ffbbacae",
+        "entries": [
+          {
+            "scope": "[\"http://127.0.0.1:18724\",\"home\",\"6adfab974b184bb049dfa92f\"]",
+            "event": {
+              "actorId": "6adfab974b184bb049dfa92f",
+              "after": {
+                "adapter": "algorithm-content",
+                "value": {
+                  "crystal": {
+                    "description": "Disposable local profile",
+                    "emoji": "🧠",
+                    "eventCount": 0,
+                    "lastTrainedAt": null,
+                    "name": "Recovery algorithm original",
+                    "title": "Recovered algorithm library title",
+                    "weights": {
+                      "authors": {},
+                      "tags": {},
+                      "types": {}
+                    }
+                  },
+                  "folderId": "83304cef-4e51-4ffe-a1bb-3e0013917342"
+                },
+                "version": 1
+              },
+              "before": {
+                "adapter": "algorithm-content",
+                "value": {
+                  "crystal": {
+                    "description": "Disposable local profile",
+                    "emoji": "🧠",
+                    "eventCount": 0,
+                    "lastTrainedAt": null,
+                    "name": "Recovery algorithm original",
+                    "title": "Recovered algorithm library title",
+                    "weights": {
+                      "authors": {},
+                      "tags": {},
+                      "types": {}
+                    }
+                  },
+                  "folderId": null
+                },
+                "version": 1
+              },
+              "branchId": "device-workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "clientId": "workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "dependencies": [],
+              "formatVersion": 1,
+              "id": "device-event-320a6c2c-6c37-4141-b3ae-e16aa51019b8",
+              "label": "Edited Thing on this device",
+              "mode": "draft",
+              "occurredAt": "2026-10-26T19:35:56.096Z",
+              "operation": "update",
+              "operationId": "42242453-fe59-41dc-81ff-4f1485fb35f4",
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "parentIds": [
+                "device-event-73bcc114-fc96-4c6a-9b7e-e386bef84591"
+              ],
+              "source": "client",
+              "thingId": "ae60e79b-30e6-4151-a65d-1b02ffbbacae"
+            },
+            "receipt": {
+              "acceptedAt": "2026-10-26T19:35:59.779Z",
+              "eventId": "device-event-320a6c2c-6c37-4141-b3ae-e16aa51019b8",
+              "formatVersion": 1,
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "position": 1793043359779
+            },
+            "status": "accepted",
+            "accessedAt": 1793043356096,
+            "bytes": 1452
+          },
+          {
+            "scope": "[\"http://127.0.0.1:18724\",\"home\",\"6adfab974b184bb049dfa92f\"]",
+            "event": {
+              "actorId": "6adfab974b184bb049dfa92f",
+              "after": {
+                "adapter": "algorithm-content",
+                "value": {
+                  "crystal": {
+                    "description": "Disposable local profile",
+                    "emoji": "🧠",
+                    "eventCount": 0,
+                    "lastTrainedAt": null,
+                    "name": "Recovery algorithm original",
+                    "weights": {
+                      "authors": {},
+                      "tags": {},
+                      "types": {}
+                    }
+                  },
+                  "folderId": null
+                },
+                "version": 1
+              },
+              "before": null,
+              "branchId": "device-workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "clientId": "workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "dependencies": [],
+              "formatVersion": 1,
+              "id": "device-event-3f7e865d-1375-43ef-98c5-8367bc1047e1",
+              "label": "Created Thing on this device",
+              "mode": "draft",
+              "occurredAt": "2026-10-26T19:35:55.989Z",
+              "operation": "create",
+              "operationId": "51463c24-ecdc-464b-8cc4-44efd2d604ee",
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "parentIds": [],
+              "source": "client",
+              "thingId": "ae60e79b-30e6-4151-a65d-1b02ffbbacae"
+            },
+            "receipt": {
+              "acceptedAt": "2026-10-26T19:35:58.872Z",
+              "eventId": "device-event-3f7e865d-1375-43ef-98c5-8367bc1047e1",
+              "formatVersion": 1,
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "position": 1793043358872
+            },
+            "status": "accepted",
+            "accessedAt": 1793043355989,
+            "bytes": 1028
+          },
+          {
+            "scope": "[\"http://127.0.0.1:18724\",\"home\",\"6adfab974b184bb049dfa92f\"]",
+            "event": {
+              "actorId": "6adfab974b184bb049dfa92f",
+              "after": {
+                "adapter": "algorithm-content",
+                "value": {
+                  "crystal": {
+                    "description": "Disposable local profile",
+                    "emoji": "🧠",
+                    "eventCount": 0,
+                    "lastTrainedAt": null,
+                    "name": "Recovery algorithm original",
+                    "title": "Recovered algorithm library title",
+                    "weights": {
+                      "authors": {},
+                      "tags": {},
+                      "types": {}
+                    }
+                  },
+                  "folderId": null
+                },
+                "version": 1
+              },
+              "before": {
+                "adapter": "algorithm-content",
+                "value": {
+                  "crystal": {
+                    "description": "Disposable local profile",
+                    "emoji": "🧠",
+                    "eventCount": 0,
+                    "lastTrainedAt": null,
+                    "name": "Recovery algorithm original",
+                    "weights": {
+                      "authors": {},
+                      "tags": {},
+                      "types": {}
+                    }
+                  },
+                  "folderId": null
+                },
+                "version": 1
+              },
+              "branchId": "device-workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "clientId": "workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "dependencies": [],
+              "formatVersion": 1,
+              "id": "device-event-73bcc114-fc96-4c6a-9b7e-e386bef84591",
+              "label": "Edited Thing on this device",
+              "mode": "draft",
+              "occurredAt": "2026-10-26T19:35:56.077Z",
+              "operation": "update",
+              "operationId": "48e3cea3-ae9c-4d13-9a92-732687d3842f",
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "parentIds": [
+                "device-event-3f7e865d-1375-43ef-98c5-8367bc1047e1"
+              ],
+              "source": "client",
+              "thingId": "ae60e79b-30e6-4151-a65d-1b02ffbbacae"
+            },
+            "receipt": {
+              "acceptedAt": "2026-10-26T19:35:59.365Z",
+              "eventId": "device-event-73bcc114-fc96-4c6a-9b7e-e386bef84591",
+              "formatVersion": 1,
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "position": 1793043359365
+            },
+            "status": "accepted",
+            "accessedAt": 1793043356077,
+            "bytes": 1374
+          },
+          {
+            "scope": "[\"http://127.0.0.1:18724\",\"home\",\"6adfab974b184bb049dfa92f\"]",
+            "event": {
+              "actorId": "6adfab974b184bb049dfa92f",
+              "after": null,
+              "before": {
+                "adapter": "algorithm-content",
+                "value": {
+                  "crystal": {
+                    "description": "Disposable local profile",
+                    "emoji": "🧠",
+                    "eventCount": 0,
+                    "lastTrainedAt": null,
+                    "name": "Recovery algorithm deleted",
+                    "title": "Recovered algorithm library title",
+                    "weights": {
+                      "authors": {},
+                      "tags": {},
+                      "types": {}
+                    }
+                  },
+                  "folderId": "83304cef-4e51-4ffe-a1bb-3e0013917342"
+                },
+                "version": 1
+              },
+              "branchId": "device-workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "clientId": "workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "dependencies": [],
+              "formatVersion": 1,
+              "id": "device-event-c975ab33-6e55-4d81-8798-c89aa184f1c0",
+              "label": "Deleted Thing on this device",
+              "mode": "draft",
+              "occurredAt": "2026-10-26T19:36:03.692Z",
+              "operation": "delete",
+              "operationId": "e5f7d98f-3181-41bb-bb7a-eb94fcb2b941",
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "parentIds": [
+                "device-event-ee138508-b60c-4c6f-8cd1-4bbaa1a8ec36"
+              ],
+              "source": "client",
+              "thingId": "ae60e79b-30e6-4151-a65d-1b02ffbbacae"
+            },
+            "receipt": {
+              "acceptedAt": "2026-10-26T19:36:06.309Z",
+              "eventId": "device-event-c975ab33-6e55-4d81-8798-c89aa184f1c0",
+              "formatVersion": 1,
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "position": 1793043366309
+            },
+            "status": "accepted",
+            "accessedAt": 1793043363692,
+            "bytes": 1156
+          },
+          {
+            "scope": "[\"http://127.0.0.1:18724\",\"home\",\"6adfab974b184bb049dfa92f\"]",
+            "event": {
+              "actorId": "6adfab974b184bb049dfa92f",
+              "after": {
+                "adapter": "algorithm-content",
+                "value": {
+                  "crystal": {
+                    "description": "Disposable local profile",
+                    "emoji": "🧠",
+                    "eventCount": 0,
+                    "lastTrainedAt": null,
+                    "name": "Recovery algorithm deleted",
+                    "title": "Recovered algorithm library title",
+                    "weights": {
+                      "authors": {},
+                      "tags": {},
+                      "types": {}
+                    }
+                  },
+                  "folderId": "83304cef-4e51-4ffe-a1bb-3e0013917342"
+                },
+                "version": 1
+              },
+              "before": {
+                "adapter": "algorithm-content",
+                "value": {
+                  "crystal": {
+                    "description": "Disposable local profile",
+                    "emoji": "🧠",
+                    "eventCount": 0,
+                    "lastTrainedAt": null,
+                    "name": "Recovery algorithm original",
+                    "title": "Recovered algorithm library title",
+                    "weights": {
+                      "authors": {},
+                      "tags": {},
+                      "types": {}
+                    }
+                  },
+                  "folderId": "83304cef-4e51-4ffe-a1bb-3e0013917342"
+                },
+                "version": 1
+              },
+              "branchId": "device-workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "clientId": "workspace-e989998f-e41e-4a89-871e-c8235bd1595c",
+              "dependencies": [],
+              "formatVersion": 1,
+              "id": "device-event-ee138508-b60c-4c6f-8cd1-4bbaa1a8ec36",
+              "label": "Edited Thing on this device",
+              "mode": "draft",
+              "occurredAt": "2026-10-26T19:35:56.131Z",
+              "operation": "update",
+              "operationId": "1058abbb-5675-4fe7-aa78-8c9d392b5b98",
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "parentIds": [
+                "device-event-320a6c2c-6c37-4141-b3ae-e16aa51019b8"
+              ],
+              "source": "client",
+              "thingId": "ae60e79b-30e6-4151-a65d-1b02ffbbacae"
+            },
+            "receipt": {
+              "acceptedAt": "2026-10-26T19:36:00.002Z",
+              "eventId": "device-event-ee138508-b60c-4c6f-8cd1-4bbaa1a8ec36",
+              "formatVersion": 1,
+              "ownerId": "6adfab974b184bb049dfa92f",
+              "position": 1793043360002
+            },
+            "status": "accepted",
+            "accessedAt": 1793043356131,
+            "bytes": 1485
+          }
+        ]
+      }
+    ],
+    "themes": {
+      "ok": true,
+      "themes": [],
+      "activeThemeId": null
+    },
+    "algorithms": {
+      "ok": true,
+      "algorithms": [],
+      "activeAlgorithmId": null
+    },
+    "authority": "account-home-device-history"
+  }
+}

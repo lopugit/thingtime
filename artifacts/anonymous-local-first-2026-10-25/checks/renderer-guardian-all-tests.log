@@ -1,0 +1,57 @@
+
+> @thingtime/mcp@0.1.0 test
+> node --import tsx --test test/**/*.test.ts
+
+✔ reads bounded local Codex messages and rejects rollout paths outside the session root (526.120041ms)
+✔ normalizes ChatGPT exports in chronological order (41.854666ms)
+✔ normalizes Claude exports and attachments (0.633125ms)
+✔ redacts secrets from portable manifest settings (7.925917ms)
+✔ prepares relational parent and child ingestion records (17.919417ms)
+✔ redacts credential fields supplied by an MCP host (0.701208ms)
+✔ imports ChatGPT zip exports and preserves project names without source paths (117.423334ms)
+✔ prepares consented exports as ordered bounded batches (64.51275ms)
+✔ lists Codex sessions and creates a project-scoped thread (10.703291ms)
+✔ refreshes a fresh project registry through one bounded session page (0.708333ms)
+✔ holds a busy-session queue command until app-server accepts the next turn (17.390875ms)
+✔ times out a blocked queue command without acknowledging delivery (70.215917ms)
+✔ reads paged transcripts without exposing reasoning, local paths, commands, or tool output (0.825083ms)
+✔ redacts local paths from connector errors (0.701084ms)
+✔ uses enumerated generic connector errors instead of source messages (0.1585ms)
+✔ classifies a transport loss during turn start as an uncertain outcome (0.2915ms)
+✔ discards JSON-RPC error messages before they leave the local transport (515.344833ms)
+✔ fails closed without an unhandled error when a child closes its stdin pipe (357.721917ms)
+✔ does not forward raw Codex error text into cloud-visible events (0.486209ms)
+✔ maps queue and steer to separate Codex turn operations (1.820875ms)
+✔ forwards streamed deltas and approval responses with monotonic sequence numbers (1.503792ms)
+✔ buffers streamed text across chunks and drops split internal context markers (0.288291ms)
+✔ cancels and clears unanswered local approval requests on stop (0.190667ms)
+✔ actively expires unanswered local approval requests without another connector call (45.857458ms)
+✔ caps local pending approval requests and cancels overflow fail closed (12.880167ms)
+✔ adapts the native Thingtime Node connector wire without widening operations (4.053041ms)
+✔ preserves the development JSON request wire and rejects malformed native commands (0.521875ms)
+✔ connector list exposes only bounded opaque project references when its unavailable local connector exits early (760.615333ms)
+✔ a blocking queued send does not prevent a concurrent steer command (967.801ms)
+✔ maps local directories to stable opaque ids without returning paths (3.1685ms)
+✔ fails closed for unknown project ids and relative paths (1.029708ms)
+✔ discovers fresh-install projects locally before exposing bounded references (0.529708ms)
+✔ reloads a private Electron registry while keeping project paths off the wire (403.794042ms)
+﹣ stdio agent: no-login native PNGs, canonical dependencies and failures (0.816333ms) # SKIP
+﹣ running web app: clean browser edit, native render, JSON download and zero API traffic (0.174709ms) # SKIP
+﹣ isolated Docker stdio: exact render-only tools, resources and rejected calls (8.863875ms) # SKIP
+✔ isolated renderer requires explicit pinned image and socket; never accepts extra Docker arguments (1.529ms)
+✔ mounted trees reject dotenv files and escaping symlinks (438.096416ms)
+✔ failed Docker invocation preserves failure, sanitizes CLI environment and cleans temporary state (11485.593083ms)
+✔ cleanup refuses a matching resource name with a different ownership label (55.041167ms)
+✔ cleanup repeats the complete ownership sweep to catch a late acquisition (2773.7445ms)
+✔ recursively redacts credential-shaped fields (3.198875ms)
+✔ allows only files beneath configured roots (17.762375ms)
+✔ negotiates MCP and exposes the consent-first tool surface (139.585791ms)
+✔ copies allowlisted attachment bytes into private staging (350.018041ms)
+ℹ tests 45
+ℹ suites 0
+ℹ pass 42
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 3
+ℹ todo 0
+ℹ duration_ms 16036.435958

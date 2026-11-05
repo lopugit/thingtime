@@ -1,0 +1,12 @@
+{
+  "parentCommit": "b5ed654c6c11dbddbff6f59dc94e090fb4afe446",
+  "sha256": {
+    "remix/app/utils/thingTransfer/archive.ts": "6c852e130babb72e7b6c0ec9ea15272c276916d0d4fa98122ff2382e9980c56e",
+    "remix/app/utils/thingTransfer/binary.ts": "e95188710385dc5444e180d11d7081a9d9fcb0fe12224c32578db6c46a327fa8",
+    "remix/app/utils/thingTransfer/storedZip.ts": "6bf81723b4de74f59a8d75cacaa6ac51599a26b25610cf74a32a6abe396efd0e",
+    "remix/app/utils/thingTransfer/archive.test.ts": "5d5cc5dbaec752175093c5ed2819d3c742468324ae402bd22ec2e41c69213b7e",
+    "remix/app/utils/thingTransfer/storedZip.test.ts": "fadde9e256f9324a8cece7294f671b41ef14b46db0566fd4da5e05050bbe4af2",
+    "remix/app/utils/thingTransfer/binary.test.ts": "0d9b497a04eaab8a568ababc3f49046f0049f5d739e36c64c356ce3a37f49d11",
+    "remix/app/utils/thingTransfer/zip64Capacity.test.ts": "2e8ea3e0c29270c69d2b22bbaecb7f920d5c9dd6080c76e4efdc79172faa760f"
+  }
+}

@@ -1,153 +1,119 @@
 import React from 'react';
+import { LegacyEditorTreeRecovery } from '../local-workspace/WorkspaceThingtimeProvider';
+import { smarts } from '../smarts';
 import { Flex } from '@chakra-ui/react';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
-import { parseThingtime, stringifyThingtimeForStorage } from '~/Providers/thingtimeSerialization';
-import { readLocalCache, clearLocalCache } from '~/hooks/localCache';
+import { clearLocalCache } from '~/hooks/localCache';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { workspaceStorageBinding, workspaceStorageIdentity, subscribeWorkspaceStorage } from '../local-workspace/storageStatus.client';
 import { DraftPicker, DraftSaveStatus } from './DraftPicker';
-import { createDraftSession, type DraftSaveState } from './draftSession';
-import { draftRequest } from './draftClient';
+import type { DraftSaveState } from './draftSession';
 import type { AccountDraft } from './draftCore';
+import { createThingDraftWorkspace, ThingDraftRecoveryError } from './thingDraftWorkspace';
 
-const RESERVED = new Set(['tmp', 'settings', 'timemachine', 'set', 'get', '__proto__', 'prototype', 'constructor']);
 const DraftContext = React.createContext<{
+	resume: (path: string) => void;
 	load: (draft: AccountDraft) => Promise<void>;
 	flush: () => Promise<void>;
 	forget: (id: string) => Promise<void>;
 	retry: () => Promise<void>;
 	status: DraftSaveState;
 	error: string;
+	paused: boolean;
 } | null>(null);
 export function ThingDraftsProvider({ children }: { children: React.ReactNode }) {
-	const user = useCurrentUser(),
-		{ events, setThingtime } = useThingtime(),
-		lopu = useLopu();
-	const sessions = React.useRef(new Map<string, ReturnType<typeof createDraftSession>>());
+	const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+	// A generation change retires all sessions, even for the same account/plane.
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	const binding = React.useMemo(() => workspaceStorageBinding(), [identity]);
+	return <WorkspaceThingDrafts key={identity} binding={binding}>{children}</WorkspaceThingDrafts>;
+}
+function WorkspaceThingDrafts({ children, binding }: {
+	children: React.ReactNode;
+	binding: ReturnType<typeof workspaceStorageBinding>;
+}) {
+	const user = useWorkspaceUser(), { events, setThingtime } = useThingtime(), lopu = useLopu();
+	const [status, setStatus] = React.useState<DraftSaveState>('idle'), [error, setError] = React.useState('');
+	const [paused, setPaused] = React.useState(false);
+	const recoveryFailure = React.useRef('');
 	const warned = React.useRef(false);
-	const active = React.useRef(true);
-	const failures = React.useRef(new Map<string, DraftSaveState>());
-	const [status, setStatus] = React.useState<DraftSaveState>('idle'),
-		[error, setError] = React.useState('');
-	const sessionFor = React.useCallback(
-		(context: string) => {
-			if (!user?.id) return null;
-			if (sessions.current.has(context)) return sessions.current.get(context)!;
-			const key = `tt-account-draft:${location.origin}:${user.id}:${context}`;
-			const session = createDraftSession({
-				seed: readLocalCache(key),
-				uuid: () => crypto.randomUUID(),
-				save: async (input) => (await draftRequest(user.id, { operation: 'save', ...input })).draft,
-				copy: async (input) => (await draftRequest(user.id, { operation: 'recover', ...input })).draft,
-				persist: (value) => {
-					if (!value) {
-						clearLocalCache(key);
-						return;
-					}
-					try {
-						localStorage.setItem(key, JSON.stringify(value));
-					} catch {
-						if (!warned.current) {
-							warned.current = true;
-							lopu({
-								title: 'Device draft storage is full',
-								description: 'Keep this page open until your account draft has synced.',
-								status: 'error'
-							});
-						}
-					}
-				},
-				changed: (status, error) => {
-					failures.current.set(context, status);
-					if (active.current) {
-						setStatus(status);
-						setError(error || '');
-					}
-					if ((status === 'offline' || status === 'conflict') && !warned.current) {
-						warned.current = true;
-						lopu({ title: 'Your Thing draft is waiting to sync', description: error, status: 'info' });
-					}
+	const callbacks = React.useRef({ setThingtime, lopu });
+	callbacks.current = { setThingtime, lopu };
+	const workspace = React.useMemo(() => binding && user?.id ? createThingDraftWorkspace({
+		actor: user.id, origin: location.origin, scope: binding.scope, lease: binding.lease,
+		read: key => { const raw = localStorage.getItem(key); return raw === null ? null : JSON.parse(raw); }, uuid: () => crypto.randomUUID(),
+		restore: (path, value, recovery) => callbacks.current.setThingtime(path, value, { namespace: 'user', ...(recovery ? { fromRemote: true, ignoreUndoRedo: true } : {}) }),
+		persist: (key, value) => {
+			if (!value) { clearLocalCache(key); return; }
+			try { localStorage.setItem(key, JSON.stringify(value)); }
+			catch {
+				if (!warned.current) {
+					warned.current = true;
+					callbacks.current.lopu({ title: 'Device draft storage is full', description: 'Keep this page open until the draft is saved on this device.', status: 'error' });
 				}
-			});
-			sessions.current.set(context, session);
-			return session;
-		},
-		[lopu, user?.id]
-	);
-	React.useEffect(() => {
-		active.current = true;
-    const activeSessions = sessions.current;
-		const subscription = events?.subscribe((event: any) => {
-			if (event?.type !== 'draft-edit' || !user) return;
-			const path = event.path as string[];
-			if (!path?.length || RESERVED.has(path[0])) return;
-			try {
-				const serialized = stringifyThingtimeForStorage(event.value);
-				sessionFor(`thing:${path.join('.')}`)?.capture({
-					name: path.join('.').slice(0, 160),
-					surface: 'thing',
-					context: `thing:${path.join('.')}`,
-					snapshot: JSON.stringify({ path, serialized }),
-					attachmentIds: []
-				});
-			} catch {
-				lopu({ title: 'This Thing could not be saved as a draft', status: 'error' });
 			}
+		},
+		changed: (next, message) => { setStatus(next); setError(recoveryFailure.current || message || ''); }
+	}) : null, [binding, user?.id]);
+	const report = React.useCallback((failure: unknown) => {
+		setStatus('offline');
+		if (failure instanceof ThingDraftRecoveryError) recoveryFailure.current = failure.message;
+		setPaused(!!recoveryFailure.current);
+		setError(recoveryFailure.current || (failure instanceof Error ? failure.message : 'This Thing could not be saved as a draft'));
+	}, []);
+	const resume = React.useCallback((path: string) => {
+		try {
+			const parts = smarts.parsePropertyPath(path);
+			while (parts[0] === 'tt' || parts[0] === 'thingtime') parts.shift();
+			if (parts.length) workspace?.resume([parts[0]]);
+		} catch (failure) { report(failure); }
+	}, [workspace, report]);
+	React.useEffect(() => {
+		const subscription = events?.subscribe((event: any) => {
+			if (event?.type !== 'draft-edit' || !workspace) return;
+			try { workspace.capture(event.path, event.value); }
+			catch (failure) { report(failure); }
 		});
-		const flush = () => {
-			for (const session of sessions.current.values()) void session.flush().catch(() => {});
-		};
-		const retry = () => {
-			for (const session of sessions.current.values()) void session.retry().catch(() => {});
-		};
+		const flush = () => { void workspace?.flush().catch(() => {}); };
+		const retry = () => { void workspace?.retry().catch(() => {}); };
 		window.addEventListener('pagehide', flush);
 		window.addEventListener('online', retry);
 		return () => {
 			subscription?.unsubscribe();
 			window.removeEventListener('pagehide', flush);
 			window.removeEventListener('online', retry);
-			active.current = false;
-			queueMicrotask(() => {
-				if (!active.current) for (const session of activeSessions.values()) session.dispose();
-			});
+			// React StrictMode replays effects on the same workspace. Disposal is
+			// handled by the workspace lifetime effect below.
 		};
-	}, [events, lopu, sessionFor, user]);
-	const load = async (draft: AccountDraft) => {
-		if (draft.surface !== 'thing') throw new Error('Open this draft in its original editor');
-		const value = JSON.parse(draft.snapshot);
-		if (
-			!Array.isArray(value.path) ||
-			value.path.length !== 1 ||
-			typeof value.path[0] !== 'string' ||
-			RESERVED.has(value.path[0]) ||
-			['tt', 'thingtime'].includes(value.path[0])
-		)
-			throw new Error('Invalid Thing draft');
-		const session = sessionFor(`thing:${value.path[0]}`);
-		await session?.load(draft);
-		const latest = JSON.parse(session?.current()?.content.snapshot || draft.snapshot);
-		setThingtime(latest.path, parseThingtime(latest.serialized), { namespace: 'user' });
-	};
-	const flush = async () => {
-		await Promise.all([...sessions.current.values()].map((session) => session.flush()));
-	};
-	const forget = async (id: string) => {
-		for (const session of sessions.current.values()) if (session.current()?.id === id) await session.clear(async () => {});
-	};
-	const retry = async () => {
-		await Promise.all(
-			[...sessions.current.entries()].map(([key, session]) => (failures.current.get(key) === 'conflict' ? session.saveCopy() : session.retry()))
-		);
-	};
-	return <DraftContext.Provider value={{ load, flush, forget, retry, status, error }}>{children}</DraftContext.Provider>;
+	}, [events, workspace, report]);
+	const mounted = React.useRef<ReturnType<typeof createThingDraftWorkspace> | null>(null);
+	React.useEffect(() => {
+		mounted.current = workspace;
+		return () => {
+			mounted.current = null;
+			queueMicrotask(() => { if (mounted.current !== workspace) workspace?.dispose(); });
+		};
+	}, [workspace]);
+	const unavailable = async () => { throw new Error('Draft workspace is not ready. Reopen this editor.'); };
+	return <DraftContext.Provider value={{ resume, load: workspace?.load || unavailable, flush: workspace?.flush || unavailable,
+		forget: workspace?.forget || unavailable, retry: workspace?.retry || unavailable, status, error, paused }}>{children}</DraftContext.Provider>;
 }
 export function ThingDraftPicker() {
-	const user = useCurrentUser(),
+	const user = useWorkspaceUser(),
 		drafts = React.useContext(DraftContext);
 	return user && drafts ? (
 		<Flex px={3} py={2} gap={3} justify="flex-end" flexWrap="wrap">
-			<DraftSaveStatus status={drafts.status} error={drafts.error} retry={drafts.retry} />
+			<DraftSaveStatus status={drafts.status} error={drafts.error} paused={drafts.paused} retry={drafts.retry} />
+			<LegacyEditorTreeRecovery />
 			<DraftPicker actor={user.id} surface="thing" onLoad={drafts.load} beforeOpen={drafts.flush} onDeleted={drafts.forget} />
 		</Flex>
 	) : null;
+}
+
+/** Embedded/read-only foreign Things must not recover into the user tree. */
+export function useThingDraftRecovery(path: string, enabled = true) {
+ const drafts = React.useContext(DraftContext), { loading } = useThingtime();
+ const resume = drafts?.resume;
+ React.useEffect(() => { if (enabled && !loading) resume?.(path); }, [enabled, loading, path, resume]);
 }

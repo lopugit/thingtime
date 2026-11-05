@@ -1,0 +1,257 @@
+{
+  "ok": true,
+  "entries": [
+    {
+      "event": {
+        "actorId": "6adb0c8554364032d3d1b98a",
+        "after": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "History profile 246138",
+              "title": "Library alias 80c726",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": null
+          },
+          "version": 1
+        },
+        "before": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "History profile 246138 edited",
+              "title": "Library alias 80c726",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": null
+          },
+          "version": 1
+        },
+        "branchId": "device-workspace-7d7dc5aa-4466-4f56-bfb2-a3f7d28beccf",
+        "clientId": "workspace-7d7dc5aa-4466-4f56-bfb2-a3f7d28beccf",
+        "dependencies": [],
+        "formatVersion": 1,
+        "id": "version-9b90429d-f367-4fe5-8998-102e6e876aae",
+        "label": "Restored earlier version",
+        "mode": "draft",
+        "occurredAt": "2026-10-23T07:28:53.748Z",
+        "operation": "restore",
+        "operationId": "75308bb05ec3e0f7be2aa7486648d6e9ad5800fad427e3359260bff9f2e75c2b",
+        "ownerId": "6adb0c8554364032d3d1b98a",
+        "parentIds": [
+          "device-event-979d99ea-fb3b-4955-8f8b-95516fb96b04",
+          "device-event-81dca9ae-157e-4796-9b7b-40f15c2b253c"
+        ],
+        "source": "client",
+        "thingId": "01b1b75d-e992-4ff3-8e8d-cca158c39cb1"
+      },
+      "receipt": {
+        "acceptedAt": "2026-10-23T07:29:24.269Z",
+        "eventId": "version-9b90429d-f367-4fe5-8998-102e6e876aae",
+        "formatVersion": 1,
+        "ownerId": "6adb0c8554364032d3d1b98a",
+        "position": 1792740564269
+      }
+    },
+    {
+      "event": {
+        "actorId": "6adb0c8554364032d3d1b98a",
+        "after": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "History profile 246138 edited",
+              "title": "Library alias 80c726",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": null
+          },
+          "version": 1
+        },
+        "before": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "History profile 246138 edited",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": null
+          },
+          "version": 1
+        },
+        "branchId": "device-workspace-7d7dc5aa-4466-4f56-bfb2-a3f7d28beccf",
+        "clientId": "workspace-7d7dc5aa-4466-4f56-bfb2-a3f7d28beccf",
+        "dependencies": [],
+        "formatVersion": 1,
+        "id": "device-event-979d99ea-fb3b-4955-8f8b-95516fb96b04",
+        "label": "Edited Thing on this device",
+        "mode": "draft",
+        "occurredAt": "2026-10-23T07:28:28.770Z",
+        "operation": "update",
+        "operationId": "d6ed6d5e-5287-498d-a1f6-1cd1e2aca787",
+        "ownerId": "6adb0c8554364032d3d1b98a",
+        "parentIds": [
+          "device-event-7bc81518-a17b-4765-b1a1-e6515341184f"
+        ],
+        "source": "client",
+        "thingId": "01b1b75d-e992-4ff3-8e8d-cca158c39cb1"
+      },
+      "receipt": {
+        "acceptedAt": "2026-10-23T07:29:22.483Z",
+        "eventId": "device-event-979d99ea-fb3b-4955-8f8b-95516fb96b04",
+        "formatVersion": 1,
+        "ownerId": "6adb0c8554364032d3d1b98a",
+        "position": 1792740562483
+      }
+    },
+    {
+      "event": {
+        "actorId": "6adb0c8554364032d3d1b98a",
+        "after": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "History profile 246138 edited",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": null
+          },
+          "version": 1
+        },
+        "before": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "History profile 246138",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": null
+          },
+          "version": 1
+        },
+        "branchId": "device-workspace-7d7dc5aa-4466-4f56-bfb2-a3f7d28beccf",
+        "clientId": "workspace-7d7dc5aa-4466-4f56-bfb2-a3f7d28beccf",
+        "dependencies": [],
+        "formatVersion": 1,
+        "id": "device-event-7bc81518-a17b-4765-b1a1-e6515341184f",
+        "label": "Edited Thing on this device",
+        "mode": "draft",
+        "occurredAt": "2026-10-23T07:28:19.896Z",
+        "operation": "update",
+        "operationId": "feadba7b-0a7b-400d-9715-60c33c8fa9f0",
+        "ownerId": "6adb0c8554364032d3d1b98a",
+        "parentIds": [
+          "device-event-81dca9ae-157e-4796-9b7b-40f15c2b253c"
+        ],
+        "source": "client",
+        "thingId": "01b1b75d-e992-4ff3-8e8d-cca158c39cb1"
+      },
+      "receipt": {
+        "acceptedAt": "2026-10-23T07:29:20.692Z",
+        "eventId": "device-event-7bc81518-a17b-4765-b1a1-e6515341184f",
+        "formatVersion": 1,
+        "ownerId": "6adb0c8554364032d3d1b98a",
+        "position": 1792740560692
+      }
+    },
+    {
+      "event": {
+        "actorId": "6adb0c8554364032d3d1b98a",
+        "after": {
+          "adapter": "algorithm-content",
+          "value": {
+            "crystal": {
+              "description": "",
+              "emoji": "🧠",
+              "eventCount": 0,
+              "lastTrainedAt": null,
+              "name": "History profile 246138",
+              "weights": {
+                "authors": {},
+                "tags": {},
+                "types": {}
+              }
+            },
+            "folderId": null
+          },
+          "version": 1
+        },
+        "before": null,
+        "branchId": "device-workspace-7d7dc5aa-4466-4f56-bfb2-a3f7d28beccf",
+        "clientId": "workspace-7d7dc5aa-4466-4f56-bfb2-a3f7d28beccf",
+        "dependencies": [],
+        "formatVersion": 1,
+        "id": "device-event-81dca9ae-157e-4796-9b7b-40f15c2b253c",
+        "label": "Created Thing on this device",
+        "mode": "draft",
+        "occurredAt": "2026-10-23T07:28:19.178Z",
+        "operation": "create",
+        "operationId": "910d8cc4-49c3-487e-8ea1-bc6ee22e8202",
+        "ownerId": "6adb0c8554364032d3d1b98a",
+        "parentIds": [],
+        "source": "client",
+        "thingId": "01b1b75d-e992-4ff3-8e8d-cca158c39cb1"
+      },
+      "receipt": {
+        "acceptedAt": "2026-10-23T07:29:17.877Z",
+        "eventId": "device-event-81dca9ae-157e-4796-9b7b-40f15c2b253c",
+        "formatVersion": 1,
+        "ownerId": "6adb0c8554364032d3d1b98a",
+        "position": 1792740557877
+      }
+    }
+  ],
+  "nextBefore": null,
+  "nextAfter": null,
+  "notes": [],
+  "names": []
+}

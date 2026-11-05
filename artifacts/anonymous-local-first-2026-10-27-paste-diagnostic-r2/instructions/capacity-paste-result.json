@@ -1,0 +1,221 @@
+{
+  "pasteMs": 2194,
+  "nativeTimings": {
+    "events": [
+      {
+        "type": "paste",
+        "elapsedMs": 11
+      },
+      {
+        "type": "beforeinput",
+        "elapsedMs": 12.100000008940697,
+        "inputType": "insertFromPaste"
+      },
+      {
+        "type": "input",
+        "elapsedMs": 2076.9000000059605,
+        "inputType": "insertFromPaste"
+      },
+      {
+        "type": "first-frame-after-input",
+        "elapsedMs": 2098.7000000029802
+      }
+    ],
+    "longTasks": [
+      {
+        "elapsedMs": 9.900000005960464,
+        "durationMs": 2072
+      }
+    ],
+    "observedMs": 2208.9000000059605
+  },
+  "exact": true,
+  "hardLines": 12002,
+  "rendererMetrics": {
+    "metrics": [
+      {
+        "name": "Timestamp",
+        "value": 127335.360588
+      },
+      {
+        "name": "AudioHandlers",
+        "value": 0
+      },
+      {
+        "name": "AudioWorkletProcessors",
+        "value": 0
+      },
+      {
+        "name": "Documents",
+        "value": 1
+      },
+      {
+        "name": "Frames",
+        "value": 1
+      },
+      {
+        "name": "JSEventListeners",
+        "value": 572
+      },
+      {
+        "name": "LayoutObjects",
+        "value": 36729
+      },
+      {
+        "name": "MediaKeySessions",
+        "value": 0
+      },
+      {
+        "name": "MediaKeys",
+        "value": 0
+      },
+      {
+        "name": "Nodes",
+        "value": 25148
+      },
+      {
+        "name": "Resources",
+        "value": 3
+      },
+      {
+        "name": "ContextLifecycleStateObservers",
+        "value": 24
+      },
+      {
+        "name": "V8PerContextDatas",
+        "value": 2
+      },
+      {
+        "name": "WorkerGlobalScopes",
+        "value": 2
+      },
+      {
+        "name": "UACSSResources",
+        "value": 0
+      },
+      {
+        "name": "RTCPeerConnections",
+        "value": 0
+      },
+      {
+        "name": "ResourceFetchers",
+        "value": 3
+      },
+      {
+        "name": "AdSubframes",
+        "value": 0
+      },
+      {
+        "name": "DetachedScriptStates",
+        "value": 0
+      },
+      {
+        "name": "ArrayBufferContents",
+        "value": 10
+      },
+      {
+        "name": "LayoutCount",
+        "value": 4
+      },
+      {
+        "name": "RecalcStyleCount",
+        "value": 16
+      },
+      {
+        "name": "LayoutDuration",
+        "value": 0.120098
+      },
+      {
+        "name": "RecalcStyleDuration",
+        "value": 0.016092
+      },
+      {
+        "name": "DevToolsCommandDuration",
+        "value": 0.031606
+      },
+      {
+        "name": "ScriptDuration",
+        "value": 0.007261
+      },
+      {
+        "name": "V8CompileDuration",
+        "value": 0
+      },
+      {
+        "name": "TaskDuration",
+        "value": 2.221479
+      },
+      {
+        "name": "TaskOtherDuration",
+        "value": 2.046422
+      },
+      {
+        "name": "ThreadTime",
+        "value": 2.071804
+      },
+      {
+        "name": "ProcessTime",
+        "value": 0
+      },
+      {
+        "name": "JSHeapUsedSize",
+        "value": 47315592
+      },
+      {
+        "name": "JSHeapTotalSize",
+        "value": 53407744
+      },
+      {
+        "name": "FirstMeaningfulPaint",
+        "value": 127111.535303
+      },
+      {
+        "name": "DomContentLoaded",
+        "value": 127110.976894
+      },
+      {
+        "name": "NavigationStart",
+        "value": 127110.270955
+      }
+    ]
+  },
+  "browserProcesses": {
+    "processInfo": [
+      {
+        "type": "browser",
+        "id": 660,
+        "cpuTime": 2.37
+      },
+      {
+        "type": "renderer",
+        "id": 754,
+        "cpuTime": 0
+      },
+      {
+        "type": "renderer",
+        "id": 755,
+        "cpuTime": 18.98
+      },
+      {
+        "type": "renderer",
+        "id": 743,
+        "cpuTime": 0.25
+      },
+      {
+        "type": "GPU",
+        "id": 691,
+        "cpuTime": 3.33
+      },
+      {
+        "type": "network.mojom.NetworkService",
+        "id": 692,
+        "cpuTime": 0.69
+      },
+      {
+        "type": "storage.mojom.StorageService",
+        "id": 719,
+        "cpuTime": 0.02
+      }
+    ]
+  }
+}

@@ -329,7 +329,7 @@ export const Nav = (props) => {
 							<Search size={16} strokeWidth={1.9} />
 						</Center>
 						<NavAccountLink className="electron-titlebar-account-button" claimedUser={claimedUser} />
-						{claimedUser && !isMobile ? (
+						{!isMobile ? (
 							<Center className="electron-titlebar-notifications-button" height="36px">
 								<NotificationsBell />
 							</Center>
@@ -382,7 +382,7 @@ export const Nav = (props) => {
 							</Center>
 						)}
 						{isMobile ? <NavAccountLink className="nav-right-account-button" claimedUser={claimedUser} /> : null}
-						{claimedUser && isMobile ? (
+						{isMobile ? (
 							<Center>
 								<NotificationsBell />
 							</Center>

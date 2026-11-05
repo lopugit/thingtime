@@ -1,0 +1,27 @@
+✔ native library moves, drains and deletes private account themes offline with independent conditional synchronization (100926.618691ms)
+✖ native library moves, drains and deletes private account themes offline under a selected custom plane with independent conditional synchronization (177606.88479ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 278946.438122
+
+✖ failing tests:
+
+test at app/local-workspace/accountThemeOrganization.browser.test.ts:2:1308
+✖ native library moves, drains and deletes private account themes offline under a selected custom plane with independent conditional synchronization (177606.88479ms)
+  AssertionError [ERR_ASSERTION]: Conditional synchronization did not complete
+      at until (/workspace/thingtime/remix/app/local-workspace/accountThemeOrganization.browser.test.ts:76:12)
+      at async TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountThemeOrganization.browser.test.ts:256:5)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }

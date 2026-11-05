@@ -1,0 +1,1 @@
+{"denied":[{"host":"203.0.113.1","result":"ENETUNREACH"},{"host":"::ffff:203.0.113.1","result":"ENETUNREACH"},{"host":"2001:db8::1","result":"ENETUNREACH"}],"backendRedirectDenied":true,"browserDirectIPDenied":true,"browserRedirectDenied":true,"sandbox":true}

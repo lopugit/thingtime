@@ -1,0 +1,38 @@
+Current package ready; running component
+Egress check 203.0.113.1: ENETUNREACH
+Egress check ::ffff:203.0.113.1: ENETUNREACH
+Egress check 2001:db8::1: ENETUNREACH
+Egress check blocked.invalid: EAI_AGAIN
+Checking backend redirect
+Launching isolated browser
+Browser ready
+Browser egress denied http://203.0.113.1/
+Browser egress denied http://[::ffff:203.0.113.1]/
+Browser egress denied http://[2001:db8::1]/
+Browser egress denied http://blocked.invalid/
+Browser egress denied http://127.0.0.1:18725/
+Closing network-proof browser
+Closing network-proof server
+{"interfaces":["loopback"],"denied":[{"host":"203.0.113.1","code":"ENETUNREACH"},{"host":"::ffff:203.0.113.1","code":"ENETUNREACH"},{"host":"2001:db8::1","code":"ENETUNREACH"},{"host":"blocked.invalid","code":"EAI_AGAIN"}],"browserDenied":["http://203.0.113.1/","http://[::ffff:203.0.113.1]/","http://[2001:db8::1]/","http://blocked.invalid/","http://127.0.0.1:18725/"],"backendRedirectDenied":true,"chromiumSandbox":true}
+Server before test: 200
+
+✖ normal account worker gates nested Components and recovers immutable page write after cold reload (103490.455703ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 103546.2944
+
+✖ failing tests:
+
+test at ../component.test.mjs:10:1
+✖ normal account worker gates nested Components and recovers immutable page write after cold reload (103490.455703ms)
+  Error: Queue convergence failed: {"status":[{"id":"9ce7ce92-b972-4a09-90a2-3f52c2d6b84d","state":"pending","deleted":false,"attempts":0,"retryAt":0},{"id":"bf5bcfc4-5918-4dba-b7fa-a2fd9f9ea8fa","state":"pending","deleted":false,"attempts":0,"retryAt":0},{"id":"f8b97da8-bf47-4765-9f1d-a40267e9d824","state":"pending","deleted":false,"attempts":0,"retryAt":0}],"things":[{"thingtime":["component"],"crystal":{"name":"Acknowledged component control","library":"custom","category":"general","componentKey":"queue-5918fbad-8bb1-4793-b3c1-3d927c441e3d","version":1,"render":{"tag":"p","children":"Acknowledged component control"}},"id":"f8b97da8-bf47-4765-9f1d-a40267e9d824","createdAt":"2026-10-26T18:24:29.904Z","updatedAt":"2026-10-26T18:24:29.904Z","revision":1},{"thingtime":["webpage"],"crystal":{"name":"Dependency queue page","version":1,"blocks":[{"id":"outer","type":"container","direction":"column","children":[{"id":"inner","type":"container","direction":"column","children":[{"id":"control","type":"component","component":"f8b97da8-bf47-4765-9f1d-a40267e9d824"},{"id":"text","type":"element","tag":"p","text":"Original frozen content"}]}]}]},"id":"bf5bcfc4-5918-4dba-b7fa-a2fd9f9ea8fa","createdAt":"2026-10-26T18:24:29.914Z","updatedAt":"2026-10-26T18:24:29.914Z","revision":1},{"thingtime":["data"],"crystal":{"name":"Independent queue data"},"id":"9ce7ce92-b972-4a09-90a2-3f52c2d6b84d","createdAt":"2026-10-26T18:24:29.928Z","updatedAt":"2026-10-26T18:24:29.928Z","revision":1}],"records":[{"id":"f8b97da8-bf47-4765-9f1d-a40267e9d824","row":{"id":"f8b97da8-bf47-4765-9f1d-a40267e9d824","base":null,"audience":{"acl":["tt:user"],"visibility":"private"},"state":"pending","attempts":0,"retryAt":0}},{"id":"bf5bcfc4-5918-4dba-b7fa-a2fd9f9ea8fa","row":{"id":"bf5bcfc4-5918-4dba-b7fa-a2fd9f9ea8fa","base":null,"audience":{"acl":["tt:user"],"visibility":"private"},"state":"pending","attempts":0,"retryAt":0}},{"id":"9ce7ce92-b972-4a09-90a2-3f52c2d6b84d","row":{"id":"9ce7ce92-b972-4a09-90a2-3f52c2d6b84d","base":null,"audience":{"acl":["tt:user"],"visibility":"private"},"state":"pending","attempts":0,"retryAt":0}}]}
+      at poll (file:///tmp/check/component.test.mjs:68:11)
+      at async TestContext.<anonymous> (file:///tmp/check/component.test.mjs:109:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+Container operation failed: 1

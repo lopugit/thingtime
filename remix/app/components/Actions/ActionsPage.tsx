@@ -7,7 +7,8 @@ import { ActionChip, type ChipSize, type ChipTone } from './ActionChip';
 
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { CARD_STYLES } from '~/theme/card';
 import {
 	ACTION_OP_TONES,
@@ -131,11 +132,16 @@ export const ActionCard = ({
 };
 
 export const ActionsPage = () => {
+ const scope = useWorkspaceScope();
+ return <WorkspaceActionsPage key={scope} scope={scope} />;
+};
+const WorkspaceActionsPage = ({ scope }: { scope: string }) => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
-	const user = useCurrentUser();
-	const cacheKey = cacheKeyFor(user?.id);
+	const workspaceUser = useWorkspaceUser();
+ const user = scope === 'pending' ? null : workspaceUser;
+	const cacheKey = cacheKeyFor(scope);
 	const cached = React.useMemo(() => readLocalCache<ActionsCache>(cacheKey), [cacheKey]);
 	const [actions, setActions] = React.useState<ActionThing[]>(cached?.actions || []);
 	const [loaded, setLoaded] = React.useState(false);
@@ -145,7 +151,7 @@ export const ActionsPage = () => {
 	// resolve schema refs (ids) to display names — one fetch per unique ref
 	React.useEffect(() => {
 		const refs = [...new Set(actions.flatMap((action) => collectSchemaRefs(action.crystal)))].filter(
-			(ref) => !(ref in schemaNames)
+			(ref) => !(ref in schemaNames) && (!user?.localOnly || ref.startsWith('local-'))
 		);
 		if (!refs.length) return;
 		let cancelled = false;
@@ -165,7 +171,7 @@ export const ActionsPage = () => {
 		return () => {
 			cancelled = true;
 		};
-	}, [actions, schemaNames]);
+	}, [actions, schemaNames, user?.localOnly]);
 
 	React.useEffect(() => {
 		if (!user?.id) return;

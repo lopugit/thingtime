@@ -1,0 +1,17 @@
+{
+  "before": {
+    "currentSrc": "blob:null/9334a277-ad9a-4dd9-bdc2-ff5809ca93a0",
+    "readyState": 4
+  },
+  "after": {
+    "currentSrc": "blob:null/9334a277-ad9a-4dd9-bdc2-ff5809ca93a0",
+    "paused": true,
+    "readyState": 0,
+    "networkState": 3,
+    "srcAttribute": null,
+    "sources": [
+      null
+    ]
+  },
+  "playResult": "timed out"
+}

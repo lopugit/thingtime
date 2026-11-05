@@ -5,7 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { materializeSuite, summarizeBehaviourSuite, type BehaviourSuite } from '~/schemas/behaviourSuites';
 // the REGISTRY module (not just the lookups): importing it registers the app
 // suites, so a cold load of /builder/demos/pokeworld resolves the app
@@ -17,7 +17,7 @@ import { useActionRunConfirm } from '../Actions/ActionRunConfirm';
 import type { TtActionConfirmHandler, TtActionUnownedHandler } from '../Actions/useTtActionClicks';
 import { WebpageBlocksRenderer, buildComponentsByRef, type ComponentsByRef, type WebpageBlocksRendererProps } from './WebpageBlocksRenderer';
 import { WebpageRuntimeProvider } from './webpageRuntime';
-import { installSuiteOnServer, suiteKeyFromActionKey } from './installSuite';
+import { installSuiteForWorkspace, suiteKeyFromActionKey } from './installSuite';
 import { DemoThumb, type DemoBlockList } from './DemoLibraryPage';
 import {
 	DEMO_LIBRARY_PATH,
@@ -64,10 +64,12 @@ type Reconciled = { seeded: boolean | null; library: ComponentsByRef };
 // tier, then the census) and the library components. The view components are
 // keyed by slug, so a slug change remounts and re-runs this.
 const useCatalogReconcile = (id: string, query: string, pickSeeded: (data: any) => boolean | null): Reconciled => {
+	const localOnly = useWorkspaceUser()?.localOnly;
 	const [state, setState] = React.useState<Reconciled>(() => ({ seeded: readSeededCache(id), library: {} }));
 	const pickRef = React.useRef(pickSeeded);
 	pickRef.current = pickSeeded;
 	React.useEffect(() => {
+		if (localOnly) return;
 		let cancelled = false;
 		(async () => {
 			try {
@@ -85,7 +87,7 @@ const useCatalogReconcile = (id: string, query: string, pickSeeded: (data: any) 
 		return () => {
 			cancelled = true;
 		};
-	}, [id, query]);
+	}, [id, query, localOnly]);
 	return state;
 };
 
@@ -178,7 +180,7 @@ const LivePane = ({
 	actionNames: Record<string, string>;
 	what: string;
 }) => {
-	const user = useCurrentUser();
+	const user = useWorkspaceUser();
 	const signedIn = !!user?.id;
 	// the catalog-side run confirmation: the first press of each control
 	// names what will run before anything executes (ActionRunConfirm)
@@ -237,7 +239,7 @@ const DemoView = ({ demo, slug }: { demo: WebpageDemo; slug: string }) => {
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
 	const lopu = useLopu();
-	const user = useCurrentUser();
+	const user = useWorkspaceUser();
 	const navigate = useNavigate();
 	const identity = React.useMemo(() => demoPageIdentity(demo), [demo]);
 	const reconciled = useCatalogReconcile(identity.shareId, `slug=${encodeURIComponent(slug)}`, (data) => (typeof data?.demo?.seeded === 'boolean' ? data.demo.seeded : null));
@@ -314,7 +316,7 @@ const DemoView = ({ demo, slug }: { demo: WebpageDemo; slug: string }) => {
 							{demo.tags.length ? demo.tags.map((tag) => <Chip key={tag}>#{tag}</Chip>) : '—'}
 						</MetaRow>
 						<MetaRow label="Seeded" testId="demo-meta-seeded">
-							{reconciled.seeded === null ? 'checking this deployment…' : seeded ? '🌱 yes — opens at /p/ and in the builder' : 'not on this deployment (Use template still works)'}
+							{user?.localOnly ? 'bundled · installs in this browser' : reconciled.seeded === null ? 'checking this deployment…' : seeded ? '🌱 yes — opens at /p/ and in the builder' : 'not on this deployment (Use template still works)'}
 						</MetaRow>
 					</Flex>
 				</Flex>
@@ -345,7 +347,7 @@ const SuiteView = ({ suite }: { suite: BehaviourSuite }) => {
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
 	const lopu = useLopu();
-	const user = useCurrentUser();
+	const user = useWorkspaceUser();
 	const navigate = useNavigate();
 	const materialized = React.useMemo(() => materializeSuite(suite, 'own'), [suite]);
 	const summary = React.useMemo(() => summarizeBehaviourSuite(suite), [suite]);
@@ -373,7 +375,7 @@ const SuiteView = ({ suite }: { suite: BehaviourSuite }) => {
 				return null;
 			}
 			lopu({ title: `Installing ${target.emoji} ${target.title}…`, description: 'Your own schemas, controls, actions, and pages.', status: 'info', duration: 4000 });
-			const installed = await installSuiteOnServer(target.key, { onlyMissing });
+			const installed = await installSuiteForWorkspace(target.key, { onlyMissing });
 			const href = `/p/${encodeURIComponent(installed.entryPageKey)}`;
 			lopu({ title: `${target.emoji} ${target.title} installed ✨`, description: 'Your controls are ready.', status: 'success', duration: 6000, link: { label: 'Open my page', href } });
 			return { href };
@@ -477,7 +479,7 @@ const SuiteView = ({ suite }: { suite: BehaviourSuite }) => {
 								  })}
 						</MetaRow>
 						<MetaRow label="Seeded" testId="demo-meta-seeded">
-							{reconciled.seeded === null ? 'checking this deployment…' : seeded ? '🌱 yes — every page opens at /p/' : 'not on this deployment (install still works)'}
+							{user?.localOnly ? 'bundled · installs in this browser' : reconciled.seeded === null ? 'checking this deployment…' : seeded ? '🌱 yes — every page opens at /p/' : 'not on this deployment (install still works)'}
 						</MetaRow>
 						{suite.story.length ? (
 							<Box paddingTop={1}>

@@ -1,0 +1,17 @@
+{
+  "sourceParent": "16984b13dce49db926c9e10913ab1b8fb7983778",
+  "files": {
+    "MCP/src/isolatedRender.ts": "92b92af49a67ac27d0f6833c3a73beb793f5f70083fae754782455b1d6940107",
+    "MCP/src/renderExport.ts": "e435f42fb7ef74470418f44cbe5985f6c2950148d95b0ff24db9185cbda1690e",
+    "MCP/src/renderWorker.ts": "2110c46ca9030f08e3d6a11fe54cd53dd2a62359921c08e22c6cecd6ce1dd678",
+    "MCP/src/server.ts": "39549190d5ca4f97a39d238acd6eb32ef9ab115de9a8015d2bc63eff883368bd",
+    "MCP/src/index.ts": "d0be12f6adce7332a8c7e81fb18115f40969989e4783f46e452932f89aff540e",
+    "MCP/scripts/render-isolated.mjs": "3014253cdb99255f14ef70c2b04afdcbb6de52f2db4556fc661b482aa5020540",
+    "MCP/scripts/save-render-artifacts.mjs": "64909d0070e36589f6bbb22c9c9915a73299d004050fcfe14b53b250c2f6c9d2",
+    "MCP/test/render-export.integration.test.ts": "648797d79ccadfd0ff520dda7e1c7c04e69570bbff7be5487b7bbf9018b7ec93",
+    "MCP/test/fixtures/affirmation.transfer.json": "b442fb14997f943b1b31a2f01f37b07d20d73d2ef82b429931f038f4fc7fa215",
+    "MCP/package.json": "02c836c1bed3a3be1e5dada7d1134ccbab5c01ec5f5862534206ac7f986713c2",
+    "MCP/package-lock.json": "fead51cde3bcfa2c48515c3fbe3899ab48d46937d2f690abf72acbde320f6fdd",
+    "remix/dist/draft-preview/runner.js": "779bbe76a39123cd9578c3325ecfbf47e4c5d4c4e3802feb299c77d407abf0f3"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "matchedCreationInterval": true,
+  "expectedSyntheticFiles": {
+    "source-0.bin": 1073741824,
+    "source-1.bin": 1073741824,
+    "source-2.bin": 1073741824,
+    "source-3.bin": 1073741824,
+    "source-4.bin": 1
+  },
+  "removed": true,
+  "reason": "Node native abort skipped finally; parent removed only exact owned fixture directory"
+}

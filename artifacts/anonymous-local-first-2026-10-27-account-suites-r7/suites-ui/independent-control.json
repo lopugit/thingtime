@@ -1,0 +1,7 @@
+{
+  "separateContext": true,
+  "exactActorAndPlaneVerified": true,
+  "normalLogin": true,
+  "primaryTransportFailed": true,
+  "accountMutationReadBack": true
+}

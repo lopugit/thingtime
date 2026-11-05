@@ -1,3 +1,4 @@
+import { toBin } from '../auth/binary.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -281,4 +282,18 @@ test('usage projection distinguishes unlimited, overage, reconciling, and unavai
     'ready',
     'independently versioned ledgers compare against their own expected accounting version'
   );
+});
+
+
+test('private instruction content bills exact retained UTF-8 secure bytes and refuses malformed mixed envelopes', () => {
+  const payload = JSON.stringify({ text: 'Private 漢字😀', enabled: false });
+  const row = { thingtime: ['lopu-instruction-part'], crystal: {}, extended: null, tags: [], secure: toBin(payload) };
+  const ordinaryBytes = thingStorageSizeBytes({ crystal: {}, extended: null, tags: [] });
+  assert.equal(thingStorageSizeBytes(row), ordinaryBytes + Buffer.byteLength(payload));
+  assert.equal(isBillableStorageThing({ ...row, ownerId: 'owner' }), true);
+  assert.throws(() => thingStorageSizeBytes({ ...row, secure: payload }), /instruction storage envelope/);
+  assert.throws(() => thingStorageSizeBytes({ ...row, thingtime: ['lopu-instruction-part','post'] }), /instruction storage envelope/);
+  const stamp = { ...row, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, storageClass: 'content', storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION, sizeBytes: ordinaryBytes + Buffer.byteLength(payload) };
+  assert.equal(currentContentStorageSizeBytes(stamp), stamp.sizeBytes);
+  assert.equal(currentContentStorageSizeBytes({ ...stamp, sizeBytes: ordinaryBytes }), null);
 });

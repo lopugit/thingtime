@@ -1,0 +1,219 @@
+{
+  "checks": [
+    "Same server entry ID read/save by other account returns404; server globally owns entry IDs",
+    "{\"rootUser\":\"6adfcf91a3ef8e63b624ac82\",\"meUser\":\"6adfcf91a3ef8e63b624ac82\",\"rootKeys\":[\"dataPlane\",\"envFromCookie\",\"dataEnvironment\",\"devKitEnv\",\"titlePrefix\",\"user\"]}",
+    "Held real root request after BroadcastChannel account invalidation clears selected entry, title and fields",
+    "Distinct registered accounts create separate encrypted device vaults; next account reads only own fields; same server ID access was refused",
+    "Cold offline reload locks B vault; unlock restores only B; offline local edit has zero HTTP writes",
+    "{\"onlineProof\":{\"online\":true,\"root\":\"6adfcf93a3ef8e63b624ac8a\"}}",
+    "{\"syncConfirmed\":true,\"syncReadbacks\":[{\"status\":200,\"revision\":1,\"offlineEdited\":false},{\"status\":200,\"revision\":2,\"offlineEdited\":true}]}",
+    "Actual old-scope save held before native WebCrypto encryption was released after invalidation; switch-back UI and canonical API retain original A username",
+    "Switch back unlocks preserved A vault; B offline edit syncs to B only and A remote entry unchanged",
+    "Export dialog opens/closes normally; masked fields and full scroll verified at 1440/390/320"
+  ],
+  "bounds": [
+    {
+      "width": 1440,
+      "documentWidth": 1440
+    },
+    {
+      "width": 390,
+      "documentWidth": 390
+    },
+    {
+      "width": 320,
+      "documentWidth": 320
+    }
+  ],
+  "writes": [
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    },
+    {
+      "offline": false,
+      "pending": false
+    }
+  ],
+  "errors": [],
+  "apiTrace": [
+    {
+      "operation": "save",
+      "id": "7aedace3-71d0-4eef-b543-786912c59f48",
+      "owner": "6adfcf93a3ef8e63b624ac8a",
+      "status": 200,
+      "revision": 1
+    },
+    {
+      "operation": "read",
+      "id": "7aedace3-71d0-4eef-b543-786912c59f48",
+      "owner": "6adfcf91a3ef8e63b624ac82",
+      "status": 404
+    },
+    {
+      "operation": "save",
+      "id": "7aedace3-71d0-4eef-b543-786912c59f48",
+      "owner": "6adfcf91a3ef8e63b624ac82",
+      "status": 404
+    },
+    {
+      "operation": "save",
+      "id": "2e12ef58-f77a-4f9a-a105-8c08056f29b1",
+      "owner": "6adfcf91a3ef8e63b624ac82",
+      "status": 200,
+      "revision": 1
+    },
+    {
+      "operation": "file-list",
+      "owner": "6adfcf91a3ef8e63b624ac82",
+      "status": 200
+    },
+    {
+      "operation": "export",
+      "owner": "6adfcf93a3ef8e63b624ac8a",
+      "status": 200
+    },
+    {
+      "operation": "file-list",
+      "owner": "6adfcf93a3ef8e63b624ac8a",
+      "status": 200
+    },
+    {
+      "operation": "read",
+      "id": "7aedace3-71d0-4eef-b543-786912c59f48",
+      "owner": "6adfcf93a3ef8e63b624ac8a",
+      "status": 200,
+      "revision": 1,
+      "username": "other"
+    },
+    {
+      "operation": "save",
+      "id": "7aedace3-71d0-4eef-b543-786912c59f48",
+      "owner": "6adfcf93a3ef8e63b624ac8a",
+      "status": 200,
+      "revision": 2
+    },
+    {
+      "operation": "export",
+      "owner": "6adfcf93a3ef8e63b624ac8a",
+      "status": 200
+    },
+    {
+      "operation": "file-list",
+      "owner": "6adfcf93a3ef8e63b624ac8a",
+      "status": 200
+    },
+    {
+      "operation": "read",
+      "id": "7aedace3-71d0-4eef-b543-786912c59f48",
+      "owner": "6adfcf93a3ef8e63b624ac8a",
+      "status": 200,
+      "revision": 2,
+      "username": "offline-edited"
+    },
+    {
+      "operation": "export",
+      "owner": "6adfcf93a3ef8e63b624ac8a",
+      "status": 200
+    },
+    {
+      "operation": "file-list",
+      "owner": "6adfcf91a3ef8e63b624ac82",
+      "status": 200
+    },
+    {
+      "operation": "export",
+      "owner": "6adfcf91a3ef8e63b624ac82",
+      "status": 200
+    },
+    {
+      "operation": "read",
+      "id": "2e12ef58-f77a-4f9a-a105-8c08056f29b1",
+      "owner": "6adfcf91a3ef8e63b624ac82",
+      "status": 200,
+      "revision": 1,
+      "username": "other"
+    },
+    {
+      "operation": "file-list",
+      "owner": "6adfcf91a3ef8e63b624ac82",
+      "status": 200
+    }
+  ],
+  "limits": [
+    "One loopback origin and default plane only",
+    "No installed macOS app, AutoFill or provider credential proof"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "startedAt": "2026-10-26T09:57:55.118Z",
+  "endedAt": "2026-10-26T09:59:48.158Z",
+  "scope": "Current merged source; sanitized test environment; outbound network restricted to loopback; synthetic unit fixtures only",
+  "results": [
+    {
+      "command": "typecheck:ratchet",
+      "code": 0,
+      "elapsedMs": 113034,
+      "summary": []
+    }
+  ],
+  "diagnostics": 92,
+  "baseline": 89,
+  "newIncomingDiagnostic": "environmentGateway.ts: Type string is not assignable to MongoConnectionMode",
+  "fix": "Explicitly return either accepted literal; reject other defined values before returning the bundled default."
+}

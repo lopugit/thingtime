@@ -7,8 +7,9 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { redactSecrets } from './security.js';
+import { LOCAL_RENDER_TOOL, localAdapterEnvironment, localToolFailure, localToolTimeout } from './localCliPolicy.js';
 
-const renderTool = 'thingtime_render_and_export';
+const renderTool = LOCAL_RENDER_TOOL;
 const usage = 'Usage: thingtime-local list | thingtime-local call TOOL [--output NEW_DIRECTORY] < arguments.json';
 
 class UsageError extends Error {}
@@ -38,11 +39,7 @@ async function main() {
     }
   }
 
-  const env: Record<string, string> = {};
-  for (const key of ['THINGTIME_MCP_ALLOWED_ROOTS', 'THINGTIME_MCP_STATE_DIR', 'PLAYWRIGHT_BROWSERS_PATH']) {
-    const value = process.env[key];
-    if (value !== undefined) env[key] = value;
-  }
+  const env = localAdapterEnvironment(process.env);
   const client = new Client({ name: 'thingtime-local', version: '1.0.0' });
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -59,9 +56,9 @@ async function main() {
     }
     if (!tools.some(tool => tool.name === name)) throw new UsageError('Unknown local Thingtime tool. Run thingtime-local list.');
     const result = CallToolResultSchema.parse(
-      await client.callTool({ name, arguments: args }, undefined, { timeout: 60_000 })
+      await client.callTool({ name, arguments: args }, undefined, { timeout: localToolTimeout(name!) })
     );
-    if (result.isError) throw new UsageError('Local Thingtime tool rejected the request. Check the input schema, confirmation, and local setup.');
+    if (result.isError) throw new UsageError(localToolFailure(name!, result));
     if (rendering && output) {
       const directory = resolve(output);
       const artifacts = [];

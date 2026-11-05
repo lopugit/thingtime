@@ -1,8 +1,10 @@
+import { LOCAL_WORKSPACE_CHANGED, workspaceIdentityKey } from '~/local-workspace/runtime.client';
 import React from 'react';
 import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { FeedShortcutsContext, useFeedShortcuts } from '~/hooks/useFeedShortcuts';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
@@ -42,11 +44,15 @@ const readCachedScope = (loggedIn: boolean): FeedScope => feedScopeOf(readLocalC
 const PAGE_SIZE = 20;
 
 export const FeedPage = () => {
+  const navigate = useNavigate();
   const api = useApi();
   const user = useCurrentUser();
+  const workspaceUser = useWorkspaceUser();
+  const localIdentity = workspaceIdentityKey();
   const lopu = useLopu();
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const deviceOnly = searchParams.get('device') === '1';
   const [near, setNear] = React.useState<GeoLocation | null>(null);
   const [locating, setLocating] = React.useState(false);
   const sortParam = searchParams.get('sort');
@@ -68,6 +74,22 @@ export const FeedPage = () => {
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [ranked, setRanked] = React.useState(false);
+  const [deviceCoverage, setDeviceCoverage] = React.useState(false);
+  const [localTrainingError, setLocalTrainingError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!workspaceUser || isDefaultAlgorithm(searchParams.get('sort'))) return;
+    let cancelled = false, sequence = 0;
+    const identity = workspaceIdentityKey();
+    const read = () => {
+      const ticket = ++sequence;
+      api.v1.algorithms.list().then((result: any) => { if (!cancelled && ticket === sequence && identity === workspaceIdentityKey()) setAlgorithmId(result.activeAlgorithmId); }).catch(() => {});
+    };
+    read(); window.addEventListener(LOCAL_WORKSPACE_CHANGED, read);
+    return () => { cancelled = true; window.removeEventListener(LOCAL_WORKSPACE_CHANGED, read); };
+    // The captured API is scoped to this workspace; cancel on identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceUser?.id, workspaceUser?.localOnly, localIdentity, sortParam]);
+
 
   // login/logout swaps the viewer — re-seed the algorithm from their profile
   // and the scope from the cache (a logout drops back to all: a guest has no
@@ -77,10 +99,10 @@ export const FeedPage = () => {
     const userId = user?.id ?? null;
     if (lastUserIdRef.current === userId) return;
     lastUserIdRef.current = userId;
-    setAlgorithmId(isDefaultAlgorithm(searchParams.get('sort')) ? searchParams.get('sort') : user?.activeFeedAlgorithmId ?? null);
+    setAlgorithmId(isDefaultAlgorithm(sortParam) ? sortParam : user?.activeFeedAlgorithmId ?? null);
     setScope(readCachedScope(!!userId));
     setNear(null);
-  }, [user?.id, user?.activeFeedAlgorithmId]);
+  }, [user?.id, user?.activeFeedAlgorithmId, sortParam]);
 
   const { observeCard, recordEvent, sessionEventCount, getSessionEvents } = useFeedEngagement({
     activeAlgorithmId: isDefaultAlgorithm(algorithmId) ? null : algorithmId
@@ -287,11 +309,13 @@ export const FeedPage = () => {
           const pagePosts: PublicPost[] = mergeReactionOverlays(startedAt, searchResponsePosts(resp));
           setPosts((prev) => appendPostsDeduped(reset ? [] : prev, pagePosts));
           setNextCursor(resp.nextCursor ?? null);
-          setRanked(!!resp.ranked);
+          setDeviceCoverage(false);
+          setRanked(!!resp.ranked); setLocalTrainingError(resp.localTrainingError || null);
           return;
         }
 
         const resp = await apiRef.current.v1.things.feed({
+          device: deviceOnly || undefined,
           types: filters.types,
           circles: filters.circles,
           tag: tagParam || undefined,
@@ -302,7 +326,7 @@ export const FeedPage = () => {
           ...(algorithmId === 'local' && near ? { lat: near.lat, lng: near.lng, radiusKm: 50 } : {}),
           // only a logged-in viewer can be scoped (the server answers a guest
           // an empty page, and the anon URL must stay the shared cacheable one)
-          scope: scope === 'subspaces' && viewerIdRef.current ? 'subspaces' : undefined,
+          scope: !deviceOnly && scope === 'subspaces' && viewerIdRef.current ? 'subspaces' : undefined,
           cursor: reset ? undefined : cursor || undefined,
           limit: PAGE_SIZE,
           anon: viewerIdRef.current ? undefined : 1
@@ -316,15 +340,16 @@ export const FeedPage = () => {
           return appendPostsDeduped(reset ? [] : prev, page);
         });
         setNextCursor(resp.nextCursor ?? null);
-        setRanked(!!resp.ranked);
+        setDeviceCoverage(resp.source === 'device');
+        setRanked(!!resp.ranked); setLocalTrainingError(resp.localTrainingError || null);
       } catch (err: any) {
         if (seq !== requestSeqRef.current) return;
         // a failed RESET must not leave the previous query's posts posing as
         // this one's results (the optimistic keep only covers the happy path);
         // a failed load-more keeps the list it was extending
-        if (reset) setPosts([]);
+        if (reset) { setPosts([]); setDeviceCoverage(deviceOnly); }
         setNextCursor(null);
-        lopuRef.current({ title: err?.error || 'Could not load the feed 😞', status: 'error' });
+        lopuRef.current({ title: err?.error || err?.message || 'Could not load the feed 😞', status: 'error' });
       } finally {
         if (seq === requestSeqRef.current) {
           loadingRef.current = false;
@@ -332,12 +357,12 @@ export const FeedPage = () => {
         }
       }
     },
-    [filters, algorithmId, scope, appliedAdvanced, tagParam, tagApplied, localTag, near]
+    [filters, algorithmId, scope, appliedAdvanced, tagParam, tagApplied, localTag, near, deviceOnly]
   );
 
   // the scope chip: flips instantly (the pager reloads through `load`'s deps)
   // and persists per browser; a guest is nudged to log in instead
-  const scopeOn = scope === 'subspaces' && !!user && !appliedAdvanced;
+  const scopeOn = scope === 'subspaces' && !!user && !appliedAdvanced && !deviceOnly;
   const toggleScope = React.useCallback(() => {
     if (!user) {
       lopuRef.current({
@@ -362,16 +387,27 @@ export const FeedPage = () => {
   // while the new query loads (reset replaces them when it lands) — only a
   // viewer change clears immediately, so one account's circle posts never
   // linger into another's session.
-  const lastViewerRef = React.useRef(user?.id ?? null);
+  const lastViewerRef = React.useRef(localIdentity);
   React.useEffect(() => {
-    const viewerId = user?.id ?? null;
-    if (lastViewerRef.current !== viewerId) {
-      lastViewerRef.current = viewerId;
+    if (lastViewerRef.current !== localIdentity) {
+      lastViewerRef.current = localIdentity;
       setPosts([]);
+      setDeviceCoverage(false);
     }
     setNextCursor(null);
     load({ reset: true });
-  }, [load, user?.id]);
+  }, [load, user?.id, localIdentity]);
+
+  React.useEffect(() => {
+    const connectionChanged = () => { load({ reset: true }); };
+    const deviceChanged = () => { if (deviceOnly || deviceCoverage) load({ reset: true }); };
+    window.addEventListener('online', connectionChanged); window.addEventListener('offline', connectionChanged);
+    window.addEventListener(LOCAL_WORKSPACE_CHANGED, deviceChanged);
+    return () => {
+      window.removeEventListener('online', connectionChanged); window.removeEventListener('offline', connectionChanged);
+      window.removeEventListener(LOCAL_WORKSPACE_CHANGED, deviceChanged);
+    };
+  }, [load, deviceOnly, deviceCoverage]);
 
   const handleLoadMore = React.useCallback(() => {
     if (!nextCursor) return;
@@ -392,8 +428,9 @@ export const FeedPage = () => {
   // your own fresh post beats strict filter fidelity, and the next Apply or
   // page reload reconciles the list
   const handlePosted = React.useCallback((post: PublicPost) => {
+    if (post.id.startsWith('local-')) { navigate(`/post/${encodeURIComponent(post.id)}`); return; }
     setPosts((prev) => [post, ...prev]);
-  }, []);
+  }, [navigate]);
 
   // hook the engagement observer onto every rendered card wrapper
   const listRef = React.useRef<HTMLDivElement | null>(null);
@@ -461,7 +498,9 @@ export const FeedPage = () => {
           >
             Thingtime ·{' '}
             {scopeOn ? 'Your subspaces 🪐 · ' : ''}
-            {appliedAdvanced
+            {deviceCoverage
+              ? 'Posts saved on this device'
+              : appliedAdvanced
               ? ranked
                 ? 'Advanced search · best match first 🔬'
                 : 'Advanced search 🔬'
@@ -564,6 +603,25 @@ export const FeedPage = () => {
           <Button
             size="sm"
             variant="outline"
+            borderRadius={RADIUS_MD}
+            aria-pressed={deviceOnly && !appliedAdvanced}
+            isDisabled={!!appliedAdvanced}
+            data-testid="feed-device"
+            onClick={() => {
+              if (!deviceOnly) { setAlgorithmId('new'); setScope('all'); }
+              setSearchParams(prev => {
+                const next = new URLSearchParams(prev);
+                if (deviceOnly) next.delete('device');
+                else { next.set('device', '1'); next.set('sort', 'new'); }
+                return next;
+              }, { replace: true });
+            }}
+          >
+            On this device
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
             fontWeight={600}
             borderRadius={RADIUS_MD}
             borderColor="var(--tt-border, #ececef)"
@@ -571,7 +629,7 @@ export const FeedPage = () => {
             color={scopeOn ? INK : MUTED}
             _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)', color: INK }}
             _active={{ background: 'var(--tt-surface-hover, #ececee)' }}
-            isDisabled={!!appliedAdvanced}
+            isDisabled={!!appliedAdvanced || deviceOnly}
             onClick={toggleScope}
             aria-pressed={scopeOn}
             title={appliedAdvanced ? 'Advanced search covers every post' : scopeOn ? 'Showing only your subspaces — tap for everything' : 'Only posts from the subspaces you belong to'}
@@ -619,7 +677,7 @@ export const FeedPage = () => {
           />
         )}
 
-        {user && (
+        {workspaceUser && (
           <Box ref={composerBoxRef}>
             <PostComposer onPosted={handlePosted} />
           </Box>
@@ -629,6 +687,9 @@ export const FeedPage = () => {
             when there are none, so the list below never shifts */}
         {user && <MemoriesCard />}
 
+        {localTrainingError && <Text fontSize="sm" role="alert">Local training storage: {localTrainingError}</Text>}
+        {deviceCoverage && <Text fontSize="sm" role="status" data-testid="feed-device-coverage">Showing posts created or retained in this device workspace. This is a partial view; community updates and current access changes need a connection.</Text>}
+        {algorithmId?.startsWith('local-') && <Text fontSize="sm" role="status">This device ranks each available {deviceCoverage ? 'device' : 'public'} page using your local interests. Your profile stays on this device.</Text>}
         <Box ref={listRef}>
           <FeedShortcutsContext.Provider value={shortcuts.registry}>
             <PostList
@@ -640,7 +701,9 @@ export const FeedPage = () => {
               onEngagement={recordEvent}
               focusedPostId={shortcuts.focusedPostId}
               emptyLabel={
-                algorithmId === 'local' && !appliedAdvanced && !near && !localTag.trim()
+                deviceCoverage
+                  ? 'No posts saved in this device workspace match these filters.'
+                  : algorithmId === 'local' && !appliedAdvanced && !near && !localTag.trim()
                   ? 'Choose a location tag or use your location to see nearby posts 📍'
                   : appliedAdvanced
                   ? 'Nothing matched — loosen a filter, or try plain words up top ✨'

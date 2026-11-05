@@ -1,0 +1,18 @@
+{
+  "recordedAt": "2026-10-26T16:13:47.634520+00:00",
+  "applicationSourceCommit": "9f24113dd883b450e9d3086753b6cfd027d175a8",
+  "workingTreeHasLaterSuiteEdits": true,
+  "laterSuiteEditsIncludedInBuild": false,
+  "fileSha256": {
+    "tmp/continuation/vault-file-app.tar.gz": "41f5764d7d456283889b3affcf51fdc0b419935fa157bfa6a2dc16824d5f3755",
+    "tmp/continuation/vault-file.test.mjs": "14a608432ef2614e991321009733faa6bd211c6b7d09f86d57c5789176575aef",
+    "tmp/continuation/vault-file-run.cjs": "ba8b989f46385587e963920326e362ace0457de8a3b2fadcd277380c07f02505",
+    "tmp/continuation/vault-memory-observer.cjs": "d8cda3055f6b7b2b8f146ed3152280280bf3e0d607fe1ae20f35c1bbfebb91c1"
+  },
+  "vmMemoryReadback": {
+    "command": "colima ssh --profile thingtime-agents -- free -b",
+    "totalBytes": 4095635456,
+    "swapBytes": 0,
+    "note": "Read after diagnostic failures, before file-only acceptance. Not a measurement at the earlier OOM."
+  }
+}

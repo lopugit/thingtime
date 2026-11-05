@@ -1,0 +1,2048 @@
+{
+  "runId": "d834319c-6e6c-4cd8-bbd0-df926564875c",
+  "error": "AssertionError [ERR_ASSERTION]: The input did not match the regular expression /(?:^|\\n)oom_kill 0(?:\\n|$)/. Input:\n\n''\n",
+  "screenshot": {
+    "file": "failure-d834319c-6e6c-4cd8-bbd0-df926564875c.png",
+    "sha256": "dbdc9c6488b029ffe84dc88d13d429ab522ca2689db982bf696488ba65ff0b69",
+    "bytes": 65658
+  },
+  "browserConnected": true,
+  "pageClosed": false,
+  "url": "http://127.0.0.1:18721/feed?device=1&sort=new",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\n\nOffline account workspace. Local edits are available; account sync is paused until your session is verified.\n\nReconnect\nReview sync\nTHINGTIME · POSTS SAVED ON THIS DEVICE\nFeed 📰\n✨ New\nOn this device\n🪐 My subspaces\nFilters\nPost as\nOffline account workspace\n🌈\nWhat's on your mind? ✨\n\nShowing posts created or retained in this device workspace. This is a partial view; community updates and current access changes need a connection.\n\nA\naudience-c686c84b\n@audience-c686c84b · \n3m\n🌐\nanyone can see this post\n\nPublic fixture for comparison\n\n0\nA\naudience-c686c84b\n@audience-c686c84b · \n3m\n🔒\nprivate subspace members only\n🪐\ns/private_2055fd3b\n\nPrivate parent fixture\n\n1\n0\n0\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "page": {
+    "url": "http://127.0.0.1:18721/feed?device=1&sort=new",
+    "html": "<html lang=\"en\" prefix=\"og: https://ogp.me/ns#\" style=\"--tt-ink: #16161a; --tt-text: #5a5a66; --tt-muted: #9a9aa6; --tt-faint: #b6b6c0; --tt-border: #ececef; --tt-border-light: #f0f0f2; --tt-surface: #fafafb; --tt-surface-alt: #f5f5f7; --tt-surface-hover: #ececee; --tt-card: #ffffff; --tt-page-bg: #ffffff; --tt-accent: hotpink; --tt-accent-tint: #fff5fa; --tt-accent-contrast: #ffffff; --tt-link: #2f8fd6; --tt-positive: #2f8f4f; --tt-positive-soft: rgba(88, 202, 112, 0.14); --tt-danger: #d6455a; --tt-warning: #ffbc48; --tt-dark-bg: #131318; --tt-dark-chrome: #1c1c22; --tt-dark-border: #2a2a33; --tt-dark-text: #e6e6ee; --tt-dark-muted: #8a8a95; --tt-dark-accent: #59ff9c; --tt-rainbow-1: #f34a4a; --tt-rainbow-2: #ffbc48; --tt-rainbow-3: #58ca70; --tt-rainbow-4: #47b5e6; --tt-rainbow-5: #a555e8; --tt-gradient-rainbow: linear-gradient(90deg, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6); --tt-gradient-rainbow-x: linear-gradient(90deg, #f34a4a, #ffbc48, #58ca70, #47b5e6, #a555e8, #f34a4a); --tt-font-heading: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; --tt-font-body: 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; --tt-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; --tt-font-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; --tt-radius-xs: 7px; --tt-radius-sm: 9px; --tt-radius-md: 12px; --tt-radius-lg: 16px; --tt-radius-xl: 20px; --tt-radius-2xl: 26px; --tt-radius-pill: 999px; --tt-border-w: 1px; --tt-border-w-bold: 2px; --tt-border-w-chunky: 3px; --tt-things-badge-padding: 3px 8px; --tt-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05); --tt-shadow-panel: 0 24px 60px -28px rgba(20, 20, 40, 0.28); --tt-shadow-popover: 0 16px 40px -12px rgba(20, 20, 40, 0.3); --tt-shadow-toast: 0 14px 38px rgba(20, 20, 40, 0.18); --tt-shadow-hard-sm: 5px 5px 0 #16161a; --tt-shadow-hard-lg: 8px 8px 0 #16161a; --tt-traffic-close: #f34a4a; --tt-traffic-minimise: #ffbc48; --tt-traffic-maximise: #58ca70; --tt-traffic-close-radius: 3.5px; --tt-traffic-minimise-radius: 3.5px; --tt-traffic-maximise-radius: 3.5px; --tt-anim-speed: 200ms; --tt-rainbow-anim: moving-rainbow 5s linear infinite; --tt-motion: 1; --thingtime-visual-bottom-padding: 72px; --thingtime-visual-devkit-bottom-offset: 36px; color-scheme: light;\" data-theme=\"light\"><head>\n    <script src=\"/tt-preview-freshness.js\" data-thingtime-preview-freshness=\"\"></script>\n\n    <meta charset=\"utf-8\">\n    <!-- maximum-scale=1 stops iOS Safari's auto-zoom when focusing inputs;\n    since iOS 10 Safari ignores the cap for user pinch-zoom, so accessibility\n    zooming still works -->\n    <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover\">\n    <link rel=\"icon\" href=\"/favicon.ico\">\n    <title>[Offline] Thingtime - Feed</title>\n    <!-- Feed-reader auto-discovery for the public posts Atom feed\n         (GET /api/v1/things/rss — app/api/utils/things/rss.ts). Deliberately\n         OUTSIDE the tt-social-meta marker block below: that block is swapped\n         per-request and this link must survive on every page. -->\n    <link rel=\"alternate\" type=\"application/atom+xml\" title=\"Thingtime — public posts\" href=\"/api/v1/things/rss\">\n    <!-- tt-social-meta:start — static site-wide defaults. The Nitro page\n         catch-all (server/routes/[...].ts) swaps this whole block per-request\n         with page-specific Open Graph / Twitter tags and absolute URLs\n         (app/api/utils/meta/socialMeta.ts). -->\n    <meta name=\"description\" content=\"Thingtime is where everything is a thing — share posts, run polls, and build a home for the things you care about.\">\n    <meta property=\"og:site_name\" content=\"Thingtime\">\n    <meta property=\"og:type\" content=\"website\">\n    <meta property=\"og:title\" content=\"Thingtime - Your Home for Everything\">\n    <meta property=\"og:description\" content=\"Thingtime is where everything is a thing — share posts, run polls, and build a home for the things you care about.\">\n    <meta property=\"og:image\" content=\"https://thingtime.com/branding/presskit/thingtime-og-card-1200x630.png?v=20260917\">\n    <meta property=\"og:url\" content=\"https://thingtime.com/\">\n    <meta property=\"og:image:secure_url\" content=\"https://thingtime.com/branding/presskit/thingtime-og-card-1200x630.png?v=20260917\">\n    <meta property=\"og:image:alt\" content=\"Colourful Thingtime wordmark on a white background with a rainbow border\">\n    <meta property=\"og:image:type\" content=\"image/png\">\n    <meta property=\"og:image:width\" content=\"1200\">\n    <meta property=\"og:image:height\" content=\"630\">\n    <meta name=\"twitter:card\" content=\"summary_large_image\">\n    <meta name=\"twitter:title\" content=\"Thingtime - Your Home for Everything\">\n    <meta name=\"twitter:image\" content=\"https://thingtime.com/branding/presskit/thingtime-og-card-1200x630.png?v=20260917\">\n    <meta name=\"twitter:description\" content=\"Thingtime is where everything is a thing — share posts, run polls, and build a home for the things you care about.\">\n    <meta name=\"twitter:image:alt\" content=\"Colourful Thingtime wordmark on a white background with a rainbow border\">\n    <link rel=\"canonical\" href=\"https://thingtime.com/\">\n    <!-- tt-social-meta:end -->\n    <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n    <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin=\"\">\n    <link href=\"https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&amp;family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap\" rel=\"stylesheet\">\n    <!-- Early boot (theme snapshot, tab title and guarded module recovery). External file\n         so the CSP can stay `script-src 'self'` with no inline-script hashes. -->\n    <script src=\"/tt-boot.js\"></script>\n    <script type=\"module\" crossorigin=\"\" src=\"/assets/index-DYqQK1JS.js\"></script>\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/rolldown-runtime-DAXXjFlN.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/capabilityContract-YGZd7r3F.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/requireCapability.client-00U_blSP.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/jsx-runtime-CBD9r_Rc.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/text-DV3zdfuN.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/button-iiVVfedf.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/use-update-effect-BE1ht6Vv.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/proxy-B0NPJtdG.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/portal-DicUj6Kp.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/hooks-CcwhGgAu.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/preload-helper-Czpn1I53.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/lib-C0yaoKJR.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/focusable-BYQTYkiY.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/call-all-CvnVcB5B.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/popover-trigger-C6P49pQG.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/use-form-control-9iAJMeje.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/select-D0ZrvrKd.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/children-rDSpZAbD.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/use-descendant-DuwvFhU0.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/createLucideIcon-CJkvbz5V.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/smartphone-Bo6mwSjI.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/icon-CCpHsQCx.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/box-7XyDsKb6.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/registry-BkRkwjV5.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/storage-D1Jv7mev.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/componentTemplate-BtbE723f.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/things-DsQSZJXk.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/runtime.client-CFFl2MQj.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/CharacterScope-DB1aJao6.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useCurrentUser-Dsq6iEQC.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/dataPlane-DLa2r0gU.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/aiTasks.client-DcyBDFME.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/rainbow-DtBW-T4E.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useLopu-CM-qRCjg.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/transition-utils-DzB2lp8D.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/image-BOTlCInl.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/icon-button-B05hsXz7.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/center-BQqw8sKr.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/use-checkbox-DsAWMG1e.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/checkbox-2W6Igtyv.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/tslib.es6-DgPp1qHM.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/modal-overlay-Cs9dwNll.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/form-label-Dp4GFCxa.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/grid-Xqnp1IxO.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/input-D67GTdIb.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/modal-close-button-C9odHy47.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/textarea-l7zfdTmn.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/mediaPolicy-k4nddYNP.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/species-CvNO-5AZ.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/actions-BTvoJ0hP.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/componentBrowseTypes-XV-7pG_l.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/apiRequestLog-BW_s4VAC.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useApi-BLIThiru.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/check-kWpI1l2W.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/chevron-down-D2nX8Hvp.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/chevron-right-DyIaIeMq.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/circle-check-Brd5K6Xj.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/copy-Bka8Z6ju.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/external-link-F4DmZDSr.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/link-2-dl_XnCy8.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/lock-G-OzztxM.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/play-BeGuapwr.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/trash-2-C-cazxIi.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/rocket-DyANsLm_.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/rotate-ccw-GESIjRin.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/search-CNJUXjL8.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/sparkles-rN-UN3Pq.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/x-Bov-Xyij.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/documents-CfVrKuaJ.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/brandingAssets.generated-DDHK2-QI.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useDrawer-BkAdGvfl.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/userIdentity-CNlrJ64X.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/ThingTransferControls-BqJjuPP3.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/arrow-left-FSzb0Tv7.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/responsive-DDqOHO-S.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/collapse-DQ40UYNG.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/use-clipboard-Dxz0qjsJ.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/accordion-panel-DthbZFzK.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/badge-Bmwd7qsR.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/input-element-D8uURpTH.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/simple-grid-DuUn8lnM.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/link-DESGrlWr.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/popover-arrow-hY_4i3Br.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/stack-DJRsJfGO.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/editorJsHtml-DNdlftX1.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/switch-CMR_auj0.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/tr-CEbt8r7Y.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/heading-n5Xlp-qo.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useWorkspaceScope-DwlQGrdM.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/nativeBridge-DUp7wl8z.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/electronBridge-CsSTpHQ6.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/templateBlocks-BWIfLaUW.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/catalogRecordsSuite-l4xMGTz3.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/marketingPublicationsStore-B2nn1sC4.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/subspaceTypes-BZSt8cs9.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/marketingDownload-DTCr0zJT.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/DefinitionValueEditor-CzQjqGLx.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/PageShell-KupXtgqn.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/card-BekJjnX-.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/ThingDrafts-B8P6QhdZ.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/square-DSnkr35m.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/loader-circle-Djmmjtk2.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/settings-2-D6cXoUFa.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/shield-alert-BbV_YpBa.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useLopuSettings-Bs638qws.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useMessengerApi-DeWH6msX.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useLopuChat-C0JYOBxJ.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/LopuMarkdown-CJ1MPqMj.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/LopuModelPicker-DojrXbJr.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/chatAttachmentInput-IL0CSfX6.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/LopuChatView-6dgRBiVJ.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/LopuVoiceControls-BVSMdxZB.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/DeviceCard-DnjT--sF.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/shield-check-Cg_AYeIa.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useDeviceApi-DoIMr6GE.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useDeviceStore-Bsc0SK6i.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/panel-left-close-D38EP9BO.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/panel-left-open-DwTVwAv7.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/supportContent-Djc1q7Mh.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/notificationCore-BNETJ9ni.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/SettingsSection-DR-vcRyl.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/esm-C_wvsA3c.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/logoMatrix-Cxlc8DF0.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/Logo-CjmmV38u.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/BrutalButton-Brg4gFD7.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/landingSections-bMPCQKpG.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/welcomeSections-CfA6Bjqo.js\">\n    <link rel=\"stylesheet\" crossorigin=\"\" href=\"/assets/index-CYUcBQH4.css\">\n  <style data-emotion=\"cha-global\" data-s=\"\"></style><style data-emotion=\"cha-global\" data-s=\"\"></style><style data-emotion=\"cha-global\" data-s=\"\"></style><style data-emotion=\"cha-global\" data-s=\"\"></style><style data-emotion=\"cha-global\" data-s=\"\"></style><style data-emotion=\"cha\" data-s=\"\"></style></head>\n  <body class=\"chakra-ui-light\">\n    <div id=\"root\"><style>\n        \n        #lopuPageViewport { width: 100%; }\n        #lopuPageViewport[data-lopu-split] {\n          position: fixed;\n          top: var(--lopu-inset-top); right: var(--lopu-inset-right);\n          bottom: var(--lopu-inset-bottom); left: var(--lopu-inset-left);\n          width: auto; overflow: hidden; transform: translateZ(0); isolation: isolate;\n          container-type: inline-size; container-name: lopu-page;\n        }\n        #lopuPageViewport[data-lopu-split] > #lopuPageScroll { height: 100%; overflow: auto; }\n        @container lopu-page (max-width: 680px) {\n          .thingtimeTopNavInner { padding-left: 48px !important; padding-right: 12px !important; }\n          .nav-left-section { padding-left: 0 !important; column-gap: 4px !important; }\n          .nav-right-section { column-gap: 12px !important; }\n          .nav-search-section { display: none !important; }\n          .electron-titlebar-account-button { max-width: 100px; overflow: hidden; }\n          .electron-titlebar-account-button a { min-width: 0; overflow: hidden; text-overflow: ellipsis; }\n        }\n        @container lopu-page (max-width: 440px) {\n          .electron-titlebar-account-button, .electron-titlebar-home-button { display: none !important; }\n        }\n\n        html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [data-testid=\"site-edit-pill\"],\n        html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [class~=\"tt.devKit\"],\n        html[data-lopu-sheet=\"open\"] [data-testid=\"site-edit-pill\"] { z-index: 10059 !important; }\n      </style><div id=\"lopuPageViewport\" style=\"--lopu-inset-top: 0px; --lopu-inset-right: 0px; --lopu-inset-bottom: 0px; --lopu-inset-left: 0px; --thingtime-page-height: 100dvh;\"><div class=\"tt.devKit cha-flloxi\"><div role=\"button\" tabindex=\"0\" aria-label=\"Move or open DevKit\" aria-pressed=\"false\" class=\"cha-1wx70lu\"><div name=\"👨‍💻\" class=\"cha-1gw7ujn\">👨‍💻</div><div class=\"cha-1atyrux\"></div></div></div><div class=\"thingtimeTopNav cha-1w341zc\"><nav class=\"thingtimeTopNavInner cha-ahkh17\"><div class=\"nav-left-section cha-18cyjkv\"><button class=\"electron-titlebar-navigation-button cha-5878j\" type=\"button\" title=\"Back\" aria-label=\"Back\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-arrow-left\" aria-hidden=\"true\"><path d=\"m12 19-7-7 7-7\"></path><path d=\"M19 12H5\"></path></svg></button><button class=\"electron-titlebar-navigation-button cha-5878j\" type=\"button\" title=\"Forward\" aria-label=\"Forward\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-arrow-right\" aria-hidden=\"true\"><path d=\"M5 12h14\"></path><path d=\"m12 5 7 7-7 7\"></path></svg></button><div class=\"electron-titlebar-home-button cha-1wuhey5\"><a href=\"/\" data-discover=\"true\"><div name=\"🦄\" class=\"cha-1ie6p7q\">🦄</div></a></div><button class=\"electron-titlebar-search-button cha-1almx2n\" type=\"button\" title=\"Open Commander search\" aria-label=\"Open Commander search\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-search\" aria-hidden=\"true\"><path d=\"m21 21-4.34-4.34\"></path><circle cx=\"11\" cy=\"11\" r=\"8\"></circle></svg></button><div class=\"electron-titlebar-account-button cha-bev6cn\"><a href=\"/login\" data-discover=\"true\"><div class=\"cha-kfnzmt\"><div class=\"cha-1hwm87u\">Login</div><div name=\"🌈\" class=\"cha-sgbnjp\">🌈</div></div></a></div></div><div class=\"nav-right-section cha-1dhwl0n\"><button class=\"nav-lopu-button cha-1283qa6\" type=\"button\" aria-label=\"Talk to Lopu\" aria-pressed=\"false\" title=\"Talk to Lopu 🦄\"><span class=\"cha-d6dxvg\"><span class=\"lopuRingAvatar cha-19gt0v2\" aria-hidden=\"true\"><span class=\"cha-2gemw5\">🦄</span></span></span></button><button type=\"button\" aria-label=\"Open Commander search\" title=\"Search\" class=\"cha-1jmmn01\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-search\" aria-hidden=\"true\"><path d=\"m21 21-4.34-4.34\"></path><circle cx=\"11\" cy=\"11\" r=\"8\"></circle></svg></button><div class=\"nav-right-account-button cha-bev6cn\"><a href=\"/login\" data-discover=\"true\"><div class=\"cha-kfnzmt\"><div class=\"cha-1hwm87u\">Login</div><div name=\"🌈\" class=\"cha-sgbnjp\">🌈</div></div></a></div><div class=\"cha-gmuwbf\"><a aria-label=\"Notification history\" href=\"/notifications\" data-discover=\"true\"><div class=\"cha-evb4b5\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-bell\" aria-hidden=\"true\"><path d=\"M10.268 21a2 2 0 0 0 3.464 0\"></path><path d=\"M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326\"></path></svg></div></a></div><div class=\"cha-1uo7prm\"><a href=\"/\" data-discover=\"true\"><div name=\"🦄\" class=\"cha-1ie6p7q\">🦄</div></a></div></div></nav></div><div id=\"lopuPageScroll\"><div class=\"mainFlexRoot cha-64rata\"><div class=\"mainShiftContainer cha-74d7qi\"><div class=\"mainFlexChildrenContainer cha-5gv3tp\"><div class=\"cha-15hjfp\"><section aria-label=\"Account sync\" data-testid=\"account-sync-status\" class=\"cha-mocpht\"><div class=\"cha-qjwhli\"><p class=\"chakra-text cha-1rr4qq7\">Offline account workspace. Local edits are available; account sync is paused until your session is verified.</p><button type=\"button\" class=\"chakra-button cha-e8ab4z\" disabled=\"\">Reconnect</button></div><details><summary>Review sync</summary></details></section></div><div class=\"cha-1lxqzi6\"><div class=\"cha-dzqv1a\"><div class=\"cha-qtk6dd\"><div class=\"cha-1ynu2mz\">Thingtime · Posts saved on this device</div><h1 class=\"cha-po2ngn\">Feed 📰</h1></div><div class=\"cha-1cpv91b\"><button type=\"button\" class=\"chakra-button chakra-menu__menu-button cha-5y3nvu\" id=\"menu-button-_r_2_\" aria-expanded=\"false\" aria-haspopup=\"menu\" aria-controls=\"menu-list-_r_2_\"><span class=\"cha-9amris\"><span class=\"cha-vde6bn\"><span class=\"cha-8uhtka\">✨ New</span></span></span><span class=\"chakra-button__icon cha-1hzyiq5\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-down\" aria-hidden=\"true\" focusable=\"false\"><path d=\"m6 9 6 6 6-6\"></path></svg></span></button><div class=\"cha-1iyck1j\" style=\"visibility: hidden; position: absolute; min-width: max-content; inset: 0px auto auto 0px;\"><div tabindex=\"-1\" role=\"menu\" id=\"menu-list-_r_2_\" aria-orientation=\"vertical\" class=\"chakra-menu__menu-list cha-b3i2da\" style=\"transform-origin: var(--popper-transform-origin); opacity: 0; visibility: hidden; transform: scale(0.8);\"><button type=\"button\" id=\"menu-list-_r_2_-menuitem-_r_3_\" role=\"menuitem\" tabindex=\"-1\" class=\"chakra-menu__menuitem cha-u3cnv2\" data-index=\"0\"><div class=\"cha-vjv0ab\"><span class=\"cha-0\">⏱️ Latest</span><span class=\"chakra-text cha-asx48h\">chronological</span></div></button><button type=\"button\" title=\"Popular posts balanced with freshness.\" id=\"menu-list-_r_2_-menuitem-_r_4_\" role=\"menuitem\" tabindex=\"-1\" class=\"chakra-menu__menuitem cha-u3cnv2\" data-index=\"1\">🔥 Hot</button><button type=\"button\" title=\"Newest posts first.\" id=\"menu-list-_r_2_-menuitem-_r_5_\" role=\"menuitem\" tabindex=\"-1\" class=\"chakra-menu__menuitem cha-u3cnv2\" data-index=\"2\">✨ New<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-check\" aria-hidden=\"true\" style=\"margin-left: auto;\"><path d=\"M20 6 9 17l-5-5\"></path></svg></button><button type=\"button\" title=\"Highest net votes among the latest 400 posts.\" id=\"menu-list-_r_2_-menuitem-_r_6_\" role=\"menuitem\" tabindex=\"-1\" class=\"chakra-menu__menuitem cha-u3cnv2\" data-index=\"3\">🏆 Top</button><button type=\"button\" title=\"Fresh posts gaining votes in the last day.\" id=\"menu-list-_r_2_-menuitem-_r_7_\" role=\"menuitem\" tabindex=\"-1\" class=\"chakra-menu__menuitem cha-u3cnv2\" data-index=\"4\">📈 Rising</button><button type=\"button\" title=\"Posts with both upvotes and downvotes.\" id=\"menu-list-_r_2_-menuitem-_r_8_\" role=\"menuitem\" tabindex=\"-1\" class=\"chakra-menu__menuitem cha-u3cnv2\" data-index=\"5\">⚡ Controversial</button><button type=\"button\" title=\"Nearby posts using your location, or a location tag you choose.\" id=\"menu-list-_r_2_-menuitem-_r_9_\" role=\"menuitem\" tabindex=\"-1\" class=\"chakra-menu__menuitem cha-u3cnv2\" data-index=\"6\">📍 Local</button><button type=\"button\" title=\"Hot posts from the public feed worldwide.\" id=\"menu-list-_r_2_-menuitem-_r_a_\" role=\"menuitem\" tabindex=\"-1\" class=\"chakra-menu__menuitem cha-u3cnv2\" data-index=\"7\">🌍 Global</button><button type=\"button\" title=\"Hot posts tagged politics or political.\" id=\"menu-list-_r_2_-menuitem-_r_b_\" role=\"menuitem\" tabindex=\"-1\" class=\"chakra-menu__menuitem cha-u3cnv2\" data-index=\"8\">🏛️ Political</button><hr aria-orientation=\"horizontal\" class=\"chakra-menu__divider cha-12vdn2q\"><button type=\"button\" id=\"menu-list-_r_2_-menuitem-_r_c_\" role=\"menuitem\" tabindex=\"-1\" class=\"chakra-menu__menuitem cha-u3cnv2\" data-index=\"9\">Explore algorithms 🔎</button><hr aria-orientation=\"horizontal\" class=\"chakra-menu__divider cha-12vdn2q\"><button type=\"button\" id=\"menu-list-_r_2_-menuitem-_r_d_\" role=\"menuitem\" tabindex=\"-1\" class=\"chakra-menu__menuitem cha-u3cnv2\" data-index=\"10\">New algorithm ➕</button><button type=\"button\" id=\"menu-list-_r_2_-menuitem-_r_e_\" role=\"menuitem\" tabindex=\"-1\" class=\"chakra-menu__menuitem cha-u3cnv2\" data-index=\"11\" aria-disabled=\"false\"><div class=\"cha-vjv0ab\"><span class=\"cha-0\">Save session as algorithm 💾</span><span class=\"chakra-text cha-asx48h\">· 1</span></div></button><button type=\"button\" id=\"menu-list-_r_2_-menuitem-_r_f_\" role=\"menuitem\" tabindex=\"-1\" class=\"chakra-menu__menuitem cha-u3cnv2\" data-index=\"12\">Manage in settings ⚙️</button></div></div><button type=\"button\" class=\"chakra-button cha-1hp5ani\" aria-pressed=\"true\" data-testid=\"feed-device\">On this device</button><button disabled=\"\" type=\"button\" class=\"chakra-button cha-13j3zem\" aria-pressed=\"false\" title=\"Only posts from the subspaces you belong to\" data-testid=\"feed-scope-subspaces\" data-scope=\"all\">🪐 My subspaces</button><div class=\"cha-zdpt2t\"><button type=\"button\" class=\"chakra-button chakra-menu__menu-button cha-1nnjqss\" id=\"menu-button-_r_h_\" aria-expanded=\"false\" aria-haspopup=\"menu\" aria-controls=\"menu-list-_r_h_\"><span class=\"chakra-button__icon cha-1wh2kri\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-sliders-horizontal\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M10 5H3\"></path><path d=\"M12 19H3\"></path><path d=\"M14 3v4\"></path><path d=\"M16 17v4\"></path><path d=\"M21 12h-9\"></path><path d=\"M21 19h-5\"></path><path d=\"M21 5h-7\"></path><path d=\"M8 10v4\"></path><path d=\"M8 12H3\"></path></svg></span><span class=\"cha-9amris\">Filters</span></button><div class=\"cha-1iyck1j\" style=\"visibility: hidden; position: absolute; min-width: max-content; inset: 0px auto auto 0px;\"><div tabindex=\"-1\" role=\"menu\" id=\"menu-list-_r_h_\" aria-orientation=\"vertical\" class=\"chakra-menu__menu-list cha-2hsagk\" style=\"transform-origin: var(--popper-transform-origin); opacity: 0; visibility: hidden; transform: scale(0.8);\"><p class=\"chakra-text cha-m94f4t\">Post type</p><div class=\"chakra-menu__group\" role=\"group\"><button type=\"button\" value=\"text\" id=\"menu-list-_r_h_-menuitem-_r_i_\" role=\"menuitemcheckbox\" tabindex=\"-1\" aria-checked=\"false\" class=\"chakra-menu__menuitem-option cha-u3cnv2\" data-index=\"0\"><span class=\"chakra-menu__icon-wrapper cha-n6hvge\"><svg viewBox=\"0 0 14 14\" width=\"1em\" height=\"1em\" focusable=\"false\" aria-hidden=\"true\" class=\"chakra-menu__icon\"><polygon fill=\"currentColor\" points=\"5.5 11.9993304 14 3.49933039 12.5 2 5.5 8.99933039 1.5 4.9968652 0 6.49933039\"></polygon></svg></span><span style=\"flex: 1 1 0%;\">📝 Text</span></button><button type=\"button\" value=\"image\" id=\"menu-list-_r_h_-menuitem-_r_j_\" role=\"menuitemcheckbox\" tabindex=\"-1\" aria-checked=\"false\" class=\"chakra-menu__menuitem-option cha-u3cnv2\" data-index=\"1\"><span class=\"chakra-menu__icon-wrapper cha-n6hvge\"><svg viewBo",
+    "worker": "http://127.0.0.1:18721/media-cache-sw.mjs"
+  },
+  "navigation": [
+    {
+      "repetition": 1,
+      "label": "parent",
+      "width": 1440,
+      "url": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87",
+      "startedAt": 1792739318180,
+      "memoryBefore": {
+        "cgroupBytes": null,
+        "events": null,
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:    9193244 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "   2231    2099 536228 chromium",
+          "    100       2 368984 MainThread",
+          "   2020    1989 272392 MainThread",
+          "     14       2 240712 mongod",
+          "   2083    2020 187364 chromium",
+          "   2224    2099 82968 chromium",
+          "   2265    2099 80292 chromium",
+          "   2145    2083 80164 chromium",
+          "   2275    2099 71424 chromium",
+          "      2       1 67876 MainThread",
+          "   2125    2094 66216 chromium",
+          "   2094    2083 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 3
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 2357
+          },
+          {
+            "name": "Nodes",
+            "value": 1929
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 100378340
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 195584000
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792739324361
+    },
+    {
+      "repetition": 1,
+      "label": "comment",
+      "width": 1440,
+      "url": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761",
+      "startedAt": 1792739324361,
+      "memoryBefore": {
+        "cgroupBytes": null,
+        "events": null,
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:    8674588 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "   2231    2099 552712 chromium",
+          "    100       2 369044 MainThread",
+          "   2020    1989 280668 MainThread",
+          "     14       2 240712 mongod",
+          "   2083    2020 187104 chromium",
+          "   2125    2094 85388 chromium",
+          "   2265    2099 80292 chromium",
+          "   2145    2083 80232 chromium",
+          "   2224    2099 80108 chromium",
+          "   2275    2099 71424 chromium",
+          "      2       1 67876 MainThread",
+          "   2094    2083 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 5
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 5562
+          },
+          {
+            "name": "Nodes",
+            "value": 3100
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 139231084
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 201801728
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792739331847
+    },
+    {
+      "repetition": 1,
+      "label": "nested",
+      "width": 1440,
+      "url": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107",
+      "startedAt": 1792739331847,
+      "memoryBefore": {
+        "cgroupBytes": null,
+        "events": null,
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:   10472268 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "   2231    2099 498216 chromium",
+          "    100       2 369200 MainThread",
+          "   2020    1989 282696 MainThread",
+          "     14       2 240712 mongod",
+          "   2083    2020 188464 chromium",
+          "   2125    2094 80836 chromium",
+          "   2224    2099 80336 chromium",
+          "   2265    2099 80292 chromium",
+          "   2145    2083 80104 chromium",
+          "   2275    2099 71424 chromium",
+          "      2       1 67876 MainThread",
+          "   2094    2083 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 1
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 2707
+          },
+          {
+            "name": "Nodes",
+            "value": 901
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 58344116
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 182648832
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792739340683
+    },
+    {
+      "repetition": 1,
+      "label": "public",
+      "width": 1440,
+      "url": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0",
+      "startedAt": 1792739340683,
+      "memoryBefore": {
+        "cgroupBytes": null,
+        "events": null,
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:   10260740 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "   2231    2099 475700 chromium",
+          "    100       2 369400 MainThread",
+          "   2020    1989 294720 MainThread",
+          "     14       2 240712 mongod",
+          "   2083    2020 190636 chromium",
+          "   2125    2094 80776 chromium",
+          "   2224    2099 80476 chromium",
+          "   2265    2099 80292 chromium",
+          "   2145    2083 80172 chromium",
+          "   2275    2099 71424 chromium",
+          "      2       1 67876 MainThread",
+          "   2094    2083 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 1
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 1422
+          },
+          {
+            "name": "Nodes",
+            "value": 833
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 61794888
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 146423808
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792739344286
+    },
+    {
+      "repetition": 1,
+      "label": "parent",
+      "width": 390,
+      "url": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87",
+      "startedAt": 1792739344371,
+      "memoryBefore": {
+        "cgroupBytes": null,
+        "events": null,
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:   12679884 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "   2231    2099 493856 chromium",
+          "    100       2 376720 MainThread",
+          "   2020    1989 297424 MainThread",
+          "     14       2 240732 mongod",
+          "   2083    2020 196284 chromium",
+          "   2224    2099 80636 chromium",
+          "   2265    2099 80292 chromium",
+          "   2145    2083 80284 chromium",
+          "   2125    2094 77340 chromium",
+          "   2275    2099 71424 chromium",
+          "      2       1 67876 MainThread",
+          "   2094    2083 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 3
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 3899
+          },
+          {
+            "name": "Nodes",
+            "value": 1684
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 103412264
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 153317376
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792739347966
+    },
+    {
+      "repetition": 1,
+      "label": "comment",
+      "width": 390,
+      "url": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761",
+      "startedAt": 1792739347966,
+      "memoryBefore": {
+        "cgroupBytes": null,
+        "events": null,
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:   12575292 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "   2231    2099 521348 chromium",
+          "    100       2 387240 MainThread",
+          "   2020    1989 298864 MainThread",
+          "     14       2 240736 mongod",
+          "   2083    2020 192064 chromium",
+          "   2224    2099 80844 chromium",
+          "   2265    2099 80292 chromium",
+          "   2145    2083 80220 chromium",
+          "   2275    2099 71424 chromium",
+          "      2       1 67876 MainThread",
+          "   2125    2094 57428 chromium",
+          "   2094    2083 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 5
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 6481
+          },
+          {
+            "name": "Nodes",
+            "value": 2608
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 124421092
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 182702080
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792739351740
+    },
+    {
+      "repetition": 1,
+      "label": "nested",
+      "width": 390,
+      "url": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107",
+      "startedAt": 1792739351740,
+      "memoryBefore": {
+        "cgroupBytes": null,
+        "events": null,
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:   12651004 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "   2231    2099 465256 chromium",
+          "    100       2 391432 MainThread",
+          "   2020    1989 308068 MainThread",
+          "     14       2 240736 mongod",
+          "   2083    2020 190524 chromium",
+          "   2224    2099 81032 chromium",
+          "   2145    2083 80412 chromium",
+          "   2265    2099 80292 chromium",
+          "   2275    2099 71424 chromium",
+          "      2       1 67876 MainThread",
+          "   2125    2094 59920 chromium",
+          "   2094    2083 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 1
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 2276
+          },
+          {
+            "name": "Nodes",
+            "value": 877
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 69431356
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 168525824
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792739356006
+    },
+    {
+      "repetition": 1,
+      "label": "public",
+      "width": 390,
+      "url": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0",
+      "startedAt": 1792739356006,
+      "memoryBefore": {
+        "cgroupBytes": null,
+        "events": null,
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:   12679124 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "   2231    2099 501484 chromium",
+          "    100       2 396016 MainThread",
+          "   2020    1989 309492 MainThread",
+          "     14       2 240736 mongod",
+          "   2083    2020 191244 chromium",
+          "   2224    2099 81156 chromium",
+          "   2145    2083 80372 chromium",
+          "   2265    2099 80292 chromium",
+          "   2275    2099 71424 chromium",
+          "      2       1 67876 MainThread",
+          "   2125    2094 56664 chromium",
+          "   2094    2083 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 3
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 4828
+          },
+          {
+            "name": "Nodes",
+            "value": 1729
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 112892148
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 176869376
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792739362299
+    },
+    {
+      "repetition": 1,
+      "label": "parent",
+      "width": 320,
+      "url": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87",
+      "startedAt": 1792739362325,
+      "memoryBefore": {
+        "cgroupBytes": null,
+        "events": null,
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:   12778328 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "   2231    2099 520200 chromium",
+          "    100       2 400056 MainThread",
+          "   2020    1989 314544 MainThread",
+          "     14       2 240760 mongod",
+          "   2083    2020 193704 chromium",
+          "   2224    2099 81332 chromium",
+          "   2145    2083 80460 chromium",
+          "   2265    2099 80292 chromium",
+          "   2275    2099 71424 chromium",
+          "      2       1 67876 MainThread",
+          "   2125    2094 52584 chromium",
+          "   2094    2083 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 5
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 7467
+          },
+          {
+            "name": "Nodes",
+            "value": 2569
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 129433324
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 195907584
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792739366596
+    },
+    {
+      "repetition": 1,
+      "label": "comment",
+      "width": 320,
+      "url": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761",
+      "startedAt": 1792739366596,
+      "memoryBefore": {
+        "cgroupBytes": null,
+        "events": null,
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:   12535724 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "   2231    2099 488516 chromium",
+          "    100       2 403432 MainThread",
+          "   2020    1989 316584 MainThread",
+          "     14       2 240764 mongod",
+          "   2083    2020 196848 chromium",
+          "   2224    2099 81420 chromium",
+          "   2145    2083 80380 chromium",
+          "   2265    2099 80292 chromium",
+          "   2275    2099 71424 chromium",
+          "      2       1 67876 MainThread",
+          "   2125    2094 55084 chromium",
+          "   2094    2083 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 3
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 2468
+          },
+          {
+            "name": "Nodes",
+            "value": 2590
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 102405380
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 203603968
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792739371766
+    },
+    {
+      "repetition": 1,
+      "label": "nested",
+      "width": 320,
+      "url": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107",
+      "startedAt": 1792739371766,
+      "memoryBefore": {
+        "cgroupBytes": null,
+        "events": null,
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:   12484332 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "   2231    2099 522256 chromium",
+          "    100       2 431336 MainThread",
+          "   2020    1989 318468 MainThread",
+          "     14       2 240768 mongod",
+          "   2083    2020 193064 chromium",
+          "   2224    2099 81548 chromium",
+          "   2145    2083 80392 chromium",
+          "   2265    2099 80292 chromium",
+          "   2275    2099 71424 chromium",
+          "      2       1 67876 MainThread",
+          "   2125    2094 55412 chromium",
+          "   2094    2083 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 5
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 5121
+          },
+          {
+            "name": "Nodes",
+            "value": 3481
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 148513868
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 212488192
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792739376392
+    },
+    {
+      "repetition": 1,
+      "label": "public",
+      "width": 320,
+      "url": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0",
+      "startedAt": 1792739376392,
+      "memoryBefore": {
+        "cgroupBytes": null,
+        "events": null,
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:   12427312 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "   2231    2099 569520 chromium",
+          "    100       2 461324 MainThread",
+          "   2020    1989 329184 MainThread",
+          "     14       2 240784 mongod",
+          "   2083    2020 193132 chromium",
+          "   2224    2099 81644 chromium",
+          "   2145    2083 80432 chromium",
+          "   2265    2099 80292 chromium",
+          "   2275    2099 71424 chromium",
+          "      2       1 67876 MainThread",
+          "   2125    2094 55284 chromium",
+          "   2094    2083 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 7
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 7683
+          },
+          {
+            "name": "Nodes",
+            "value": 4332
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 169786840
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 237768704
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792739379946
+    }
+  ],
+  "events": [
+    {
+      "at": 1792739207048,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/.well-known/thingtime-capabilities.json"
+    },
+    {
+      "at": 1792739207191,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/.well-known/thingtime-capabilities.json"
+    },
+    {
+      "at": 1792739207210,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/.well-known/thingtime-capabilities.json"
+    },
+    {
+      "at": 1792739211916,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739218241,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739218241,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739218241,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739223377,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739223377,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739224781,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739224812,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739225273,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739225274,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739225404,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739225411,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739225411,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739225411,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739225448,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739225463,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739228975,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739228980,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739229111,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739229144,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739230440,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739230440,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739231590,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739231649,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739231649,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739231649,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739233784,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739237169,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739237174,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739240844,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739240846,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739241468,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739241472,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739241483,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739241483,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739241720,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739241740,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739241761,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739241765,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739241817,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739241817,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739244798,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739244807,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739246954,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739249090,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739249090,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739257814,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739258274,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739259361,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739259361,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739259361,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739259372,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739261071,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739261096,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739261096,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739261096,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739261281,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739261281,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739263563,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739263575,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792739264858,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739267472,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739267473,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739267504,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739272908,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792739273977,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739275619,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739275620,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739275639,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739277809,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792739278844,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739280957,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739280957,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739280967,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739284609,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792739285458,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739287290,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739287290,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739287290,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739289594,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792739290299,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739292578,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739292579,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739292584,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739294490,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792739295145,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739297252,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739297252,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739297252,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739299649,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792739300270,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739302088,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739302091,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739302098,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739304669,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792739305886,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739308074,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739308075,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739308075,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739310725,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792739311452,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739314186,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739314188,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739314188,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739317447,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792739318791,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739320351,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739320357,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739320357,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739324572,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739326291,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739326298,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739326298,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739332117,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107"
+    },
+    {
+      "at": 1792739334677,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107"
+    },
+    {
+      "at": 1792739334677,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107"
+    },
+    {
+      "at": 1792739334678,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107"
+    },
+    {
+      "at": 1792739340863,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739342472,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739342475,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739342476,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739344629,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739345864,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739345864,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739345864,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739348149,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739349417,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739349418,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739349418,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739351944,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107"
+    },
+    {
+      "at": 1792739353201,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107"
+    },
+    {
+      "at": 1792739353201,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107"
+    },
+    {
+      "at": 1792739353201,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107"
+    },
+    {
+      "at": 1792739356939,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739359232,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739359240,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739359240,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739362439,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739363748,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739363759,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739363761,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/b6d89fd2-2067-4909-9c72-454b627f7b87"
+    },
+    {
+      "at": 1792739366751,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739369189,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739369190,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739369190,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/127cd724-ecc4-4999-a2f6-dee0d374f761"
+    },
+    {
+      "at": 1792739372059,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107"
+    },
+    {
+      "at": 1792739373756,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107"
+    },
+    {
+      "at": 1792739373764,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107"
+    },
+    {
+      "at": 1792739373764,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/07c6d633-9fff-4754-9f2a-1ee13b3a0107"
+    },
+    {
+      "at": 1792739376576,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739377718,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739377718,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739377718,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/56e156ce-d081-491c-8e31-493e245005b0"
+    },
+    {
+      "at": 1792739380092,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792739381347,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792739381347,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792739381347,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792739384481,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792739385657,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792739385657,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792739387872,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792739389168,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792739389168,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792739391223,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792739392213,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792739392214,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    }
+  ],
+  "errors": [],
+  "failedRequests": [
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/nitro: net::ERR_ABORTED",
+    "/api/v1/health/frontend: net::ERR_ABORTED",
+    "/api/v1/health/mongodb: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/nitro: net::ERR_ABORTED",
+    "/api/v1/health/frontend: net::ERR_ABORTED",
+    "/api/v1/health/mongodb: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/nitro: net::ERR_ABORTED",
+    "/api/v1/health/frontend: net::ERR_ABORTED",
+    "/api/v1/health/mongodb: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/drafts: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/algorithms/sync: net::ERR_ABORTED",
+    "/api/v1/themes/sync: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/algorithms/sync: net::ERR_ABORTED",
+    "/api/v1/themes/sync: net::ERR_ABORTED",
+    "/api/v1/themes/sync: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/themes/sync: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/drafts: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/root-data: net::ERR_INTERNET_DISCONNECTED",
+    "/.well-known/thingtime-capabilities.json: net::ERR_INTERNET_DISCONNECTED",
+    "/api/root-data: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/nitro: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/frontend: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/mongodb: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/marketing/publications: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/nitro: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/frontend: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/mongodb: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/auth/account-hints: net::ERR_INTERNET_DISCONNECTED",
+    "/.well-known/thingtime-capabilities.json: net::ERR_INTERNET_DISCONNECTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/root-data: net::ERR_INTERNET_DISCONNECTED",
+    "/.well-known/thingtime-capabilities.json: net::ERR_INTERNET_DISCONNECTED",
+    "/api/root-data: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/nitro: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/frontend: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/mongodb: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/marketing/publications: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/nitro: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/frontend: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/mongodb: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/auth/account-hints: net::ERR_INTERNET_DISCONNECTED",
+    "/.well-known/thingtime-capabilities.json: net::ERR_INTERNET_DISCONNECTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/root-data: net::ERR_INTERNET_DISCONNECTED",
+    "/.well-known/thingtime-capabilities.json: net::ERR_INTERNET_DISCONNECTED",
+    "/api/root-data: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/nitro: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/frontend: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/mongodb: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/marketing/publications: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/nitro: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/frontend: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/mongodb: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/auth/account-hints: net::ERR_INTERNET_DISCONNECTED",
+    "/.well-known/thingtime-capabilities.json: net::ERR_INTERNET_DISCONNECTED"
+  ],
+  "consoleErrors": [
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 404 ()",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED"
+  ],
+  "crashes": [],
+  "bounds": [
+    {
+      "label": "parent",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "comment",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "nested",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "public",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "parent",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "comment",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "nested",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "public",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "parent",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "comment",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "nested",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "public",
+      "width": 320,
+      "scrollWidth": 320
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+[
+  {
+    "expectedOffline": true,
+    "online": [
+      {
+        "source": "primary",
+        "online": false
+      }
+    ],
+    "transportFailed": true,
+    "status": null,
+    "actorMatches": false,
+    "planeMatches": false,
+    "at": 1793034248334
+  },
+  {
+    "expectedOffline": false,
+    "online": [
+      {
+        "source": "primary",
+        "online": true
+      }
+    ],
+    "transportFailed": false,
+    "status": 200,
+    "actorMatches": true,
+    "planeMatches": true,
+    "at": 1793034248346
+  },
+  {
+    "expectedOffline": true,
+    "online": [
+      {
+        "source": "primary",
+        "online": false
+      },
+      {
+        "source": "concurrent",
+        "online": false
+      }
+    ],
+    "transportFailed": true,
+    "status": null,
+    "actorMatches": false,
+    "planeMatches": false,
+    "at": 1793034255848
+  },
+  {
+    "expectedOffline": false,
+    "online": [
+      {
+        "source": "primary",
+        "online": true
+      },
+      {
+        "source": "concurrent",
+        "online": true
+      }
+    ],
+    "transportFailed": false,
+    "status": 200,
+    "actorMatches": true,
+    "planeMatches": true,
+    "at": 1793034314833
+  }
+]

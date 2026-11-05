@@ -35,3 +35,14 @@ test('malformed and unbounded interest profiles fail rather than being truncated
     assert.throws(() => parseAlgorithmTransfer({ ...fixture(), ...patch }));
   }
 });
+
+
+test('portable algorithm display titles preserve absence, null and existing text with canonical bounds', () => {
+  assert.equal(Object.prototype.hasOwnProperty.call(parseAlgorithmTransfer(fixture()), 'title'), false);
+  for (const title of [null, '', 'Reading shelf', '字'.repeat(120)]) {
+    assert.deepEqual(parseAlgorithmTransfer({ ...fixture(), title }), { ...fixture(), title });
+  }
+  for (const title of [undefined, 1, false, {}, 'x'.repeat(121)]) {
+    assert.throws(() => parseAlgorithmTransfer({ ...fixture(), title }), /display title/);
+  }
+});

@@ -1,0 +1,7 @@
+{
+  "reason": "Synthetic browser-session continuity and served-module/font evidence; product unchanged",
+  "hashes": {
+    "remix/app/components/Attachments/AudioAttachmentPlayer.browser.test.ts": "c5fa16a6950620b793bdd6f227a05fff87b188fbda1e20d747ac2da2e41e44d6",
+    "tmp/continuation/audio-player.test.mjs": "ef3b17a8562eb58cc5aa796479acfc512caa32bc1da4d1c579f8975dddf8ce34"
+  }
+}

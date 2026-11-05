@@ -1,0 +1,13 @@
+✔ isolated renderer requires explicit pinned image and socket; never accepts extra Docker arguments (1.243709ms)
+✔ mounted trees reject dotenv files and escaping symlinks (7.253209ms)
+✔ failed Docker invocation preserves failure, sanitizes CLI environment and cleans temporary state (10237.577625ms)
+✔ cleanup refuses a matching resource name with a different ownership label (74.669875ms)
+✔ cleanup repeats the complete ownership sweep to catch a late acquisition (2694.509709ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13322.888416

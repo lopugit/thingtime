@@ -1,0 +1,13 @@
+{
+  "phases": [
+    "anonymous",
+    "account"
+  ],
+  "rendererHeapMiB": 128,
+  "sourceSha256": "eed6016b2327bdfbbf60af26e5a1b6bed418653f503c68177397b32c7016f9b4",
+  "executedSha256": "e89d80083776cc9ddb5c874777b1e6b955d4af2f71ad9d833c7a9652841c7319",
+  "compile": "node:module.stripTypeScriptTypes",
+  "syntax": "node --check tmp/continuation/post-delete/post-delete.test.mjs",
+  "lint": "corepack pnpm --dir remix run lint:files -- app/local-workspace/postDelete.browser.test.ts",
+  "executedPhase": "account"
+}

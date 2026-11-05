@@ -1,0 +1,29 @@
+{
+  "head": "8c690d2984b0cff8322c408625fe2c36488232f5",
+  "buildMetadata": {
+    "date": "2026-10-26T07:13:27.476Z",
+    "preset": "node-server",
+    "framework": {
+      "name": "nitro",
+      "version": "3.0.260610-beta"
+    },
+    "versions": {
+      "nitro": "3.0.260610-beta"
+    },
+    "serverEntry": "server/index.mjs",
+    "publicDir": "public",
+    "commands": {
+      "preview": "node ./server/index.mjs"
+    },
+    "config": {}
+  },
+  "latestAppRuntimeMtimeUTC": "2026-10-26T07:12:22.231525+00:00",
+  "sourceTestSha256": "2c336e9680628e89e3a1d668a66e86f9c35c120d2927f786b74daa08c00f3ccf",
+  "bundledTestSha256": "ad54b86e32e15fc9010760db39ed39f96690c951922ddb963e37a996efc0f1d2",
+  "applicationTree": {
+    "sha256": "41492c71379d88f80fd69e4accb7d2f35e5e15545ab6599f71f9f740fbd27bb6",
+    "fileCount": 2105
+  },
+  "packageTarSha256": "ce62bc59522cdfb7770ca43c07c29b1ac844b029e3888550e55aad7ca86ee033",
+  "boundary": "Parent confirms build from current runtime source; runtime unchanged after build, test bundle refreshed only."
+}

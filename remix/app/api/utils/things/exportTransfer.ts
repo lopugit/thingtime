@@ -213,14 +213,18 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
       const reservedIds = new Set([...includedIds, ...targets.keys()]);
       const recordingIds = new Set(recordings.map(thing => thing.id));
       let bytes = 0;
+      const addBytes = (size: number) => {
+        if (!Number.isSafeInteger(size) || size < 0 || size > Number.MAX_SAFE_INTEGER - bytes)
+          throw new Error('Invalid export file size or aggregate byte precision');
+        bytes += size;
+      };
       for (const [id, target] of targets) {
         check();
         if (!includedIds.has(target.targetId)) throw new Error('An attachment target is missing');
         const inlineAvatar = inlineAvatars.get(id);
         if (inlineAvatar) {
           if (input.includeFiles === false) continue;
-          bytes += inlineAvatar.bytes;
-          if (bytes > TRANSFER_LIMITS.fileBytes) throw new Error('This export exceeds the file byte limit');
+          addBytes(inlineAvatar.bytes);
           plan.files.push(structuredClone(inlineAvatar));
           (plan.attachmentOrder ||= []).push(id);
           continue;
@@ -250,17 +254,16 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
           (plan.links ||= []).push({ id, targetId: target.targetId, url: attachment.url, mediaKind: attachment.mediaKind, ...transferAnnotations(attachment) });
           continue;
         }
-        bytes += result.attachment.size;
-        if (bytes > TRANSFER_LIMITS.fileBytes) throw new Error('This export exceeds the file byte limit');
+        addBytes(result.attachment.size);
         plan.files.push({ id: portableId, ...(portableId !== id ? { sourceId: id } : {}), ...target, name: result.attachment.name, mime: result.attachment.contentType, bytes: result.attachment.size, ...transferAnnotations(result.attachment) });
       }
       for (const emoji of emojis) {
         const image = emojiSources.get(emoji.id)!.inlineImage;
         if (!image) continue;
-        if (plan.files.length + (plan.links?.length || 0) >= TRANSFER_LIMITS.files || bytes + image.bytes > TRANSFER_LIMITS.fileBytes) throw new Error('This export exceeds the file limit');
+        if (plan.files.length + (plan.links?.length || 0) >= TRANSFER_LIMITS.files) throw new Error('This export exceeds the file limit');
         let index = 0, id: string;
         do { id = `emoji-file:${index++}`; } while (reservedIds.has(id));
-        reservedIds.add(id); bytes += image.bytes;
+        reservedIds.add(id); addBytes(image.bytes);
         emoji.crystal.emojiFileId = id;
         plan.files.push({ id, targetId: emoji.id, name: image.name, mime: image.mime, bytes: image.bytes, inlineBase64: image.base64 });
         (plan.attachmentOrder ||= []).push(id);

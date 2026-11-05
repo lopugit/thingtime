@@ -1,0 +1,42 @@
+✖ native account import preserves editable theme folders offline and synchronizes private copies independently (38632.574118ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 39257.639081
+
+✖ failing tests:
+
+test at app/local-workspace/accountThemeImport.browser.test.ts:2:1318
+✖ native account import preserves editable theme folders offline and synchronizes private copies independently (38632.574118ms)
+  locator.click: Timeout 25000ms exceeded.
+  Call log:
+    - waiting for getByRole('menuitem', { name: 'Import into my Things…', exact: true })
+      - locator resolved to <button type="button" tabindex="-1" data-index="2" role="menuitem" id="menu-list-_r_2_-menuitem-_r_9_" class="chakra-menu__menuitem cha-5ck06g">Import into my Things…</button>
+    - attempting click action
+      2 × waiting for element to be visible, enabled and stable
+        - element is not stable
+      - retrying click action
+      - waiting 20ms
+      2 × waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - element is outside of the viewport
+      - retrying click action
+        - waiting 100ms
+      45 × waiting for element to be visible, enabled and stable
+         - element is visible, enabled and stable
+         - scrolling into view if needed
+         - done scrolling
+         - element is outside of the viewport
+       - retrying click action
+         - waiting 500ms
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountThemeImport.browser.test.ts:88:86) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('menuitem', { name: 'Import into my Things…', exact: true })", '    - locator resolved to <button type="button" tabindex="-1" data-index="2" role="menuitem" id="menu-list-_r_2_-menuitem-_r_9_" class="chakra-menu__menuitem cha-5ck06g">Import into my Things…</button>', '  - attempting click action', '    2 × waiting for element to be visible, enabled and stable', '      - element is not stable', '    - retrying click action', '    - waiting 20ms', '    2 × waiting for element to be visible, enabled and stable', '      - element is visible, enabled and stable', '      - scrolling into view if needed', '      - done scrolling', '      - element is outside of the viewport', '    - retrying click action', '      - waiting 100ms', '    45 × waiting for element to be visible, enabled and stable', '       - element is visible, enabled and stable', '       - scrolling into view if needed', '       - done scrolling', '       - element is outside of the viewport', '     - retrying click action', '       - waiting 500ms' ]
+  }

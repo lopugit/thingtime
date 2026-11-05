@@ -1,0 +1,67 @@
+{
+  "packageSha256": "edd245b3026f971e114d84082440fc47e7ec7c234c974f19af904caa49a22a69",
+  "runtime": "theme-repair",
+  "passed": 7,
+  "scenarios": [
+    {
+      "name": "anonymous History",
+      "verification": "theme-versions/anonymous/verification.json",
+      "log": "theme-history-repair-final.log",
+      "status": "passed"
+    },
+    {
+      "name": "Home account History",
+      "verification": "theme-versions-account-retry/account/verification.json",
+      "log": "theme-history-account-final.log",
+      "status": "passed"
+    },
+    {
+      "name": "custom-selected account History",
+      "verification": "theme-versions-custom-retry/custom-plane-account/verification.json",
+      "log": "theme-history-custom-final.log",
+      "status": "passed"
+    },
+    {
+      "name": "anonymous organization",
+      "verification": "theme-organization/anonymous-verification.json",
+      "log": "theme-organization-final.log",
+      "status": "passed"
+    },
+    {
+      "name": "Home account organization",
+      "verification": "theme-organization-account-retry/account/verification.json",
+      "log": "theme-organization-account-final.log",
+      "status": "passed"
+    },
+    {
+      "name": "custom-selected account organization",
+      "verification": "theme-organization-custom-retry/custom-plane-account/verification.json",
+      "log": "theme-organization-custom-final.log",
+      "status": "passed"
+    },
+    {
+      "name": "Home account import/export",
+      "verification": "theme-import/verification.json",
+      "log": "theme-import-final.log",
+      "status": "passed"
+    }
+  ],
+  "focusedTests": {
+    "passed": 22,
+    "log": "theme-repair-focused.log"
+  },
+  "bounds": [
+    1440,
+    390,
+    320
+  ],
+  "notes": [
+    "Each scenario has a successful recorded run. Earlier failures remain preserved; combined intermediate logs include failed attempts.",
+    "History changes saved theme design. The native proof explicitly applies the saved theme before verifying active editor colors and cold offline reload.",
+    "Selected custom-plane History and Theme Studio use Home storage through the existing LocalApiView provider, while remote authority remains the actually selected custom plane.",
+    "Custom-selected organization edits Home local content offline, then canonically resets the selected endpoint to Home before generic ordinary-content queues synchronize.",
+    "Organization reconnect waits up to90s per checkpoint to allow the existing60s durable sync claim to expire after reload. No product timeout or security changes were made.",
+    "Protected deleted recovery and named-branch composition remain refused; divergent merge and stale/conflict/rollback/identity/retry cases are covered by focused unit tests.",
+    "Subsequent linked-gallery/account copy/capacity changes are outside this immutable package; this manifest proves the named theme scenarios on the stated hash."
+  ]
+}

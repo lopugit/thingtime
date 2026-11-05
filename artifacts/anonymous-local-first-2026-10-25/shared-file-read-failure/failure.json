@@ -1,0 +1,161 @@
+{
+  "error": "WorkspaceError: File is not stored in this workspace\nfail7 (/tmp/check/shared.fixture.js:23936:11)\n/tmp/check/shared.fixture.js:24312:108\nasync WorkspaceDatabase.scopedTransaction (/tmp/check/shared.fixture.js:5053:25)\nasync LocalThings.readFileBlob (/tmp/check/shared.fixture.js:24310:23)\nasync /tmp/check/shared.fixture.js:82831:24",
+  "stack": "WorkspaceError: File is not stored in this workspace\nfail7 (/tmp/check/shared.fixture.js:23936:11)\n/tmp/check/shared.fixture.js:24312:108\nasync WorkspaceDatabase.scopedTransaction (/tmp/check/shared.fixture.js:5053:25)\nasync LocalThings.readFileBlob (/tmp/check/shared.fixture.js:24310:23)\nasync /tmp/check/shared.fixture.js:82831:24\n    at #evaluate (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/cdp/ExecutionContext.js:402:19)\n    at async ExecutionContext.evaluate (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/cdp/ExecutionContext.js:288:16)\n    at async IsolatedWorld.evaluate (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/cdp/IsolatedWorld.js:104:16)\n    at async CdpFrame.evaluate (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/api/Frame.js:364:20)\n    at async CdpPage.evaluate (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/api/Page.js:832:20)\n    at async TestContext.<anonymous> (file:///tmp/check/shared.test.mjs:244:20)\n    at async Test.run (node:internal/test_runner/test:1409:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)\n    at <anonymous> (/tmp/check/shared.fixture.js:24311:107)\n    at fail7 (/tmp/check/shared.fixture.js:23935:10)",
+  "setupSteps": [
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/register",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/login",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/users/public-uploads",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/attachments/uploads",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "upload-start"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/attachments/uploads/parts",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "upload-parts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/attachments/uploads/complete",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "upload-complete"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/things",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "post"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/things",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "component"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/things",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "webpage"
+    }
+  ],
+  "errors": [],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/things"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/things"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/things"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/webpages/resolve"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/things/export"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/attachments/content",
+      "mode": "validate"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/attachments/content",
+      "mode": "original-bytes"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/attachments/content",
+      "mode": "validate"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/things/export"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/attachments/content",
+      "mode": "validate"
+    },
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/things"
+    },
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    }
+  ]
+}

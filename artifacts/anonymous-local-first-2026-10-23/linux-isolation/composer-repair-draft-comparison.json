@@ -1,0 +1,35 @@
+{
+  "allIdentical": false,
+  "files": [
+    {
+      "path": "assets/aiTasks.worker-CKRd9k1s.js",
+      "acceptedPackageSha256": "7ca6c1c3055654c3ecd281fa0b48d1e33f2449f0270ce5e8fad5dfe966b4f4cf",
+      "repairedPackageSha256": "7ca6c1c3055654c3ecd281fa0b48d1e33f2449f0270ce5e8fad5dfe966b4f4cf",
+      "identical": true
+    },
+    {
+      "path": "assets/mediaWorker-BoV8L5k2.js",
+      "acceptedPackageSha256": "9c4448829742559a3e4e632145eb0ccb465883f2f58a2c6694d46678ef21df06",
+      "repairedPackageSha256": "9c4448829742559a3e4e632145eb0ccb465883f2f58a2c6694d46678ef21df06",
+      "identical": true
+    },
+    {
+      "path": "index.html",
+      "acceptedPackageSha256": "087b1ba2bdba43d15e849e113e57fc7c9b2d005ad782e2b5e84ed74d39b103c4",
+      "repairedPackageSha256": "087b1ba2bdba43d15e849e113e57fc7c9b2d005ad782e2b5e84ed74d39b103c4",
+      "identical": true
+    },
+    {
+      "path": "policy.json",
+      "acceptedPackageSha256": "f839d46fc28a6fd860349372583daa3830d4c63dbf9776cc7855390b94eee10f",
+      "repairedPackageSha256": "f839d46fc28a6fd860349372583daa3830d4c63dbf9776cc7855390b94eee10f",
+      "identical": true
+    },
+    {
+      "path": "runner.js",
+      "acceptedPackageSha256": "648839bd2759f73b66680e048f373005a724db5f37789a70f80694899da95bfa",
+      "repairedPackageSha256": "00635b15bdd7373ef513eb6064808d14b69b655c8d991aeb2ae45f95fbc45e63",
+      "identical": false
+    }
+  ]
+}

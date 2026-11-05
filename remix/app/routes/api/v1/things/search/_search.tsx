@@ -96,6 +96,7 @@ export const loader = async ({ request }: { request: Request }) => {
     request,
     actor,
     {
+      scope: params.get('scope') ?? undefined,
       q: params.get('q') || undefined,
       thingtime: params.get('thingtime') || undefined,
       tags: params.get('tags') || undefined,
@@ -131,6 +132,7 @@ export const action = async ({ request }: { request: Request }) => {
   if (actor instanceof Response) return actor;
   const body = await readJsonBodyWithCors(request, MAX_BODY_BYTES, actorCors(actor));
   return respond(request, actor, {
+    scope: body?.scope,
     q: body?.q,
     near: body?.near,
     radiusKm: body?.radiusKm,

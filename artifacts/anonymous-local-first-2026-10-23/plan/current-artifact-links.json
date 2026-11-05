@@ -1,0 +1,7 @@
+{
+  "ok": true,
+  "sourceSha256": "1fbd615f3318a51cad0af831c1b3ae8fae7f8b6297aabcdb3036d36e3b46d232",
+  "checkedCurrentArtifactLinks": 24,
+  "missing": [],
+  "scope": "Filesystem existence only for current ../../artifacts/ links; historical tmp and external URLs are explicitly outside this check."
+}

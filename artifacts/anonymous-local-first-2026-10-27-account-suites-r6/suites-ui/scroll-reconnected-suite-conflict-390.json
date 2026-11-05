@@ -1,0 +1,152 @@
+{
+  "label": "reconnected-suite-conflict",
+  "width": 390,
+  "attempt": 0,
+  "ready": {
+    "stable": true,
+    "observations": [
+      {
+        "height": 5166,
+        "reviewPanes": 3,
+        "componentReady": true,
+        "notFound": false
+      },
+      {
+        "height": 5167,
+        "reviewPanes": 3,
+        "componentReady": true,
+        "notFound": false
+      }
+    ]
+  },
+  "skippedHidden": 3,
+  "roots": [
+    {
+      "marker": "0",
+      "tag": "HTML",
+      "reviewPane": false,
+      "kind": "page",
+      "clientHeight": 844,
+      "scrollHeight": 5167,
+      "maxScroll": 4323,
+      "rect": {
+        "width": 390,
+        "height": 5166.578125
+      },
+      "points": [
+        0,
+        617.5714285714286,
+        1235.142857142857,
+        1852.7142857142858,
+        2470.285714285714,
+        3087.8571428571427,
+        3705.4285714285716,
+        4323
+      ],
+      "observed": [
+        0,
+        618,
+        1235,
+        1853,
+        2470,
+        3088,
+        3705,
+        4323
+      ]
+    },
+    {
+      "marker": "1",
+      "tag": "PRE",
+      "reviewPane": true,
+      "kind": "pane",
+      "clientHeight": 240,
+      "scrollHeight": 3654,
+      "maxScroll": 3414,
+      "rect": {
+        "width": 324,
+        "height": 240
+      },
+      "points": [
+        0,
+        1707,
+        3414
+      ],
+      "observed": [
+        0,
+        1707,
+        3414
+      ]
+    },
+    {
+      "marker": "2",
+      "tag": "PRE",
+      "reviewPane": true,
+      "kind": "pane",
+      "clientHeight": 240,
+      "scrollHeight": 3618,
+      "maxScroll": 3378,
+      "rect": {
+        "width": 324,
+        "height": 240
+      },
+      "points": [
+        0,
+        1689,
+        3378
+      ],
+      "observed": [
+        0,
+        1689,
+        3378
+      ]
+    },
+    {
+      "marker": "3",
+      "tag": "PRE",
+      "reviewPane": true,
+      "kind": "pane",
+      "clientHeight": 240,
+      "scrollHeight": 3582,
+      "maxScroll": 3342,
+      "rect": {
+        "width": 324,
+        "height": 240
+      },
+      "points": [
+        0,
+        1671,
+        3342
+      ],
+      "observed": [
+        0,
+        1671,
+        3342
+      ]
+    },
+    {
+      "marker": "4",
+      "tag": "PRE",
+      "reviewPane": false,
+      "kind": "pane",
+      "clientHeight": 418,
+      "scrollHeight": 3060,
+      "maxScroll": 2642,
+      "rect": {
+        "width": 358,
+        "height": 420
+      },
+      "points": [
+        0,
+        1321,
+        2642
+      ],
+      "observed": [
+        0,
+        1321,
+        2642
+      ]
+    }
+  ],
+  "phase": "complete",
+  "completedRoots": 5
+}

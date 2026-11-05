@@ -1,0 +1,1965 @@
+{
+  "runId": "b4941304-b988-41da-a788-bcaf8a99a3ad",
+  "heapLimitMiB": 256,
+  "guestRefusals": 3,
+  "foreignRefusals": 3,
+  "publicRead": true,
+  "inheritedPublicAcl": true,
+  "privateRoot": true,
+  "recovery": [
+    {
+      "width": 1440,
+      "notice": {
+        "x": 240,
+        "y": 74,
+        "width": 542.53125,
+        "height": 24
+      },
+      "failedRetry": true,
+      "realRecovery": true,
+      "recoveryMethod": "background refresh"
+    },
+    {
+      "width": 390,
+      "notice": {
+        "x": 16,
+        "y": 70,
+        "width": 358,
+        "height": 48
+      },
+      "failedRetry": true,
+      "realRecovery": true,
+      "recoveryMethod": "retry"
+    },
+    {
+      "width": 320,
+      "notice": {
+        "x": 16,
+        "y": 70,
+        "width": 288,
+        "height": 48
+      },
+      "failedRetry": true,
+      "realRecovery": true,
+      "recoveryMethod": "retry"
+    }
+  ],
+  "composerClearance": [
+    {
+      "width": 1440,
+      "button": {
+        "x": 991,
+        "y": 663,
+        "width": 32,
+        "height": 32
+      },
+      "visible": true,
+      "intersects": false,
+      "composerIntersects": false,
+      "reachable": true
+    },
+    {
+      "width": 390,
+      "button": {
+        "x": 325,
+        "y": 659.5,
+        "width": 32,
+        "height": 32
+      },
+      "visible": false,
+      "intersects": false,
+      "composerIntersects": true,
+      "reachable": true
+    },
+    {
+      "width": 320,
+      "button": {
+        "x": 255,
+        "y": 698.5,
+        "width": 32,
+        "height": 32
+      },
+      "visible": false,
+      "intersects": true,
+      "composerIntersects": true,
+      "reachable": true
+    }
+  ],
+  "genericAudiences": [
+    {
+      "width": 1440,
+      "label": "parent",
+      "description": "🔒 private subspace members only"
+    },
+    {
+      "width": 1440,
+      "label": "comment",
+      "description": "↳ follows the parent’s audience"
+    },
+    {
+      "width": 1440,
+      "label": "public",
+      "description": "🌐 anyone can see this thing"
+    },
+    {
+      "width": 390,
+      "label": "parent",
+      "description": "🔒 private subspace members only"
+    },
+    {
+      "width": 390,
+      "label": "comment",
+      "description": "↳ follows the parent’s audience"
+    },
+    {
+      "width": 390,
+      "label": "public",
+      "description": "🌐 anyone can see this thing"
+    },
+    {
+      "width": 320,
+      "label": "parent",
+      "description": "🔒 private subspace members only"
+    },
+    {
+      "width": 320,
+      "label": "comment",
+      "description": "↳ follows the parent’s audience"
+    },
+    {
+      "width": 320,
+      "label": "public",
+      "description": "🌐 anyone can see this thing"
+    }
+  ],
+  "deviceFeed": [
+    {
+      "width": 1440,
+      "scrollWidth": 1440,
+      "coldOffline": true,
+      "collapsedComposer": {
+        "launcherVisible": true,
+        "intersects": false,
+        "reachable": true
+      },
+      "coverage": "Showing posts created or retained in this device workspace. This is a partial view; community updates and current access changes need a connection."
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "coldOffline": true,
+      "collapsedComposer": {
+        "launcherVisible": true,
+        "intersects": false,
+        "reachable": true
+      },
+      "coverage": "Showing posts created or retained in this device workspace. This is a partial view; community updates and current access changes need a connection."
+    },
+    {
+      "width": 320,
+      "scrollWidth": 320,
+      "coldOffline": true,
+      "collapsedComposer": {
+        "launcherVisible": false,
+        "intersects": true,
+        "reachable": true
+      },
+      "coverage": "Showing posts created or retained in this device workspace. This is a partial view; community updates and current access changes need a connection."
+    }
+  ],
+  "bounds": [
+    {
+      "label": "parent",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "comment",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "nested",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "public",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "parent",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "comment",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "nested",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "public",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "parent",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "comment",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "nested",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "public",
+      "width": 320,
+      "scrollWidth": 320
+    }
+  ],
+  "navigation": [
+    {
+      "repetition": 1,
+      "label": "parent",
+      "width": 1440,
+      "url": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17",
+      "startedAt": 1792742101352,
+      "memoryBefore": {
+        "cgroupBytes": 14776524800,
+        "events": "low 0\nhigh 0\nmax 23683\noom 0\noom_kill 0\noom_group_kill 0\n",
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:    8924984 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "    391     310 581164 chromium",
+          "    100       2 366740 MainThread",
+          "    276     270 296932 MainThread",
+          "     14       2 230808 mongod",
+          "    299     276 196516 chromium",
+          "    377     310 83072 chromium",
+          "    414     310 81376 chromium",
+          "    341     299 81056 chromium",
+          "    424     310 70972 chromium",
+          "    331     307 70424 chromium",
+          "      2       1 69260 MainThread",
+          "    307     299 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 6
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 3435
+          },
+          {
+            "name": "Nodes",
+            "value": 5131
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 161206192
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 227065856
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792742105183
+    },
+    {
+      "repetition": 1,
+      "label": "comment",
+      "width": 1440,
+      "url": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897",
+      "startedAt": 1792742105183,
+      "memoryBefore": {
+        "cgroupBytes": 14869975040,
+        "events": "low 0\nhigh 0\nmax 23683\noom 0\noom_kill 0\noom_group_kill 0\n",
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:    8757896 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "    391     310 659460 chromium",
+          "    100       2 371804 MainThread",
+          "    276     270 291920 MainThread",
+          "     14       2 231132 mongod",
+          "    299     276 193632 chromium",
+          "    331     307 84540 chromium",
+          "    377     310 83168 chromium",
+          "    414     310 81376 chromium",
+          "    341     299 81060 chromium",
+          "    424     310 70972 chromium",
+          "      2       1 69260 MainThread",
+          "    307     299 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 8
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 6265
+          },
+          {
+            "name": "Nodes",
+            "value": 6299
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 195932812
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 260521984
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792742108804
+    },
+    {
+      "repetition": 1,
+      "label": "nested",
+      "width": 1440,
+      "url": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14",
+      "startedAt": 1792742108804,
+      "memoryBefore": {
+        "cgroupBytes": 14858096640,
+        "events": "low 0\nhigh 0\nmax 23683\noom 0\noom_kill 0\noom_group_kill 0\n",
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:    8645660 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "    391     310 746028 chromium",
+          "    100       2 400288 MainThread",
+          "    276     270 293728 MainThread",
+          "     14       2 231204 mongod",
+          "    299     276 194064 chromium",
+          "    377     310 83296 chromium",
+          "    331     307 83288 chromium",
+          "    414     310 81376 chromium",
+          "    341     299 81076 chromium",
+          "    424     310 70972 chromium",
+          "      2       1 69260 MainThread",
+          "    307     299 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 10
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 9051
+          },
+          {
+            "name": "Nodes",
+            "value": 7210
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 239028356
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 291651584
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792742113041
+    },
+    {
+      "repetition": 1,
+      "label": "public",
+      "width": 1440,
+      "url": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019",
+      "startedAt": 1792742113041,
+      "memoryBefore": {
+        "cgroupBytes": 14796271616,
+        "events": "low 0\nhigh 0\nmax 23683\noom 0\noom_kill 0\noom_group_kill 0\n",
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:    8818188 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "    391     310 650476 chromium",
+          "    100       2 424500 MainThread",
+          "    276     270 299108 MainThread",
+          "     14       2 231276 mongod",
+          "    299     276 195336 chromium",
+          "    377     310 83292 chromium",
+          "    414     310 81376 chromium",
+          "    341     299 80404 chromium",
+          "    331     307 79184 chromium",
+          "    424     310 70972 chromium",
+          "      2       1 69260 MainThread",
+          "    307     299 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 1
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 3098
+          },
+          {
+            "name": "Nodes",
+            "value": 866
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 80091856
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 170766336
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792742116500
+    },
+    {
+      "repetition": 1,
+      "label": "parent",
+      "width": 390,
+      "url": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17",
+      "startedAt": 1792742116566,
+      "memoryBefore": {
+        "cgroupBytes": 14910730240,
+        "events": "low 0\nhigh 0\nmax 23683\noom 0\noom_kill 0\noom_group_kill 0\n",
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:    8664044 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "    391     310 665280 chromium",
+          "    100       2 428392 MainThread",
+          "    276     270 300504 MainThread",
+          "     14       2 231360 mongod",
+          "    299     276 196976 chromium",
+          "    377     310 83476 chromium",
+          "    414     310 81276 chromium",
+          "    341     299 80680 chromium",
+          "    331     307 77444 chromium",
+          "    424     310 70976 chromium",
+          "      2       1 69260 MainThread",
+          "    307     299 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 3
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 5401
+          },
+          {
+            "name": "Nodes",
+            "value": 1741
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 116084192
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 176222208
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792742120311
+    },
+    {
+      "repetition": 1,
+      "label": "comment",
+      "width": 390,
+      "url": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897",
+      "startedAt": 1792742120312,
+      "memoryBefore": {
+        "cgroupBytes": 14860705792,
+        "events": "low 0\nhigh 0\nmax 23683\noom 0\noom_kill 0\noom_group_kill 0\n",
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:    8772924 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "    391     310 616552 chromium",
+          "    100       2 431604 MainThread",
+          "    276     270 301876 MainThread",
+          "     14       2 231388 mongod",
+          "    299     276 200116 chromium",
+          "    377     310 83584 chromium",
+          "    414     310 81276 chromium",
+          "    341     299 80372 chromium",
+          "    424     310 70756 chromium",
+          "      2       1 69260 MainThread",
+          "    331     307 57160 chromium",
+          "    307     299 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 1
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 2535
+          },
+          {
+            "name": "Nodes",
+            "value": 924
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 74712708
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 158998528
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792742124385
+    },
+    {
+      "repetition": 1,
+      "label": "nested",
+      "width": 390,
+      "url": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14",
+      "startedAt": 1792742124385,
+      "memoryBefore": {
+        "cgroupBytes": 13762449408,
+        "events": "low 0\nhigh 0\nmax 23683\noom 0\noom_kill 0\noom_group_kill 0\n",
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:    9813952 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "    391     310 551648 chromium",
+          "    100       2 435988 MainThread",
+          "    276     270 314140 MainThread",
+          "     14       2 231492 mongod",
+          "    299     276 188968 chromium",
+          "    377     310 82108 chromium",
+          "    414     310 81232 chromium",
+          "    341     299 80388 chromium",
+          "    424     310 70756 chromium",
+          "      2       1 69260 MainThread",
+          "    331     307 56676 chromium",
+          "    307     299 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 3
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 4824
+          },
+          {
+            "name": "Nodes",
+            "value": 1840
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 116556732
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 164454400
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792742128235
+    },
+    {
+      "repetition": 1,
+      "label": "public",
+      "width": 390,
+      "url": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019",
+      "startedAt": 1792742128235,
+      "memoryBefore": {
+        "cgroupBytes": 13758881792,
+        "events": "low 0\nhigh 0\nmax 23683\noom 0\noom_kill 0\noom_group_kill 0\n",
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:    9941272 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "    391     310 495872 chromium",
+          "    100       2 440644 MainThread",
+          "    276     270 315568 MainThread",
+          "     14       2 231536 mongod",
+          "    299     276 190164 chromium",
+          "    377     310 82300 chromium",
+          "    341     299 80420 chromium",
+          "    414     310 79324 chromium",
+          "    424     310 70756 chromium",
+          "      2       1 69260 MainThread",
+          "    331     307 56568 chromium",
+          "    307     299 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 1
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 2289
+          },
+          {
+            "name": "Nodes",
+            "value": 867
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 82428748
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 168341504
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792742133093
+    },
+    {
+      "repetition": 1,
+      "label": "parent",
+      "width": 320,
+      "url": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17",
+      "startedAt": 1792742133132,
+      "memoryBefore": {
+        "cgroupBytes": 13912592384,
+        "events": "low 0\nhigh 0\nmax 23683\noom 0\noom_kill 0\noom_group_kill 0\n",
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:    9692108 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "    391     310 531352 chromium",
+          "    100       2 444868 MainThread",
+          "    276     270 320428 MainThread",
+          "     14       2 231604 mongod",
+          "    299     276 191848 chromium",
+          "    377     310 82460 chromium",
+          "    341     299 80384 chromium",
+          "    414     310 79324 chromium",
+          "    424     310 70756 chromium",
+          "      2       1 69260 MainThread",
+          "    331     307 54772 chromium",
+          "    307     299 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 3
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 4821
+          },
+          {
+            "name": "Nodes",
+            "value": 1732
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 107324692
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 182149120
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792742136436
+    },
+    {
+      "repetition": 1,
+      "label": "comment",
+      "width": 320,
+      "url": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897",
+      "startedAt": 1792742136436,
+      "memoryBefore": {
+        "cgroupBytes": 13984030720,
+        "events": "low 0\nhigh 0\nmax 23683\noom 0\noom_kill 0\noom_group_kill 0\n",
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:    9560876 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "    391     310 502936 chromium",
+          "    100       2 445200 MainThread",
+          "    276     270 321884 MainThread",
+          "     14       2 231848 mongod",
+          "    299     276 193852 chromium",
+          "    377     310 82612 chromium",
+          "    341     299 80600 chromium",
+          "    414     310 79324 chromium",
+          "    424     310 70756 chromium",
+          "      2       1 69260 MainThread",
+          "    331     307 54440 chromium",
+          "    307     299 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 1
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 2398
+          },
+          {
+            "name": "Nodes",
+            "value": 921
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 81060176
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 176209920
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792742140311
+    },
+    {
+      "repetition": 1,
+      "label": "nested",
+      "width": 320,
+      "url": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14",
+      "startedAt": 1792742140311,
+      "memoryBefore": {
+        "cgroupBytes": 14003834880,
+        "events": "low 0\nhigh 0\nmax 23683\noom 0\noom_kill 0\noom_group_kill 0\n",
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:    9659968 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "    391     310 531296 chromium",
+          "    100       2 449260 MainThread",
+          "    276     270 323776 MainThread",
+          "     14       2 231944 mongod",
+          "    299     276 191260 chromium",
+          "    377     310 82692 chromium",
+          "    341     299 80400 chromium",
+          "    414     310 79324 chromium",
+          "    424     310 70756 chromium",
+          "      2       1 69260 MainThread",
+          "    331     307 54232 chromium",
+          "    307     299 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 3
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 5137
+          },
+          {
+            "name": "Nodes",
+            "value": 1837
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 105315696
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 184512512
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792742143953
+    },
+    {
+      "repetition": 1,
+      "label": "public",
+      "width": 320,
+      "url": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019",
+      "startedAt": 1792742143953,
+      "memoryBefore": {
+        "cgroupBytes": 13987840000,
+        "events": "low 0\nhigh 0\nmax 23683\noom 0\noom_kill 0\noom_group_kill 0\n",
+        "available": [
+          "MemTotal:       18440112 kB",
+          "MemAvailable:    9686392 kB"
+        ],
+        "processes": [
+          "    PID    PPID   RSS COMMAND",
+          "    391     310 575388 chromium",
+          "    100       2 453432 MainThread",
+          "    276     270 334124 MainThread",
+          "     14       2 232112 mongod",
+          "    299     276 190728 chromium",
+          "    377     310 82796 chromium",
+          "    341     299 80596 chromium",
+          "    414     310 79324 chromium",
+          "    424     310 70756 chromium",
+          "      2       1 69260 MainThread",
+          "    331     307 54448 chromium",
+          "    307     299 50476 chromium"
+        ],
+        "renderer": [
+          {
+            "name": "Documents",
+            "value": 5
+          },
+          {
+            "name": "JSEventListeners",
+            "value": 7482
+          },
+          {
+            "name": "Nodes",
+            "value": 2714
+          },
+          {
+            "name": "JSHeapUsedSize",
+            "value": 149311556
+          },
+          {
+            "name": "JSHeapTotalSize",
+            "value": 194310144
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "url": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019",
+        "fromServiceWorker": true
+      },
+      "alerts": [],
+      "finishedAt": 1792742146906
+    }
+  ],
+  "finalMemory": {
+    "cgroupBytes": 13444517888,
+    "events": "low 0\nhigh 0\nmax 23683\noom 0\noom_kill 0\noom_group_kill 0\n",
+    "available": [
+      "MemTotal:       18440112 kB",
+      "MemAvailable:   10239768 kB"
+    ],
+    "processes": [
+      "    PID    PPID   RSS COMMAND",
+      "    391     310 585712 chromium",
+      "    100       2 461788 MainThread",
+      "    276     270 346200 MainThread",
+      "     14       2 240688 mongod",
+      "    299     276 192584 chromium",
+      "    377     310 83484 chromium",
+      "    341     299 80312 chromium",
+      "    414     310 79092 chromium",
+      "    424     310 70592 chromium",
+      "      2       1 69260 MainThread",
+      "    331     307 58196 chromium",
+      "    307     299 50476 chromium"
+    ],
+    "renderer": [
+      {
+        "name": "Documents",
+        "value": 5
+      },
+      {
+        "name": "JSEventListeners",
+        "value": 4316
+      },
+      {
+        "name": "Nodes",
+        "value": 3605
+      },
+      {
+        "name": "JSHeapUsedSize",
+        "value": 155422624
+      },
+      {
+        "name": "JSHeapTotalSize",
+        "value": 202534912
+      }
+    ]
+  },
+  "events": [
+    {
+      "at": 1792742054319,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/.well-known/thingtime-capabilities.json"
+    },
+    {
+      "at": 1792742054395,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/.well-known/thingtime-capabilities.json"
+    },
+    {
+      "at": 1792742054398,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/.well-known/thingtime-capabilities.json"
+    },
+    {
+      "at": 1792742056872,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742059211,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742059219,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742059219,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742060945,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742061118,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742061624,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742061669,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742061687,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742061689,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742061690,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742061694,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742061694,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742061696,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742061697,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742061705,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742062922,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742062932,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742063849,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742063855,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742066389,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742067857,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742067858,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742068922,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742068926,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742069088,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742069088,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742069093,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742069093,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742069153,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742069153,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742069156,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742069157,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742069169,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742069172,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742070047,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742070050,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742070634,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742071549,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742071552,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742072810,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742072812,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742072932,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742072935,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742072936,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742072936,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742072964,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742072970,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742072970,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742072983,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742073046,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742073061,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742074302,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742074309,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792742075131,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742076174,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742076174,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742076174,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742077612,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792742078391,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742079792,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742079795,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742079796,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742081805,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792742082640,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742083900,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742083900,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742083900,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742085952,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792742086266,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742087291,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742087293,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742087294,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742088074,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792742088364,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742089556,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742089557,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742089560,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742090803,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792742091280,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742092259,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742092260,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742092260,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742093144,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792742093454,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742094509,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742094513,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742094514,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742095341,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792742095928,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742096925,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742096926,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742096932,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742098259,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792742098618,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742099666,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/thing/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742099669,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/thing/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742099674,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/thing/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742100736,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 404
+      }
+    },
+    {
+      "at": 1792742101637,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742102854,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742102855,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742102860,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742105291,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742106352,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742106352,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742106352,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742108954,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14"
+    },
+    {
+      "at": 1792742110132,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14"
+    },
+    {
+      "at": 1792742110134,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14"
+    },
+    {
+      "at": 1792742110134,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14"
+    },
+    {
+      "at": 1792742113275,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742114534,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742114534,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742114534,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742116748,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742118031,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742118031,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742118031,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742120576,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742121858,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742121858,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742121858,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742124605,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14"
+    },
+    {
+      "at": 1792742126531,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14"
+    },
+    {
+      "at": 1792742126532,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14"
+    },
+    {
+      "at": 1792742126532,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14"
+    },
+    {
+      "at": 1792742128372,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742130352,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742130352,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742130352,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742133239,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742134643,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742134644,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742134644,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/aee1454e-0a56-4d81-b73a-a5fb9a439a17"
+    },
+    {
+      "at": 1792742136593,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742137841,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742137846,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742137846,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/c170aa3b-ec21-4a1c-82f8-503b7b1d2897"
+    },
+    {
+      "at": 1792742140564,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14"
+    },
+    {
+      "at": 1792742141477,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14"
+    },
+    {
+      "at": 1792742141479,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14"
+    },
+    {
+      "at": 1792742141479,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/2e73ed24-eb34-4561-98c0-fa86f0c06c14"
+    },
+    {
+      "at": 1792742144117,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742145227,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742145228,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742145229,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/c17a895e-6a2e-4882-b21c-185d297bf019"
+    },
+    {
+      "at": 1792742146979,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792742148316,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792742148317,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792742148317,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792742150902,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792742152137,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792742152137,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792742157251,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792742158968,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792742158984,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792742161820,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792742163399,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    },
+    {
+      "at": 1792742163399,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/feed?device=1&sort=new"
+    }
+  ],
+  "errors": [],
+  "crashes": []
+}

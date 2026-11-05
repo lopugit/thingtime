@@ -1,0 +1,251 @@
+{
+  "formatVersion": 1,
+  "exportedAt": "2026-10-23T07:14:41.358Z",
+  "event": {
+    "actorId": "local-workspace",
+    "after": {
+      "adapter": "theme-content",
+      "value": {
+        "crystal": {
+          "name": "History design ff18bd",
+          "theme": {
+            "colors": {
+              "accent": "#aa6644",
+              "accentContrast": "#ffffff",
+              "accentTint": "#fff5fa",
+              "border": "#ececef",
+              "borderLight": "#f0f0f2",
+              "card": "#ffffff",
+              "danger": "#d6455a",
+              "darkAccent": "#59ff9c",
+              "darkBg": "#131318",
+              "darkBorder": "#2a2a33",
+              "darkChrome": "#1c1c22",
+              "darkMuted": "#8a8a95",
+              "darkText": "#e6e6ee",
+              "faint": "#b6b6c0",
+              "ink": "#16161a",
+              "link": "#2f8fd6",
+              "muted": "#9a9aa6",
+              "pageBg": "#ffffff",
+              "positive": "#2f8f4f",
+              "positiveSoft": "rgba(88, 202, 112, 0.14)",
+              "rainbow": [
+                "#f34a4a",
+                "#ffbc48",
+                "#58ca70",
+                "#47b5e6",
+                "#a555e8"
+              ],
+              "surface": "#fafafb",
+              "surfaceAlt": "#f5f5f7",
+              "surfaceHover": "#ececee",
+              "text": "#5a5a66",
+              "warning": "#ffbc48"
+            },
+            "fonts": {
+              "body": "Hanken Grotesk",
+              "display": "",
+              "heading": "Space Grotesk",
+              "mono": "JetBrains Mono"
+            },
+            "general": {
+              "animSpeed": 200,
+              "borderWidth": 1,
+              "iconStyle": "emoji",
+              "motion": true,
+              "radiusScale": 1,
+              "shadow": "soft",
+              "thingsBadgeCustomPadding": "3px 8px",
+              "thingsBadgePadding": "small"
+            },
+            "name": "History design ff18bd",
+            "windows": {
+              "closeColor": "",
+              "closeRadius": 3.5,
+              "maximiseColor": "",
+              "maximiseRadius": 3.5,
+              "minimiseColor": "",
+              "minimiseRadius": 3.5
+            }
+          }
+        },
+        "folderId": null,
+        "tags": [],
+        "visibility": "private"
+      },
+      "version": 1
+    },
+    "before": {
+      "adapter": "theme-content",
+      "value": {
+        "crystal": {
+          "name": "History design ff18bd",
+          "theme": {
+            "colors": {
+              "accent": "#885544",
+              "accentContrast": "#ffffff",
+              "accentTint": "#fff5fa",
+              "border": "#ececef",
+              "borderLight": "#f0f0f2",
+              "card": "#ffffff",
+              "danger": "#d6455a",
+              "darkAccent": "#59ff9c",
+              "darkBg": "#131318",
+              "darkBorder": "#2a2a33",
+              "darkChrome": "#1c1c22",
+              "darkMuted": "#8a8a95",
+              "darkText": "#e6e6ee",
+              "faint": "#b6b6c0",
+              "ink": "#16161a",
+              "link": "#2f8fd6",
+              "muted": "#9a9aa6",
+              "pageBg": "#ffffff",
+              "positive": "#2f8f4f",
+              "positiveSoft": "rgba(88, 202, 112, 0.14)",
+              "rainbow": [
+                "#f34a4a",
+                "#ffbc48",
+                "#58ca70",
+                "#47b5e6",
+                "#a555e8"
+              ],
+              "surface": "#fafafb",
+              "surfaceAlt": "#f5f5f7",
+              "surfaceHover": "#ececee",
+              "text": "#5a5a66",
+              "warning": "#ffbc48"
+            },
+            "fonts": {
+              "body": "Hanken Grotesk",
+              "display": "",
+              "heading": "Space Grotesk",
+              "mono": "JetBrains Mono"
+            },
+            "general": {
+              "animSpeed": 200,
+              "borderWidth": 1,
+              "iconStyle": "emoji",
+              "motion": true,
+              "radiusScale": 1,
+              "shadow": "soft",
+              "thingsBadgeCustomPadding": "3px 8px",
+              "thingsBadgePadding": "small"
+            },
+            "name": "History design ff18bd",
+            "windows": {
+              "closeColor": "",
+              "closeRadius": 3.5,
+              "maximiseColor": "",
+              "maximiseRadius": 3.5,
+              "minimiseColor": "",
+              "minimiseRadius": 3.5
+            }
+          }
+        },
+        "folderId": null,
+        "tags": [],
+        "visibility": "private"
+      },
+      "version": 1
+    },
+    "branchId": "main",
+    "clientId": "local-workspace",
+    "dependencies": [],
+    "formatVersion": 1,
+    "id": "local-event-273d83d5-b805-40ad-8020-0a85e9fe05fc",
+    "label": "Edited Thing",
+    "mode": "revision",
+    "occurredAt": "2026-10-23T07:14:18.877Z",
+    "operation": "update",
+    "operationId": "435cebeb-f80b-4b16-ba28-ba2207b4aeb7",
+    "ownerId": "local-workspace",
+    "parentIds": [
+      "local-event-2e5bdd55-f674-4834-ac06-44ff6469d558"
+    ],
+    "source": "client",
+    "thingId": "local-45f76066-e4f6-478f-a9a1-002c97ff2a09"
+  },
+  "receipt": {
+    "acceptedAt": "2026-10-23T07:14:18.877Z",
+    "eventId": "local-event-273d83d5-b805-40ad-8020-0a85e9fe05fc",
+    "formatVersion": 1,
+    "ownerId": "local-workspace",
+    "position": 2
+  },
+  "content": {
+    "adapter": "theme-content",
+    "value": {
+      "crystal": {
+        "name": "History design ff18bd",
+        "theme": {
+          "colors": {
+            "accent": "#aa6644",
+            "accentContrast": "#ffffff",
+            "accentTint": "#fff5fa",
+            "border": "#ececef",
+            "borderLight": "#f0f0f2",
+            "card": "#ffffff",
+            "danger": "#d6455a",
+            "darkAccent": "#59ff9c",
+            "darkBg": "#131318",
+            "darkBorder": "#2a2a33",
+            "darkChrome": "#1c1c22",
+            "darkMuted": "#8a8a95",
+            "darkText": "#e6e6ee",
+            "faint": "#b6b6c0",
+            "ink": "#16161a",
+            "link": "#2f8fd6",
+            "muted": "#9a9aa6",
+            "pageBg": "#ffffff",
+            "positive": "#2f8f4f",
+            "positiveSoft": "rgba(88, 202, 112, 0.14)",
+            "rainbow": [
+              "#f34a4a",
+              "#ffbc48",
+              "#58ca70",
+              "#47b5e6",
+              "#a555e8"
+            ],
+            "surface": "#fafafb",
+            "surfaceAlt": "#f5f5f7",
+            "surfaceHover": "#ececee",
+            "text": "#5a5a66",
+            "warning": "#ffbc48"
+          },
+          "fonts": {
+            "body": "Hanken Grotesk",
+            "display": "",
+            "heading": "Space Grotesk",
+            "mono": "JetBrains Mono"
+          },
+          "general": {
+            "animSpeed": 200,
+            "borderWidth": 1,
+            "iconStyle": "emoji",
+            "motion": true,
+            "radiusScale": 1,
+            "shadow": "soft",
+            "thingsBadgeCustomPadding": "3px 8px",
+            "thingsBadgePadding": "small"
+          },
+          "name": "History design ff18bd",
+          "windows": {
+            "closeColor": "",
+            "closeRadius": 3.5,
+            "maximiseColor": "",
+            "maximiseRadius": 3.5,
+            "minimiseColor": "",
+            "minimiseRadius": 3.5
+          }
+        }
+      },
+      "folderId": null,
+      "tags": [],
+      "visibility": "private"
+    },
+    "version": 1
+  },
+  "notes": [],
+  "name": null
+}

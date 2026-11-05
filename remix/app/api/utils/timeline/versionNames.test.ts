@@ -131,14 +131,19 @@ test('naming a version with its current name is a no-op that writes nothing', as
 	assert.equal(h.events().has(timelineVersionNameEventId(uuid(2))), false, 'a no-op leaves no receipt to replay');
 });
 
-test('only a synced saved version of this account and Thing can be named; nothing is written otherwise', async () => {
+test('only retained content versions of this account and Thing can be named; nothing is written otherwise', async () => {
 	const h = harness();
 	await rejects(h.service('user-1', name(1, { eventId: 'missing' })), 404, /Version not found/);
 	await rejects(h.service('user-1', name(2, { eventId: 'other-thing' })), 404, /Version not found/);
 	await rejects(h.service('other', name(3)), 404, /Version not found/);
-	await rejects(h.service('user-1', name(4, { eventId: 'draft' })), 422, /Only a saved version can be named/);
-	await rejects(h.service('user-1', name(5, { eventId: 'deleted' })), 422, /Only a saved version can be named/);
-	await rejects(h.service('user-1', name(6, { eventId: 'effect' })), 422, /Only a saved version can be named/);
+	await rejects(h.service('user-1', name(5, { eventId: 'deleted' })), 422, /Only a retained content version can be named/);
+	await rejects(h.service('user-1', name(6, { eventId: 'effect' })), 422, /Only a retained content version can be named/);
+ for (const [index, patch] of [{actorId:'other'}, {source:'api' as const,clientId:null}, {clientId:null}].entries()) {
+  const id=`invalid-draft-${index}`;
+  h.events().set(id,entryFixture(eventFixture(id,patch)));
+  await rejects(h.service('user-1',name(30+index,{eventId:id})),422,/Only a retained content version/);
+ }
+
 	assert.equal(h.rows().length, 0); assert.equal(h.appended.length, 0);
 	await assert.rejects(h.service('user-1', { ...name(7), extra: true } as any), /Invalid Timeline version name command/);
 	await assert.rejects(h.service('user-1', name(8, { name: 'x'.repeat(81) })), /Invalid Timeline version name command/);
@@ -171,4 +176,19 @@ test('page name reads are one bounded owner-scoped batch and refuse envelopes th
 		assert.throws(() => versionNameFromDoc({ ...row, ...patch }), /Timeline version name envelope/, JSON.stringify(patch));
 	row.targetId = timelineEventThingId('user-1', 'other-thing');
 	await assert.rejects(readTimelineVersionNames(h.things, 'user-1', ['saved']), /does not match its record/);
+});
+
+
+test('an admitted client draft receives canonical name metadata without becoming a saved revision', async () => {
+ const h = harness(), original = structuredClone(h.events().get('draft'));
+ const command = name(20, {eventId:'draft', name:'Device experiment'});
+ const named = await h.service('user-1',command);
+ assert.equal(named.name?.eventId,'draft'); assert.equal(named.name?.revision,1);
+ assert.deepEqual(h.events().get('draft'),original);
+ assert.equal(original!.event.mode,'draft'); assert.equal(original!.event.source,'client');
+ assert.deepEqual(named.entry?.event.dependencies,[{thingId:command.thingId,eventId:'draft'}]);
+ assert.deepEqual(await h.service('user-1',command),named);
+ assert.deepEqual(await readTimelineVersionNames(h.things,'user-1',['draft']),[named.name]);
+ const cleared = await h.service('user-1',name(21,{eventId:'draft',name:null,expectedRevision:1}));
+ assert.equal(cleared.name,null); assert.deepEqual(h.events().get('draft'),original);
 });

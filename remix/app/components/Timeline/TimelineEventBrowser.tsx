@@ -28,14 +28,15 @@ const icons: Record<string, string> = {
 	folder: '📁',
 	action: '⚡',
 	schema: '📋',
-	theme: '🎨'
+	theme: '🎨',
+	'feed-algorithm': '🧠'
 };
 const titleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
-function SyncPill({ card }: { card: HistoryCard }) {
+function SyncPill({ card, localOnly }: { card: HistoryCard; localOnly: boolean }) {
 	return (
 		<span className={`history-sync ${card.row.status}`}>
 			<i aria-hidden="true" />
-			{card.row.status === 'accepted' ? 'Synced to your account' : 'Saved on this device'}
+			{card.row.status === 'accepted' && !localOnly ? 'Synced to your account' : 'Saved on this device'}
 		</span>
 	);
 }
@@ -112,8 +113,10 @@ export function TimelineEventBrowser({
 	initialThingId,
 	older,
 	hasOlder,
-	ready
+	ready,
+	localOnly = false
 }: {
+	localOnly?: boolean;
 	rows: LocalTimelineRow[];
 	notes: Map<string, HistoryNoteView[]>;
 	names: Map<string, TimelineVersionName>;
@@ -332,7 +335,8 @@ export function TimelineEventBrowser({
 								['folder', 'Folders'],
 								['action', 'Actions'],
 								['schema', 'Schemas'],
-								['theme', 'Themes']
+								['theme', 'Themes'],
+								['feed-algorithm', 'Algorithms']
 							]
 						],
 						[
@@ -362,8 +366,8 @@ export function TimelineEventBrowser({
 							'sync',
 							'Saved',
 							[
-								['pending', 'On this device'],
-								['accepted', 'Synced to account']
+								['pending', localOnly ? 'Pending device save' : 'On this device'],
+								['accepted', localOnly ? 'Saved on this device' : 'Synced to account']
 							]
 						]
 					] as const
@@ -454,7 +458,7 @@ export function TimelineEventBrowser({
 									<SnapshotCard card={card} />
 									<ChangeChips card={card} />
 									{filters.messages ? <HistoryMessages card={card} /> : null}
-									<SyncPill card={card} />
+									<SyncPill card={card} localOnly={localOnly} />
 								</span>
 							</button>
 						</React.Fragment>
@@ -548,7 +552,7 @@ export function TimelineEventBrowser({
 												{filters.look !== 'line' ? <ChangeChips card={card} /> : null}
 												{filters.look !== 'line' && filters.messages ? <HistoryMessages card={card} compact /> : null}
 												<span className="history-caption">{card.source}</span>
-												<SyncPill card={card} />
+												<SyncPill card={card} localOnly={localOnly} />
 											</span>
 										</button>
 									))}

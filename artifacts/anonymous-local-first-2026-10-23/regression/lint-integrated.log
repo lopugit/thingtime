@@ -1,0 +1,34 @@
+Changed Remix app source and tests: 102 files
+
+> @1.0.0 lint:files /workspace/thingtime/remix
+> node scripts/ensure-dependencies.js --tool=eslint && eslint -- app/api/utils/attachments/attachmentResponses.ts app/api/utils/attachments/attachmentStore.ts app/api/utils/attachments/attachments.test.ts app/api/utils/attachments/attachments.ts app/api/utils/attachments/linkedAttachmentRequest.test.ts app/api/utils/capabilities/requireCapability.client.test.ts app/api/utils/capabilities/thingtimeCapabilities.test.ts app/api/utils/timeline/exportVersion.test.ts app/api/utils/timeline/exportVersion.ts app/components/Attachments/useAttachmentUploads.ts app/components/Feed/Feed.tsx app/components/Feed/PostCard.tsx app/components/Feed/PostComposer.tsx app/components/Lopu/LopuHost.tsx app/components/Lopu/useLopuLauncherClearance.ts app/components/Sharing/inheritedAudience.browser.test.ts app/components/ThemeSettings/ThemeStudio.tsx app/components/Things/ThingImportDialog.tsx app/components/Things/ThingTransferControls.tsx app/components/Timeline/TimelineEventBrowser.tsx app/components/Timeline/TimelineHost.tsx app/components/Timeline/TimelineVersionActions.tsx app/docs/apiCapabilities.test.ts app/docs/apiDocs.ts app/hooks/useApi.tsx app/local-workspace/AccountThemeSyncStatus.tsx app/local-workspace/accountActions.test.ts app/local-workspace/accountAlgorithms.ts app/local-workspace/accountApi.client.ts app/local-workspace/accountBoundRetention.test.ts app/local-workspace/accountCopy.test.ts app/local-workspace/accountDraftSync.browser.test.ts app/local-workspace/accountExport.ts app/local-workspace/accountFileCopy.browser.test.ts app/local-workspace/accountFileMetadata.ts app/local-workspace/accountFiles.ts app/local-workspace/accountImport.ts app/local-workspace/accountLinkedAttachments.test.ts app/local-workspace/accountLopuInstructions.browser.test.ts app/local-workspace/accountPosts.test.ts app/local-workspace/accountPosts.ts app/local-workspace/accountReconnect.test.ts app/local-workspace/accountSync.test.ts app/local-workspace/accountSync.ts app/local-workspace/accountThemeHistoryScope.test.ts app/local-workspace/accountThemeImport.browser.test.ts app/local-workspace/accountThemeOrganization.browser.test.ts app/local-workspace/accountThemePublicRead.test.ts app/local-workspace/accountThemes.ts app/local-workspace/accountTimeline.ts app/local-workspace/accountTimelineVersions.ts app/local-workspace/accountTransport.client.ts app/local-workspace/actionRequests.test.ts app/local-workspace/actionRequests.ts app/local-workspace/actions.ts app/local-workspace/algorithmHistory.browser.test.ts app/local-workspace/algorithmHistory.test.ts app/local-workspace/algorithmVersions.ts app/local-workspace/algorithms.ts app/local-workspace/api.client.test.ts app/local-workspace/api.client.ts app/local-workspace/attachments.ts app/local-workspace/drafts.ts app/local-workspace/editableBlocks.browser.test.ts app/local-workspace/editorTree.test.ts app/local-workspace/editorTree.ts app/local-workspace/feed.test.ts app/local-workspace/feed.ts app/local-workspace/feedFacade.test.ts app/local-workspace/linkedApi.test.ts app/local-workspace/linkedAttachments.test.ts app/local-workspace/linkedDrafts.test.ts app/local-workspace/linkedGallery.browser.test.ts app/local-workspace/media.client.tsx app/local-workspace/media.test.ts app/local-workspace/media.ts app/local-workspace/posts.ts app/local-workspace/providerVault.test.ts app/local-workspace/providerVault.ts app/local-workspace/storage.ts app/local-workspace/themeVersions.browser.test.ts app/local-workspace/themeVersions.test.ts app/local-workspace/themeVersions.ts app/local-workspace/themes.ts app/local-workspace/things.ts app/local-workspace/threadContext.test.ts app/local-workspace/timeline.ts app/local-workspace/timelineVersions.ts app/local-workspace/transferBatch.browser.test.ts app/mail/accountSettings.browser.test.ts app/routes/api/v1/attachments/attachmentsRoutes.test.ts app/routes/api/v1/attachments/link/_link.tsx app/routes/thing.tsx app/timeline/algorithmContent.ts app/timeline/browserModel.ts app/timeline/exportVersion.ts app/timeline/publishedVersion.ts app/timeline/versionGraph.ts app/timeline/versionPlan.ts app/utils/thingTransfer/collect.ts app/utils/thingTransfer/readFile.test.ts app/utils/thingTransfer/readFile.ts
+
+⚠️ REMIX FUTURE CHANGE: The `@remix-run/eslint-config` package is deprecated and will not be included in React Router v7.  We recommend moving towards a streamlined ESLint config such as the ones included in the Remix templates. See https://github.com/remix-run/remix/blob/v2/templates/remix/.eslintrc.cjs.
+
+/workspace/thingtime/remix/app/hooks/useApi.tsx
+  163:10  warning  React Hook useCallback has a missing dependency: 'getJson'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/workspace/thingtime/remix/app/local-workspace/drafts.ts
+  24:2  warning  Useless constructor  no-useless-constructor
+
+/workspace/thingtime/remix/app/local-workspace/linkedAttachments.test.ts
+  105:31  warning  Script URL is a form of eval  no-script-url
+
+/workspace/thingtime/remix/app/local-workspace/media.test.ts
+  28:21  warning  Script URL is a form of eval  no-script-url
+
+/workspace/thingtime/remix/app/local-workspace/storage.ts
+  68:2  warning  Useless constructor  no-useless-constructor
+
+/workspace/thingtime/remix/app/local-workspace/things.ts
+   73:2   warning  Useless constructor                                                               no-useless-constructor
+  444:44  warning  Function declared in a loop contains unsafe references to variable(s) 'folderId'  no-loop-func
+
+/workspace/thingtime/remix/app/local-workspace/timeline.ts
+  202:2  warning  Useless constructor  no-useless-constructor
+
+/workspace/thingtime/remix/app/local-workspace/timelineVersions.ts
+  98:2  warning  Useless constructor  no-useless-constructor
+
+✖ 9 problems (0 errors, 9 warnings)
+

@@ -1,4 +1,6 @@
 import React from 'react';
+import { LegacyEditorTreeRecovery } from '~/local-workspace/WorkspaceThingtimeProvider';
+import { useThingDraftRecovery } from '~/drafts/ThingDrafts';
 import { Flex } from '@chakra-ui/react';
 import { useLocation, useMatches } from 'react-router';
 
@@ -34,6 +36,8 @@ export const ThingtimeURL = (props) => {
   const mode = React.useMemo(() => {
     return parseThingMode(pathname);
   }, [pathname]);
+
+  useThingDraftRecovery(path, mode !== 'editor');
 
   const inEditorMode = mode === 'editor';
 
@@ -73,6 +77,7 @@ export const ThingtimeURL = (props) => {
       paddingTop={PAGE_TOP_CLEARANCE}
       paddingBottom="48px"
     >
+      <LegacyEditorTreeRecovery />
       <Thingtime
         className="inEditModeThingtime"
         edit={inEditMode}

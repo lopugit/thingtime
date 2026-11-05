@@ -1,0 +1,36 @@
+
+> test:catalogue
+> node --import tsx --test app/catalogue/*.test.ts app/api/utils/catalogue/*.test.ts
+
+✔ both domains stream past old caps, merge sorted legacy IDs and prefer modern duplicates in one pinned snapshot (2787.82325ms)
+✔ empty catalogue completes, authorized custom selection stays home-pinned, duplicate source IDs fail closed (9.263041ms)
+✔ snapshot expiry, session disposal failure, revoked auth and endpoint changes withhold successful completion (1342.18025ms)
+✔ reader backpressure bounds page reads and keeps session alive until the full stream is consumed (824.359791ms)
+✔ slow or cancelled readers release snapshots; an in-flight query is drained before session disposal (30.479208ms)
+✔ a stalled independent auth recheck cannot retain a snapshot session after cancellation or timeout (32.848834ms)
+✔ canonical profile validation remains intact and a valid large algorithm is chunked losslessly (335.554209ms)
+✔ streams beyond former total count/byte ceilings with bounded frames and exact unicode (11904.937375ms)
+✔ empty catalogue is valid, but completion waits for clean EOF (7.165542ms)
+✔ rejects wrong identity/version, malformed/order/digest/count/duplicate/truncated/trailing frames without admission (23.568083ms)
+▶ structural defects reject even when transcript digest and terminal totals are consistent
+  ✔ duplicate IDs (0.575333ms)
+  ✔ out-of-order IDs (0.302791ms)
+  ✔ skipped ordinal (0.22525ms)
+  ✔ skipped chunk (0.366584ms)
+  ✔ ID changes mid-entry (0.226167ms)
+  ✔ unfinished entry (0.916416ms)
+✔ structural defects reject even when transcript digest and terminal totals are consistent (3.479ms)
+✔ sink failures and identity changes cancel and release the stream (0.843208ms)
+✔ abort and stalled reads/sinks release resources (187.314083ms)
+✔ producer preserves backpressure and rejects duplicate IDs (0.927333ms)
+✔ producer stalls abort the source and release its iterator (24.313958ms)
+✔ stalled entry write times out, aborts its signal and closes source without another pull or terminal (23.969417ms)
+✔ late sink completion receives cancellation and cannot admit when fenced (23.608125ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15404.770459

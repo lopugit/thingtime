@@ -1,0 +1,26 @@
+{
+  "checks": [
+    "nested title, button, icon and repeated row edits",
+    "style, reorder, duplicate and delete through Builder controls",
+    "save and cold offline reload",
+    "offline edit and local save without capability fetch",
+    "canonical export includes Component and Action dependencies",
+    "inspector and unobstructed page at all three viewports"
+  ],
+  "viewports": [
+    {
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "width": 320,
+      "overflow": false
+    }
+  ],
+  "accountRequests": [],
+  "errors": []
+}

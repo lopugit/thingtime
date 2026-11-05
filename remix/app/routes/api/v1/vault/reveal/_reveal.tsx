@@ -1,3 +1,5 @@
+import { mongoDataPlane } from '~/api/utils/mongodb/dataPlane';
+import { EXPECTED_DATA_PLANE_HEADER, isDataPlane } from '~/utils/dataPlane';
 import { revealSystemEnvironment } from '~/api/utils/admin/systemEnvironment';
 import { createHash } from 'node:crypto';
 import { json, readJsonBody } from '~/api/http';
@@ -8,10 +10,11 @@ import { resolveTokenUser } from '~/api/utils/auth/getCurrentUser';
 import { confirmCurrentPassword } from '~/api/utils/auth/passwordConfirmation';
 import { deriveWebAuthnParams, finishVaultPasskeyVerification, startVaultPasskeyVerification } from '~/api/utils/auth/passkeys';
 import { revealLopuCredential } from '~/api/utils/ciControl/credentialVault';
-import { revealUserVaultValue } from '~/api/utils/lopu/userVault';
+import { revealUserVaultValue, revealUserVaultValueVersion } from '~/api/utils/lopu/userVault';
 import { enforceFixedRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 const defaults = {
+	mongoDataPlane,
 	getAuthToken,
 	resolveTokenUser,
 	confirmCurrentPassword,
@@ -21,9 +24,10 @@ const defaults = {
 	revealSystemEnvironment,
 	revealLopuCredential,
 	revealUserVaultValue,
+	revealUserVaultValueVersion,
 	enforceFixedRateLimit
 };
-const fields = new Set(['vault', 'id', 'action', 'password', 'ticket', 'response']);
+const fields = new Set(['vault', 'id', 'action', 'password', 'ticket', 'response', 'includeVersion', 'expectedOwnerId']);
 const deny = (status: number, error: string) => json({ ok: false, error }, { status });
 
 // No bulk export or generic secure-field decoder. Read one selected saved
@@ -52,6 +56,13 @@ export const createVaultRevealAction = (overrides: Partial<typeof defaults> = {}
 					!['options', 'reveal'].includes(action)
 				)
 					return deny(400, 'Invalid vault selection');
+				if (body.includeVersion !== undefined && (body.includeVersion !== true || vault !== 'personal')) return deny(400, 'A version is available only for a selected personal entry');
+                const scoped = body.expectedOwnerId !== undefined;
+                const expectedPlane = request.headers.get(EXPECTED_DATA_PLANE_HEADER);
+                if (scoped && (vault !== 'personal' || body.includeVersion !== true || typeof body.expectedOwnerId !== 'string' || !body.expectedOwnerId)) return deny(400, 'Invalid account retention selection');
+                if (scoped && !isDataPlane(expectedPlane)) return deny(400, 'Confirm the selected database before retaining a value');
+                if (scoped && (body.expectedOwnerId !== account.user.id || account.user.accountKind === 'service')) return deny(409, 'Your selected account changed');
+                if (scoped && deps.mongoDataPlane() !== expectedPlane) return deny(409, 'Your selected database changed');
 				if (vault !== 'personal' && !account.user.isAdmin) return deny(403, 'Admins only');
 				const options = action === 'options';
 				const limit = await deps.enforceFixedRateLimit(request, options ? 'auth.vaultRevealOptions' : 'auth.vaultReveal', `user:${account.user.id}`, {
@@ -63,7 +74,7 @@ export const createVaultRevealAction = (overrides: Partial<typeof defaults> = {}
 						? deny(503, 'Verification is temporarily unavailable')
 						: json({ ok: false, error: 'Too many verification attempts. Try again later.' }, rateLimitedResponseInit(limit));
 				const binding = createHash('sha256')
-					.update(JSON.stringify([account.claims.jti, vault, id]))
+					.update(JSON.stringify([account.claims.jti, vault, id, ...(scoped ? [expectedPlane] : [])]))
 					.digest('hex');
 				if (options) {
 					if (body.password !== undefined || body.ticket !== undefined || body.response !== undefined)
@@ -88,6 +99,16 @@ export const createVaultRevealAction = (overrides: Partial<typeof defaults> = {}
 				const fresh = await deps.resolveTokenUser(token!);
 				if (!fresh || fresh.user.id !== account.user.id || fresh.user.temporary || (vault !== 'personal' && !fresh.user.isAdmin))
 					return deny(403, 'Your access changed. Sign in again.');
+                if (scoped && fresh.user.accountKind === 'service') return deny(403, 'Your access changed. Sign in again.');
+                if (scoped && deps.mongoDataPlane() !== expectedPlane) return deny(409, 'Your selected database changed');
+				if (body.includeVersion === true) {
+                    const selected = await deps.revealUserVaultValueVersion(fresh.user.id, id);
+                    if (selected === null) return deny(404, 'Vault entry not found');
+                    const finalAccount = await deps.resolveTokenUser(token!);
+                    if (!finalAccount || finalAccount.user.id !== fresh.user.id || finalAccount.user.temporary || finalAccount.user.accountKind === 'service') return deny(403, 'Your access changed. Sign in again.');
+                    if (scoped && deps.mongoDataPlane() !== expectedPlane) return deny(409, 'Your selected database changed');
+                    return json({ ok: true, vault, id, ...selected, ...(scoped ? { ownerId: finalAccount.user.id, dataPlane: expectedPlane } : {}) });
+                }
 				const value =
 					vault === 'deployment'
 						? await deps.revealSystemEnvironment(id)

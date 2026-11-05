@@ -1,0 +1,79 @@
+{
+  "identity": {
+    "ownerId": "6adfba58156ac66b47ff292d",
+    "dataPlane": "home",
+    "temporary": false
+  },
+  "online": [
+    {
+      "path": "/api/v1/users/search?q=search_db3366a5b97",
+      "status": 200,
+      "body": {
+        "ok": true,
+        "users": [
+          {
+            "id": "6adfba58156ac66b47ff292d",
+            "username": "search_db3366a5b97",
+            "displayName": null,
+            "bio": null,
+            "avatarUrl": null,
+            "bannerUrl": null,
+            "createdAt": "2026-10-26T20:38:48.554Z",
+            "temporary": false
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/subspaces?q=search_db3366a5b97",
+      "status": 200,
+      "body": {
+        "ok": true,
+        "subspaces": [
+          {
+            "id": "cb327228-44f7-40e5-85c3-137b198c6d79",
+            "messagesCommunityId": "subspace-space-cb327228-44f7-40e5-85c3-137b198c6d79",
+            "messagesChatId": "subspace-general-cb327228-44f7-40e5-85c3-137b198c6d79",
+            "slug": "search_db3366a5b97",
+            "name": "search_db3366a5b97 discovery subspace",
+            "description": "Synthetic isolated discovery fixture",
+            "access": "public",
+            "nsfw": false,
+            "rules": [],
+            "flairs": [],
+            "userFlairs": [],
+            "userFlairSelfAssign": true,
+            "allowCustomUserFlair": false,
+            "removalReasons": [],
+            "branding": {
+              "icon": null,
+              "iconUrl": null,
+              "bannerUrl": null,
+              "accent": null
+            },
+            "ownerId": "6adfba58156ac66b47ff292d",
+            "memberCount": 1,
+            "createdAt": "2026-10-26T20:38:52.264Z",
+            "updatedAt": "2026-10-26T20:38:52.264Z",
+            "viewer": {
+              "role": "owner",
+              "member": true,
+              "approved": true,
+              "banned": false,
+              "banReason": null,
+              "banUntil": null,
+              "canModerate": true,
+              "canPost": true,
+              "pending": false,
+              "approvalRequested": false,
+              "userFlair": null
+            }
+          }
+        ],
+        "nextCursor": null,
+        "sort": "new"
+      }
+    }
+  ],
+  "body": "🦄\nsearch_db3366a5b97\n🌈\n🦄\nThis device\nOnline search\nSearch\nAdd filter\nSearch by schema\nany kind\nposts\ndata\nschemas\ncomments\nreactions\nattachments\nauto sort\nrelevance\nnewest\noldest\n\n~3 things · best match first\n\nStandard\nData\n\nSubspaces 🪐\n\nS\n\nsearch_db3366a5b97 discovery subspace\n\ns/search_db3366a5b97\n\n1 member\n\nPeople\n\nS\n\nsearch_db3366a5b97@search_db3366a5b97\n\nsubspace\n\n@search_db3366a5b97 · 10/26/2026\n\nranked match · 7.77\n\nOpen thing\nsearch_db3366a5b97 discovery subspace\n▾\n🧙‍♂️\nslug\n▾\n🧙‍♂️\nsearch_db3366a5b97\nname\n▾\n🧙‍♂️\nsearch_db3366a5b97 discovery subspace\ndescription\n▾\n🧙‍♂️\nSynthetic isolated discovery fixture\naccess\n▾\n🧙‍♂️\npublic\nnsfw\n▾\n🧙‍♂️\nfalse\nLoad more\ncommunity\n\n@search_db3366a5b97 · 10/26/2026\n\nranked match · 6.67\n\nOpen thing\nsearch_db3366a5b97 discovery subspace\n▾\n🧙‍♂️\nname\n▾\n🧙‍♂️\nsearch_db3366a5b97 discovery subspace\ndescription\n▾\n🧙‍♂️\nSynthetic isolated discovery fixture\navatarUrl\n▾\n🧙‍♂️\nnull\nsubspaceId\n▾\n🧙‍♂️\ncb327228-44f7-40e5-85c3-137b198c6d79\ndata\n\n@search_db3366a5b97 · 10/26/2026\n\nranked match · 6.67\n\nOpen thing\nsearch_db3366a5b97 private Thing\n▾\n🧙‍♂️\nname\n▾\n🧙‍♂️\nsearch_db3366a5b97 private Thing\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 6ms\n\nMongoDB: connected (2ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nSEARCH_DB3366A5B97\n\nProfile\n\nLog out\n\n✉️ email unverified\n\n🦄"
+}
