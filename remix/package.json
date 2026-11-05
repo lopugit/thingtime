@@ -34,6 +34,7 @@
     "test:folder-batches": "node --import tsx --test app/api/utils/files/batches.test.ts app/api/utils/files/folderBatches.test.ts app/api/utils/files/folders.test.ts app/api/utils/files/batchAdmission.test.ts app/api/utils/files/batchObserve.test.ts app/routes/api/v1/files/batches/batchesRoute.test.ts && node --test scripts/smoke-built-file-sync-batches.test.mjs",
     "test:files:inventory-pages": "node scripts/test-cloud-inventory-pages.mjs",
     "test:files:mac-paged": "node scripts/test-mac-paged-sync.mjs",
+    "test:files:mac-fixture-transport": "node --import tsx --test scripts/mac-fixture-transport.test.mjs scripts/mac-fixture-host.test.mts scripts/mac-fixture-http-observer.test.mjs scripts/mac-fixture-tls.test.mjs",
     "test:files:two-way-progress-ui": "node scripts/test-two-way-progress-ui.mjs",
     "test:files:ios-lifecycle": "node scripts/test-ios-sync-lifecycle.mjs",
     "test:files:desktop-lifecycle": "node scripts/test-desktop-sync-lifecycle.mjs",
