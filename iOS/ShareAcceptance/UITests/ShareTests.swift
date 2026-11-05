@@ -94,7 +94,7 @@ final class ShareTests: XCTestCase {
                 let progress = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); progress.name = "saving-progress"; progress.lifetime = .keepAlways; add(progress)
             }
             XCTAssertTrue(app.staticTexts["New post"].waitForExistence(timeout: 5), app.debugDescription)
-            XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 30), "Composer did not open for \(kind): \(app.debugDescription)")
+            XCTAssertTrue(app.webViews.staticTexts["New post"].firstMatch.waitForExistence(timeout: 30), "Rendered composer did not open for \(kind): \(app.debugDescription)")
             XCTAssertFalse(app.staticTexts["Saved locally"].exists, "Sharing must open the composer")
             let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             shot.name = "composer-\(kind)"; shot.lifetime = .keepAlways; add(shot)

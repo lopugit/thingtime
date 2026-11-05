@@ -22,6 +22,7 @@ function fixture(flush: () => Promise<void>, retire: () => Promise<void>) {
 	const doc = { kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: 'Exact latest text' } }] };
 	let failPost = false;
 	const context = {
+		props: {} as { initialDraft?: { id: string }; beforeSubmit?: (submission: any) => Promise<void> },
 		valid: true, posting: false, attachmentSnapshot: { blocking: false, attachmentIds: [], attachments: [] },
 		setPosting: () => {}, setThingModalOpen: () => {}, postEditorValue: doc, pendingPostSubmissionRef: pending,
 		capturePostEditorValue: async () => doc, postTextEditorRef: { current: null }, setPostEditorValue: () => {},
@@ -51,6 +52,29 @@ for (const failure of ['rejected', 'stalled'] as const) test(`posting completes 
 	assert.equal(f.requests[0].text, 'Exact latest text');
 	assert.equal(JSON.parse(f.captures[0].snapshot).pendingSubmission.shareId, f.requests[0].shareId);
 	assert.ok(f.notifications.some(value => value.status === 'success'));
+});
+
+test('incoming share claims the frozen identity before publication', async () => {
+	const f = fixture(async () => {}, async () => {});
+	const id = randomUUID();
+	const claims: any[] = [];
+	f.context.props = { initialDraft: { id }, beforeSubmit: async submission => {
+		assert.equal(f.requests.length, 0);
+		claims.push(structuredClone(submission));
+	} };
+	await f.run();
+	assert.equal(claims.length, 1);
+	assert.equal(claims[0].shareId, id);
+	assert.deepEqual(claims[0].payload, f.requests[0]);
+	assert.equal(f.posted[0].id, id);
+});
+
+test('refused incoming share claim cannot publish', async () => {
+	const f = fixture(async () => {}, async () => {});
+	f.context.props.beforeSubmit = async () => { throw Object.assign(new Error('Different share identity'), { status: 403 }); };
+	await f.run();
+	assert.equal(f.requests.length, 0);
+	assert.equal(f.posted.length, 0);
 });
 test('draft failure cannot replace the frozen identity or payload after uncertain posting', async () => {
 	const f = fixture(async () => { throw new Error('Draft unavailable'); }, async () => {});
