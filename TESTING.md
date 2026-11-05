@@ -2111,11 +2111,38 @@ is fixed, and cite the checklist you ran in the PR description.
       Check a freshly composed Messages/Messenger preview separately from old
       cached bubbles; see `docs/seo-social-metadata.md`.
 
-- [ ] `/invite`, `/branding`, `/`, and an unknown SPA path return the white
-      press-kit wordmark PNG as absolute `og:image` and `twitter:image`, with
-      1200×630 dimensions and a large Twitter card. Branding uses the shared
-      page title; unknown paths use `Thingtime - Your Home for Everything`. Query/fragment secrets never
-      enter metadata. Custom `/feed` and public post cards remain custom.
+- [ ] `/` and an unknown SPA path keep the canonical press-kit wordmark image;
+      `/branding` and other matched routes receive named branded cards. All
+      image URLs are absolute with 1200×630 dimensions and a large Twitter card.
+      Branding uses its optional document-title label; unknown paths use
+      `Thingtime - Your Home for Everything`. Query/fragment secrets and raw
+      parameter values never enter fallback copy. Public post cards keep their
+      authorized content.
+
+- [ ] Add a disposable explicit app route with no preview export, including a
+      nested/index or eager/lazy module. Run normal Vite/Nitro generation and
+      confirm matching HTML, metadata API and PNG defaults without a backend
+      metadata entry. Change an optional literal `socialPreview` export and
+      verify regeneration; remove it and recover defaults. Re-run generation
+      unchanged and require identical portable output. Unknown/splat paths and
+      different secret parameter values retain safe generic/pattern copy.
+
+- [ ] Create an anonymously readable saved page with supported heading, prose,
+      nested Component text and a managed photo; verify `/p/:id` and `/t/:id`
+      infer the same public content in HTML/API/card without metadata setup.
+      Set/clear existing `name` and `description` to verify optional override
+      precedence. Edit the page/Component and require a new content revision.
+      Keep viewer/query/state bindings, runtime sources/Actions, unknown or
+      hidden conditional branches and private `siteRoute` layouts out of the
+      preview. Deny/revoke a photo or replace its stored version during decode:
+      its bytes must not appear. No arbitrary remote image URL is fetched.
+
+- [ ] `/invite` returns invitation-specific title/description and the revisioned
+      `/social-card?path=%2Finvite` PNG. Valid, expired and malformed fragment
+      tokens share the same anonymous invitation card; neither crawler HTML
+      nor PNG reveals tokens, recipient details, email, gift amounts or validity.
+      Unfurling must never consume an invite. Confirm noindex and canonical
+      `/invite`, then separately check a newly composed messaging-app link.
 
 Crawlers never run JS, so verify with plain `curl` against the Nitro port (the
 Vite dev port serves the raw shell without injection; in production, Vercel
@@ -2150,27 +2177,37 @@ function — `remix/scripts/patch-vercel-output.mjs`).
       a 404 Response from this middleware as "unhandled" and would fall
       through to the raw source template — see `server/routes/[...].ts`.)
 - [ ] The image renderer fetches only stored, public Thingtime image
-      attachments via a short-lived download URL; a linked remote attachment,
+      attachments through the canonical thumbnail service; a linked remote attachment,
       private attachment, oversized response, malformed `path`, or non-image
       MIME type never becomes a server-side fetch or an image-card leak.
+- [ ] A public photo whose original exceeds 2 MiB still appears in the PNG
+      through a bounded thumbnail. Compare rendered pixels with the source,
+      then revoke access or replace its stored version during processing and
+      confirm stale bytes are omitted, including when a thumbnail was cached.
+- [ ] `GET /api/v1/social-previews?path=/post/<id>` returns the same title,
+      description, canonical and image URL as raw page HTML. Same-origin URLs
+      work; external URLs and embedded credentials are refused. Query strings
+      and fragments never appear in the output. Cookies and custom database
+      selection cannot grant access to private content or alter the home data
+      authority. Negotiate `api.social-previews` 1.0.0 first.
 - [ ] User-authored text with `<`, `>`, `&`, quotes, and newlines arrives
       HTML/XML-escaped and whitespace-collapsed inside both `content="…"` and
       the generated card.
 - [ ] `curl -s -H 'x-forwarded-host: thingtime.com' -H 'x-forwarded-proto:
       https' <nitro>/post/<id>` derives `https://thingtime.com/...` absolute
       URLs (the request-origin pattern, not a hardcoded host).
-- [ ] The colourful Thingtime browser-card (wordmark, five-colour mark and
-      playful icon treatment) remains readable at 1200×630 and iMessage-sized
+- [ ] The Thingtime card uses the canonical `/branding` wordmark/icon matrices,
+      palette and font families, rather than a substitute mark. It remains readable at 1200×630 and iMessage-sized
       previews; no text or photo tile clips at the edge.
 - [ ] Check the card from the **deployed** preview, not just locally:
       `curl -o card.png '<preview-origin>/social-card?path=/feed'` and open it.
-      Cards ship their own Liberation Sans (`socialCardFontData.ts`) because the
+      Cards ship the canonical Space Grotesk, Hanken Grotesk and JetBrains Mono faces because the
       Vercel runtime has no system fonts, and a dev machine's fonts hide a
       missing one — a fontless deploy renders full artwork with zero glyphs.
       Emoji are deliberately dropped from the PNG (the face has no pictographs,
       so they would draw as tofu boxes) while the `og:`/`twitter:` text tags
-      keep them. Non-Latin scripts the face lacks (CJK, Arabic, Thai) still draw
-      as tofu — known gap.
+      keep them. Check scripts not covered by the bundled faces separately;
+      successful Latin rendering is not evidence of complete Unicode coverage.
 - [ ] `npm --prefix remix run test:social-previews` passes.
 - [ ] After `npm run build`, `verify:vercel-output` passes: the permalink
       and social-card routes sit between the API routes and the SPA fallback,
@@ -2641,6 +2678,11 @@ email whose link points at the attacker.
       keeps a dead session id and re-registration cannot heal it.
 
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
+
+- [ ] Run `node --test remix/scripts/ensure-dependencies.test.js`. A killed
+  owner is diagnosed promptly while its lock remains for surviving-child
+  inspection. An old but live owner is never displaced by elapsed time, and a
+  normal concurrent release cannot cause a spurious missing-directory failure.
 
 - [ ] In a fresh linked worktree with no copied `node_modules`, run
       `npm run worktree-setup`: every direct Remix dependency is linked and
@@ -9326,9 +9368,14 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Gifted signup invitations (2026-09-13)
 
-- [ ] In Settings → Lopu, create an invite with a profile photo, display name,
+- [ ] In Settings → Account, create an invite with a profile photo, display name,
       username and fractional gift. The balance decreases once; copied links use
       the browser/deployment origin, never the internal Nitro port.
+- [ ] Create an invitation with both name and username blank, then with each
+      suggestion supplied independently. The optional labels have no required
+      marker; creation succeeds. Open the blank invite and choose a fresh name
+      and username; signup requires valid final values and persists the
+      recipient's choices. Invalid values must leave the invite and gift usable.
 - [ ] Visit the link signed out at desktop and mobile widths; scroll top to
       bottom. The avatar/name/username are prefilled, editable, and remain after
       refresh. Remove and replace the photo; submit stays disabled while it is
@@ -13822,6 +13869,18 @@ separate from deterministic discovery/lease tests.
 
 ## Editable Mapbox maps and route planning
 
+- [ ] Batch complete-address lookups with stored coordinates, precise matches,
+  ambiguous results and absent quality metadata. Preserve every input ID/order,
+  do not silently choose an ambiguous pin, and keep temporary coordinates out of
+  saved Things and persistent browser caches. Compare visible map coverage to
+  independent favourite/stop readback. Invalid queries must fail before Vault
+  access; changed permanent selections, incomplete batches and cancellation in
+  the final chunk must refuse success. Run `test:maps` and built HTTP coverage.
+- [ ] Publish successive valid map pages while later pages are pending. On a
+  permission refusal clear protected results; on an ordinary network failure
+  retain useful same-account points with one inline retry. A pin selection must
+  reveal its actual list row, including another page, without resetting the map.
+
 - Select a favourite and a stop from the map, including an item outside the first list page. The exact detail panel opens without changing the URL or rebuilding the map. Test pointer and keyboard activation, focus retention, switching tabs, searching while a background refresh runs, errors/retry and identity changes. In local query mode, searches and saved actions update visible data without page navigation.
 - Delay address-search A, type B, then complete A last. Retire A's suggestions on typing and show only B; page-local tabs still work during an unrelated Action. Manual next-order defaults stay pinned after a failed save, with an explicit retry for a failed summary and a fresh default after successful form reset.
 - Create and edit favourite/stop marker icons, title/custom/both/hidden labels, and optional icon lists; upload a photo, choose Use file, save and reload. Compare the circular marker image and saved attachment ID with exact readback. Verify replacement, removal, inherited stop styling, missing/revoked media, long labels and desktop/mobile overflow. Edit the upload and nested fields separately in Builder, save and reload.
@@ -13989,6 +14048,16 @@ separate from deterministic discovery/lease tests.
 - Deployment order: product gateway API first, signed read and admin save/readback
   second, protected controller consumer last. A UI preview using the older
   gateway cannot establish the new backend's acceptance.
+
+### Builder provenance and shared media
+
+Create a public saved Webpage referencing a saved Component with a managed
+image. Confirm both returned content kinds include `builder-thing`, then open
+its `/p/<id>` page anonymously: the image must load through
+`attachments/content?id=<id>&sharedRoot=<page-id>` for both original and
+`width=640` reads. Repeat with the Component as sharedRoot. Private roots,
+marker-only/control/unknown kinds and target-attached roots must remain refused;
+removing provenance or widening ACLs is not a workaround.
 
 
 ### Passkey registration exclusion recovery (2026-11-02)
@@ -14383,3 +14452,59 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - [ ] Close the dedicated transfer worker as a saved folder job dispatches a
   request or reuses an idle worker. Verify the app stays open, interrupted work
   can resume through a replacement worker, and the file publishes once.
+
+
+### Share preview themes and customiser
+
+- [ ] Share a multiline text post with an opening headline paragraph and links
+  in its body. The card title uses the opening paragraph; the description still
+  reflects the body. Structured titles and poll questions retain precedence.
+- [ ] On a real public text/photo/gallery/page link, open **Share link and customise
+  preview**, compare the auto-filled title and photos with its anonymous API
+  projection, then select Editorial/Colour Blocks and every layout. Copy/open
+  the URL and verify raw HTML, JSON metadata and 1200×630 PNG agree.
+- [ ] On `/invite`, select Editorial White, Pink Invitation and Night Garden.
+  The token fragment survives copying but never reaches metadata requests or
+  card pixels; opening the customiser does not consume the invite.
+- [ ] Verify homepage and missing/private content use the new generated safe
+  card. Invalid/duplicate theme/layout values do not inject content or URLs.
+- [ ] At desktop and mobile widths, scroll the whole dialog, use keyboard
+  choices/copy/close, check live refresh, failure/Retry and stale-request fencing.
+  Edit nested title/choice blocks separately, save and reload their document.
+- [ ] After deployment, fetch the exact raw `og:image` for the requested public
+  post and inspect its actual PNG; mocked data/build output is not live proof.
+
+### Authorized Things counts and visible offset windows
+
+- Run `node remix/scripts/things-counts-acceptance.mjs` after a node-server Nitro
+  build. It creates a disposable replica and separate API accounts, compares
+  the exact count against ordinary cursor traversal, exercises literal archive,
+  schema, parent, namespace and public/private PAT filters, and verifies distant
+  offset windows without exposing another account's rows or totals.
+- Compare explicit data-only and mixed data/protected-kind counts/pages with the
+  unfiltered owner library. Prune impossible managed-kind OR exceptions without
+  admitting mixed protected rows; preserve legacy post/folder aliases and the
+  retained managed-kind guards.
+- Confirm `count=true` rejects cursor/limit/offset/exact-ID/discussion parameters,
+  duplicate filters, unsupported query keys and anonymous reads. Errors and
+  cancellation must never return a partial total. Counts carry private/no-store.
+- Confirm offset pages skip **visible** rows, including when blocked or denied
+  inherited rows occur before a requested page. The returned total is separate
+  from loaded rows; failed/unavailable totals remain unknown. Count and offset
+  are current observations rather than transactional snapshots.
+- Review the acceptance report's request count, actual response byte totals and
+  elapsed HTTP timings separately. A native safe-row count and metadata-only
+  fallback avoid transferring/projecting every crystal, but do not prove a
+  production index plan or constant-time offset access.
+
+- Exact-ID batch regression: request mixed accessible/missing/private/protected
+  IDs with duplicates and more than one internal processing chunk. Compare
+  each returned generic Thing to an ordinary exact read, retain input order,
+  and ensure invisible positions are null without an existence distinction.
+  Exercise PAT/app boundaries, malformed IDs, cancellation and mixed selectors.
+- Collection renderer regression: run
+  `node remix/scripts/collections-performance.browser.mjs` with the documented
+  fixture build/server setup in that script. It covers desktop/mobile page
+  transitions, search, selection reveal, identity changes and 403 behavior.
+  Synthetic Action transport timings are renderer evidence; real API timing
+  requires the disposable replica acceptance fixture separately.

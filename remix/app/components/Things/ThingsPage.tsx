@@ -1,3 +1,4 @@
+import { openSharePreview } from '~/components/Sharing/sharePreviewLink';
 import { BUILDER_THING_KIND } from '~/schemas/builderThing';
 import { UnfiledAttachmentsPage } from './UnfiledAttachmentsPage';
 import { ActivityManagerPage } from '~/components/Activity/ActivityManagerPage';
@@ -1184,6 +1185,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     (thing: ThingsThing, action: ThingsItemAction) => {
       const group = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
       switch (action) {
+        case 'share-preview': openSharePreview(thingShareLink(thing)); break;
         case 'history': openThingHistory(thing.id, thing.thingtime); break;
         case 'open-builder': { const href = thingBuilderHref(thing, user?.id); if (href) navigate(href); break; }
         case 'open-live': { const href = thingLiveHref(thing); if (href) navigate(href); break; }
@@ -1380,6 +1382,9 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
           break;
         case 'inspect':
           navigate(`/thing/${encodeURIComponent(menuThing.id)}`);
+          break;
+        case 'share-preview':
+          openSharePreview(thingShareLink(menuThing));
           break;
         case 'copy-link':
           copyLink(menuThing);

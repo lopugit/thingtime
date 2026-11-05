@@ -17,6 +17,7 @@ import { Nav } from './components/Nav/Nav';
 import { DrawerSystem } from './components/Nav/Drawer/DrawerSystem';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
+import { SharePreviewHost } from './components/Sharing/SharePreviewHost';
 import { TimelineHost } from './components/Timeline/TimelineHost';
 import { TimelineProvider } from './timeline/TimelineProvider';
 import { BUILDER_OVERLAY_CHROME_CSS } from './components/Builder/BuilderOverlayHost';
@@ -141,7 +142,7 @@ export default function App() {
       <ThingtimeProvider key={rootData.user?.id || 'guest'} accountId={rootData.user?.id} storageKey={rootData.user?.id ? `thingtime:account:${rootData.user.id}` : 'thingtime'}>
         <ThingDraftsProvider>
          <TimelineProvider>
-         {mounted && !isAuthorizePopup ? <TimelineHost /> : null}
+         {mounted && !isAuthorizePopup ? <><TimelineHost /><SharePreviewHost /></> : null}
         <VisualSettingsHost />
         {mounted ? <BrowserExtensionAccountBridge /> : null}
         <LopuPageTracker />

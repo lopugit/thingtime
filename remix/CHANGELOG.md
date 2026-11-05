@@ -110,6 +110,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-05: Replace shared preview artwork with Editorial/Colour Blocks and
+  three invitation themes; add an editable preview customiser with URL-carried
+  theme/layout choices and anonymous content autofill. Details and acceptance:
+  [PR 1287](../PRs/1287-invite-previews-profile-choice-shared-branded-social-previews.md).
+
+- 2026-11-05: Add ACL-aware exact counts, authorized offset paging and ordered
+  batch Thing reads; retain collection pages and prefetch adjacent pages, reveal
+  selected list rows, and publish map pages progressively. Add complete-address
+  batch geocoding with allowlisted match quality. Private app composition stays
+  in saved Things. Diagnose interrupted dependency installers without stealing
+  live locks. Prune impossible managed-kind query alternatives for explicit
+  kinds while preserving mixed protected-kind and legacy compatibility checks.
+  Deployment and real-account acceptance remain separate checks.
+  See [PR 1351](../PRs/1351-codex-routes-home-performance-add-precise-collection-paging-and-progressive-maps.md).
+  **Codex (AI)**
+
 ### 2026-11-05
 - Add account-scoped connector confirmation controls in Settings → Connections,
   staged large mutation plans, paged signed review and single-use receipts.
@@ -218,6 +234,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   **Codex (AI)**
 
 - 2026-10-29 — **Codex (AI)**: Add a transactional 100 MiB pending-accounting budget for trusted unlimited accounts, durable leased recovery, source-aware release health and structured storage incident logs. Add pre-merge, production alias and scheduled runtime checks through the protected controller. See [storage recovery](../docs/storage-recovery.md). Details: [PR #1289](../PRs/1289-storage-ledger-release-guard.md).
+
+- 2026-10-29: Add invitation previews and optional recipient profile suggestions. Discover app-route preview defaults automatically from the real router, support optional route-local overrides, and infer supported anonymous saved-page copy/photos without per-page metadata registration. Share those projections through `api.social-previews` 1.1.0 and branded PNGs through `api.social-card` 1.3.0, preserving canonical ACLs, managed-photo version checks and exact Thingtime brand assets. Deployment/live acceptance remains separate; [PR 1287 details](../PRs/1287-invite-previews-profile-choice-shared-branded-social-previews.md). **Codex (AI)**
 
 - 2026-10-29: Restore the original browser tab before explicit native passkey fallback starts WebAuthn; approval-page cancellation returns consistently while background opt-out/cancellation stays non-disruptive.
 

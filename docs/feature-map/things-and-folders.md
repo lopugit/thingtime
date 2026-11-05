@@ -765,3 +765,62 @@ index. It returns only a complete `summary.max`, or null for no numbers. Abort,
 pagination and access failures never return a partial maximum. This read does
 not allocate an atomic sequence. Focused tests cover filtering and complete
 pagination; real API acceptance must verify separate account/PAT boundaries.
+
+
+## Exact authorized counts and visible offset windows
+
+`api.things` 1.49.0 adds authenticated `GET /api/v1/things?count=true` with
+ordinary list filters (`thingtime`, exact `schemaId`/`parentId`, `target`,
+`folder`, `appId`, `builderApp` and `excludeArchived`). It returns
+`{ ok: true, count }` or an explicit error, never a loaded-row subtotal.
+`excludeArchived=true` excludes only literal `crystal.archived=true` in both
+ordinary lists and counts before pagination. Count requests reject paging,
+exact-ID and discussion-projection parameters.
+
+Optional list `offset` is a zero-based ordinal of authorized visible rows and
+returns `offset` plus `nextOffset` (null at the end), alongside the normal
+`things` and `nextCursor`. It cannot be combined with a cursor or discussion
+projection. This removes client-side serial page fetching for a distant page;
+it does not promise constant-time access or a reserved snapshot.
+
+`things.ts` shares `prepareThingsList` and `visibleThingsPage` across these
+reads. Ordinary owned `['data']` rows with no inherited ACL, blocked moderation
+or PAT visibility restriction can be counted natively. All exceptional rows
+stream only authorization metadata through the canonical ACL gate; app
+namespace, liveness, moderation and inherited audiences retain their exact
+checks. Offset windows scan metadata and hydrate only the requested window.
+There is no raw Mongo query input, new index, public projection or item cap.
+
+Run `test:things`, `test:api-capabilities`, and
+`node remix/scripts/things-counts-acceptance.mjs` after building Nitro with the
+node-server preset. The latter uses a fresh disposable replica and API-created
+accounts/data, checks privacy and page results, and records actual payload and
+latency observations. Synthetic measurements do not establish production
+latency or large-account query plans.
+
+
+### Ordered exact-ID joins
+
+The same `api.things` 1.49.0 contract accepts authenticated `GET /things?ids=`
+with one URL-encoded JSON array of Thing ID strings. `getThings` reads unique
+IDs in processing chunks, applies the same exact-read protected-record,
+inherited ACL, PAT, app namespace and author-liveness gates as `getThing`, and
+batches the generic public projection. It returns `{ ok: true, things }`
+aligned to the requested order, including duplicates. Each inaccessible,
+missing or protected row is `null`; no existence reason is disclosed.
+There is no discussion hydration or discovery write. `ids` rejects other
+list/id/projection parameters; the optional existing `key` remains supported.
+
+This is the existing GET endpoint, so browser Actions retain their registered
+read-only classification and canonical capability negotiation. No new route,
+MCP server/tool, URL fetcher or raw query escape hatch is introduced. The array
+has no product item cap; deployed URL and response transports remain finite.
+Clients should chunk by encoded URL bytes (and split again on a transport
+refusal) and retain all input positions, instead of truncating the selection.
+Small processing chunks can preserve input positions across related-row joins.
+
+Explicit-kind list/count requests pass their required kinds to
+`ownerLibraryQuery.ts`, pruning impossible exact managed-kind OR exceptions
+before Mongo planning while preserving the ordinary protected-kind exclusion.
+Legacy post compatibility retains the full library query. The helper truth-table
+regression covers mixed protected kinds and every retained managed guard.
