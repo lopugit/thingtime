@@ -366,7 +366,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			}
 			if (failed && jobs && !signal.aborted && !(error instanceof SyncConditionsWait) && !(error instanceof NativeInventoryRetryWait)) {
 				historyStatus = 'error';
-				await jobs.attention(failed);
+				await jobs.attention(failed, error);
 			}
 			throw error;
 		} finally {

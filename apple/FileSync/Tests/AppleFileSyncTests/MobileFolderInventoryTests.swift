@@ -288,8 +288,11 @@ final class MobileFolderInventoryTests: XCTestCase {
         XCTAssertEqual(capture.totalEntries, 10_001)
         XCTAssertEqual(try store.capture(scope, id: id, bookmark: bookmark), capture)
         try Data("later edit".utf8).write(to: source.appendingPathComponent("file-0"))
-        let reopened = try RustIndexFixture.inventory(directory: directory)
+        let database = directory.deletingLastPathComponent().appendingPathComponent(".shared-index/filesystem-index.sqlite3")
+        let transport = PageCountingTransport(base: RustProcessInventoryTransport(helper: try RustIndexFixture.executable(), database: database))
+        let reopened = MobileFolderInventory(directory: directory, transport: transport, database: database)
         var offset = 0, paths = Set<String>(), pages = 0
+        let pageStarted = Date()
         while true {
             let page = try reopened.read(scope, capture: capture, bookmark: bookmark, offset: offset)
             XCTAssertEqual(page.offset, offset); XCTAssertEqual(page.capture, capture)
@@ -304,6 +307,11 @@ final class MobileFolderInventoryTests: XCTestCase {
             XCTAssertEqual(next, offset + page.entries.count); offset = next
         }
         XCTAssertEqual(paths.count, 10_001); XCTAssertEqual(pages, 79)
+        XCTAssertEqual(transport.count("page"), pages)
+        XCTAssertEqual(transport.count("status"), 0, "A page already carries its validated Rust status")
+        if ProcessInfo.processInfo.environment["THINGTIME_SCAN_PAGE_BENCHMARK"] == "1" {
+            print("NATIVE_PAGE_BENCHMARK pages=\(pages) entries=\(paths.count) elapsedMs=\(Int(Date().timeIntervalSince(pageStarted) * 1000))")
+        }
         XCTAssertEqual(paths, Set((0..<10_001).map { "file-\($0)" }))
         try reopened.discard(scope, capture: capture, bookmark: bookmark)
         XCTAssertThrowsError(try reopened.read(scope, capture: capture, bookmark: bookmark, offset: 0))
@@ -479,5 +487,26 @@ final class MobileFolderInventoryTests: XCTestCase {
         do { try await work.value; XCTFail("Cancelled capture completed") } catch is CancellationError { }
         let store = try RustIndexFixture.inventory(directory: directory)
         XCTAssertEqual(try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark).totalEntries, 1)
+    }
+}
+
+private final class PageCountingTransport: RustInventoryTransport, @unchecked Sendable {
+    private let base: RustProcessInventoryTransport
+    private let lock = NSLock()
+    private var counts: [String: Int] = [:]
+
+    init(base: RustProcessInventoryTransport) { self.base = base }
+
+    func count(_ operation: String) -> Int {
+        lock.lock(); defer { lock.unlock() }
+        return counts[operation, default: 0]
+    }
+
+    func run(request: Data, isCancelled: @escaping @Sendable () -> Bool,
+             onLine: @escaping @Sendable (Data) throws -> Void) throws {
+        guard let object = try JSONSerialization.jsonObject(with: request) as? [String: Any],
+              let operation = object["operation"] as? String else { throw RustInventoryTransportFailure.invalidResponse }
+        lock.lock(); counts[operation, default: 0] += 1; lock.unlock()
+        try base.run(request: request, isCancelled: isCancelled, onLine: onLine)
     }
 }

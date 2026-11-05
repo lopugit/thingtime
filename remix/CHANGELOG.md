@@ -110,6 +110,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Return validated native inventory status with each bounded Rust
+  page so large Mac scans avoid a second helper launch per page. The matched
+  10,001-entry/79-page fixture read fell from 21.6 s to 11.4 s; full sync
+  throughput and first-transfer timing remain separate acceptance. Show an
+  allowlisted saved automatic-sync failure reason when available instead of
+  claiming every attention state means settings changed. **Codex (AI)**
+
 - 2026-11-05: Fix large/deep editable Webpage saves that passed validation but
   rolled back when Timeline discovery hit hidden block/nesting caps. Share
   cycle-safe iterative traversal across capture and comparison; preserve
