@@ -12,7 +12,15 @@ import { AgentComposerControls, type AgentComposerControlState, type AgentSendMo
 import { CUSTOM_TOKEN_PREFIX, customTokenId, isCustomToken, type ChatMessage, type CustomEmoji } from './messengerTypes';
 import { getUserDisplayName } from '~/utils/userIdentity';
 
+import { ComposerDraftAdmission, sharedMessageRequestId, type ComposerInitialDraft } from './composerInitialDraft';
+export type { ComposerInitialDraft } from './composerInitialDraft';
+
 export type ComposerProps = {
+  initialDraft?: ComposerInitialDraft;
+  active?: boolean;
+  onSent?: () => void;
+  initialSubmission?: MessageSubmission;
+  beforeSubmit?: (targetId: string, operationId: string, payload: Record<string, unknown>) => Promise<void>;
   targetId: string;
   placeholder: string;
   pickerEmojis: CustomEmoji[];
@@ -41,24 +49,57 @@ const EMPTY_ATTACHMENTS: AttachmentComposerSnapshot = {
 	hasSelection: false
 };
 
-type MessageSubmission = Parameters<ComposerProps['onSend']>[0];
+export type MessageSubmission = Parameters<ComposerProps['onSend']>[0];
 
 // The message box: Enter sends, Shift+Enter breaks the line, the emoji button
 // inserts unicode emojis or `:name:` custom tokens inline, and the same
 // surface flips into edit / reply mode with a small context strip on top.
 export const Composer = (props: ComposerProps) => {
 	const user = useCurrentUser();
-  const [text, setText] = React.useState('');
+  const [text, setText] = React.useState(props.initialSubmission?.text ?? props.initialDraft?.text ?? '');
   const [sending, setSending] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const pickerDraft = useEmojiPickerDraft(props.targetId);
-	const [attachmentOpen, setAttachmentOpen] = React.useState(false);
+	const [attachmentOpen, setAttachmentOpen] = React.useState(Boolean(props.initialDraft?.files?.length || props.initialSubmission?.attachments.length));
+  const [sharedFilesPending, setSharedFilesPending] = React.useState(Boolean(props.initialDraft?.files?.length) && !props.initialSubmission);
 	const [attachmentSession, setAttachmentSession] = React.useState(0);
 	const [attachmentSnapshot, setAttachmentSnapshot] = React.useState<AttachmentComposerSnapshot>(EMPTY_ATTACHMENTS);
-	const [submissionUncertain, setSubmissionUncertain] = React.useState(false);
+	const [submissionUncertain, setSubmissionUncertain] = React.useState(Boolean(props.initialSubmission));
   const areaRef = React.useRef<HTMLTextAreaElement | null>(null);
 	const attachmentRef = React.useRef<AttachmentComposerHandle | null>(null);
-	const pendingSubmissionRef = React.useRef<MessageSubmission | null>(null);
+	const pendingSubmissionRef = React.useRef<MessageSubmission | null>(props.initialSubmission || null);
+  const initialSubmissionSent = React.useRef(false);
+  const preparingSubmission = React.useRef(false);
+  const admission = React.useRef(new ComposerDraftAdmission(props.initialDraft));
+  const draftRef = React.useRef(props.initialDraft);
+  draftRef.current = props.initialDraft;
+  // Ref attachment runs before passive mount. Never enqueue here: React's
+  // StrictMode probe would abort that queue and consume the incoming seed.
+  const receiveAttachmentHandle = React.useCallback((handle: AttachmentComposerHandle | null) => {
+    attachmentRef.current = handle;
+  }, []);
+
+  React.useEffect(() => {
+    const draft = props.initialDraft;
+    if (!draft) return;
+    setText(admission.current.text(text, draft));
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled || pendingSubmissionRef.current) return;
+      const handle = attachmentRef.current;
+      if (!handle) return;
+      const accepted = admission.current.files(draft, files => handle.addFiles(files));
+      setSharedFilesPending(!accepted);
+    });
+    return () => { cancelled = true; };
+  }, [props.initialDraft, user?.privateUploadsEnabled, text]);
+
+  React.useEffect(() => {
+    if (!props.initialDraft?.id || props.active === false) return;
+    const area = areaRef.current;
+    area?.focus();
+    area?.setSelectionRange(area.value.length, area.value.length);
+  }, [props.initialDraft?.id, props.active]);
   const emojiNameById = React.useMemo(() => new Map(props.pickerEmojis.map((e) => [e.id, e.name])), [props.pickerEmojis]);
 
   React.useEffect(() => {
@@ -73,11 +114,22 @@ export const Composer = (props: ComposerProps) => {
   }, [props.replyTo]);
 
   const send = async () => {
+    if (preparingSubmission.current || sending || props.disabled || sharedFilesPending || (!pendingSubmissionRef.current && attachmentSnapshot.blocking) || (!pendingSubmissionRef.current && !text.trim() && !attachmentSnapshot.attachments.length)) return;
+    setSending(true);
+    preparingSubmission.current = true;
+    let requestId: string;
+    try {
+      requestId = props.initialDraft && !initialSubmissionSent.current
+        ? await sharedMessageRequestId(props.initialDraft.id, props.targetId) : crypto.randomUUID();
+    } catch {
+      setSending(false);
+      return;
+    } finally { preparingSubmission.current = false; }
 		const submission =
 			pendingSubmissionRef.current ||
 			({
 				text: text.trim(),
-				requestId: crypto.randomUUID(),
+				requestId,
 				attachmentIds: [...attachmentSnapshot.attachmentIds],
 				attachments: [...attachmentSnapshot.attachments],
 				...(props.agentControls?.running ? { agentMode: props.agentControls.mode } : {})
@@ -86,21 +138,25 @@ export const Composer = (props: ComposerProps) => {
 			(!submission.text && !submission.attachments.length) ||
 			(!pendingSubmissionRef.current && attachmentSnapshot.blocking) ||
 			sending ||
+      sharedFilesPending ||
 			props.disabled
 		)
 			return;
 		pendingSubmissionRef.current = submission;
     setSending(true);
 		try {
+			await props.beforeSubmit?.(props.targetId, submission.requestId, { ...submission });
 			const okSend = await props.onSend(submission);
 			if (okSend) {
 				attachmentRef.current?.markCommitted(submission.attachmentIds);
+        initialSubmissionSent.current = true;
 				pendingSubmissionRef.current = null;
 				setSubmissionUncertain(false);
 				setText('');
 				setAttachmentSnapshot(EMPTY_ATTACHMENTS);
 				setAttachmentSession((session) => session + 1);
 				setAttachmentOpen(false);
+        props.onSent?.();
 			} else {
 				pendingSubmissionRef.current = null;
 				setSubmissionUncertain(false);
@@ -255,7 +311,7 @@ export const Composer = (props: ComposerProps) => {
           onClick={send}
           isLoading={sending}
 					isDisabled={
-						(!submissionUncertain && !text.trim() && !attachmentSnapshot.attachments.length) || (!submissionUncertain && attachmentSnapshot.blocking)
+						(!submissionUncertain && !text.trim() && !attachmentSnapshot.attachments.length) || (!submissionUncertain && (attachmentSnapshot.blocking || sharedFilesPending))
 					}
           flexShrink={0}
           background="var(--tt-accent, #a855f7)"
@@ -263,19 +319,22 @@ export const Composer = (props: ComposerProps) => {
           _hover={{ opacity: 0.9 }}
           borderRadius="var(--tt-radius-pill, 999px)"
 					title={submissionUncertain ? 'Retry safely' : props.editing ? 'Save edit' : 'Send'}
+          aria-label={submissionUncertain ? 'Retry safely' : props.editing ? 'Save edit' : 'Send'}
         >
 					{submissionUncertain ? '↻' : props.editing ? '✓' : '➤'}
         </Button>
       </Flex>
-			{submissionUncertain ? (
+			{props.initialSubmission && submissionUncertain ? <Text fontSize="12px" paddingTop={2}>Retry will confirm the original {props.initialSubmission.attachmentIds.length} shared attachments.</Text> : null}
+      {sharedFilesPending ? <Text role="status" fontSize="12px" paddingTop={2} whiteSpace="normal">Shared files are retained. Allow uploads below to attach them before sending.</Text> : null}
+      {submissionUncertain ? (
 				<Text role="status" aria-live="polite" fontSize="12px" color="var(--tt-muted, #70707a)" paddingX={2} paddingTop={2} whiteSpace="normal">
 					Thingtime may already have sent this. Retry safely to confirm it without creating a duplicate.
 				</Text>
 			) : null}
-			{user && !props.editing && props.attachmentsSupported !== false ? (
+			{user && !props.editing && props.attachmentsSupported !== false && !(props.initialSubmission && submissionUncertain) ? (
 				<Box paddingTop={2} display={attachmentOpen || attachmentSnapshot.hasSelection ? undefined : 'none'}>
 					<AttachmentComposer
-						ref={attachmentRef}
+						ref={receiveAttachmentHandle}
 						key={`message-attachments-${user.id}-${attachmentSession}`}
 						ownerId={user.id}
 						purpose="message"

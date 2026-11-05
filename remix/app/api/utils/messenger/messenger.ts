@@ -26,7 +26,6 @@ import {
 	MAX_CHAT_NAME_CHARS,
 	MAX_CHAT_TOPIC_CHARS,
 	MAX_CHATS_PER_COMMUNITY,
-	MAX_MESSAGE_CHARS,
 	MAX_NICKNAME_CHARS
 } from '~/schemas/registry';
 import { customReactionEmojiId, isCustomReactionToken, sanitizeChatReactionToken } from '~/utils/reactionTokens';
@@ -1296,7 +1295,6 @@ export const sendMessage = async (
   if ('ok' in access && access.ok === false) return access;
   const { chat, member } = access as ChatAccess;
   const text = typeof input.text === 'string' ? input.text.trim() : '';
-  if (text.length > MAX_MESSAGE_CHARS) return fail(400, `Messages cap at ${MAX_MESSAGE_CHARS} characters`);
 
 	const requestId = input.requestId === undefined ? null : normalizedMessengerRequestId(input.requestId);
 	if (input.requestId !== undefined && !requestId) return fail(400, 'Invalid message request id');
@@ -1450,7 +1448,6 @@ export const editMessage = async (viewerId: string, input: { id?: unknown; text?
 		).countDocuments({ thingtime: 'attachment', targetId: message.shareId, attachmentState: 'ready', attachmentPurpose: 'message' } as any);
 		if (!attachmentCount) return fail(400, 'Add a message or an attachment');
 	}
-  if (text.length > MAX_MESSAGE_CHARS) return fail(400, `Messages cap at ${MAX_MESSAGE_CHARS} characters`);
   const things = await getThingsCollection();
 	await updateMessengerThing(things, { shareId: message.shareId } as any, {
 		$set: { 'crystal.text': text, 'crystal.editedAt': new Date().toISOString(), updatedAt: new Date() }

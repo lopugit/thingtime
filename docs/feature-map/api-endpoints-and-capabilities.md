@@ -1,5 +1,17 @@
 # API endpoints and capabilities
 
+## Incoming-share message compatibility
+
+`api.chats-messages` 1.3.0 accepts large purpose-matched attachment selections
+and message text without the old 25-item/4,000-character product ceilings.
+`api.chats-messages-edit` 1.1.0 removes the matching edit ceiling. Both public
+manifests derive these versions from `apiDocs.ts`; the Messenger client
+negotiates them before mutation. No new HTTP route or permission is introduced.
+Native sharing negotiates its own exact-origin `thingtimeShare` 1.x bridge.
+Run `test:api-capabilities`, the attachment service tests, and the built-server
+incoming-share acceptance before release.
+
+
 ## Connector confirmations and large mutation plans
 
 `api.settings-connector-protections` 1.0.0 registers GET/POST

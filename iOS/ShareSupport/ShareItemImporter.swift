@@ -181,16 +181,26 @@ final class ShareItemImporter {
         self.inbox = inbox
         self.cancellation = cancellation
     }
-    func save(_ sources: [ShareItemSource], additionalText: [String] = [], progress: @escaping (Int, Int) -> Void) async throws {
+    @discardableResult
+    func save(_ sources: [ShareItemSource], additionalText: [String] = [], composerOrigin: URL? = nil, progress: @escaping (Int, Int) -> Void) async throws -> UUID {
         let batch = try inbox.begin()
         do {
+            var textPaths: [String] = []
             let total = sources.count + additionalText.count
             guard total > 0 else { throw ShareInbox.Failure.empty }
             for (index, source) in sources.enumerated() {
                 try cancellation.check()
                 let directory = batch.payload.appendingPathComponent("Item \(index + 1)", isDirectory: true)
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                do { try await save(source, into: directory) }
+                do {
+                    if let type = try await save(source, into: directory),
+                       UTType(type)?.conforms(to: .plainText) == true || (UTType(type)?.conforms(to: .url) == true && UTType(type)?.conforms(to: .fileURL) != true) {
+                        let candidates = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isRegularFileKey])
+                        if candidates.count == 1, (try candidates[0].resourceValues(forKeys: [.isRegularFileKey])).isRegularFile == true {
+                            textPaths.append("Item \(index + 1)/" + candidates[0].lastPathComponent)
+                        }
+                    }
+                }
                 catch is CancellationError { throw CancellationError() }
                 catch Failure.livePhotoResources { throw Failure.livePhotoResources }
                 catch { throw Failure.item(index + 1) }
@@ -198,14 +208,20 @@ final class ShareItemImporter {
             }
             for (index, text) in additionalText.enumerated() {
                 try cancellation.check()
-                try Data(text.utf8).write(to: inbox.uniqueURL(in: batch.payload, suggestedName: "Shared text.txt"), options: .atomic)
+                let destination = inbox.uniqueURL(in: batch.payload, suggestedName: "Shared text.txt")
+                try Data(text.utf8).write(to: destination, options: .atomic)
+                textPaths.append(destination.lastPathComponent)
                 progress(sources.count + index + 1, total)
             }
             try cancellation.check()
+            if let composerOrigin {
+                try ShareComposerMetadata(origin: ShareComposerSession.origin(composerOrigin), textPaths: textPaths).write(to: batch.directory)
+            }
             try inbox.commit(batch)
+            return batch.id
         } catch { inbox.rollback(batch); throw error }
     }
-    private func save(_ source: ShareItemSource, into directory: URL) async throws {
+    private func save(_ source: ShareItemSource, into directory: URL) async throws -> String? {
         if source.suppliesLivePhoto {
             do {
                 let photo: PHLivePhoto = try await withCheckedThrowingContinuation { continuation in
@@ -223,7 +239,7 @@ final class ShareItemImporter {
                     let destination = inbox.uniqueURL(in: directory, suggestedName: resource.originalFilename)
                     try await saveResource(resource, to: destination)
                 }
-                return
+                return nil
             } catch is CancellationError { throw CancellationError() }
             catch { throw Failure.livePhotoResources }
         }
@@ -238,7 +254,7 @@ final class ShareItemImporter {
             if type == "com.apple.uikit.image" || type == UTType.image.identifier {
                 // UIActivityViewController's legacy provider may deny the newer
                 // class-loader probe while loadItem still returns UIImage.
-                do { try await saveItem(source, type: type, into: directory); return }
+                do { try await saveItem(source, type: type, into: directory); return type }
                 catch { try cancellation.check(); try clear(directory) }
                 guard source.suppliesImage else { continue }
                 do {
@@ -250,7 +266,7 @@ final class ShareItemImporter {
                     try cancellation.check()
                     guard let png = image.pngData() else { throw Failure.noRepresentation }
                     try png.write(to: directory.appendingPathComponent("Shared image.png"), options: .atomic)
-                    return
+                    return type
                 } catch { try cancellation.check(); try clear(directory); continue }
             }
             if !isURL {
@@ -262,12 +278,12 @@ final class ShareItemImporter {
                             if let error { continuation.resume(throwing: error) } else { continuation.resume() }
                         }))
                     }
-                    return
+                    return type
                 } catch { try cancellation.check(); try clear(directory) }
             } else {
                 // public.file-url describes a reference, not the referenced file's
                 // bytes. Resolve the typed URL while its callback is still valid.
-                do { try await saveItem(source, type: type, into: directory); return }
+                do { try await saveItem(source, type: type, into: directory); return type }
                 catch { try cancellation.check(); try clear(directory) }
                 if UTType(type)?.conforms(to: .fileURL) == true { continue }
             }
@@ -284,10 +300,10 @@ final class ShareItemImporter {
                 } else {
                     try data.write(to: directory.appendingPathComponent(Self.filename(source, type: type, fallback: "Shared item")), options: .atomic)
                 }
-                return
+                return type
             } catch { try cancellation.check(); try clear(directory) }
             if !isURL {
-                do { try await saveItem(source, type: type, into: directory); return }
+                do { try await saveItem(source, type: type, into: directory); return type }
                 catch { try cancellation.check(); try clear(directory) }
             }
         }

@@ -110,6 +110,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-05: Replace the iOS share completion dead end with a prefilled post composer, normal message destination and Things folder saving. Add an editable contextual bottom toolbar, bounded native file reads and durable share recovery; see [incoming sharing](../docs/incoming-sharing.md). **Codex (AI)**
+
+
 - 2026-11-05: Fix large/deep editable Webpage saves that passed validation but
   rolled back when Timeline discovery hit hidden block/nesting caps. Share
   cycle-safe iterative traversal across capture and comparison; preserve

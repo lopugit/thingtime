@@ -135,3 +135,17 @@ test('a second import changes only the self mapping, never resolves archived use
     assert.equal('userId' in other, false);
   }
 });
+
+test('long message text survives portable archive serialization without truncation', () => {
+  const manifest = fixture();
+  const longText = 'Original shared text 🥰\n'.repeat(1000);
+  manifest.things[3].crystal.text = longText;
+  const serialized = JSON.stringify(manifest);
+  const roundTrip = JSON.parse(serialized);
+  const [group] = validateChatArchives(roundTrip);
+  assert.equal(group.messages[0].crystal.text, longText);
+  assert.equal(group.messages[1].crystal.replyToId, group.messages[0].id);
+  assert.equal(JSON.stringify(roundTrip), serialized);
+  roundTrip.things[3].crystal.text += '\0';
+  assert.throws(() => validateChatArchives(roundTrip), 'removing a product cap must preserve integrity validation');
+});

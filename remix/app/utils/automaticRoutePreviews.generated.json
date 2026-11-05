@@ -535,6 +535,11 @@
     "preview": {}
   },
   {
+    "pattern": "/share",
+    "label": "Share",
+    "preview": {}
+  },
+  {
     "pattern": "/status",
     "label": "Status",
     "preview": {}

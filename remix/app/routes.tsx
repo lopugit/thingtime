@@ -150,6 +150,7 @@ export const router = createBrowserRouter([
       { path: 'pages/:slug/:version', lazy: lazyRoute(() => import('./routes/legal')) },
       { path: 'privacy', loader: () => redirect('/pages/privacy-policy') },
       { path: 'terms', loader: () => redirect('/pages/terms-of-service') },
+      { path: 'share', lazy: lazyRoute(() => import('./routes/share')) },
       { path: 'support', lazy: lazyRoute(() => import('./routes/support')) },
 
       // "Login with Thingtime" popup (embed SDK) — no guest/user guard: it

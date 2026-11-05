@@ -1,3 +1,4 @@
+import { attachmentSourceIdentity } from './attachmentFileSource';
 import { ATTACHMENT_ARCHIVE_PATH, ATTACHMENT_ARCHIVE_REQUIREMENTS } from '~/api/utils/attachments/attachmentArchiveCore';
 import { isHeicImage } from './heicImage';
 import type {
@@ -505,10 +506,10 @@ export const attachmentCleanupAction = (upload: ComposerAttachmentUpload, commit
 export const dedupeSelectedFiles = (current: ComposerAttachmentUpload[], incoming: File[]): File[] => {
 	const seen = new Set(current.map((upload) => {
 		const file = upload.sourceFile || upload.file;
-		return `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+		return `${file.name}\u0000${file.size}\u0000${file.lastModified}\u0000${file.webkitRelativePath || ''}\u0000${attachmentSourceIdentity(file)}`;
 	}));
 	return incoming.filter((file) => {
-		const key = `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+		const key = `${file.name}\u0000${file.size}\u0000${file.lastModified}\u0000${file.webkitRelativePath || ''}\u0000${attachmentSourceIdentity(file)}`;
 		if (seen.has(key)) return false;
 		seen.add(key);
 		return true;

@@ -87,7 +87,7 @@ const EMPTY_ATTACHMENT_SNAPSHOT: AttachmentComposerSnapshot = {
 const DRAFT_ROOT_KEY = 'New Thing';
 const DRAFT_TMP_KEY = 'tmp';
 
-type PendingPostSubmission = {
+export type PendingPostSubmission = {
 	shareId: string;
 	payload: Record<string, unknown>;
 	expectation: CommittedPostExpectation | null;
@@ -136,6 +136,10 @@ const TEXTAREA_PLACEHOLDERS: Record<ComposeMode, string> = {
 };
 
 export type PostComposerProps = {
+  incomingShareActive?: boolean;
+  initialSubmission?: PendingPostSubmission;
+  beforeSubmit?: (submission: PendingPostSubmission) => Promise<void>;
+  initialDraft?: { id: string; text: string; files?: readonly File[] };
   // in comment mode this receives the created comment (post-shaped — comments
   // share the post schema); in edit mode it receives the UPDATED post
   onPosted: (post: PublicPost) => void;
@@ -164,8 +168,8 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 
 export const PostComposer = (props: PostComposerProps) => {
   const user = useCurrentUser();
-  const composer = <AccountPostComposer key={`${user?.id || 'guest'}:${props.editPost?.id || props.parentId || 'new'}:${props.subspace?.id || ''}`} {...props} />;
-  return props.editPost ? composer : <CharacterComposer key={user?.id || 'guest'}>{composer}</CharacterComposer>;
+  const composer = <AccountPostComposer key={`${user?.id || 'guest'}:${props.editPost?.id || props.parentId || props.initialDraft?.id || 'new'}:${props.subspace?.id || ''}`} {...props} />;
+  return props.editPost || props.initialDraft ? composer : <CharacterComposer key={user?.id || 'guest'}>{composer}</CharacterComposer>;
 };
 const AccountPostComposer = (props: PostComposerProps) => {
   const { onPosted, parentId, onClose, editPost, subspace } = props;
@@ -182,14 +186,14 @@ const AccountPostComposer = (props: PostComposerProps) => {
   const lopu = useLopu();
   const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
-  const [expanded, setExpanded] = React.useState(isComment || isEdit);
+  const [expanded, setExpanded] = React.useState(isComment || isEdit || !!props.initialDraft);
   const [draftAttachments, setDraftAttachments] = React.useState<PublicAttachment[]>([]);
   const [legacyImages, setLegacyImages] = React.useState<string[]>(editPost?.images || []);
 	// Post-type badges are additive TOGGLES, not exclusive tabs: Text is the
 	// always-on base and each toggle switches its field group on top. Edit mode
 	// seeds them from whatever the post already carries.
 	const [photosOn, setPhotosOn] = React.useState(
-		isEdit && (editPost!.type === 'image' || (editPost!.images?.length ?? 0) > 0 || (editPost!.attachments?.length ?? 0) > 0)
+		!!props.initialDraft?.files?.length || (isEdit && (editPost!.type === 'image' || (editPost!.images?.length ?? 0) > 0 || (editPost!.attachments?.length ?? 0) > 0))
   );
   const [marketOn, setMarketOn] = React.useState(isEdit && (editPost!.type === 'marketplace' || !!editPost!.listing));
   const [pickedThings, setPickedThings] = React.useState<PostThingReference[]>(() => postThingReferences(editPost?.thing));
@@ -203,7 +207,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
   const [postEditorValue, setPostEditorValue] = React.useState<EditorJsDoc>(() =>
     isEditorJsDoc(editPost?.richText)
       ? editPost.richText
-      : { kind: 'rich-text', blocks: textToBlocks(editPost?.text || '') }
+      : { kind: 'rich-text', blocks: textToBlocks(editPost?.text || String(props.initialSubmission?.payload.text || props.initialDraft?.text || '')) }
   );
   const text = blocksToText(postEditorValue.blocks);
   const [title, setTitle] = React.useState(editPost?.listing?.title || '');
@@ -248,7 +252,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
 		editPost?.mediaLayout?.mode === 'grid' && editPost.mediaLayout.spans ? { ...editPost.mediaLayout.spans } : {}
 	);
   const [posting, setPosting] = React.useState(false);
-	const [submissionUncertain, setSubmissionUncertain] = React.useState(false);
+	const [submissionUncertain, setSubmissionUncertain] = React.useState(!!props.initialSubmission);
 	const [attachmentSnapshot, setAttachmentSnapshot] = React.useState<AttachmentComposerSnapshot>(EMPTY_ATTACHMENT_SNAPSHOT);
 
   // the thing edits in a bottom-sheet modal (nested comment composers can't
@@ -263,11 +267,11 @@ const AccountPostComposer = (props: PostComposerProps) => {
 	const postTextEditorRef = React.useRef<LongTextEditorHandle | null>(null);
 	// A stable client id turns a lost POST response into a safely reconcilable
 	// read. It is rotated only after the draft is definitively committed/reset.
-	const pendingPostSubmissionRef = React.useRef<PendingPostSubmission | null>(null);
+	const pendingPostSubmissionRef = React.useRef<PendingPostSubmission | null>(props.initialSubmission || null);
 	React.useEffect(() => {
-		pendingPostSubmissionRef.current = null;
-		setSubmissionUncertain(false);
-	}, [user?.id]);
+		pendingPostSubmissionRef.current = props.initialSubmission || null;
+		setSubmissionUncertain(!!props.initialSubmission);
+	}, [user?.id, props.initialSubmission]);
   const handleEditorApi = React.useCallback((api: { popOutDuplicate: () => void } | null) => {
     editorApiRef.current = api;
   }, []);
@@ -530,13 +534,13 @@ const AccountPostComposer = (props: PostComposerProps) => {
     thing: getThingtime(draftPath) ?? null, attachments: [...draftAttachments, ...attachmentSnapshot.attachments],
     editAttachments, legacyImages, pendingSubmission: pendingPostSubmissionRef.current
   });
-  const draftContext = isEdit ? `post:edit:${editPost!.id}` : isComment ? `comment:rich:${parentId}` : `post:new:${subspace?.id || ''}`;
+  const draftContext = isEdit ? `post:edit:${editPost!.id}` : isComment ? `comment:rich:${parentId}` : props.initialDraft ? `post:incoming:${props.initialDraft.id}` : `post:new:${subspace?.id || ''}`;
   const accountDraft = useAccountDraft({ actor: user?.id, context: draftContext, surface: isComment ? 'comment' : 'post',
     onRestore: (saved) => {
       const value = JSON.parse(saved.snapshot);
-      pendingPostSubmissionRef.current = value.pendingSubmission || null;
+      pendingPostSubmissionRef.current = props.initialSubmission || value.pendingSubmission || null;
       if (pendingPostSubmissionRef.current) pendingPostSubmissionRef.current.unknownOutcome = true;
-      setSubmissionUncertain(!!value.pendingSubmission);
+      setSubmissionUncertain(!!pendingPostSubmissionRef.current);
       advanceComposerSession();
       setPostEditorDraft(null); latestEditorDraft.current = null;
       setPhotosOn(!!value.photosOn); setMarketOn(!!value.marketOn); setThingOn(!!value.thingOn);
@@ -606,7 +610,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
   };
 
   const handlePost = async () => {
-		if (!valid || posting || attachmentSnapshot.blocking) return;
+		if ((!valid && !pendingPostSubmissionRef.current) || posting || attachmentSnapshot.blocking) return;
 		setPosting(true);
 		setThingModalOpen(false);
 		let submittedEditorValue = postEditorValue;
@@ -621,7 +625,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
 			}
 		}
 		const currentAttachmentIds = [...draftAttachments.map(file => file.id), ...attachmentSnapshot.attachmentIds];
-		const currentPostShareId = crypto.randomUUID();
+		const currentPostShareId = props.initialDraft?.id || crypto.randomUUID();
 		// polls publish as thingtime posts; the question lives on the thing (the
 		// poll card renders it), so the post text stays empty — no double render
 		const apiType: PostType = type === 'poll' ? 'thingtime' : type;
@@ -776,6 +780,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
 		};
 
 		try {
+      if (pendingSubmission) await props.beforeSubmit?.(pendingSubmission);
       if (!pendingSubmission?.unknownOutcome) {
         // Capture the immutable publish identity on this device before sending.
         // Account draft sync runs independently and cannot block the post.
@@ -1265,6 +1270,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
 							ref={attachmentComposerRef}
 							key={`attachments-${user.id}-${composerSession}`}
 							ownerId={user.id}
+              initialFiles={!accountDraft.resumeComplete || props.initialSubmission || props.incomingShareActive === false || draftAttachments.length ? undefined : props.initialDraft?.files}
 							disabled={posting || submissionUncertain}
               preserveDrafts
 							purpose={attachmentPurpose}

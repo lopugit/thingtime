@@ -136,7 +136,7 @@ test('external avatar export requires the bounded-download contract on both mani
 
 test('emoji transfer, library and move capabilities reject pre-support origins', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, version] of [['api.things-export', '1.15.1'], ['api.things-import', '1.11.0'], ['api.things', '1.38.0'], ['api.things-bulk', '1.6.0']]) {
+  for (const [feature, version] of [['api.things-export', '1.15.1'], ['api.things-import', '1.12.0'], ['api.things', '1.38.0'], ['api.things-bulk', '1.6.0']]) {
     assert.equal(manifest.features[feature].version, feature === 'api.things' ? '1.49.2' : version);
 
     assert.equal(capabilitySatisfies(version, version), true);
@@ -302,9 +302,9 @@ test('capabilities publish the native Apple notification device contract', () =>
 	assert.equal(manifest.features['api.watch-things'], '1.1.0');
 	assert.equal(manifest.features['api.devices'], '1.14.0');
 	assert.equal(manifest.features['api.devices-node-state'], '1.14.0');
-	assert.equal(manifest.features['api.attachment-uploads'], '1.7.0');
+	assert.equal(manifest.features['api.attachment-uploads'], '1.8.0');
 	assert.equal(manifest.features['api.attachment-upload-parts'], '1.1.0');
-	assert.equal(manifest.features['api.attachment-upload-complete'], '1.5.1');
+	assert.equal(manifest.features['api.attachment-upload-complete'], '1.6.0');
 });
 
 test('notification contracts publish the history filters and the system family as compatible minors', () => {
@@ -1029,4 +1029,19 @@ test('provider icons negotiate their own public route without changing OAuth con
   assert.equal(capabilitySatisfies('1.1.0', CONNECTION_ICON_VERSION), true);
   assert.equal(capabilitySatisfies(undefined, CONNECTION_ICON_VERSION), false);
   assert.equal(capabilitySatisfies('2.0.0', CONNECTION_ICON_VERSION), false);
+});
+
+
+test('incoming share message contracts advertise uncapped content consistently', () => {
+ const required = { 'api.chats-messages': '1.3.0', 'api.chats-messages-edit': '1.1.0' };
+ const route = createApiCapabilitiesManifest(Object.keys(routeModules));
+ const runtime = thingtimeCapabilityManifest('https://incoming-share.test');
+ for (const [feature, version] of Object.entries(required)) {
+  assert.equal(route.features[feature], version);
+  assert.equal(runtime.features[feature].version, version);
+  assert.equal(capabilitySatisfies(version, version), true);
+  assert.equal(capabilitySatisfies('1.0.0', version), false);
+  assert.equal(capabilitySatisfies('2.0.0', version), false);
+  assert.equal(capabilitySatisfies(undefined, version), false);
+ }
 });

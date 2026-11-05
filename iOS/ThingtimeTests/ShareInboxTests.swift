@@ -2,6 +2,8 @@ import XCTest
 import Photos
 import UIKit
 import Darwin
+import Network
+import WebKit
 @testable import Thingtime
 
 final class ShareInboxTests: XCTestCase {
@@ -274,6 +276,195 @@ final class ShareInboxTests: XCTestCase {
         XCTAssertFalse(predicate.evaluate(with: ["extensionItems": [NSExtensionItem()]]))
         XCTAssertFalse(predicate.evaluate(with: ["extensionItems": []]))
     }
+    func testComposerPrefillsTypedTextAndStreamsOriginalBinaryWithOwnershipFencing() async throws {
+        let binary = StubShareItem(types: ["com.example.original"])
+        let original = Data((0..<(ShareComposerSession.maxChunkBytes + 17)).map { UInt8($0 % 251) })
+        binary.dataLoader = { _, completion in completion(original, nil) }
+        let link = StubShareItem(types: ["public.url"])
+        link.itemLoader = { _, consume, completion in
+            do { try consume(NSURL(string: "https://example.org/shared")!); completion(nil) } catch { completion(error) }
+        }
+        let origin = URL(string: "https://thingtime.com")!
+        let id = try await ShareItemImporter(inbox: inbox).save([binary, link], additionalText: ["Caption 🦋"], composerOrigin: origin) { _, _ in }
+        let session = try ShareComposerSession(inbox: inbox, id: id, origin: origin)
+        let draft = try session.incoming(accountId: "test-owner")
+        XCTAssertTrue((draft["text"] as? String)?.contains("https://example.org/shared") == true)
+        XCTAssertTrue((draft["text"] as? String)?.contains("Caption 🦋") == true)
+        let attachments = try XCTUnwrap(draft["attachments"] as? [[String: Any]])
+        XCTAssertEqual(attachments.count, 1)
+        let fileId = try XCTUnwrap(attachments[0]["id"] as? String)
+        let first = try session.read(accountId: "test-owner", fileId: fileId, offset: 0, length: ShareComposerSession.maxChunkBytes)
+        let last = try session.read(accountId: "test-owner", fileId: fileId, offset: UInt64(ShareComposerSession.maxChunkBytes), length: ShareComposerSession.maxChunkBytes)
+        XCTAssertEqual(first["eof"] as? Bool, false)
+        XCTAssertEqual(last["eof"] as? Bool, true)
+        let firstBytes = try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(first["base64"] as? String)))
+        let lastBytes = try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(last["base64"] as? String)))
+        XCTAssertEqual(firstBytes + lastBytes, original)
+        XCTAssertThrowsError(try session.read(accountId: "other", fileId: fileId, offset: 0, length: 1))
+        XCTAssertThrowsError(try session.read(accountId: "test-owner", fileId: "../receipt", offset: 0, length: 1))
+        XCTAssertThrowsError(try session.read(accountId: "test-owner", fileId: fileId, offset: 0, length: ShareComposerSession.maxChunkBytes + 1))
+        XCTAssertThrowsError(try ShareComposerSession(inbox: inbox, id: id, origin: URL(string: "https://other.example")!))
+        XCTAssertThrowsError(try ShareComposerSession(inbox: inbox, id: id, origin: origin), "A second composer must not take over the same share")
+    }
+    func testComposerRetainsUnfinishedBatchAcrossDrainAndBindsAccountAcrossRestart() async throws {
+        let origin = URL(string: "https://thingtime.com")!
+        let id = try await ShareItemImporter(inbox: inbox).save([], additionalText: ["Unfinished"], composerOrigin: origin) { _, _ in }
+        let destination = root.appendingPathComponent("Shared")
+        try inbox.drain(to: destination)
+        XCTAssertEqual(try inbox.pendingComposers(origin: origin), [id])
+        var first: ShareComposerSession? = try ShareComposerSession(inbox: inbox, id: id, origin: origin)
+        _ = try first?.incoming(accountId: "test-owner")
+        first = nil
+        let recovered = try ShareComposerSession(inbox: inbox, id: id, origin: origin)
+        XCTAssertThrowsError(try recovered.incoming(accountId: "other"))
+        XCTAssertEqual(try recovered.incoming(accountId: "test-owner")["text"] as? String, "Unfinished")
+        XCTAssertThrowsError(try recovered.complete(accountId: "test-owner"))
+        let claim = ShareComposerSubmission(destination: "post", operationId: id.uuidString, targetId: nil, recoveryPayload: "edited draft payload")
+        _ = try recovered.beginSubmission(accountId: "test-owner", submission: claim)
+        let stored = try XCTUnwrap(recovered.incoming(accountId: "test-owner")["submission"] as? [String: Any])
+        XCTAssertEqual(stored["recoveryPayload"] as? String, "edited draft payload")
+        XCTAssertThrowsError(try recovered.beginSubmission(accountId: "test-owner", submission: ShareComposerSubmission(destination: "post", operationId: id.uuidString, targetId: nil, recoveryPayload: "changed draft payload")))
+        XCTAssertThrowsError(try recovered.beginSubmission(accountId: "test-owner", submission: ShareComposerSubmission(destination: "message", operationId: id.uuidString, targetId: "other")))
+        _ = try recovered.recordOutcome(accountId: "test-owner", submission: claim, outcomeIds: ["verified-post-id"])
+        try recovered.complete(accountId: "test-owner")
+        try recovered.complete(accountId: "test-owner") // Receipt acknowledgement is idempotent.
+        XCTAssertEqual(try inbox.pendingComposers(origin: origin), [])
+        try inbox.drain(to: destination)
+        XCTAssertThrowsError(try inbox.composerDirectory(id: id))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.appendingPathComponent(id.uuidString + "/Files/Shared text.txt").path))
+    }
+    func testComposerPreservesDirectoriesAndRejectsReplacedSymlinks() throws {
+        let origin = URL(string: "https://thingtime.com")!
+        let batch = try inbox.begin()
+        try FileManager.default.createDirectory(at: batch.payload.appendingPathComponent("Folder/Empty"), withIntermediateDirectories: true)
+        try Data([1, 2]).write(to: batch.payload.appendingPathComponent("Folder/original.bin"))
+        try ShareComposerMetadata(origin: ShareComposerSession.origin(origin), textPaths: []).write(to: batch.directory)
+        try inbox.commit(batch)
+        let session = try ShareComposerSession(inbox: inbox, id: batch.id, origin: origin)
+        let draft = try session.incoming(accountId: "test-owner")
+        XCTAssertTrue((draft["directories"] as? [String])?.contains("Folder/Empty") == true)
+        let file = try XCTUnwrap((draft["attachments"] as? [[String: Any]])?.first)
+        XCTAssertEqual(file["relativePath"] as? String, "Folder/original.bin")
+        let directory = try inbox.composerDirectory(id: batch.id)
+        let path = directory.appendingPathComponent("payload/Folder/original.bin")
+        try FileManager.default.removeItem(at: path)
+        try FileManager.default.createSymbolicLink(at: path, withDestinationURL: directory.appendingPathComponent("receipt"))
+        XCTAssertThrowsError(try session.read(accountId: "test-owner", fileId: try XCTUnwrap(file["id"] as? String), offset: 0, length: 10))
+    }
+
+
+    func testEmptyAndWhitespaceTextSourcesRemainOriginalAttachments() async throws {
+        let origin = URL(string: "https://thingtime.com")!
+        let empty = StubShareItem(types: ["public.utf8-plain-text"])
+        empty.dataLoader = { _, completion in completion(Data(), nil) }
+        let whitespace = StubShareItem(types: ["public.utf8-plain-text"])
+        whitespace.dataLoader = { _, completion in completion(Data(" \n\t".utf8), nil) }
+        let id = try await ShareItemImporter(inbox: inbox).save([empty, whitespace], composerOrigin: origin) { _, _ in }
+        let session = try ShareComposerSession(inbox: inbox, id: id, origin: origin)
+        let draft = try session.incoming(accountId: "test-owner")
+        XCTAssertEqual(draft["text"] as? String, "")
+        let files = try XCTUnwrap(draft["attachments"] as? [[String: Any]])
+        XCTAssertEqual(files.count, 2)
+        XCTAssertEqual(files[0]["size"] as? UInt64, 0)
+        let chunk = try session.read(accountId: "test-owner", fileId: try XCTUnwrap(files[0]["id"] as? String), offset: 0, length: 1)
+        XCTAssertEqual(chunk["base64"] as? String, "")
+        XCTAssertEqual(chunk["eof"] as? Bool, true)
+    }
+    func testComposerFileHandlesAndOrderSurviveExtensionToAppRecovery() throws {
+        let origin = URL(string: "https://thingtime.com")!
+        let batch = try inbox.begin()
+        try FileManager.default.createDirectory(at: batch.payload.appendingPathComponent("folder/empty"), withIntermediateDirectories: true)
+        for item in ["Item 10", "Item 2"] { try FileManager.default.createDirectory(at: batch.payload.appendingPathComponent(item), withIntermediateDirectories: true) }
+        for path in ["zeta.bin", "folder/zeta.bin", "alpha.bin", "Item 10/file.bin", "Item 2/file.bin"] { try Data(path.utf8).write(to: batch.payload.appendingPathComponent(path)) }
+        try ShareComposerMetadata(origin: ShareComposerSession.origin(origin), textPaths: []).write(to: batch.directory)
+        try inbox.commit(batch)
+        var first: ShareComposerSession? = try ShareComposerSession(inbox: inbox, id: batch.id, origin: origin)
+        let original = try XCTUnwrap(first?.incoming(accountId: "test-owner")["attachments"] as? [[String: Any]])
+        first = nil
+        let recovered = try ShareComposerSession(inbox: inbox, id: batch.id, origin: origin)
+        let draft = try recovered.incoming(accountId: "test-owner")
+        let next = try XCTUnwrap(draft["attachments"] as? [[String: Any]])
+        XCTAssertEqual(original.compactMap { $0["relativePath"] as? String }, ["Item 2/file.bin", "Item 10/file.bin", "alpha.bin", "folder/zeta.bin", "zeta.bin"])
+        XCTAssertEqual(original.compactMap { $0["id"] as? String }, next.compactMap { $0["id"] as? String })
+        XCTAssertEqual(draft["directories"] as? [String], ["Item 2", "Item 10", "folder", "folder/empty"])
+    }
+    func testComposerThumbnailIsBoundedAndOriginalRemainsUnchanged() throws {
+        let origin = URL(string: "https://thingtime.com")!
+        let batch = try inbox.begin()
+        let bytes = try XCTUnwrap(UIGraphicsImageRenderer(size: CGSize(width: 1600, height: 1000)).image { context in
+            UIColor.systemBlue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 1600, height: 1000))
+        }.pngData())
+        try bytes.write(to: batch.payload.appendingPathComponent("original.png"))
+        try ShareComposerMetadata(origin: ShareComposerSession.origin(origin), textPaths: []).write(to: batch.directory)
+        try inbox.commit(batch)
+        let session = try ShareComposerSession(inbox: inbox, id: batch.id, origin: origin)
+        let draft = try session.incoming(accountId: "test-owner")
+        let fileId = try XCTUnwrap((draft["attachments"] as? [[String: Any]])?.first?["id"] as? String)
+        let thumbnail = try XCTUnwrap(session.thumbnail(accountId: "test-owner", fileId: fileId, maxDimension: 640))
+        let preview = try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(thumbnail["base64"] as? String)))
+        XCTAssertLessThanOrEqual(preview.count, 512 * 1024)
+        let image = try XCTUnwrap(UIImage(data: preview))
+        XCTAssertLessThanOrEqual(max(image.size.width, image.size.height), 640)
+        var original = Data()
+        while original.count < bytes.count {
+            let chunk = try session.read(accountId: "test-owner", fileId: fileId, offset: UInt64(original.count), length: ShareComposerSession.maxChunkBytes)
+            original.append(try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(chunk["base64"] as? String))))
+        }
+        XCTAssertEqual(original, bytes)
+    }
+
+    @MainActor
+    func testActualWebKitReplyBridgeNegotiatesAndRejectsSubframes() async throws {
+        let listening = expectation(description: "Isolated native fixture listening")
+        let listener = try NWListener(using: .tcp, on: .any)
+        listener.stateUpdateHandler = { if case .ready = $0 { listening.fulfill() } }
+        listener.newConnectionHandler = { connection in
+            connection.start(queue: .global())
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 16_384) { data, _, _, _ in
+                let child = data.flatMap { String(data: $0, encoding: .utf8) }?.hasPrefix("GET /child ") == true
+                let html = child ? "<html><body>Child fixture</body></html>" : "<html><body>Native share fixture<iframe src='/child'></iframe></body></html>"
+                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: \(html.utf8.count)\r\nConnection: close\r\n\r\n" + html
+                connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
+            }
+        }
+        listener.start(queue: .global())
+        defer { listener.cancel() }
+        await fulfillment(of: [listening], timeout: 10)
+        let port = try XCTUnwrap(listener.port?.rawValue)
+        let origin = URL(string: "http://127.0.0.1:\(port)")!
+        let id = try await ShareItemImporter(inbox: inbox).save([], additionalText: ["WebKit prefilled text"], composerOrigin: origin) { _, _ in }
+        let localInbox = try XCTUnwrap(inbox)
+        let bridge = ShareComposerBridge(origin: origin, requestId: id, makeInbox: { localInbox })
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.userContentController.addScriptMessageHandler(bridge, contentWorld: .page, name: ShareComposerBridge.name)
+        configuration.userContentController.addUserScript(ShareComposerBridge.script(origin: origin))
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 700), configuration: configuration)
+        bridge.webView = webView
+        let loaded = expectation(description: "Actual WKWebView loaded")
+        let navigation = ShareBridgeTestNavigation(loaded: loaded)
+        webView.navigationDelegate = navigation
+        webView.load(URLRequest(url: try XCTUnwrap(ShareComposerSession.composerURL(origin: origin, requestId: id))))
+        await fulfillment(of: [loaded], timeout: 20)
+        let manifest = try await webView.callAsyncJavaScript("return await window.thingtimeShare.request({method:'manifest'});", arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
+        XCTAssertEqual(manifest?["version"] as? String, "1.0.0")
+        XCTAssertEqual(manifest?["maxChunkBytes"] as? Int, ShareComposerSession.maxChunkBytes)
+        let arguments: [String: Any] = ["requestId": id.uuidString, "accountId": "test-owner"]
+        let payload = try await webView.callAsyncJavaScript("return await window.thingtimeShare.request({method:'getIncomingShare',requestId,accountId});", arguments: arguments, in: nil, contentWorld: .page) as? [String: Any]
+        XCTAssertEqual(payload?["text"] as? String, "WebKit prefilled text")
+        let refused = try await webView.callAsyncJavaScript("try { await document.querySelector('iframe').contentWindow.webkit.messageHandlers.thingtimeShare.postMessage({method:'manifest'}); return false; } catch { return true; }", arguments: [:], in: nil, contentWorld: .page)
+        XCTAssertEqual(refused as? Bool, true)
+        webView.stopLoading()
+        configuration.userContentController.removeScriptMessageHandler(forName: ShareComposerBridge.name, contentWorld: .page)
+    }
+    func testComposerOriginAndRouteRejectUntrustedDestinations() {
+        XCTAssertEqual(ShareComposerSession.origin(URL(string: "https://thingtime.com:443/path")!), "https://thingtime.com")
+        XCTAssertEqual(ShareComposerSession.origin(URL(string: "https://thingtime.com.evil.example")!), "https://thingtime.com.evil.example")
+        XCTAssertEqual(ShareComposerSession.origin(URL(string: "http://thingtime.com")!), "")
+        XCTAssertEqual(ShareComposerSession.origin(URL(string: "https://account:secret@thingtime.com")!), "")
+        XCTAssertNil(ShareComposerSession.composerURL(origin: URL(string: "file:///tmp/share")!, requestId: UUID()))
+    }
+
 }
 
 private final class StubShareItem: ShareItemSource {
@@ -306,4 +497,11 @@ private final class StubShareItem: ShareItemSource {
         if let livePhotoLoader { livePhotoLoader(completion) } else { completion(nil, ShareItemImporter.Failure.livePhotoResources) }
         return Progress()
     }
+}
+
+private final class ShareBridgeTestNavigation: NSObject, WKNavigationDelegate {
+    let loaded: XCTestExpectation
+    init(loaded: XCTestExpectation) { self.loaded = loaded }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { loaded.fulfill() }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { loaded.fulfill() }
 }

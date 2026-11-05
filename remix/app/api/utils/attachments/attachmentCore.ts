@@ -9,6 +9,12 @@ export type AttachmentState = (typeof ATTACHMENT_STATES)[number];
 // a different audience (for example, a DM attachment becoming a public post).
 export const ATTACHMENT_PURPOSES = ['post', 'comment', 'message', 'profile', 'emoji', 'recording', 'file', 'subspace-icon', 'subspace-banner', 'password'] as const;
 export type AttachmentPurpose = (typeof ATTACHMENT_PURPOSES)[number];
+// Empty ordinary files remain valid content on these surfaces. Image-only,
+// recording and vault ceremonies retain their existing nonempty validation.
+export const EMPTY_ATTACHMENT_PURPOSES = ['post', 'comment', 'message', 'file'] as const;
+export const attachmentPurposeAllowsEmpty = (purpose: unknown): boolean =>
+  (EMPTY_ATTACHMENT_PURPOSES as readonly unknown[]).includes(purpose);
+
 export const ATTACHMENT_PROFILE_SLOTS = ['avatar', 'banner'] as const;
 export type ProfileAttachmentSlot = (typeof ATTACHMENT_PROFILE_SLOTS)[number];
 

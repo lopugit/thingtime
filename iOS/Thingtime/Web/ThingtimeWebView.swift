@@ -23,6 +23,7 @@ struct ThingtimeWebView: View {
 
     @Environment(\.scenePhase) private var scenePhase
     @State private var widgetPath: String?
+    @State private var pendingShare: UUID?
     @State private var widgetSettingsOpen = false
     @State private var deploymentGroups: [ThingtimeWebDestination.DeploymentGroup] = []
     @State private var isDestinationPickerOpen = false
@@ -56,8 +57,21 @@ struct ThingtimeWebView: View {
             let drawerWidth = min(proxy.size.width - 48, 360)
 
             ZStack(alignment: .leading) {
-                WebView(url: selectedDestination.url, widgetPath: $widgetPath)
-                    .ignoresSafeArea(.container, edges: [.bottom])
+                VStack(spacing: 0) {
+                    if let pendingShare {
+                        Button {
+                            widgetPath = ShareComposerSession.composerURL(origin: selectedDestination.url, requestId: pendingShare)?.absoluteString
+                            self.pendingShare = nil
+                        } label: {
+                            Label("Continue shared draft", systemImage: "square.and.pencil")
+                                .font(.body).frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .background(.regularMaterial)
+                        .accessibilityHint("Opens your unfinished share in the post composer")
+                    }
+                    WebView(url: selectedDestination.url, widgetPath: $widgetPath)
+                        .ignoresSafeArea(.container, edges: [.bottom])
+                }
 
                 if isDestinationPickerOpen {
                     Color.black.opacity(0.2)
@@ -98,18 +112,23 @@ struct ThingtimeWebView: View {
             }
             .onOpenURL { url in widgetPath = WidgetRoute.path(for: url) }
             .onReceive(NotificationCenter.default.publisher(for: .thingtimeWidgetAction)) { _ in receiveWidgetAction() }
-            .onChange(of: scenePhase) { _, phase in if phase == .active { receiveWidgetAction() } }
-            .onAppear { prepareDestinationState(); receiveWidgetAction() }
+            .onChange(of: scenePhase) { _, phase in if phase == .active { receiveWidgetAction(); refreshPendingShare() } }
+            .onAppear { prepareDestinationState(); receiveWidgetAction(); refreshPendingShare() }
             .task {
                 await refreshDeploymentsIfNeeded()
             }
             .onChange(of: selectedDestinationID) { _, _ in
                 ensureSelectedDestinationIsAvailable()
+                refreshPendingShare()
             }
             .onChange(of: deploymentGroups) { _, _ in
                 ensureSelectedDestinationIsAvailable()
             }
         }
+    }
+
+    private func refreshPendingShare() {
+        pendingShare = (try? ShareInbox.shared().pendingComposers(origin: selectedDestination.url))?.first
     }
 
     private func receiveWidgetAction() {

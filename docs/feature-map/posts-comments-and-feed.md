@@ -1,5 +1,16 @@
 # Posts, comments and feed
 
+## Prefilled incoming shares
+
+`PostComposer.initialDraft` and Messenger's `Composer.initialDraft` admit a stable
+share once, retaining typed text across destination switches. `/share` defaults
+to Post and composes the existing chat and Things surfaces behind the reusable
+`ContextActionToolbar`. `api.chats-messages` 1.3.0 and
+`api.chats-messages-edit` 1.1.0 remove product text/attachment-count ceilings;
+existing transport, authorization, purpose, storage and moderation gates remain.
+See [incoming sharing](../incoming-sharing.md) and the matching manual checklist.
+
+
 Typed Posts and comments retain explicit `crystal.renderComponent` metadata.
 The root declaration takes precedence over legacy nested `crystal.thing` in
 `PostInteractiveThing`; the linked embed still reads its Component through its

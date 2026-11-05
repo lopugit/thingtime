@@ -503,6 +503,7 @@ export const MAX_APP_SESSIONS_PER_APP_USER = 10;
 
 // Messenger (see api/utils/messenger): chats, messages, communities, custom
 // emojis, follows. All bounds here so no write path can disagree about them.
+// Processing chunk size for agent/provider replies, not a user message limit.
 export const MAX_MESSAGE_CHARS = 4000;
 export const MAX_CHAT_NAME_CHARS = 80;
 export const MAX_CHAT_TOPIC_CHARS = 250;
@@ -3584,8 +3585,7 @@ const chatMessageSchema: ThingtimeSchema = {
 			name: 'text',
 			type: 'string',
 			required: false,
-			max: MAX_MESSAGE_CHARS,
-			description: `Optional message text, max ${MAX_MESSAGE_CHARS} chars. A message may instead contain one or more bound attachments. :name: tokens render as custom emojis.`
+			description: 'Optional message text. A message may instead contain one or more bound attachments. :name: tokens render as custom emojis.'
 		},
     { name: 'threadRootId', type: 'id', required: false, description: 'Root message shareId when this is a thread reply.' },
     { name: 'replyToId', type: 'id', required: false, description: 'Quoted message shareId (inline reply).' },

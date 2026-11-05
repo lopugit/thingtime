@@ -14537,3 +14537,37 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - Compare/restore Components nested inside containers, elements, collections and
   inactive conditions. Match stable block IDs, preserve duplicate-ID refusal,
   reject ancestor cycles and permit reused objects/lists in separate positions.
+
+
+## Incoming sharing: post, message and save
+
+- From the real iOS system share sheet, select Thingtime for a link, text, photo,
+  Live Photo, PDF, video, audio, ZIP, custom UTI and mixed files/folders. The first
+  screen is New post with the content prefilled; no Saved locally dead end.
+- Verify image previews separately from original upload bytes. Live Photo
+  resources, unknown binary bytes, names, nested paths and empty folders survive.
+  Repeat with more than 25 items and identical names in different folders.
+- Share zero-byte files and whitespace-only text to Post, Message and Save.
+  Compare original bytes after download; retry the same request after lost
+  replies without creating another object. Missing empty-upload capabilities,
+  expired/bound drafts and changed metadata must refuse safely.
+- Edit the post text, switch destinations and return; preserve the edit and
+  attachment order. Publish once and compare the exact server Thing and files.
+- Choose Message, select/search/create a conversation through ordinary Messenger,
+  see the original link and an Add message cursor at the end, append a caption,
+  send once and read the exact recipient/message/attachments back.
+- Choose Save, browse all Things, create nested folders, enter them and use the
+  permanently reachable Save here button. Verify actual folder placement, exact
+  binary content and separately rendered/editable saved text.
+- Interrupt before/after upload and before/after publication; reopen in both the
+  extension and main app. Recover the same operation without duplicate content.
+  Block changing destinations after a submission has an unknown outcome.
+- Test sign-in, account/origin change, missing upload approval, cancelled source,
+  failed upload, retry and unavailable capability. Never show success before
+  exact result verification. Preserve recoverable originals.
+- Inspect desktop and phone layouts, full scroll to the bottom, keyboard-open
+  composer, menus, folder dialog and toolbar customisation. No hidden Send/Save,
+  clipped labels or overlap. Edit a toolbar icon, label, action and pixel block
+  individually, save/reload, then restore the task fixture.
+- Record web fixture, simulator, signed build, TestFlight processing and physical
+  device evidence separately. A fake native bridge proves the web adapter only.

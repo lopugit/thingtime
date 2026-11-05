@@ -886,7 +886,9 @@ export function useApi() {
 						},
 						options?: ThingRequestOptions
 					) => {
-						await requireThingtimeCapability('api.attachment-uploads', args.purpose === 'file' || args.purpose === 'file-import' ? '1.5.0' : '1.4.1');
+						const emptySharedFile = args.sizeBytes === 0 && (!args.purpose || ['post', 'comment', 'message'].includes(args.purpose));
+            await requireThingtimeCapability('api.attachment-uploads', emptySharedFile ? '1.8.0' : args.purpose === 'file' || args.purpose === 'file-import' ? '1.5.0' : '1.4.1');
+            if (emptySharedFile) await requireThingtimeCapability('api.attachment-upload-complete', '1.6.0');
 						if (args.purpose === 'file' || args.purpose === 'file-import') await requireThingtimeCapability('api.attachment-upload-complete', '1.4.0');
 						if (args.purpose === 'recording-import') {
 							await requireThingtimeCapability('api.attachment-upload-complete', '1.3.0');
@@ -1127,7 +1129,7 @@ export function useApi() {
         }, options?.signal);
       }, [asyncFetcher]),
       import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things-import', '1.11.0');
+        await requireThingtimeCapability('api.things-import', '1.12.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
@@ -1154,13 +1156,16 @@ export function useApi() {
       // only on the URL). `mode` is meaningless without conditions, so the GET
       // URL drops it to keep cache keys stable.
       search: useCallback(
-        async (args) => {
+        async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+          if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const { conditions, mode, ...rest } = args || {};
           if (rest.near !== undefined) await requireThingtimeCapability('api.things-search', '1.3.0');
           if (rest.anon && !conditions && rest.near === undefined) {
-            return getJson(`/api/v1/things/search${toQuery(rest)}`);
+            return getJson(`/api/v1/things/search${toQuery(rest)}`, { ...options, expectedDataPlane });
           }
-          return asyncFetcher.submit(args || {}, { action: '/api/v1/things/search' });
+          return asyncFetcher.submit(args || {}, { action: '/api/v1/things/search', ...options, expectedDataPlane });
         },
         [asyncFetcher]
       ),
