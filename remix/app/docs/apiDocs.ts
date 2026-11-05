@@ -681,9 +681,9 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
-    id: 'social-card', contractVersion: '1.0.1', featureVersion: '1.0.1', group: 'root',
+    id: 'social-card', contractVersion: '1.4.0', featureVersion: '1.4.0', group: 'root',
     title: 'Public social card', endpoint: '/social-card', summary: 'Renders an anonymous public social preview PNG.',
-    detail: 'GET accepts a normalized local path query; the controller resolves only public home-plane metadata. It ignores custom database selection and falls back to a safe generic card. HEAD returns image headers without resolving data. No arbitrary remote image URL is accepted.',
+    detail: 'Version 1.4 adds Editorial, Colour Blocks, Editorial White, Pink Invitation and Night Garden templates with auto/text/photo/gallery layouts, selected by the allowlisted previewTheme and previewLayout query values. All paths, including the homepage, use generated artwork. GET accepts a normalized local path query; the controller resolves only public home-plane metadata. It ignores custom database selection and falls back to a safe generic card. HEAD returns image headers without resolving data. Canonical brand artwork, palette and bundled fonts are embedded in the generated card. Eligible public managed photo thumbnails are baked into the PNG after anonymous attachment authorization; unsafe or unavailable photos fall back to brand artwork. Dynamic image URLs carry an independent renderer/brand revision and content revision. No arbitrary remote image URL is accepted. Every declared application route receives an automatic branded card from its route identity, with optional page-local copy overrides. Public saved-page composition supplies inferred visible text and managed image references without executing Actions or data sources. The /invite path renders a shared invitation card without resolving tokens, exposing private invite fields or consuming an invitation.',
     auth: { mode: 'none', description: 'Anonymous public projection only.' }, methods: ['GET'],
     steps: ['GET /social-card?path=/p/<public-id>.'], requestExamples: [{ name: 'Public preview', description: 'Render a public page preview.', method: 'GET', query: { path: '/' } }],
     responseExamples: [{ status: 200, description: 'PNG image.', headers: { 'Content-Type': 'image/png' } }]
@@ -3990,13 +3990,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Bounded expiry pass completed.', body: { ok: true } }]
   }),
   endpoint({
-    id: 'auth-invites', featureVersion: '2.1.0', contractVersion: '2.1.0', group: 'auth',
+    id: 'social-previews', featureVersion: '1.2.0', contractVersion: '1.2.0', group: 'content',
+    title: 'Public page metadata', endpoint: '/api/v1/social-previews', methods: ['GET'],
+    summary: 'Resolve crawler-safe title, description, canonical URL and social image for a Thingtime page.',
+    detail: 'Version 1.2 adds resolved design and choice catalogues. Optional previewTheme and previewLayout select presentation only; the copied URL and matching canonical/Open Graph identities retain these allowlisted choices. Optional path accepts a root-relative path or same-origin HTTP(S) URL, default /. Other query values and fragments are discarded before lookup. Remote origins, URL credentials and malformed paths are refused; this endpoint does not scrape remote URLs. Uses automatically discovered application routes with optional page-local copy overrides and inferred authorized saved-page composition, plus the shared anonymous post/profile/media resolver. Unknown dynamic bindings are omitted, never evaluated. Resets custom database selections regardless of supplied session cookies or scoped tokens. Private, missing and unavailable content receives the same generic metadata as anonymous unfurling. Only title, description, canonical/url, Open Graph type, publicContent, design/choices and image URL/type/dimensions/alt are returned, never raw Thing data. Responses are no-store and rate-limited by anonymous IP.',
+    auth: { mode: 'none', description: 'Anonymous public projection only; supplied authentication never grants additional visibility.' },
+    steps: ['Negotiate api.social-previews 1.2.0 on the selected origin.', 'GET with path for the page to share.'],
+    requestExamples: [{ name: 'Page metadata', description: 'Resolve a public page on the current origin.', method: 'GET', query: { path: '/feed' } }],
+    responseExamples: [{ status: 200, description: 'Anonymous page metadata.', body: { ok: true, title: 'Thingtime - Feed', description: 'Public posts on Thingtime.', url: 'https://thingtime.com/feed', canonical: 'https://thingtime.com/feed', type: 'website', publicContent: false, image: { url: 'https://thingtime.com/social-card?path=%2Ffeed', type: 'image/png', width: 1200, height: 630, alt: 'Thingtime preview card' } } }]
+  }),
+  endpoint({
+    id: 'auth-invites', featureVersion: '2.2.0', contractVersion: '2.2.0', group: 'auth',
     title: 'Gift credit invitations', endpoint: '/api/v1/auth/invites', methods: ['POST'],
     summary: 'Create, inspect and cancel single-use signup links with reserved gift credits.',
-    detail: 'POST intent=create with username, displayName, credits (0–10000, up to six decimals), and optional avatarUrl (small PNG/JPEG/WebP data URL). Server re-encodes and moderates a lossless PNG 128px thumbnail, max 80 KiB. JSON requests are bounded to 128 KiB; PNG/JPEG/WebP input data URLs are limited to 112,000 characters. Short moderation-provider throttles are retried once; unavailable review returns 503 before creating an invite or reserving credits. Clients retain the draft and may explicitly remove the optional photo before retrying. Returns url with a 256-bit fragment token; its hash is indexed and its recoverable value is stored only in protected binary state. POST intent=preview and token anonymously returns editable profile suggestions and gift amount. POST intent=list returns all pending and the latest 30 closed owned invites without bearer tokens, with canShowLink for recoverable pending links. POST intent=link with id reveals only an owned unexpired pending link. Older hash-only links require explicit replaceLegacy=true, atomically invalidating the old token without changing the gift or expiry. POST intent=cancel and id refunds an owned pending invite once. Optional expiresInDays accepts null (default Never expire), 1, 7, 30 or 90; expiresAt is null for non-expiring links. Existing dated invites keep their expiry; expiry refunds run hourly (up to 50 per run) and are also reconciled on owner list/create or expired-link access. At most 20 pending links; in-flight Lopu turns prevent reserving gifts. Pending profile suggestions are private binary state, deleted on completion. This narrow thumbnail upload does not enable general uploads. Invite signup grants no extra promotional starter credits.',
+    detail: 'POST intent=create with credits (0–10000, up to six decimals), optional username and displayName suggestions (omitted or blank lets the recipient choose), and optional avatarUrl (small PNG/JPEG/WebP data URL). Server re-encodes and moderates a lossless PNG 128px thumbnail, max 80 KiB. JSON requests are bounded to 128 KiB; PNG/JPEG/WebP input data URLs are limited to 112,000 characters. Short moderation-provider throttles are retried once; unavailable review returns 503 before creating an invite or reserving credits. Clients retain the draft and may explicitly remove the optional photo before retrying. Returns url with a 256-bit fragment token; its hash is indexed and its recoverable value is stored only in protected binary state. POST intent=preview and token anonymously returns editable profile suggestions and gift amount. POST intent=list returns all pending and the latest 30 closed owned invites without bearer tokens, with canShowLink for recoverable pending links. POST intent=link with id reveals only an owned unexpired pending link. Older hash-only links require explicit replaceLegacy=true, atomically invalidating the old token without changing the gift or expiry. POST intent=cancel and id refunds an owned pending invite once. Optional expiresInDays accepts null (default Never expire), 1, 7, 30 or 90; expiresAt is null for non-expiring links. Existing dated invites keep their expiry; expiry refunds run hourly (up to 50 per run) and are also reconciled on owner list/create or expired-link access. At most 20 pending links; in-flight Lopu turns prevent reserving gifts. Pending profile suggestions are private binary state, deleted on completion. This narrow thumbnail upload does not enable general uploads. Invite signup grants no extra promotional starter credits.',
     auth: { mode: 'optional', description: 'Full user session required for create/list/link/cancel. Preview requires the unguessable invite token. Scoped tokens cannot create or manage invites.' },
-    steps: ['Create an invite and copy its returned URL.', 'Recipient POSTs the fragment token with intent=preview.', 'Redeem with POST /api/v1/auth/register including inviteToken and password; profile overrides and email are optional.'],
-    requestExamples: [{ name: 'Create invitation', description: 'Gift one credit.', method: 'POST', body: { intent: 'create', username: 'new-friend', displayName: 'New friend', credits: 1 } }],
+    steps: ['Create an invite and copy its returned URL.', 'Recipient POSTs the fragment token with intent=preview.', 'Redeem with POST /api/v1/auth/register including inviteToken and password; the recipient chooses a valid username and displayName, with existing invite suggestions used only when an override is omitted. Email is optional.'],
+    requestExamples: [{ name: 'Create invitation', description: 'Gift one credit and let the recipient choose their profile.', method: 'POST', body: { intent: 'create', credits: 1 } }],
     responseExamples: [{ status: 200, description: 'Invite created.', body: { ok: true, url: 'https://thingtime.com/invite#opaque-single-use-token' } }]
   }),
   endpoint({
@@ -6252,14 +6262,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.17.1',
-		featureVersion: '1.17.1',
+		contractVersion: '1.17.2',
+		featureVersion: '1.17.2',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
-			'Version 1.17 adds owner-only target=1 with an exact range, returning a 60-second signed GET target whose Range header and stored object version are signature-bound. The JSON fingerprint describes the whole attachment. URLs are transient transport authority: never log, persist or cache them. Providers without exact signed-range support fail closed. Legacy redirects, ranges, fingerprints and retention remain unchanged. Version 1.16 fingerprints stored empty file content with algorithm sha256-parts-v1, partSizeBytes=8388608, partCount=0 and the exact SHA-256 of empty input. Verification requires an exact-version FULL_OBJECT storage checksum, size zero and the canonical attachment identity. Ordinary authorized GET returns the real stored zero-byte object; no placeholder bytes or absent-object inference is used. ' +
+			'Version 1.17.2 serves exact-version verified zero-byte cache reads after a successful backing object GET even when the storage response has no stream. Version 1.17.1 accepts the passive builder-thing provenance marker alongside an otherwise supported standalone content root for shared dependency, media, action, copy and export traversal. The marker alone, unknown/control kinds, target-attached roots and inaccessible audiences remain refused. Version 1.17 adds owner-only target=1 with an exact range, returning a 60-second signed GET target whose Range header and stored object version are signature-bound. The JSON fingerprint describes the whole attachment. URLs are transient transport authority: never log, persist or cache them. Providers without exact signed-range support fail closed. Legacy redirects, ranges, fingerprints and retention remain unchanged. Version 1.16 fingerprints stored empty file content with algorithm sha256-parts-v1, partSizeBytes=8388608, partCount=0 and the exact SHA-256 of empty input. Verification requires an exact-version FULL_OBJECT storage checksum, size zero and the canonical attachment identity. Ordinary authorized GET returns the real stored zero-byte object; no placeholder bytes or absent-object inference is used. ' +
             'Optional character=<id> selects an owned Character for media elements; unauthorized identities return 401. Standalone file-purpose attachments use the same exact-owner access checks as saved recordings, including moderation, object-version and storage gates. ' +
 			'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Inherited comment media also enforce moderation on every intervening ancestor, including comments on media. ' +
 			'Unlisted post/page/comment media opens by canonical attachment id without a secret key. Current parent ACL, moderation and storage gates are rechecked on every request. Saved profile discoveries remain tied to the account or anonymous browser identity; IP metadata never grants access. ' +
@@ -6285,7 +6295,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'range=1 with version (the exact fingerprint version), offset and length returns 206 bytes without redirects. Length is 1 byte–2 MiB, offset is a nonnegative integer, and the complete range must fit the file. No cache/image/download/fingerprint variants may be combined. The server validates exact upstream Content-Range and byte count and reauthorizes before returning bytes; responses are private/no-store. Changed versions return 409, out-of-file ranges 416, truncated/wrong upstream bytes 502. Native staged publication must still verify the full planned fingerprint.',
 			'fingerprint=1 returns a verified sha256-parts-v1 fingerprint, exact-content opaque version and size through the same live authorization gate. The digest hashes canonical multipart part digests, not the whole file; compare algorithm, part size, part count and size as well. No object keys, signed URLs or account data are returned. Unavailable or incompatible checksums return 409; never treat that as a missing file.',
 			'GET with id; optionally add download=1. width=64,320,640,1280,1920 returns a bounded WebP preview for verified raster images up to 20 MiB; unsupported images return 415 so clients can use the original.',
-			'cache=bytes returns at most 16 MiB of authorized original content through the same origin, without S3 CORS. In 1.17.1, a verified zero-byte object returns HTTP 200 with an empty body even when storage exposes no stream; a missing object still returns 502. Larger files return 413; omit cache to use native range streaming.',
+			'cache=bytes returns at most 16 MiB of authorized original content through the same origin, without S3 CORS. In 1.17.2, a verified zero-byte object returns HTTP 200 with an empty body even when storage exposes no stream; a missing object still returns 502. Larger files return 413; omit cache to use native range streaming.',
 			'cache=validate performs the same live authorization and returns {ok,cacheKey,size} without file bytes. Cache keys are opaque, viewer/version scoped and include the requested width. Revalidate before EVERY local cache read; never serve cached private bytes after a failed check or offline. Never persist signed URLs.',
 			'Follow the 302 to the short-lived private object URL.',
 			'Use the same stable endpoint again after expiry; never persist the presigned target.',
@@ -9514,8 +9524,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.48.0',
-    contractVersion: '1.48.0',
+    featureVersion: '1.49.1',
+    contractVersion: '1.49.1',
+
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -9523,9 +9534,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.49 preserves generic authored Collection source offsetInput/limitInput/totalPath mappings, explicit total and selected-row presentation, and Map query-parameter selection bindings. Authenticated GET ?ids=<JSON array of Thing IDs> returns { ok: true, things: [PublicThing|null,...] } in exact input order, including duplicates. It reuses canonical exact-read ACLs, PAT visibility, app namespace/liveness and protected-record gates, batches DB and public projection work, and does not hydrate discussions or write discovery state. Missing, denied and protected IDs are indistinguishable nulls. ids cannot be combined with list/id/projection parameters; the existing optional hidden-link key remains supported. The operation has no product item cap, but GET URL and response transport limits still apply; clients must process large selections in encoded-byte-aware chunks and reduce the chunk on a transport refusal instead of truncating the dataset. It adds authenticated GET ?count=true over the ordinary Things list filters, returning { ok: true, count } after the same owner, namespace, PAT visibility, moderation and inherited ACL checks. Counts reject paging, exact-ID and discussion-projection parameters, return no partial total on failure or cancellation, and are observations rather than transactionally reserved snapshots. Ordinary list and count reads accept excludeArchived=true, excluding only crystal.archived=true before pagination. Optional list offset is a nonnegative visible-row ordinal; it cannot be combined with a cursor or discussion projection and returns offset plus nextOffset (null at the end). Offset reads scan authorization metadata and project only the requested window, without promising constant-time random access. Safe ordinary owner data uses native database counts; exceptional rows stream authorization metadata only. No raw query language, new index, item limit or public data projection is added. ' +
       'Version 1.48 supports saved map marker child templates, including ordinary Component references bound to each point, and authored detail reveal controls. Normal composition and authorization checks remain. ' +
       'Version 1.47 accepts individually editable tt-upload blocks and adds first-party owner/PAT numeric summaries for exact data schemaId and parentId lists. GET with maxCrystalField=<top-level field> and optional excludeArchived=true returns summary.max (null when no finite numeric value exists), traverses all authorized pages without an item-count cap, and fails without a partial result on cancellation or pagination failure. Summary reads are not atomic order reservations. ' +
       'Version 1.46.3 keeps private external account and named credential metadata behind the dedicated Connections API. Generic Things reads do not expose either record. ' +
+      'Version 1.49.1 preserves sharedRoot dependency reads for canonical Builder content carrying builder-thing provenance. The passive marker does not grant access or admit control/relationship roots. ' +
+
       'Version 1.46.2 accepts complete emoji-only reaction combinations without the former 12-emoji / 80-code-point caps, through the shared reaction validator. Existing authorization, storage accounting and request transport validation still apply. ' +
       'Version 1.46.1 reserves storage-pending- and storage-recovery- share IDs for transactional accounting records; generic create and upsert cannot squat those namespaces. ' +
       'Version 1.45 adds owner-only GET ?folder=root&builderApp=true to list top-level Builder app folders before cursor pagination. A Builder app is an ordinary folder Thing with validated crystal.builderApp, iconUrl and structured metadata; folderId groups independently authorized Things without changing their ACL or protected OAuth appId. The filter rejects exact-ID and non-root/app-lens use. ' +
@@ -9589,6 +9603,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Handle 401 unauthenticated, 400 invalid payload or acl, 404 missing target/thing, and 413 oversized payload.'
     ],
     requestExamples: [
+      {
+        name: 'Read related Things in order',
+        description: 'One generic exact-read join. Missing or inaccessible rows are null, duplicates retain their positions, and no discussion descendants are included. Chunk large selections to respect the deployed URL/response transport.',
+        method: 'GET',
+        query: { ids: '["thing-one","thing-two","thing-one"]' }
+      },
+      {
+        name: 'Count saved data',
+        description: 'Exact authorized count over the same filters as a cursor list. No cursor or limit is accepted; an unavailable count is an error, never a loaded-page subtotal.',
+        method: 'GET',
+        query: { thingtime: 'data', schemaId: 'saved-schema', parentId: 'parent-thing', count: 'true', excludeArchived: 'true' }
+      },
       {
         name: 'Summarize route stop order',
         description: 'Read the largest finite numeric rank across all authorized matching data Things. Empty lists return { ok: true, summary: { max: null } }. This read does not reserve the next order.',
@@ -11545,14 +11571,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'things-update',
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.17.0',
-    contractVersion: '1.17.0',
+    featureVersion: '1.18.0',
+    contractVersion: '1.18.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     notes: ['Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
+      'Version 1.18 preserves authored Collection source offsetInput, limitInput and totalPath mappings, explicit total bindings, selectedKey/itemKey/revealSelected presentation, and Map onSelectQueryParams/onRouteSelectQueryParams. These generic saved bindings grant no read or mutation authority. ' +
       'Version 1.16 accepts individually editable tt-upload Webpage blocks, preserving the shared uploader, ownership, attachment access and storage validation. ' +
       'Version 1.15.1 accepts complete emoji-only reaction combinations without the former 12-emoji / 80-code-point caps, through the shared reaction validator. Existing authorization, storage accounting and request transport validation still apply. ' +
       'Version 1.15 accepts additive thingtime: [...storedContentSchemas, \"builder-thing\"] provenance without permitting content-kind changes or losing the marker; canonical Builder kinds are marked automatically on save. ' +
@@ -13101,8 +13128,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-export',
-    featureVersion: '1.15.0',
-    contractVersion: '1.15.0',
+    featureVersion: '1.15.1',
+    contractVersion: '1.15.1',
     // 1.12.0: include shared emoji content referenced by authorized live history.
     // Standalone emoji exports remain owner-only; stored bytes keep current gates.
     // 1.11.1: preserve the canonical ISO crystal edit/deletion timestamps.
@@ -13130,7 +13157,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // file identifies the authorized download and never enters the archive.
     endpoint: '/api/v1/things/export',
     summary: 'Read authorized content, folder descendants, app dependencies and file/link descriptors, including bounded annotations. Owned/public themes use dedicated readers. Feed algorithms use owner-only home-plane reads, including legacy profiles: exports contain name, emoji, exact weights, eventCount and lastTrainedAt, never shared status, lineage or active selection. Algorithm files contain private interest weights; public preview links do not authorize full export.',
-    detail: 'Standalone files export through the protected attachment adapter. Their portable crystal includes recordingFileId and optional filePurpose=file, preserving the original immutable purpose and bytes. ' +
+    detail: 'Version 1.15.1 accepts the passive builder-thing provenance marker alongside an otherwise supported standalone content root for shared dependency, media, action, copy and export traversal. The marker alone, unknown/control kinds, target-attached roots and inaccessible audiences remain refused. Standalone files export through the protected attachment adapter. Their portable crystal includes recordingFileId and optional filePurpose=file, preserving the original immutable purpose and bytes. ' +
       'Read-only POST. Owned standalone recordings use an attachment Thing with only crystal.recordingFileId and exactly one required stored byte entry. Its plan-only sourceId identifies the authenticated content download; sourceId never enters portable files. includeFiles=false fails for recordings. Reuses live Thing and composition audience checks, canonicalizes executable aliases, and drains folder pagination. File metadata uses the same live moderation, audience and object-state gates as downloads. No ownership, ACL, tokens, object keys or signed URLs are exported. Clients download stored files through the normal content endpoint and compute checksums. Optional links contain validated external URLs, mediaKind and owner annotations; attachmentOrder preserves mixed gallery order. Linked bytes are never fetched. Flagged linked media, inaccessible dependencies, unsupported managed records and bounds violations fail explicitly rather than truncating.',
     auth: { mode: 'optional', description: 'Session or anonymous public/keyed content access. Folder enumeration requires ownership. App tokens and PATs are not supported.' },
     methods: ['POST'],
@@ -13168,14 +13195,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things-fork',
     // 1.4.0: root render media bindings preserve split-fragment template behavior.
-    featureVersion: '1.8.0',
-    contractVersion: '1.8.0',
+    featureVersion: '1.8.1',
+    contractVersion: '1.8.1',
+
     group: 'things',
     title: 'Copy a shared composition',
     endpoint: '/api/v1/things/fork',
     summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content and bound post-purpose file galleries; independently readable foreign components include their authored same-author children. Bound files keep their copied home target and gallery order, even when also embedded elsewhere. Linked gallery entries become new private quota-accounted records with the same validated external URL and annotations; external bytes are never fetched, stored or redirected by the content endpoint. Flagged linked media cannot be re-minted as unflagged. Non-post purposes are excluded and unavailable or unsupported files fail the copy instead of silently dropping a gallery.',
-    detail: 'Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
+    detail: 'Version 1.8.1 accepts the passive builder-thing provenance marker alongside an otherwise supported standalone content root for shared dependency, media, action, copy and export traversal. The marker alone, unknown/control kinds, target-attached roots and inaccessible audiences remain refused. Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
       'Revalidates the root audience and traverses stored component, action, schema and data references, including saved component arguments and every persisted page instance. Copies readable relational comments and nested replies in parent-first order (up to 512 Things, files and comments; larger copies fail without truncation), including comments on media and each nested gallery. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Templated controls retain their editable arguments and receive a bounded ttActionRefs array of [original resolved reference, copied id] pairs on the authored control node. The renderer applies the first matching pair once after ttAction interpolation, never to labels or inputs, and strips the marker from rendered output. Unused pairs are not access grants. Deferred tt-collection/Collection itemTemplate controls participate in stored dependency discovery and copying; row runtime values never grant authority. Version 1.8 also rewrites literal map source Actions to their copied IDs without changing map input data. Dialog closeOnAction references follow copied actions without independently granting access. Forks of forks rebind to their own actions. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
+
     auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed. File-bearing copies additionally require the recipient to be a user account with normal post-purpose upload approval; that permission is checked before reservation and throughout copying.' },
     methods: ['POST'],
     steps: ['POST { id, key? }. Supported roots are post, data, schema, component, webpage and action content; organizational folders, managed records and target-attached relationship rows retain their dedicated lifecycle.', 'Stored first-party media referenced by pages/components is copied to new caller-owned uploads through quota, exact-version authorization and normal moderation. HTML/CSS, saved URL arguments and exact attachment IDs in persisted argument values/defaults are retargeted, including nested lists and page-instance overrides. Matching ttMap keys and ttIf comparison values follow copied IDs so branch selection is preserved. URL template strings, argument labels and unrelated prose are preserved. External URLs are unchanged. Split-fragment file IDs retain their argument program and use root render ttMediaRefs pairs after interpolation. At most 512 valid first-match ID pairs map only first-party unkeyed media props and parsed CSS; the marker is stripped from output, generated text shares the render budget, and unused pairs never grant access. Re-forks compose targets onto their newly copied files.', 'Post and comment galleries preserve order, use their original attachment purpose, and supply inspected media to post validation. Copied comments inherit the new private parent; source community/flair placement is removed. Reactions and votes are not copied. Files bind transactionally to a copied Thing, with at most 25 files per target. The operation shares a 120-second copy deadline and revalidates the source composition before and after writes. Failure cleans only new Things/uploads; deferred cleanup remains billed and is reported. filesCopied counts newly owned attachments, separately from copied Things.', 'Open the returned id in Builder for a webpage or /thing/:id for other content.'],
@@ -13186,15 +13215,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'actions-run',
     // 1.34.0 adds owned XPath evaluator, compiled expression and result objects.
     // 1.34.1 retains trusted mutation provenance; 1.35.0 adds native traversal and reusable synchronous data callbacks.
-    featureVersion: '1.39.0',
-    contractVersion: '1.39.0',
+    featureVersion: '1.40.1',
+    contractVersion: '1.40.1',
+
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
+      'Version 1.40 adds the unary ttExpr:["encodeURIComponent",value] expression in ordinary saved Action and Component expressions. It accepts text and maps null/undefined to an empty string; other types and malformed UTF-16 surrogate text are refused without exposing the value. Standard JavaScript URI-component UTF-8 escaping applies, within the existing expression output budget. The operation performs no evaluation, HTTP request or other side effect. Browser programs containing it require execution protocol 1.40 and api.actions-run >=1.40.0 on the selected origin. ' +
       'Version 1.39 recognizes the literal saved source Actions of a map as stored shared composition dependencies, subject to the same audience and read-only Action checks. Runtime row values and source inputs grant no Action access. ' +
-      'Version 1.38 preserves opaque pagination cursor query values up to the shared 16-KiB transport bound in local UI navigation. ' +
+      'Version 1.40.1 accepts the passive builder-thing provenance marker alongside an otherwise supported standalone content root for shared dependency, media, action, copy and export traversal. The marker alone, unknown/control kinds, target-attached roots and inaccessible audiences remain refused. Version 1.38 preserves opaque pagination cursor query values up to the shared 16-KiB transport bound in local UI navigation. ' +
+
       'Version 1.37.1 fixes browser Action requests in the installed desktop shell: same-origin requests use the selected HTTPS account endpoint with actor and database preconditions preserved; incomplete web servers still fail closed. ' +
       'Version 1.37.0 adds history.recovery:{formatVersion:1,event,dataPlane,proof} when completion retries fail and configured signing keys can seal the exact immutable outcome. API clients should retain this bounded bundle and retry it through api.timeline 1.16.0; never rerun the Action to repair delivery. The first-party client durably queues the same event before reporting local retention, then synchronizes normally across reloads. A lost response or process death before sealing cannot supply a known outcome; incomplete without recovery remains explicit. ' +
       'Version 1.36.0 journals admitted ordinary server runs and outcomes in canonical Timeline, including read-only runs. A failed admission returns 507/503 before execution. Completed runs include history:{status:recorded|incomplete,startedEventId,outcomeEventId:string|null}; incomplete preserves the actual run result and warns that completion was not acknowledged after bounded receipt retries. Do not replay the Action to repair History. A process that stops after admission can leave only a started event. Outcomes omit runtime payloads, use the invoker account/data plane and survive Action deletion. Browser preparation and shared runs remain unrecorded. The bounded action-run records below remain a supplementary debug cache. ' +
@@ -13405,14 +13437,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.10.0',
-    featureVersion: '1.10.0',
+    contractVersion: '1.11.0',
+    featureVersion: '1.11.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
     notes: ['Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
+      'Version 1.11 resolves authored Collection source offsetInput, limitInput and totalPath mappings, explicit total bindings, selectedKey/itemKey/revealSelected presentation, and Map onSelectQueryParams/onRouteSelectQueryParams through the canonical editable composition renderer. Existing source negotiation, access and dependency checks remain. ' +
       'Version 1.9 resolves editable tt-upload controls alongside guarded map blocks. The page runtime supports opt-in local query state, marker selection, custom plain-text icons, title/custom labels, icon lists and authorized attachment avatars without page navigation. These presentation bindings grant no data or media access. ' +
       'Version 1.8.1 resolves saved Component dependencies nested in element, collection and condition blocks, including inactive condition branches, through the same visibility and shared-writer checks as top-level references. Version 1.8 resolves saved intrinsic media containers and ordinary editable child controls for browser-local image and video compression. ' +
       'Version 1.7 adds registered authenticated live SSE source bindings. Shared-root execution cannot borrow viewer stream authority. Version 1.6 adds individually editable element, collection and condition blocks, any-block Action sources, transparent option repetition and Show all pagination. Element props/text and child templates use the existing safe binding language. Authored trees no longer have product block-count/depth limits; transport and storage constraints still apply. ' +
@@ -13487,14 +13520,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'maps', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'maps',
+    id: 'maps', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'maps',
     title: 'Mapbox maps and route optimization', endpoint: '/api/v1/maps',
     summary: 'Owner-scoped Mapbox address search, selected permanent geocoding, route optimization and public browser map configuration.',
-    detail: 'POST operation suggest, optimize or browser-config with an owned Vault entry reference. Fixed Mapbox destinations only; no caller URLs, credentials or headers. Suggest returns transient address candidates; permanent:true requires expectedId from the selected candidate and a matching fresh permanent result. Account entitlement and Mapbox storage conditions still apply. Optimize accepts 2–12 stops (the Optimization v1 provider constraint), unique stop IDs and longitude/latitude pairs, driving, driving-traffic, walking or cycling, and roundtrip. A non-roundtrip keeps the first and last input stops fixed. Returns optimized stop IDs, GeoJSON, distance and duration for the current view only. Mapbox standard terms prohibit caching Navigation API results. browser-config returns only an owned public pk token for the Mapbox SDK, never a secret sk token. Responses are private/no-store; clients must not persist tokens or temporary provider results. Each operation is explicit and may incur provider usage charges. Negotiate api.maps 1.0.0 on the selected origin.',
+    detail: 'Version 1.1 adds optional autocomplete:boolean on suggest (true by default, always false for permanent requests), optional allowlisted featureType/accuracy/matchCode metadata on suggestions, and alternative queries:[{id,query,expectedId?}] batch inputs in place of query. Batch replies return results:[{id,suggestions}] with the same cachePolicy; IDs remain in input order, duplicate addresses share provider work, and all inputs are validated before Vault access. Provider calls use processing chunks without a product item cap. Errors or cancellation return no partial batch. Permanent batches require each expectedId to match its fresh selected result. The same full-owner/Vault/origin boundaries and storage terms apply. POST operation suggest, optimize or browser-config with an owned Vault entry reference. Fixed Mapbox destinations only; no caller URLs, credentials or headers. Suggest returns transient address candidates; permanent:true requires expectedId from the selected candidate and a matching fresh permanent result. Account entitlement and Mapbox storage conditions still apply. Optimize accepts 2–12 stops (the Optimization v1 provider constraint), unique stop IDs and longitude/latitude pairs, driving, driving-traffic, walking or cycling, and roundtrip. A non-roundtrip keeps the first and last input stops fixed. Returns optimized stop IDs, GeoJSON, distance and duration for the current view only. Mapbox standard terms prohibit caching Navigation API results. browser-config returns only an owned public pk token for the Mapbox SDK, never a secret sk token. Responses are private/no-store; clients must not persist tokens or temporary provider results. Each operation is explicit and may incur provider usage charges. Negotiate api.maps 1.1.0 on the selected origin.',
     auth: { mode: 'session', description: 'Full signed-in owner account; Vault references grant no access to another owner.' },
     methods: ['POST'],
-    steps: ['Save a Mapbox token in your private Vault.', 'Negotiate api.maps 1.0.0.', 'Call an explicit operation with that Vault entry ID.', 'Render temporary results without persistence.'],
-    requestExamples: [{ name: 'Find an address', description: 'A Vault entry reference, not a token.', method: 'POST', body: { operation: 'suggest', vaultId: '<owned-vault-entry-id>', query: 'Federation Square Melbourne' } }],
+    steps: ['Save a Mapbox token in your private Vault.', 'Negotiate api.maps 1.1.0.', 'Call an explicit operation with that Vault entry ID.', 'Render temporary results without persistence.'],
+    requestExamples: [{ name: 'Find addresses in one operation', description: 'Batch IDs correlate each result; exact-address queries may disable autocomplete.', method: 'POST', body: { operation: 'suggest', vaultId: '<owned-vault-entry-id>', autocomplete: false, queries: [{ id: 'one', query: 'Federation Square Melbourne' }, { id: 'two', query: 'Flinders Street Station Melbourne' }] } }, { name: 'Find an address', description: 'A Vault entry reference, not a token.', method: 'POST', body: { operation: 'suggest', vaultId: '<owned-vault-entry-id>', query: 'Federation Square Melbourne' } }],
     responseExamples: [{ status: 200, description: 'Transient address candidates', body: { ok: true, suggestions: [], cachePolicy: 'transient' } }, { status: 401, description: 'Sign in required', body: { ok: false, error: 'Sign in with a full account to use Maps.' } }, { status: 409, description: 'Selected address changed or provider unavailable', body: { ok: false, error: 'Map request could not be completed.' } }]
   }),
   endpoint({

@@ -1272,7 +1272,12 @@ npm run worktree-setup
 The Remix `dev`, `build`, and lint entry points run the same dependency check
 automatically. It validates every direct dependency link and uses pnpm's shared
 store to repair missing or stale links, so `node_modules` never needs to be
-copied from another checkout.
+copied from another checkout. Install locks record their owning process.
+An interrupted owner fails promptly instead of waiting ten minutes; it does not
+steal a lock from a surviving pnpm child. Check this checkout for active installers
+before removing the named owner marker and empty lock directory, then rerun
+`npm run worktree-bootstrap`. Never remove another checkout’s lock or dependency
+files, and never infer that a live installer is stale from elapsed time alone.
 
 From the repository root, `npm run web-pms` starts or restarts the PM2-managed
 dev app `tt-nitro-react-router-9999`. The older `npm run remix-pms` command is
@@ -6733,7 +6738,7 @@ subject to GitHub's current plan terms; Vercel hosting/runtime charges remain.
 ### Saved Mapbox map applications
 
 A saved Builder app can use the `tt-mapbox` viewport and the origin-scoped
-`api.maps` 1.0.0 operations. Save your own Mapbox token in the private Thingtime
+`api.maps` 1.1.0 operations (including batched complete-address lookups). Save your own Mapbox token in the private Thingtime
 Vault and configure its entry ID (`<owned-vault-entry-id>`) in the saved app.
 The browser map requires a public `pk` token; never put secret tokens in page
 definitions. The map SDK and CSS are staged from the pinned npm package as same-origin app assets; browser

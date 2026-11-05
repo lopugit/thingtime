@@ -265,7 +265,11 @@ export const useThingSource = ({
 						: apiRef.current.v1.actions.run({ action: source.action, inputs: pageInputs, source: 'component' })
 					) as Promise<any>;
 				};
-				const response: any = loadAllPages ? await loadMapboxSourcePages(run, stale, inputs.cursor) : await run();
+				const response: any = loadAllPages ? await loadMapboxSourcePages(run, stale, inputs.cursor, (page) => {
+					if (stale()) return;
+					if (page.cache === 'no-store') clearSourceCache(viewerId, pageId, cacheId);
+					setState({ identity: runtime.identity, binding, status: 'ok', result: page.result, error: null });
+				}) : await run();
 				if (stale()) return;
 				if (response?.status === 'ok') {
 					if (!runtime.sharedRun) {

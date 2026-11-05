@@ -48,13 +48,20 @@ export function CollectionList<T>({
 	loadMore,
 	loading = false,
 	error = '',
-	resetKey = ''
+	resetKey = '',
+	total,
+	selectedKey,
+	itemKey,
+	loadPage,
+	pageData,
+	pageLoading = false,
+	pageError = ''
 }: {
 	label: string;
 	items: T[];
 	searchText: (item: T) => string;
 	filters?: CollectionFilter<T>[];
-	children: (items: T[]) => React.ReactNode;
+	children: (items: T[], start: number) => React.ReactNode;
 	empty?: string;
 	query?: string;
 	onQueryChange?: (query: string) => void;
@@ -68,6 +75,14 @@ export function CollectionList<T>({
 	loading?: boolean;
 	error?: string;
 	resetKey?: string;
+	/** Exact total from the same authorized source/filter, independent of loaded pages. */
+	total?: number;
+	selectedKey?: string | number;
+	itemKey?: (item: T) => unknown;
+	loadPage?: (offset: number, limit: number, prefetch?: boolean) => Promise<unknown>;
+	pageData?: Record<string, T[]>;
+	pageLoading?: boolean;
+	pageError?: string;
 }) {
 	const [localQuery, setLocalQuery] = React.useState('');
 	const query = externalQuery ?? localQuery;
@@ -85,13 +100,59 @@ export function CollectionList<T>({
 			(!normalized || searchText(item).toLocaleLowerCase().includes(normalized)) &&
 			filters.every((filter) => !selection[filter.key] || filter.value(item) === selection[filter.key])
 	);
-	const window = collectionWindow(filtered.length, size, page, visible);
+
 	const filtering = !!normalized || Object.values(selection).some(Boolean);
 	const filterKey = JSON.stringify(selection);
+	const knownTotal = !filtering && Number.isSafeInteger(total) && total! >= 0 ? Math.max(total!, filtered.length) : undefined;
+	// A pending cursor page is a valid requested page even before its rows arrive.
+	const count = knownTotal ?? (hasMore && size !== 'all' && size !== 'infinite' ? Math.max(filtered.length, page * size) : filtered.length);
+	const window = collectionWindow(count, size, page, visible);
+	const handledSelection = React.useRef<{ resetKey: string; key: string | number } | null>(null);
+	const [, refreshSelection] = React.useReducer((value: number) => value + 1, 0);
+	const selectedIndex = itemKey && selectedKey != null ? items.findIndex(item => itemKey(item) === selectedKey) : -1;
+	const selectionPending = selectedKey != null && itemKey && selectedIndex < 0 && hasMore;
+	const selectionSettled = selectedKey == null || (handledSelection.current?.resetKey === resetKey && handledSelection.current.key === selectedKey && selectedIndex >= 0);
+	const useOffset = !!loadPage && (!loading || items.length > 0) && !filtering && selectionSettled && typeof size === 'number' && knownTotal !== undefined;
+	const remoteKey = `${window.start}:${window.pageSize}`;
+	const remoteRows = useOffset ? pageData?.[remoteKey] ?? (filtered.length >= window.end ? filtered.slice(window.start, window.end) : undefined) : undefined;
+	const pageReady = useOffset ? !!remoteRows : !hasMore || window.end <= filtered.length;
+	const retained = React.useRef<{ resetKey: string; rows: T[]; start: number; end: number } | undefined>(undefined);
+	const loadedWindow = collectionWindow(filtered.length, size, page, visible);
+	if (pageReady || !retained.current || retained.current.resetKey !== resetKey) {
+		retained.current = remoteRows ? { resetKey, rows: remoteRows, start: window.start, end: window.start + remoteRows.length } : { resetKey, rows: filtered.slice(loadedWindow.start, loadedWindow.end), start: loadedWindow.start, end: loadedWindow.end };
+	}
+	const displayed = retained.current;
 	React.useEffect(() => {
 		setPage(1);
 		setVisible(10);
 	}, [query, filterKey, size, resetKey]);
+	React.useEffect(() => {
+		if (selectedKey == null) { handledSelection.current = null; return; }
+		if (selectedIndex < 0 || (handledSelection.current?.resetKey === resetKey && handledSelection.current.key === selectedKey)) return;
+		// Selection addresses the complete collection, so remove local filters that
+		// could otherwise hide the requested row. Authored source filters stay intact.
+		if (filtering) {
+			(onQueryChange || setLocalQuery)('');
+			setSelection({});
+			return;
+		}
+		handledSelection.current = { resetKey, key: selectedKey };
+		refreshSelection();
+		if (size === 'infinite') setVisible(value => Math.max(value, selectedIndex + 1));
+		else if (size !== 'all') setPage(Math.floor(selectedIndex / size) + 1);
+	}, [selectedKey, selectedIndex, resetKey, size, onQueryChange, filtering]);
+	React.useEffect(() => {
+		if (useOffset && !remoteRows && !pageLoading && !pageError) void loadPage?.(window.start, window.pageSize);
+	}, [useOffset, remoteRows, pageLoading, pageError, loadPage, window.start, window.pageSize]);
+	// Once the displayed page is ready, warm the most likely next/previous pages.
+	React.useEffect(() => {
+		if (!useOffset || !remoteRows || pageLoading || pageError || !loadPage) return;
+		const next = window.start + window.pageSize;
+		const previous = window.start - window.pageSize;
+		const covered = (start: number) => !!pageData?.[`${start}:${window.pageSize}`] || start + Math.min(window.pageSize, (knownTotal ?? 0) - start) <= filtered.length;
+		if (next < (knownTotal ?? 0) && !covered(next)) void loadPage(next, window.pageSize, true);
+		else if (previous >= 0 && !covered(previous)) void loadPage(previous, window.pageSize, true);
+	}, [useOffset, remoteRows, pageLoading, pageError, loadPage, window.start, window.pageSize, knownTotal, pageData, filtered.length]);
 	const requestMore = React.useCallback(async () => {
 		if (!loadMore || !hasMore || loading || requesting.current) return;
 		requesting.current = true;
@@ -105,8 +166,8 @@ export function CollectionList<T>({
 	// pages must not hide a match in older comments/media. A failed page stops here.
 	React.useEffect(() => {
 		const needed = size === 'infinite' ? visible : page * window.pageSize;
-		if (hasMore && !loading && !error && (size === 'all' || filtering || filtered.length < needed)) void requestMore();
-	}, [hasMore, loading, error, filtering, filtered.length, size, visible, page, window.pageSize, requestMore]);
+		if (!useOffset && hasMore && !loading && !error && (size === 'all' || filtering || selectionPending || filtered.length < needed)) void requestMore();
+	}, [hasMore, loading, error, filtering, filtered.length, size, visible, page, window.pageSize, requestMore, selectionPending, useOffset]);
 	const more = window.end < filtered.length || hasMore;
 	const goToPage = (next: number) => {
 		setPage(next);
@@ -128,7 +189,7 @@ export function CollectionList<T>({
 		return () => observer.disconnect();
 	}, [size, more, loading, error, window.end, revealMore]);
 	return (
-		<div ref={root} className="tt-collection" role="region" aria-label={`${label} results`}>
+		<div ref={root} className="tt-collection" aria-busy={loading || pageLoading || !pageReady} role="region" aria-label={`${label} results`}>
 			<div className="tt-collection-controls">
 				{!hideSearch && (
 					<label className="tt-collection-search">
@@ -196,20 +257,17 @@ export function CollectionList<T>({
 				)}
 			</div>
 			{!hideCount && <div className="tt-collection-count" role="status" aria-live="polite">
-				{filtered.length
-					? `${window.start + 1}–${window.end} of ${filtered.length}${hasMore ? '+' : ''} results`
+				{displayed.rows.length
+					? `${displayed.start + 1}–${displayed.end} of ${knownTotal ?? filtered.length}${hasMore && knownTotal === undefined ? '+' : ''} results`
 					: loading || hasMore
-					? 'Looking for results…'
+					? ''
 					: '0 results'}
-				{filtering && hasMore && !error ? ' · Searching older records…' : ''}
 			</div>}
-			{filtered.length ? (
-				children(filtered.slice(window.start, window.end))
-			) : (
-				<p className="tt-collection-empty">
-					{loading || hasMore ? 'More records are available below.' : filtering ? 'No results match these filters.' : empty}
-				</p>
-			)}
+			{displayed.rows.length ? (
+				children(displayed.rows, displayed.start)
+		) : !(loading || pageLoading || hasMore) ? (
+				<p className="tt-collection-empty">{filtering ? 'No results match these filters.' : empty}</p>
+			) : null}
 			{size === 'infinite' ? (
 				<div ref={sentinel} className="tt-collection-more">
 					{more ? (
@@ -220,7 +278,7 @@ export function CollectionList<T>({
 								else revealMore();
 							}}
 						>
-							{loading ? 'Loading more…' : 'Load more'}
+							Load more
 						</button>
 					) : (
 						filtered.length > 0 && <span>All {filtered.length} results shown</span>
@@ -242,11 +300,11 @@ export function CollectionList<T>({
 								))}
 							</select>{' '}
 							of {window.pages}
-							{hasMore ? '+' : ''}
+							{hasMore && knownTotal === undefined ? '+' : ''}
 						</label>
 						<button
 							aria-label={`Next page of ${label}`}
-							disabled={loading || (window.page === window.pages && !hasMore)}
+							disabled={pageLoading || loading || (window.page === window.pages && !hasMore)}
 							onClick={() => {
 								if (window.page === window.pages && hasMore) {
 									goToPage(window.page + 1);
@@ -259,6 +317,8 @@ export function CollectionList<T>({
 					</nav>
 				)
 			)}
+			{(loading || pageLoading) && <span className="tt-collection-progress" role="status" aria-label={`Loading ${label}`} />}
+			{pageError && useOffset && <div role="alert">{pageError} <button disabled={pageLoading} onClick={() => void loadPage?.(window.start, window.pageSize)}>Retry loading {label.toLowerCase()}</button></div>}
 			{error && hasMore && (
 				<button disabled={loading} onClick={() => void requestMore()}>
 					Retry loading {label.toLowerCase()}

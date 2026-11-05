@@ -47,7 +47,7 @@ function markerAppearance(value: unknown): MarkerAppearance | undefined {
 
 export function markerSelection(
 	point: Pick<MapboxPoint, 'group' | 'id'>,
-	config: { onSelectState?: unknown; onRouteSelectState?: unknown; onSelectQuery?: unknown; onRouteSelectQuery?: unknown; queryScope?: unknown },
+	config: { onSelectState?: unknown; onRouteSelectState?: unknown; onSelectQuery?: unknown; onRouteSelectQuery?: unknown; onSelectQueryParams?: unknown; onRouteSelectQueryParams?: unknown; queryScope?: unknown },
 	query: Record<string, unknown>
 ): Record<string, unknown> | undefined {
 	const route = point.group === 'route';
@@ -61,7 +61,14 @@ export function markerSelection(
 	}
 	const queryKey = route ? config.onRouteSelectQuery : config.onSelectQuery;
 	if (typeof queryKey === 'string' && queryKey) {
-		const params = { ...query, [queryKey]: point.id };
+		const extra = route ? config.onRouteSelectQueryParams : config.onSelectQueryParams;
+		const params: Record<string, unknown> = { ...query };
+		if (extra && typeof extra === 'object' && !Array.isArray(extra)) {
+			for (const [key, value] of Object.entries(extra)) {
+				if (/^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$/.test(key) && !['__proto__', 'constructor', 'prototype'].includes(key) && (typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) || value === null)) params[key] = value;
+			}
+		}
+		params[queryKey] = point.id;
 		if (config.queryScope !== 'page') return { op: 'query', params };
 		const otherKey = route ? config.onSelectQuery : config.onRouteSelectQuery;
 		if (typeof otherKey === 'string' && otherKey !== queryKey) delete params[otherKey];

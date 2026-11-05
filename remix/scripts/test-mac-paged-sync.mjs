@@ -251,7 +251,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		const manifest = await fetch(base + '/.well-known/thingtime-capabilities.json').then((r) => r.json());
 		assert.equal(manifest.origin, base);
 		assert.equal(manifest.features['api.files'].version, '1.10.0');
-		assert.equal(manifest.features['api.attachment-content'].version, '1.17.1');
+		assert.equal(manifest.features['api.attachment-content'].version, '1.17.2');
 		assert.equal(manifest.features['api.file-sync-batches'].version, '1.3.0');
 		const registered = await fetch(base + '/api/v1/auth/register', {
 			method: 'POST',
