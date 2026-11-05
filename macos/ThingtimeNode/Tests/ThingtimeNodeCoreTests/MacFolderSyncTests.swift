@@ -884,7 +884,7 @@ final class MacFolderSyncTests: XCTestCase {
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
         XCTAssertNotNil(context["conditions"])
         XCTAssertNotNil(context["roots"])
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.19.0", "fileSymbolicLinksVersion": "1.0.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0", "fileUploadBatchVersion": "1.0.0", "fileFolderBatchVersion": "1.0.0", "fileResourceLimitsVersion": "1.1.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.19.0", "fileSymbolicLinksVersion": "1.0.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0", "fileUploadBatchVersion": "1.0.0", "fileSingleUploadVersion": "1.0.0", "fileFolderBatchVersion": "1.0.0", "fileResourceLimitsVersion": "1.1.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }

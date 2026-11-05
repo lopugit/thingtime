@@ -661,3 +661,34 @@ test('symbolic-link uploads negotiate tagged file support before opening bytes o
  await assert.rejects(executeSyncRun(run, f.port(run, async () => {})), /updated server/);
  assert.equal(tagged, true); assert.deepEqual(f.counts(), { puts: 0, starts: 0, commits: 0, opens: 0 });
 });
+
+test('compound attachment transport retains guarded publication hook, operation identity and receipt-first replay', async () => {
+ const f = await fixture(), run = f.make(), write = run.cloudWrites[0]; write.guardDestination = true; write.cloudRootId = "cloud"; write.folderId = "cloud";
+ f.runtime.nativeUploadApproval = { id: scope.rootId, updatedAt: '2026-11-06T00:00:00Z', scope,
+  configuration: { configurationVersion: 1, name: 'Two way', deviceId: scope.deviceId, localRootId: 'local', remoteFolderId: 'cloud', mode: 'two-way', paused: false, propagateDeletes: false, network: 'wifi', chargingOnly: false, excludedPaths: [] } };
+ let calls = 0, hooks = 0;
+ f.runtime.beforeFilePublication = async id => { assert.equal(id, write.operation.id); hooks++; };
+ const native: FingerprintSource = { ...source(), check: () => { throw Error('Duplicate native check'); }, verify: async () => { throw Error('Duplicate native verify'); },
+  uploadSingle: async request => { calls++; assert.equal(request.requestId, write.operation.id); assert.equal(request.uploadId, 'att1');
+   return { attachmentId: 'att1', version: 'a'.repeat(64), size: f.entry.size, fingerprint: f.entry.fingerprint!, payloadBytes: f.entry.size }; } };
+ await createCloudFileTransport(f.runtime, write).apply(native);
+ await createCloudFileTransport(f.runtime, write).apply(native);
+ assert.equal(calls, 1); assert.equal(hooks, 1); assert.equal(f.counts().commits, 1);
+});
+test('compound refuses mismatched content and preserves occupied/revised destination guard', async () => {
+ for (const failure of ['proof', 'destination']) {
+  const f = await fixture(), write = f.make().cloudWrites[0]; write.guardDestination = true; write.cloudRootId = "cloud"; write.folderId = "cloud";
+  f.runtime.nativeUploadApproval = { id: scope.rootId, updatedAt: '2026-11-06T00:00:00Z', scope,
+   configuration: { configurationVersion: 1, name: 'Sync', deviceId: scope.deviceId, localRootId: 'local', remoteFolderId: 'cloud', mode: 'two-way', paused: false, propagateDeletes: false, network: 'wifi', chargingOnly: false, excludedPaths: [] } };
+  if (failure === 'destination') f.runtime.beforeFilePublication = async () => { throw Error('Destination revision changed'); };
+  await assert.rejects(createCloudFileTransport(f.runtime, write).apply({ ...source(), uploadSingle: async () => ({ attachmentId: 'att1', version: 'a'.repeat(64), size: f.entry.size,
+   fingerprint: failure === 'proof' ? { ...f.entry.fingerprint!, sha256: '0'.repeat(64) } : f.entry.fingerprint!, payloadBytes: f.entry.size }) }));
+  assert.equal(f.counts().commits, 0);
+ }
+});
+test('absent native approval leaves custom mutation policy on its original per-part path', async () => {
+ const f = await fixture(), write = f.make().cloudWrites[0]; let authorized = 0;
+ f.runtime.authorizeMutation = async () => { authorized++; };
+ await createCloudFileTransport(f.runtime, write).apply({ ...source(), uploadSingle: async () => { throw Error('Custom policy bypass'); } });
+ assert.ok(authorized > 0); assert.equal(f.counts().puts, 1);
+});

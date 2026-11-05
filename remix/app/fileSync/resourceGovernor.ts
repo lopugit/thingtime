@@ -118,5 +118,5 @@ export class SyncResourceGovernor {
 /** Only governed payload calls may outlive a fixed bridge wall deadline. Native
  * transports still own bounded network inactivity and cancellable waits. */
 export function syncRequestHasPacing(action: string, limits?: FileSyncResourceLimits): boolean {
- return !!limits && ((['upload-batch', 'upload-file', 'upload-part'].includes(action) && !!(limits.uploadBytesPerSecond || limits.cpuPercent)) || (action === 'stage-download' && !!(limits.downloadBytesPerSecond || limits.cpuPercent)) || (['stage-finish', 'publish'].includes(action) && !!limits.cpuPercent));
+ return !!limits && ((['upload-batch', 'upload-file', 'upload-part', 'upload-single'].includes(action) && !!(limits.uploadBytesPerSecond || limits.cpuPercent)) || (action === 'stage-download' && !!(limits.downloadBytesPerSecond || limits.cpuPercent)) || (['stage-finish', 'publish'].includes(action) && !!limits.cpuPercent));
 }

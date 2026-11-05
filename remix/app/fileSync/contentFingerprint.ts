@@ -38,6 +38,9 @@ export type FingerprintSource = {
 	downloadTarget?(offset: number, length: number, signal?: AbortSignal): Promise<import('./signedDownloadTarget').SignedDownloadTarget>;
 	/** Native multipart loop and attachment completion. The caller still verifies
 	 * stored bytes and publishes the canonical file/Timeline operation. */
+	/** Bounded Mac compound transport: strong source checks include the final stored
+	 * fingerprint callback. Publication remains in the original guarded executor. */
+	uploadSingle?(request: NativeFileUpload, signal?: AbortSignal): Promise<{ attachmentId: string; version: string; size: number; fingerprint: ContentFingerprint; payloadBytes: number | null }>;
 	uploadFile?(request: NativeFileUpload, signal?: AbortSignal, progress?: (bytes: number, total: number) => void): Promise<{ fingerprint: ContentFingerprint }>;
 
 	/** Native file-backed multipart upload. Resolves only after authenticated

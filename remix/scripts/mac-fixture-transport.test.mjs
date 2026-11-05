@@ -156,3 +156,61 @@ test('per-call diagnostics retain closed identity and end once on cancellation/E
   assert.ok(events.every(e => e.requestId === 'safe-id' && e.path === 'other'));
   assert.equal(JSON.stringify(events).includes('private'), false);
 });
+
+const callbackFrame = (requestId, callbackId, frame = { kind: 'chunk', ordinal: 0, data: 'private-bytes' }) =>
+  ({ type: 'batch', requestId, callbackId, frame, nativeEmittedMs: 123 });
+test('duplex replies bypass the held lane and out-of-order callbacks keep request identity', async () => {
+  const f = fixture(), callbacks = new Map();
+  const active = f.transport.request({ requestId: 'upload', action: 'upload-single' }, undefined,
+    { onBatchFrame: frame => new Promise(resolve => callbacks.set(frame.ordinal, resolve)) });
+  const poll = f.transport.request({ requestId: 'poll', action: 'scan-changes' });
+  const next = f.transport.request({ requestId: 'next', action: 'inspect' });
+  await turn(); f.transport.receive(callbackFrame('upload', 1)); f.transport.receive(callbackFrame('upload', 2, { kind: 'chunk', ordinal: 1 }));
+  callbacks.get(1)({ status: 'second' }); await turn(); callbacks.get(0)({ status: 'first' }); await turn();
+  assert.deepEqual(f.sent.filter(x => x.action === 'fixture-batch-reply').map(x => [x.requestId,x.callbackId,x.reply.status]), [['upload',2,'second'],['upload',1,'first']]);
+  assert.equal(f.sent.some(x => x.requestId === 'next'), false);
+  f.reply('poll'); await poll; f.reply('upload'); await active; await turn(); f.reply('next'); await next;
+});
+test('duplex unknown requests and replayed callback IDs cannot invoke another callback', async () => {
+  const f = fixture(); let calls = 0;
+  const active = f.transport.request({ requestId: 'upload', action: 'upload-single' }, undefined,
+    { onBatchFrame: () => { calls++; return new Promise(() => {}); } });
+  const rejected = assert.rejects(active);
+  await turn(); assert.throws(() => f.transport.receive(callbackFrame('wrong-request',1)), /identity/);
+  assert.equal(calls,0); f.transport.receive(callbackFrame('upload',1));
+  assert.throws(() => f.transport.receive(callbackFrame('upload',1)), /callback/); assert.equal(calls,1);
+  f.transport.close(); await rejected;
+});
+test('duplex cancellation aborts callback once and holds lane through late batch frames until native ACK', async () => {
+  const f = fixture(), controller = new AbortController(); let aborted = 0, release;
+  const active = f.transport.request({ requestId: 'upload', action: 'upload-single' }, controller.signal,
+    { onBatchFrame: (_frame, signal) => { signal.addEventListener('abort', () => aborted++, { once: true }); return new Promise(resolve => { release = resolve; }); } });
+  const rejected = assert.rejects(active), next = f.transport.request({ requestId: 'next', action: 'read' });
+  await turn(); f.transport.receive(callbackFrame('upload',1)); controller.abort(); await rejected;
+  f.transport.receive(callbackFrame('upload',2)); release({ status: 'late' }); await turn();
+  assert.equal(aborted,1); assert.equal(f.sent.some(x => x.action === 'fixture-batch-reply'),false);
+  assert.equal(f.sent.some(x => x.requestId === 'next'),false);
+  f.transport.receive({ requestId: 'upload', ok: false }); await turn(); f.reply('next'); await next;
+});
+test('duplex EOF rejects all relevant pending work once, aborts callback and redacts diagnostics', async () => {
+  const sent = [], events = []; let release, aborted = 0;
+  const transport = new MacFixtureTransport({ write: frame => sent.push(frame), createStream: () => {}, observeRequest: event => events.push(event) });
+  const active = transport.request({ requestId: 'upload', action: 'upload-single' }, undefined,
+    { onBatchFrame: (_frame, signal) => { signal.addEventListener('abort', () => aborted++, { once: true }); return new Promise(resolve => { release = resolve; }); } });
+  const other = transport.request({ requestId: 'other', action: 'read' });
+  const rejected = Promise.all([assert.rejects(active),assert.rejects(other)]);
+  await turn(); transport.receive(callbackFrame('upload',1)); const count = sent.length;
+  transport.close(Error('private-error')); transport.close(); await rejected; release({ status: 'late' }); await turn();
+  assert.equal(aborted,1); assert.equal(sent.length,count); assert.equal(JSON.stringify(events).includes('private'),false);
+  assert.equal(events.filter(x => x.requestId === 'upload' && x.phase === 'end').length,1);
+});
+test('duplex callback authority refusal cancels only its operation and waits for native ACK', async () => {
+  const f = fixture();
+  const active = f.transport.request({ requestId: 'upload', action: 'upload-single' }, undefined,
+    { onBatchFrame: async () => { throw Error('controlled authority refusal'); } });
+  const rejected = assert.rejects(active, /authority refusal/), next = f.transport.request({ requestId: 'next', action: 'inspect' });
+  await turn(); f.transport.receive(callbackFrame('upload',1)); await rejected; await turn();
+  assert.equal(f.sent.filter(x => x.action === 'fixture-cancel').length,1);
+  assert.equal(f.sent.some(x => x.action === 'fixture-batch-reply' || x.requestId === 'next'),false);
+  f.transport.receive({ requestId: 'upload', ok: false }); await turn(); f.reply('next'); await next;
+});

@@ -44,7 +44,7 @@ struct FixtureRequestContext: Sendable {
     let started: Double
 }
 enum FixtureRequestClockContext { @TaskLocal static var request: FixtureRequestContext? }
-private let fixtureTimingActions: Set<String> = ["validate-folder-batch", "upload-batch", "resources", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
+private let fixtureTimingActions: Set<String> = ["validate-folder-batch", "upload-batch", "upload-single", "resources", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
 func fixtureTimingLabel(_ value: JSONValue?, path: Bool = false) -> String {
     guard case .string(let text) = value else { return "other" }
     return (path ? ["local.bin", "remote.bin"].contains(text) : fixtureTimingActions.contains(text)) ? text : "other"
@@ -112,18 +112,116 @@ actor Cooldowns {
 final class StreamCursor: @unchecked Sendable { var offset: Int64 = 0 }
 final class FixtureOutput: @unchecked Sendable {
     private let lock = NSLock()
+    private let handle: FileHandle
+    init(handle: FileHandle = .standardOutput) { self.handle = handle }
     func write(_ value: JSONValue) throws {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         var bytes = try encoder.encode(value); bytes.append(10)
         lock.lock(); defer { lock.unlock() }
-        try FileHandle.standardOutput.write(contentsOf: bytes)
+        try handle.write(contentsOf: bytes)
     }
+}
+// Same callback semantics as NodeBatchDuplex, fed by the ONE persistent
+// framed reader rather than starting a competing newline stdin reader.
+final class FixtureBatchPeer: NSObject, ThingtimeNodeBatchCallback, @unchecked Sendable {
+    private let requestID: String, output: FixtureOutput
+    private let lock = NSLock()
+    private var pending: [Int: (Data) -> Void] = [:], sequence = 0
+    private var closed = false
+    init(requestID: String, output: FixtureOutput) { self.requestID = requestID; self.output = output }
+    func exchange(_ data: Data, withReply reply: @escaping (Data) -> Void) {
+        guard data.count <= 100_000, let frame = try? JSONDecoder().decode(JSONValue.self, from: data),
+              case .object(let fields) = frame, case .string(let kind) = fields["kind"],
+              ["prepare-ready", "chunk", "put-ready", "verify-ready"].contains(kind) else { reply(Data()); return }
+        lock.lock()
+        guard !closed, pending.count < 32, sequence < 4096 else { lock.unlock(); reply(Data()); return }
+        sequence += 1; let id = sequence; pending[id] = reply
+        do {
+            try output.write(.object(["type": .string("batch"), "requestId": .string(requestID), "callbackId": .number(Double(id)),
+                "frame": frame, "nativeEmittedMs": .number(ProcessInfo.processInfo.systemUptime * 1000)]))
+            lock.unlock()
+        } catch { lock.unlock(); close() }
+    }
+    func accept(_ fields: [String: JSONValue]) throws {
+        guard Set(fields.keys) == ["action", "requestId", "callbackId", "reply"], fields["action"] == .string("fixture-batch-reply"),
+              fields["requestId"] == .string(requestID), case .number(let number) = fields["callbackId"], number >= 1, number <= 4096,
+              number.rounded() == number, let value = fields["reply"] else { throw MobileFolderStore.Failure.invalid }
+        switch value { case .object, .array: break; default: throw MobileFolderStore.Failure.invalid }
+        let data = try JSONEncoder().encode(value)
+        guard data.count <= 524_288 else { throw MobileFolderStore.Failure.invalid }
+        lock.lock()
+        guard !closed, let reply = pending.removeValue(forKey: Int(number)) else { lock.unlock(); throw MobileFolderStore.Failure.invalid }
+        lock.unlock(); reply(data)
+    }
+    func close() {
+        lock.lock()
+        guard !closed else { lock.unlock(); return }
+        closed = true; let replies = Array(pending.values); pending.removeAll(); lock.unlock()
+        replies.forEach { $0(Data()) }
+    }
+}
+func fixtureDuplexSelfTest() throws {
+    let pipe = Pipe(), output = FixtureOutput(handle: pipe.fileHandleForWriting)
+    defer { try? pipe.fileHandleForWriting.close(); try? pipe.fileHandleForReading.close() }
+    let peer = FixtureBatchPeer(requestID: "same-request", output: output)
+    let frame = try JSONEncoder().encode(JSONValue.object(["kind": .string("chunk"), "ordinal": .number(0)]))
+    var order: [Int] = [], closedReplies = 0
+    peer.exchange(frame) { if !$0.isEmpty { order.append(1) } }
+    peer.exchange(frame) { if !$0.isEmpty { order.append(2) } }
+    func packet(_ request: String, _ id: Int) -> [String: JSONValue] {
+        ["action": .string("fixture-batch-reply"), "requestId": .string(request), "callbackId": .number(Double(id)), "reply": .object(["status": .string("ack")])]
+    }
+    var refused = false
+    do { try peer.accept(packet("wrong-request", 2)) } catch { refused = true }
+    guard refused, order.isEmpty else { throw MobileFolderStore.Failure.invalid }
+    try peer.accept(packet("same-request", 2)); try peer.accept(packet("same-request", 1))
+    guard order == [2, 1] else { throw MobileFolderStore.Failure.invalid }
+    refused = false; do { try peer.accept(packet("same-request", 1)) } catch { refused = true }
+    guard refused else { throw MobileFolderStore.Failure.invalid }
+    peer.close(); peer.close(); peer.exchange(frame) { if $0.isEmpty { closedReplies += 1 } }
+    let eof = FixtureBatchPeer(requestID: "eof-request", output: output)
+    eof.exchange(frame) { if $0.isEmpty { closedReplies += 1 } }; eof.close(); eof.close()
+    guard closedReplies == 2 else { throw MobileFolderStore.Failure.invalid }
+    try pipe.fileHandleForWriting.close()
+    let frames = pipe.fileHandleForReading.readDataToEndOfFile().split(separator: 10)
+    guard frames.count == 3 else { throw MobileFolderStore.Failure.invalid }
+    FileHandle.standardOutput.write(Data("{\"ok\":true,\"fixtureDuplexSelfTest\":true}\n".utf8))
+}
+@MainActor private func dispatchFixtureRequest(_ service: MacFolderSync, _ request: JSONValue,
+    stream: (@Sendable (Data) throws -> Void)? = nil, receive: (@Sendable (Int) throws -> Data)? = nil,
+    peer: FixtureBatchPeer) async throws -> JSONValue {
+    guard case .object(let fields) = request else { throw MobileFolderStore.Failure.invalid }
+    if [JSONValue.string("upload-batch"), .string("upload-single")].contains(fields["action"] ?? .null) {
+        return try await service.handle(request, stream: stream, receive: receive, batchCallback: { frame, timeout in
+            try await NodeBatchCallback.exchange(peer, frame: frame, timeout: timeout)
+        })
+    }
+    return try await service.handle(request, stream: stream, receive: receive)
+}
+@MainActor private func fixtureContextDispatchSelfTest() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let pipe = Pipe(), output = FixtureOutput(handle: pipe.fileHandleForWriting)
+    defer { try? pipe.fileHandleForWriting.close(); try? pipe.fileHandleForReading.close() }
+    let peer = FixtureBatchPeer(requestID: "context-self-test", output: output)
+    defer { peer.close() }
+    var identities = 0
+    let service = try MacFolderSync(origin: URL(string: "https://fixture.test")!,
+        store: MobileFolderStore(load: { _ in nil }, save: { _, _ in }),
+        staging: MobileSyncStaging(directory: directory.appendingPathComponent("staging")),
+        verify: { _, _ in identities += 1 }, choose: { nil }, approve: { _ in false })
+    let request: JSONValue = .object(["requestId": .string(UUID().uuidString), "ownerId": .string("fixture-self-test"),
+        "deviceId": .string("fixture-self-test-device"), "origin": .string("https://fixture.test"), "action": .string("context")])
+    let result = try await dispatchFixtureRequest(service, request, peer: peer)
+    guard identities == 2, case .object(let fields) = result, fields["capabilities"] != nil else { throw MobileFolderStore.Failure.invalid }
+    FileHandle.standardOutput.write(Data("{\"ok\":true,\"fixtureContextDispatchSelfTest\":true}\n".utf8))
 }
 struct FixturePacket: Sendable {
     let request: JSONValue
     let bytes: Data?
     static func read() throws -> FixturePacket? {
-        guard let input = try NodeFolderStreamInput.header(.standardInput, maximumBytes: 524_288) else { return nil }
+        guard let input = try NodeFolderStreamInput.header(.standardInput, maximumBytes: 600_000) else { return nil }
         let request = try JSONDecoder().decode(JSONValue.self, from: input)
         var bytes: Data?
         if case .object(let fields) = request, fields["action"] == .string("stage-range") {
@@ -153,6 +251,8 @@ final class StreamWriter: @unchecked Sendable {
 @main struct Fixture {
     @MainActor static func main() async throws {
         if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--self-test-timing" { try fixtureClockSelfTest(); return }
+        if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--self-test-duplex" { try fixtureDuplexSelfTest(); return }
+        if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--self-test-context" { try await fixtureContextDispatchSelfTest(); return }
         guard CommandLine.arguments.count == 2 else { throw MobileFolderStore.Failure.invalid }
         let configurationURL = URL(fileURLWithPath: CommandLine.arguments[1])
         let attributes = try FileManager.default.attributesOfItem(atPath: configurationURL.path)
@@ -228,6 +328,7 @@ final class StreamWriter: @unchecked Sendable {
         }
         let output = FixtureOutput()
         var requests: [String: Task<Void, Never>] = [:]
+        var peers: [String: FixtureBatchPeer] = [:], retired = Set<String>()
         do {
             // Block only the reader task. MainActor must remain free to resume
             // MacFolderSync's independent streamWaiter and active request lanes.
@@ -235,15 +336,21 @@ final class StreamWriter: @unchecked Sendable {
                 guard case .object(let fields) = packet.request, case .string(let id) = fields["requestId"] else {
                     throw MobileFolderStore.Failure.invalid
                 }
-                if fields["action"] == .string("fixture-cancel") { requests[id]?.cancel(); continue }
+                if fields["action"] == .string("fixture-cancel") { requests[id]?.cancel(); peers[id]?.close(); continue }
+                if fields["action"] == .string("fixture-batch-reply") {
+                    if let peer = peers[id] { try peer.accept(fields) }
+                    else if !retired.contains(id) { throw MobileFolderStore.Failure.invalid }
+                    continue
+                }
                 guard requests[id] == nil else { throw MobileFolderStore.Failure.invalid }
                 if fields["deviceResourceLimits"] != nil,
                    case .string(let owner) = fields["ownerId"], case .string(let device) = fields["deviceId"] {
                     let scope = try JSONEncoder().encode([config.base.absoluteString, owner, device]).base64EncodedString()
                     fixturePolicyKeys.insert("thingtime.sync.resources.v1." + scope)
                 }
+                let peer = FixtureBatchPeer(requestID: id, output: output); peers[id] = peer
                 requests[id] = Task { @MainActor in
-                    defer { requests.removeValue(forKey: id) }
+                    defer { peer.close(); peers.removeValue(forKey: id); retired.insert(id); requests.removeValue(forKey: id) }
                     let started = ProcessInfo.processInfo.systemUptime
                     let requestContext = FixtureRequestContext(id: id, action: fixtureTimingLabel(fields["action"]),
                         path: fixtureTimingLabel(fields["path"], path: true), started: started)
@@ -265,7 +372,7 @@ final class StreamWriter: @unchecked Sendable {
                             }
                         } else { receive = nil }
                         response = ["ok": .bool(true), "result": try await FixtureRequestClockContext.$request.withValue(requestContext) {
-                            try await service.handle(packet.request, stream: stream, receive: receive)
+                            try await dispatchFixtureRequest(service, packet.request, stream: stream, receive: receive, peer: peer)
                         }]
                     } catch {
                         // Never serialize a throwable message or request fields.
@@ -286,6 +393,7 @@ final class StreamWriter: @unchecked Sendable {
             }
         } catch {
             for task in requests.values { task.cancel() }
+            for peer in peers.values { peer.close() }
             let remaining = Array(requests.values)
             for task in remaining { await task.value }
             throw error
@@ -293,6 +401,7 @@ final class StreamWriter: @unchecked Sendable {
         // EOF closes this test session; no orphan service requests survive it.
         let remaining = Array(requests.values)
         for task in remaining { task.cancel() }
+        for peer in peers.values { peer.close() }
         for task in remaining { await task.value }
     }
 }

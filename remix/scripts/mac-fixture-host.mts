@@ -21,7 +21,7 @@ const { DesktopFolderSync } = require('../../electron/lib/folder-sync.cjs');
 
 export async function createMacFixtureHost(input: {
  origin: string; ownerId: string; deviceId: string; signal: AbortSignal; fetch: typeof fetch;
- sendNative(payload: any, signal?: AbortSignal): Promise<any>; cancelNative(id: string): void;
+ sendNative(payload: any, signal?: AbortSignal, options?: { onBatchFrame?: (frame: any, signal?: AbortSignal) => Promise<any> }): Promise<any>; cancelNative(id: string): void;
  resourcePolicy: NonNullable<Parameters<typeof createDesktopFolderHost>[0]['resourcePolicy']>;
  diagnostic(row: Record<string, unknown>): void;
 }) {
@@ -44,7 +44,7 @@ export async function createMacFixtureHost(input: {
    // One host operation may issue several native requests under its outer ID.
    const id = randomUUID(); wireIds.set(payload.requestId, id);
    try {
-    const result = await input.sendNative({ ...payload, requestId: id, ...(options.bytes ? { bytes: options.bytes } : {}) }, options.signal);
+    const result = await input.sendNative({ ...payload, requestId: id, ...(options.bytes ? { bytes: options.bytes } : {}) }, options.signal, { onBatchFrame: options.onBatchFrame });
     if (payload.action === 'context' && JSON.stringify(Object.keys(result.capabilities ?? {})) !== JSON.stringify(Object.keys(result.capabilities ?? {}).sort()))
      throw Error('Fixture context framing must match sorted canonical NodeWireCodec output');
     return { ...result, requestId: payload.requestId };
