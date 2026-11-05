@@ -2,7 +2,7 @@
 
 [Pull request](https://github.com/lopugit/thingtime/pull/1364) · branch
 `codex/builder-rich-text-context-menu` · integrated base
-`af7572bba2afba19bb4207281db3e33ca4862a91`.
+`9afdc97ad`.
 
 ## Behavior and composition
 
@@ -83,6 +83,14 @@ The effective feature-branch rules were empty; no policy violation was returned.
 The supported Git Data API uploaded the exact source tree and commit and
 advanced only the feature branch with an expected-head check and `force:false`.
 Main protection, authorization scope and required checks were not changed.
+
+For the final graph, base64 blob upload returned HTTP 401 (the object was absent
+while the existing API session remained valid). Supported UTF-8 reduced the
+request but returned HTTP 422 input-too-large with explicit guidance to push
+from a local clone. One normal non-force push on the established feature ref
+then published the exact source and active graph successfully. A subsequent
+main attachment-range release required only a changelog conflict union; the
+measured rich-control runtime bytes remained unchanged.
 
 A scoped semantic attempt over the five changed large documents required 128
 slices. It was interrupted when the independent base advanced; partial work was
