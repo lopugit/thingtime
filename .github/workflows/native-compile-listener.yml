@@ -1,0 +1,29 @@
+name: Native compile
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_pr:
+        description: Pull request number to compile
+        required: true
+        type: string
+      source_sha:
+        description: Exact immutable pull request head SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  compile:
+    if: >-
+      github.repository == 'lopugit/thingtime' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == github.repository_owner
+    uses: lopugit/thingtime/.github/workflows/native-compile.yml@109f82a0e51e6dc66da017445bff8d85e1e63527
+    with:
+      source_pr: ${{ inputs.source_pr }}
+      source_sha: ${{ inputs.source_sha }}
