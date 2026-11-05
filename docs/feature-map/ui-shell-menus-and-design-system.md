@@ -49,6 +49,12 @@ The installed app retains direct controls for its own device. Remote controls us
 editable settings blocks and the existing configuration form; see
 [browser device sync](../browser-device-sync.md) and its browser/installed checks.
 
+Lopu’s floating shortcut is opt-in through `settings.lopu.launcher`. The chat
+composer gear and Settings → Lopu share that persisted preference through
+`useLopuChat` / `useLopuSettings`; `LopuHost` honors it even when minimised.
+Navigation can always reopen the chat. Missing preferences default off while
+explicit saved choices survive. See the unified Lopu checklist in `TESTING.md`.
+
 ## Where the code lives
 
 | Concern | Path |
