@@ -148,3 +148,12 @@ export class FixturePageObservers {
         waiter.finish(undefined, observation);
   }
 }
+
+export function validateFixtureProofKind(result, mode) {
+  if (mode === 'legacy') return result;
+  const diagnostic = mode === 'upload-start-diagnostic';
+  if (result?.proofKind !== mode || result.twoWayAcceptance !== !diagnostic ||
+      (diagnostic ? result.download?.exercised !== false : result.download?.nativeState !== 'running'))
+    throw Error('Fixture result does not prove the requested acceptance mode');
+  return result;
+}

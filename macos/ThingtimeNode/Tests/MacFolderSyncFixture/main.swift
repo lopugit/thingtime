@@ -3,7 +3,7 @@
 import AppleFileSync
 import Foundation
 import CryptoKit
-import ThingtimeNodeCore
+@testable import ThingtimeNodeCore
 
 struct Configuration: Decodable {
     let base: URL
@@ -35,6 +35,27 @@ struct FixturePhotoResources: PhotoResourceProvider {
         try validate(resource)
     }
 }
+// Observe the unchanged monotonic clock calls already surrounding native
+// identity admission and HTTP. Each verification owns its TaskLocal sample.
+final class FixtureIdentityClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [Double] = []
+    func append(_ value: Double) { lock.lock(); values.append(value); lock.unlock() }
+    func summary() -> JSONValue {
+        lock.lock(); let times = values; lock.unlock()
+        guard !times.isEmpty, times.count % 4 == 0 else {
+            return .object(["complete": .bool(false), "clockSamples": .number(Double(times.count))])
+        }
+        var admission = 0.0, http = 0.0
+        for i in stride(from: 0, to: times.count, by: 4) {
+            admission += (times[i + 1] - times[i]) * 1000
+            http += (times[i + 3] - times[i + 2]) * 1000
+        }
+        return .object(["complete": .bool(true), "attempts": .number(Double(times.count / 4)),
+                        "admissionMs": .number(admission), "httpMs": .number(http)])
+    }
+}
+enum FixtureIdentityClockContext { @TaskLocal static var sample: FixtureIdentityClock? }
 actor Cooldowns {
     private var count = 0
     private var seconds: UInt64 = 0
@@ -48,7 +69,8 @@ final class StreamCursor: @unchecked Sendable { var offset: Int64 = 0 }
 final class FixtureOutput: @unchecked Sendable {
     private let lock = NSLock()
     func write(_ value: JSONValue) throws {
-        var bytes = try JSONEncoder().encode(value); bytes.append(10)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        var bytes = try encoder.encode(value); bytes.append(10)
         lock.lock(); defer { lock.unlock() }
         try FileHandle.standardOutput.write(contentsOf: bytes)
     }
@@ -98,8 +120,11 @@ final class StreamWriter: @unchecked Sendable {
         try await credentials.save(DeviceCredential(deviceID: config.deviceId, refreshToken: config.credential,
             signingPrivateKey: Data(), signingPublicKey: Data()))
         let cooldowns = Cooldowns()
-        let api = try ThingtimeAPIClient(baseURL: config.base, credentialStore: credentials,
-            fileSyncRetrySleep: { delay in try await cooldowns.wait(delay) })
+        let api = try ThingtimeAPIClient(baseURL: config.base, credentialStore: credentials, identityAdmission: .shared,
+            fileSyncNow: {
+                let now = ProcessInfo.processInfo.systemUptime
+                FixtureIdentityClockContext.sample?.append(now); return now
+            }, fileSyncRetrySleep: { delay in try await cooldowns.wait(delay) })
         let selected = config.directory.appendingPathComponent("selected", isDirectory: true)
         let records = config.directory.appendingPathComponent("grants", isDirectory: true)
         try FileManager.default.createDirectory(at: selected, withIntermediateDirectories: true)
@@ -118,17 +143,22 @@ final class StreamWriter: @unchecked Sendable {
         let database = config.directory.appendingPathComponent("private-filesystem-index.sqlite3")
         let transport = config.commanderIndexer.map { RustProcessInventoryTransport(helper: $0, database: database) }
         var identityChecks = 0, identityTotalMilliseconds = 0.0, identityMaxMilliseconds = 0.0
+        var identityCalls: [JSONValue] = [], reportedIdentityCalls = 0
         let service = try MacFolderSync(origin: config.base, store: store,
             staging: MobileSyncStaging(directory: config.directory.appendingPathComponent("staging")),
             trash: MobileSyncTrash(directory: config.directory.appendingPathComponent("trash")),
             verify: { owner, device in
                 identityChecks += 1
                 let started = ProcessInfo.processInfo.systemUptime
+                let sample = FixtureIdentityClock()
                 defer {
+                    identityCalls.append(sample.summary())
                     let elapsed = (ProcessInfo.processInfo.systemUptime - started) * 1000
                     identityTotalMilliseconds += elapsed; identityMaxMilliseconds = max(identityMaxMilliseconds, elapsed)
                 }
-                try await api.verifyFileSyncIdentity(ownerID: owner, deviceID: device)
+                try await FixtureIdentityClockContext.$sample.withValue(sample) {
+                    try await api.verifyFileSyncIdentity(ownerID: owner, deviceID: device)
+                }
             },
             choose: { selected }, approve: { _ in true },
             chooseSource: config.photoFixture == true ? { .photos } : nil,
@@ -193,6 +223,8 @@ final class StreamWriter: @unchecked Sendable {
                     }
                     response["requestId"] = .string(id)
                     response["identityChecks"] = .number(Double(identityChecks))
+                    response["identityCalls"] = .array(Array(identityCalls.dropFirst(reportedIdentityCalls)))
+                    reportedIdentityCalls = identityCalls.count
                     response["identityTiming"] = .object(["totalMs": .number(identityTotalMilliseconds), "maxMs": .number(identityMaxMilliseconds)])
                     response["serviceMs"] = .number((ProcessInfo.processInfo.systemUptime - started) * 1000)
                     response["cooldowns"] = await cooldowns.snapshot()

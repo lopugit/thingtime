@@ -14444,6 +14444,23 @@ the isolated real-API/browser command and the metadata-only session boundary.
   lane; verify out-of-order result/chunk IDs, atomic stage frames, cancellation
   acknowledgements, EOF rejection of active and queued requests exactly once, and
   identity duration accumulation across native restarts and out-of-order samples.
+  The same command checks canonical host capability negotiation, fresh composite
+  authorization, absence of a custom mutation hook, refusal of missing native
+  prerequisites, and non-interfering digest observation. The early proof must
+  use the real host manager/transfer worker and confirm equal renderer/native
+  byte and CPU policies before timing; observe worker PUTs at the fixture server.
+  Before timing, require an owned signed HTTPS download target from the selected
+  storage provider. Local attachment storage currently lacks that prerequisite;
+  record it as unavailable, never disable the negotiated native path or count a
+  failed partial run as a latency result.
+  The separate `--upload-start-diagnostic` mode keeps a canonical two-way
+  connection with an initially empty synthetic cloud folder; require exact
+  upload hash/receipt, unsealed capture and strict no-replay resume. Its explicit
+  `twoWayAcceptance: false` result must be rejected by the original two-way proof
+  validator. Downloads are deliberately unexercised in that diagnostic. Fixture framing must retain the
+  canonical NodeWireCodec sorted-key encoding across context refreshes.
+  Record per-call native identity admission/HTTP, host account/native service,
+  source/configuration checks and digest-worker elapsed time separately.
   Receipt observers must share a fresh production feed result without adding a
   second native poll. Preserve the production iterator's 25-second indexing /
   2-second indexed waits; never inject a faster fixture-only polling cadence.

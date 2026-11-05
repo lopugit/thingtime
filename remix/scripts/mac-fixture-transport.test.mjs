@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MacFixtureTransport, FixtureIdentityTiming, FixturePageObservers } from './mac-fixture-transport.mjs';
+import { MacFixtureTransport, FixtureIdentityTiming, FixturePageObservers, validateFixtureProofKind } from './mac-fixture-transport.mjs';
 const turn = () => new Promise(resolve => setImmediate(resolve));
 function fixture() {
   const sent = [];
@@ -106,4 +106,12 @@ test('receipt observers require a fresh shared feed page and cancel independentl
   assert.equal(observed.page, fresh); assert.equal((await second).page, fresh);
   assert.equal(observed.observedAt, 3); assert.equal(observed.sequence, 3);
   assert.equal(feed.waiters.size, 0);
+});
+
+test('upload-start diagnostic can never satisfy the original two-way proof mode', () => {
+ const diagnostic = { proofKind: 'upload-start-diagnostic', twoWayAcceptance: false, download: { exercised: false } };
+ assert.equal(validateFixtureProofKind(diagnostic, 'upload-start-diagnostic'), diagnostic);
+ assert.throws(() => validateFixtureProofKind(diagnostic, 'two-way-before-seal'));
+ assert.throws(() => validateFixtureProofKind({ ...diagnostic, twoWayAcceptance: true }, 'upload-start-diagnostic'));
+ assert.throws(() => validateFixtureProofKind({ ...diagnostic, proofKind: 'two-way-before-seal', twoWayAcceptance: true }, 'two-way-before-seal'));
 });

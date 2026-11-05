@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createServer, connect } from 'node:net';
 import { randomUUID, createHash } from 'node:crypto';
+import { validateFixtureProofKind } from './mac-fixture-transport.mjs';
 import { accountBackupSandbox, verifyAccountBackupIsolation } from './account-backup-isolation.mjs';
 const apiPort = 28311,
 	dbPort = 28312,
@@ -23,6 +24,8 @@ if (indexer && !indexer.startsWith('/')) throw Error('The fixture Rust indexer p
 const symlinksOnly = process.argv.includes('--symlinks-only');
 const early = process.argv.includes('--two-way-early');
 const normalEarlyBudget = process.argv.includes('--normal-early-budget');
+const uploadStartDiagnostic = process.argv.includes('--upload-start-diagnostic');
+if (uploadStartDiagnostic && (!early || !normalEarlyBudget)) throw Error('--upload-start-diagnostic requires --two-way-early --normal-early-budget');
 if (normalEarlyBudget && !early) throw Error('--normal-early-budget requires --two-way-early.');
 if (early && (wide || symlinksOnly)) throw Error('The early acceptance requires only --two-way-early.');
 const clean = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR || tmpdir() };
@@ -74,8 +77,8 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
         if (process.env.THINGTIME_MAC_PAGED_EVIDENCE_PATH) {
             const target = process.env.THINGTIME_MAC_PAGED_EVIDENCE_PATH;
             assert.ok(target.startsWith('/'), 'Evidence path must be absolute');
-            const sourcePaths = execFileSync('rg', ['--files', '../apple/FileSync/Sources', '../macos/ThingtimeNode/Sources', '../filesystem-indexer/crates/indexer/src', 'app/fileSync', 'app/api/utils/files'], { cwd: root, encoding: 'utf8' }).trim().split('\n').filter(p => /\.(swift|rs|ts|tsx|mts)$/.test(p));
-            sourcePaths.push('../macos/ThingtimeNode/Tests/MacFolderSyncFixture/main.swift', 'scripts/mac-file-sync.integration.mts', 'scripts/mac-fixture-transport.mjs', 'scripts/test-mac-paged-sync.mjs'); sourcePaths.sort();
+            const sourcePaths = execFileSync('rg', ['--files', '../apple/FileSync/Sources', '../macos/ThingtimeNode/Sources', '../filesystem-indexer/crates/indexer/src', 'app/fileSync', 'app/api/utils/files', '../electron/lib'], { cwd: root, encoding: 'utf8' }).trim().split('\n').filter(p => /\.(swift|rs|ts|tsx|mts|cjs|mjs)$/.test(p));
+            sourcePaths.push('../macos/ThingtimeNode/Tests/MacFolderSyncFixture/main.swift', 'scripts/mac-file-sync.integration.mts', 'scripts/mac-fixture-transport.mjs', 'scripts/mac-fixture-host.mts', 'scripts/test-mac-paged-sync.mjs'); sourcePaths.sort();
             const sha = async p => createHash('sha256').update(await readFile(p)).digest('hex');
             const files = Object.fromEntries(await Promise.all(sourcePaths.map(async p => [p, await sha(resolve(root, p))])));
             const metadata = { capturedAt: new Date().toISOString(), head: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
@@ -88,7 +91,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		const policy =
 			accountBackupSandbox(apiPort, true) +
 			`\n(allow network-outbound (remote ip "localhost:${dbPort}"))\n(allow network-inbound (local ip "localhost:${dbPort}"))`;
-		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename, ...(wide ? ['--wide'] : []), ...(wideMixed ? ['--wide-mixed'] : []), ...(wideCountArg ? [wideCountArg] : []), ...(symlinksOnly ? ['--symlinks-only'] : []), ...(early ? ['--two-way-early'] : []), ...(normalEarlyBudget ? ['--normal-early-budget'] : [])], {
+		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename, ...(wide ? ['--wide'] : []), ...(wideMixed ? ['--wide-mixed'] : []), ...(wideCountArg ? [wideCountArg] : []), ...(symlinksOnly ? ['--symlinks-only'] : []), ...(early ? ['--two-way-early'] : []), ...(normalEarlyBudget ? ['--normal-early-budget'] : []), ...(uploadStartDiagnostic ? ['--upload-start-diagnostic'] : [])], {
 			cwd: root,
 			env: { ...clean, TT_MAC_PAGED_WORKER: directory, THINGTIME_MAC_SYNC_FIXTURE_BIN: binary, THINGTIME_MAC_SYNC_INDEXER_BIN: resolvedIndexer },
 			stdio: ['ignore', 'pipe', 'pipe']
@@ -221,10 +224,11 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		THINGTIME_EMAIL_PROVIDER: 'console',
 		MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${dbPort}/thingtime?replicaSet=mac-paged-sync`,
 		THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR: join(directory, 'objects'),
-		THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN: base
+		THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN: base,
+        THINGTIME_FIXTURE_REQUEST_TIMINGS: join(directory, 'http-request-timings.jsonl')
 	};
 	const startServer = async (admin = false) => {
-		server = start(process.execPath, ['--input-type=module', '-e', "import {createServer} from 'node:http'; const app=await import('./.output/server/index.mjs'); if(typeof app.middleware!=='function')throw Error('Build Nitro with NITRO_PRESET=node_middleware');createServer(app.middleware).listen(Number(process.env.NITRO_PORT),'127.0.0.1');"], { ...env, ...(admin ? { ADMIN_USERNAMES: username } : {}) });
+		server = start(process.execPath, ['--input-type=module', '-e', "import {createServer} from 'node:http'; import {appendFileSync} from 'node:fs'; const app=await import('./.output/server/index.mjs'); if(typeof app.middleware!=='function')throw Error('Build Nitro with NITRO_PRESET=node_middleware');createServer((req,res)=>{if(req.method==='PUT'&&req.url.split('?')[0]==='/api/v1/attachments/local-object')appendFileSync(process.env.THINGTIME_FIXTURE_REQUEST_TIMINGS,JSON.stringify({at:Date.now(),operation:'attachment-object-put'})+String.fromCharCode(10));return app.middleware(req,res)}).listen(Number(process.env.NITRO_PORT),'127.0.0.1');"], { ...env, ...(admin ? { ADMIN_USERNAMES: username } : {}) });
 		const output = collect(server);
 		await wait(async () => {
 			assert.equal(server.exitCode, null, 'Built server exited: ' + output().slice(-500));
@@ -264,13 +268,13 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		assert.equal(registered.status, 200, 'Disposable API signup: ' + JSON.stringify(data));
 		assert.ok(data.user.id);
 		const fixturePath = join(directory, 'fixture.json');
-		await writeFile(fixturePath, JSON.stringify({ base, username, password, userId: data.user.id }), { mode: 0o600 });
+		await writeFile(fixturePath, JSON.stringify({ base, username, password, requestTimings: env.THINGTIME_FIXTURE_REQUEST_TIMINGS, userId: data.user.id }), { mode: 0o600 });
 		await stop(server);
 		await startServer(true);
 		console.log('MAC_PAGED_STAGE native-transfers');
 		const test = start(
 			process.execPath,
-			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', ...(early ? ['--two-way-early'] : symlinksOnly ? ['--symlinks-only'] : ['--large-upload', '--large-download']), ...(normalEarlyBudget ? ['--normal-early-budget'] : []), ...(wide ? ['--wide'] : []), ...(wideMixed ? ['--wide-mixed'] : []), ...(wideCountArg ? [wideCountArg] : [])],
+			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', ...(early ? ['--two-way-early'] : symlinksOnly ? ['--symlinks-only'] : ['--large-upload', '--large-download']), ...(normalEarlyBudget ? ['--normal-early-budget'] : []), ...(uploadStartDiagnostic ? ['--upload-start-diagnostic'] : []), ...(wide ? ['--wide'] : []), ...(wideMixed ? ['--wide-mixed'] : []), ...(wideCountArg ? [wideCountArg] : [])],
 			{ ...clean, THINGTIME_MAC_SYNC_FIXTURE_BIN: process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN, ...(indexer ? { THINGTIME_MAC_SYNC_INDEXER_BIN: indexer } : {}) }
 		);
 		const output = collect(test, true);
@@ -283,7 +287,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		console.log(
 			JSON.stringify({
 				macPagedSyncProof: true,
-				...JSON.parse(result),
+				...validateFixtureProofKind(JSON.parse(result), early ? uploadStartDiagnostic ? 'upload-start-diagnostic' : 'two-way-before-seal' : 'legacy'),
 				isolation: 'OS-enforced disposable loopback API and Mongo replica; synthetic picker and credential store; not installed UI acceptance'
 			})
 		);

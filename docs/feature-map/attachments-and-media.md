@@ -612,6 +612,16 @@ installed/large-production acceptance gaps.
 
 ### Mac paged transfer acceptance
 
+The early proof's `scripts/mac-fixture-host.mts` composes the production Electron
+manager and renderer host factories with only synthetic IPC/window/session
+adapters. Negotiation, composite authorization, native guards, transfer worker,
+byte/CPU governors and signing remain canonical. Its server observes worker PUTs;
+timing rows separate native identity admission/HTTP and digest-worker wall time.
+Full native two-way acceptance requires a provider-backed signed HTTPS download
+target; local attachment storage currently lacks it. The explicit
+`--upload-start-diagnostic` keeps the same connection/capabilities with an empty
+cloud folder, measures only upload, and cannot pass the two-way proof validator.
+
 The test-only `scripts/mac-fixture-transport.mjs` multiplexes result/chunk request
 IDs and preserves the native manager's independent polling and active lanes.
 Run `test:files:mac-fixture-transport` for held-poll, out-of-order, binary framing,

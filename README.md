@@ -5907,6 +5907,28 @@ for the isolated browser harness and remaining native acceptance gates.
 
 ### Disposable Mac paged-sync acceptance
 
+The early fixture composes the production `DesktopFolderSync` and
+`createDesktopFolderHost` factories around a synthetic renderer/IPC surface,
+a real disposable API session and the production Swift adapter. It negotiates
+capabilities, uses fresh composite authorization and native operation guards,
+and keeps the real transfer worker's global fetch path. Both renderer and native
+device policies must confirm the requested budget. Its first-PUT measurement is
+server receipt of the worker's request; it is not renderer fetch invocation.
+The canonical two-way proof requires a storage provider that supplies signed
+HTTPS download ranges. It checks that real capability before starting its timing
+run. The local attachment-storage adapter currently lacks `signDownloadRange`,
+so this canonical path reports a prerequisite failure rather than downgrading
+to renderer download/staging or claiming a successful measurement.
+For upload-start attribution without exercising unsupported download storage, use
+`pnpm --dir remix run test:files:mac-paged -- --two-way-early --normal-early-budget --upload-start-diagnostic`.
+This keeps the canonical two-way connection but starts with an empty synthetic
+cloud folder. Its result is explicitly `upload-start-diagnostic`, reports
+`twoWayAcceptance: false`, and cannot satisfy the original two-direction proof.
+It must still verify the exact uploaded hash/receipt before seal, strict resume,
+and no replay. It does not establish native download acceptance.
+The debug-only Swift fixture observes identity admission/HTTP clock boundaries;
+digest-worker timing includes worker admission, IPC and scheduling.
+
 The fixture pipe multiplexes request IDs against one production native manager.
 `scan-changes` has an independent polling lane; active requests remain serialized,
 and cancellation keeps a lane occupied until the native manager acknowledges it.

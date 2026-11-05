@@ -3,12 +3,17 @@
 import assert from 'node:assert/strict';
 import { readFile, writeFile, mkdtemp, mkdir, rm, stat, truncate, rename, symlink, readlink, lstat } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { MacFixtureTransport, FixtureIdentityTiming, FixturePageObservers } from './mac-fixture-transport.mjs';
+import { createMacFixtureHost, macFixtureWorkerOptions, macFixtureRuntime } from './mac-fixture-host.mts';
+import { saveDeviceSyncResourcePolicy, deviceResourceKey, readDeviceSyncResourcePolicy } from '../app/fileSync/deviceResourcePolicy';
+import { NATIVE_INVENTORY_BATCH_ENTRIES } from '../app/fileSync/nativeInventory';
+import { supportsNativeStreamingBatches } from '../app/fileSync/mobileFolders.client';
 import { createRequire } from 'node:module';
 import { generateKeyPairSync, randomBytes, randomUUID, sign, createHash } from 'node:crypto';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
@@ -29,6 +34,7 @@ import { createSyncRun, executeSyncRun, type SyncRun } from '../app/fileSync/exe
 import { prepareCloudInventoryRun } from '../app/fileSync/cloudWrite';
 import { readCloudPathEntry } from '../app/fileSync/cloudPath.client';
 import { createCloudSyncPort } from '../app/fileSync/cloudSyncPort.client';
+import { createCloudDownloadSource } from '../app/fileSync/cloudDownloadSource';
 import { fingerprintSource } from '../app/fileSync/contentFingerprint';
 import { capabilitySatisfies } from '../app/api/utils/capabilities/capabilityContract';
 import { parseTimelineEntry } from '../app/timeline/contract';
@@ -47,13 +53,15 @@ const photoFixture = process.argv.includes('--photos');
 const symlinksOnly = process.argv.includes('--symlinks-only');
 const earlyFixture = process.argv.includes('--two-way-early');
 const normalEarlyBudget = process.argv.includes('--normal-early-budget');
+const uploadStartDiagnostic = process.argv.includes('--upload-start-diagnostic');
+if (uploadStartDiagnostic && (!earlyFixture || !normalEarlyBudget)) throw Error('Upload-start diagnostic requires normal-budget early mode');
 if (normalEarlyBudget && !earlyFixture) throw Error('Normal early budget requires the early fixture.');
 const pagedFixture = process.argv.includes('--paged');
 const wideFixture = process.argv.includes('--wide');
 const wideMixedFixture = process.argv.includes('--wide-mixed');
 const wideCountArg = process.argv.find(arg => arg.startsWith('--wide-count='));
 const wideFolders = wideFixture ? Number(wideCountArg?.slice(13) || 10001) : 0;
-const benchmarkDeviceLimits = wideMixedFixture ? { transferBytesPerSecond: 5_000_000, scanBytesPerSecond: 5_000_000, cpuPercent: 15 } : null;
+const benchmarkDeviceLimits = (wideMixedFixture || earlyFixture) ? { transferBytesPerSecond: 5_000_000, scanBytesPerSecond: earlyFixture && !normalEarlyBudget ? 400_000 : 5_000_000, cpuPercent: 15 } : null;
 assert.ok(!wideFixture || pagedFixture, 'Wide acceptance requires the paged runner');
 assert.ok(!wideMixedFixture || wideFixture, 'Mixed large-folder acceptance requires the wide paged runner');
 assert.ok(!wideCountArg || (wideFixture && Number.isSafeInteger(wideFolders) && wideFolders > 0 && wideFolders <= 10001), 'Diagnostic wide count must be between 1 and 10,001');
@@ -71,6 +79,7 @@ const cookies = new Map<string, string>();
 let native: ChildProcessWithoutNullStreams | undefined;
 let nativeTransport: MacFixtureTransport | undefined;
 const nativeIdentityTiming = new FixtureIdentityTiming();
+const nativeIdentityCalls: { complete: boolean; admissionMs?: number; httpMs?: number; attempts?: number }[] = [];
 const nativeServiceTiming: Record<string, { count: number; totalMs: number; maxMs: number }> = {};
 let nativeExit: Promise<void> | undefined,
 	nativeCalls = 0,
@@ -179,6 +188,7 @@ async function startNative() {
                 cooldownCount += count - priorCooldownCount; cooldownSeconds += seconds - priorCooldownSeconds;
                 priorCooldownCount = count; priorCooldownSeconds = seconds;
                 observeIdentityTiming(value.identityTiming);
+                nativeIdentityCalls.push(...(value.identityCalls ?? []));
             }
             transport.receive(value);
         } catch { transport.close(Error('Invalid native fixture frame')); }
@@ -210,10 +220,26 @@ async function stopNative() {
 async function send(payload: any, signal?: AbortSignal) {
     assert.ok(native && nativeTransport);
     nativeCalls++;
+    markEarlyRequest('native ' + payload.action);
+    if (payload.action === 'read') counts.reads++;
+    if (payload.action === 'read-range') { counts.streams++; counts.streamedBytes += payload.length; }
+    if (payload.action === 'publish') counts.publishes++;
+    if (payload.action === 'stage-range') { counts.stageRanges++; counts.stagedBytes += payload.bytes.length; }
     return nativeTransport.request(payload, signal);
 }
 const signal = new AbortController().signal;
-const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.17.0', fileSymbolicLinksVersion: '1.0.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.2.0', fileTrashVersion: '1.2.0' };
+let canonicalHost: Awaited<ReturnType<typeof createMacFixtureHost>> | undefined;
+const hostTimings: Record<string, unknown>[] = [];
+const boundaryTimings: { phase: string; at: number; elapsedMs: number }[] = [];
+async function measured<T>(phase: string, work: () => Promise<T>): Promise<T> {
+ const at = performance.now(); try { return await work(); } finally { boundaryTimings.push({ phase, at, elapsedMs: performance.now() - at }); }
+}
+const serverPuts = async () => {
+ if (!fixture.requestTimings) throw Error('Canonical worker requires server-side PUT observation');
+ try { return (await readFile(fixture.requestTimings, 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line)); }
+ catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error; }
+};
+let caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.17.0', fileSymbolicLinksVersion: '1.0.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.2.0', fileTrashVersion: '1.2.0' };
 let deviceId: string | undefined, remoteRoot: string | undefined, configurationId: string | undefined;
 const deviceName = 'Mac sync acceptance ' + randomUUID();
 const factory = new IDBFactory();
@@ -273,18 +299,29 @@ try {
 	await startNative();
 	const nativeContext = await send({ requestId: randomUUID(), ownerId: fixture.userId, deviceId, origin: base.origin, action: 'context' });
 	assert.equal(nativeContext.capabilities.filePublicationVersion, '1.2.0');
+    if (earlyFixture) {
+        saveDeviceSyncResourcePolicy(deviceResourceKey(base.origin, fixture.userId, deviceId!), benchmarkDeviceLimits!);
+        canonicalHost = await createMacFixtureHost({ origin: base.origin, ownerId: fixture.userId, deviceId: deviceId!, signal,
+            fetch: sessionFetch, sendNative: send,
+            cancelNative: id => { const row = nativeTransport?.pending.get(id); if (row) nativeTransport!.cancel(row, Error('Fixture host suspended')); },
+            resourcePolicy: { get resourceScope() { return configurationId ?? deviceName; },
+                deviceResourceLimits: () => benchmarkDeviceLimits!, observe: () => {} },
+            diagnostic: row => { if (row.phase === 'folder-timing' || row.phase === 'digest-worker') hostTimings.push(row); } });
+        caps = canonicalHost.capabilities!;
+        assert.equal(caps.fileAccessVersion, nativeContext.capabilities.fileAccessVersion);
+        assert.deepEqual(readDeviceSyncResourcePolicy(deviceResourceKey(base.origin, fixture.userId, deviceId!)), benchmarkDeviceLimits);
+        const effective = await canonicalHost.request(fixture.userId, { action: 'resources', deviceResourceLimits: benchmarkDeviceLimits! }, signal);
+        assert.deepEqual(effective.deviceResourceLimits, benchmarkDeviceLimits, 'Native and renderer device policy must match');
+    }
 	let loseTrash = false, loseRestore = false;
 	const request = async (ownerId: string, input: FolderRequest, abort: AbortSignal) => {
 		abort.throwIfAborted();
-		markEarlyRequest('native ' + input.action);
+		markEarlyRequest((canonicalHost ? 'host ' : 'native ') + input.action);
 		const expected = { requestId: randomUUID(), ownerId, origin: base.origin };
-		if (input.action === 'read') counts.reads++;
-        if (input.action === 'read-range') { counts.streams++; counts.streamedBytes += input.length; }
-		if (input.action === 'publish') counts.publishes++;
-        if (input.action === 'stage-range') { counts.stageRanges++; counts.stagedBytes += input.bytes.length; }
+
 		const started = Date.now();
 		let payload: any;
-		try { payload = await send({ ...expected, deviceId, ...input, ...(benchmarkDeviceLimits ? { deviceResourceLimits: benchmarkDeviceLimits } : {}) }, abort); }
+		try { payload = canonicalHost ? await canonicalHost.request(ownerId, input, abort) : await send({ ...expected, deviceId, ...input, ...(benchmarkDeviceLimits ? { deviceResourceLimits: benchmarkDeviceLimits } : {}) }, abort); }
 		finally {
 			const elapsed = Date.now() - started, metric = nativeLatency[input.action] ?? { count: 0, totalMs: 0, maxMs: 0 };
 			metric.count++; metric.totalMs += elapsed; metric.maxMs = Math.max(metric.maxMs, elapsed); nativeLatency[input.action] = metric;
@@ -293,8 +330,8 @@ try {
 				console.log('MAC_PAGED_STAGE slow-native-' + input.action + '-' + Math.round(elapsed / 1000) + 's');
 			}
 		}
-		assert.equal(payload.deviceId, deviceId);
-		const result = parseMobileFolderResult({ type: 'mobile-files-result', payload }, expected, input);
+		if (!canonicalHost) assert.equal(payload.deviceId, deviceId);
+		const result = canonicalHost ? payload : parseMobileFolderResult({ type: 'mobile-files-result', payload }, expected, input);
 		assert.ok(result);
         if (input.action === 'stage-range' && loseStage) {
             loseStage = false;
@@ -309,7 +346,7 @@ try {
 		return result;
 	};
 	const nativeRoot = (await request(fixture.userId, { action: 'choose' }, signal)).roots[0].id;
-	if (benchmarkDeviceLimits) {
+	if (benchmarkDeviceLimits && !earlyFixture) {
 		const selected = (await request(fixture.userId, { action: 'resources' }, signal)).deviceResourceLimits;
 		assert.deepEqual(selected, benchmarkDeviceLimits, 'Synthetic device policy must match the benchmark limits');
 	}
@@ -331,7 +368,7 @@ try {
 	let primeCooldown = false,
 		primedAt = 0,
 		preflightWaitMs = 0;
-	const runtime: CloudTransportRuntime = {
+	const runtime: CloudTransportRuntime = canonicalHost ? macFixtureRuntime(canonicalHost, scope) : {
 		currentScope: () => scope,
 		origin: () => base.origin,
 		authorizeMutation: async () => {
@@ -375,7 +412,7 @@ try {
         assert.equal(roots[0].sourceKind, 'photos'); assert.equal(roots[0].publicationVersion, undefined);
         const runPhotos = () => runForegroundCloudSync(saved, scope, {
             currentScope: () => scope,
-            readConfiguration: async () => (await api('/api/v1/things?id=' + row.id)).thing,
+            readConfiguration: async () => measured('configuration', async () => (await api('/api/v1/things?id=' + row.id)).thing),
             authorizeDevice: async () => { await request(fixture.userId, { action: 'list' }, signal); },
             conditions: async () => (await request(fixture.userId, { action: 'conditions' }, signal)).conditions!,
             scanLocal: async () => (await request(fixture.userId, { action: 'scan', rootId: nativeRoot }, signal)).entries!,
@@ -467,7 +504,17 @@ try {
 		finally { phaseMs[name] = Date.now() - started; }
 	};
 	await writeFile(path.join(directory, 'selected/local.bin'), localBytes);
-	await seed('remote.bin', remoteBytes);
+	if (!uploadStartDiagnostic) await seed('remote.bin', remoteBytes);
+    else assert.equal((await inventory()).nodes.length, 0, 'Upload-start diagnostic requires an initially empty synthetic cloud folder');
+    if (earlyFixture && !uploadStartDiagnostic) {
+        const remote = (await inventory()).nodes.find(node => node.path === 'remote.bin');
+        assert.ok(remote?.kind === 'file');
+        const source = createCloudDownloadSource(runtime, scope, remote.file, signal);
+        try { await source.downloadTarget!(0, Math.min(remoteBytes.length, 2 * 1024 * 1024), signal); }
+        catch (cause) {
+            throw Error('Canonical two-way benchmark prerequisite failed: the selected storage provider must supply an owned signed HTTPS download range. No timing run was started.', { cause });
+        }
+    }
 	if (wideFixture) {
 		const setupStarted = Date.now();
 		assert.equal(base.origin, 'http://127.0.0.1:28311');
@@ -535,7 +582,7 @@ try {
 			scope,
 			{
 				currentScope: () => scope,
-				readConfiguration: async () => (await api('/api/v1/things?id=' + row.id)).thing,
+				readConfiguration: async () => measured('configuration', async () => (await api('/api/v1/things?id=' + row.id)).thing),
 				authorizeDevice: async () => {
 					await request(fixture.userId, { action: 'list' }, signal);
 				},
@@ -644,7 +691,9 @@ try {
 				...command, deviceResourceLimits: { scanBytesPerSecond, transferBytesPerSecond: 5_000_000, cpuPercent: 15 }
 			}, requestSignal);
 		const nativeIndex = () => {
-			const database = new DatabaseSync(path.join(directory, 'private-filesystem-index.sqlite3'), { readOnly: true });
+            const databasePath = path.join(directory, 'private-filesystem-index.sqlite3');
+            if (!existsSync(databasePath)) return undefined;
+			const database = new DatabaseSync(databasePath, { readOnly: true });
 			try {
 				return database.prepare('SELECT g.mode, g.generation, g.coverage, g.indexed, g.entry_count AS entries FROM inventory_generations g JOIN inventory_scopes s ON s.id=g.scope WHERE s.root_id=? AND g.created_ms>=? ORDER BY g.created_ms DESC LIMIT 1').get(nativeRoot, scanStartedAt);
 			} finally { database.close(); }
@@ -652,8 +701,7 @@ try {
 		const proof = new Map<string, { receipt: import('../app/fileSync/execute').SyncReceipt; at: number; nativeState: string; index: ReturnType<typeof nativeIndex>; receiptCommittedAtMonotonic: number; nativePageObservedAtMonotonic: number; nativePageObservationSequence: number }>();
 		let notify!: () => void;
 		const both = new Promise<void>(resolve => { notify = resolve; });
-		let markLocal!: () => void;
-		const localObserved = new Promise<void>(resolve => { markLocal = resolve; });
+
 		let capture: string | undefined;
         const nativePagesObserved = new FixturePageObservers();
 		let firstLocalChangeMs: number | null = null, firstAdmittedMs: number | null = null, firstAdmittedPath: string | null = null;
@@ -661,37 +709,36 @@ try {
 			const localTarget = await approveMobileSyncTarget(saved, scope, current, governedRequest, caps, 'existing');
 			return {
 				currentScope: () => scope, localTarget, runtime,
-				readConfiguration: async () => (await api('/api/v1/things?id=' + row.id)).thing,
+                ...macFixtureWorkerOptions(canonicalHost!, fixture.userId, deviceId!, current),
+				readConfiguration: async () => measured('configuration', async () => (await api('/api/v1/things?id=' + row.id)).thing),
 				authorizeDevice: async () => { await governedRequest(fixture.userId, { action: 'list' }, current); },
 				conditions: async () => (await governedRequest(fixture.userId, { action: 'conditions' }, current)).conditions!,
 				scanLocal: async () => (await governedRequest(fixture.userId, { action: 'scan', rootId: nativeRoot }, current)).entries!,
+                scanLocalPages: options => readNativeInventory({ ownerId: fixture.userId, deviceId: deviceId!, rootId: nativeRoot,
+                    signal: current, request: governedRequest, ...options, strictAsync: true, captureId: randomUUID(), pageSize: NATIVE_INVENTORY_BATCH_ENTRIES }),
+                inventoryPages: () => readCloudFolderInventoryPages(scope, remoteRoot!, { ...runtime, signal: current }),
 				inspectLocal: async name => (await governedRequest(fixture.userId, { action: 'inspect', rootId: nativeRoot, path: name }, current)).inspectedEntry!,
 				streamLocalChanges: async function* (id, after, streamSignal, readyToFinish) {
 					capture = id;
 					for await (const page of readNativeIndexChanges({ ownerId: fixture.userId, deviceId: deviceId!, rootId: nativeRoot, captureId: id,
-						afterSequence: after, signal: streamSignal ?? current, readyToFinish, request: governedRequest })) {
+						afterSequence: after, signal: streamSignal ?? current, readyToFinish, request: governedRequest,
+                            ...(supportsNativeStreamingBatches(caps) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}) })) {
                         if (observe) nativePagesObserved.publish(page);
 						if (page.changes.length) {
 							firstLocalChangeMs ??= Date.now() - transferRunStartedAt;
-							markLocal();
+
 						}
 						yield page;
 					}
 				},
-				streamRemoteChanges: async function* (id, after, streamSignal, readyToFinish, resume) {
-					const feedSignal = streamSignal ?? current;
-					const gate = AbortSignal.any([feedSignal, AbortSignal.timeout(30000)]);
-					let abort!: () => void;
-					try {
-						await Promise.race([localObserved, new Promise<void>((_resolve, reject) => {
-							abort = () => reject(gate.reason);
-							gate.addEventListener('abort', abort, { once: true }); if (gate.aborted) abort();
-						})]);
-					} finally { gate.removeEventListener('abort', abort); }
-					yield* readCloudIndexChanges(scope, remoteRoot!, { ...runtime, signal: feedSignal }, id, after, readyToFinish!, resume!);
-				},
+                streamRemoteChanges: (id, after, streamSignal, readyToFinish, resume) => readCloudIndexChanges(scope, remoteRoot!,
+                    { ...runtime, signal: streamSignal ?? current }, id, after, readyToFinish!, resume!),
 				inventory,
-				source: async entry => mobileFolderSource(fixture.userId, nativeRoot, entry, current, governedRequest, caps),
+				source: async entry => {
+                    const source = mobileFolderSource(fixture.userId, nativeRoot, entry, current, governedRequest, caps);
+                    return { ...source, check: () => measured('source-check', async () => { await source.check(); }),
+                        ...(source.verify ? { verify: () => measured('source-verify', async () => { await source.verify!(); }) } : {}) };
+                },
 				progress: () => {},
 				journal: observe ? { ...journal, pagedRuns: access => {
 					const runs = journal.pagedRuns(access);
@@ -719,7 +766,7 @@ try {
 								throw Error('The native capture was not live and unsealed at an early receipt: ' + JSON.stringify({ index, state: page?.state }));
 							proof.set(name, { receipt, at: Date.now(), nativeState: page.state, index, receiptCommittedAtMonotonic,
                                 nativePageObservedAtMonotonic: observation.observedAt, nativePageObservationSequence: observation.sequence });
-							if (proof.size === 2) notify();
+							if (proof.size === (uploadStartDiagnostic ? 1 : 2)) notify();
 						}
 						return result;
 					} };
@@ -727,7 +774,7 @@ try {
 			};
 		};
 		const controller = new AbortController(), current = AbortSignal.any([controller.signal, proofTimeout]),
-			stop = new Error('Stop after the two before-seal confirmations');
+			stop = new Error(uploadStartDiagnostic ? 'Stop after the upload-start diagnostic receipt' : 'Stop after the two before-seal confirmations');
 		transferRunStartedAt = Date.now();
         earlyIdentityStartTotalMs = nativeIdentityTiming.totalMs;
 		console.log('MAC_PAGED_STAGE early-input-start');
@@ -736,17 +783,18 @@ try {
 		const running = runPagedForegroundCloudSync(saved, scope, firstInput, current);
 		void running.catch(() => {});
 		try {
-			await Promise.race([both, running.then(() => { throw Error('Early sync finished before two receipts were observed.'); })]);
-			const upload = proof.get('local.bin')!, download = proof.get('remote.bin')!;
-			assert.equal(upload.index?.generation, download.index?.generation);
+			await Promise.race([both, running.then(() => { throw Error('Early sync finished before its required receipts were observed.'); })]);
+			const upload = proof.get('local.bin')!, download = proof.get('remote.bin');
+            assert.ok(upload);
+            if (!uploadStartDiagnostic) { assert.ok(download); assert.equal(upload.index?.generation, download.index?.generation); }
 			const remote = (await api('/api/v1/files?' + new URLSearchParams({ id: upload.receipt.entry!.id, operationId: upload.receipt.operationId }))).receipt.file;
 			assert.equal(remote.revision, upload.receipt.entry!.version);
 			const content = await sessionFetch(new URL('/api/v1/attachments/content?' + new URLSearchParams({ id: remote.content.attachmentId, cache: 'bytes' }), base));
 			assert.equal(content.status, 200);
 			assert.equal(hash(new Uint8Array(await content.arrayBuffer())), hash(localBytes));
-			assert.equal(hash(await readFile(path.join(folder, 'remote.bin'))), hash(remoteBytes));
+			if (!uploadStartDiagnostic) assert.equal(hash(await readFile(path.join(folder, 'remote.bin'))), hash(remoteBytes));
 			assert.equal(nativeIndex()?.indexed, 0);
-			console.log('MAC_PAGED_STAGE both-directions-confirmed-while-rust-indexing');
+			console.log(uploadStartDiagnostic ? 'MAC_PAGED_STAGE upload-diagnostic-confirmed-while-rust-indexing' : 'MAC_PAGED_STAGE both-directions-confirmed-while-rust-indexing');
 			const cancelledAt = Date.now(), originalCapture = capture;
 			controller.abort(stop);
 			await assert.rejects(running, error => error === stop);
@@ -754,9 +802,10 @@ try {
 			const stopped = await governedRequest(fixture.userId, { action: 'scan-cancel', rootId: nativeRoot, inventoryDeviceId: deviceId!,
 				captureId: originalCapture, capturePolicy: 'one-way-supported', excludedPaths: [] }, AbortSignal.timeout(15000));
 			assert.equal(stopped.changesPage?.state, 'interrupted');
-			assert.ok(cancelledAt >= Math.max(upload.at, download.at));
+			assert.ok(cancelledAt >= Math.max(upload.at, download?.at ?? 0));
 			await rename(blocker, path.join(directory, 'held-scan.bin'));
 			const countsBefore = { ...counts };
+            const serverPutCountBefore = (await serverPuts()).length;
 			const resume = AbortSignal.timeout(120000);
 			const settled = await runPagedForegroundCloudSync(saved, scope, await input(resume, false), resume);
 			assert.ok('progress' in settled); assert.equal(settled.progress.operations, 0);
@@ -764,24 +813,37 @@ try {
 			const entries = (await api('/api/v1/timeline?' + new URLSearchParams({ ownerId: fixture.userId, dataPlane: 'home', thingId: remote.id }))).entries.map(parseTimelineEntry);
 			assert.equal(entries.filter(entry => entry.event.mode === 'revision').length, 1);
 			assert.equal(entries.filter(entry => entry.event.operationId === upload.receipt.operationId).length, 1);
-			assert.equal(hash(await readFile(path.join(folder, 'remote.bin'))), hash(remoteBytes));
+			if (!uploadStartDiagnostic) assert.equal(hash(await readFile(path.join(folder, 'remote.bin'))), hash(remoteBytes));
 			assert.equal(counts.puts, countsBefore.puts);
+            assert.equal((await serverPuts()).length, serverPutCountBefore, 'Native transfer worker must not replay a PUT on resume');
 			assert.equal(counts.publishes, countsBefore.publishes);
 			assert.ok(await journal.pagedCheckpoints(journalAccess).current());
+            const observedPuts = (await serverPuts()).filter(event => event.at >= transferRunStartedAt);
+            assert.equal(observedPuts.length, 1, 'Exactly one native worker upload PUT is expected');
+            firstTransferMs = observedPuts[0].at - transferRunStartedAt;
 			assert.ok(firstLocalChangeMs !== null && firstAdmittedMs !== null && firstTransferMs !== null);
 			assert.ok(firstLocalChangeMs <= firstAdmittedMs && firstAdmittedMs <= firstTransferMs);
-			console.log(JSON.stringify({ ok: true, scenario: 'Mac two-way transfer before initial index seal',
-				firstLocalChangeMs, firstAdmittedMs, firstAdmittedPath, firstPutMs: firstTransferMs, earlyFirstRequestMs, nativeTransportTiming: nativeTransport?.timings, nativeServiceTiming, nativeIdentityTiming, earlyIdentityStartTotalMs,
+			console.log(JSON.stringify({ ok: true, scenario: uploadStartDiagnostic ? 'Canonical upload-start diagnostic with empty cloud folder' : 'Mac two-way transfer before initial index seal',
+                proofKind: uploadStartDiagnostic ? 'upload-start-diagnostic' : 'two-way-before-seal', twoWayAcceptance: !uploadStartDiagnostic,
+				firstLocalChangeMs, firstAdmittedMs, firstAdmittedPath, firstPutMs: firstTransferMs, firstPutObservation: 'server-received native transfer-worker PUT', earlyFirstRequestMs,
+                parity: { capabilities: caps, nativeOperationGuards: true, compositeAuthorization: true, customMutationHook: false,
+                    canonicalDesktopManager: true, canonicalRendererHost: true, canonicalTransferWorkerSelected: true,
+                    rendererDevicePolicy: readDeviceSyncResourcePolicy(deviceResourceKey(base.origin, fixture.userId, deviceId!)) },
+                hostTimings, boundaryTimings, nativeIdentityCalls, nativeTransportTiming: nativeTransport?.timings, nativeServiceTiming, nativeIdentityTiming, earlyIdentityStartTotalMs,
                 nativeLatency, httpLatency, httpRequests, nativeCalls, verifyCalls, cooldownCount, cooldownSeconds,
 				resourceLimits: { scanBytesPerSecond, transferBytesPerSecond: 5_000_000, cpuPercent: 15, effectiveRustScanBytesPerSecond: scanBytesPerSecond / 2 }, blockerBytes,
 				upload: { at: upload.at, receiptCommittedAtMonotonic: upload.receiptCommittedAtMonotonic, nativePageObservedAtMonotonic: upload.nativePageObservedAtMonotonic, nativePageObservationSequence: upload.nativePageObservationSequence, nativeState: upload.nativeState, index: upload.index, operationId: upload.receipt.operationId, revision: remote.revision, sha256: hash(localBytes) },
-				download: { at: download.at, receiptCommittedAtMonotonic: download.receiptCommittedAtMonotonic, nativePageObservedAtMonotonic: download.nativePageObservedAtMonotonic, nativePageObservationSequence: download.nativePageObservationSequence, nativeState: download.nativeState, index: download.index, operationId: download.receipt.operationId, sha256: hash(remoteBytes) },
+				download: uploadStartDiagnostic ? { exercised: false, reason: 'Initially empty cloud folder; signed native download remains unverified' } : { at: download!.at, receiptCommittedAtMonotonic: download!.receiptCommittedAtMonotonic, nativePageObservedAtMonotonic: download!.nativePageObservedAtMonotonic, nativePageObservationSequence: download!.nativePageObservationSequence, nativeState: download!.nativeState, index: download!.index, operationId: download!.receipt.operationId, sha256: hash(remoteBytes) },
 				cancelledAt, sameNativeCaptureAfterResume: true, strictCheckpointAfterResume: true, duplicateTransfers: false, cloudHistoryRevisions: 1 }));
 		} catch (error) {
 			// Keep a bounded, non-secret stage snapshot when the deliberate
 			// before-seal deadline fires; otherwise its only symptom is a timeout.
 			console.log(JSON.stringify({ earlyTimingFailure: true, firstLocalChangeMs, firstAdmittedMs,
-				firstAdmittedPath, firstPutMs: firstTransferMs, earlyFirstRequestMs, nativeTransportTiming: nativeTransport?.timings, nativeServiceTiming, nativeIdentityTiming, earlyIdentityStartTotalMs,
+				firstAdmittedPath, firstPutMs: firstTransferMs, firstPutObservation: 'server-received native transfer-worker PUT', earlyFirstRequestMs,
+                parity: { capabilities: caps, nativeOperationGuards: true, compositeAuthorization: true, customMutationHook: false,
+                    canonicalDesktopManager: true, canonicalRendererHost: true, canonicalTransferWorkerSelected: true,
+                    rendererDevicePolicy: readDeviceSyncResourcePolicy(deviceResourceKey(base.origin, fixture.userId, deviceId!)) },
+                hostTimings, boundaryTimings, nativeIdentityCalls, nativeTransportTiming: nativeTransport?.timings, nativeServiceTiming, nativeIdentityTiming, earlyIdentityStartTotalMs,
                 nativeLatency, httpLatency, httpRequests, nativeCalls, verifyCalls, cooldownCount, cooldownSeconds,
 				resourceLimits: { scanBytesPerSecond, effectiveRustScanBytesPerSecond: scanBytesPerSecond / 2 },
 				index: nativeIndex(), counts }));
