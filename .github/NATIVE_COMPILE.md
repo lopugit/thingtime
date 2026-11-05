@@ -10,6 +10,21 @@ simulator scheme and tests the local PasswordCore/FileSync packages only after
 all gates pass. Neither mode signs, installs, launches apps, uses Apple
 credentials, publishes releases, or uploads to TestFlight.
 
+## Current acceptance limit
+
+The reviewed authority-supervision continuation is a partial source repair,
+not a usable admitted fallback. Existing immutable H1/H2 pins are unchanged.
+The observed authority timeout/remaining-UID cleanup failure still requires
+supported launchd service ownership/teardown and usable IPv6 policy proof
+before any newly authorized hosted preflight or native execution. See
+[the repair note](../PRs/codex-oauth-native-authority-lifecycle.md) and
+[the regression checklist](TESTING.md).
+
+A separate [inert lifecycle experiment](NATIVE_LIFECYCLE_EXPERIMENT.md) provides
+a bounded way to collect actual hosted platform observations. Its reviewed
+helper and exact-head PR label are independent of native H1/H2; publication
+does not authorize a run or activate candidate compilation.
+
 ## Admission and entry point
 
 Review the controller workflow, Python supervisor, archive extractor, probes,
@@ -104,6 +119,42 @@ VM. No `.env`, personal profiles, account credentials or signing assets are
 copied. Only local Swift packages are required; XcodeGen acquisition precedes
 the network boundary.
 
+## Task lifecycle gate — unavailable
+
+The current source refuses both `preflight` and `native` immediately after
+read-only runner admission, before UID allocation, account creation, watchdog
+launch, policy mutation or candidate access. Its fixed-label `result.json`
+reports `task-lifecycle-admission` and `direct-setuid-unsupported`; these are
+unavailable-capability diagnostics, not isolation or cleanup acceptance. There
+is no caller flag, environment variable or saved-receipt override. Existing
+immutable workflow pins remain unchanged and do not activate this source gate.
+
+The direct numeric credential launcher does not establish exclusive bootstrap
+namespace/service ownership. An empty UID process inventory, successful group
+kill, or an arbitrary failed `launchctl print` cannot prove a dormant service
+will not respawn. The cleanup implementation below remains unaccepted for that
+boundary; do not admit it merely because process tests pass.
+
+A future reviewed backend must reserve and verify a fresh exclusive task UID
+and its service/bootstrap namespace before candidate execution, launch every
+candidate descendant in that owned namespace, and prohibit registration in a
+foreign namespace. The trusted supervisor and detached watchdog must retain
+that ownership independently of the candidate and parent lifetime. Cleanup
+must close launch admission, remove the exact owned services/domain through a
+supported lifecycle operation, verify successful teardown, and observe no
+remaining or respawned task processes/services before restoring PF. Uncertain
+ownership, teardown, inventory errors and respawn must retain denial. Never
+boot out a runner/login/system domain or broadly kill unrelated services.
+
+Use an authorized disposable hosted Mac or separately consented VM for the
+next gate: first prove the domain/UID is unused and the candidate sees only its
+owned namespace; then exercise a task-owned KeepAlive service and escaped
+process, supervisor loss, cancellation, and failed teardown. Require exact
+owned-resource readback, no-respawn and post-restoration positive evidence.
+Record the OS/tool contract and its failure classification; mocks and ordinary
+process absence do not establish this platform authority. This design is a
+required next implementation/acceptance gate, not a claim that it exists.
+
 ## Enforced network policy and cleanup
 
 On the dedicated ephemeral hosted macOS VM, trusted root code first verifies
@@ -136,9 +187,15 @@ There is no DNS broker exemption, arbitrary forwarding, endpoint/IP allowlist,
 or resolver change. These fixed documented GitHub control-host probes establish
 only immediate public control HTTPS. They do not authenticate the runner's
 long-poll protocol or establish DNS-cache-expiry continuity. Trusted runner positive controls must reach
-the same IPv4 TCP/UDP addresses first. IPv6 positive-control availability is
-reported separately; absence of an IPv6 route is not transport-level proof of
-IPv6 enforcement. The explicit loaded IPv6 deny rule remains mandatory.
+the same TCP/UDP addresses first. Both IPv4 and IPv6 TCP positive controls and
+the UDP/DNS positive control are required before PF activation and revalidated
+from the saved evidence before the isolation gates can pass. An unavailable
+IPv6 route aborts rather than becoming denial evidence. Direct denial probes
+accept timeout-class socket failures only; route, refusal, permission and other
+socket errors fail closed. A timeout observation is not PF counter attribution:
+usable task-owned IPv6 fixtures, policy traversal and exact denial counters
+remain outstanding acceptance requirements. The explicit loaded IPv6 deny rule
+remains mandatory.
 Redirects and alternate DNS names do not grant an exception. A refused PF
 operation, failed required control, or child-sandbox failure stops compilation;
 there is no permissive fallback.
