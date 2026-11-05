@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, readFile, writeFile, rm, chmod, copyFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, chmod, copyFile, access } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createServer, connect } from 'node:net';
@@ -13,13 +14,22 @@ const apiPort = 28311,
 	base = `http://127.0.0.1:${apiPort}`,
 	root = resolve(import.meta.dirname, '..');
 const wide = process.argv.includes('--wide');
+const wideMixed = process.argv.includes('--wide-mixed');
+if (wideMixed && !wide) throw Error('--wide-mixed requires --wide');
+const wideCountArg = process.argv.find((arg) => arg.startsWith('--wide-count='));
+if (wideCountArg && (!wide || !/^[1-9][0-9]*$/.test(wideCountArg.slice(13)))) throw Error('--wide-count requires --wide and a positive integer');
 const indexer = process.env.THINGTIME_MAC_SYNC_INDEXER_BIN;
 if (indexer && !indexer.startsWith('/')) throw Error('The fixture Rust indexer path must be absolute.');
 const symlinksOnly = process.argv.includes('--symlinks-only');
 const early = process.argv.includes('--two-way-early');
-if (early && (!indexer || wide || symlinksOnly)) throw Error('The early acceptance requires only --two-way-early and an exact Rust fixture binary.');
+if (early && (wide || symlinksOnly)) throw Error('The early acceptance requires only --two-way-early.');
 const clean = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR || tmpdir() };
 if (!process.env.TT_MAC_PAGED_WORKER) {
+	// The paged native adapter requires the Rust indexer. Prove that prerequisite
+	// before creating an account or 10,001 cloud folders; cargo reuses its cache.
+	const resolvedIndexer = indexer || resolve(root, '../filesystem-indexer/target/debug/commander-indexer');
+	if (!indexer) execFileSync('cargo', ['build', '--manifest-path', resolve(root, '../filesystem-indexer/Cargo.toml'), '-p', 'commander-indexer', '--bin', 'commander-indexer'], { cwd: resolve(root, '..'), stdio: 'pipe', timeout: 180000 });
+	await access(resolvedIndexer, fsConstants.X_OK);
 	for (const port of [apiPort, dbPort]) {
 		const server = createServer();
 		server.listen(port, '127.0.0.1');
@@ -76,21 +86,24 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		const policy =
 			accountBackupSandbox(apiPort, true) +
 			`\n(allow network-outbound (remote ip "localhost:${dbPort}"))\n(allow network-inbound (local ip "localhost:${dbPort}"))`;
-		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename, ...(wide ? ['--wide'] : []), ...(symlinksOnly ? ['--symlinks-only'] : []), ...(early ? ['--two-way-early'] : [])], {
+		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename, ...(wide ? ['--wide'] : []), ...(wideMixed ? ['--wide-mixed'] : []), ...(wideCountArg ? [wideCountArg] : []), ...(symlinksOnly ? ['--symlinks-only'] : []), ...(early ? ['--two-way-early'] : [])], {
 			cwd: root,
-			env: { ...clean, TT_MAC_PAGED_WORKER: directory, THINGTIME_MAC_SYNC_FIXTURE_BIN: binary, ...(indexer ? { THINGTIME_MAC_SYNC_INDEXER_BIN: indexer } : {}) },
+			env: { ...clean, TT_MAC_PAGED_WORKER: directory, THINGTIME_MAC_SYNC_FIXTURE_BIN: binary, THINGTIME_MAC_SYNC_INDEXER_BIN: resolvedIndexer },
 			stdio: ['ignore', 'pipe', 'pipe']
 		});
-		let output = '';
+		let output = '', pendingLine = '';
 		child.stdout.on('data', (b) => {
 			output += b;
-			for (const line of String(b).split('\n')) if (line.startsWith('MAC_PAGED_STAGE ')) console.log(line);
+			const lines = (pendingLine + String(b)).split('\n');
+			pendingLine = lines.pop();
+			for (const line of lines) if (line.startsWith('MAC_PAGED_STAGE ')) console.log(line);
 		});
 		child.stderr.on('data', (b) => (output += b));
 		const stop = () => child.kill('SIGTERM');
 		process.once('SIGINT', stop);
 		process.once('SIGTERM', stop);
-		timer = setTimeout(() => { deadlineExpired = true; stop(); }, wide ? 1200000 : 600000);
+		const deadlineMs = wideMixed && !wideCountArg ? 35 * 60_000 : wide ? 20 * 60_000 : 10 * 60_000;
+		timer = setTimeout(() => { deadlineExpired = true; stop(); }, deadlineMs);
 		const [code] = await once(child, 'exit');
 		const result = output.split('\n').find((line) => line.startsWith('{"macPagedSyncProof":'));
 		if (code !== 0 || !result) {
@@ -163,7 +176,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 			if (!stages) return;
 			pendingStage += b;
 			const lines = pendingStage.split('\n'); pendingStage = lines.pop() ?? '';
-			for (const line of lines) if (/^MAC_PAGED_STAGE [a-z-]+$/.test(line)) console.log(line);
+			for (const line of lines) if (/^MAC_PAGED_STAGE [a-z0-9-]+$/.test(line)) console.log(line);
 		});
 		c.stderr.on('data', (b) => (text += b));
 		return () => text;
@@ -238,6 +251,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		const manifest = await fetch(base + '/.well-known/thingtime-capabilities.json').then((r) => r.json());
 		assert.equal(manifest.origin, base);
 		assert.equal(manifest.features['api.files'].version, '1.10.0');
+		assert.equal(manifest.features['api.attachment-content'].version, '1.17.2');
 		assert.equal(manifest.features['api.file-sync-batches'].version, '1.3.0');
 		const registered = await fetch(base + '/api/v1/auth/register', {
 			method: 'POST',
@@ -254,7 +268,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		console.log('MAC_PAGED_STAGE native-transfers');
 		const test = start(
 			process.execPath,
-			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', ...(early ? ['--two-way-early'] : symlinksOnly ? ['--symlinks-only'] : ['--large-upload', '--large-download']), ...(wide ? ['--wide'] : [])],
+			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', ...(early ? ['--two-way-early'] : symlinksOnly ? ['--symlinks-only'] : ['--large-upload', '--large-download']), ...(wide ? ['--wide'] : []), ...(wideMixed ? ['--wide-mixed'] : []), ...(wideCountArg ? [wideCountArg] : [])],
 			{ ...clean, THINGTIME_MAC_SYNC_FIXTURE_BIN: process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN, ...(indexer ? { THINGTIME_MAC_SYNC_INDEXER_BIN: indexer } : {}) }
 		);
 		const output = collect(test, true);
