@@ -18,8 +18,9 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // Pinned projections. A diff here is a REVIEW PROMPT, not necessarily a bug:
 // a new registry field should appear (except a reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
-  file: ['name', 'trashed', 'content'],
+  file: ['name', 'trashed', 'content', 'symbolicLink'],
   'password-manager-entry': ['title', 'passwordType', 'icon', 'fields'],
+  'password-verification-device': [], // Private device proofs never enter the public crystal projection.
   draft: [], // Private snapshots never enter the public schema projection.
   "timeline-snapshot-part": [],
   "timeline-branch": ["name"],
@@ -67,6 +68,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "app-storage": ["quotaKind", "appId", "usedBytes", "storageAllowanceBytes"],
   "service-quota": ["quotaKind", "quotaVersion", "key", "policy", "dayKey", "dailyUsed", "reservations", "permitIds", "releasedIds", "rollingPermits"],
   "migration-diagnostic": ["diagnosticVersion", "migrationId", "mode", "status", "outcome", "summary", "capturedAt"],
+  "mongodb-connection-snapshot": ["source"],
   "error-log": ["source", "message", "provider", "status", "code", "requestId", "route", "method", "providerType", "providerRequestId", "retryAfter", "attempt"],
   "ai-model": ["modelId", "label", "provider", "efforts", "speeds", "family", "enabled", "sortOrder", "contextWindow", "notes"],
   "account-invite": ["status", "amountMicros"],
@@ -104,6 +106,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "device-state": ["deviceStateKey", "revision", "stateHash", "snapshotHash", "state", "observedAt"],
   "device-connector": ["deviceConnectorKey", "revision", "connectorHash", "connector"],
   "device-command": ["deviceCommandKey", "requestId", "kind", "input", "requiresApproval", "approvalState", "status", "controlBytes", "inputTextHash", "inputRedactedAt", "expiresAt"],
+  "device-sync-control": ["requestId", "digest", "deviceCommandKey", "pairingHash", "status", "deadlineAt", "leaseHash"],
   "device-command-event": ["deviceEventKey", "deviceControlEventScopeKey", "liveControlEventScopeKey", "retainedBytes", "liveEventSequenceKey", "liveEventHash", "liveActivityHash", "eventType", "resourceId", "revision", "payload", "expiresAt"],
   "device-ai-live-state": ["deviceAiLiveStateKey", "connectorId", "sessionId", "lastSequence", "lastObservedAt"],
   "device-approval": ["deviceApprovalKey", "commandId", "requestId", "kind", "prompt", "status"],
@@ -147,6 +150,7 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 	assert.ok(PROTECTED_THINGTIME.includes('attachment'));
 	assert.ok(PROTECTED_THINGTIME.includes('app'));
 	assert.ok(PROTECTED_THINGTIME.includes('migration-diagnostic'));
+	assert.ok(PROTECTED_THINGTIME.includes('mongodb-connection-snapshot'));
 	assert.ok(PROTECTED_THINGTIME.includes('moderationFlag'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-pull-request'));
 	assert.ok(PROTECTED_THINGTIME.includes('ci-preview-policy'));
@@ -292,6 +296,19 @@ test('opaque native objects remain copyable bounded JSON, including the root cry
   }
 });
 
+test('MongoDB snapshot schema projects its opaque source without granting generic data writes', () => {
+  const schema = crystalSchemas.find((entry) => entry.id === 'mongodb-connection-snapshot')!;
+  const projected = projectBuiltinSchemaCrystal(schema);
+  const validated = validateThingtimeCrystal(['schema'], projected);
+  assert.equal(validated.ok, true);
+  if (!validated.ok) return;
+  const source = (validated.crystal.fields as Array<Record<string, unknown>>).find((field) => field.name === 'source')!;
+  assert.equal(source.type, 'json');
+  assert.equal(source.required, true);
+  assert.equal(isProtectedThingtime([schema.id]), true);
+  assert.equal(validateThingtimeCrystal([schema.id], schema.example).ok, false, 'the dedicated runtime writer owns snapshot data');
+});
+
 test('schema extension headroom retains a total field-node limit', () => {
   const fields = Array.from({ length: MAX_SCHEMA_FIELDS - 1 }, (_, index) => ({ name: `field${index}`, type: 'string' }));
   const crystal = { name: 'Bounded', fields: [{ name: 'nested', type: 'object', children: fields }] };
@@ -364,4 +381,15 @@ test('password icon projection remains optional and retains its typed source cho
     assert.equal(fields[name].type, 'string');
     assert.notEqual(fields[name].required, true, 'each source keeps its alternative field optional');
   }
+});
+
+test('password verification device is a protected zero-field marker with no public proof projection', () => {
+  const schema = crystalSchemas.find(schema => schema.id === 'password-verification-device')!;
+  assert.ok(PROTECTED_THINGTIME.includes('password-verification-device'));
+  assert.equal(isProtectedThingtime([schema.id]), true);
+  assert.equal(isProtectedThingtime(['data', schema.id]), true);
+  assert.equal(schema.collection, null);
+  const projected = projectBuiltinSchemaCrystal(schema);
+  assert.deepEqual(projected, { name: schema.title, description: schema.summary, fields: [] });
+  assert.equal(validateThingtimeCrystal(['schema'], projected).ok, true);
 });

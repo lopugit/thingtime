@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { requireGatewayDatabaseAccess, registerGatewayDrain } from '../deployment/environmentGateway';
 import { INDEX_LIFECYCLE_ID, indexExecutionPolicy, type IndexExecutionOptions, budgetIndexCommands, indexPlanFingerprint, recordIndexPlan, runDurableIndexPlan, invalidateDurableIndexPlan } from './indexLifecycle';
 import { getMongoUri } from './config';
+import { mongoConnectionTracker } from './connectionTracker';
 import { getActiveMongoDbName, getActiveMongoUri, isCustomMongoEndpointActive } from './endpoint';
 import { getMongoDb } from './mongodb';
 import { COLLECTIONS, physicalCollectionName } from './collectionNames';
@@ -29,7 +30,9 @@ const getClientCachedFor = async (uri: string, isHome: boolean) => {
     // LRU touch — Map iteration order is insertion order
     clientCache.delete(uri);
     clientCache.set(uri, cached);
-    return cached;
+    const client = await cached;
+    mongoConnectionTracker.recordAccess(client);
+    return client;
   }
 
   const entry = (async () => {
@@ -56,9 +59,11 @@ const getClientCachedFor = async (uri: string, isHome: boolean) => {
             socketTimeoutMS: 30000,
             appName: 'thingtime-api'
           }
-        : { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000 }
+        : { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000, appName: 'thingtime-api-custom' }
     );
-    await client.connect();
+    const observation = mongoConnectionTracker.track(client, isHome ? 'home' : 'custom', isHome ? 'thingtime-api' : 'thingtime-api-custom');
+    try { await client.connect(); observation.ready(); }
+    catch (error) { observation.failed(); throw error; }
     return client;
   })().catch((err) => {
     // don't cache a failed connection — let the next call retry
@@ -82,7 +87,18 @@ const getClientCachedFor = async (uri: string, isHome: boolean) => {
     stale?.then((client: any) => client.close()).catch(() => {});
   }
 
-  return entry;
+  const client = await entry;
+  mongoConnectionTracker.recordAccess(client);
+  return client;
+};
+
+// Observability may reuse a home client, but must never create or warm one.
+export const getExistingHomeMongoDb = async () => {
+  let cached: Promise<any> | undefined;
+  try { cached = clientCache.get(getMongoUri()); } catch { return null; }
+  if (!cached) return null;
+  await requireGatewayDatabaseAccess();
+  return (await cached).db('thingtime');
 };
 
 // A read-only snapshot for diagnostics. Do not use getThingtimeDb here: its
@@ -207,21 +223,29 @@ const adoptVersionedCollections = async (db: any) => {
 // includes the adoption pass, so no caller can reach a collection handle
 // before legacy names have been (re)checked.
 let homeDbPromise: Promise<any> | null = null;
+let homeDbClient: any = null;
 
 const getRawHomeThingtimeDb = async () => {
   await requireGatewayDatabaseAccess();
   if (!homeDbPromise) {
     homeDbPromise = (async () => {
-      const db = (await getClientCachedFor(getMongoUri(), true)).db('thingtime');
+      const client = await getClientCachedFor(getMongoUri(), true);
+      const db = client.db('thingtime');
+      homeDbClient = client;
       await adoptVersionedCollections(db);
       return db;
     })().catch((err) => {
       // don't cache a failed connection/adoption — let the next call retry
       homeDbPromise = null;
+      homeDbClient = null;
       throw err;
     });
   }
-  return homeDbPromise;
+  const db = await homeDbPromise;
+  // A warm database handle bypasses getClientCachedFor. Attribute its use at
+  // this canonical access boundary too; the request context deduplicates it.
+  if (homeDbClient) mongoConnectionTracker.recordAccess(homeDbClient);
+  return db;
 };
 
 // Keep identity reads available for authenticated repair; gate every normal
@@ -264,6 +288,17 @@ export const getHomeThingtimeDb = async () => {
     const value = target[property];
     return typeof value === 'function' ? value.bind(target) : value;
   } });
+};
+
+// Telemetry resolves the ordinary write-readiness barrier BEFORE the caller
+// checks its deadline. Returning an already admitted raw handle prevents the
+// generic mutation proxy from resuming a telemetry write after its deadline.
+// It can only reuse an existing home client and never borrows a custom plane.
+export const getExistingHomeConnectionSnapshotCollection = async () => {
+  const db = await getExistingHomeMongoDb();
+  if (!db) return null;
+  await requireHomeIndexWriteReadiness();
+  return db.collection(physicalCollectionName('things'));
 };
 
 // Active data-plane database: the home db — unless the request carries a
@@ -1746,6 +1781,7 @@ registerGatewayDrain(async () => {
   clientCache.clear();
   customIndexesEnsured.clear();
   homeDbPromise = null;
+  homeDbClient = null;
   indexesEnsured = null;
   ensuredFingerprint = null;
   homeRelationshipKeys = null;

@@ -1,3 +1,4 @@
+import { openSharePreview } from '~/components/Sharing/sharePreviewLink';
 import { refreshLopuAccount } from '~/components/Lopu/useLopuAccount';
 import React from 'react';
 import { Box, Button, Flex, FormControl, FormLabel, Input, Select, Text } from '@chakra-ui/react';
@@ -113,6 +114,7 @@ export const InvitePanel = () => {
 					>
 						Copy link
 					</Button>
+					<Button mt={2} ml={2} onClick={() => openSharePreview(url)}>Share link & customise preview</Button>
 				</Box>
 			)}
 			{error && (

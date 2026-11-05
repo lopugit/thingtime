@@ -66,7 +66,7 @@ let package = Package(
         ),
         .testTarget(
             name: "ThingtimeNodeCoreTests",
-            dependencies: ["ThingtimeNodeCore", .product(name: "AppleFileSync", package: "FileSync")]
+            dependencies: ["ThingtimeNode", "ThingtimeNodeCore", .product(name: "AppleFileSync", package: "FileSync")]
         )
     ],
     swiftLanguageModes: [.v5]

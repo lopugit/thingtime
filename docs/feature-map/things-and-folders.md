@@ -22,6 +22,12 @@ always through `getThingsCollection()` / `getHomeThingsCollection()`, never a
 raw name). Folders are `folder` Things; containment is the child's `folderId`
 pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 
+Private `file-sync` configurations can be managed from any signed-in browser.
+The device sync screen keeps saved connection editing available offline and
+uses a protected, leased control channel for live device operations. Native
+grants and transfer journals stay on the target device. See
+[browser device sync](../browser-device-sync.md) for code paths and checks.
+
 ## Where the code lives
 
 | Concern | Path |
@@ -102,14 +108,14 @@ ignore the marker when enforcing content-kind exclusivity. Coverage lives in
 | Dialogs (new folder, rename, move, share, delete, preview) | `app/components/Things/ThingsDialogs.tsx` |
 | Export/import dialogs | `ThingExportDialog.tsx`, `ThingImportDialog.tsx` |
 | Universal Thing page `/thing/:id` | `app/routes/thing.tsx` |
-| Device page `/things?device=<id>&deviceView=page` | `app/components/Things/ThingsPage.tsx` selects the same `DeviceDetailsDrawer.tsx` content used in the drawer; device cards/rows have a navigation-only right-click menu |
+| Device page `/things?device=<id>&deviceView=page` | Device cards and rows link to the dedicated page. `ThingsPage.tsx` shares `DeviceDetailsDrawer.tsx` and the top dashboard with the explicit Quick view (`deviceView=quick`); the device menu also links to sync and saved files. |
 
 Shared item activation is defined in `browseInteraction.ts`: ordinary clicks
 open once; Cmd/Ctrl/Shift clicks select, and title links retain native
 middle-click navigation. `ThingsViews.tsx` supplies labelled hover/focus
 checkboxes and action menus for Things, files and devices in every layout;
 coarse-pointer controls remain visible. Device controls are siblings of their
-primary button to preserve independent keyboard and pointer actions.
+primary link to preserve independent keyboard and pointer actions.
 `FolderTree.tsx` reuses those controls only when browsing handlers are supplied;
 Move dialog pickers remain independent. Its folder button expands children in
 place, while modifier clicks select and context controls preserve location.
@@ -166,6 +172,15 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
   home/selected discovery while keeping different data planes separate.
 
 ## Remote and stored files
+
+For connected folder sync, `app/fileSync/streamingForegroundSync.ts` can
+prepare two-way copies from native and cloud index hints while both source
+feeds remain open. `app/api/utils/files/inventory.ts` resolves the exact
+destination under the same transaction and ancestor locks used by the
+canonical file and folder writers. Early two-way cloud writes negotiate
+`api.files` 1.10.0 before using that guard. The strict paged plan and
+checkpoint remain responsible for reconciliation and agreement.
+
 
 `FilesystemThingsBrowser.tsx` adapts ephemeral remote inode entries into the
 same `ThingsGridView`/`ThingsListView` used by `/things`. The full-page entry is
@@ -590,7 +605,7 @@ values, source context and password history. See [the password contract](../pass
 
 ## Mac backup scan implementation
 
-`Commander/crates/commander-indexer/src/backup.rs` adapts the shared bounded Rust
+`filesystem-indexer/crates/indexer/src/backup.rs` adapts the shared bounded Rust
 walker to private JSONL backup observations. `backup_ignore.rs` matches the same
 Git oracle as the web/Apple adapters. `apple/FileSync/.../CommanderBackupCapture.swift`
 runs the bundled helper under the selected grant, validates returned metadata and
@@ -674,3 +689,79 @@ private managed content excluded by the ordinary library API are not covered.
 Incomplete scan/traversal status remains explicit. No new API contract or
 background indexing service is introduced. Unfiled files independently loads
 one page at a time and requires Load more for each subsequent page.
+
+
+Mac folder-grant location metadata uses `MacFolderSync` `fileAccessVersion`
+1.15.0 and `MobileFolderStore.sourcePath`. The owner-verified native response
+adds optional `roots[].sourcePath`, preserving the exact selected absolute POSIX
+location without granting ancestor access. `mobileFolders.client` validates it
+separately from root-relative file paths and exposes `supportsNativeSourcePaths`.
+Stale/unavailable bookmarks and Photos omit it. `MobileFolderTests` and
+`MacFolderSyncTests` cover owner isolation and continued rejection of absolute
+paths by file operations; `mobileFolders.client.test.ts` covers negotiation,
+correlation and malformed location metadata. This field does not change signed
+sync policy, existing cloud destination identities, or public manifests.
+
+Device-wide resource controls use `fileSync/remoteDeviceResources.client.ts` for
+one identity-qualified status session shared by overview and connection manager.
+`remoteSyncProtocol.ts` defines the rootless read/save contract, strict policy and
+measurement projections; client and worker require `api.devices-sync-control`
+1.2.0 plus native fileAccess 1.16.0 / fileResourceLimits 1.1.0. The existing paired
+mailbox retains ownership, leases and immutable saves. Focused protocol/client,
+worker, session and `deviceSyncControl` tests cover paused changes, no folder/job
+side effects, stale replies and shared polling. See browser-device-sync.md.
+The installed Mac dashboard shares one Activity Manager sampler per active
+local run. It reads the existing rootless resources lane while visible, and
+Electron projects current worker samples from the same device governor without
+changing limits. Stale transfer, scan and memory measurements expire.
+
+Sync history uses `fileSync/deviceSyncHistoryRecorder.ts` inside the admitted
+native runner, independently of dashboard mounting. `deviceSyncHistoryJournal.ts`
+stores individual origin/owner/device/data-plane scoped observations in the
+existing IndexedDB journal. Range reads process all matching rows in bounded
+batches; display buckets retain measured sample counts and null gaps.
+`deviceSyncHistory.client.ts` reads locally or requests the paired worker's
+read-only `history` command after negotiating `api.devices-sync-control` 1.4.0.
+The API lease completion and remote client both validate the requested range
+and strict result projection. `DeviceSyncResources` and
+`deviceSyncResourceBlocks.ts` expose editable live/history controls and stats.
+
+Mac signed-range staging uses the existing attachment and file reads through
+`electron/lib/folder-download.cjs` and its transport child. Native
+`fileDownloadVersion` 1.0.1 reports temporary transport failures as a runnable
+wait. Retry rechecks the same owner, selected origin, cloud revision and signed
+range, then resumes from native staging's retained offset. The folder diagnostic
+log records only closed phase and result labels. Test the retry and range
+integrity in `electron/test/folder-download.test.cjs`.
+
+POSIX symbolic-link metadata lives in `fileSync/symbolicLink.ts`; `SyncEntry`
+content/stamp equality includes link kind and exact raw target identity.
+`cloudFile.ts`, canonical `files/files.ts`, inventory projections and
+`fileVersions.ts` preserve it through uploads, retained history and guarded
+restore. `api.files` 1.9.0 / `api.file-sync-batches` 1.3.0 and native fileAccess
+1.17.0 / fileSymbolicLinks 1.0.0 are explicit requirements. Targets are never
+followed. Tests: `symbolicLink.test.ts`, canonical file/route suites and the
+isolated Mac paged HTTP lane described in mobile-file-sync.md.
+
+### Files browser and sync folder publication
+
+The Files browser includes canonical live `file` Things. Its file actions use
+the private file API and versioned attachment ranges. Moves and Trash use
+the selected Timeline revision and preserve the original file ID and history.
+Browser Upload reuses the existing upload control, then publishes the ready
+attachment with the file API when the destination is in a saved owned sync
+folder. The destination lookup reads only saved sync configurations and exact
+folder ancestry, once per distinct folder in the current operation. Other
+uploads keep their ordinary attachment placement. The sync inventory still
+enumerates only canonical files and folders.
+
+## Numeric summaries
+
+`GET /api/v1/things` (1.47.0) accepts `maxCrystalField` for first-party owner/PAT
+`thingtime=data` lists with exact `schemaId` and `parentId`; `excludeArchived=true`
+omits archived entries. `numericSummary.ts` streams the existing `listThings`
+projection and accumulates finite numbers without an item-count cap or a new
+index. It returns only a complete `summary.max`, or null for no numbers. Abort,
+pagination and access failures never return a partial maximum. This read does
+not allocate an atomic sequence. Focused tests cover filtering and complete
+pagination; real API acceptance must verify separate account/PAT boundaries.

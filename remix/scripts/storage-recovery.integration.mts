@@ -22,8 +22,8 @@ if (!process.argv.includes('--child')) {
   const probe = socketServer(); probe.listen(0, '127.0.0.1'); await once(probe, 'listening');
   const port = (probe.address() as any).port; await new Promise<void>(resolve => probe.close(() => resolve()));
   await mkdir(join(dir, 'db'));
-  const env = { PATH: process.env.PATH!, HOME: dir, TMPDIR: dir, NODE_ENV: 'test', THINGTIME_DATA_ENV: 'development',
-    MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${port}/thingtime?replicaSet=storage_recovery`, JWT_SECRET: randomBytes(48).toString('hex') };
+  const env = { ...(process.env.THINGTIME_EXTENSION_ACCOUNTS_UI?{THINGTIME_EXTENSION_ACCOUNTS_UI:process.env.THINGTIME_EXTENSION_ACCOUNTS_UI}:{}), ...(process.env.THINGTIME_TEST_PLAYWRIGHT_MODULE?{THINGTIME_TEST_PLAYWRIGHT_MODULE:process.env.THINGTIME_TEST_PLAYWRIGHT_MODULE}:{}), ...(process.env.PLAYWRIGHT_BROWSERS_PATH?{PLAYWRIGHT_BROWSERS_PATH:process.env.PLAYWRIGHT_BROWSERS_PATH}:{}), PATH: process.env.PATH!, HOME: dir, TMPDIR: dir, NODE_ENV: 'test', THINGTIME_DATA_ENV: 'development',
+    MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${port}/thingtime?replicaSet=storage_recovery`, JWT_SECRET: randomBytes(48).toString('hex'), THINGTIME_USER_VAULT_KEY: randomBytes(32).toString('base64url') };
   const containerName = `tt-storage-recovery-${randomUUID()}`;
   const mongoArgs = ['--port', String(port), '--bind_ip', '127.0.0.1', '--replSet', 'storage_recovery', '--nounixsocket', '--wiredTigerCacheSizeGB', '0.25'];
   // Linux CI uses an owned foreground container and tmpfs, never the API
@@ -44,11 +44,11 @@ if (!process.argv.includes('--child')) {
     await admin.db('admin').command({ replSetInitiate: { _id: 'storage_recovery', members: [{ _id: 0, host: `127.0.0.1:${port}` }] } });
     for (let n = 0; !(await admin.db('admin').command({ hello: 1 })).isWritablePrimary; n++) { if (n > 100) throw new Error('Replica primary timeout'); await delay(100); }
     await admin.close();
-    child = spawn(process.execPath, ['--import', 'tsx', script, '--child'], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    child = spawn(process.execPath, ['--import', 'tsx', script, '--child', ...process.argv.filter(arg=>['--password-records','--password-verification','--verification-ui','--native-approval-ui'].includes(arg))], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = ''; child.stdout!.on('data', data => output += data); child.stderr!.on('data', data => output += data);
     const timeout = setTimeout(() => child?.kill('SIGTERM'), 180_000);
     const [code] = await once(child, 'exit'); clearTimeout(timeout);
-    if (code !== 0) throw new Error(`Integration failed:\n${output.slice(-10000)}`);
+    if (code !== 0) throw new Error(`Integration failed:\n${output.split('\n').filter(line=>!/(?:verify-email\?token=|^subject:|^to:|^Welcome to Thingtime)/i.test(line)).join('\n').slice(-10000)}`);
     console.log(output.split('\n').filter(line => line.startsWith('PASS:')).join('\n'));
   } finally {
     await admin.close().catch(() => {}); child?.kill('SIGTERM');
@@ -59,21 +59,56 @@ if (!process.argv.includes('--child')) {
 } else {
   assert.match(process.env.MONGODB_CONNECTION_STRING || '', /^mongodb:\/\/127\.0\.0\.1:\d+\/thingtime\?replicaSet=storage_recovery$/);
   const { createServer } = await import('vite');
-  const vite = await createServer({ root, configFile: false, envDir: false, appType: 'custom', server: { middlewareMode: true, hmr: false, ws: false, watch: null }, resolve: { alias: { '~': join(root, 'app') } } });
+  const vite = await createServer({ root, configFile: false, envDir: false, appType: 'custom', server: { middlewareMode: true, hmr: process.argv.includes('--verification-ui')?{host:'127.0.0.1',port:18091}:false, ...(process.argv.includes('--verification-ui')?{}:{ws:false}), watch: null }, resolve: { alias: { '~': join(root, 'app') } } });
   const load = (path: string) => vite.ssrLoadModule('/app/' + path);
   try {
     const register = await load('routes/api/v1/auth/register/_register.tsx'), route = await load('routes/api/v1/things/_things.tsx');
     const plans = await load('api/utils/subscriptions/subscriptions.ts'), storage = await load('api/utils/storage/userStorage.ts');
     const accounted = await load('api/utils/storage/accountedThings.ts'), core = await load('api/utils/storage/storageCore.ts');
     const db = await load('api/utils/mongodb/collections.ts'), recovery = await load('api/utils/storage/userStorageRecovery.ts'), registry = await load('schemas/registry.ts');
-    const origin = 'http://127.0.0.1:19897', username = `storage-${randomUUID().slice(0, 8)}`;
-    const response = await register.action({ request: new Request(origin + '/api/v1/auth/register', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ username, email: username + '@example.invalid', password: randomBytes(32).toString('hex') }) }) });
+    const origin = process.argv.includes('--password-verification') ? 'https://verification-api.test' : 'http://127.0.0.1:19897', username = `storage-${randomUUID().slice(0, 8)}`;
+    const fixturePassword = randomBytes(32).toString('hex');
+    const response = await register.action({ request: new Request(origin + '/api/v1/auth/register', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ username, email: username + '@example.invalid', password: fixturePassword }) }) });
     const registered = await response.json(); assert.equal(registered.ok, true, registered.error);
     const ownerId = registered.user.id, cookie = response.headers.getSetCookie().map((value: string) => value.split(';')[0]).join('; ');
     const call = async (method: string, body?: any, id?: string) => {
       const request = new Request(origin + '/api/v1/things' + (id ? '?id=' + encodeURIComponent(id) : ''), { method, headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
       const result = await (method === 'GET' ? route.loader : route.action)({ request }); return { status: result.status, body: await result.json() };
     };
+    if (process.argv.includes('--password-verification')) {
+      await (await import('./password-verification.integration')).runPasswordVerificationIntegration({load,vite,origin,ownerId,cookie,password:fixturePassword,username});
+    } else if (process.argv.includes('--password-records')) {
+      const passwords = await load('routes/api/v1/passwords/_passwords.tsx');
+      const material = await load('passwords/browserPasskey.ts');
+      const model = await load('passwords/model.ts');
+      const callPasswords = async (body: any, selectedCookie = cookie, selectedOwner = ownerId) => {
+        const result = await passwords.action({ request: new Request(origin + '/api/v1/passwords', { method: 'POST', headers: { Cookie: selectedCookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, expectedOwnerId: selectedOwner }) }) });
+        return { status: result.status, body: await result.json() };
+      };
+      const request = { type: 'create', origin: 'https://credential-fixture.test', publicKey: { challenge: randomBytes(32).toString('base64url'), rp: { id: 'credential-fixture.test', name: 'Fixture' }, user: { id: 'AQID', name: 'fixture', displayName: 'Fixture' }, pubKeyCredParams: [{ type: 'public-key', alg: -7 }], attestation: 'none' } };
+      const first = await material.prepareBrowserPasskeyRegistration(request, true);
+      const second = await material.prepareBrowserPasskeyRegistration(request, true, [first.entry]);
+      assert.notEqual(first.response.id, second.response.id);
+      const payloads = [first, second].map(prepared => ({ operation: 'save', id: randomUUID(), writeId: randomUUID(), revision: 0, entry: prepared.entry }));
+      for (const payload of payloads) { const saved = await callPasswords(payload); assert.equal(saved.status, 200); assert.equal(saved.body.record.id, payload.id); }
+      const firstBefore = await callPasswords({ operation: 'read', id: payloads[0].id });
+      assert.equal(firstBefore.status, 200); assert.deepEqual(firstBefore.body.entry, model.validatePasswordEntry(first.entry));
+      assert.equal((await callPasswords(payloads[0])).body.record.revision, 1, 'Same write retry does not replace a key');
+      const both = await Promise.all(payloads.map(async payload => {
+        const readback = await callPasswords({ operation: 'read', id: payload.id }); assert.equal(readback.status, 200);
+        assert.deepEqual(readback.body.entry, model.validatePasswordEntry(payload.entry)); return readback.body;
+      }));
+      assert.deepEqual(both[0], firstBefore.body, 'Saving another same-account record leaves the first unchanged');
+      const catalog = await callPasswords({ operation: 'catalog' }); assert.equal(catalog.status, 200);
+      assert.equal(catalog.body.catalog.filter((item: any) => item.relyingParty === request.publicKey.rp.id && item.userHandle === request.publicKey.user.id).length, 2);
+      assert.deepEqual(new Set(catalog.body.catalog.map((item: any) => item.id)), new Set(payloads.map(payload => payload.id)));
+      const otherName = 'other-' + randomUUID().slice(0, 8);
+      const otherResponse = await register.action({ request: new Request(origin + '/api/v1/auth/register', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ username: otherName, email: otherName + '@example.invalid', password: randomBytes(32).toString('hex') }) }) });
+      const other = await otherResponse.json(); assert.equal(other.ok, true);
+      const otherCookie = otherResponse.headers.getSetCookie().map((value: string) => value.split(';')[0]).join('; ');
+      for (const payload of payloads) assert.equal((await callPasswords({ operation: 'read', id: payload.id }, otherCookie, other.user.id)).status, 404);
+      console.log('PASS: disposable replica; real registration/password route handlers; two independent record UUIDs with same RP/handle; exact encrypted readback of both; first record unchanged; immutable retry and cross-account refusal. Record storage only, not simultaneous discoverable-authenticator registration.');
+    } else {
     const plan = await plans.getSubscription('user', ownerId);
     assert.equal((await plans.setSubscription({ subjectType: 'user', subjectId: ownerId, ownerId, tier: plan.tier, tierVersionId: plan.tierVersionId, overrides: { userStorageBytes: null }, updatedBy: ownerId })).ok, true);
     const created = await call('POST', { thingtime: ['data'], crystal: { text: 'original' }, visibility: 'private' });
@@ -107,6 +142,7 @@ if (!process.argv.includes('--child')) {
     const exact = await storage.getUserStorageUsage(ownerId); assert.equal(exact.status, 'ready'); assert.equal(exact.usedBytes, baseline.usedBytes + cap);
     assert.equal(await worker.run(ownerId), 'skipped'); assert.equal((await storage.getUserStorageUsage(ownerId)).usedBytes, exact.usedBytes);
     console.log('PASS: disposable replica; real registration and Things create/update/read; canonical unlimited plan; durable queue; concurrent100MiB cap and insert/update rollback; independent exact census and repeated drain without replay; isolated environment with no production data');
+    }
   } finally { await vite.close(); }
   process.exit(0);
 }

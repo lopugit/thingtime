@@ -1,3 +1,5 @@
+import { runWithMongoConnectionFeature } from '../../../app/api/utils/mongodb/connectionTracker';
+import { publishMongoConnectionSnapshots } from '../../../app/api/utils/mongodb/connectionInventory';
 import { agentTestRefusal } from '../../../app/api/utils/agentTesting';
 import { actionDataRoutes } from '../../utils/actionDataRoutes';
 import { defineHandler } from 'nitro/h3';
@@ -28,6 +30,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/files': () => import('../../../app/routes/api/v1/files/_files'),
   'v1/lopu/network': () => import('../../../app/routes/api/v1/lopu/network/_network'),
   'v1/lopu/tasks': () => import('../../../app/routes/api/v1/lopu/tasks/_tasks'),
+  'v1/admin/mongodb/connections': () => import('../../../app/routes/api/v1/admin/mongodb/connections/_connections'),
   'v1/admin/error-logs': () => import('../../../app/routes/api/v1/admin/error-logs/_error-logs'),
   'v1/integrations/ci/stack-completion': () => import('../../../app/routes/api/v1/integrations/ci/stack-completion/_stack-completion'),
   'v1/watch/recordings': () => import('../../../app/routes/api/v1/watch/recordings/_recordings'),
@@ -171,6 +174,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/chats/updates': () => import('../../../app/routes/api/v1/chats/updates/_updates'),
 	'v1/devices': () => import('../../../app/routes/api/v1/devices/_devices'),
 	'v1/devices/approvals': () => import('../../../app/routes/api/v1/devices/approvals/_approvals'),
+	'v1/devices/sync-control': () => import('../../../app/routes/api/v1/devices/sync-control/_sync-control'),
 	'v1/devices/commands': () => import('../../../app/routes/api/v1/devices/commands/_commands'),
 	'v1/devices/events': () => import('../../../app/routes/api/v1/devices/events/_events'),
 	'v1/devices/node/commands': () => import('../../../app/routes/api/v1/devices/node/commands/_commands'),
@@ -198,7 +202,9 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/connections/filters': () => import('../../../app/routes/api/v1/connections/filters/_filters'),
   'v1/connections/oauth/begin': () => import('../../../app/routes/api/v1/connections/oauth/begin/_begin'),
   'v1/connections/oauth/callback': () => import('../../../app/routes/api/v1/connections/oauth/callback/_callback'),
+  'v1/connections/provider-icon': () => import('../../../app/routes/api/v1/connections/provider-icon/_provider-icon'),
   'v1/connections/providers': () => import('../../../app/routes/api/v1/connections/providers/_providers'),
+  'v1/connections/named': () => import('../../../app/routes/api/v1/connections/named/_named'),
   'v1/connections/unlink': () => import('../../../app/routes/api/v1/connections/unlink/_unlink'),
   'v1/connections/youtube/channels': () => import('../../../app/routes/api/v1/connections/youtube/channels/_channels'),
   'v1/connections/youtube/search': () => import('../../../app/routes/api/v1/connections/youtube/search/_search'),
@@ -263,6 +269,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/network-probe/download': () => import('../../../app/routes/api/v1/network-probe/download/_download'),
   'v1/network-probe/upload': () => import('../../../app/routes/api/v1/network-probe/upload/_upload'),
   'v1/settings/lopu-prompt': () => import('../../../app/routes/api/v1/settings/lopu-prompt/_lopu-prompt'),
+  'v1/settings/connector-protections': () => import('../../../app/routes/api/v1/settings/connector-protections/_connector-protections'),
   'v1/settings/lopu-chat-defaults': () => import('../../../app/routes/api/v1/settings/lopu-chat-defaults/_lopu-chat-defaults'),
   'v1/settings/lopu-access': () => import('../../../app/routes/api/v1/settings/lopu-access/_lopu-access'),
   'v1/settings/pr-conflict-auto-resolver-model-waterfall': () =>
@@ -401,6 +408,15 @@ export default defineHandler(async (event) => {
     return jsonResponse(createApiDocPayload(doc, new URL(event.req.url).origin));
   }
 
+  // Fixed public provider artwork is an asset of the document origin. It
+  // never reads the account, selected data plane, or fallback API.
+  if (path === 'v1/connections/provider-icon') {
+    if (method !== 'GET' && method !== 'HEAD') return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD' } });
+    const route = await routeModules['v1/connections/provider-icon']();
+    const response = normalizeResponse(await route.loader!({ request: event.req }));
+    return method === 'HEAD' ? new Response(null, { status: response.status, headers: response.headers }) : response;
+  }
+
   if (shouldProxyApiToFallback(event.req)) {
     if (path === 'v1/ai/chatgpt-plan' && process.env.THINGTIME_DESKTOP_API_MODE !== 'remote') return jsonResponse({ ok: false, available: false, error: 'Choose a configured local or self-hosted account runtime for ChatGPT plan usage.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/mail/google/callback') return jsonResponse({ ok: false, error: 'Google callback requires this configured origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
@@ -457,7 +473,8 @@ export default defineHandler(async (event) => {
     return jsonResponse({ ok: false, error: 'Lopu looked everywhere and found no such endpoint 🤷‍♂️' }, { status: 404 });
   }
 
-  return withErrorLogRequest('/api/' + path, method, async () => {
+  const { getApiDocByPath } = await import('../../../app/docs/apiDocs');
+  return runWithMongoConnectionFeature(getApiDocByPath(path)?.group, () => withErrorLogRequest('/api/' + path, method, async () => {
   try {
   const route = await loadModule();
   const handler = method === 'GET' || method === 'HEAD' ? route.loader : route.action;
@@ -521,6 +538,12 @@ export default defineHandler(async (event) => {
   } catch (error) {
     if (!(error instanceof Response) && path !== 'v1/admin/error-logs') await recordErrorLog(error, { source: 'http-unhandled', status: 500 });
     throw error;
+  } finally {
+    // Request-bound telemetry only. Health/discovery and proxy returns do not
+    // warm clients or schedule polling; publication reuses an existing home pool.
+    if (!path.startsWith('v1/health') && !path.startsWith('v1/mongodb/status') && path !== 'v1/capabilities') {
+      try { await publishMongoConnectionSnapshots(); } catch { /* Telemetry must never replace an API response. */ }
+    }
   }
-  });
+  }));
 });

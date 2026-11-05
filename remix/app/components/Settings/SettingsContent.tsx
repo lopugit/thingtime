@@ -1,3 +1,5 @@
+import { ConnectorProtectionsSettings } from './ConnectorProtectionsSettings';
+import { useDataPlane } from '~/hooks/useDataPlane';
 import { CharactersSettings } from '~/components/Characters/CharactersSettings';
 import { EmailSettings } from '~/components/Mail/EmailSettings';
 import { LopuPromptSettings } from './LopuPromptSettings';
@@ -279,6 +281,7 @@ export const SettingsContent = ({
 }) => {
 	const contentRef = React.useRef<HTMLDivElement>(null);
 	const user = useCurrentUser();
+	const dataPlane = useDataPlane();
 	const api = useApi();
 	const lopu = useLopu();
 	const routerNavigate = useNavigate();
@@ -856,6 +859,7 @@ export const SettingsContent = ({
 					<Flex direction="column" gap={4} minW={0}>
 						{/* connected apps — grants + everything each app stores */}
 						{user && <ConnectedAppsSection userId={user.id} />}
+						{user && !user.temporary && user.accountKind !== 'service' && <ConnectorProtectionsSettings key={`${user.id}:${dataPlane}`} accountId={user.id} />}
 						{/* 3b · linked deployments (auth only) */}
 						{user && (
 							<SettingsSection

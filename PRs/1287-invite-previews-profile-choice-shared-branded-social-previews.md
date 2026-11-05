@@ -69,8 +69,8 @@ At the initial delivery, the preview served the invitation HTML but its PNG
 returned HTTP 409 `ENVIRONMENT_GATEWAY_CAPABILITY`: the branch required a newer
 social-card feature than the selected shared gateway. This was a rollout gap,
 not successful deployed image acceptance. Production merge and a newly composed
-messenger preview remain separate release checks. No primary-branch merge is
-authorized by this task.
+messenger preview remain separate release checks. That initial turn did not authorize a primary-branch merge; the later
+2026-11-05 standing main-first instruction supersedes that hold.
 
 
 ## Automatic defaults and optional page metadata — 2026-10-29
@@ -133,3 +133,81 @@ Support cards were also inspected at desktop/mobile sizes. This follow-up used
 the in-app browser. No Builder interface was added or replaced; saved content
 remains ordinary editable blocks and Components. Task tabs were closed and the
 temporary viewport override cleared.
+
+## Approved designs and share customiser — 2026-11-05
+
+Continued the existing task branch from remote b7cb5164a and integrated
+origin/main f07a96dea. PR1287 now targets main under the current standing
+merge authorization. The detached startup snapshot c05a2b69d was preserved
+locally and its incidental generated files were not added to the feature.
+
+The shared PNG generator now uses Editorial and Colour Blocks, plus the
+approved Editorial White, Pink Invitation and Night Garden invitation designs.
+Exact logo matrices, palette and bundled brand fonts replace the former fake
+browser chrome and clipart. Layout choices are automatic, text, photo and
+gallery. Renderer revision design-20261105 changes image URLs independently of
+content edits. Homepage and safe fallback previews also use this generator.
+
+Share link and customise preview is available through shared Thing menus,
+Things, profiles and invitations. A shared editable Settings document presents
+the real server PNG and anonymous source title/description, theme swatches and
+layout choices. Its transient adapter handles selections, copy and native share.
+Existing preview stays visible during refresh; failure supports Retry.
+Selections travel as previewTheme/previewLayout on the copied URL. Destination
+queries and invite fragments are preserved for navigation but omitted from
+metadata requests. No per-link storage or backend page manifest is required.
+
+Compatibility: api.social-previews1.2.0, api.social-card1.4.0. The existing
+Builder-provenance correction was carried forward over newer main contracts
+as Things1.48.1, Actions1.39.1 and Fork1.8.1, preserving newer map features.
+
+Checks at this checkpoint:62 preview tests+3 generator tests,19 invite tests,
+138 capability tests and9 menu/link tests passed. Full lint:0errors419warnings;
+raw typecheck and zero-baseline ratchet passed. Canonical production build and
+Vercel output verification passed. The additional gallery refinement, real API
+browser acceptance, final graph refresh and deployed post inspection are
+recorded below when complete. Connected task reporting is unavailable because
+the current OAuth grant lacks agents.report; no alternate public posting used.
+
+Final local acceptance passed with real API-created public/private pages, two
+managed uploads and a post on a disposable replica. Normal Things, Post and
+InvitePanel entry points opened the customiser. Desktop 1440px and mobile 390px
+checks exercised all layouts, all five invitation themes, copied links, raw
+Nitro HTML/JSON/decoded PNG agreement, private fallback and no invite consumption.
+Nested text, repeated choice labels and copy controls were separately edited in
+Builder, saved privately, read back exactly and reloaded with copy still working.
+The final Colour Blocks gallery/photo compositions were visually inspected.
+
+A supplemental final-UI check measured supporting text at rgb(90,90,102),
+6.798:1 contrast on white, at both widths. The two-second copy confirmation
+cleared in 2606ms/2322ms including browser animation, leaving mobile controls
+unobscured. No uncaught page errors; task browser, server and replica stopped,
+all four allocated listeners absent. Evidence is retained in
+`/tmp/tt-share-preview-final-evidence/` and
+`/tmp/tt-share-preview-contrast-final-evidence/`. These are local acceptance,
+not proof of production deployment. The requested final live target remains
+`/post/c9ece84c-98c2-484e-bcb8-ac735d86bf34`.
+
+Additional verification: final renderer19/19, capabilities138/138,
+webpages197 passed/4 skipped, shared-root/copy6/6. The skips were not claimed
+as positive coverage. Full build logs are `/tmp/tt-preview-release-build.log`;
+full lint/type evidence is `/tmp/tt-preview-{lint,types,ratchet}.log`.
+
+Graph refresh: the current semantic CLI/proxy was available, but these seven
+large existing documents expanded to109 semantic chunks and progressed slowly.
+The attempt was stopped without activating a partial graph. A structural refresh
+keeps the complete prior semantic graph/cache and current code/report/HTML;
+new documentation semantics are not claimed as indexed. The old CodeQL review
+item was addressed with case-insensitive invite leakage assertions and an
+uppercase SCRIPT fragment regression.
+
+The requested public Vito post has two outbound configurator links and three
+managed PNG attachments (its separate legacy images array is empty). Its default
+is the Colour Blocks gallery. Ordinary multiline text posts use their opening paragraph
+as the headline while keeping the body in the description, so long outbound
+URLs do not crowd the title. A regression covers LF and CRLF paragraph breaks.
+
+Final scoped merge review preserved main's current floating-Lopu preference,
+settings persistence and regression fixtures; unrelated older branch versions
+were not allowed to roll back that delivered behavior. Final preview suite:
+65 tests plus 3 generator tests passed.

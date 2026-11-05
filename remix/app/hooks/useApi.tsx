@@ -1,3 +1,4 @@
+import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
 import { isBuilderThing } from '~/schemas/builderThing';
 import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
@@ -146,9 +147,9 @@ export function useApi() {
     files: {
       read: useCallback(async (scope: TimelineScope, id: string, options?: { signal?: AbortSignal }) => {
         if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
-        await requireThingtimeCapability('api.files', '1.0.0');
-        await requireThingtimeCapability('api.actions-run', '1.7.0');
-        await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+        await requireThingtimeCapability('api.files', '1.0.0', scope.apiOrigin);
+        await requireThingtimeCapability('api.actions-run', '1.7.0', scope.apiOrigin);
+        await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0', scope.apiOrigin);
         const result = await getJson(`/api/v1/files${toQuery({ id })}`, { ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
         const file = parseCloudFile(result?.file);
         if (file.id !== id) throw Error('File identity changed.');
@@ -157,8 +158,8 @@ export function useApi() {
       commit: useCallback(async (scope: TimelineScope, input: CloudFileCommit, options?: { signal?: AbortSignal }) => {
         if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
         const command = parseCloudFileCommit(input);
-        await requireThingtimeCapability('api.files', '1.0.0');
-        await requireThingtimeCapability('api.actions-run', '1.7.0');
+        await requireThingtimeCapability('api.files', command.symbolicLink ? '1.9.0' : '1.0.0', scope.apiOrigin);
+        await requireThingtimeCapability('api.actions-run', '1.7.0', scope.apiOrigin);
         return asyncFetcher.submit(command, { action: '/api/v1/files', ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
       }, [asyncFetcher])
     },
@@ -388,7 +389,7 @@ export function useApi() {
       passkeys: {
         list: useCallback(async () => getJson('/api/v1/auth/passkeys'), []),
         registerOptions: useCallback(
-          async (args: { password: string; signal?: AbortSignal }) => asyncFetcher.submit({ password: args?.password }, { action: '/api/v1/auth/passkeys/register-options', signal: args.signal }),
+          async (args: { password: string; verificationRequestId?:string; signal?: AbortSignal }) => asyncFetcher.submit({ password: args?.password, ...(args.verificationRequestId ? {verificationRequestId:args.verificationRequestId} : {}) }, { action: '/api/v1/auth/passkeys/register-options', signal: args.signal }),
           [asyncFetcher]
         ),
         register: useCallback(
@@ -434,6 +435,19 @@ export function useApi() {
       }
     },
     settings: {
+      connectorProtections: useCallback(async (expectedActor: string, signal?: AbortSignal) => {
+        await requireThingtimeCapability(CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_VERSION);
+        signal?.throwIfAborted();
+        return getJson(CONNECTOR_PROTECTIONS_PATH, { expectedActor, signal, expectedApiOrigin: window.location.origin });
+      }, [getJson]),
+      setConnectorProtections: useCallback(async (expectedActor: string, confirmations: ConnectorConfirmationPatch, signal?: AbortSignal) => {
+        await requireThingtimeCapability(CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_VERSION);
+        signal?.throwIfAborted();
+        return asyncFetcher.submit({ confirmations }, {
+          action: CONNECTOR_PROTECTIONS_PATH, expectedActor, signal, expectedApiOrigin: window.location.origin,
+          characterId: character?.id, errorContext: 'save Thingtime connector confirmations'
+        });
+      }, [asyncFetcher, character?.id]),
       lopuPrompt: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/settings/lopu-prompt', options), []),
       setLopuPrompt: useCallback(async (args: Record<string, unknown>) => {
         await requireThingtimeCapability('api.settings-lopu-prompt', '1.0.0');
@@ -528,6 +542,10 @@ export function useApi() {
 				async (args?: { limit?: number }, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
         []
       ),
+      mongodbConnections: useCallback(async (args: { cursor?: string; limit?: number }, scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.admin-mongodb-connections', '1.1.0', scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        return getJson(`/api/v1/admin/mongodb/connections${toQuery(args)}`, { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal });
+      }, [getJson]),
       ciPreviewRetention: useCallback(async (scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.admin-ci-preview-retention', PREVIEW_RETENTION_REQUIREMENTS['api.admin-ci-preview-retention'], scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
         const requestScope = { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal };
@@ -865,7 +883,7 @@ export function useApi() {
 							sizeBytes: number;
 							purpose?: AttachmentUploadPurpose;
 						},
-						options?: { signal?: AbortSignal }
+						options?: ThingRequestOptions
 					) => {
 						await requireThingtimeCapability('api.attachment-uploads', args.purpose === 'file' || args.purpose === 'file-import' ? '1.5.0' : '1.4.1');
 						if (args.purpose === 'file' || args.purpose === 'file-import') await requireThingtimeCapability('api.attachment-upload-complete', '1.4.0');
@@ -882,7 +900,7 @@ export function useApi() {
 							},
 							{
 								action: '/api/v1/attachments/uploads',
-								signal: options?.signal,
+								...options,
 								errorContext: 'prepare a file upload'
 							}
 						);
@@ -904,12 +922,12 @@ export function useApi() {
 					[asyncFetcher]
 				),
 				complete: useCallback(
-					async (args: { uploadId: string }, options?: { signal?: AbortSignal }) => {
+					async (args: { uploadId: string }, options?: ThingRequestOptions) => {
 						const ret = asyncFetcher.submit(
 							{ uploadId: args?.uploadId },
 							{
 								action: '/api/v1/attachments/uploads/complete',
-								signal: options?.signal,
+								...options,
 								errorContext: 'verify a file upload'
 							}
 						);
@@ -919,12 +937,12 @@ export function useApi() {
 					[asyncFetcher]
 				),
 				abort: useCallback(
-					async (args: { uploadId: string }, options?: { signal?: AbortSignal }) => {
+					async (args: { uploadId: string }, options?: ThingRequestOptions) => {
 						const ret = asyncFetcher.submit(
 							{ uploadId: args?.uploadId },
 							{
 								action: '/api/v1/attachments/uploads/abort',
-								signal: options?.signal,
+								...options,
 								errorContext: 'cancel a file upload'
 							}
 						);
@@ -1160,7 +1178,7 @@ export function useApi() {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
-          await requireThingtimeCapability('api.things', args?.sharedRoot ? '1.46.1' : '1.40.0');
+          await requireThingtimeCapability('api.things', args?.sharedRoot ? '1.48.1' : '1.40.0');
           await requireThingtimeCapability('api.attachment-content', '1.9.0');
           return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
         },
@@ -1391,17 +1409,36 @@ export function useApi() {
     // third-party app connections (Reddit, YouTube, Mastodon, …) — link
     // external accounts, browse their feeds, manage AI feed filters
     connections: {
-      providers: useCallback(async () => getJson('/api/v1/connections/providers'), []),
-      list: useCallback(async () => getJson('/api/v1/connections'), []),
+      providers: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-providers', '2.0.0'); return getJson('/api/v1/connections/providers', options); }, [getJson]),
+      list: useCallback(async (options?: ThingRequestOptions, includeNamed = false) => {
+        await requireThingtimeCapability('api.connections', includeNamed ? '2.1.0' : '2.0.0');
+        return getJson('/api/v1/connections' + (includeNamed ? '?includeNamed=1' : ''), options);
+      }, [getJson]),
       connect: useCallback(
-        async (args) => asyncFetcher.submit({ provider: args?.provider, fields: args?.fields }, { action: '/api/v1/connections' }),
+        async (args) => { await requireThingtimeCapability('api.connections', args?.named ? '2.1.0' : '2.0.0'); return asyncFetcher.submit({
+          provider: args?.provider, fields: args?.fields, named: args?.named, expectedOwnerId: args?.expectedOwnerId
+        }, { action: '/api/v1/connections', expectedApiOrigin: args?.expectedApiOrigin }); },
         [asyncFetcher]
       ),
-      unlink: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/connections/unlink' }), [asyncFetcher]),
+      unlink: useCallback(async (args) => {
+        await requireThingtimeCapability('api.connections-unlink', args?.named ? '2.1.0' : '2.0.0');
+        return asyncFetcher.submit({ id: args?.id, expectedOwnerId: args?.expectedOwnerId },
+          { action: '/api/v1/connections/unlink', expectedApiOrigin: args?.expectedApiOrigin });
+      }, [asyncFetcher]),
+      useNamed: useCallback(async (args) => {
+        await requireThingtimeCapability('api.connections-named', '1.0.0');
+        return asyncFetcher.submit({ id: args.id, operation: args.operation, expectedOwnerId: args.expectedOwnerId },
+          { action: '/api/v1/connections/named', expectedActor: args.expectedOwnerId, expectedApiOrigin: args.expectedApiOrigin });
+      }, [asyncFetcher]),
       // SSO account linking: begin returns the provider's authorize URL — send
       // the browser there; the callback lands back on /connections
       oauthBegin: useCallback(
-        async (args) => asyncFetcher.submit({ provider: args?.provider }, { action: '/api/v1/connections/oauth/begin' }),
+        async (args) => {
+          await requireThingtimeCapability('api.connections-oauth-begin', args?.named ? '2.1.0' : '2.0.0');
+          if (args?.named) await requireThingtimeCapability('api.connections-oauth-callback', '2.1.0');
+          return asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId, named: args?.named },
+            { action: '/api/v1/connections/oauth/begin', expectedApiOrigin: args?.expectedApiOrigin });
+        },
         [asyncFetcher]
       ),
       // the Thingtime-managed virtual YouTube subscription list
@@ -1415,8 +1452,9 @@ export function useApi() {
         [asyncFetcher]
       ),
       feed: useCallback(
-        async (args) =>
-          getJson(
+        async (args) => {
+          await requireThingtimeCapability('api.connections-feed', '2.0.0');
+          return getJson(
             `/api/v1/connections/feed${toQuery({
               connection: args?.connection,
               cursor: args?.cursor,
@@ -1424,20 +1462,21 @@ export function useApi() {
               sync: args?.sync,
               deepen: args?.deepen
             })}`
-          ),
+          ); },
         []
       ),
-      filters: useCallback(async () => getJson('/api/v1/connections/filters'), []),
+      filters: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-filters', '2.0.0'); return getJson('/api/v1/connections/filters', options); }, [getJson]),
       saveFilter: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          await requireThingtimeCapability('api.connections-filters', '2.0.0');
+          return asyncFetcher.submit(
             { id: args?.id, name: args?.name, prompt: args?.prompt, action: args?.action, enabled: args?.enabled },
             { action: '/api/v1/connections/filters' }
-          ),
+          ); },
         [asyncFetcher]
       ),
       removeFilter: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id, remove: true }, { action: '/api/v1/connections/filters' }),
+        async (args) => { await requireThingtimeCapability('api.connections-filters', '2.0.0'); return asyncFetcher.submit({ id: args?.id, remove: true }, { action: '/api/v1/connections/filters' }); },
         [asyncFetcher]
       )
     },
@@ -1682,7 +1721,7 @@ export function useApi() {
         const actor = actionActor.current;
         const expectedPlane = planeRef.current;
         const origin = window.location.origin;
-        await requireThingtimeCapability('api.actions-run', args?.sharedRoot ? '1.38.1' : '1.37.0');
+        await requireThingtimeCapability('api.actions-run', args?.sharedRoot ? '1.39.1' : '1.37.0');
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
         const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane });
         const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery));

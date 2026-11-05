@@ -1,6 +1,7 @@
 import { createTemplateResolver, defaultsFromArgs, sanitizeArgSpecs } from '../../../components/ComponentsLibrary/componentTemplate';
 import { componentTextOverrides } from '../../../components/Builder/componentTextOverrides';
 import { literalAttachmentId } from '../../../components/Sharing/sharedMediaCore';
+import { socialPreviewDesign, type SocialPreviewDesign } from '../../../utils/socialPreviewDesign';
 
 export type PublicWebpageContentInput = {
 	ok?: boolean;
@@ -12,7 +13,7 @@ export type PublicWebpageContent = {
 	title: string;
 	description: string;
 	images: Array<{ attachmentId: string; label: string }>;
-	overrides: { title?: string; description?: string };
+	overrides: SocialPreviewDesign & { title?: string; description?: string };
 	truncated: boolean;
 };
 const record = (value: unknown): Record<string, any> =>
@@ -93,6 +94,7 @@ export const inferPublicWebpageContent = (input: PublicWebpageContentInput): Pub
 	const output: PublicWebpageContent = { title: '', description: '', images: [], overrides: {}, truncated: false };
 	if (input.ok === false || !input.page) return output;
 	const page = record(input.page.crystal);
+	Object.assign(output.overrides, socialPreviewDesign(page.socialPreview));
 	const name = clean(page.name),
 		description = clean(page.description);
 	if (name && !/^untitled(?:\s+page)?$/i.test(name)) output.overrides.title = name;

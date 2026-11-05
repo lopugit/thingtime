@@ -1,3 +1,4 @@
+import { sameSymbolicLink, validSymbolicLink, type SymbolicLink } from './symbolicLink';
 import { EMPTY_CONTENT_SHA256, equalContentFingerprints, validContentFingerprint, type ContentFingerprint } from './contentFingerprint';
 /** Transport-independent reconciliation for the native and cloud file adapters.
  * Observations are not authority: executors must condition writes on the exact
@@ -14,6 +15,7 @@ export type SyncEntry = {
 	size: number;
 	sha256: string | null;
 	fingerprint?: ContentFingerprint;
+	symbolicLink?: SymbolicLink;
 };
 export type SyncScan = { scope: SyncScope; complete: boolean; entries: readonly SyncEntry[] };
 export type SyncBaseline = { scope: SyncScope; entries: readonly { path: string; local: SyncEntry; remote: SyncEntry }[] };
@@ -48,7 +50,7 @@ export const sameSyncScope = (a: SyncScope, b: SyncScope): boolean =>
 const emptyContentIdentity = (entry: SyncEntry): boolean =>
 	entry.size === 0 && (entry.fingerprint ? validContentFingerprint(entry.fingerprint, 0) : entry.sha256 === EMPTY_CONTENT_SHA256);
 export const sameSyncContent = (a: SyncEntry | null, b: SyncEntry | null): boolean =>
-	a === null || b === null ? a === b : a.kind === b.kind && (a.kind === 'folder' || (a.size === b.size && (
+	a === null || b === null ? a === b : a.kind === b.kind && sameSymbolicLink(a.symbolicLink, b.symbolicLink) && (a.kind === 'folder' || (a.size === b.size && (
 		a.size === 0 ? emptyContentIdentity(a) && emptyContentIdentity(b) :
 		a.fingerprint && b.fingerprint ? equalContentFingerprints(a.fingerprint, b.fingerprint) :
 		!a.fingerprint && !b.fingerprint && typeof a.sha256 === 'string' && a.sha256 === b.sha256)));
@@ -60,7 +62,8 @@ export const validSyncEntry = (entry: SyncEntry): boolean => Boolean(entry) && v
 	typeof entry.id === 'string' && entry.id.length > 0 && entry.id.length <= 512 &&
 	typeof entry.version === 'string' && entry.version.length > 0 && entry.version.length <= 512 &&
 	Number.isSafeInteger(entry.size) && entry.size >= 0 &&
-	(entry.kind === 'folder' ? entry.sha256 === null && entry.size === 0 && entry.fingerprint === undefined : entry.kind === 'file' && (
+	(entry.symbolicLink === undefined || (entry.kind === 'file' && validSymbolicLink(entry.symbolicLink, entry.size))) &&
+	(entry.kind === 'folder' ? entry.symbolicLink === undefined && entry.sha256 === null && entry.size === 0 && entry.fingerprint === undefined : entry.kind === 'file' && (
 		entry.fingerprint === undefined ? typeof entry.sha256 === 'string' && digestPattern.test(entry.sha256) :
 		entry.sha256 === null && validContentFingerprint(entry.fingerprint, entry.size)));
 

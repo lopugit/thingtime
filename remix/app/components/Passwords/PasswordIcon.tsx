@@ -3,9 +3,9 @@ import { Box } from '@chakra-ui/react';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { TransientBlockHost, type TransientBlockActions } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
-import { passwordIconBlocks } from './passwordIconBlocks';
+import { passwordIconBlocks, migratePasswordIconBranding } from './passwordIconBlocks';
 import { openPasswordIconBlob } from '~/passwords/icons.client';
-import { PASSWORD_ICON_MIME_TYPES, passwordIconUrl, passwordWebsiteIcon, type PasswordIcon } from '~/passwords/icons';
+import { PASSWORD_ICON_MIME_TYPES, passwordIconUrl, type PasswordIcon } from '~/passwords/icons';
 import { uploadPasswordFile } from '~/passwords/files.client';
 import { newPasswordFile } from '~/passwords/fileCrypto';
 
@@ -41,7 +41,7 @@ function PasswordIconEditorScope({ ownerId, entryId, saved, icon, website = '', 
     'icon.show-url': () => setShowUrl(value => !value),
     'icon.type-url': () => {}, // Kept exclusively in this transient input's DOM.
     'icon.use-url': ({ readField }) => { if (!disabled && !pending.current) { try { onChange({ kind: 'url', url: passwordIconUrl(readField('icon-url')) }); setError(''); } catch (cause) { setError((cause as Error).message); } } },
-    'icon.website': () => { if (!disabled && !pending.current) { try { onChange(passwordWebsiteIcon(website)); setError(''); } catch { setError('Enter a valid HTTPS website first.'); } } },
+    'icon.website': () => { if (!disabled && !pending.current) { onChange(undefined); setError(''); } },
     'icon.remove': () => { if (!disabled && !pending.current) { onChange(undefined); setError(''); } },
     'icon.upload': async ({ readFile, signal }) => {
       if (disabled || pending.current || !saved) return;
@@ -56,7 +56,7 @@ function PasswordIconEditorScope({ ownerId, entryId, saved, icon, website = '', 
       finally { pending.current = false; if (active.current) { setBusy(false); current.current.onBusyChange?.(false); } }
     }
   };
-  return <Box mt={4}><SettingsDocumentHost documentKey="password-entry-icon" defaultDocument={passwordIconBlocks} scopeKey={scopeKey} title="Entry icon layout" layoutEditingDisabled={busy}>
+  return <Box mt={4}><SettingsDocumentHost documentKey="password-entry-icon" defaultDocument={passwordIconBlocks} migrateBlocks={migratePasswordIconBranding} scopeKey={scopeKey} title="Entry icon layout" layoutEditingDisabled={busy}>
     {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={{ icon: { showUrl, busy: busy || disabled, cannotUpload: busy || disabled || !saved, unsaved: !saved, cannotWebsite: busy || disabled || !website, cannotRemove: busy || disabled || !icon, error } }} actions={actions} enabled={!editing} onError={() => setError('The icon could not be changed.')}>
       <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
     </TransientBlockHost>}

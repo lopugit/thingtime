@@ -1,3 +1,4 @@
+import { openSharePreview } from '~/components/Sharing/sharePreviewLink';
 import { RenameDialog } from '~/components/Things/ThingsDialogs';
 import { openThingHistory } from '~/components/Timeline/TimelineHost';
 import { thingRenameCrystal, isManagedLibraryThing, type ThingsThing } from '~/components/Things/thingsCore';
@@ -77,7 +78,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   const builderNavigation = builderThingMenuSections(thing, user?.id).map(section => ({ ...section,
     actions: section.actions.map(action => action.command === 'open-live' && action.href ? { ...action, href: sharedPath(action.href) } : action)
   }));
-  const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: !!user?.id && thing?.author?.id === user.id, rename: !!thing && thing.author?.id === user?.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, ...capabilities,
+  const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: !!user?.id && thing?.author?.id === user.id, rename: !!thing && thing.author?.id === user?.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, 'share-preview': true, ...capabilities,
     'send-to-lopu': !!thing && canOfferRecordingHandoff(thing, user?.id) ? { disabled: sending || handoffDisabled } : false
   }, [...builderNavigation, ...extensions]);
   return <><ThingActionMenuButton identity={identity} label={label} model={model} onOpen={() => void resolve()}
@@ -88,6 +89,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
         case 'open-live': { const target = thing && thingLiveHref(thing); if (target) navigate(sharedPath(target)); break; }
         case 'inspect': navigate(inspectHref); break;
         case 'history': openThingHistory(id, thing?.thingtime); break;
+        case 'share-preview': openSharePreview(thingEntityLink(permalink, window.location.origin, thing, user?.id, sharedAccess.key).href); break;
         case 'copy-link': {
           const url = thingEntityLink(permalink, window.location.origin, thing, user?.id, sharedAccess.key);
           void navigator.clipboard.writeText(url.href).then(() => lopu({ title: 'Link copied',

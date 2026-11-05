@@ -117,7 +117,7 @@ export const InviteSignup = () => {
 // Optional shared preview copy. Route discovery works without this override.
 export const socialPreview = {
   "title": "You’re invited to Thingtime",
-  "description": "Join your people on Thingtime. Create an account to accept your invitation and make yourself at home.",
+  "description": "Make yourself at home.",
   "eyebrow": "THINGTIME · AN INVITATION",
   "badges": [
     "Your people",
@@ -125,5 +125,5 @@ export const socialPreview = {
   ],
   "variant": "invite",
   "pageTitle": "Invitation",
-  "revision": "invite-20261029"
+  "revision": "invite-20261105"
 } as const;

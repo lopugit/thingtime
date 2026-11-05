@@ -6,6 +6,7 @@ import { pageTitle } from '../../../utils/pageTitle';
 import { automaticRoutePreview } from '../../../utils/automaticRoutePreview';
 import { inferPublicWebpageContent } from './publicWebpageContent';
 import type { ResolveWebpageResult } from '../webpages/webpages';
+import { socialPreviewDesign, socialPreviewDesignFromUrl, socialPreviewDesignParams, type SocialPreviewDesign } from '../../../utils/socialPreviewDesign';
 
 // Change the revision when the branded asset changes so image caches can refresh.
 export const DEFAULT_SOCIAL_IMAGE_PATH = '/branding/presskit/thingtime-og-card-1200x630.png?v=20260917';
@@ -65,7 +66,7 @@ export type SocialPreviewImage = {
 	label: string;
 };
 
-export type SocialPreview = {
+export type SocialPreview = SocialPreviewDesign & {
 	kind: SocialPreviewKind;
 	variant: SocialPreviewVariant;
 	path: string;
@@ -88,7 +89,7 @@ export type SocialPreview = {
 
 // Global renderer/brand version refreshes every dynamic card, independently
 // of the content revision carried in v. Never include viewer or bearer data.
-export const SOCIAL_CARD_RENDERER_REVISION = 'brand-20261029';
+export const SOCIAL_CARD_RENDERER_REVISION = 'design-20261105';
 export const SOCIAL_PREVIEW_WIDTH = 1200;
 export const SOCIAL_PREVIEW_HEIGHT = 630;
 
@@ -152,16 +153,17 @@ export const socialPreviewRevision = (...parts: readonly string[]): string => {
 };
 
 export const normaliseSocialPreviewPath = (value: unknown): string => {
-	if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.includes('\\') || value.length > 2048) {
+	if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.includes('\\') || /[\p{Cc}\u2028\u2029]/u.test(value) || value.length > 2048) {
 		return '/';
 	}
 	const path = value.split('?')[0]?.split('#')[0] || '/';
 	return path.startsWith('/') && !path.startsWith('//') ? path : '/';
 };
 
-export const socialPreviewCardUrl = (origin: string, path: string, revision?: string): string => {
+export const socialPreviewCardUrl = (origin: string, path: string, revision?: string, design?: SocialPreviewDesign): string => {
 	const query = new URLSearchParams({ path: normaliseSocialPreviewPath(path), r: SOCIAL_CARD_RENDERER_REVISION });
 	if (revision) query.set('v', truncateSocialText(revision, 80));
+	for (const [key, value] of socialPreviewDesignParams(design ?? socialPreviewDesignFromUrl(path))) query.set(key, value);
 	return `${origin}/social-card?${query.toString()}`;
 };
 
@@ -183,6 +185,8 @@ export const staticSocialPreview = (pathInput: string): SocialPreview => {
 	const eyebrow = cleanSocialText(automatic?.eyebrow) || 'THINGTIME · EVERYDAY MAGIC';
 	const badges = cleanList(automatic?.badges, 4);
 	return {
+		...socialPreviewDesign(automatic),
+		...socialPreviewDesignFromUrl(pathInput),
 		kind,
 		variant,
 		path,
@@ -327,6 +331,7 @@ export const socialPreviewFromPublicWebpage = (path: string, result: ResolveWebp
 	const title = `${truncateSocialText(name, TITLE_MAX)} on ${SITE_NAME}`;
 	const summary = truncateSocialText(description, DESCRIPTION_MAX);
 	return {
+		...socialPreviewDesign(content.overrides),
 		publicContent: true,
 		indexable: page.acl?.includes('tt:all') === true,
 		kind: 'webpage',
@@ -421,6 +426,7 @@ export const socialPreviewFromPublicPost = (path: string, post: any, context: { 
 		  ].filter(Boolean)
 		: [];
 	const plainText = cleanSocialText(source.text);
+	const openingParagraph = typeof source.text === 'string' ? cleanSocialText(source.text.trim().split(/\r?\n[\t ]*\r?\n/, 1)[0]) : plainText;
 	const listingTitle = cleanSocialText(listing?.title);
 	const summary =
 		listingTitle ||
@@ -429,6 +435,7 @@ export const socialPreviewFromPublicPost = (path: string, post: any, context: { 
 		plainText ||
 		structured.description ||
 		(attachmentCount ? `${attachmentCount} shared attachment${attachmentCount === 1 ? '' : 's'}` : 'A post on Thingtime');
+	const headline = listingTitle || question || structured.title || openingParagraph || summary;
 	const kindLabel = humanPostKind(contentKind, structured.kind);
 	const badges = Array.from(
 		new Set(
@@ -463,7 +470,7 @@ export const socialPreviewFromPublicPost = (path: string, post: any, context: { 
 		kind,
 		variant,
 		path,
-		title: `${titleLead}: ${truncateSocialText(summary, TITLE_MAX)}`,
+		title: `${titleLead}: ${truncateSocialText(headline, TITLE_MAX)}`,
 		description,
 		eyebrow: `THINGTIME · ${kind === 'share' ? `SHARED ${kindLabel}` : humanPostKind(kind, structured.kind)}`,
 		article: true,
@@ -606,7 +613,7 @@ const thingPreview = async (path: string, id: string): Promise<SocialPreview> =>
 	};
 };
 
-export const resolveSocialPreview = async (origin: string, pathInput: string): Promise<SocialPreview> => {
+const resolveSocialPreviewContent = async (origin: string, pathInput: string): Promise<SocialPreview> => {
 	const path = normaliseSocialPreviewPath(pathInput);
 	try {
 		const postMatch = path.match(/^\/post\/([^/]+)\/?$/);
@@ -626,3 +633,8 @@ export const resolveSocialPreview = async (origin: string, pathInput: string): P
 	}
 	return staticSocialPreview(path);
 };
+
+export const resolveSocialPreview = async (origin: string, pathInput: string): Promise<SocialPreview> => ({
+	...(await resolveSocialPreviewContent(origin, pathInput)),
+	...socialPreviewDesignFromUrl(pathInput)
+});

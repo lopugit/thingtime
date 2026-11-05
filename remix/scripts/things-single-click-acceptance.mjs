@@ -180,12 +180,12 @@ async function browserAcceptance() {
       await tile(fixture.alpha.id).getByRole('button',{name:'Acceptance alpha actions',exact:true}).click();
       await page.getByRole('menu').last().waitFor(); await measure(view+'-menu-desktop');await page.keyboard.press('Escape');
       await tile(fixture.alpha.id).click({button:'right'});await page.getByRole('menu').last().waitFor();await page.keyboard.press('Escape');
-      const deviceCard=page.getByRole('button',{name:'Open Acceptance computer',exact:true});await deviceCard.waitFor();const beforeDeviceSelect=new URL(page.url()).search;
+      const deviceCard=page.getByRole('link',{name:'Open Acceptance computer',exact:true});await deviceCard.waitFor();const beforeDeviceSelect=new URL(page.url()).search;
       await deviceCard.click({modifiers:['Meta']});assert.equal(await page.getByRole('checkbox',{name:'Select Acceptance computer',exact:true}).isChecked(),true,'Cmd click selects device');assert.equal(new URL(page.url()).search,beforeDeviceSelect,'Device modifier selection stays in view');
       const deviceCheckbox=page.getByRole('checkbox',{name:'Select Acceptance computer',exact:true});await deviceCheckbox.locator('xpath=..').click();assert.equal(await deviceCheckbox.isChecked(),false,'Device checkbox toggles selection');
       const deviceMenu=page.getByRole('button',{name:'Acceptance computer actions',exact:true});await deviceMenu.focus();await deviceMenu.press('Enter');await page.getByRole('menu').last().waitFor();await page.keyboard.press('Escape');
       await deviceCard.click({button:'right'});await page.getByRole('menu').last().waitFor();await page.keyboard.press('Escape');
-      await deviceCard.click();await page.waitForURL(url=>url.searchParams.get('deviceFiles')===fixture.deviceId);checks.push(view+': device single-click opens its saved-files view; modifier, checkbox, keyboard, and context menus stay separate');
+      await deviceCard.click();await page.waitForURL(url=>url.searchParams.get('device')===fixture.deviceId&&url.searchParams.get('deviceView')==='page');await page.getByRole('heading',{name:'Device dashboard',exact:true}).waitFor();checks.push(view+': device single-click opens its dashboard; modifier, checkbox, keyboard, and context menus stay separate');
       await open(view);
       await tile(fixture.folder.id).click();
       await page.waitForURL(url=>url.searchParams.get('folder')===fixture.folder.id);
@@ -203,7 +203,7 @@ async function browserAcceptance() {
       if(view==='grid')await writeFile(join(out,'touch-styles.json'),JSON.stringify(await tile(fixture.folder.id).evaluate(el=>({hover:matchMedia('(hover: none)').matches,coarse:matchMedia('(pointer: coarse)').matches,controls:[...el.querySelectorAll('.thing-item-controls')].map(control=>({opacity:getComputedStyle(control).opacity,pointerEvents:getComputedStyle(control).pointerEvents}))})),null,2));
       const touchCheckbox=await tile(fixture.folder.id).getByRole('checkbox').evaluate(el=>{const r=el.closest('label').getBoundingClientRect();return {width:r.width,height:r.height}});
       const touchMenu=await tile(fixture.folder.id).getByRole('button',{name:'Acceptance folder actions',exact:true}).boundingBox();
-      const deviceCard=page.getByRole('button',{name:'Open Acceptance computer',exact:true});await deviceCard.waitFor();
+      const deviceCard=page.getByRole('link',{name:'Open Acceptance computer',exact:true});await deviceCard.waitFor();
       const deviceCheckbox=await page.getByRole('checkbox',{name:'Select Acceptance computer',exact:true}).evaluate(el=>{const r=el.closest('label').getBoundingClientRect();return {width:r.width,height:r.height}});
       const deviceMenu=await page.getByRole('button',{name:'Acceptance computer actions',exact:true}).boundingBox();
       touchTargets[view]={touchCheckbox,touchMenu,deviceCheckbox,deviceMenu,media:await page.evaluate(()=>({hoverNone:matchMedia('(hover: none)').matches,coarse:matchMedia('(pointer: coarse)').matches}))};await writeFile(join(out,'touch-targets.json'),JSON.stringify(touchTargets,null,2));

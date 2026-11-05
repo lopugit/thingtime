@@ -6,13 +6,18 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, chmod, copyFile } from 'node:f
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createServer, connect } from 'node:net';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { accountBackupSandbox, verifyAccountBackupIsolation } from './account-backup-isolation.mjs';
 const apiPort = 28311,
 	dbPort = 28312,
 	base = `http://127.0.0.1:${apiPort}`,
 	root = resolve(import.meta.dirname, '..');
 const wide = process.argv.includes('--wide');
+const indexer = process.env.THINGTIME_MAC_SYNC_INDEXER_BIN;
+if (indexer && !indexer.startsWith('/')) throw Error('The fixture Rust indexer path must be absolute.');
+const symlinksOnly = process.argv.includes('--symlinks-only');
+const early = process.argv.includes('--two-way-early');
+if (early && (!indexer || wide || symlinksOnly)) throw Error('The early acceptance requires only --two-way-early and an exact Rust fixture binary.');
 const clean = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR || tmpdir() };
 if (!process.env.TT_MAC_PAGED_WORKER) {
 	for (const port of [apiPort, dbPort]) {
@@ -24,7 +29,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 	await verifyAccountBackupIsolation(apiPort, clean);
 	const directory = await mkdtemp(join(tmpdir(), 'thingtime-mac-paged-'));
 	await chmod(directory, 0o700);
-	let timer;
+	let timer, deadlineExpired = false;
 	try {
 		const binary = join(directory, 'MacFolderSyncFixture');
 		await copyFile(resolve(root, '../macos/ThingtimeNode/.build/debug/MacFolderSyncFixture'), binary);
@@ -54,12 +59,26 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 			{ stdio: 'pipe' }
 		);
 		execFileSync('codesign', ['--verify', '--strict', binary], { stdio: 'pipe' });
+        if (process.env.THINGTIME_MAC_PAGED_EVIDENCE_PATH) {
+            const target = process.env.THINGTIME_MAC_PAGED_EVIDENCE_PATH;
+            assert.ok(target.startsWith('/'), 'Evidence path must be absolute');
+            const sourcePaths = execFileSync('rg', ['--files', '../apple/FileSync/Sources', '../macos/ThingtimeNode/Sources', '../filesystem-indexer/crates/indexer/src', 'app/fileSync', 'app/api/utils/files'], { cwd: root, encoding: 'utf8' }).trim().split('\n').filter(p => /\.(swift|rs|ts|tsx|mts)$/.test(p));
+            sourcePaths.push('scripts/mac-file-sync.integration.mts', 'scripts/test-mac-paged-sync.mjs'); sourcePaths.sort();
+            const sha = async p => createHash('sha256').update(await readFile(p)).digest('hex');
+            const files = Object.fromEntries(await Promise.all(sourcePaths.map(async p => [p, await sha(resolve(root, p))])));
+            const metadata = { capturedAt: new Date().toISOString(), head: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
+                fixture: { path: binary, sha256: await sha(binary), compiledPath: resolve(root, '../macos/ThingtimeNode/.build/debug/MacFolderSyncFixture'), compiledSha256: await sha(resolve(root, '../macos/ThingtimeNode/.build/debug/MacFolderSyncFixture')) },
+                backend: { path: resolve(root, '.output/server/index.mjs'), sha256: await sha(resolve(root, '.output/server/index.mjs')) },
+                sourceContentFingerprint: createHash('sha256').update(JSON.stringify(files)).digest('hex'), files };
+            await writeFile(target, JSON.stringify(metadata, null, 2), { mode: 0o600, flag: 'wx' });
+        }
+
 		const policy =
 			accountBackupSandbox(apiPort, true) +
 			`\n(allow network-outbound (remote ip "localhost:${dbPort}"))\n(allow network-inbound (local ip "localhost:${dbPort}"))`;
-		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename, ...(wide ? ['--wide'] : [])], {
+		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename, ...(wide ? ['--wide'] : []), ...(symlinksOnly ? ['--symlinks-only'] : []), ...(early ? ['--two-way-early'] : [])], {
 			cwd: root,
-			env: { ...clean, TT_MAC_PAGED_WORKER: directory, THINGTIME_MAC_SYNC_FIXTURE_BIN: binary },
+			env: { ...clean, TT_MAC_PAGED_WORKER: directory, THINGTIME_MAC_SYNC_FIXTURE_BIN: binary, ...(indexer ? { THINGTIME_MAC_SYNC_INDEXER_BIN: indexer } : {}) },
 			stdio: ['ignore', 'pipe', 'pipe']
 		});
 		let output = '';
@@ -71,13 +90,13 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		const stop = () => child.kill('SIGTERM');
 		process.once('SIGINT', stop);
 		process.once('SIGTERM', stop);
-		timer = setTimeout(stop, wide ? 1200000 : 600000);
+		timer = setTimeout(() => { deadlineExpired = true; stop(); }, wide ? 1200000 : 600000);
 		const [code] = await once(child, 'exit');
 		const result = output.split('\n').find((line) => line.startsWith('{"macPagedSyncProof":'));
 		if (code !== 0 || !result) {
 			const log = join(tmpdir(), 'thingtime-mac-paged-failure.log');
 			await writeFile(log, output.replace(/https?:\/\/[^\s"<>]+/g, '[url withheld]'), { mode: 0o600 });
-			throw Error('Mac paged acceptance failed; private diagnostics: ' + log);
+			throw Error('Mac paged acceptance failed (' + (deadlineExpired ? 'overall deadline' : 'child exit ' + code) + '); private diagnostics: ' + log);
 		}
 		console.log(result);
 	} finally {
@@ -190,7 +209,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN: base
 	};
 	const startServer = async (admin = false) => {
-		server = start(process.execPath, ['.output/server/index.mjs'], { ...env, ...(admin ? { ADMIN_USERNAMES: username } : {}) });
+		server = start(process.execPath, ['--input-type=module', '-e', "import {createServer} from 'node:http'; const app=await import('./.output/server/index.mjs'); if(typeof app.middleware!=='function')throw Error('Build Nitro with NITRO_PRESET=node_middleware');createServer(app.middleware).listen(Number(process.env.NITRO_PORT),'127.0.0.1');"], { ...env, ...(admin ? { ADMIN_USERNAMES: username } : {}) });
 		const output = collect(server);
 		await wait(async () => {
 			assert.equal(server.exitCode, null, 'Built server exited: ' + output().slice(-500));
@@ -218,7 +237,8 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		console.log('MAC_PAGED_STAGE signup');
 		const manifest = await fetch(base + '/.well-known/thingtime-capabilities.json').then((r) => r.json());
 		assert.equal(manifest.origin, base);
-		assert.equal(manifest.features['api.files'].version, '1.6.0');
+		assert.equal(manifest.features['api.files'].version, '1.10.0');
+		assert.equal(manifest.features['api.file-sync-batches'].version, '1.3.0');
 		const registered = await fetch(base + '/api/v1/auth/register', {
 			method: 'POST',
 			headers: { Origin: base, 'Content-Type': 'application/json' },
@@ -234,12 +254,12 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		console.log('MAC_PAGED_STAGE native-transfers');
 		const test = start(
 			process.execPath,
-			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', '--large-upload', '--large-download', ...(wide ? ['--wide'] : [])],
-			{ ...clean, THINGTIME_MAC_SYNC_FIXTURE_BIN: process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN }
+			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', ...(early ? ['--two-way-early'] : symlinksOnly ? ['--symlinks-only'] : ['--large-upload', '--large-download']), ...(wide ? ['--wide'] : [])],
+			{ ...clean, THINGTIME_MAC_SYNC_FIXTURE_BIN: process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN, ...(indexer ? { THINGTIME_MAC_SYNC_INDEXER_BIN: indexer } : {}) }
 		);
 		const output = collect(test, true);
-		const [code] = await once(test, 'exit');
-		if (code !== 0) throw Error('Native transfer child failed: ' + output().replaceAll(password, '[secret]').replaceAll(secret, '[secret]'));
+		const [code, exitSignal] = await once(test, 'exit');
+		if (code !== 0) throw Error('Native transfer child failed (exit ' + code + ', signal ' + exitSignal + '): ' + output().replaceAll(password, '[secret]').replaceAll(secret, '[secret]'));
 		const result = output()
 			.split('\n')
 			.find((line) => line.startsWith('{"ok":true'));

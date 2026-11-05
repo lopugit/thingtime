@@ -1,3 +1,4 @@
+import { openSharePreview } from '~/components/Sharing/sharePreviewLink';
 import { BUILDER_THING_KIND } from '~/schemas/builderThing';
 import { UnfiledAttachmentsPage } from './UnfiledAttachmentsPage';
 import { ActivityManagerPage } from '~/components/Activity/ActivityManagerPage';
@@ -25,7 +26,7 @@ import { BuilderAppDialog } from '~/components/Builder/BuilderAppDialog';
 import { ThingDefinitionEditor } from '~/components/Builder/DefinitionEditor/ThingDefinitionEditor';
 import { BuilderAssignDialog } from '~/components/Builder/BuilderAssignDialog';
 import { DeviceDetailsDrawer } from '~/components/Devices/DeviceDetailsDrawer';
-import { deviceThingsPageHref } from '~/components/Devices/deviceNavigation';
+import { deviceSyncPageHref, deviceThingsPageHref, deviceViewMode } from '~/components/Devices/deviceNavigation';
 import { MobileDeviceSetupCard } from '~/components/Devices/MobileDeviceSetupCard';
 import { LocalNodeSetupCard } from '~/components/Devices/LocalNodeSetupCard';
 import type { DeviceActionIntent, DeviceControlResolver } from '~/components/Devices/DeviceStateGrid';
@@ -190,8 +191,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
   const previewParam = searchParams.get('preview') || null;
 	const deviceParam = searchParams.get('device') || null;
 	const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
-	const devicePageMode = Boolean(deviceParam && searchParams.get('deviceView') === 'page');
-	const deviceSyncMode = Boolean(deviceParam && searchParams.get('deviceView') === 'sync');
+	const deviceView = deviceViewMode(searchParams);
   const currentKey = folderKeyOf(folderId);
 
   const archive = useAttachmentArchive();
@@ -678,7 +678,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
 
   // ------------------------------------------------------------------ actions
 
-	const openDevice = useCallback(
+	const openDeviceQuickView = useCallback(
 		(deviceId: string) => {
 			setSelection(new Set());
 			anchorRef.current = null;
@@ -687,7 +687,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
 				(previous) => {
 					const next = new URLSearchParams(previous);
 					next.set('device', deviceId);
-					next.delete('deviceView');
+					next.set('deviceView', 'quick');
 					next.delete('preview');
 					return next;
 				},
@@ -1185,6 +1185,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     (thing: ThingsThing, action: ThingsItemAction) => {
       const group = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
       switch (action) {
+        case 'share-preview': openSharePreview(thingShareLink(thing)); break;
         case 'history': openThingHistory(thing.id, thing.thingtime); break;
         case 'open-builder': { const href = thingBuilderHref(thing, user?.id); if (href) navigate(href); break; }
         case 'open-live': { const href = thingLiveHref(thing); if (href) navigate(href); break; }
@@ -1382,6 +1383,9 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
         case 'inspect':
           navigate(`/thing/${encodeURIComponent(menuThing.id)}`);
           break;
+        case 'share-preview':
+          openSharePreview(thingShareLink(menuThing));
+          break;
         case 'copy-link':
           copyLink(menuThing);
           break;
@@ -1428,9 +1432,10 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     [clipboard?.ids.length, displayItems.length, sort, groupBy, view, displayMode]
   );
 	const deviceMenuModel = useMemo(() => ({ sections: [{ id: 'device-navigation', actions: [{
-		id: 'open-device-files', label: 'Open synced files', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncedFilesHref(menuDeviceId) : '/things'
-	}, { id: 'open-device-page', label: 'Device settings page', icon: '⚙️', lucide: 'maximize', href: menuDeviceId ? deviceThingsPageHref(menuDeviceId) : '/things'
-	}, { id: 'open-device-settings', label: 'Quick device settings', icon: '⚙️', lucide: 'settings', command: 'inspect-device'
+		id: 'open-device-page', label: 'Open device page', icon: '⚙️', lucide: 'maximize', href: menuDeviceId ? deviceThingsPageHref(menuDeviceId) : '/things'
+	}, { id: 'open-device-settings', label: 'Quick view', icon: '⚙️', lucide: 'settings', command: 'inspect-device'
+	}, { id: 'open-device-sync', label: 'File sync & backup', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncPageHref(menuDeviceId) : '/things'
+	}, { id: 'open-device-files', label: 'Open synced files', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncedFilesHref(menuDeviceId) : '/things'
 	}] }] }), [menuDeviceId]);
 
   const onBackgroundMenuAction = useCallback(
@@ -1615,11 +1620,10 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
 		selectedDeviceId: deviceParam || selectedDevice,
 		deviceMenuId: deviceMenu.open ? menuDeviceId : null,
 		onDeviceSelect: (id: string) => setSelectedDevice(current => current === id ? null : id),
-		onDeviceOpen: (id: string) => navigate(deviceSyncedFilesHref(id)),
 		onDeviceContextMenu
 	};
 	const searchResultCount = (searchResults || []).length + visibleDevices.length;
-	if (deviceSyncMode && deviceParam) return (
+	if (deviceView === 'sync' && deviceParam) return (
     <Flex justify="center" background="var(--tt-surface, #fafafb)" minHeight="100vh" paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 24px)" paddingBottom={16} paddingX={{ base: 4, md: 6 }} width="100%">
       <Flex direction="column" gap={6} width="100%" maxWidth="1100px" minWidth={0}>
         <DeviceSyncPanel deviceId={deviceParam} ownerId={user?.id} pairedDeviceIds={localNode.pairedDeviceIds} ownedDeviceIds={currentAccountDeviceIds} />
@@ -1628,7 +1632,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
       </Flex>
     </Flex>
   );
-	if (devicePageMode) return (
+	if (deviceView === 'page') return (
 		<Flex background="var(--tt-surface, #fafafb)" minHeight="100vh" paddingBottom={16} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 20px)" paddingX={{ base: 3, md: 6 }} width="100%">
 			<DeviceDetailsDrawer
 				controlFor={deviceControlFor}
@@ -2087,7 +2091,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
 				ownerId={user?.id}
 				pairedDeviceIds={localNode.pairedDeviceIds}
 				ownedDeviceIds={currentAccountDeviceIds}
-				isOpen={Boolean(deviceParam) && !devicePageMode}
+				isOpen={deviceView === 'quick'}
 				onAction={onDeviceAction}
 				onClose={closeDevice}
 				onPermissionModeChange={setDevicePermissionMode}
@@ -2148,7 +2152,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
 			{...deviceMenu.menuProps}
 			meta={menuDeviceId ? { path: deviceStore.devices.find((device) => device.deviceId === menuDeviceId)?.summary?.name || 'Device', type: 'Device' } : undefined}
 			model={deviceMenuModel}
-			onAction={({ action }) => { if (action.command === 'inspect-device' && menuDeviceId) openDevice(menuDeviceId); }}
+			onAction={({ action }) => { if (action.command === 'inspect-device' && menuDeviceId) openDeviceQuickView(menuDeviceId); }}
 		/>
     </Flex>
   );

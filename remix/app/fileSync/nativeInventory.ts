@@ -108,7 +108,7 @@ export function parseNativeInventoryPage(value: unknown, capture: NativeInventor
  * never become an empty scan; the caller seals its journal after the final count. */
 export async function* readNativeInventory(input: {
 	ownerId: string; deviceId: string; rootId: string; signal: AbortSignal; excludedPaths?: string[]; ignoreRules?: string;
-	backupPolicy?: SyncPolicy; captureId?: string; pageSize?: number; onProgress?(progress: NativeIndexProgress): void;
+	backupPolicy?: SyncPolicy; strictAsync?: boolean; captureId?: string; pageSize?: number; onProgress?(progress: NativeIndexProgress): void; onStrictProgress?(indexed: number): void;
 	/** Called only after fresh native authorization pins a complete descriptor. */
 	resume?(capture: NativeBackupCapture): Promise<NativeInventoryResume>;
 	/** The caller discards this backup source after its durable journal handoff. */
@@ -135,6 +135,15 @@ export async function* readNativeInventory(input: {
 	const exclusions = canonicalNativeScanExclusions(provided), excludedPaths = [...provided];
 	const ignoreRules = canonicalIgnoreRules(input.ignoreRules), ignore = createSyncIgnorePolicy(ignoreRules);
 	const ignoredPolicy = ignoreRules ? { ignoreRules } : {};
+	const waitForPoll = async () => {
+		if (input.waitForPoll) await input.waitForPoll();
+		else await new Promise<void>((resolve, reject) => {
+			const finish = () => { signal.removeEventListener('abort', abort); resolve(); };
+			const timer = setTimeout(finish, NATIVE_INDEX_POLL_MS);
+			const abort = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(signal.reason); };
+			signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort();
+		});
+	};
 	let capture: NativeInventoryCapture | undefined;
 	let preserveCapture = false;
 	try {
@@ -146,7 +155,9 @@ export async function* readNativeInventory(input: {
 		const captureId = input.captureId ?? crypto.randomUUID();
 		if (!uuid.test(captureId)) throw Error('Invalid native capture identity.');
 		if (input.backupPolicy) assertBackupCapturePolicy(input.backupPolicy);
-		const begin = await request(ownerId, { action: 'scan-capture', ...ignoredPolicy, rootId, inventoryDeviceId, captureId, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}), ...(excludedPaths.length ? { excludedPaths } : {}) }, signal);
+		if (input.backupPolicy && input.strictAsync) throw Error('Native capture policies cannot be combined.');
+		const capturePolicy = input.backupPolicy ? 'backup-supported' : input.strictAsync ? 'strict-async' : undefined;
+		const begin = await request(ownerId, { action: 'scan-capture', ...ignoredPolicy, rootId, inventoryDeviceId, captureId, ...(capturePolicy ? { capturePolicy } : {}), ...(excludedPaths.length ? { excludedPaths } : {}) }, signal);
 		let offset = 0, ordinal = 0;
 		if (input.backupPolicy) {
 			let status = parseNativeBackupStatus(begin.backupCapture);
@@ -157,13 +168,7 @@ export async function* readNativeInventory(input: {
 				input.onProgress?.(status);
 				if (status.state === 'complete') { capture = parseNativeBackupCapture(status); break; }
 				if (status.state === 'interrupted') throw new NativeInventoryRetryWait('Backup indexing was interrupted. Its saved capture will retry automatically.');
-				if (input.waitForPoll) await input.waitForPoll();
-				else await new Promise<void>((resolve, reject) => {
-					const finish = () => { signal.removeEventListener('abort', abort); resolve(); };
-					const timer = setTimeout(finish, NATIVE_INDEX_POLL_MS);
-					const abort = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(signal.reason); };
-					signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort();
-				});
+				await waitForPoll();
 				let response: FolderResult;
 				try { response = await request(ownerId, { action: 'scan-status', ...ignoredPolicy, rootId, inventoryDeviceId, captureId, capturePolicy: 'backup-supported', excludedPaths }, signal); }
 				catch (error) { signal.throwIfAborted(); throw error; }
@@ -195,6 +200,26 @@ export async function* readNativeInventory(input: {
 				}
 				if (skippedPage.nextOffset === null) break;
 				skipOffset = skippedPage.nextOffset;
+			}
+		} else if (input.strictAsync) {
+			let response = begin, generation: string | undefined;
+			while (true) {
+				signal.throwIfAborted();
+				const status = response.strictCapture;
+				if (!status || status.id !== captureId || (generation !== undefined && status.generation !== generation))
+					throw Error('Native strict capture identity changed.');
+				generation = status.generation;
+				input.onStrictProgress?.(status.indexedEntries);
+				if (status.state === 'complete') {
+					capture = parseNativeInventoryCapture(response.capture);
+					if (capture.coverage !== undefined || capture.generation !== generation) throw Error('Native strict capture coverage or generation changed.');
+					break;
+				}
+				if (status.state !== 'running' || response.capture !== undefined)
+					throw Error('Indexing stopped before the whole folder was verified. Existing sync state was preserved.');
+				await waitForPoll();
+				signal.throwIfAborted();
+				response = await request(ownerId, { action: 'scan-status', ...ignoredPolicy, rootId, inventoryDeviceId, captureId, capturePolicy: 'strict-async', excludedPaths }, signal);
 			}
 		} else { capture = parseNativeInventoryCapture(begin.capture); if (capture.coverage !== undefined) throw Error('Partial inventory requires the negotiated backup policy.'); }
 		if (capture.id !== captureId) throw Error('Native capture identity changed.');

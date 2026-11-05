@@ -20,6 +20,7 @@ import {
 	sendLopuMessage,
 	setLopuSettings,
   setLopuAiDefaults,
+  setLopuManagementDefault,
   createLopuChat,
 	type AiModelPublic,
 	type LopuApiClient,
@@ -841,6 +842,23 @@ test('hydration never restores plan admission hints and never shares provider me
     assert.equal(getLopuStoreSnapshot().vaultProviders[0].id, 'chatgpt-plan-cached');
     assert.equal(getLopuStoreSnapshot().vaultProviders[0].planChatEligible, undefined);
     hydrateLopuStore('other'); assert.deepEqual(getLopuStoreSnapshot().vaultProviders, []);
+    // Execution placement is this device's preference for this viewer. A cached
+    // placement is restored for the account that saved it, and an account that
+    // saved none starts without one — never with the previous viewer's.
+    storage.set('tt-lopu-settings-placed', JSON.stringify({ model: null, effort: null, speed: null, providerId: null, management: 'server' }));
+    resetLopuStoreForTests(); hydrateLopuStore('placed');
+    assert.equal(getLopuStoreSnapshot().managementDefault, 'server');
+    assert.equal(getLopuStoreSnapshot().settings.management, 'server');
+    hydrateLopuStore('unplaced');
+    assert.equal(getLopuStoreSnapshot().managementDefault, null);
+    assert.equal(getLopuStoreSnapshot().settings.management, undefined);
+    // the same crossing through the live preference rather than the cache
+    resetLopuStoreForTests(); hydrateLopuStore('reporter');
+    setLopuManagementDefault('server');
+    assert.equal(getLopuStoreSnapshot().settings.management, 'server');
+    hydrateLopuStore('next-viewer');
+    assert.equal(getLopuStoreSnapshot().managementDefault, null);
+    assert.equal(getLopuStoreSnapshot().settings.management, undefined);
   } finally { (globalThis as any).window = previous; resetLopuStoreForTests(); }
 });
 
@@ -884,6 +902,38 @@ test('AI defaults seed new chats and stay separate from saved chat overrides', a
   hydrateLopuStore('other-owner');
   assert.equal(getLopuStoreSnapshot().aiDefaults, null);
   assert.equal(getLopuStoreSnapshot().settings.providerId, null);
+  resetLopuStoreForTests();
+});
+
+// AI defaults carry the credential choice only. Execution placement is the
+// viewer's device preference, so selecting a chat that never stored one — and
+// starting a chat from inside another — must not fall back to local management.
+test('the management preference survives chats that do not state one', async () => {
+  resetLopuStoreForTests();
+  const { client, calls } = fakeClient({ chats: [
+    { id: 'legacy', name: 'Legacy', updatedAt: new Date().toISOString(), lopu: { model: 'gpt-5', providerId: null } },
+    { id: 'local', name: 'Local', updatedAt: new Date().toISOString(), lopu: { model: 'gpt-5', providerId: null, management: 'client' } }
+  ] });
+  bindLopuApi(client); hydrateLopuStore('management-owner');
+  await loadLopuModels(); await loadLopuChats();
+  // the hook reports the device preference; no conversation is rewritten
+  setLopuManagementDefault('server');
+  assert.equal(getLopuStoreSnapshot().settings.management, 'server');
+  assert.equal(calls.some(row => row.name === 'chats.update'), false);
+  setLopuAiDefaults({ model: 'gpt-5', effort: 'low', speed: 'normal', providerId: null });
+  selectLopuChat('legacy');
+  assert.equal(getLopuStoreSnapshot().settings.management, 'server');
+  // a conversation that states its own placement still wins over the preference
+  selectLopuChat('local');
+  assert.equal(getLopuStoreSnapshot().settings.management, 'client');
+  selectLopuChat('legacy');
+  assert.equal(getLopuStoreSnapshot().settings.management, 'server');
+  // a chat started from inside another adopts the AI defaults, not local management
+  const created = await createLopuChat();
+  assert.equal(created.ok, true);
+  assert.equal(getLopuStoreSnapshot().settings.management, 'server');
+  await sendLopuMessage('synthetic request'); await flush();
+  assert.equal((calls.filter(row => row.name === 'reply').pop()?.args as any).management, 'server');
   resetLopuStoreForTests();
 });
 

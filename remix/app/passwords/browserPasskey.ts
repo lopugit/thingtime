@@ -1,4 +1,5 @@
 import { parse as parseDomain } from 'tldts';
+import { PASSWORD_PROVIDER_NAME, passwordProviderAAGUIDBytes } from './passwordProviderIdentity';
 import type { PasswordEntry } from './model';
 
 type Descriptor = { type: 'public-key'; id: string; transports?: string[] };
@@ -98,18 +99,28 @@ const authData = async (crypto: Crypto, rp: string, attested: boolean) => join(a
 const field = (entry: PasswordEntry, id: string) => entry.fields.find(item => item.id === id)?.value ?? '';
 const credential = (id: string, response: BrowserPasskeyCredential['response']): BrowserPasskeyCredential => ({ id, rawId: id, type: 'public-key', authenticatorAttachment: 'platform', clientExtensionResults: {}, response });
 
+export const BROWSER_PASSKEY_EXCLUDED_MESSAGE = "This site already has a passkey saved in Thingtime and does not allow another from this provider for this request. Return to the site to use it or choose another option in its security settings. Keep your working passkey.";
+export class BrowserPasskeyExcludedError extends DOMException {
+  constructor() { super(BROWSER_PASSKEY_EXCLUDED_MESSAGE, 'InvalidStateError'); }
+}
+/** Recheck on every attempt, including retries with retained key material. */
+export function requireNoExcludedBrowserPasskey(request: BrowserPasskeyRequest, existingEntries: PasswordEntry[]): void {
+  const rp = relyingParty(request);
+  if (existingEntries.some(entry => entry.passwordType === 'passkey' && field(entry, 'relyingParty') === rp && request.publicKey.excludeCredentials?.some(item => item.id === field(entry, 'credentialId'))))
+    throw new BrowserPasskeyExcludedError();
+}
 export async function prepareBrowserPasskeyRegistration(input: BrowserPasskeyRequest, freshVerified: boolean, existingEntries: PasswordEntry[] = [], crypto: Crypto = globalThis.crypto): Promise<{ entry: PasswordEntry; response: BrowserPasskeyCredential }> {
   const request = validateBrowserPasskeyRequest(input); if (request.type !== 'create') return fail('TypeError', 'Expected passkey creation.'); confirmed(freshVerified);
   const rp = relyingParty(request), user = request.publicKey.user!;
-  if (existingEntries.some(entry => entry.passwordType === 'passkey' && field(entry, 'relyingParty') === rp && request.publicKey.excludeCredentials?.some(item => item.id === field(entry, 'credentialId')))) return fail('InvalidStateError', 'An excluded credential already exists.');
+  requireNoExcludedBrowserPasskey(request, existingEntries);
   const keys = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']) as CryptoKeyPair;
   const jwk = await crypto.subtle.exportKey('jwk', keys.privateKey);
   const idBytes = crypto.getRandomValues(new Uint8Array(32)), id = passkeyBase64url(idBytes);
   const cose = cborMap([[cborInt(1), cborInt(2)], [cborInt(3), cborInt(-7)], [cborInt(-1), cborInt(1)], [cborInt(-2), cborBytes(passkeyBytes(jwk.x))], [cborInt(-3), cborBytes(passkeyBytes(jwk.y))]]);
-  const authenticatorData = join(await authData(crypto, rp, true), new Uint8Array(16), bytes(0, idBytes.length), idBytes, cose);
+  const authenticatorData = join(await authData(crypto, rp, true), passwordProviderAAGUIDBytes(), bytes(0, idBytes.length), idBytes, cose);
   const attestation = cborMap([[cborText('fmt'), cborText('none')], [cborText('attStmt'), cborMap([])], [cborText('authData'), cborBytes(authenticatorData)]]);
   const fields: [string, string, string][] = [['username', 'Username', user.name], ['website', 'Website', `https://${rp}`], ['relyingParty', 'Relying party', rp], ['credentialId', 'Credential id', id], ['userHandle', 'User handle', user.id], ['privateKey', 'Passkey private key', jwk.d!]];
-  const entry: PasswordEntry = { title: `${rp} · ${user.name}`, passwordType: 'passkey', fields: fields.map(([id, label, value]) => ({ id, label, value, type: id === 'privateKey' ? 'password' : id === 'website' ? 'url' : 'text', ...(id === 'privateKey' ? { concealed: true } : {}) })) };
+  const entry: PasswordEntry = { title: `${PASSWORD_PROVIDER_NAME} Passkey · ${rp} · ${user.name}`, passwordType: 'passkey', fields: fields.map(([id, label, value]) => ({ id, label, value, type: id === 'privateKey' ? 'password' : id === 'website' ? 'url' : 'text', ...(id === 'privateKey' ? { concealed: true } : {}) })) };
   const publicKey = new Uint8Array(await crypto.subtle.exportKey('spki', keys.publicKey));
   const response = credential(id, { clientDataJSON: passkeyBase64url(clientData(request)), attestationObject: passkeyBase64url(attestation), authenticatorData: passkeyBase64url(authenticatorData), transports: ['internal'], publicKey: passkeyBase64url(publicKey), publicKeyAlgorithm: -7 });
   if (request.publicKey.extensions?.credProps === true) response.clientExtensionResults = { credProps: { rk: true } };

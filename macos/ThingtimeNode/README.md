@@ -12,6 +12,21 @@ XPC surface, and a supervised connector subprocess boundary.
   **preflight** state. Startup and status reads never prompt. A separate
   journaled `permissions.request` method is available only through the signed,
   presence-gated bridge after the user presses **Request access**.
+- Host resources: CPU percent from host tick deltas, physical memory used and
+  total, startup-volume capacity used and total, physical disk read/write bytes
+  per second, and received/transmitted bytes
+  per second across active physical Ethernet and Wi-Fi interfaces. Memory used
+  counts anonymous, wired, and compressed physical pages, excluding purgeable
+  memory and file cache. Startup-volume usage subtracts filesystem free space
+  from total capacity, including space allocated elsewhere in a shared APFS
+  container. The I/O rates cover block storage drivers with a known physical
+  interconnect, excluding virtual disk images. Rate fields are omitted on the
+  first sample or when their counters are unavailable. Topology changes and
+  counter resets omit the affected rates for that interval. Network link
+  capacity remains unavailable on macOS.
+  Resource fields contain no interface names, addresses, or volume paths.
+  Native publishing requires `api.devices-node-state` 1.14.0 at the paired
+  origin, and the owner's read projection is `api.devices` 1.14.0.
 - Safe actions: telemetry refresh, output volume, activate a running app, and
   launch an installed app. Remote mutations deny while locked and require an
   explicit approval bit.
@@ -283,3 +298,15 @@ it verifies real native streaming, API authentication, cloud hashes, retained
 versions, local-deletion retention, restart and repeat convergence. It does not
 prove actual PhotoKit permission, installed signed-app selection or personal
 library behavior. Those require a separate explicit live acceptance session.
+
+
+### Owner-private source locations (Mac fileAccessVersion 1.15.0)
+
+Authorized folder-root responses optionally include `sourcePath`, the absolute
+POSIX location resolved from that owner's exact existing native bookmark.
+Clients negotiate Mac `fileAccessVersion` 1.15.0 before relying on this field.
+Unavailable or stale grants and Photos omit it. This is display/placement
+metadata, never an executable relative file path or a grant to any ancestor.
+The bookmark and current owner verification remain authoritative; no public
+capability manifest contains a physical path. Existing cloud destinations are
+not renamed, moved or migrated by this additive native response.

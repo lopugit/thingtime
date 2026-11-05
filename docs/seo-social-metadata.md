@@ -20,8 +20,10 @@ published-page card rendering stays in the shared anonymous preview resolver.
 
 ## Implemented contract
 
-- One per-request title, description, canonical and Open Graph URL. Query
-  strings and fragments (including invite tokens) are excluded from metadata.
+- One per-request title, description and canonical URL. Only the allowlisted
+  `previewTheme` and `previewLayout` presentation choices survive in the Open Graph
+  share URL and its matching canonical, keeping each chosen card identifiable. Other query values
+  and fragments (including invite tokens) are excluded from metadata.
 - Absolute PNG URLs, width/height, Open Graph/Twitter alt text and large cards.
   `og:image:secure_url` is emitted only for an HTTPS image.
 - JSON-LD `WebSite` plus `WebPage`, `CollectionPage` or a resolved `ProfilePage`.
@@ -199,3 +201,26 @@ See [PR 1287 delivery evidence](../PRs/1287-invite-previews-profile-choice-share
 for the source revision, checks and deployment limitations. A gateway preview
 must negotiate the new metadata/card capabilities with its selected backend;
 successful HTML alone does not establish that the PNG endpoint is ready.
+
+## Editable share designs — 2026-11-05
+
+Every URL now renders through the same five-template PNG generator, including
+the homepage and safe fallbacks. Automatic selection uses Editorial for text,
+Colour Blocks for media and Editorial White for invitations. Pink Invitation
+and Night Garden are also available for invitations. All use the canonical
+Thingtime logo matrix, palette and bundled fonts; public managed images are
+embedded as pixels after anonymous authorization. Missing photos use brand
+geometry without fetching arbitrary URLs.
+
+**Share link and customise preview** opens the shared editable-block document
+from persisted Thing menus, Things, profiles and invitations. The selected
+link supplies its own public title, description and photos. Theme and layout
+choices travel in `previewTheme` and `previewLayout`; no stored manifest or
+per-link write is needed. The copied destination preserves navigation queries
+and invite fragments, while the metadata lookup strips those unrelated values.
+The preview retains its previous image while refreshing and supports Retry.
+
+`api.social-previews` 1.2.0 adds the resolved design and choice catalogues;
+`api.social-card` 1.4.0 implements the presentation parameters. The customiser
+negotiates the selected origin before loading. Unknown/duplicate options are
+ignored; none changes content permissions, stored copy or destination.

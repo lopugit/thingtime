@@ -1,3 +1,4 @@
+import { PasswordBrandMark } from './PasswordBrandMark';
 import { PasswordSource } from './PasswordSource';
 import { PasswordGenerator } from './PasswordGenerator';
 import { PasswordEntryIcon, PasswordIconEditor } from './PasswordIcon';
@@ -6,6 +7,8 @@ import { createPasswordBackup } from '~/passwords/backup.client';
 import { PasswordAttachments } from './PasswordAttachments';
 import { uploadPasswordFile } from '~/passwords/files.client';
 import { newPasswordFile, type PasswordFile } from '~/passwords/fileCrypto';
+import { PasswordPreviewList } from './PasswordPreviewList';
+import { PasswordVerificationSettings } from './PasswordVerificationSettings';
 import React from 'react';
 import { Box, Button, Checkbox, Flex, Heading, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Text } from '@chakra-ui/react';
 import { Link, useLocation } from 'react-router';
@@ -13,7 +16,8 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { Thingtime } from '~/components/Thingtime/Thingtime';
 import type { ThingMods } from '~/components/Thingtime/thingMods';
-import { emptyPasswordEntry, FIELD_TYPES, PASSWORD_TYPES, type PasswordEntry, type PasswordMetadata, type FieldType } from '~/passwords/model';
+import { emptyPasswordEntry, FIELD_TYPES, PASSWORD_TYPES, passwordPreviewUsername, type PasswordEntry, type PasswordMetadata, type FieldType } from '~/passwords/model';
+import { passwordWebsiteOrigins } from '~/passwords/icons';
 import { passwordRequest } from '~/passwords/client';
 import { previewPasswordFile, visitPasswordFile, passwordImportErrorMessage, exportPasswordBackup, type PasswordFormat, type PasswordImportPreview } from '~/passwords/transfer';
 import { scanQrFile, scanQrScreen } from '~/passwords/qr.client';
@@ -24,7 +28,7 @@ const changed = () => window.dispatchEvent(new Event('thingtime:passwords-change
 const card = { border: '1px solid var(--tt-border, #e6e6eb)', borderRadius: '12px', p: 4, background: 'var(--tt-card, #fff)' };
 export function PasswordManager() {
   const user = useCurrentUser(), location = useLocation();
-  return <Box width="100%" pt="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))">{user && !user.temporary ? <PasswordManagerScope key={`${user.id}:${location.key}`} ownerId={user.id} /> : <Box p={6}><Heading size="md">Password manager</Heading><Text mt={3}>Sign in to unlock your password manager.</Text><Button as={Link} to="/login" mt={3}>Sign in</Button></Box>}</Box>;
+  return <Box width="100%" pt="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))">{user && !user.temporary ? <PasswordManagerScope key={`${user.id}:${location.key}`} ownerId={user.id} /> : <Box p={6}><Flex alignItems="center" gap={3}><PasswordBrandMark /><Heading size="md">Password manager</Heading></Flex><Text mt={3}>Sign in to unlock your password manager.</Text><Button as={Link} to="/login" mt={3}>Sign in</Button></Box>}</Box>;
 }
 function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   const lopu = useLopu();
@@ -32,6 +36,14 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   const [configured, setConfigured] = React.useState<boolean | null>(null), [busy, setBusy] = React.useState(false), [error, setError] = React.useState('');
   const [iconBusy, setIconBusy] = React.useState(false);
   const [draft, setDraft] = React.useState<Draft | null>(null), [customLabel, setCustomLabel] = React.useState(''), [customType, setCustomType] = React.useState<FieldType>('text');
+  const editorHeading = React.useRef<HTMLHeadingElement>(null);
+  const returnFocus = React.useRef<HTMLElement | null>(null);
+  const [openCount, setOpenCount] = React.useState(0);
+  React.useLayoutEffect(() => {
+    if (!openCount) return;
+    editorHeading.current?.focus({ preventScroll: true });
+    editorHeading.current?.scrollIntoView({ block: 'start' });
+  }, [openCount]);
   const [search, setSearch] = React.useState(''), [sort, setSort] = React.useState('title');
   const [listLoading, setListLoading] = React.useState(true), [settledSearch, setSettledSearch] = React.useState<string | null>(null);
   const listEpoch = React.useRef(0), listAbort = React.useRef<AbortController | null>(null);
@@ -46,7 +58,7 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   const retry = React.useRef<{ payload: string; writeId: string } | null>(null), importSource = React.useRef<{ file: File; count: number; saved: number; archive?: { id: string; writeId: string; saved: boolean }; filesSaved?: number; entryIds?: Map<number, string>; restoredIds?: Map<string, string>; iconFiles?: Map<number, string>; pendingIcon?: { id: string; revision: number; writeId: string; entry: PasswordEntry }; pendingFile?: PasswordFile; pending?: { id: string; writeId: string; entry: PasswordEntry } } | null>(null);
   const clear = React.useCallback(() => {
     listEpoch.current++; setListLoading(false); generation.current++; controllers.current.forEach(controller => controller.abort()); controllers.current.clear();
-    setDraft(null); setIconBusy(false); setImported(null); importSource.current = null; importRead.current?.abort(); importRead.current = null; setReadingImport(false); retry.current = null; setTransfer(null); setBusy(false); setDeleteConfirm(false); setCustomLabel(''); setAcknowledged(false); setProgress('');
+    returnFocus.current = null; setDraft(null); setIconBusy(false); setImported(null); importSource.current = null; importRead.current?.abort(); importRead.current = null; setReadingImport(false); retry.current = null; setTransfer(null); setBusy(false); setDeleteConfirm(false); setCustomLabel(''); setAcknowledged(false); setProgress('');
   }, []);
   React.useEffect(() => {
     active.current = true;
@@ -67,7 +79,7 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
     listAbort.current = controller; controllers.current.add(controller); setListLoading(true);
     const current = () => active.current && epoch === listEpoch.current && version === generation.current && !controller.signal.aborted;
     try {
-      const result = await passwordRequest(ownerId, undefined, controller.signal, next, search.trim());
+      const result = await passwordRequest(ownerId, undefined, controller.signal, next, search.trim(), true);
       if (!current()) return;
       setRecords(prev => next ? [...prev.filter(item => !result.entries.some((entry: PasswordMetadata) => entry.id === item.id)), ...result.entries] : result.entries);
       setCursor(result.nextCursor); setConfigured(result.configured); setSettledSearch(search);
@@ -82,6 +94,11 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
     return () => { clearTimeout(timer); listAbort.current?.abort(); window.removeEventListener('focus', check); };
   }, [refresh, showError]);
   const clearAndRefresh = () => { clear(); refresh().catch(showError); };
+  const closeEntry = () => {
+    const trigger = returnFocus.current;
+    clearAndRefresh();
+    if (trigger?.isConnected) trigger.focus();
+  };
   const changeSearch = (value: string) => {
     listEpoch.current++; listAbort.current?.abort(); setListLoading(true); setError(''); setSearch(value);
   };
@@ -93,9 +110,18 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
     const payload = JSON.stringify(draft); if (retry.current?.payload !== payload) retry.current = { payload, writeId: crypto.randomUUID() };
     const result = await request({ operation: 'save', ...draft, writeId: retry.current.writeId });
     retry.current = null; setDraft(prev => prev?.id === draft.id ? { ...prev, revision: result.record.revision } : prev);
-    setRecords(prev => [...prev.filter(item => item.id !== result.record.id), result.record]); changed(); lopu({ title: 'Password entry saved', status: 'success' });
+    const username = passwordPreviewUsername(draft.entry);
+    const record = { ...result.record, ...(username ? { username } : {}), ...(!result.record.icon && passwordWebsiteOrigins(draft.entry).length ? { websiteIcon: true } : {}) };
+    setRecords(prev => [...prev.filter(item => item.id !== record.id), record]); changed(); lopu({ title: 'Password entry saved', status: 'success' });
   });
-  const read = (record: PasswordMetadata) => run(async () => { const result = await request({ operation: 'read', id: record.id }); setDraft({ id: result.id, revision: result.revision, entry: result.entry }); retry.current = null; setDeleteConfirm(false); });
+  const read = (record: PasswordMetadata, trigger: HTMLElement | null) => run(async () => {
+    const result = await request({ operation: 'read', id: record.id });
+    returnFocus.current = trigger;
+    setDraft({ id: result.id, revision: result.revision, entry: result.entry });
+    retry.current = null;
+    setDeleteConfirm(false);
+    setOpenCount(value => value + 1);
+  });
   const loadImport = async (file?: File) => {
     if (!file || busy) return;
     importRead.current?.abort();
@@ -179,30 +205,33 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   });
   const visible = records.filter(record => record.title.toLowerCase().includes(search.trim().toLowerCase())).sort((a, b) => sort === 'updated' ? b.updatedAt.localeCompare(a.updatedAt) : a.title.localeCompare(b.title));
   return <Box width="100%" maxWidth="1100px" mx="auto" px={{ base: 3, md: 6 }} py={6}>
-    <Flex gap={3} alignItems="center" justifyContent="space-between" flexWrap="wrap"><Box><Heading size="lg">Password manager</Heading><Text mt={1} color="var(--tt-muted)">Unlocked with your Thingtime session</Text></Box><Flex gap={2} flexWrap="wrap"><Button onClick={() => { clearAndRefresh(); setDraft({ id: crypto.randomUUID(), revision: 0, entry: emptyPasswordEntry() }); }} isDisabled={busy || configured === false}>Add password</Button><Button variant="outline" onClick={() => { clearAndRefresh(); setTransfer('import'); }}>Import</Button><Button variant="outline" onClick={() => { clearAndRefresh(); setTransfer('export'); }}>Export</Button><Button variant="ghost" onClick={clearAndRefresh}>Hide values</Button></Flex></Flex>
+    <Flex gap={3} alignItems="center" justifyContent="space-between" flexWrap="wrap"><Flex alignItems="center" gap={3}><PasswordBrandMark size={40} /><Box><Heading size="lg">Password manager</Heading><Text mt={1} color="var(--tt-muted)">Unlocked with your Thingtime session</Text></Box></Flex><Flex gap={2} flexWrap="wrap"><Button onClick={() => { clearAndRefresh(); setDraft({ id: crypto.randomUUID(), revision: 0, entry: emptyPasswordEntry() }); }} isDisabled={busy || configured === false}>Add password</Button><Button variant="outline" onClick={() => { clearAndRefresh(); setTransfer('import'); }}>Import</Button><Button variant="outline" onClick={() => { clearAndRefresh(); setTransfer('export'); }}>Export</Button><Button variant="ghost" onClick={clearAndRefresh}>Hide values</Button></Flex></Flex>
     {configured === false && <Text mt={4}>Password encryption needs deployment configuration before you can save entries.</Text>}
+    <Box mt={4}><PasswordVerificationSettings ownerId={ownerId} /></Box>
     <PasswordPasskeySetup ownerId={ownerId} nativeAvailable={nativeAvailable} />
     {error && <Text role="alert" color="red.600" mt={4}>{error}</Text>}
     <Flex gap={5} mt={6} alignItems="start" direction={{ base: 'column', md: 'row' }}>
       <Box width={{ base: '100%', md: draft ? '34%' : '100%' }} minWidth={0}>
-        <Flex gap={2} mb={3}><Input aria-label="Search passwords" placeholder="Search all password titles" value={search} onChange={event => changeSearch(event.target.value)} /><Select maxWidth="150px" aria-label="Sort passwords" value={sort} onChange={event => setSort(event.target.value)}><option value="title">Title</option><option value="updated">Recently edited</option></Select></Flex>
-        <Flex direction="column" gap={2}>{visible.map(record => <Box {...card} key={record.id} as="button" textAlign="left" width="100%" disabled={busy || iconBusy} onClick={() => read(record)}><Flex gap={3} alignItems="center"><PasswordEntryIcon ownerId={ownerId} entryId={record.id} icon={record.icon} /><Box minWidth={0}><Text fontWeight={600} overflowWrap="anywhere">{record.title}</Text><Text fontSize="sm" color="var(--tt-muted)">{record.passwordType.replace(/-/g, ' ')}</Text></Box></Flex></Box>)}</Flex>
+        <Flex gap={2} mb={3} direction={{base:'column',md:'row'}} alignItems={{base:'stretch',md:'center'}}><Input minWidth={0} flex={1} width="100%" aria-label="Search passwords" placeholder="Search all password titles" value={search} onChange={event => changeSearch(event.target.value)} /><Select maxWidth="150px" alignSelf={{base:'flex-end',md:'auto'}} aria-label="Sort passwords" value={sort} onChange={event => setSort(event.target.value)}><option value="title">Title</option><option value="updated">Recently edited</option></Select></Flex>
+        <PasswordPreviewList ownerId={ownerId} entries={visible} disabled={busy || iconBusy} onOpen={read} />
         {listLoading && <Text role="status" mt={3} fontSize="sm">{search.trim() ? 'Searching all password titles…' : 'Refreshing passwords…'}</Text>}
         {!listLoading && settledSearch === search && !visible.length && <Text py={5}>{search.trim() ? 'No matching password titles.' : 'Add a login, API key, secure note or authenticator.'}</Text>}
         {cursor && settledSearch === search && <Button mt={3} onClick={() => run(() => refresh(cursor))} isDisabled={listLoading || busy}>Load more</Button>}
         {error && !listLoading && <Button mt={3} variant="outline" onClick={() => { setError(''); refresh().catch(showError); }}>Retry search</Button>}
       </Box>
       {draft && <Box {...card} flex={1} width={{ base: '100%', md: 'auto' }} minWidth={0}>
-        <Flex justifyContent="space-between" mb={4} gap={3}><Flex alignItems="center" gap={3}><PasswordEntryIcon ownerId={ownerId} entryId={draft.id} icon={draft.entry.icon} /><Heading size="md">{draft.revision ? 'Edit entry' : 'New entry'}</Heading></Flex><Button size="sm" onClick={clearAndRefresh}>Close</Button></Flex>
+        <Flex justifyContent="space-between" mb={4} gap={3}><Flex alignItems="center" gap={3}><PasswordEntryIcon ownerId={ownerId} entryId={draft.id} icon={draft.entry.icon} /><PasswordBrandMark size={24} /><Heading ref={editorHeading} tabIndex={-1} scrollMarginTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 12px)" size="md">{draft.revision ? 'Edit entry' : 'New entry'}</Heading></Flex><Button size="sm" onClick={closeEntry}>Close</Button></Flex>
         <Text as="label" htmlFor="password-title">Title</Text><Input id="password-title" value={draft.entry.title} onChange={event => updateEntry({ ...draft.entry, title: event.target.value })} mb={3} />
         <Text as="label" htmlFor="password-type">Password type</Text><Select id="password-type" isDisabled={draft.entry.passwordType === 'passkey'} value={draft.entry.passwordType} onChange={event => updateEntry({ ...draft.entry, passwordType: event.target.value as PasswordEntry['passwordType'] })} mb={4}>{PASSWORD_TYPES.filter(type => type !== 'passkey' || draft.entry.passwordType === 'passkey').map(type => <option key={type} value={type}>{type.replace(/-/g, ' ')}</option>)}</Select>
         {draft.entry.passwordType === 'passkey' && <Text fontSize="sm" mb={4}>This passkey was created by the native Thingtime provider. Keep its signing fields intact to continue signing in.</Text>}
         {draft.entry.passwordType === 'passkey-reference' && <Text fontSize="sm" mb={4}>Record the site and where an existing passkey is stored. This reference does not contain a passkey. New passkeys use the native credential provider.</Text>}
         <Flex gap={4} mb={3}><Checkbox isChecked={draft.entry.favorite === true} onChange={event => updateEntry({ ...draft.entry, favorite: event.target.checked })}>Favourite</Checkbox><Checkbox isChecked={draft.entry.archived === true} onChange={event => updateEntry({ ...draft.entry, archived: event.target.checked })}>Archived</Checkbox></Flex>
         <Text as="label" htmlFor="password-tags">Tags (one per line)</Text><Input as="textarea" id="password-tags" value={(draft.entry.tags || []).join('\n')} onChange={event => updateEntry({ ...draft.entry, tags: event.target.value.split('\n') })} mb={4} />
-        <Thingtime thing={Object.fromEntries(draft.entry.fields.map(field => [field.id, field.value]))} mods={{ layout: 'fields', fields: draft.entry.fields.map(({ value: _value, ...field }) => field), sortable: true, removable: true, revealSecrets: true }} onChange={(values: Record<string, string>) => updateEntry({ ...draft.entry, fields: draft.entry.fields.map(field => ({ ...field, value: values[field.id] ?? '' })) })} onModsChange={(mods: ThingMods) => updateEntry({ ...draft.entry, fields: mods.fields.map(field => ({ ...draft.entry.fields.find(item => item.id === field.id), ...field, value: draft.entry.fields.find(item => item.id === field.id)?.value ?? '' })) })} />
+        {/* Keep this key distinct from the sibling entry verification control. */}
+        <Thingtime key={`password-fields:${draft.id}`} thing={Object.fromEntries(draft.entry.fields.map(field => [field.id, field.value]))} mods={{ layout: 'fields', fields: draft.entry.fields.map(({ value: _value, ...field }) => field), sortable: true, removable: true, revealSecrets: true, copyPasswords: draft.entry.passwordType !== 'passkey' }} onChange={(values: Record<string, string>) => updateEntry({ ...draft.entry, fields: draft.entry.fields.map(field => ({ ...field, value: values[field.id] ?? '' })) })} onModsChange={(mods: ThingMods) => updateEntry({ ...draft.entry, fields: mods.fields.map(field => ({ ...draft.entry.fields.find(item => item.id === field.id), ...field, value: draft.entry.fields.find(item => item.id === field.id)?.value ?? '' })) })} />
         <Flex gap={2} flexWrap="wrap" mt={5}><Input flex="1 1 150px" aria-label="Custom field label" placeholder="Custom field label" value={customLabel} onChange={event => setCustomLabel(event.target.value)} /><Select flex="1 1 120px" aria-label="Custom field type" value={customType} onChange={event => setCustomType(event.target.value as FieldType)}>{FIELD_TYPES.map(type => <option key={type}>{type}</option>)}</Select><Button isDisabled={!customLabel.trim()} onClick={() => { updateEntry({ ...draft.entry, fields: [...draft.entry.fields, { id: crypto.randomUUID(), label: customLabel.trim(), type: customType, value: '' }] }); setCustomLabel(''); }}>Add custom field</Button></Flex>
         {draft.entry.passwordType !== 'passkey' && <PasswordGenerator key={`password-generator:${draft.id}`} ownerId={ownerId} origin={window.location.origin} targets={draft.entry.fields.filter(field => field.type === 'password').map(({ id, label }) => ({ id, label }))} disabled={busy || iconBusy} onGenerate={(value, fieldId) => setDraft(current => current?.id === draft.id && current.entry.passwordType !== 'passkey' ? { ...current, entry: { ...current.entry, fields: current.entry.fields.map(field => field.id === fieldId && field.type === 'password' ? { ...field, value } : field) } } : current)} />}
+        <PasswordVerificationSettings key={draft.id} ownerId={ownerId} entryWindow={draft.entry.verificationWindow ?? 'global'} onEntryChange={value=>updateEntry({...draft.entry,verificationWindow:value})} />
         <PasswordIconEditor ownerId={ownerId} entryId={draft.id} saved={draft.revision > 0} icon={draft.entry.icon} website={draft.entry.fields.find(field => field.type === 'url')?.value} disabled={busy} onBusyChange={setIconBusy} onChange={icon => setDraft(current => current?.id === draft.id ? { ...current, entry: { ...current.entry, icon } } : current)} />
         {draft.entry.onePassword && <PasswordSource entry={draft.entry} />}
         {draft.revision > 0 ? <PasswordAttachments key={`password-files:${draft.id}`} ownerId={ownerId} entryId={draft.id} /> : <Text mt={5} fontSize="sm">Save this entry to add attachments.</Text>}
@@ -212,7 +241,7 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
         {deleteConfirm && <Box mt={3}><Text>Delete this entry and its saved secrets?</Text><Flex gap={2} mt={2}><Button size="sm" onClick={() => run(async () => { await request({ operation: 'delete', id: draft.id, revision: draft.revision }); setRecords(prev => prev.filter(record => record.id !== draft.id)); changed(); clearAndRefresh(); })}>Confirm delete</Button><Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(false)}>Keep entry</Button></Flex></Box>}
       </Box>}
     </Flex>
-    <Modal isOpen={transfer !== null} onClose={clearAndRefresh} size="xl"><ModalOverlay /><ModalContent mx={3}><ModalHeader>{transfer === 'import' ? 'Import passwords' : 'Export passwords'}</ModalHeader><ModalCloseButton /><ModalBody>
+    <Modal isOpen={transfer !== null} onClose={clearAndRefresh} size="xl"><ModalOverlay /><ModalContent mx={3}><ModalHeader><Flex alignItems="center" gap={3}><PasswordBrandMark /><span>{transfer === 'import' ? 'Import passwords' : 'Export passwords'}</span></Flex></ModalHeader><ModalCloseButton /><ModalBody>
       {transfer === 'import' ? <><Text>Choose a 1Password .1pux or CSV export, Chrome CSV, or Apple Passwords CSV. Preview before saving. Imported entries remain private.</Text><Input mt={3} type="file" accept=".csv,.1pux" aria-label="Import password file" isDisabled={busy} onChange={event => { loadImport(event.target.files?.[0]); event.target.value = ''; }} />{imported && <Box mt={3}><Text fontWeight={600}>{imported.count} entries and {imported.fileCount} archive files ready</Text><Box maxHeight="180px" overflowY="auto" mt={2}>{imported.entries.slice(0, 50).map((entry, index) => <Text key={index} fontSize="sm" overflowWrap="anywhere">{entry.title} · {entry.passwordType.replace(/-/g, ' ')}</Text>)}{imported.count > imported.entries.length && <Text fontSize="sm">and {imported.count - imported.entries.length} more</Text>}</Box>{imported.warnings.map(warning => <Text key={warning} fontSize="sm" mt={2}>{warning}</Text>)}<Text fontSize="sm" mt={2}>Keep your source vault until you have checked the imported entries.</Text></Box>}</> : <><Select aria-label="Export format" value={format} onChange={event => setFormat(event.target.value as PasswordFormat)}><option value="1pux">1Password 1PUX (all data and attachments)</option><option value="1password">1Password CSV</option><option value="chrome">Chrome CSV</option><option value="apple">Apple Passwords CSV</option></Select><Text mt={3}>1PUX includes custom fields, attachments, and preserved original archive data. Large CSV exports download as numbered files in a ZIP. Exports contain unencrypted passwords. CSV omits custom fields; Chrome CSV also omits authenticator secrets. CSV does not transfer passkeys. Thingtime 1PUX backups preserve passkey fields for restoring to Thingtime; other password managers may import them only as custom data. Use 1PUX to keep custom fields, and delete the export after transferring it.</Text><Checkbox mt={3} isChecked={acknowledged} onChange={event => setAcknowledged(event.target.checked)}>I understand the downloaded file contains unencrypted secrets.</Checkbox></>}
       {progress && <Text mt={3}>{progress}</Text>}{error && <Text role="alert" color="red.600" mt={3}>{error}</Text>}
     </ModalBody><ModalFooter gap={2}><Button variant="ghost" onClick={clearAndRefresh}>Cancel</Button><Button isLoading={busy} isDisabled={transfer === 'import' ? readingImport || !imported || (!imported.count && !imported.fileCount) : !acknowledged} onClick={transfer === 'import' ? commitImport : download}>{transfer === 'import' ? 'Import entries' : 'Download export'}</Button></ModalFooter></ModalContent></Modal>

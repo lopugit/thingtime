@@ -96,7 +96,18 @@
 - [ ] Type a unique query and launch a command from its results. Hide and reopen with the global shortcut; verify the input is blank while the launched command appears first under History and its search term appears next as a separate full-width top-level result. Return reruns the command from its row and restores the query from the search-term row. Quit/relaunch Commander and verify both persist.
 - [ ] Create at least nine distinct search sessions. Verify only the newest eight appear initially, Show More expands the retained history, Show Less collapses it again, and arrow navigation keeps every revealed row visible.
 - [ ] With text in the search field, Command-A selects the complete query and typing replaces it; on Windows/Linux shells, repeat with Control-A.
-- [ ] Up/Down selection stays visible through the complete result list. Return runs the selected primary action.
+- [ ] Tap Up/Down rapidly: each press moves exactly one row immediately. Hold an arrow: repeat begins after 180ms,
+      ramps smoothly to 40 rows/second, and stops on release without jumps, overscroll or wrapping at either end.
+      Repeat with slow and fast macOS keyboard-repeat settings; system repeats must not add extra selection steps.
+      Verify History, Calculator and grouped results stay visible with instant nearest scrolling, including the last row.
+      Select a lower result in a tall launcher, then shrink it to its minimum size without pressing another arrow:
+      the same selected row must stay visible immediately, with no smooth-scroll delay or scroll/resize loop.
+      Press Return immediately after rapid arrows and verify the current highlighted primary action executes once.
+- [ ] During a held arrow, reverse direction, type a new query, replace/shrink results, move focus to Settings,
+      open Actions or a context/pin menu, open a bundled view, hide/reopen Commander and switch applications.
+      Selection must stop when ownership changes and must not resume from stray native repeat events.
+      Command/Control/Option/Shift arrows and IME composition retain their input editing/menu behavior.
+      Keep a native icon request unresolved while navigating: unrelated rows must not cancel/requeue their icons.
 - [ ] Hover a lower result, stop moving the pointer, then keep typing. The refreshed list resets to its first result; the stationary pointer must not steal selection until it moves again.
 - [ ] Type a new query and press Return immediately, before the search debounce settles. Commander must never execute an item left over from the previous query.
 - [ ] Command-K opens Actions for the selected item; Escape closes Actions before closing Commander.
@@ -111,7 +122,17 @@
 - [ ] Drag the launcher by its icon/header chrome; the window follows the pointer without moving focus into the search field.
 - [ ] Drag each launcher corner and edge inward and outward in default and compact modes. Verify native resize cursors
       appear, the panel follows the pointer down to its mode-specific minimum, and content remains usable without an
-      opaque outer rectangle.
+      opaque outer rectangle. Keep the mouse held after the first small movement, cross cursor/tracking boundaries,
+      change Shift, and reverse direction: resizing must continue beyond the first pixel until release. Run the native
+      passive-event dispatch regression to cover cursor, enter/exit, framework and modifier notifications between drag
+      steps; endpoint-only automated drags do not establish that interleaved-event behavior.
+- [ ] Hover without clicking along both sides of each visible launcher border and all four corners. Pause, move along
+      the border, and cross a corner: the resize cursor must remain stable and match the direction available on drag.
+      Repeat after default/compact changes and at minimum and wide/tall window sizes. Center links, text fields,
+      header/footer controls and file dragging must retain normal input and cursors. Disable custom resize handling:
+      its native handle views must stop intercepting hits and cursors. Run the loaded-WebKit native cursor regression
+      for sibling hit ownership, system cursor selection and relayout/invalidation; dispatched cursor updates and
+      endpoint drags do not substitute for this physical-hover check when automation lacks pointer movement.
 - [ ] While resizing, trigger an emoji insertion or press Return to paste from Commander’s Emoji & Symbols picker,
       release the mouse, press Escape, change focus, hide, or close the launcher. The resize session must cancel
       immediately, so later pointer movement cannot resize the panel. In
@@ -259,7 +280,6 @@
 - [ ] Inspect every settings tab and the open Actions state at native window sizes.
 - [ ] Resize Settings to its minimum and a large desktop size; no clipping, overlap, or horizontal overflow.
 - [ ] Verify keyboard focus, VoiceOver labels, reduced motion, and high-contrast/dark appearance.
-
 
 ## Signed releases
 

@@ -6,6 +6,8 @@ import ts from 'typescript';
 const defaultRoot = fileURLToPath(new URL('..', import.meta.url));
 const variants = new Set(['app', 'invite', 'feed', 'explore', 'docs', 'collection', 'text-post', 'image-post', 'gallery', 'poll', 'listing', 'thingtime', 'share', 'comment', 'reply', 'media-image', 'media-video', 'media-audio', 'media-file', 'webpage', 'profile', 'thing']);
 const copyFields = new Set(['title', 'description', 'eyebrow', 'pageTitle', 'revision']);
+const templates = new Set(['editorial', 'colour-blocks', 'editorial-white', 'pink-invitation', 'night-garden']);
+const layouts = new Set(['auto', 'text', 'photo', 'gallery']);
 const unwrap = (node) => {
   while (node && (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isSatisfiesExpression(node) || ts.isTypeAssertionExpression(node))) node = node.expression;
   return node;
@@ -33,6 +35,8 @@ const previewOverride = (source) => {
         const value = literal(entry.initializer);
         if (copyFields.has(key) && safeCopy(value)) result[key] = value;
         if (key === 'variant' && variants.has(value)) result.variant = value;
+        if (key === 'template' && templates.has(value)) result.template = value;
+        if (key === 'layout' && layouts.has(value)) result.layout = value;
         if (key === 'badges') {
           const array = unwrap(entry.initializer);
           if (array && ts.isArrayLiteralExpression(array) && array.elements.every((item) => safeCopy(literal(item)))) result.badges = array.elements.map(literal);

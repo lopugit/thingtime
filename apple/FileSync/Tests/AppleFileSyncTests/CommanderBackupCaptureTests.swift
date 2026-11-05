@@ -4,12 +4,7 @@ import XCTest
 import Darwin
 
 final class CommanderBackupCaptureTests: XCTestCase {
-    private func helper() throws -> URL {
-        guard let path = ProcessInfo.processInfo.environment["THINGTIME_TEST_COMMANDER_INDEXER"] else {
-            throw XCTSkip("Run macos/ThingtimeNode/scripts/test-commander-backup.sh to test the real Rust helper.")
-        }
-        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: path)); return URL(fileURLWithPath: path)
-    }
+    private func helper() throws -> URL { try RustIndexFixture.executable() }
     private func fixture() throws -> (URL, URL, Data, MobileFolderInventory.Scope) {
         let base = FileManager.default.temporaryDirectory.appendingPathComponent("commander-backup-" + UUID().uuidString)
         let source = base.appendingPathComponent("source")
@@ -18,64 +13,56 @@ final class CommanderBackupCaptureTests: XCTestCase {
         let owner = try FileSyncOwnerScope(ownerId: "fixture", url: URL(string: "https://fixture.invalid")!)
         return (base, source, try FolderBookmark.create(source), .init(owner: owner, deviceId: "fixture", rootId: UUID().uuidString.lowercased()))
     }
-    func testStreamingFirstPageIsDurableWhileIndexerPausedAndLegacyPagesStayPrivate() async throws {
-        let (base, source, bookmark, scope) = try fixture()
+    func testStreamingPauseAndRestartRetainCommittedRustRevisions() async throws {
+        let helper = try helper(), (base, source, bookmark, scope) = try fixture()
         try Data("first".utf8).write(to: source.appendingPathComponent("first"))
-        try Data("pending".utf8).write(to: source.appendingPathComponent("pending"))
-        let scanned = try MobileFolderReader.scan(bookmark: bookmark)
-        let entry = try XCTUnwrap(scanned.first { $0.path == "first" })
-        let queued = try XCTUnwrap(scanned.first { $0.path == "pending" })
-        let queuedEvent = String(decoding: try JSONEncoder().encode(queued), as: UTF8.self)
-        let event = String(decoding: try JSONEncoder().encode(entry), as: UTF8.self)
-        let gate = base.appendingPathComponent("continue"), script = base.appendingPathComponent("stream-helper")
-        let text = "#!/bin/sh\n/usr/bin/read request\nprintf '%s\\n' '{\"event\":\"hello\",\"version\":1,\"streaming\":true}' '{\"event\":\"entry\",\"entry\":\(event)}' '{\"event\":\"entry\",\"entry\":\(queuedEvent)}'\nwhile [ ! -f '\(gate.path)' ]; do /bin/sleep 0.05; done\n/bin/cat '\(gate.path)'\nprintf '%s\\n' '{\"event\":\"complete\"}'\n"
-        try Data(text.utf8).write(to: script)
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
-        let inventory = MobileFolderInventory(directory: base.appendingPathComponent("stream-cache"), commanderIndexer: script)
+        let cache = base.appendingPathComponent("journal")
+        let inventory = try RustIndexFixture.inventory(directory: cache, helper: helper)
         let id = UUID().uuidString.lowercased()
         let initial = try inventory.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil)
-        XCTAssertEqual(initial.revision, 0)
-        let ready = expectation(description: "first eligible row committed")
-        ready.expectedFulfillmentCount = 2 // First entry + timer-flushed pending entry before helper resumes.
-        ready.assertForOverFulfill = false
+        let first = DispatchSemaphore(value: 0)
+        let control = MobileFolderInventory.StreamControl()
         let scanner = Task.detached {
-            try inventory.runStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, wake: { ready.fulfill() })
+            try inventory.runStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil,
+                control: control, wake: { first.signal() })
         }
-        defer { try? Data().write(to: gate); scanner.cancel() }
-        await fulfillment(of: [ready], timeout: 5)
-        // Reopen the cache, proving this is committed disk state, not a callback buffer.
-        let reopened = MobileFolderInventory(directory: base.appendingPathComponent("stream-cache"), commanderIndexer: script)
-        let page = try reopened.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: 0)
-        XCTAssertEqual(page.state, "running"); XCTAssertEqual(page.generation, initial.generation)
-        XCTAssertEqual(page.changes.map(\.entry.path), ["first", "pending"]); XCTAssertEqual(page.nextSequence, 2)
-        XCTAssertThrowsError(try reopened.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: ["first"], ignoreRules: nil, afterSequence: 0))
-        try Data("updated".utf8).write(to: source.appendingPathComponent("first"))
-        let updated = try XCTUnwrap(MobileFolderReader.scan(bookmark: bookmark).first { $0.path == "first" })
-        let update = String(decoding: try JSONEncoder().encode(updated), as: UTF8.self)
-        try Data(("{\"event\":\"entry\",\"entry\":\(update)}\n").utf8).write(to: gate)
-        try await scanner.value
-        let next = try inventory.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: 2)
-        XCTAssertEqual(next.changes.count, 1); XCTAssertEqual(next.nextSequence, 3)
-        XCTAssertEqual(next.totalEntries, 2)
-        XCTAssertNotEqual(next.changes.first?.revision, page.changes.first?.revision)
+        defer { scanner.cancel() }
+        XCTAssertEqual(first.wait(timeout: .now() + 8), .success)
+        let page = try inventory.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: 0)
+        XCTAssertEqual(page.changes.map(\.entry.path), ["first"])
+        XCTAssertEqual(page.nextSequence, 1)
+        scanner.cancel()
+        do { try await scanner.value; XCTFail("Paused scanner completed") } catch is CancellationError { }
         try inventory.finishStream(scope, id: id, bookmark: bookmark, state: "interrupted")
-        XCTAssertEqual(try inventory.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: 3).state, "interrupted")
+        try Data("second".utf8).write(to: source.appendingPathComponent("second"))
+        let reopened = try RustIndexFixture.inventory(directory: cache, helper: helper)
+        XCTAssertEqual(try reopened.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil).generation, initial.generation)
+        try reopened.runStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, wake: {})
+        try reopened.finishStream(scope, id: id, bookmark: bookmark, state: "complete")
+        let resumed = try reopened.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: 1)
+        XCTAssertEqual(resumed.generation, initial.generation)
+        XCTAssertEqual(resumed.changes.map(\.entry.path), ["second"])
+        XCTAssertEqual(resumed.changes.map(\.sequence), [2])
+        XCTAssertEqual(resumed.state, "complete")
+        XCTAssertThrowsError(try reopened.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: ["first"], ignoreRules: nil, afterSequence: 0))
     }
     func testRealRustStreamingFeedRetainsGenerationAndSkipsUnsupportedEntries() throws {
         let helper = try helper(), (base, source, bookmark, scope) = try fixture()
         try FileManager.default.createDirectory(at: source.appendingPathComponent("folder"), withIntermediateDirectories: true)
         try Data("payload".utf8).write(to: source.appendingPathComponent("folder/file"))
-        try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("outside"), withDestinationURL: base)
-        let inventory = MobileFolderInventory(directory: base.appendingPathComponent("feed"), commanderIndexer: helper)
+        try FileManager.default.createSymbolicLink(atPath: source.appendingPathComponent("outside").path, withDestinationPath: "../absent")
+        XCTAssertEqual(mkfifo(source.appendingPathComponent("unsupported-pipe").path, 0o600), 0)
+        let inventory = try RustIndexFixture.inventory(directory: base.appendingPathComponent("feed"), helper: helper)
         let id = UUID().uuidString.lowercased()
         let initial = try inventory.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil)
         try inventory.runStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, wake: {})
         try inventory.finishStream(scope, id: id, bookmark: bookmark, state: "complete")
         let page = try inventory.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: 0)
         XCTAssertEqual(page.generation, initial.generation); XCTAssertEqual(page.state, "complete")
-        XCTAssertEqual(Set(page.changes.map(\.entry.path)), ["folder", "folder/file"])
-        XCTAssertEqual(page.totalEntries, 2); XCTAssertEqual(page.totalSkipped, 1)
-        XCTAssertEqual(page.nextSequence, 2); XCTAssertFalse(page.hasMore)
+        XCTAssertEqual(Set(page.changes.map(\.entry.path)), ["folder", "folder/file", "outside"])
+        XCTAssertEqual(try page.changes.first { $0.entry.path == "outside" }?.entry.symbolicLink?.target(), Data("../absent".utf8))
+        XCTAssertEqual(page.totalEntries, 3); XCTAssertEqual(page.totalSkipped, 1)
+        XCTAssertEqual(page.nextSequence, 3); XCTAssertFalse(page.hasMore)
         XCTAssertEqual(try inventory.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil).generation, initial.generation)
     }
     func testProductionDirectoryRevisionsRemainDurableAndMatchNativeFullStamp() async throws {
@@ -87,9 +74,9 @@ final class CommanderBackupCaptureTests: XCTestCase {
         let slow = source.appendingPathComponent("zz-slow.bin")
         XCTAssertTrue(FileManager.default.createFile(atPath: slow.path, contents: nil))
         let handle = try FileHandle(forWritingTo: slow)
-        try handle.truncate(atOffset: 64 * 1024 * 1024); try handle.close()
+        try handle.truncate(atOffset: 1 * 1024 * 1024); try handle.close()
         let cache = base.appendingPathComponent("directory-feed")
-        let inventory = MobileFolderInventory(directory: cache, commanderIndexer: helper)
+        let inventory = try RustIndexFixture.inventory(directory: cache, helper: helper)
         let id = UUID().uuidString.lowercased(), control = MobileFolderInventory.StreamControl()
         let wake = DispatchSemaphore(value: 0)
         let initial = try inventory.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil)
@@ -137,7 +124,7 @@ final class CommanderBackupCaptureTests: XCTestCase {
         let cRow = try XCTUnwrap(rows.first { $0.entry.path == "visited" && $0.entry.version == c.version })
         XCTAssertLessThan(a.sequence, bRow.sequence); XCTAssertLessThan(bRow.sequence, cRow.sequence)
         // Reopening retains the same generation and all immutable revisions.
-        let reopened = MobileFolderInventory(directory: cache, commanderIndexer: helper)
+        let reopened = try RustIndexFixture.inventory(directory: cache, helper: helper)
         let durable = try reopened.streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, afterSequence: 0)
         XCTAssertEqual(durable.generation, initial.generation)
         XCTAssertEqual(durable.changes.filter { $0.entry.path == "visited" }.map(\.entry.version), [a.entry.version, b.version, c.version])
@@ -157,7 +144,7 @@ final class CommanderBackupCaptureTests: XCTestCase {
         let helper = try helper(), (base, source, bookmark, scope) = try fixture()
         let bytes = Data(repeating: 71, count: 131_073), file = source.appendingPathComponent("payload")
         try bytes.write(to: file)
-        let inventory = MobileFolderInventory(directory: base.appendingPathComponent("bulk-feed"), commanderIndexer: helper)
+        let inventory = try RustIndexFixture.inventory(directory: base.appendingPathComponent("bulk-feed"), helper: helper)
         let id = UUID().uuidString.lowercased()
         let initial = try inventory.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil)
         try inventory.runStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, wake: {})
@@ -178,7 +165,7 @@ final class CommanderBackupCaptureTests: XCTestCase {
         let helper = try helper(), (_, source, bookmark, scope) = try fixture()
         try FileManager.default.createDirectory(at: source.appendingPathComponent("Library"), withIntermediateDirectories: true)
         try Data("user data".utf8).write(to: source.appendingPathComponent("Library/keep"))
-        let inventory = MobileFolderInventory(directory: source.appendingPathComponent("Library/private-inventory"), commanderIndexer: helper)
+        let inventory = try RustIndexFixture.inventory(directory: source.appendingPathComponent("Library/private-inventory"), helper: helper)
         let id = UUID().uuidString.lowercased()
         _ = try inventory.beginStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil)
         try inventory.runStream(scope, id: id, bookmark: bookmark, excludedPaths: [], ignoreRules: nil, wake: {})
@@ -199,7 +186,7 @@ final class CommanderBackupCaptureTests: XCTestCase {
         try Data(repeating: 0x63, count: 8 * 1_048_576 + 17).write(to: source.appendingPathComponent("keep/multipart"))
         let rules = "node_modules/\n*.tmp\n!keep.tmp\n/café.txt\n!Library/\n"
         let expected = try MobileFolderReader.scan(bookmark: bookmark, excludedPaths: ["Library"], ignoreRules: rules)
-        let store = MobileFolderInventory(directory: base.appendingPathComponent("cache"), commanderIndexer: helper)
+        let store = try RustIndexFixture.inventory(directory: base.appendingPathComponent("cache"), helper: helper)
         let capture = try store.prepareBackup(scope, id: UUID().uuidString.lowercased(), generation: UUID().uuidString.lowercased(), bookmark: bookmark, excludedPaths: ["Library"], ignoreRules: rules)
         XCTAssertEqual(capture.coverage, "full"); XCTAssertEqual(capture.totalSkipped, 0)
         XCTAssertThrowsError(try store.read(scope, capture: capture, bookmark: bookmark, offset: 0, ignoreRules: rules), "Provisional Rust rows are private until authorized sealing")
@@ -213,19 +200,40 @@ final class CommanderBackupCaptureTests: XCTestCase {
         try FileManager.default.linkItem(at: source.appendingPathComponent("good"), to: source.appendingPathComponent("alias"))
         try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("outside"), withDestinationURL: base)
         XCTAssertEqual(mkfifo(source.appendingPathComponent("pipe").path, 0o600), 0)
-        let store = MobileFolderInventory(directory: base.appendingPathComponent("cache"), commanderIndexer: helper)
+        let store = try RustIndexFixture.inventory(directory: base.appendingPathComponent("cache"), helper: helper)
         let capture = try store.prepareBackup(scope, id: UUID().uuidString.lowercased(), generation: UUID().uuidString.lowercased(), bookmark: bookmark)
-        XCTAssertEqual(capture.coverage, "partial"); XCTAssertEqual(capture.totalEntries, 1); XCTAssertEqual(capture.totalSkipped, 3)
+        XCTAssertEqual(capture.coverage, "partial"); XCTAssertEqual(capture.totalEntries, 2); XCTAssertEqual(capture.totalSkipped, 2)
         try store.sealBackup(scope, capture: capture, bookmark: bookmark)
         let gaps = try store.readSkipped(scope, capture: capture, bookmark: bookmark, offset: 0).skipped
-        XCTAssertEqual(Set(gaps.map(\.reason.rawValue)), ["duplicate-identity", "symlink", "fifo"])
+        XCTAssertEqual(Set(gaps.map(\.reason.rawValue)), ["duplicate-identity", "fifo"])
+    }
+    func testRealRustLinkTargetsFallbackProvenanceAndOwnedJournalExclusion() throws {
+        let helper = try helper(), (base, source, bookmark, scope) = try fixture()
+        try NativeSymbolicLinks.$receiptDirectory.withValue(base.appendingPathComponent("receipts")) {
+            let root = open(source.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW); defer { close(root) }
+            try NativeSymbolicLinks.create(root, name: "broken", link: NativeSymbolicLink(target: Data("../missing".utf8)))
+            try NativeSymbolicLinks.create(root, name: "raw", link: NativeSymbolicLink(target: Data([0xff, 0x2f, 0x61])))
+            try NativeSymbolicLinks.create(root, name: "fallback", link: NativeSymbolicLink(target: Data("../fallback-target".utf8)), forceUnsupported: true)
+            XCTAssertEqual(mkdirat(root, ".thingtime-link-journal-fixture", 0o700), 0)
+            let journal = openat(root, ".thingtime-link-journal-fixture", O_RDONLY | O_DIRECTORY | O_NOFOLLOW); defer { close(journal) }
+            try NativeSymbolicLinks.register(journal, link: nil, journal: true)
+            try Data("must not upload retained bytes".utf8).write(to: source.appendingPathComponent(".thingtime-link-journal-fixture/retained"))
+            let expected = try MobileFolderReader.scan(bookmark: bookmark)
+            let store = try RustIndexFixture.inventory(directory: base.appendingPathComponent("inventory"), helper: helper)
+            let capture = try store.prepareBackup(scope, id: UUID().uuidString.lowercased(), generation: UUID().uuidString.lowercased(), bookmark: bookmark)
+            XCTAssertEqual(capture.coverage, "full"); XCTAssertEqual(capture.totalSkipped, 0)
+            try store.sealBackup(scope, capture: capture, bookmark: bookmark)
+            let actual = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0).entries
+            XCTAssertEqual(actual.sorted { $0.path < $1.path }, expected.sorted { $0.path < $1.path })
+            XCTAssertEqual(Set(actual.map(\.path)), ["broken", "raw", "fallback"])
+        }
     }
     func testProcessFailureCannotSealOrBecomeEmptySuccess() throws {
         let (base, _, bookmark, scope) = try fixture()
         let script = base.appendingPathComponent("failed-helper")
-        try Data("#!/bin/sh\nprintf '%s\\n' '{\"event\":\"hello\",\"version\":1}'\nexit 1\n".utf8).write(to: script)
+        try Data("#!/bin/sh\nread request\ncase \"$request\" in *status*) printf 'null\\n'; exit 0;; esac\nprintf '%s\\n' '{\"event\":\"hello\",\"version\":1}'\nexit 1\n".utf8).write(to: script)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
-        let store = MobileFolderInventory(directory: base.appendingPathComponent("cache"), commanderIndexer: script), id = UUID().uuidString.lowercased()
+        let store = try RustIndexFixture.inventory(directory: base.appendingPathComponent("cache"), helper: script), id = UUID().uuidString.lowercased()
         XCTAssertThrowsError(try store.prepareBackup(scope, id: id, generation: UUID().uuidString.lowercased(), bookmark: bookmark))
         XCTAssertEqual(try store.backupStatus(scope, id: id, bookmark: bookmark)?.state, "interrupted")
     }
@@ -237,7 +245,7 @@ final class CommanderBackupCaptureTests: XCTestCase {
         let nested = source.appendingPathComponent("nested")
         try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
         for i in 0..<1500 { try Data().write(to: nested.appendingPathComponent("file-\(i)")) }
-        let store = MobileFolderInventory(directory: base.appendingPathComponent("cache"), commanderIndexer: helper), once = Once()
+        let store = try RustIndexFixture.inventory(directory: base.appendingPathComponent("cache"), helper: helper), once = Once()
         let capture = try store.prepareBackup(scope, id: UUID().uuidString.lowercased(), generation: UUID().uuidString.lowercased(), bookmark: bookmark, progress: { count, _ in
             if count > 0 && !once.done { once.done = true; try! Data().write(to: nested.appendingPathComponent("created-during-scan")) }
         })
@@ -251,9 +259,9 @@ final class CommanderBackupCaptureTests: XCTestCase {
         let script = base.appendingPathComponent("waiting-helper")
         // Close stdout but remain alive and ignore TERM: both exit paths must
         // stay cancellable. The shell itself loops, so there is no orphan child.
-        try Data("#!/bin/sh\ntrap '' TERM\nexec 1>&-\nwhile :; do :; done\n".utf8).write(to: script)
+        try Data("#!/bin/sh\nread request\ncase \"$request\" in *status*) printf 'null\\n'; exit 0;; esac\ntrap '' TERM\nexec 1>&-\nwhile :; do :; done\n".utf8).write(to: script)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
-        let store = MobileFolderInventory(directory: base.appendingPathComponent("cache"), commanderIndexer: script), id = UUID().uuidString.lowercased()
+        let store = try RustIndexFixture.inventory(directory: base.appendingPathComponent("cache"), helper: script), id = UUID().uuidString.lowercased()
         let task = Task.detached { try store.prepareBackup(scope, id: id, generation: UUID().uuidString.lowercased(), bookmark: bookmark) }
         try await Task.sleep(for: .milliseconds(150)); task.cancel()
         let started = Date()

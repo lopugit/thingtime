@@ -1,6 +1,6 @@
 'use strict';
 const { governorFor } = require('./folder-resource-governor.cjs');
-const { governedFetch, governedHash } = require('./folder-transfer-process.cjs');
+const { TransferWorkerDisconnected, governedFetch, governedHash } = require('./folder-transfer-process.cjs');
 const { createHash } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
 const { uploadRetry, retryableUploadFailure } = require('./folder-upload.cjs');
@@ -88,7 +88,7 @@ async function uploadFolderBatch({ input, context, signal, assertCurrent, reques
         descriptor.configuration.configuration.localRootId !== input.rootId) throw invalid();
     const governor = governorFor(input, context);
     const governed = !!(governor?.policy.uploadBytesPerSecond || governor?.policy.cpuPercent);
-    const started = now(), deadline = governed ? Infinity : started + 30000, lifetime = new AbortController();
+    const started = now(), lifetime = new AbortController();
     const combined = AbortSignal.any([signal, lifetime.signal, ...(!governed ? [AbortSignal.timeout(180000)] : [])]);
     const states = descriptor.members.map(member => ({ member, prepared: null, confirmed: null, content: null, bytes: null, received: 0, put: 'none', payload: 0, checksum: null }));
     let prepareRounds = 0, verified = false, active = 0;
@@ -151,13 +151,25 @@ async function uploadFolderBatch({ input, context, signal, assertCurrent, reques
                 !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(frame.data)) throw invalid();
             const bytes = Buffer.from(frame.data, 'base64'), size = s.member.write.operation.mutation.source.size;
             if (!bytes.length || bytes.length > 65536 || bytes.toString('base64') !== frame.data || s.received + bytes.length > size) throw invalid();
-            s.bytes ??= Buffer.alloc(size); bytes.copy(s.bytes, s.received); s.received += bytes.length; return { accepted: true };
+            s.bytes ??= Buffer.alloc(size); bytes.copy(s.bytes, s.received); s.received += bytes.length; s.lastPayloadAt = now(); return { accepted: true };
         }
         if (frame.kind === 'put-ready') {
             closed(frame, ['kind', 'ordinal', 'sha256']);
-            if (!s?.prepared || s.put !== 'none' || frame.sha256 !== s.checksum || !s.bytes || s.received !== s.bytes.length ||
-                await governedHash(governor, s.bytes, combined) !== s.checksum || active >= 16 || verified) throw invalid();
-            if (now() >= deadline) { s.bytes.fill(0); s.bytes = null; s.put = 'deadline'; return { status: 'failed', code: 'deadline' }; }
+            if (!s?.prepared || s.put !== 'none' || frame.sha256 !== s.checksum || !s.bytes || s.received !== s.bytes.length || active >= 16 || verified) throw invalid();
+            // Source/transfer quota waits may be long. Once a member's final
+            // payload chunk arrives, retain the bounded dispatch freshness gate
+            // before its explicitly governed hash and transport work begins. Explicit
+            // v3 resource-governed descriptors retain their quota-aware contract.
+            if (!descriptor.configuration.configuration.resourceLimits && now() - (s.lastPayloadAt ?? started) >= 30000) { s.bytes.fill(0); s.bytes = null; s.put = 'deadline'; return { status: 'failed', code: 'deadline' }; }
+            let digest;
+            try { digest = await governedHash(governor, s.bytes, combined); }
+            catch (error) {
+                check(callbackSignal);
+                if (!(error instanceof TransferWorkerDisconnected)) throw error;
+                s.bytes.fill(0); s.bytes = null; s.put = 'failed';
+                return { status: 'failed', code: 'temporarily-unavailable' };
+            }
+            if (digest !== s.checksum) throw invalid();
             check(callbackSignal);
             const freshTarget = async () => {
                 check(callbackSignal);

@@ -30,9 +30,23 @@
             model.status = "Step: " + phase.message.replacingOccurrences(of: "…", with: "")
             model.retry = {}
         }
+        if args.contains("--excluded") {
+            model.title = "Passkey already saved"; model.busy = false; model.status = ""; model.choices = []; model.retry = nil
+            model.message = PasswordProviderPhase.vault.failure(.credentialExcluded)
+            model.cancelTitle = "Return to website"; model.requestedSite = args.contains("--long-site") ? "registration." + String(repeating: "long-subdomain.", count: 7) + "example.test" : "registration.example.test"
+            model.registrationSummary = PasskeyRegistrationPolicy.summary(relyingParty: model.requestedSite, userHandleBytes: 16,
+                clientDataHashBytes: 32, supportsES256: true, excludedCredentialIDs: [Data([1])],
+                catalog: [try! JSONDecoder().decode(PasswordCatalogItem.self, from: Data("{\"id\":\"synthetic\",\"title\":\"Fixture\",\"username\":\"fixture\",\"domains\":[],\"hasPassword\":false,\"hasTotp\":false,\"relyingParty\":\"registration.example.test\",\"credentialId\":\"AQ\"}".utf8))])
+            if args.contains("--large-counts") {
+                let item = try! JSONDecoder().decode(PasswordCatalogItem.self, from: Data("{\"id\":\"synthetic\",\"title\":\"Fixture\",\"username\":\"fixture\",\"domains\":[],\"hasPassword\":false,\"hasTotp\":false,\"relyingParty\":\"".utf8) + Data(model.requestedSite.utf8) + Data("\",\"credentialId\":\"AQ\"}".utf8))
+                model.registrationSummary = PasskeyRegistrationPolicy.summary(relyingParty: model.requestedSite, userHandleBytes: 64,
+                    clientDataHashBytes: 32, supportsES256: true, excludedCredentialIDs: Array(repeating: Data([1]), count: 10_001), catalog: Array(repeating: item, count: 10_001))
+            }
+            model.requestDetailsExpanded = args.contains("--details")
+        }
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
-        let host = NSHostingController(rootView: ProviderView(model: model))
+        let host = NSHostingController(rootView: ProviderView(model: model).background(Color(nsColor: .windowBackgroundColor)))
         let window = NSWindow(contentViewController: host)
         window.setContentSize(NSSize(width: width, height: height))
         window.title = "Thingtime · synthetic provider preview"
@@ -40,11 +54,14 @@
         app.activate(ignoringOtherApps: true)
         if args.contains("--snapshot") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                let renderer = ImageRenderer(content: ProviderView(model: model).frame(width: width, height: height).background(Color(nsColor: .windowBackgroundColor)))
-                renderer.scale = 2
-                if let image = renderer.cgImage,
-                   let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) {
+                // ImageRenderer omits native-backed ScrollView contents. Capture
+                // the laid-out hosting view used by this actual preview window.
+                host.view.layoutSubtreeIfNeeded()
+                if let bitmap = host.view.bitmapImageRepForCachingDisplay(in: host.view.bounds) {
+                    host.view.cacheDisplay(in: host.view.bounds, to: bitmap)
+                    if let png = bitmap.representation(using: .png, properties: [:]) {
                     try? png.write(to: URL(fileURLWithPath: value("--snapshot", "/tmp/thingtime-provider-preview.png")))
+                    }
                 }
                 app.terminate(nil)
             }

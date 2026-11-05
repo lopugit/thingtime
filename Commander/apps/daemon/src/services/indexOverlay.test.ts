@@ -14,7 +14,7 @@ describe('live index overlay', () => {
       'build',
       '--locked',
       '--manifest-path',
-      '../../crates/commander-indexer/Cargo.toml',
+      '../../../filesystem-indexer/crates/indexer/Cargo.toml',
     ]);
   }, 120_000);
   it('handles parent-directory-only create/rename/delete notifications including children and apps, then verifies retirement', async () => {
@@ -26,7 +26,7 @@ describe('live index overlay', () => {
     await writeFile(path.join(original, 'unchanged-child.txt'), 'cached');
     await mkdir(path.join(original, 'Inside.app'));
     const client = new FileSystemIndexerClient({
-      binaryPath: path.resolve('../../crates/commander-indexer/target/debug/commander-indexer'),
+      binaryPath: path.resolve('../../../filesystem-indexer/target/debug/commander-indexer'),
       databasePath: path.join(temporary, 'index.sqlite3'),
     });
     const configuration: IndexConfiguration = {
@@ -44,6 +44,7 @@ describe('live index overlay', () => {
       (config, paths) => client.observe(config, paths),
       (paths) => client.readback(paths, ['fixture']),
       () => undefined,
+      (config, directory, after, limit) => client.listChildren(config, directory, after, limit),
     );
     try {
       await client.index(configuration);
@@ -87,7 +88,7 @@ describe('live index overlay', () => {
     const newPath = path.join(root, 'new.txt');
     await writeFile(oldPath, 'old');
     const client = new FileSystemIndexerClient({
-      binaryPath: path.resolve('../../crates/commander-indexer/target/debug/commander-indexer'),
+      binaryPath: path.resolve('../../../filesystem-indexer/target/debug/commander-indexer'),
       databasePath: path.join(temporary, 'index.sqlite3'),
     });
     const configuration: IndexConfiguration = {
@@ -113,6 +114,7 @@ describe('live index overlay', () => {
       },
       (paths) => client.readback(paths, ['fixture']),
       () => undefined,
+      (config, directory, after, limit) => client.listChildren(config, directory, after, limit),
     );
     try {
       await overlay.apply(configuration, [oldPath]);
@@ -163,10 +165,8 @@ describe('live index overlay', () => {
         entries: paths.map((itemPath) => ({ path: itemPath, records: [], hasDescendants: false })),
       }),
       () => undefined,
-      {
-        openDirectory: async () => {
-          throw new Error('enumeration unavailable');
-        },
+      async () => {
+        throw new Error('enumeration unavailable');
       },
     );
     await overlay.apply(configuration, ['/fixture/parent/kept.txt']);
@@ -210,6 +210,7 @@ describe('live index overlay', () => {
         entries: paths.map((itemPath) => ({ path: itemPath, records: [], hasDescendants: false })),
       }),
       () => undefined,
+      async () => ({ paths: [] }),
     );
     const older = overlay.apply(configuration, ['/fixture/old.txt']);
     await started;
@@ -230,7 +231,7 @@ describe('live index overlay', () => {
     const wal = path.join(state, 'self-index.sqlite3-wal');
     await writeFile(wal, 'one');
     const client = new FileSystemIndexerClient({
-      binaryPath: path.resolve('../../crates/commander-indexer/target/debug/commander-indexer'),
+      binaryPath: path.resolve('../../../filesystem-indexer/target/debug/commander-indexer'),
       databasePath: path.join(temporary, 'index.sqlite3'),
     });
     const configuration: IndexConfiguration = {
@@ -244,6 +245,7 @@ describe('live index overlay', () => {
       },
       (paths) => client.readback(paths, ['fixture']),
       () => undefined,
+      (config, directory, after, limit) => client.listChildren(config, directory, after, limit),
       { excludedDirectories: [state] },
     );
     try {
@@ -265,7 +267,7 @@ describe('live index overlay', () => {
     const parent = path.join(root, 'parent');
     await mkdir(path.join(parent, 'Inside.app'), { recursive: true });
     const client = new FileSystemIndexerClient({
-      binaryPath: path.resolve('../../crates/commander-indexer/target/debug/commander-indexer'),
+      binaryPath: path.resolve('../../../filesystem-indexer/target/debug/commander-indexer'),
       databasePath: path.join(temporary, 'index.sqlite3'),
     });
     const configuration: IndexConfiguration = { sources: [{ id: 'fixture', root, kinds: ['application'] }] };
@@ -273,6 +275,7 @@ describe('live index overlay', () => {
       (config, paths) => client.observe(config, paths),
       (paths) => client.readback(paths, ['fixture']),
       () => undefined,
+      (config, directory, after, limit) => client.listChildren(config, directory, after, limit),
     );
     try {
       await overlay.apply(configuration, [parent]);

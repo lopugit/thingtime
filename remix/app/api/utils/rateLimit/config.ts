@@ -271,11 +271,13 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // (POST /api/v1/admin/ai/models { id, enabled } | { seed } | { probe }) —
   // the seed is a batch write and the probe dials the providers (5 s cap
   // each); enforced fail-closed at the route
+  'admin.mongodb.connections': { limit: 30, windowMs: 60_000, enabled: true },
   'admin.ai.models': { limit: 30, windowMs: 60_000, enabled: true },
   // Thingtime.LopuChatDefaults singleton (GET public / POST admin) — a rare
   // interactive read/save; the public GET keys anonymous callers by IP and
   // the admin POST is enforced fail-closed at the route
   'settings.lopu-prompt': { limit: 30, windowMs: 60_000, enabled: true },
+  'settings.connector-protections': { limit: 180, windowMs: 60_000, enabled: true },
   'settings.lopu-chat-defaults': { limit: 30, windowMs: 60_000, enabled: true },
   // Thingtime.LopuAccess singleton (GET public / POST admin) — the client
   // reads it to render the locked state; the admin POST fails closed
@@ -339,6 +341,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
 	'devices.pairing': { limit: 20, windowMs: 3_600_000, enabled: true },
 	'devices.pairing.claim': { limit: 30, windowMs: 15 * 60_000, enabled: true },
 	'devices.state': { limit: 240, windowMs: 60_000, enabled: true },
+	'devices.sync-control': { limit: 1200, windowMs: 60_000, enabled: true },
 	'devices.commands': { limit: 120, windowMs: 60_000, enabled: true },
 	'devices.node.commands': { limit: 600, windowMs: 60_000, enabled: true },
 	'devices.liveSync': { limit: 120, windowMs: 60_000, enabled: true },

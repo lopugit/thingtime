@@ -10,6 +10,13 @@ const page = (blocks: unknown[], extra: Record<string, unknown> = {}): PublicWeb
 });
 const content = '/api/v1/attachments/content?id=public-photo';
 
+test('saved page presentation overrides allow only literal finite design values after anonymous resolution', () => {
+	const input = page([], { socialPreview: { template: 'night-garden', layout: 'text', title: 'Ignored', images: ['http://internal.invalid'] } });
+	assert.deepEqual(inferPublicWebpageContent(input).overrides, { template: 'night-garden', layout: 'text' });
+	assert.deepEqual(inferPublicWebpageContent({ ...input, ok: false }).overrides, {});
+	assert.deepEqual(inferPublicWebpageContent(page([], { socialPreview: { template: '{query.theme}', layout: { ttArg: 'layout' } } })).overrides, {});
+});
+
 test('nested public Components use default, saved and block arguments only in visible render positions', () => {
 	const input = page([{ type: 'container', children: [{ type: 'component', component: 'hero', args: { title: 'Final heading' } }] }], {
 		description: 'Explicit description'

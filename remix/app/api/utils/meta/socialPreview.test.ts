@@ -5,6 +5,7 @@ import { buildSocialMetaTags, resolveSocialMeta, renderSocialMetaHtml } from './
 import { DEFAULT_PAGE_TITLE, pageTitle } from '../../../utils/pageTitle';
 import type { ResolveWebpageResult } from '../webpages/webpages';
 import { readFileSync } from 'node:fs';
+import { resolveSocialPreviewDesign, SOCIAL_PREVIEW_TEMPLATES, socialPreviewDesign, socialPreviewDesignFromUrl, socialPreviewShareUrl } from '../../../utils/socialPreviewDesign';
 import {
 	normaliseSocialMediaKind,
 	normaliseSocialPreviewPath,
@@ -15,6 +16,53 @@ import {
 	socialPreviewRevision,
 	staticSocialPreview
 } from './socialPreview';
+
+test('presentation choices are a finite client-safe contract with content-aware defaults', () => {
+	assert.equal(SOCIAL_PREVIEW_TEMPLATES.length, 5);
+	assert.deepEqual(socialPreviewDesign({ template: 'night-garden', layout: 'gallery', title: 'injected', image: 'http://internal' }), { template: 'night-garden', layout: 'gallery' });
+	for (const value of [null, [], 'editorial', { template: '__proto__', layout: { ttArg: 'secret' } }]) assert.deepEqual(socialPreviewDesign(value), {});
+	assert.deepEqual(resolveSocialPreviewDesign(staticSocialPreview('/invite')), { template: 'editorial-white', layout: 'text' });
+	assert.deepEqual(resolveSocialPreviewDesign({ kind: 'webpage' }), { template: 'editorial', layout: 'text' });
+	assert.deepEqual(resolveSocialPreviewDesign({ variant: 'image-post', imageCount: 1 }), { template: 'colour-blocks', layout: 'photo' });
+	assert.deepEqual(resolveSocialPreviewDesign({ images: [{}, {}], layout: 'auto' }), { template: 'colour-blocks', layout: 'gallery' });
+	assert.deepEqual(resolveSocialPreviewDesign({ template: 'pink-invitation', layout: 'photo', images: [] }), { template: 'pink-invitation', layout: 'text' });
+});
+
+test('same-origin generated links retain only validated design choices and never redirect', () => {
+	const origin = 'https://thingtime.example';
+	assert.equal(socialPreviewShareUrl(origin, '/post/public?key=secret&previewTheme=night-garden&previewLayout=photo#secret'), `${origin}/post/public?previewTheme=night-garden&previewLayout=photo`);
+	assert.equal(socialPreviewShareUrl(origin, '/invite?previewTheme=invalid&previewLayout=%7Bquery.secret%7D'), `${origin}/invite`);
+	assert.deepEqual(socialPreviewDesignFromUrl('/invite?previewTheme=editorial&previewTheme=night-garden&previewLayout=auto'), { layout: 'auto' });
+	for (const value of ['https://elsewhere.invalid/a', '//elsewhere.invalid/a', 'https://user:password@thingtime.example/a', '/a\\b', '/a\nsecret', 'javascript:alert(1)'])
+		assert.throws(() => socialPreviewShareUrl(origin, value));
+	assert.equal(socialPreviewShareUrl(origin, '/index.html?token=secret'), `${origin}/`);
+});
+
+test('chosen design round-trips through metadata, canonical HTML and cached card URLs while content stays anonymous', async () => {
+	const { resolveSocialMetadata } = await import('./socialMetadata');
+	const { socialMetaFromPreview } = await import('./socialMeta');
+	const origin = 'https://thingtime.example';
+	const path = '/invite?previewTheme=night-garden&previewLayout=gallery&token=private#secret';
+	const metadata = await resolveSocialMetadata(new Request(`${origin}/api/v1/social-previews?path=${encodeURIComponent(path)}`), async (_, value) => staticSocialPreview(value));
+	assert.deepEqual(metadata.design, { template: 'night-garden', layout: 'text' });
+	assert.equal(metadata.choices.templates.length, 5);
+	assert.equal(metadata.url, `${origin}/invite?previewTheme=night-garden&previewLayout=gallery`);
+	const image = new URL(metadata.image.url);
+	assert.equal(image.origin, origin);
+	assert.equal(image.pathname, '/social-card');
+	assert.equal(image.searchParams.get('path'), '/invite');
+	assert.equal(image.searchParams.get('previewTheme'), 'night-garden');
+	assert.equal(image.searchParams.get('previewLayout'), 'gallery');
+	const html = renderSocialMetaHtml(socialMetaFromPreview(origin, staticSocialPreview(path)));
+	const served = await resolveSocialMeta(new Request(`${origin}${path}`));
+	assert.equal(served.canonical, metadata.url);
+	assert.equal(served.tags.find((tag) => tag.key === 'og:image')?.content, metadata.image.url);
+	assert.match(html, /previewTheme=night-garden&amp;previewLayout=gallery/);
+	assert.doesNotMatch(JSON.stringify(metadata) + html, /private|secret|token/);
+	assert.equal(metadata.publicContent, false);
+	const failed = await resolveSocialMetadata(new Request(`${origin}/api/v1/social-previews?path=${encodeURIComponent(path)}`), async () => { throw new Error('private DB failure'); });
+	assert.deepEqual(failed, metadata);
+});
 
 test('all declared routes get automatic cards while unknown paths keep safe brand fallback', async () => {
 	for (const [path, title] of [
@@ -27,9 +75,7 @@ test('all declared routes get automatic cards while unknown paths keep safe bran
 		const values = new Map(tags.map((tag) => [tag.key, tag.content]));
 		assert.equal(values.get('og:title'), title);
 		assert.equal(values.get('twitter:title'), title);
-		if (path === '/' || path.startsWith('/unknown/'))
-			assert.equal(values.get('og:image'), 'https://thingtime.example/branding/presskit/thingtime-og-card-1200x630.png?v=20260917');
-		else assert.match(values.get('og:image') || '', /\/social-card\?/);
+		assert.match(values.get('og:image') || '', /\/social-card\?/);
 		assert.equal(values.get('twitter:image'), values.get('og:image'));
 		assert.equal(values.get('twitter:card'), 'summary_large_image');
 		assert.doesNotMatch(renderSocialMetaHtml(tags), /secret-token|token=secret/);
@@ -65,7 +111,7 @@ test('social preview paths never become a redirect or an arbitrary route', () =>
 test('social-card URLs carry only a normalized local path and a safe revision', () => {
 	assert.equal(
 		socialPreviewCardUrl('https://thingtime.example', '/post/hello?source=chat', '2026-09-04T12:00:00.000Z'),
-		'https://thingtime.example/social-card?path=%2Fpost%2Fhello&r=brand-20261029&v=2026-09-04T12%3A00%3A00.000Z'
+		'https://thingtime.example/social-card?path=%2Fpost%2Fhello&r=design-20261105&v=2026-09-04T12%3A00%3A00.000Z'
 	);
 });
 
@@ -225,6 +271,23 @@ test('every canonical post family and thread shape gets a distinct social varian
 	assert.ok(reply.badges.includes('To Jade'));
 });
 
+test('multiline posts use their opening paragraph as the headline without discarding the body description', () => {
+	for (const separator of ['\n\n', '\r\n \t\r\n']) {
+		const preview = socialPreviewFromPublicPost('/post/configuration', {
+			author: { displayName: 'Nikk' },
+			thingtime: ['post'],
+			type: 'text',
+			text: `\nDream Vito configuration${separator}#1 Panel Van: https://example.com/configurator`,
+			attachments: [],
+			images: [],
+			tags: []
+		});
+		assert.equal(preview.title, 'Nikk: Dream Vito configuration');
+		assert.match(preview.description, /#1 Panel Van: https:\/\/example.com\/configurator/);
+		assert.equal(preview.variant, 'text-post');
+	}
+});
+
 test('an anonymously readable unlisted photo post has contextual metadata but stays noindex', async () => {
 	const { publicPostPreview } = await import('./socialPreview');
 	const { socialMetaFromPreview } = await import('./socialMeta');
@@ -256,6 +319,7 @@ test('invitation links have a shared card without reading or validating their pr
 	assert.equal(expected.kind, 'invite');
 	assert.equal(expected.variant, 'invite');
 	assert.equal(expected.title, 'You’re invited to Thingtime');
+	assert.equal(expected.description, 'Make yourself at home.');
 	assert.equal(expected.indexable, false);
 	assert.equal(expected.publicContent, undefined);
 	// Fragments never reach a real HTTP server. These inputs also cover the
@@ -265,7 +329,8 @@ test('invitation links have a shared card without reading or validating their pr
 		'#valid-private-token',
 		'#expired-private-token',
 		'#%E0%A4%A',
-		'?token=private&email=person%40example.com&gift=99#<script>'
+		'?token=private&email=person%40example.com&gift=99#<script>',
+		'?token=private#<SCRIPT>'
 	]) {
 		const meta = await resolveSocialMeta(new Request(`https://thingtime.example/invite${suffix}`));
 		const tags = new Map(meta.tags.map((tag) => [tag.key, tag.content]));
@@ -275,7 +340,7 @@ test('invitation links have a shared card without reading or validating their pr
 		assert.equal(tags.get('og:image'), socialPreviewCardUrl('https://thingtime.example', '/invite', expected.revision));
 		assert.equal(tags.get('robots'), 'noindex, follow');
 		assert.equal(meta.canonical, 'https://thingtime.example/invite');
-		assert.doesNotMatch(renderSocialMetaHtml(meta), /private|expired|person|%E0|gift|<script>/);
+		assert.doesNotMatch(renderSocialMetaHtml(meta), /private|expired|person|%E0|gift|<script>/i);
 	}
 	assert.equal(pageTitle('/invite'), 'Thingtime - Invitation');
 	assert.equal(pageTitle('/invite#private', '[LC]'), '[LC] Thingtime - Invitation');
@@ -324,7 +389,7 @@ test('metadata API accepts only same-origin paths and drops queries, fragments a
 		['https://thingtime.example', '/post/public'],
 		['https://thingtime.example', '/post/public']
 	]);
-	assert.deepEqual(Object.keys(anonymous).sort(), ['canonical', 'description', 'image', 'publicContent', 'title', 'type', 'url']);
+	assert.deepEqual(Object.keys(anonymous).sort(), ['canonical', 'choices', 'description', 'design', 'image', 'publicContent', 'title', 'type', 'url']);
 	assert.equal(anonymous.canonical, 'https://thingtime.example/post/public');
 	assert.equal(anonymous.title, 'Public title');
 	assert.equal(anonymous.image.width, 1200);

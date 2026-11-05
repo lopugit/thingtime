@@ -22,6 +22,8 @@
 // img-src / media-src allow https:. Embeds render as link-out cards, never
 // iframes, so frame-src stays 'self' (docs design-bundle previews).
 
+import { FIRST_PARTY_SSO_HUB_ORIGINS } from '../app/components/Account/ssoHubOrigins.mjs';
+
 // The virtual-hosted S3 endpoint the signed part/content URLs use. Mirrors
 // api/utils/attachments/config.ts (getPrivateS3Config) without importing
 // server code into this build-time script.
@@ -52,6 +54,12 @@ const directives = ({ dev = false } = {}) => ({
 	'media-src': ["'self'", 'data:', 'blob:', 'https:'],
 	'connect-src': [
 		"'self'",
+		// AutoLoginPopup uses the selected data environment's first-party hub
+		// for FedCM even on foreign preview origins. Chrome checks its config
+		// and endpoint requests against this page's connect-src. Both built-in
+		// authorities can be selected independently of the deployment URL;
+		// custom hub overrides must still satisfy the deployed policy.
+		...FIRST_PARTY_SSO_HUB_ORIGINS,
 		// Opt-in incoming mail uses a token-paired loopback adapter. Keep this
 		// fixed origin; never permit arbitrary localhost ports or network hosts.
 		'http://127.0.0.1:17879',
@@ -101,7 +109,7 @@ export const devCsp = buildCsp({ dev: true });
 // exception hash-only: never broaden the application policy with
 // 'unsafe-inline'. pluginLimitlessCore.test.ts proves this hash still matches
 // renderThingtimeMcpUi() whenever the embedded app changes.
-export const mcpLabScriptHash = "'sha256-InujfRsBJ3VWJN0FJ9O1huZAeiHmJtIQbhm2Q3ZHwxE='";
+export const mcpLabScriptHash = "'sha256-EIabPPWdF7FAxu5/3Y6fMmhH4wbbHXK51o1HOg8YzA8='";
 export const mcpLabCsp = serialize({
 	...directives(),
 	'script-src': [...directives()['script-src'], mcpLabScriptHash]

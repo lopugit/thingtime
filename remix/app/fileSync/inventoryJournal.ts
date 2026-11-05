@@ -1,3 +1,4 @@
+import { parseSymbolicLink } from './symbolicLink';
 import { assertBackupCapturePolicy, parseNativeBackupCapture, parseNativeSkippedPage, type NativeBackupCapture, type NativeSkippedPage } from './nativeInventory';
 import { JOURNAL_RETENTION_STORE, registerJournalMetadata, forgetJournalMetadata } from './journalRetention';
 import { inventorySyncEntry, parseCloudInventoryNode, parseCloudInventoryRoot, type CloudInventoryNode, type CloudInventoryRoot } from './cloudInventory';
@@ -66,7 +67,7 @@ export function inventoryJournal(db: IDBDatabase, access: JournalAccess, keyRang
 		if (!validSyncEntry(value)) throw Error('Invalid inventory entry.');
 		return { path: value.path, id: value.id, version: value.version, kind: value.kind, size: value.size, sha256: value.sha256,
 			...(value.fingerprint ? { fingerprint: { algorithm: value.fingerprint.algorithm, partSizeBytes: value.fingerprint.partSizeBytes,
-				partCount: value.fingerprint.partCount, sha256: value.fingerprint.sha256 } } : {}) };
+				partCount: value.fingerprint.partCount, sha256: value.fingerprint.sha256 } } : {}), ...(value.symbolicLink ? { symbolicLink: parseSymbolicLink(value.symbolicLink) } : {}) };
 	};
 	const validateRow = (row: Row, header: InventoryHeader, primaryKey?: IDBValidKey): SyncEntry => {
 		if (!row) throw Error('Inventory entry is unavailable.');

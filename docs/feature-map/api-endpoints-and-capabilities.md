@@ -1,9 +1,57 @@
 # API endpoints and capabilities
 
+## Connector confirmations and large mutation plans
+
+`api.settings-connector-protections` 1.0.0 registers GET/POST
+`/api/v1/settings/connector-protections`; the current owning account alone may
+write its ten confirmation preferences, with `X-Thingtime-Expected-Actor` and
+same-origin validation. Connected Things PATs can read their own effective
+policy but cannot disable it. Missing settings default to enabled; failed
+negotiation/read requires confirmation. `api.chatgpt-mcp` 2.0.0 uses compact
+signed preview references, encrypted staged plans, paged review/history and
+single-use application. Current account preferences are checked again at
+application, including the underlying operation and workflow/undo rules.
+Run `test:chatgpt`, `test:api-capabilities`, and
+`test:connector-mutations:acceptance`. See the hosted connector documentation
+for staged text parts and unavoidable upstream transport constraints.
+
+`api.devices` and `api.devices-node-state` 1.14.0 add optional host resource
+measurements to the existing device state mirror. `DeviceResources.swift`
+samples host counters, `ThingtimeAPIClient` sends the fields only to a
+compatible paired origin, and `normalizeDeviceState` validates the scalar
+allowlist for writes and the owner-only read projection. Older snapshots omit
+these fields. Run `test:devices`, `test:api-capabilities`, and the
+`DeviceResourcesTests` Swift suite. See the [native node guide](../../macos/ThingtimeNode/README.md).
+
+`api.devices-sync-control` 1.1.0 adds `/api/v1/devices/sync-control` for the
+account browser and installed sync worker. `deviceSyncControl.ts` authenticates
+the owner and current device pairing, delivers an immutable request once, and
+accepts a result only from its claiming lease. Protected `device-sync-control`
+Things reuse the device queue/unique-key indexes, secure BinData payloads and
+shared control TTL; no new collection or index is introduced. File bytes and
+native grants remain on the device. Optional owner-private `roots[].sourcePath`
+location metadata survives the encrypted status result; it grants no ancestor
+access and never appears in a public manifest. Run `test:devices`, `test:api-capabilities`
+and `test:schemas`; see [browser device sync](../browser-device-sync.md).
+
+`api.admin-mongodb-connections` 1.1.0 registers the private administrator
+`GET /api/v1/admin/mongodb/connections` in the docs registry and Nitro map.
+The shared `useApi` client negotiates it against the selected origin. Its reply
+separates optional selected-server totals from paginated runtime/pool observations
+and explicitly declares incomplete coverage. Optional monitoring topology models,
+pool retention settings and allowlisted cumulative request-feature use explain
+deployment costs without claiming measured monitoring or exclusive socket use.
+Run `test:mongodb-connections`,
+`test:api-capabilities` and `scripts/mongodb-connections-acceptance.mjs`; see
+[connection inventory](../mongodb-connections.md).
+
 Private task reporting publishes `api.agent-reporting` 1.0.0 on
 `POST /api/v1/agents/reporting`; both manifests derive it from `apiDocs.ts` and
 the Nitro route map. The ChatGPT MCP surface publishes `api.chatgpt-mcp` 1.1.0
-and its separate `chatgpt.agent-reporting` 1.0.0 contract. Its four tools
+and its separate `chatgpt.agent-reporting` 1.0.0 contract. OAuth authorization
+publishes `api.chatgpt-oauth-authorize` 1.2.0 and `chatgpt.oauth` 1.11.0 for
+the issuer-bound Codex CIMD and its exact ephemeral loopback callback.
+The reporting tools
 negotiate reporting, Characters and overview at the connected account's exact
 origin, and require `agents.report` independently of `things`. Run
 `test:agent-reporting`, `test:chatgpt` and `test:api-capabilities`; see
@@ -136,6 +184,10 @@ Saved Webpage writes with editable intrinsic `tt-form`, `tt-select`, `tt-style`,
 `tt-change` and `tt-mapbox` blocks require `api.things` 1.44.0 on create and
 `api.things-update` 1.14.0 on update. Builder negotiates these before saving;
 `api.webpages-resolve` remains the independent read contract.
+
+Stored map source Actions are discovered through shared composition
+(`api.actions-run` 1.39.0) and retargeted to their copied IDs in private copies
+(`api.things-fork` 1.8.0). Map inputs and runtime row values do not grant access.
 
 ## Where the code lives
 
@@ -512,6 +564,7 @@ the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
 
+
 ## Mapbox provider integration
 
 `POST /api/v1/maps` negotiates `api.maps` 1.0.0. `api/utils/maps/route.ts`
@@ -538,6 +591,13 @@ The dispatcher records allowlisted storage failure codes without logging respons
 bodies. See [storage recovery](../storage-recovery.md) for transactional queue,
 worker, controller gates and the scheduled production monitor.
 
+
+Connections catalog, account/list, unlink, feed, filters and OAuth begin/callback
+publish independent 2.0.0 contracts through `apiDocs.ts` and both generated
+manifests. The existing `useApi` connection methods negotiate these requirements.
+There is no new endpoint. Owner-private encrypted grants replace shared tokens;
+OAuth app configuration is exact-origin/environment scoped. Read the auth map,
+README social OAuth setup and TESTING before provider acceptance.
 ## Environment gateway and index readiness
 
 The negotiated ingress contract and connection-mode policy are summarized at the
@@ -558,7 +618,11 @@ environment partitioning and outstanding live rollout acceptance.
 
 ## Public social metadata
 
-`GET /api/v1/social-previews?path=` exposes `api.social-previews` 1.1.0.
+`GET /api/v1/social-previews?path=` exposes `api.social-previews` 1.2.0.
+`api.social-card` 1.4.0 and `utils/socialPreviewDesign.ts` share five template
+IDs and four layout choices. Only `previewTheme`/`previewLayout` survive into
+share metadata and matching canonical URLs so each chosen card stays identifiable. The anonymous JSON
+projection adds resolved design and choice catalogues.
 `meta/socialMetadata.ts` reuses the anonymous `resolveSocialPreview` projection
 and `socialMetaFromPreview`; the route resets custom data-plane selection and
 never resolves caller identity. Same-origin inputs lose query/fragment before
@@ -579,3 +643,31 @@ remain optional overrides. Runtime sources, Actions, private bindings and system
 and semantic version negotiation still apply. See
 [the automatic metadata contract](../seo-social-metadata.md).
 Run `test:social-previews` and `test:api-capabilities`.
+
+Named Connections management is opt-in at `api.connections`,
+`api.connections-oauth-begin`, `api.connections-oauth-callback` and
+`api.connections-unlink` 2.1. `POST /api/v1/connections/named`
+(`api.connections-named` 1.0) verifies exact actor, origin, connection ID and
+a fixed operation. Token envelopes never cross the response boundary.
+Generic Things 1.46.3 also keeps private account and named grant metadata
+behind the origin-scoped Connections API. See
+`test:connections:oauth` and `test:api-capabilities`.
+
+Connection provider artwork negotiates `api.connections-provider-icon` 1.0.0.
+`GET /api/v1/connections/provider-icon?provider=<built-in-id>` serves cached
+PNG bytes, 204 when unavailable, or 404 for an unknown provider. This public
+asset stays on the document origin without opening a data-plane connection or
+forwarding user headers to the provider. Verify both manifests and route
+registration with `test:api-capabilities` and `test:connections:built`.
+
+## Dynamic map workspaces
+
+`api.things` 1.47.0 / `api.things-update` 1.16.0 accept editable `tt-upload` blocks.
+`api.webpages-resolve` 1.9.0 identifies the updated page contract.
+`PageActionSurface` and `webpageRuntime` support `$ui` query `scope: page`;
+`Builder/Maps/` renders custom marker text, labels, icon lists and authorized
+attachment avatars. `useWebpage` negotiates the upload save minimums.
+`GET /things` numeric summaries reuse canonical ACL-checked `listThings` pages
+through `api/utils/things/numericSummary.ts`, with exact schema/parent filters,
+no item-count cap and no partial success. Run the summary, map overlay/data,
+local UI, Webpage and capability tests plus live saved-page acceptance.

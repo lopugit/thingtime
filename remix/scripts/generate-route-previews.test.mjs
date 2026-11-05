@@ -28,13 +28,15 @@ test('actual eager/lazy route syntax discovers nested, index, alias and optional
       {path:'*',element:<Eager/>}
     ]}]);`);
   write('routes/eager.tsx', `throw new Error('Browser module must never execute');
-    export const socialPreview = { title:'A public override', description:'Optional public copy', badges:['One'], variant:'docs', pageTitle:'Alpha' } as const;
+    export const socialPreview = { title:'A public override', description:'Optional public copy', badges:['One'], variant:'docs', pageTitle:'Alpha', template:'night-garden',layout:'text' } as const;
     export default () => <h1>Not scraped</h1>;`);
   write('routes/named.tsx', `export const socialPreview = {title:'Named module'}; export function Named(){ return null; }`);
   write('routes/docs.tsx', `export const socialPreview = {description:'Docs copy'} satisfies Record<string, unknown>;`);
   const { entries } = extractRoutePreviews({ root });
   assert.deepEqual(entries.map((entry) => entry.pattern), ['/', '/', '/alias', '/alpha', '/docs', '/docs', '/docs/:section?', '/named', '/redirect']);
   assert.equal(entries.find((entry) => entry.pattern === '/alpha').preview.title, 'A public override');
+  assert.equal(entries.find((entry) => entry.pattern === '/alpha').preview.template, 'night-garden');
+  assert.equal(entries.find((entry) => entry.pattern === '/alpha').preview.layout, 'text');
   assert.deepEqual(entries.find((entry) => entry.pattern === '/alias').preview, entries.find((entry) => entry.pattern === '/alpha').preview);
   assert.equal(entries.find((entry) => entry.pattern === '/named').preview.title, 'Named module');
   assert.equal(entries.find((entry) => entry.pattern === '/docs/:section?').label, 'Docs');
@@ -46,7 +48,7 @@ test('override extraction allows only safe literal display fields and cannot pub
   write('routes/page.tsx', `export const socialPreview = {
     title: evaluateSecret(), description: 'private ' + account.email,
     get eyebrow(){ return 'hidden'; }, ...privateData,
-    variant:'not-a-card', badges:['One', getSecret()], publicContent:true,indexable:true,
+    variant:'not-a-card',template:'untrusted',layout:runtimeChoice(), badges:['One', getSecret()], publicContent:true,indexable:true,
     images:[{url:'http://private.invalid'}],url:'https://other.invalid',
     pageTitle:'Safe page', revision:'safe-revision'
   };`);

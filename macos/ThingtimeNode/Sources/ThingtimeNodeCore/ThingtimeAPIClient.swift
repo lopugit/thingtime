@@ -47,13 +47,25 @@ private actor DeviceCapabilityCache {
     private var batteryDetails = false
     private var fileSyncIdentity = false
     private var menuBar = false
+    private var resources = false
     private var scripts = false
     func isFresh() -> Bool { checkedAt.map { Date().timeIntervalSince($0) < 300 } ?? false }
     func supportsBatteryDetails() -> Bool { batteryDetails }
     func supportsFileSyncIdentity() -> Bool { fileSyncIdentity }
     func supportsMenuBar() -> Bool { menuBar }
+    func supportsResources() -> Bool { resources }
     func supportsScripts() -> Bool { scripts }
-    func accept(supportsBatteryDetails: Bool, supportsFileSyncIdentity: Bool, supportsMenuBar: Bool, supportsScripts: Bool) { batteryDetails = supportsBatteryDetails; fileSyncIdentity = supportsFileSyncIdentity; menuBar = supportsMenuBar; scripts = supportsScripts; checkedAt = Date() }
+    func accept(
+        supportsBatteryDetails: Bool, supportsFileSyncIdentity: Bool, supportsMenuBar: Bool,
+        supportsResources: Bool, supportsScripts: Bool
+    ) {
+        batteryDetails = supportsBatteryDetails
+        fileSyncIdentity = supportsFileSyncIdentity
+        menuBar = supportsMenuBar
+        resources = supportsResources
+        scripts = supportsScripts
+        checkedAt = Date()
+    }
 }
 
 public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
@@ -94,6 +106,14 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
               let version = features["api.devices-node-state"]?["version"] as? String else { return false }
         let parts = version.split(separator: ".").compactMap { Int($0) }
         return parts.count == 3 && parts[0] == 1 && parts[1] >= 13
+    }
+    static func supportsResources(_ data: Data, origin: URL) -> Bool {
+        guard compatibleManifest(data, origin: origin),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [String: [String: Any]],
+              let version = features["api.devices-node-state"]?["version"] as? String else { return false }
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        return parts.count == 3 && parts[0] == 1 && parts[1] >= 14
     }
     static func supportsScripts(_ data: Data, origin: URL) -> Bool {
         guard compatibleManifest(data, origin: origin),
@@ -218,7 +238,13 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         guard let response = raw as? HTTPURLResponse, response.statusCode == 200,
               response.url?.scheme == baseURL.scheme, response.url?.host == baseURL.host, response.url?.port == baseURL.port,
               data.count <= 2_097_152, Self.compatibleManifest(data, origin: baseURL) else { throw ThingtimeAPIClientError.incompatibleCapabilities }
-        await capabilityCache.accept(supportsBatteryDetails: Self.supportsBatteryDetails(data, origin: baseURL), supportsFileSyncIdentity: Self.supportsFileSyncIdentity(data, origin: baseURL), supportsMenuBar: Self.supportsMenuBar(data, origin: baseURL), supportsScripts: Self.supportsScripts(data, origin: baseURL))
+        await capabilityCache.accept(
+            supportsBatteryDetails: Self.supportsBatteryDetails(data, origin: baseURL),
+            supportsFileSyncIdentity: Self.supportsFileSyncIdentity(data, origin: baseURL),
+            supportsMenuBar: Self.supportsMenuBar(data, origin: baseURL),
+            supportsResources: Self.supportsResources(data, origin: baseURL),
+            supportsScripts: Self.supportsScripts(data, origin: baseURL)
+        )
     }
 
 
@@ -349,6 +375,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             let soundEffectsMuted: Bool?
             let brightness: Double?
             let menuBar: MenuBarTelemetry?
+            let resources: DeviceResourceTelemetry?
             let openApps: [App]
             let audioDevices: [AudioDevice]
             let wifi: WiFi
@@ -522,6 +549,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         try await requireCapabilities()
         let detailedBattery = await capabilityCache.supportsBatteryDetails()
         let menuBarSupported = await capabilityCache.supportsMenuBar()
+        let resourcesSupported = await capabilityCache.supportsResources()
         let telemetry = heartbeat.telemetry
         let brightness = telemetry.displays.first(where: { $0.isMain })?.brightness
         var connectors = [StateBody.Connector(
@@ -554,6 +582,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 soundEffectsMuted: telemetry.soundEffectsOutputMuted,
                 brightness: brightness,
                 menuBar: menuBarSupported ? telemetry.menuBar : nil,
+                resources: resourcesSupported ? telemetry.resources : nil,
                 openApps: Array(telemetry.runningApplications.compactMap { application in
                     guard let identifier = application.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
                           !identifier.isEmpty else { return nil }

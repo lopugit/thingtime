@@ -273,7 +273,7 @@
     "label": "Invite",
     "preview": {
       "title": "You’re invited to Thingtime",
-      "description": "Join your people on Thingtime. Create an account to accept your invitation and make yourself at home.",
+      "description": "Make yourself at home.",
       "eyebrow": "THINGTIME · AN INVITATION",
       "badges": [
         "Your people",
@@ -281,7 +281,7 @@
       ],
       "variant": "invite",
       "pageTitle": "Invitation",
-      "revision": "invite-20261029"
+      "revision": "invite-20261105"
     }
   },
   {

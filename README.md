@@ -1532,6 +1532,17 @@ on the same document. Docs: `/docs/api` → things.
 
 ## MongoDB
 
+Administrators can inspect **Admin → MongoDB connections** at
+`/admin/mongodb-connections`, also available in Settings → Admin. Editable cards
+group observed clients by deployment, showing in-use and idle application sockets,
+a clearly labeled monitoring/handshake model, and the API features using each
+shared client. Runtime and pool details explain concurrency and idle retention.
+Database-reported totals remain separate and may be unavailable on the selected tier;
+loaded observations and models are not an exhaustive live Atlas count.
+This uses the existing home MongoDB/auth configuration and admin allowlist, with
+no new provider secret or Vercel variable. See [connection inventory](docs/mongodb-connections.md)
+for privacy, attribution limits, fork setup and real-API verification.
+
 MongoDB powers database-backed API routes. Incomplete local or deployed servers
 return a configuration error; they do not silently forward to production. The
 installed desktop shell has its own explicit selected-API bridge. For one active
@@ -4822,6 +4833,28 @@ see [selected-folder setup and limits](android/README.md#selected-folders).
 Release signing
 and store distribution remain separate setup; never commit signing keys.
 
+### Mac folder sync resource controls
+
+Open **Things → your Mac → Device sync & backup**. The device-wide usage
+summary shares one budget across that account's folder connections. Its default
+transfer allowance is **5 Mbps total for upload and download combined**
+(625,000 bytes/second), with a separate **5 Mbps file-content scan/read allowance**
+and a **15% sync CPU target**. Lower per-connection limits still apply. The CPU
+target is adaptive backpressure, not an operating-system hard ceiling; metadata
+walking is controlled by CPU/concurrency rather than pretending directory
+entries have a network bitrate. These local preferences require no new secret
+or environment variable and survive connection switching. Saving limits does
+not grant a folder or start a paused job.
+
+The summary identifies measured sync scopes and leaves unavailable measurements
+unavailable. Memory attributed only to an indexer is not whole-app memory.
+Collapsed folder cards show **To Thingtime** (upload) and **To this Mac**
+(download) separately; incomplete discovery means totals can still grow.
+Native folder permissions, conflict review and explicit start/pause remain on
+the executing device. The [browser/device control runbook](docs/browser-device-sync.md)
+documents capability negotiation and isolated acceptance. A packaged client or
+passing fixture does not establish deployment to a selected production origin.
+
 ### Verifying file-sync content fingerprints locally
 
 The existing content endpoint advertises `api.attachment-content` 1.14.0 and
@@ -6398,6 +6431,15 @@ this host/Electron capability. Status reads do not contact the server or establi
 that macOS AutoFill is enabled; verify those requirements separately. Keep an
 existing custom host's OAuth/login behavior when updating native components.
 
+### Shared Rust filesystem engine
+
+All first-party Rust indexing code lives in the top-level
+[`filesystem-indexer/`](filesystem-indexer/README.md) Cargo workspace. Commander,
+Thingtime Mac/Electron and iOS reference the same local source and lockfile;
+nothing is published to a package registry. Native builds compile and embed the
+required helper or static archive. Platform adapters retain folder permissions,
+exact-version file operations and UI responsibilities.
+
 ### Commander-backed Mac backup indexing
 
 The signed macOS node bundles the repository's `commander-indexer` Rust binary.
@@ -6737,3 +6779,83 @@ Local acceptance for this change used the task-owned dev stack at
 `http://127.0.0.1:18210` with a disposable replica at `127.0.0.1:17343`.
 A public Funnel was intentionally not provisioned for this disposable admin
 fixture; the isolated local acceptance environment is stopped after testing.
+
+### Password confirmation/device trust checks
+
+[Password confirmation preferences](docs/password-verification-preferences.md)
+use the existing account sessions, vault encryption and protected Things; no new
+secret/environment variable or database index is required. Run
+`pnpm --dir remix run test:passwords:verification` for its disposable API replica.
+The opt-in `test:passwords:verification-ui` also requires an installed Playwright
+module (`THINGTIME_TEST_PLAYWRIGHT_MODULE=<absolute-path>/index.mjs`) and a browser
+binary cache (`PLAYWRIGHT_BROWSERS_PATH=<absolute-cache-path>` when needed). It
+uses its own synthetic sign-in, browser process/profile and loopback18090/18091,
+then closes them; never point this fixture at a personal profile or database.
+
+
+### Named auth connections
+
+In **Connections → Named auth connections**, choose a provider, give the
+connection a name, and select its allowed operations. The same external
+account can appear more than once, even with the same access, and each named
+connection has its own encrypted credential. **Reconnect** uses the same
+named ID and requires the same external account. **Remove local connection**
+retires only that local credential. It does not call provider revocation.
+
+The card separates the scopes requested from the provider, scopes the provider
+explicitly reported, and operations Thingtime permits. Choose provider
+permissions separately from allowed operations. Google account offers verified
+profile and email reads. Google Workspace service cards and Facebook can save
+explicitly selected provider permissions for future supported use. Their only
+executable operation here is saved account identity. Providers with no
+configurable permission catalog use their standard consent. See the official
+[Google scope catalog](https://developers.google.com/identity/protocols/oauth2/scopes),
+[Calendar permissions](https://developers.google.com/workspace/calendar/api/auth),
+[Drive permissions](https://developers.google.com/workspace/drive/api/guides/api-specific-auth),
+and [Meta permissions edge](https://github.com/facebook/facebook-nodejs-business-sdk/blob/main/src/objects/user.js).
+Bluesky exchanges the supplied app password for a separate session and stores
+only the session credential. Provider APIs may share grants or enforce their
+own limits. Google can invalidate older refresh tokens and its revoke endpoint
+can affect other grants in the same project. These are provider behaviors and
+do not limit how many named connections Thingtime saves.
+
+The **Use a saved connection** picker calls a fixed server operation using
+the selected ID. API clients negotiate `api.connections-named` 1.0 and
+Connections management 2.1 before using named features. Credentials and
+arbitrary provider requests are never returned or accepted by that contract.
+Existing feed connections are separate and keep their existing behavior.
+
+### Social OAuth platform vault setup
+
+Connections API 2.0 uses fixed encrypted admin-secret labels, including
+`connections-google-oauth` and `connections-facebook-oauth`. Provision or update
+the existing label through authorized platform-vault controls; do not create
+duplicate labels. Ambiguous labels fail closed. `google-mail-oauth` remains a
+separate mail integration and is not implicitly reused. Legacy provider client
+ID/secret environment variables are not a fallback.
+
+Each encrypted secret contains this JSON shape (placeholder values only):
+
+```json
+{"environments":{"production":{"origins":{"https://thingtime.com":{"clientId":"PROVIDER_CLIENT_ID","clientSecret":"PROVIDER_CLIENT_SECRET","redirectUri":"https://thingtime.com/api/v1/connections/oauth/callback"}}}}}
+```
+
+Use the deployment's explicit data-environment ID and exact selected origin.
+Register that exact callback in the provider console. Preview and local origins
+need their own entries and approved callback registrations; they cannot borrow
+production configuration. Keep the existing server vault bootstrap keys in their
+approved secret stores. Never put client secrets in client Things or source.
+
+The Google identity card requests openid/profile/email with account selection,
+offline access and PKCE. Google service cards request their own permissions.
+Facebook account linking requests public_profile only; the posts provider is a
+separate user_posts grant. Provider testing mode, eligible test accounts, app
+review and publication remain provider prerequisites. A configured card only
+proves valid vault configuration, not real provider consent or API permission.
+
+Authenticated grants are encrypted per Thingtime owner/account and saved with
+origin/environment/client binding. Reconnect migrates only the caller's legacy
+link while preserving its ID; shared legacy tokens are refused until reconnect.
+Secret rotation keeps compatible grants; changing client, callback or environment
+requires a fresh connection. Disconnect and token refresh serialize through the
+home-plane transactional account path. No provider request API is added here.

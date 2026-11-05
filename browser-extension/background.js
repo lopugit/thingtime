@@ -1,7 +1,14 @@
+import {createAccountController} from './accounts.js';
 import {DEFAULT_ORIGIN, PROVIDER_PATH, safeOrigin, providerOrigin, senderOrigin, matchesDocument, validRequest, safeError, hookDiagnostics} from './protocol.js';
+import {createVaultController} from './vault.js';
+import {createWorkspaceController, workspacePreferences, sameWorkspaceTarget} from './workspace.js';
 
 const pending = new Map();
-const settings = async () => ({enabled: false, origin: DEFAULT_ORIGIN, ...await chrome.storage.local.get(['enabled', 'origin'])});
+const workspace = createWorkspaceController(chrome, safeOrigin);
+chrome.action.onClicked.addListener(tab => { void workspace.open(tab).catch(() => {}); });
+const settings = async () => ({enabled: false, autofillEnabled: true, origin: DEFAULT_ORIGIN, ...await chrome.storage.local.get(['enabled', 'autofillEnabled', 'origin'])});
+const vault = createVaultController(chrome, {settings, workspace, currentDocument, accountIdentity:()=>accounts.current(),accountAdmission:()=>accounts.admit()});
+const accounts = createAccountController(chrome,{settings,invalidate:()=>{vault.invalidate();for(const request of [...pending.values()])void finish(request,errorResult('AbortError','The Thingtime account changed. Choose the account again.'));}});
 const alarmName = id => `passkey:${id}`;
 const send = (tabId, documentId, message) => chrome.tabs.sendMessage(tabId, message, {documentId}).catch(() => null);
 const errorResult = (name, message) => ({error: {name, message}});
@@ -82,6 +89,7 @@ async function start(message, sender, respond) {
     const config = await settings();
     if (!live()) return;
     if (!config.enabled || origin === config.origin) return finish(request, {fallback: true});
+    if (!await accounts.admit()) return finish(request,errorResult('NotAllowedError','Unlock the Thingtime browser workspace to continue.'));
     try { request.providerOrigin = providerOrigin(config.origin); }
     catch { return finish(request, errorResult('SecurityError', 'Select a valid Thingtime origin in the extension.')); }
     const current = await currentDocument(sender.tab.id, sender.documentId, origin);
@@ -91,8 +99,15 @@ async function start(message, sender, respond) {
     request.timer = setTimeout(() => void finish(request, errorResult('NotAllowedError', 'The passkey request timed out.')), timeout);
     await chrome.alarms.create(alarmName(request.id), {when: Date.now() + timeout});
     if (!live()) { await chrome.alarms.clear(alarmName(request.id)); return; }
-    const tab = await chrome.tabs.create({url: `${request.providerOrigin}${PROVIDER_PATH}`, active: true});
-    request.providerTabId = tab.id;
+    const stored = await chrome.storage.local.get('workspacePreferences');
+    if (!live()) return;
+    const preferences = workspacePreferences(stored.workspacePreferences);
+    request.presentation = {fontSize: preferences.fontSize};
+    request.identity=accounts.current();
+    const approval = await chrome.windows.create({url: `${request.providerOrigin}${PROVIDER_PATH}`, type: 'popup', focused: true, width: preferences.width, height: preferences.height});
+    const tab = approval.tabs?.[0];
+    if (!Number.isInteger(tab?.id)) throw new Error('The approval popup could not open.');
+    request.providerTabId = tab.id; request.providerWindowId = approval.id;
     if (!live()) { await closeOwnedProvider(request); return; }
     await checkpoint();
     if (!live()) return;
@@ -109,17 +124,29 @@ async function handle(message, sender, respond) {
   const internal = sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL('popup.html')
     && (sender.frameId === undefined || sender.frameId === 0)
     && (sender.origin === undefined || sender.origin === chrome.runtime.getURL('').replace(/\/$/, ''));
-  if (message?.action === 'state') { const config = await settings(); return respond({enabled: config.enabled === true, origin: config.origin}); }
+  if (message?.action === 'vault-open-workspace' && senderOrigin(sender)) { await workspace.open(sender.tab); return respond({ok:true}); }
+  if (message?.action?.startsWith('vault-')) return respond(await vault.handle(message, sender, internal));
+  if (message?.action?.startsWith('accounts-')) return respond(await accounts.handle(message,sender,internal));
+  if (message?.action === 'state') { const config = await settings(); return respond({enabled: config.enabled === true, autofillEnabled: config.autofillEnabled !== false && await accounts.admit(), origin: config.origin}); }
+  if (message?.action === 'workspace-state' && internal) {
+    const [stored, target] = await Promise.all([chrome.storage.local.get('workspacePreferences'), workspace.target()]);
+    return respond({preferences: workspacePreferences(stored.workspacePreferences), target: target ? {origin: target.origin} : null});
+  }
+  if (message?.action === 'workspace-settings' && internal) {
+    const preferences = workspacePreferences(message.preferences);
+    await chrome.storage.local.set({workspacePreferences: preferences});
+    return respond({ok: true, preferences});
+  }
   if (message?.action === 'diagnostics' && internal) {
     try {
-      const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
-      if (!Number.isInteger(tab?.id)) return respond({available: false});
-      const frame = await chrome.webNavigation.getFrame({tabId: tab.id, frameId: 0});
-      const origin = safeOrigin(frame?.url);
-      if (!origin || !frame.documentId) return respond({available: false});
-      const value = await chrome.tabs.sendMessage(tab.id, {action: 'diagnostics-query'}, {documentId: frame.documentId});
-      if (!await currentDocument(tab.id, frame.documentId, origin)) return respond({available: false});
-      return respond(hookDiagnostics(value));
+      const target = await workspace.target();
+      if (!target) return respond({available: false, target: null});
+      const tab = {id: target.tabId}, frame = {documentId: target.documentId}, origin = target.origin;
+      const value = await chrome.tabs.sendMessage(tab.id, {action: 'diagnostics-query'}, {documentId: frame.documentId}).catch(() => ({available: false}));
+      if (!await currentDocument(tab.id, frame.documentId, origin)) return respond({available: false, target: null});
+      const latest = await workspace.target();
+      if (!sameWorkspaceTarget(latest, target)) return respond({available: false, target: null});
+      return respond({...hookDiagnostics(value), target: {origin}});
     } catch { return respond({available: false}); }
   }
 
@@ -133,16 +160,16 @@ async function handle(message, sender, respond) {
   }
   if (message?.action === 'settings' && internal) {
     const origin = providerOrigin(message.origin);
-    await chrome.storage.local.set({enabled: message.enabled === true, origin});
+    await chrome.storage.local.set({enabled: message.enabled === true, autofillEnabled: message.autofillEnabled !== false, origin});
     for (const request of [...pending.values()]) await finish(request, errorResult('AbortError', 'The extension settings changed.'));
     return respond({ok: true});
   }
   if (message?.action === 'native-fallback' && internal) {
     const request = pending.get(message.tabId);
-    if (request) await finish(request, {fallback: true}, {restoreFocus: true});
+    if (request && (!message.requestId || message.requestId === request.id)) await finish(request, {fallback: true}, {restoreFocus: true});
     return respond({ok: true});
   }
-  if (message?.action === 'status' && internal) return respond({requests: [...pending.values()].map(r => ({tabId: r.tabId, origin: r.origin}))});
+  if (message?.action === 'status' && internal) return respond({requests: [...pending.values()].map(r => ({tabId: r.tabId, requestId: r.id, origin: r.origin, type: r.type}))});
   if (message?.action === 'request') return start(message, sender, respond);
   if (message?.action === 'cancel') {
     const request = pending.get(sender.tab?.id);
@@ -165,7 +192,7 @@ async function handle(message, sender, respond) {
     request.providerDocumentId = sender.documentId; request.delivered = true;
     await checkpoint();
     if (pending.get(request.tabId) !== request) return respond({ok: false});
-    await send(request.providerTabId, request.providerDocumentId, {action: 'provider-request', request: {version: 1, id: request.id, type: request.type, origin: request.origin, publicKey: request.publicKey}});
+    await send(request.providerTabId, request.providerDocumentId, {action: 'provider-request', request: {version: 1, id: request.id, type: request.type, origin: request.origin, publicKey: request.publicKey, expectedOwnerId:request.identity?.ownerId, presentation: request.presentation}});
     return respond({ok: true});
   }
   if (message.action === 'provider-response' && matchesDocument(request, sender, true) && message.version === 1 && message.id === request.id) {

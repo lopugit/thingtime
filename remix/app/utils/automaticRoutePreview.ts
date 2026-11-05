@@ -1,8 +1,9 @@
 import generatedRoutes from './automaticRoutePreviews.generated.json';
 import type { SocialPreviewVariant } from '../api/utils/meta/socialPreview';
+import type { SocialPreviewDesign } from './socialPreviewDesign';
 
 export const DEFAULT_ROUTE_PAGE_TITLE = 'Thingtime - Your Home for Everything';
-export type RoutePreviewOverride = {
+export type RoutePreviewOverride = SocialPreviewDesign & {
 	title?: string;
 	description?: string;
 	eyebrow?: string;

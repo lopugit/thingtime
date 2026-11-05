@@ -11,14 +11,15 @@ import { SettingsDocumentHost, type SettingsDocumentHostProps } from '../Setting
 import { coalescedSyncRefresh } from '~/fileSync/coalescedSyncRefresh';
 import { syncAutomationBlocks } from './syncAutomationBlocks';
 
-export function DesktopSyncAutomation({ saved, scope, generation, disabled, accountTransport }: {
+export function DesktopSyncAutomation({ saved, scope, generation, disabled, accountTransport, intervalDraft, onIntervalDraftChange }: {
 	saved: SavedFileSyncConfiguration; scope: SyncScope; generation: number; disabled: boolean;
 	accountTransport?: SettingsDocumentHostProps['accountTransport'];
+	intervalDraft?: number; onIntervalDraftChange?(value: number): void;
 }) {
 	const key = syncScopeKey(scope), [job, setJob] = React.useState<SyncJob | null>(null);
 	const [pausing, setPausing] = React.useState(false);
 	const [ready, setReady] = React.useState(false), [error, setError] = React.useState('');
-	const [interval, setInterval] = React.useState(300_000);
+	const [interval, setInterval] = React.useState(intervalDraft ?? 300_000);
 	const intervalEdited = React.useRef(false);
 	const activity = React.useSyncExternalStore(nativeSyncTasks.subscribe, () => {
 		const value = nativeSyncTasks.read();
@@ -32,7 +33,7 @@ export function DesktopSyncAutomation({ saved, scope, generation, disabled, acco
 	};
 	React.useEffect(() => {
 		const controller = new AbortController();
-		setReady(false); setJob(null); setPausing(false); intervalEdited.current = false;
+		setReady(false); setJob(null); setPausing(false); intervalEdited.current = intervalDraft !== undefined;
 		const load = async () => {
 			let journal: Awaited<ReturnType<typeof openSyncJournal>> | undefined;
 			try {
@@ -65,7 +66,7 @@ export function DesktopSyncAutomation({ saved, scope, generation, disabled, acco
 		title="Automatic file sync" accountTransport={accountTransport}>
 		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={`${key}:${generation}`} enabled={!editing}
 			scope={{ automatic: { status, error, interval, startDisabled, stopDisabled, stopLabel, startLabel } }} actions={{
-				interval: ({ value }) => { if (startDisabled) return; const n = Number(value); if (SYNC_INTERVALS.some(ms => ms === n)) { intervalEdited.current = true; setInterval(n); } },
+				interval: ({ value }) => { if (startDisabled) return; const n = Number(value); if (SYNC_INTERVALS.some(ms => ms === n)) { intervalEdited.current = true; setInterval(n); onIntervalDraftChange?.(n); } },
 				start: ({ readField }) => {
 					check(); if (startDisabled) return; const n = Number(readField('interval'));
 					if (!SYNC_INTERVALS.some(ms => ms === n)) throw Error('Choose a supported sync interval.');

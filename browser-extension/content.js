@@ -46,6 +46,7 @@
     providerActive = null; void chrome.runtime.sendMessage({action: 'provider-response', ...value}).catch(() => {});
   });
   chrome.runtime.onMessage.addListener((message, _sender, respond) => {
+    if (message?.action?.startsWith('vault-') || message?.action?.startsWith('accounts-')) return false;
     if (message.action === 'diagnostics-query') {
       let timer;
       const finish = value => { clearTimeout(timer); document.removeEventListener('thingtime:extension-diagnostics', receive); respond({available: true, hook: value}); };

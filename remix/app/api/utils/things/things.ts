@@ -72,7 +72,7 @@ import {
   MAX_TEXT_CHARS,
   MESSENGER_THINGTIME,
 	MIGRATION_DIAGNOSTIC_ID_PREFIX,
-  ERROR_LOG_ID_PREFIX, ERROR_LOG_THINGTIME,
+  ERROR_LOG_ID_PREFIX, ERROR_LOG_THINGTIME, MONGODB_CONNECTION_SNAPSHOT_ID_PREFIX, MONGODB_CONNECTION_SNAPSHOT_THINGTIME,
 	MIGRATION_DIAGNOSTIC_THINGTIME,
   POST_TYPES as REGISTRY_POST_TYPES,
   PROTECTED_THINGTIME,
@@ -1266,7 +1266,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
 		trimmed.startsWith(ACTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SUBSCRIPTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SERVICE_QUOTA_RESERVED_ID_PREFIX) ||
-		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) || trimmed.startsWith(ERROR_LOG_ID_PREFIX) ||
+		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) || trimmed.startsWith(ERROR_LOG_ID_PREFIX) || trimmed.startsWith(MONGODB_CONNECTION_SNAPSHOT_ID_PREFIX) ||
 		trimmed.startsWith(APP_STORAGE_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(EXTERNAL_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SEEDED_DATA_SUITE_RESERVED_ID_PREFIX) ||
@@ -3022,14 +3022,19 @@ export const resolvePublicAudiences = async (
 // gates. Generic Things access must never become an alternate raw-byte read.
 const isDeviceControlThing = (doc: ThingDoc) => thingtimeOf(doc).some(kind => (DEVICE_CONTROL_THINGTIME as readonly string[]).includes(kind));
 
+const isPrivateConnectionThing = (doc: ThingDoc) => {
+  const kinds = thingtimeOf(doc);
+  return kinds.includes('external-auth-connection') || (kinds.includes('external-account') && doc.ownerId !== 'system');
+};
+
 export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   // Every `timeline-` kind (events, links, snapshot parts, branches, heads, notes, version names)
   // is protected History metadata reachable only through the Timeline API, never a generic read.
   if (thingtimeOf(doc).some(kind => typeof kind === 'string' && kind.startsWith('timeline-'))) return false;
-  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
+  if (isDeviceControlThing(doc) || isPrivateConnectionThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
-	if ((thingtimeOf(doc).includes(FOUND_POST_KIND) || thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME))) return false;
+	if ((thingtimeOf(doc).includes(FOUND_POST_KIND) || thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME) || thingtimeOf(doc).includes(MONGODB_CONNECTION_SNAPSHOT_THINGTIME))) return false;
 	// Moderation-blocked things vanish from every ordinary read for everyone —
 	// owner included, same as blocked attachments. Admins review through the
 	// moderationFlag queue (which carries a bounded excerpt), never this path.
@@ -3125,7 +3130,7 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
-  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
+  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
 	// terminal — a blocked or born-private comment under a clean post must
 	// vanish for non-owners too
@@ -3566,10 +3571,10 @@ export const activeSubspaceIdsOf = (viewer: Viewer): string[] =>
 
 export const parseChronoCursor = (cursor: string | null | undefined): { createdAt: Date; id: string } | null => {
   if (!cursor) return null;
-  const [ms, id] = cursor.split('_');
-  const time = Number(ms);
-  if (!Number.isFinite(time) || !id) return null;
-  return { createdAt: new Date(time), id };
+  const separator = cursor.indexOf('_');
+  if (separator <= 0 || separator === cursor.length - 1) return null;
+  const createdAt = new Date(Number(cursor.slice(0, separator)));
+  return Number.isFinite(createdAt.getTime()) ? { createdAt, id: cursor.slice(separator + 1) } : null;
 };
 
 export const chronoCursorClause = (cursor: { createdAt: Date; id: string }) => ({
@@ -3779,7 +3784,7 @@ export async function getThing(
   if (options.commentProjection && (app || isCustomMongoEndpointActive())) return fail(400, 'Discussion projection requires first-party home storage');
   let viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
-  if (!doc || isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'draft', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return fail(404, 'Thing not found');
+  if (!doc || isDeviceControlThing(doc) || isPrivateConnectionThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'draft', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return fail(404, 'Thing not found');
   if (options.commentProjection && doc.appId) return fail(404, 'Thing not found');
   if (!app) {
     const terminal = await resolveInheritChain(doc, d => aclOf(d).includes(ACL_INHERIT), findThing);
@@ -3903,7 +3908,7 @@ export const listThings = async (
   viewerInput: string | Viewer,
   query: ListThingsQuery,
   app: AppLens = null,
-  context: { archiveOwnerId?: string } = {}
+  context: { archiveOwnerId?: string; signal?: AbortSignal } = {}
 ): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null; comments?: PublicCommentPageItem[] }> => {
   const cursorScope = { targetId: query.targetId || '', viewerId: asViewer(viewerInput)?.id || '', tokenId: asViewer(viewerInput)?.pat?.tokenId || '' };
   const discussionCursor = query.commentProjection && query.cursor != null ? decodeDiscussionCursor(query.cursor, cursorScope) : null;
@@ -3988,9 +3993,10 @@ export const listThings = async (
   const parsed = query.commentProjection ? discussionCursor : parseChronoCursor(query.cursor);
   const pageMatch = parsed ? withMatch(match, chronoCursorClause(parsed)) : match;
 
+  context.signal?.throwIfAborted();
   const things = await getThingsCollection();
   let docs = (await things
-    .find(pageMatch as any)
+    .find(pageMatch as any, context.signal ? { signal: context.signal } : undefined)
     .sort({ createdAt: -1, shareId: 1 })
     .limit(limit + 1)
     .toArray()) as any as ThingDoc[];

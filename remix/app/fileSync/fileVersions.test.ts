@@ -5,6 +5,7 @@ import { eventFixture } from '../timeline/testFixtures';
 import type { CloudFile } from './cloudFile';
 import {
 	checkFileRestoreReceipt,
+	desktopFileRestoreScope,
 	fileContentId,
 	fileRestoreCommand,
 	fileRestoreKey,
@@ -74,6 +75,20 @@ test('pending restores are scoped to account, origin, storage and exact file ver
 	assert.notEqual(key, fileRestoreKey({ ...scope, apiOrigin: 'https://other.test' }, version));
 	assert.notEqual(key, fileRestoreKey(scope, current));
 	assert.throws(() => fileRestoreKey({ ...scope, dataPlane: 'custom' }, version));
+});
+
+test('desktop restore uses the verified selected API without reusing renderer or other endpoint pending keys', () => {
+	const renderer = { ownerId: 'user-1', apiOrigin: 'http://127.0.0.1:54000', dataPlane: 'home' };
+	const info = { contentOrigin: renderer.apiOrigin, apiOrigin: 'https://thingtime.test/' };
+	const remote = desktopFileRestoreScope(renderer, info);
+	assert.deepEqual(remote, { ...renderer, apiOrigin: 'https://thingtime.test' });
+	assert.notEqual(fileRestoreKey(renderer, version), fileRestoreKey(remote!, version));
+	assert.notEqual(fileRestoreKey(remote!, version), fileRestoreKey(desktopFileRestoreScope(renderer, { ...info, apiOrigin: 'https://other.test/' })!, version));
+	assert.deepEqual(desktopFileRestoreScope(renderer, { ...info, apiOrigin: renderer.apiOrigin }), renderer);
+	for (const apiOrigin of [null, 'http://insecure.test', 'https://secret@thingtime.test', 'https://thingtime.test/another-path', 'https://thingtime.test/#old']) {
+		assert.equal(desktopFileRestoreScope(renderer, { ...info, apiOrigin }), null);
+	}
+	assert.equal(desktopFileRestoreScope(renderer, { ...info, contentOrigin: 'http://127.0.0.1:53000' }), null);
 });
 
 test('restore completion must match reviewed placement and exact retained bytes', async () => {

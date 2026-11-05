@@ -66,8 +66,8 @@ type OwnedAccount = {
 
 const OWNED_CACHE_KEY = 'tt-owned-accounts';
 
-export const AccountSwitcher = (props: { onNavigate?: () => void }) => {
-  const { onNavigate } = props;
+export const AccountSwitcher = (props: { onNavigate?: () => void; stayOnPage?: boolean }) => {
+  const { onNavigate, stayOnPage } = props;
 
   const navigate = useNavigate();
   const api = useApi();
@@ -130,7 +130,7 @@ export const AccountSwitcher = (props: { onNavigate?: () => void }) => {
     const resp = await removeAccount(account.user);
     if (resp?.ok && !resp.user) {
       onNavigate?.();
-      navigate('/login');
+      if (!stayOnPage) navigate('/login');
     }
   };
 
@@ -141,7 +141,7 @@ export const AccountSwitcher = (props: { onNavigate?: () => void }) => {
     setLoggingOutAll(false);
     if (resp?.ok) {
       onNavigate?.();
-      navigate('/login');
+      if (!stayOnPage) navigate('/login');
     }
   };
 
