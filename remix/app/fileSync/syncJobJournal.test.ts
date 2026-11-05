@@ -288,3 +288,39 @@ test('strict native capture survives a lost reply and a failed cleanup across a 
  assert.equal(await jobs.strictCapture(paused, null), null);
  journal.close();
 });
+
+test('attention retains only an allowlisted failure across reopen; pause wins stale failures and retry clears it', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const admitted = await jobs.admit(saved(), 'job-diagnostics', 300_000);
+ const attention = await jobs.attention(admitted, Error('Cloud sync request failed (403); retain this run for retry or reconciliation.'));
+ assert.equal(attention?.failureReason, 'cloud-authorization'); assert.equal(syncJobDue(attention!, Date.now()), false);
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ assert.equal((await jobs.read())?.failureReason, 'cloud-authorization');
+ const paused = await jobs.pause(attention!); assert.equal(paused?.intervalMs, 300_000);
+ assert.equal(await jobs.attention(attention!, Error('secret')), null);
+ assert.equal((await jobs.read())?.state, 'paused');
+ const retry = await jobs.admit(saved(), 'ignored', 300_000);
+ assert.equal(retry.failureReason, undefined); assert.equal(retry.id, admitted.id); journal.close();
+});
+
+test('legacy attention remains reason-unavailable and arbitrary failure text is never retained', async () => {
+ const journal = await open(), jobs = jobsFor(journal);
+ const admitted = await jobs.admit(saved(), 'job-legacy');
+ const legacy = await jobs.transition(admitted, 'attention');
+ assert.equal(legacy?.failureReason, undefined);
+ const retried = await jobs.admit(saved(), 'ignored');
+ const failed = await jobs.attention(retried, Error('private token=secret /Users/private/file'));
+ assert.equal(failed?.failureReason, 'unknown'); assert.doesNotMatch(JSON.stringify(failed), /secret|\/Users/);
+ await assert.rejects(jobs.pause({ ...failed!, failureReason: 'private' as any }), /Invalid saved sync job/);
+ journal.close();
+});
+
+test('only the actual journal policy guard supplies the typed configuration diagnostic', async () => {
+ const { syncJobFailure } = await import('./syncJobFailure');
+ const journal = await open(), jobs = jobsFor(journal), original = saved();
+ await jobs.admit(original, 'guard-proof');
+ await assert.rejects(jobs.admit({ ...original, configuration: { ...original.configuration, propagateDeletes: true } }, 'new'), cause => {
+  assert.equal(syncJobFailure(cause), 'configuration-changed'); return true;
+ });
+ journal.close();
+});

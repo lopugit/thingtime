@@ -1,3 +1,4 @@
+import { syncJobAttentionMessage } from '~/fileSync/syncJobFailure';
 import { syncConnectionGlance } from '~/fileSync/connectionGlance';
 import { useRemoteDeviceSyncStatus } from '~/fileSync/remoteDeviceResources.client';
 import type { TransferSpeedDraftState } from './TransferSpeedTrackers';
@@ -248,7 +249,7 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 					pauseDisabled: !online || !!pausingId || !!task?.stopping || (!active && !job),
 					interval: intervals[saved.id] ?? job?.intervalMs ?? 300_000,
 					automatic: !online ? 'Automatic sync status will appear when the device connects.' : job?.intervalMs && ['runnable', 'scheduled'].includes(job.state)
-						? job.nextRunAt ? `Automatic sync is on. Next check: ${new Date(job.nextRunAt).toLocaleTimeString()}.` : 'Automatic sync is on.' : job?.state === 'attention' ? 'Automatic sync needs attention. Pause its saved job before restarting with changed settings.' : 'Automatic sync is off.' };
+						? job.nextRunAt ? `Automatic sync is on. Next check: ${new Date(job.nextRunAt).toLocaleTimeString()}.` : 'Automatic sync is on.' : job?.state === 'attention' ? syncJobAttentionMessage({ intervalMs: job.intervalMs }) : 'Automatic sync is off.' };
 			})
 		}
 	};

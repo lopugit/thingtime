@@ -35,6 +35,7 @@ struct RustInventoryClient: Sendable {
         let generation: String, coverage: String, rootVersion: String
         let totalEntries: Int, nextOffset: Int?
         let entries: [Entry]
+        let status: Status?
     }
     struct Gap: Decodable {
         let sequence: Int?
@@ -161,6 +162,18 @@ struct RustInventoryClient: Sendable {
         let result: Page = try run("page", scope: scope, generation: generation, fields: ["offset": offset, "limit": limit])
         guard result.generation == generation, Self.validCount(result.totalEntries) else { throw RustInventoryTransportFailure.invalidResponse }
         return result
+    }
+    /// The Rust page operation already loads status and fences the root/snapshot.
+    /// Reuse that same response instead of spawning a second helper for status.
+    func checkedPage(_ scope: Scope, generation: String, offset: Int, limit: Int) throws -> (Page, Status) {
+        let result = try page(scope, generation: generation, offset: offset, limit: limit)
+        guard let status = result.status else { throw RustInventoryTransportFailure.invalidResponse }
+        try Self.checkStatus(status, generation: generation)
+        guard status.mode != "photo", status.coverage == result.coverage,
+              status.rootVersion == result.rootVersion, status.entryCount == result.totalEntries else {
+            throw RustInventoryTransportFailure.invalidResponse
+        }
+        return (result, status)
     }
     func gaps(_ scope: Scope, generation: String, offset: Int, limit: Int) throws -> GapPage {
         let result: GapPage = try run("gaps", scope: scope, generation: generation, fields: ["offset": offset, "limit": limit])

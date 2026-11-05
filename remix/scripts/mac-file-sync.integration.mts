@@ -45,6 +45,8 @@ if (fixtureIndexer) {
 const photoFixture = process.argv.includes('--photos');
 const symlinksOnly = process.argv.includes('--symlinks-only');
 const earlyFixture = process.argv.includes('--two-way-early');
+const normalEarlyBudget = process.argv.includes('--normal-early-budget');
+if (normalEarlyBudget && !earlyFixture) throw Error('Normal early budget requires the early fixture.');
 const pagedFixture = process.argv.includes('--paged');
 const wideFixture = process.argv.includes('--wide');
 const wideMixedFixture = process.argv.includes('--wide-mixed');
@@ -76,6 +78,11 @@ const httpLatency: Record<string, { count: number; totalMs: number; maxMs: numbe
 const nativeLatency: Record<string, { count: number; totalMs: number; maxMs: number }> = {};
 const slowEvents: Record<string, number> = {};
 let transferRunStartedAt = 0, firstTransferMs: number | null = null;
+const earlyFirstRequestMs: Record<string, number> = {};
+const markEarlyRequest = (label: string) => {
+	if (earlyFixture && transferRunStartedAt && earlyFirstRequestMs[label] === undefined)
+		earlyFirstRequestMs[label] = Date.now() - transferRunStartedAt;
+};
 let cooldownCount = 0,
 	cooldownSeconds = 0,
 	priorCooldownCount = 0,
@@ -87,6 +94,7 @@ const sessionFetch: typeof fetch = async (url, init = {}) => {
 	const target = new URL(String(url), base),
 		headers = new Headers(init.headers);
 	const requestClass = (init.method || 'GET') + ' ' + target.pathname;
+	markEarlyRequest('http ' + requestClass);
 	httpRequests[requestClass] = (httpRequests[requestClass] || 0) + 1;
 	if (transferRunStartedAt && firstTransferMs === null && init.method === 'PUT') firstTransferMs = Date.now() - transferRunStartedAt;
 	if (target.origin === base.origin && init.credentials !== 'omit') {
@@ -288,6 +296,7 @@ try {
 	let loseTrash = false, loseRestore = false;
 	const request = async (ownerId: string, input: FolderRequest, abort: AbortSignal) => {
 		abort.throwIfAborted();
+		markEarlyRequest('native ' + input.action);
 		const expected = { requestId: randomUUID(), ownerId, origin: base.origin };
 		if (input.action === 'read') counts.reads++;
         if (input.action === 'read-range') { counts.streams++; counts.streamedBytes += input.length; }
@@ -643,12 +652,17 @@ try {
 	if (earlyFixture) {
 		assert.ok(fixtureIndexer && pagedFixture);
 		const folder = path.join(directory, 'selected'), blocker = path.join(folder, 'zz-late-scan.bin');
-		await writeFile(blocker, new Uint8Array()); await truncate(blocker, 48 * 1024 * 1024);
+		// Keep the late file hashing beyond the 90-second before-seal proof even
+		// if the whole 5 MB/s policy is available to the scanner. A 128 MiB file
+		// completed too soon and its own follow-up inspect delayed the other receipt.
+		const blockerBytes = (normalEarlyBudget ? 512 : 48) * 1024 * 1024;
+		const scanBytesPerSecond = normalEarlyBudget ? 5_000_000 : 400_000;
+		await writeFile(blocker, new Uint8Array()); await truncate(blocker, blockerBytes);
 		const scanStartedAt = Date.now(), proofTimeout = AbortSignal.timeout(90_000);
 		let queue: Promise<unknown> = Promise.resolve();
 		const serialRequest: typeof request = (owner, command, requestSignal) => {
 			const next = queue.then(() => request(owner, {
-				...command, deviceResourceLimits: { scanBytesPerSecond: 400_000, transferBytesPerSecond: 5_000_000, cpuPercent: 15 },
+				...command, deviceResourceLimits: { scanBytesPerSecond, transferBytesPerSecond: 5_000_000, cpuPercent: 15 },
 				...(command.action === 'scan-changes' ? { waitMilliseconds: 200 } : {})
 			}, requestSignal));
 			queue = next.catch(() => {});
@@ -666,6 +680,7 @@ try {
 		let markLocal!: () => void;
 		const localObserved = new Promise<void>(resolve => { markLocal = resolve; });
 		let capture: string | undefined, localSequence = 0;
+		let firstLocalChangeMs: number | null = null, firstAdmittedMs: number | null = null, firstAdmittedPath: string | null = null;
 		const input = async (current: AbortSignal, observe: boolean): Promise<ForegroundSyncInput> => {
 			const localTarget = await approveMobileSyncTarget(saved, scope, current, serialRequest, caps, 'existing');
 			return {
@@ -680,7 +695,10 @@ try {
 					for await (const page of readNativeIndexChanges({ ownerId: fixture.userId, deviceId: deviceId!, rootId: nativeRoot, captureId: id,
 						afterSequence: after, signal: streamSignal ?? current, readyToFinish, request: serialRequest })) {
 						localSequence = page.nextSequence;
-						if (page.changes.length) markLocal();
+						if (page.changes.length) {
+							firstLocalChangeMs ??= Date.now() - transferRunStartedAt;
+							markLocal();
+						}
 						yield page;
 					}
 				},
@@ -701,7 +719,14 @@ try {
 				progress: () => {},
 				journal: observe ? { ...journal, pagedRuns: access => {
 					const runs = journal.pagedRuns(access);
-					return { ...runs, confirm: async (spec, receipt) => {
+					return { ...runs, appendStream: async (spec, event, binding, conflict, track) => {
+						const result = await runs.appendStream(spec, event, binding, conflict, track);
+						if (binding && firstAdmittedMs === null) {
+							firstAdmittedMs = Date.now() - transferRunStartedAt;
+							firstAdmittedPath = event.entry.path;
+						}
+						return result;
+					}, confirm: async (spec, receipt) => {
 						const result = await runs.confirm(spec, receipt);
 						const name = receipt.entry?.path;
 						if (spec.streaming?.source === 'both' && (name === 'local.bin' || name === 'remote.bin')) {
@@ -723,7 +748,11 @@ try {
 		};
 		const controller = new AbortController(), current = AbortSignal.any([controller.signal, proofTimeout]),
 			stop = new Error('Stop after the two before-seal confirmations');
-		const running = runPagedForegroundCloudSync(saved, scope, await input(current, true), current);
+		transferRunStartedAt = Date.now();
+		console.log('MAC_PAGED_STAGE early-input-start');
+		const firstInput = await input(current, true);
+		console.log('MAC_PAGED_STAGE early-input-ready');
+		const running = runPagedForegroundCloudSync(saved, scope, firstInput, current);
 		void running.catch(() => {});
 		try {
 			await Promise.race([both, running.then(() => { throw Error('Early sync finished before two receipts were observed.'); })]);
@@ -758,10 +787,22 @@ try {
 			assert.equal(counts.puts, countsBefore.puts);
 			assert.equal(counts.publishes, countsBefore.publishes);
 			assert.ok(await journal.pagedCheckpoints(journalAccess).current());
+			assert.ok(firstLocalChangeMs !== null && firstAdmittedMs !== null && firstTransferMs !== null);
+			assert.ok(firstLocalChangeMs <= firstAdmittedMs && firstAdmittedMs <= firstTransferMs);
 			console.log(JSON.stringify({ ok: true, scenario: 'Mac two-way transfer before initial index seal',
+				firstLocalChangeMs, firstAdmittedMs, firstAdmittedPath, firstPutMs: firstTransferMs, earlyFirstRequestMs,
+				resourceLimits: { scanBytesPerSecond, transferBytesPerSecond: 5_000_000, cpuPercent: 15, effectiveRustScanBytesPerSecond: scanBytesPerSecond / 2 }, blockerBytes,
 				upload: { at: upload.at, nativeState: upload.nativeState, index: upload.index, operationId: upload.receipt.operationId, revision: remote.revision, sha256: hash(localBytes) },
 				download: { at: download.at, nativeState: download.nativeState, index: download.index, operationId: download.receipt.operationId, sha256: hash(remoteBytes) },
 				cancelledAt, sameNativeCaptureAfterResume: true, strictCheckpointAfterResume: true, duplicateTransfers: false, cloudHistoryRevisions: 1 }));
+		} catch (error) {
+			// Keep a bounded, non-secret stage snapshot when the deliberate
+			// before-seal deadline fires; otherwise its only symptom is a timeout.
+			console.log(JSON.stringify({ earlyTimingFailure: true, firstLocalChangeMs, firstAdmittedMs,
+				firstAdmittedPath, firstPutMs: firstTransferMs, earlyFirstRequestMs,
+				resourceLimits: { scanBytesPerSecond, effectiveRustScanBytesPerSecond: scanBytesPerSecond / 2 },
+				index: nativeIndex(), counts, nativeLatency, httpLatency }));
+			throw error;
 		} finally { controller.abort(stop); await running.catch(() => {}); }
 	} else if (symlinksOnly) {
 		await run(); await exerciseSymbolicLinks();

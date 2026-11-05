@@ -465,6 +465,11 @@ fn sealed_page_rejects_replaced_root_and_bounded_page_never_truncates_inventory(
     page["limit"] = json!(4096);
     let first = one(&f, page.clone());
     assert_eq!(first["entries"].as_array().unwrap().len(), 512);
+    assert_eq!(first["status"]["generation"], "wide");
+    assert_eq!(first["status"]["mode"], "strict");
+    assert_eq!(first["status"]["coverage"], "sealed");
+    assert_eq!(first["status"]["entryCount"], 520);
+    assert_eq!(first["status"]["rootVersion"], first["rootVersion"]);
     page["offset"] = first["nextOffset"].clone();
     let last = one(&f, page);
     assert_eq!(last["entries"].as_array().unwrap().len(), 8);
