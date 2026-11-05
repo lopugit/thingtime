@@ -1,5 +1,20 @@
 # API endpoints and capabilities
 
+## Connector confirmations and large mutation plans
+
+`api.settings-connector-protections` 1.0.0 registers GET/POST
+`/api/v1/settings/connector-protections`; the current owning account alone may
+write its ten confirmation preferences, with `X-Thingtime-Expected-Actor` and
+same-origin validation. Connected Things PATs can read their own effective
+policy but cannot disable it. Missing settings default to enabled; failed
+negotiation/read requires confirmation. `api.chatgpt-mcp` 2.0.0 uses compact
+signed preview references, encrypted staged plans, paged review/history and
+single-use application. Current account preferences are checked again at
+application, including the underlying operation and workflow/undo rules.
+Run `test:chatgpt`, `test:api-capabilities`, and
+`test:connector-mutations:acceptance`. See the hosted connector documentation
+for staged text parts and unavoidable upstream transport constraints.
+
 `api.devices` and `api.devices-node-state` 1.14.0 add optional host resource
 measurements to the existing device state mirror. `DeviceResources.swift`
 samples host counters, `ThingtimeAPIClient` sends the fields only to a
@@ -169,6 +184,10 @@ Saved Webpage writes with editable intrinsic `tt-form`, `tt-select`, `tt-style`,
 `tt-change` and `tt-mapbox` blocks require `api.things` 1.44.0 on create and
 `api.things-update` 1.14.0 on update. Builder negotiates these before saving;
 `api.webpages-resolve` remains the independent read contract.
+
+Stored map source Actions are discovered through shared composition
+(`api.actions-run` 1.39.0) and retargeted to their copied IDs in private copies
+(`api.things-fork` 1.8.0). Map inputs and runtime row values do not grant access.
 
 ## Where the code lives
 

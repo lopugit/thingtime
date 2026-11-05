@@ -1,5 +1,15 @@
 # Auth, accounts and admin
 
+## Connector confirmation preferences
+
+`settings/connector-protections` exposes private current-account preferences.
+GET permits a full account or active Things PAT; POST requires a full owning
+account, matching `X-Thingtime-Expected-Actor`, JSON and the canonical public
+origin. Scoped connector credentials cannot change their own confirmation
+policy. Private account metadata stores partial boolean patches; absent fields
+are enabled. The connector rereads effective rules when applying, while all
+normal authentication, authorization and revision checks remain in force.
+
 MongoDB connection inventory: `/admin/mongodb-connections` and Settings → Admin
 share `Admin/MongoConnectionInventory.tsx` and individually editable
 `mongoConnectionInventoryBlocks.ts` through `SettingsDocumentHost`.

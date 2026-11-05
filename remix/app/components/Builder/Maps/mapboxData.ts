@@ -10,7 +10,7 @@ type MarkerAppearance = {
 	avatarSrc?: string;
 };
 export type LngLat = [number, number];
-export type MapboxPoint = { id: string; coordinates: LngLat; label: string; markerLabel?: string; color?: string; selected?: boolean; group?: 'favourite' | 'route'; appearance?: MarkerAppearance };
+export type MapboxPoint = { id: string; coordinates: LngLat; label: string; markerLabel?: string; color?: string; selected?: boolean; group?: 'favourite' | 'route'; appearance?: MarkerAppearance; item?: Record<string, unknown> };
 
 export function publicMapboxToken(value: unknown): string | null {
 	const token = value && typeof value === 'object' ? (value as Record<string, unknown>).publicToken : null;
@@ -75,6 +75,7 @@ export function mapboxPoints(value: unknown): MapboxPoint[] {
 		if (!entry || typeof entry !== 'object' || !validCoordinates(entry.coordinates)) return [];
 		const appearance = markerAppearance({ ...entry, markerLabel: entry.markerLabelMode === undefined ? undefined : entry.markerLabel });
 		return [{
+			item: entry,
 			id: typeof entry.id === 'string' ? entry.id : String(index),
 			coordinates: entry.coordinates,
 			label: typeof entry.label === 'string' ? entry.label : '',
@@ -98,7 +99,7 @@ export function mapboxFavouritePoints(value: unknown): MapboxPoint[] {
 			markerLabel: '•', color: '#167d8d', group: 'favourite'
 		}]);
 		const appearance = markerAppearance(item?.crystal);
-		return points.map((point) => appearance ? { ...point, appearance } : point);
+		return points.map((point) => ({ ...point, item, ...(appearance ? { appearance } : {}) }));
 	});
 }
 
@@ -121,8 +122,10 @@ export function mapboxOrderedRoutePoints(value: unknown, navigation: Record<stri
 	const points = mapboxPoints(result.points);
 	const ranks = new Map<string, number>();
 	const appearances = new Map<string, MarkerAppearance>();
+	const items = new Map<string, Record<string, unknown>>();
 	if (Array.isArray(result.items)) for (const item of result.items) {
 		if (typeof item?.id !== 'string') continue;
+		items.set(item.id, item);
 		if (typeof item?.crystal?.rank === 'number' && Number.isFinite(item.crystal.rank)) ranks.set(item.id, item.crystal.rank);
 		const inherited = markerAppearance(item.favorite?.crystal);
 		const own = markerAppearance(item.crystal);
@@ -134,7 +137,7 @@ export function mapboxOrderedRoutePoints(value: unknown, navigation: Record<stri
 		return (left ?? Infinity) - (right ?? Infinity);
 	}).map((point) => {
 		const appearance = appearances.get(point.id);
-		return appearance ? { ...point, appearance: { ...appearance, ...point.appearance } } : point;
+		return { ...point, item: items.get(point.id) ?? point.item, ...(appearance ? { appearance: { ...appearance, ...point.appearance } } : {}) };
 	});
 }
 
