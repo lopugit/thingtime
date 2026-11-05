@@ -34,6 +34,8 @@ type MapProps = {
 	selectedRoutePointId?: unknown;
 	onSelectQuery?: unknown;
 	onRouteSelectQuery?: unknown;
+	onSelectQueryParams?: unknown;
+	onRouteSelectQueryParams?: unknown;
 	onSelectState?: unknown;
 	onRouteSelectState?: unknown;
 	queryScope?: unknown;
@@ -54,7 +56,7 @@ export function ComponentMapbox(props: MapProps) {
 
 function MapboxViewport({ vaultId, styleUrl, center, zoom, points, route, fitBounds, height, title, markerContent,
 	favouritesSource, routeSource, showFavourites, selectedFavouriteId, selectedRoutePointId,
-	onSelectQuery, onRouteSelectQuery, onSelectState, onRouteSelectState, queryScope, focusPoint, focusZoom, transientRoute, routeId }: MapProps) {
+	onSelectQuery, onRouteSelectQuery, onSelectQueryParams, onRouteSelectQueryParams, onSelectState, onRouteSelectState, queryScope, focusPoint, focusZoom, transientRoute, routeId }: MapProps) {
 	const enabled = React.useContext(NativeControlsEnabled);
 	const scope = React.useContext(ComponentDataScope);
 	const instanceId = React.useId();
@@ -108,7 +110,7 @@ function MapboxViewport({ vaultId, styleUrl, center, zoom, points, route, fitBou
 	const label = typeof title === 'string' && title.trim() ? title : 'Map';
 	const onSelectRef = React.useRef<(point: MapboxPoint) => void>(() => {});
 	onSelectRef.current = (point) => {
-		const selection = markerSelection(point, { onSelectState, onRouteSelectState, onSelectQuery, onRouteSelectQuery, queryScope }, runtime.query);
+		const selection = markerSelection(point, { onSelectState, onRouteSelectState, onSelectQuery, onRouteSelectQuery, onSelectQueryParams, onRouteSelectQueryParams, queryScope }, runtime.query);
 		if (selection) local?.(selection);
 	};
 	const applyData = () => {

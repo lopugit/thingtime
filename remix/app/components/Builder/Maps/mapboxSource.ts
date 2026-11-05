@@ -1,11 +1,12 @@
 type SourceResponse = { status?: unknown; result?: unknown; cache?: unknown; [key: string]: unknown };
 const record = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
 
-/** Drain an Action's standard cursor contract without retaining partial or stale results. */
+/** Publish validated authorized pages progressively; the caller owns access invalidation. */
 export async function loadMapboxSourcePages(
 	run: (cursor?: string) => Promise<SourceResponse>,
 	stale: () => boolean,
-	initialCursor?: unknown
+	initialCursor?: unknown,
+	publish?: (response: SourceResponse) => void
 ): Promise<SourceResponse> {
 	const seen = new Set<string>(typeof initialCursor === 'string' && initialCursor ? [initialCursor] : []);
 	const lists = { items: new Map<unknown, unknown>(), points: new Map<unknown, unknown>() };
@@ -33,6 +34,9 @@ export async function loadMapboxSourcePages(
 		cursor = typeof next === 'string' && next ? next : undefined;
 		if (cursor && seen.has(cursor)) throw new Error('The map source repeated a cursor.');
 		if (cursor) seen.add(cursor);
+		const snapshot = { ...result };
+		for (const key of ['items', 'points'] as const) if (key in result) snapshot[key] = [...lists[key].values()];
+		publish?.({ ...first, result: snapshot, ...(noStore ? { cache: 'no-store' } : {}) });
 	} while (cursor);
 	for (const key of ['items', 'points'] as const) if (key in result) result[key] = [...lists[key].values()];
 	return { ...first, result: { ...result, nextCursor: null }, ...(noStore ? { cache: 'no-store' } : {}) };

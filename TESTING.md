@@ -2642,6 +2642,11 @@ email whose link points at the attacker.
 
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
+- [ ] Run `node --test remix/scripts/ensure-dependencies.test.js`. A killed
+  owner is diagnosed promptly while its lock remains for surviving-child
+  inspection. An old but live owner is never displaced by elapsed time, and a
+  normal concurrent release cannot cause a spurious missing-directory failure.
+
 - [ ] In a fresh linked worktree with no copied `node_modules`, run
       `npm run worktree-setup`: every direct Remix dependency is linked and
       `npm --prefix remix run ensure-deps -- --check` passes.
@@ -13822,6 +13827,18 @@ separate from deterministic discovery/lease tests.
 
 ## Editable Mapbox maps and route planning
 
+- [ ] Batch complete-address lookups with stored coordinates, precise matches,
+  ambiguous results and absent quality metadata. Preserve every input ID/order,
+  do not silently choose an ambiguous pin, and keep temporary coordinates out of
+  saved Things and persistent browser caches. Compare visible map coverage to
+  independent favourite/stop readback. Invalid queries must fail before Vault
+  access; changed permanent selections, incomplete batches and cancellation in
+  the final chunk must refuse success. Run `test:maps` and built HTTP coverage.
+- [ ] Publish successive valid map pages while later pages are pending. On a
+  permission refusal clear protected results; on an ordinary network failure
+  retain useful same-account points with one inline retry. A pin selection must
+  reveal its actual list row, including another page, without resetting the map.
+
 - Select a favourite and a stop from the map, including an item outside the first list page. The exact detail panel opens without changing the URL or rebuilding the map. Test pointer and keyboard activation, focus retention, switching tabs, searching while a background refresh runs, errors/retry and identity changes. In local query mode, searches and saved actions update visible data without page navigation.
 - Delay address-search A, type B, then complete A last. Retire A's suggestions on typing and show only B; page-local tabs still work during an unrelated Action. Manual next-order defaults stay pinned after a failed save, with an explicit retry for a failed summary and a fresh default after successful form reset.
 - Create and edit favourite/stop marker icons, title/custom/both/hidden labels, and optional icon lists; upload a photo, choose Use file, save and reload. Compare the circular marker image and saved attachment ID with exact readback. Verify replacement, removal, inherited stop styling, missing/revoked media, long labels and desktop/mobile overflow. Edit the upload and nested fields separately in Builder, save and reload.
@@ -14383,3 +14400,39 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - [ ] Close the dedicated transfer worker as a saved folder job dispatches a
   request or reuses an idle worker. Verify the app stays open, interrupted work
   can resume through a replacement worker, and the file publishes once.
+
+
+### Authorized Things counts and visible offset windows
+
+- Run `node remix/scripts/things-counts-acceptance.mjs` after a node-server Nitro
+  build. It creates a disposable replica and separate API accounts, compares
+  the exact count against ordinary cursor traversal, exercises literal archive,
+  schema, parent, namespace and public/private PAT filters, and verifies distant
+  offset windows without exposing another account's rows or totals.
+- Compare explicit data-only and mixed data/protected-kind counts/pages with the
+  unfiltered owner library. Prune impossible managed-kind OR exceptions without
+  admitting mixed protected rows; preserve legacy post/folder aliases and the
+  retained managed-kind guards.
+- Confirm `count=true` rejects cursor/limit/offset/exact-ID/discussion parameters,
+  duplicate filters, unsupported query keys and anonymous reads. Errors and
+  cancellation must never return a partial total. Counts carry private/no-store.
+- Confirm offset pages skip **visible** rows, including when blocked or denied
+  inherited rows occur before a requested page. The returned total is separate
+  from loaded rows; failed/unavailable totals remain unknown. Count and offset
+  are current observations rather than transactional snapshots.
+- Review the acceptance report's request count, actual response byte totals and
+  elapsed HTTP timings separately. A native safe-row count and metadata-only
+  fallback avoid transferring/projecting every crystal, but do not prove a
+  production index plan or constant-time offset access.
+
+- Exact-ID batch regression: request mixed accessible/missing/private/protected
+  IDs with duplicates and more than one internal processing chunk. Compare
+  each returned generic Thing to an ordinary exact read, retain input order,
+  and ensure invisible positions are null without an existence distinction.
+  Exercise PAT/app boundaries, malformed IDs, cancellation and mixed selectors.
+- Collection renderer regression: run
+  `node remix/scripts/collections-performance.browser.mjs` with the documented
+  fixture build/server setup in that script. It covers desktop/mobile page
+  transitions, search, selection reveal, identity changes and 403 behavior.
+  Synthetic Action transport timings are renderer evidence; real API timing
+  requires the disposable replica acceptance fixture separately.

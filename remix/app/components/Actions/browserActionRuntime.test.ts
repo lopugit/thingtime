@@ -119,3 +119,15 @@ test('sibling Actions spend the same parent expression budget',async()=>{
  const child={...program([{op:'compute',value:{ttExpr:['add',1,2]}},{op:'compute',value:{ttExpr:['add',1,2]}}]),expressionLimits:{nodes:1000}};
  await assert.rejects(executeBrowserAction(prepared(parent),host({prepare:async()=>({...prepared(child),actionId:'child'})})),/budget/);
 });
+
+
+test('URI components survive saved JSON, validation and browser evaluation at ordinary nesting depth', async () => {
+ const definition = program([{op:'return', value:{ttExpr:['concat','https://example.test/?q=',{ttExpr:['encodeURIComponent','$input.query']}]}}]);
+ const saved = JSON.parse(JSON.stringify(definition));
+ assert.equal(sanitizeActionCrystal(saved).ok, true);
+ assert.equal(await executeBrowserAction(prepared(saved), host()), 'https://example.test/?q=my%20items%20%26%20filter');
+ for (const expression of [['encodeURIComponent'], ['encodeURIComponent','a','b']]) assert.equal(sanitizeActionCrystal(program([{op:'return',value:{ttExpr:expression}}])).ok, false);
+ let nested: any = {ttExpr:['encodeURIComponent','value']};
+ for(let i=0;i<20;i++) nested = {ttExpr:['encodeURIComponent',nested]};
+ assert.equal(sanitizeActionCrystal(program([{op:'return',value:nested}])).ok, false);
+});

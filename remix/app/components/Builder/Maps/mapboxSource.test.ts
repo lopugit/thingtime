@@ -36,3 +36,14 @@ test('identity cancellation and access refusal stop page reads without publishin
 	const denied = await loadMapboxSourcePages(async () => ++page === 1 ? { status: 'ok', result: { items: [{ id: 'private' }], nextCursor: 'next' } } : { status: 'error', errorStatus: 403, error: 'Forbidden' }, () => false);
 	assert.deepEqual(denied, { status: 'error', errorStatus: 403, error: 'Forbidden' });
 });
+
+test('publishes validated pages progressively and never publishes a rejected page', async () => {
+ const published: unknown[] = [];
+ let calls = 0;
+ const denied = await loadMapboxSourcePages(async () => ++calls === 1
+  ? { status: 'ok', result: { items: [{ id: 'a' }], nextCursor: 'next' } }
+  : { status: 'error', errorStatus: 403, error: 'Forbidden' }, () => false, undefined, page => published.push(page.result));
+ assert.equal(published.length, 1);
+ assert.deepEqual((published[0] as any).items, [{ id: 'a' }]);
+ assert.equal(denied.status, 'error');
+});

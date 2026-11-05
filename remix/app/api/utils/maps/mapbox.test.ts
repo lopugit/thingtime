@@ -74,3 +74,89 @@ test('invalid stops fail before credential reveal, and browser config reveals on
 	await assert.rejects(mapboxBrowserConfig('owner-1', { vaultId: 'vault-1' }, reveal), (error: any) => error.status === 409);
 	assert.deepEqual(await mapboxBrowserConfig('owner-1', { vaultId: 'vault-1' }, async () => 'pk.synthetic-token'), { ok: true, publicToken: 'pk.synthetic-token' });
 });
+
+test('complete-address lookups preserve street and allowlisted match quality without provider extras', async () => {
+	const result = await mapboxGeocode('owner-1', { vaultId: 'vault-1', query: '12 Example Road', autocomplete: false }, (async (url: URL) => {
+		assert.equal(url.searchParams.get('autocomplete'), 'false');
+		assert.equal(url.searchParams.get('permanent'), 'false');
+		return Response.json({ features: [{ geometry: { coordinates: [144.96, -37.81] }, properties: {
+			mapbox_id: 'address-1', name: '12 Example Road', place_formatted: 'Example Town', feature_type: 'address',
+			coordinates: { accuracy: 'rooftop', private: 'DO_NOT_PROJECT' },
+			match_code: { confidence: 'exact', address_number: 'matched', street: 'matched', country: 'inferred', postcode: 'unknown-value', secret: 'DO_NOT_PROJECT' },
+			private: 'DO_NOT_PROJECT'
+		} }] });
+	}) as typeof fetch, reveal);
+	assert.deepEqual(result.suggestions![0], {
+		id: 'address-1', label: '12 Example Road', address: '12 Example Road, Example Town', coordinates: [144.96, -37.81],
+		featureType: 'address', accuracy: 'rooftop', matchCode: { confidence: 'exact', address_number: 'matched', street: 'matched', country: 'inferred' }
+	});
+	assert.equal(result.cachePolicy, 'transient');
+	assert.doesNotMatch(JSON.stringify(result), /DO_NOT_PROJECT|unknown-value/);
+});
+
+test('batch geocoding deduplicates provider queries, chunks processing, and retains caller identity/order', async () => {
+	const queries = Array.from({ length: 53 }, (_, n) => ({ id: `row-${n}`, query: `${n} Example Street` }));
+	queries.push({ id: 'same-address', query: queries[0].query });
+	const sizes: number[] = [];
+	const result = await mapboxGeocode('owner-1', { vaultId: 'vault-1', autocomplete: false, queries }, (async (url: URL, init: RequestInit) => {
+		assert.equal(url.origin, 'https://api.mapbox.com');
+		assert.equal(url.pathname, '/search/geocode/v6/batch');
+		assert.equal(url.searchParams.get('permanent'), 'false');
+		assert.equal(init.method, 'POST');
+		assert.equal(init.redirect, 'error');
+		assert.equal(init.cache, 'no-store');
+		const body = JSON.parse(String(init.body));
+		sizes.push(body.length);
+		assert.ok(body.every((q: any) => q.autocomplete === false && q.limit === 8 && !q.id && !q.expectedId));
+		return Response.json({ batch: body.map((q: any) => ({ features: [{ properties: { mapbox_id: q.q, full_address: q.q }, geometry: { coordinates: [144.96, -37.81] } }] })) });
+	}) as typeof fetch, reveal);
+	assert.deepEqual(sizes, [50, 3]);
+	assert.deepEqual(result.results!.map(row => row.id), queries.map(row => row.id));
+	assert.equal(result.results![53].suggestions[0].id, queries[0].query);
+	assert.equal(result.cachePolicy, 'transient');
+});
+
+test('batch input and permanent selection checks cannot bypass validation or reveal provider details', async () => {
+	for (const invalid of [
+		{ autocomplete: 'false', query: 'Example' },
+		{ query: 'Example', queries: [] },
+		{ queries: [{ id: 'same', query: 'First' }, { id: 'same', query: 'Second' }] },
+		{ queries: [{ id: 'row', query: '  ' }] },
+		{ permanent: true, queries: [{ id: 'row', query: 'Example' }] }
+	]) {
+		let revealed = false;
+		await assert.rejects(mapboxGeocode('owner-1', { vaultId: 'vault-1', ...invalid }, fetch, async () => { revealed = true; return 'sk.synthetic-token'; }), (error: any) => error.status === 400);
+		assert.equal(revealed, false);
+	}
+	const input = { vaultId: 'vault-1', permanent: true, queries: [{ id: 'row', query: 'Example', expectedId: 'chosen' }] };
+	const transport = (async (url: URL, init: RequestInit) => {
+		assert.equal(url.searchParams.get('permanent'), 'true');
+		assert.equal(JSON.parse(String(init.body))[0].autocomplete, false);
+		return Response.json({ batch: [{ features: [{ properties: { mapbox_id: 'other', full_address: 'Example' }, geometry: { coordinates: [0, 0] } }] }] });
+	}) as typeof fetch;
+	await assert.rejects(mapboxGeocode('owner-1', input, transport, reveal), (error: any) => error.status === 409);
+	await assert.rejects(mapboxGeocode('owner-1', input, (async () => Response.json({ batch: [] })) as typeof fetch, reveal), (error: any) => error.status === 502);
+});
+
+test('cancelled address batches never publish a partial success or start a further chunk', async () => {
+	const controller = new AbortController();
+	let calls = 0;
+	await assert.rejects(mapboxGeocode('owner-1', { vaultId: 'vault-1', queries: Array.from({ length: 51 }, (_, n) => ({ id: String(n), query: `Example ${n}` })) }, (async (_url: URL, init: RequestInit) => {
+		calls++;
+		const body = JSON.parse(String(init.body));
+		controller.abort();
+		return Response.json({ batch: body.map(() => ({ features: [] })) });
+	}) as typeof fetch, reveal, controller.signal), (error: any) => error.status === 499);
+	assert.equal(calls, 1);
+});
+
+
+test('cancellation during the last batch or single result cannot publish success', async () => {
+ for (const input of [{ query: 'Example' }, { queries: [{ id: 'one', query: 'Example' }] }]) {
+  const controller = new AbortController();
+  await assert.rejects(mapboxGeocode('owner-1', { vaultId: 'vault-1', ...input }, (async () => {
+   controller.abort();
+   return Response.json({ features: [], batch: [{ features: [] }] });
+  }) as typeof fetch, reveal, controller.signal), (error: any) => error.status === 499);
+ }
+});
