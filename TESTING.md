@@ -14555,3 +14555,19 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - Compare/restore Components nested inside containers, elements, collections and
   inactive conditions. Match stable block IDs, preserve duplicate-ID refusal,
   reject ancestor cycles and permit reused objects/lists in separate positions.
+
+### Builder app launch and scope regression
+
+- [ ] Create two independent private apps with identically named pages and data.
+      Set the first app's entry point, save/reload, then activate its card/title
+      on desktop/mobile: the live page opens. Browse and Edit app remain explicit.
+- [ ] Browse into each app; type a query, change every kind/view/display/sort/group
+      chip, then Back/Forward/reload. The folder and query persist; no other app's
+      records appear. All apps is the explicit route back to the global catalogue.
+- [ ] Remove entry metadata: primary activation browses contents. Missing,
+      inaccessible, invalid and cyclic/folder targets show a clear recoverable
+      error; access to the app never grants target access. No navigation runs an
+      Action or changes data, membership, audiences or grants.
+- [ ] Open Edit app, choose a saved page or exact Thing ID, test load-more,
+      unavailable target refusal, keyboard navigation and narrow modal scrolling.
+      Scroll each view top to bottom and verify no overflow/clipping.

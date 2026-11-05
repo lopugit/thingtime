@@ -1,3 +1,4 @@
+import { BuilderAppEntryPoint } from './BuilderAppEntryPoint';
 import { BranchWebpage } from './BranchWebpage';
 import React from 'react';
 import { Box, Flex, Text } from '@chakra-ui/react';
@@ -177,6 +178,8 @@ export const BuilderPage = () => {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const pageId = searchParams.get('page');
 	const thingId = searchParams.get('thing');
+	const appId = searchParams.get('app');
+	if (appId) return <BuilderAppEntryPoint id={appId} />;
 	if (thingId) return <><ThingsPage builderMode /><ThingDefinitionEditor id={thingId} requireBuilder onClose={() => { const next = new URLSearchParams(searchParams); next.delete('thing'); setSearchParams(next); }} /></>;
 	if (searchParams.has('branchId')) return <BranchWebpage pageId={pageId || ''} />;
 	if (!pageId) return <ThingsPage builderMode />;
