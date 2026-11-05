@@ -1,6 +1,7 @@
 import { copyBoundedJson, type JsonValue } from '../utils/boundedJson.ts';
 import type { TimelineSnapshot } from './contract.ts';
 import type { VersionChoices, VersionConflict, VersionValue } from './versions.ts';
+import { pageBlockTraversal } from './pageBlockTraversal.ts';
 
 /** Transient comparison values. An absent map key means the page did not use
  * the ref; present:false means it used the ref but has no recorded definition. */
@@ -90,22 +91,13 @@ export function alignDefinitionsToPage(version: ComponentDefinitionVersion, bloc
 	const collect = (input: unknown) => {
 		const found = new Map<string, string>();
 		const ids = new Set<string>();
-		let visited = 0;
-		const walk = (list: unknown, depth: number) => {
-			if (!Array.isArray(list)) return;
-			if (depth > 24) throw new Error('Page comparison exceeds the nesting limit.');
-			for (const block of list) {
-				if (++visited > 1200) throw new Error('Page comparison exceeds the block limit.');
-				if (!block || typeof block !== 'object') continue;
-				if (typeof block.id === 'string') {
-					if (ids.has(block.id)) throw new Error('Page comparison has duplicate block identities.');
-					ids.add(block.id);
-					if (block.type === 'component' && typeof block.component === 'string') found.set(block.id, block.component.trim());
-				}
-				if (block.type === 'container') walk(block.children, depth + 1);
+		for (const block of pageBlockTraversal(input)) {
+			if (typeof block.id === 'string') {
+				if (ids.has(block.id)) throw new Error('Page comparison has duplicate block identities.');
+				ids.add(block.id);
+				if (block.type === 'component' && typeof block.component === 'string') found.set(block.id, block.component.trim());
 			}
-		};
-		walk(input, 0);
+		}
 		return found;
 	};
 	const source = collect(blocks),
