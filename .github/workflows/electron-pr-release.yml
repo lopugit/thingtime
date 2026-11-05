@@ -168,6 +168,9 @@ jobs:
           corepack pnpm --dir MCP run typecheck
           corepack pnpm --dir MCP test
           corepack pnpm --dir MCP run build:desktop
+          cargo build --locked --manifest-path filesystem-indexer/Cargo.toml -p commander-indexer
+          export THINGTIME_TEST_COMMANDER_INDEXER="${GITHUB_WORKSPACE}/filesystem-indexer/target/debug/commander-indexer"
+          test -x "${THINGTIME_TEST_COMMANDER_INDEXER}"
           swift test --package-path macos/ThingtimeNode
           swift build --package-path macos/ThingtimeNode --configuration release --product ThingtimeNode
           swift build --package-path macos/ThingtimeNode --configuration release --product ThingtimeNodeBridge

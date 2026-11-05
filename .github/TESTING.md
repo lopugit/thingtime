@@ -1,5 +1,46 @@
 # Control-plane regression checklist
 
+## Prebuilt prepare environment (2026-11-02)
+
+- Run `node --test .github/scripts/deploy-vercel-prebuilt.test.mjs`; the prepare
+  authorization step must map both team identifiers and both project identifiers
+  from its existing protected environment. Later publish mappings cannot satisfy
+  this regression. Keep the product build job secret-free.
+- After reviewed controller rollout, rerun the existing protected deployment and
+  verify prepare passes before claiming publication. No credentials, environment
+  values or protection settings need changing.
+
+## Orphan Vercel deployment cleanup (2026-10-30)
+
+- Run `node --test .github/scripts/preview-gateway-source.test.mjs .github/scripts/orphan-preview-cleanup.test.mjs .github/scripts/deploy-vercel-prebuilt.test.mjs`
+  and both PR publisher self-tests. Cover complete multi-page inventories,
+  repeats/missing cursors, provider failures, source mismatch, deleted/reopened
+  PRs, same-branch replacement PRs, legacy previews and active-build cancellation.
+- Verify stable branches, production, gateway owners, stale production/custom target
+  pointers, fresh canonical/custom domain bindings and foreign PR aliases survive.
+  Test races at cancellation/deletion fences; a failed read is never absence.
+- Run `node --test .github/scripts/preview-retention-policy.test.mjs`; verify
+  origin/operation capability negotiation, exact signed repository/ref/time,
+  invalid/missing/disabled policy, closed grace, superseded replacement grace,
+  newest READY/lane/PR protection, unaliased READY versus published alias owners,
+  activity expiry/resumption and disabling mid-run. Paused admin lanes must
+  never bypass policy through alias-only or direct backend deletion.
+  Retained closed previews must not acquire removed labels/inactive statuses.
+  Failed late-upload cleanup must preserve the original publication error,
+  report the secondary failure without credentials and leave retry to the sweep.
+  Inactive-open expiry must not post activity that immediately recreates it.
+- Deploy the product policy endpoint first, then activate the controller. Exercise
+  signed read and immediate reconcile with the existing trusted listener:
+  `gh workflow run develop-pr-preview.yml --repo lopugit/thingtime --ref main -f pr_number=0`.
+  Zero-PR mode must require current allowlisted actor write/admin permission,
+  bypass builds and never expose the CI HMAC secret to product source.
+- After authorized rollout on `github-actions`, run the existing preview sweep,
+  verify each deleted ID returns 404, immutable URLs stop serving, repeat with
+  no remaining orphan mutations, and confirm production/develop/staging/master
+  aliases retain their original IDs. Exercise a real PR close during upload.
+  Local fixture success is not live deletion or rollout evidence.
+
+
 ## PR lifecycle settlement (2026-09-16)
 
 - Run `node --test .github/scripts/lopu-pr-lifecycle.test.mjs`.
@@ -202,6 +243,22 @@ pre-queued with no jobs, logs, or cancellable run graph.
   manifests. No unconfigured model may run or credential value enter logs/commits.
 - Run `node --test .github/scripts/admin-model-order.test.mjs .github/scripts/lopu-credential-vault.test.mjs`.
 # Prebuilt-only deployments (2026-10-23)
+
+## Storage release protection (2026-10-29)
+
+- Run `node --test .github/scripts/storage-release-gate.test.mjs .github/scripts/deploy-vercel-prebuilt.test.mjs .github/scripts/environment-gateway-policy.test.mjs`.
+- The existing required `control-plane / Build + typecheck ratchet + unit tests` context checks public production Nitro storage readiness in both full and lightweight paths. An HTTP-200 degraded body, unavailable endpoint, wrong origin, incompatible capability or missing storage status must fail the check. No new ruleset exemption or credential grant is needed.
+- Publication uses two phases because an immutable candidate remains a proxy follower until the canonical alias elects it. Before any alias changes, verify its platform project/source/target/policy identity, local manifest origin/gateway deployment identity, `api.health-nitro >= 1.3.0` with its GET operation, shared `api.storage-accounting >= 1.0.0` (matching major 1), candidate-scoped runtime logs, and the **current canonical owner's** honest storage readiness bound to the snapshotted deployment ID. Do not call the candidate's health API or claim its storage census passed in this phase: it would proxy to the older owner, and local health getters can perform collection adoption and error-log writes. No pre-promotion database admission exception is allowed.
+- Promote the canonical alias first, immediately verify its newly selected gateway identity and full storage readiness at health 1.3/storage 1.0, then move and verify secondary aliases. Only this post-promotion check exercises the candidate's own census. Existing bounded alias verification allows ownership/cache convergence and recovering queues to drain; they must reach exact `ready`. Failure rolls back only bindings still owned by this attempted deployment, using the pre-upload snapshot; concurrent operators' bindings remain untouched. This has a bounded post-promotion acceptance window rather than a guarantee that a candidate census ran before traffic moved. No success status is written until all aliases pass.
+- A changed canonical owner aborts pre-promotion verification. Reuse an exact READY deployment/artifact on recovery, preserving all metadata and log gates. Premerge/current-owner checks accept repaired health 1.2.0 without the new shared feature so the first stronger contract can roll out. Unprivileged controller PRs test their exact candidate gate; product PRs always load protected controller code.
+- The protected runtime monitor is called by the product default-branch thin listener `storage-release-monitor.yml`, every 15 minutes and after deployment completion. Activate the controller PR before that product listener. It reuses `vercel-prebuilt-control`'s existing `VERCEL_DEPLOY_TOKEN` and project/team vars; it does not create an admin token or run production migrations.
+- Verify one live manual monitor run, not only fixtures: resolve `thingtime.com` to its current project-owned production deployment, negotiate health on that origin, then query that exact deployment's last 30 minutes through pinned Vercel CLI 59.10.0 `logs --project ... --deployment ... --environment production --since ... --until ... --level error --level fatal --limit 500 --json --no-follow`. Pass the token only in `VERCEL_TOKEN`. Current [CLI docs](https://vercel.com/docs/cli/logs) describe newer flags; use the pinned package's `logs --help` for this implementation. Query all error/fatal rows before local storage classification so an allowlisted structured code cannot be hidden by a prose-only provider search.
+- Capture CLI output only in memory; report aggregate counts or fixed failure codes, never raw provider stdout/stderr, messages, URLs, account identifiers or credentials. Access failure, invalid JSON, message truncation and a saturated result window fail closed. Classify legacy migration prose plus the authored `STORAGE_MIGRATION_REQUIRED`, `STORAGE_RECOVERY_BUSY`, `STORAGE_ACCOUNTING_UNAVAILABLE` and `STORAGE_INVARIANT` codes (and fixed recovery message) emitted by the dispatcher/storage boundary. Generic unrelated HTTP 503 prose alone is not a storage classifier. Provider retention and best-effort application log capture bound detection; healthy sampled logs alone do not prove a real account write succeeded.
+- The monitor publishes a source-specific `Production storage runtime` commit status and a failing workflow run. Deduplicate unchanged status state/description and stop stale observations when the production alias moves. A success requires both current readiness and no matching errors in the complete bounded query. Review the workflow failure before any recovery; no automatic migration or destructive repair is granted by this gate.
+- Provider failures identify only the fixed provider name, HTTP status and an exhausted-rate-limit flag from the response header. No response body, URL, credential or arbitrary provider message is emitted. Establish this layer before changing credential selection; a generic provider failure alone does not prove missing permission or quota exhaustion.
+- Required Web CI's API-suite job runs `pnpm run test:storage-recovery:integration` whenever the product script exists. On Linux it explicitly selects Docker: an owned unique `mongo:7` container, loopback-only random port with host networking, tmpfs data and scrubbed child environment. It must not borrow the suite's existing MongoDB service or any host data directory. Script/package failures fail the required job; only historical script absence skips. Locally the same script resolves `mongod` from PATH or the explicit test-only binary override. Verify concurrent 100MiB admission, rollback, exact independent census and repeated drain through the real integration, plus exact container/process/temp-directory cleanup.
+
+## Prebuilt artifact acceptance
 
 - Prebuilt publication must write the immutable source cron list into Build Output API `config.json` for Production only, and set each function region from that source. Verify the live deployment reports Sydney only and the active project cron list contains all seven expected schedules. A changed output-policy marker must replace older READY artifacts.
 

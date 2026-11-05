@@ -178,3 +178,177 @@ test('an unavailable diff preserves incomplete state while another PR hydrates',
     assert.match(result.stderr,/inventory incomplete/);
   } finally { rmSync(temp,{recursive:true,force:true}); }
 });
+
+// Per-PR isolation made one ungeneratable diff non-fatal but left the
+// aggregate cost unbounded: job 124090191975 spent 867s of the detector's
+// 900s timeout in this O(open PRs) loop replaying 28 permanently refused
+// diffs, was cancelled before publishing any prs/any output, and reddened the
+// unrelated PR whose pull_request_target started it. An advisory enrichment
+// must yield the step's clock back, and must say which PRs it dropped.
+test('an exhausted changed-file budget defers the rest instead of the whole scan', () => {
+  const helper = workflow.slice(workflow.indexOf('          complete_large_pr_files() {'), workflow.indexOf('          query() {')).replace(/^          /gm, '');
+  const temp = mkdtempSync(join(tmpdir(), 'pr-inventory-'));
+  const inventory = '[{"number":1,"files":[],"filesTotal":0,"filesIncomplete":true},{"number":2,"files":[],"filesTotal":0,"filesIncomplete":true}]';
+  const run = (deadline) => spawnSync('bash', ['-c', `set -euo pipefail
+    gh_read_retry() { echo '[[{"filename":"app.ts"}]]'; }
+    ${helper}
+    complete_large_pr_files '${inventory}'`],
+    {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp,REPO:'owner/repo',FILES_INVENTORY_DEADLINE_SECONDS:deadline}});
+  try {
+    // A deadline already behind the step clock hydrates nothing, stays green,
+    // and leaves every row in the explicit state a read failure produces.
+    const exhausted = run('0');
+    assert.equal(exhausted.status,0,exhausted.stderr);
+    const deferredRows = JSON.parse(exhausted.stdout);
+    assert.equal(deferredRows.length,2);
+    assert.ok(deferredRows.every(({filesIncomplete}) => filesIncomplete === true));
+    assert.match(exhausted.stderr,/reached its 0s budget with 2 PR\(s\) un-hydrated/);
+    // No silent cap: the dropped PRs are named, because an un-hydrated PR is
+    // indistinguishable from a PR that changed no files.
+    assert.match(exhausted.stderr,/#1 #2/);
+
+    const within = run('600');
+    assert.equal(within.status,0,within.stderr);
+    assert.ok(JSON.parse(within.stdout).every(({files}) => files.length === 1));
+    assert.doesNotMatch(within.stderr,/un-hydrated/);
+  } finally { rmSync(temp,{recursive:true,force:true}); }
+});
+
+
+// GitHub answers an exhausted PRIMARY installation budget with HTTP 403 and
+// "API rate limit exceeded", never 429. Status-only matching therefore classed
+// the single most self-healing condition the API has as non-transient, and
+// `set -e` published a red check on every open PR for an upstream budget reset
+// (observed 2026-10-27: 112 occurrences in job 122051615523, then again in
+// runs 40466388995 / 40467017867). Run the REAL helper against a stubbed `gh`.
+const readRetry = (marker, call) => {
+  const body = workflow.slice(workflow.indexOf(marker));
+  return body.slice(0, body.indexOf('\n          }\n') + 13).replace(/^          /gm, '')
+    + `\n${call}\n`;
+};
+const ghStub = (status, message) => `gh() { echo '${message} (HTTP ${status})' >&2; return 1; }\n`;
+
+test('an exhausted shared API budget is recorded for deferral, not called non-transient', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'gh-budget-'));
+  try {
+    const script = 'set -euo pipefail\n'
+      + ghStub(403, 'gh: API rate limit exceeded for installation')
+      + readRetry('          gh_read_retry() {\n            local attempt delay output errors transport slow_diff\n            transport=', 'gh_read_retry pr list || echo "status=$?"');
+    const result = spawnSync('bash', ['-c', script], {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /status=1/);
+    // The sentinel the step's EXIT trap consults.
+    assert.ok(readFileSync(join(temp, 'lopu-gh-budget-exhausted'), 'utf8') === '');
+    assert.match(result.stderr, /shared installation API budget is exhausted/);
+    // The old message actively misdirected diagnosis; it must be gone.
+    assert.doesNotMatch(result.stderr, /without a recoverable transient response/);
+    // A budget reset is not clearable by a 2-8s backoff: no retry is spent.
+    assert.doesNotMatch(result.stderr, /hit a transient failure/);
+  } finally { rmSync(temp, {recursive:true, force:true}); }
+});
+
+test('a bare 403 still fails fast and a 429 still retries transiently', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'gh-budget-'));
+  const marker = '          gh_read_retry() {\n            local attempt delay output errors transport slow_diff\n            transport=';
+  try {
+    // A real permission failure must not be mistaken for a budget reset.
+    const denied = spawnSync('bash', ['-c', 'set -euo pipefail\n'
+      + ghStub(403, 'gh: Resource not accessible by integration')
+      + readRetry(marker, 'gh_read_retry pr list || echo "status=$?"')],
+      {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(denied.status, 0, denied.stderr);
+    assert.match(denied.stdout, /status=1/);
+    assert.match(denied.stderr, /Resource not accessible by integration/);
+    assert.doesNotMatch(denied.stderr, /budget is exhausted/);
+    assert.doesNotMatch(denied.stderr, /hit a transient failure/);
+    assert.throws(() => readFileSync(join(temp, 'lopu-gh-budget-exhausted')));
+
+    // A secondary limit keeps the existing bounded backoff.
+    const secondary = spawnSync('bash', ['-c', 'set -euo pipefail\n'
+      + ghStub(429, 'gh: You have exceeded a secondary rate limit')
+      + readRetry(marker, 'gh_read_retry pr list || echo "status=$?"')],
+      {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(secondary.status, 0, secondary.stderr);
+    assert.match(secondary.stderr, /hit a transient failure \(attempt 1\/4\)/);
+    assert.throws(() => readFileSync(join(temp, 'lopu-gh-budget-exhausted')));
+  } finally { rmSync(temp, {recursive:true, force:true}); }
+});
+
+test('a later successful read clears a stale budget sentinel', () => {
+  // Otherwise one tolerated budget failure would mask every unrelated
+  // failure later in the same step as a deferral.
+  const temp = mkdtempSync(join(tmpdir(), 'gh-budget-'));
+  try {
+    const script = 'set -euo pipefail\n'
+      + 'gh() { echo ok; }\n'
+      + readRetry('          gh_read_retry() {\n            local attempt delay output errors transport slow_diff\n            transport=',
+        ': >"$RUNNER_TEMP/lopu-gh-budget-exhausted"\ngh_read_retry pr list >/dev/null');
+    const result = spawnSync('bash', ['-c', script], {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(result.status, 0, result.stderr);
+    assert.throws(() => readFileSync(join(temp, 'lopu-gh-budget-exhausted')));
+  } finally { rmSync(temp, {recursive:true, force:true}); }
+});
+
+test('only the advisory inventory declines the indefinite slow-diff retry', () => {
+  // GitHub repeats "diff is taking too long to generate" for as long as a PR
+  // stays oversize, so the 2-8s backoff buys nothing where the caller already
+  // degrades gracefully -- and everything where failure stops the step.
+  const temp = mkdtempSync(join(tmpdir(), 'gh-slow-diff-'));
+  const marker = '          gh_read_retry() {\n            local attempt delay output errors transport slow_diff\n            transport=';
+  const call = 'gh_read_retry api "repos/o/r/pulls/1/files" || echo "status=$?"';
+  const stub = ghStub(422, 'gh: Server Error: Sorry, this diff is taking too long to generate.');
+  try {
+    const retried = spawnSync('bash', ['-c', `set -euo pipefail\n${stub}${readRetry(marker, call)}`],
+      {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(retried.status, 0, retried.stderr);
+    assert.match(retried.stdout, /status=1/);
+    assert.match(retried.stderr, /hit a transient failure \(attempt 3\/4\)/);
+
+    const declined = spawnSync('bash', ['-c',
+      `set -euo pipefail\n${stub}${readRetry(marker, `LOPU_SLOW_DIFF_RETRY=false\n${call}`)}`],
+      {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(declined.status, 0, declined.stderr);
+    assert.match(declined.stdout, /status=1/);
+    assert.doesNotMatch(declined.stderr, /hit a transient failure/);
+    // A 422 that is NOT the generation timeout still fails on attempt one.
+    const invalid = spawnSync('bash', ['-c', 'set -euo pipefail\n'
+      + ghStub(422, 'gh: Validation Failed: No commits between main and topic')
+      + readRetry(marker, call)], {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(invalid.status, 0, invalid.stderr);
+    assert.doesNotMatch(invalid.stderr, /hit a transient failure/);
+  } finally { rmSync(temp, {recursive:true, force:true}); }
+});
+
+test('both PR-facing detectors defer an exhausted budget instead of reporting red', () => {
+  // The red checks that motivated this repair: a repository-wide budget reset
+  // must resolve to each step's existing "nothing to do" answer, not a failure
+  // published onto every open PR.
+  for (const [step, outputs] of [['prs=[]\\nany=false', /prs=\[\]\nany=false/], ['any=false', /any=false/]]) {
+    assert.ok(workflow.includes(step));
+    void outputs;
+  }
+  const traps = [...workflow.matchAll(/defer_on_exhausted_budget\(\) \{\n([\s\S]*?)\n          \}\n          trap defer_on_exhausted_budget EXIT/g)];
+  assert.equal(traps.length, 2, 'both PR-facing detectors install the deferral trap');
+  const temp = mkdtempSync(join(tmpdir(), 'gh-defer-'));
+  try {
+    for (const [, body] of traps) {
+      const fn = `defer_on_exhausted_budget() {\n${body.replace(/^          /gm, '')}\n}\n`;
+      const run = (seed) => spawnSync('bash', ['-c',
+        `set -euo pipefail\nLOPU_GH_BUDGET_SENTINEL="$RUNNER_TEMP/s"\n${seed}\n${fn}`
+        + 'trap defer_on_exhausted_budget EXIT\nfalse\n'],
+        {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp,GITHUB_OUTPUT:join(temp,'out')}});
+
+      rmSync(join(temp,'out'), {force:true});
+      const deferred = run(': >"$LOPU_GH_BUDGET_SENTINEL"');
+      assert.equal(deferred.status, 0, 'an exhausted budget defers with a green step');
+      assert.match(deferred.stdout, /::notice::Deferring this/);
+      assert.match(readFileSync(join(temp,'out'),'utf8'), /any=false/);
+
+      rmSync(join(temp,'out'), {force:true});
+      rmSync(join(temp,'s'), {force:true});
+      const genuine = run(':');
+      assert.equal(genuine.status, 1, 'an unrelated failure still fails the step');
+      assert.doesNotMatch(genuine.stdout, /Deferring/);
+    }
+  } finally { rmSync(temp, {recursive:true, force:true}); }
+});

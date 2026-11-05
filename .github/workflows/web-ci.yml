@@ -303,6 +303,22 @@ jobs:
           cache: pnpm
           cache-dependency-path: remix/pnpm-lock.yaml
 
+      - name: Read protected storage release gate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          # Controller PRs test their exact new gate without deployment secrets;
+          # product PRs always use the protected implementation.
+          ref: ${{ github.base_ref == 'github-actions' && github.event.pull_request.head.sha || 'github-actions' }}
+          path: .storage-controller
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: .github/scripts/storage-release-gate.mjs
+
+      # Inside the existing required build context: failed readiness cannot
+      # become a skipped dependent check which GitHub considers mergeable.
+      - name: Require production storage readiness before merge
+        run: node ../.storage-controller/.github/scripts/storage-release-gate.mjs
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -375,6 +391,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The integration owns its replica and scrubs inherited configuration;
+      # it never reuses this job's application Mongo service or data.
+      # Historical trees may omit it; a present failing script fails this job.
+      - name: Verify durable storage recovery against an isolated replica
+        if: ${{ hashFiles('remix/scripts/storage-recovery.integration.mts') != '' }}
+        env:
+          THINGTIME_TEST_MONGO_RUNTIME: docker
+        run: pnpm run test:storage-recovery:integration
+
       - name: Start dev stack
         run: |
           nohup npm run dev > /tmp/tt-dev.log 2>&1 &
@@ -404,6 +429,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
+      - name: Read protected storage release gate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          # Controller PRs test their exact new gate without deployment secrets;
+          # product PRs always use the protected implementation.
+          ref: ${{ github.base_ref == 'github-actions' && github.event.pull_request.head.sha || 'github-actions' }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: .github/scripts/storage-release-gate.mjs
+      - name: Require production storage readiness before merge
+        run: node .github/scripts/storage-release-gate.mjs
       - name: Report the non-Remix build context
         run: echo "No Remix or Web CI workflow changes; the full build is not required."
 

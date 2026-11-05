@@ -8,6 +8,16 @@ import { publish, needsReleaseBuild, verifyAlias, verifyCanonicalGateway, compat
 
 import { gatewayMetadata, gatewayPolicy } from './environment-gateway-policy.mjs';
 
+test('prepare authorization receives every required Vercel project variable before publisher jobs', () => {
+  const yaml = readFileSync(new URL('../workflows/deploy-vercel-prebuilt.yml', import.meta.url), 'utf8');
+  const prepare = yaml.split('\n  prepare:\n')[1].split('\n  build:\n')[0];
+  assert.match(prepare, /environment: vercel-prebuilt-control/);
+  const authorization = prepare.split('- name: Authorize current branch and environment')[1].split('\n        run:')[0];
+  for (const name of ['VERCEL_TEAM_ID', 'VERCEL_TEAM_SLUG', 'VERCEL_PROJECT_ID', 'VERCEL_PROJECT_NAME']) {
+    assert.ok(authorization.split('\n').some(line => line.trim() === `${name}: $` + `{{ vars.${name} }}`), `Prepare must map ${name} from its protected environment`);
+  }
+});
+
 const custom = [{ id: 'env_develop', slug: 'develop', branchMatcher: { type: 'equals', pattern: 'develop' } }];
 test('a READY artifact still reconciles its aliases and status without rebuilding', () => {
   const plan = { sha: 'a'.repeat(40), branch: 'main', target: { slug: 'production', kind: 'production', id: '' } };
@@ -180,7 +190,7 @@ test('bootstrap can request secretless artifacts without enabling any publicatio
 });
 
 
-test('READY reuse publishes alias, status and summary, then retries without another mutation', async () => {
+test('two-phase promotion binds owners, rejects preflight failures, rolls back failed health and reuses READY output', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'publisher-ready-reuse-'));
   const summary = join(directory, 'summary.md');
   const environment = {
@@ -189,7 +199,7 @@ test('READY reuse publishes alias, status and summary, then retries without anot
     VERCEL_TEAM_ID: 'team_test', VERCEL_TEAM_SLUG: 'team',
     VERCEL_PROJECT_ID: 'prj_test', VERCEL_PROJECT_NAME: 'thingtime',
     SOURCE_REF: 'main', SOURCE_SHA: 'a'.repeat(40), TARGET_ENVIRONMENT: 'production', TARGET_ID: '',
-    GITHUB_RUN_ID: '123', GITHUB_STEP_SUMMARY: summary
+    GITHUB_RUN_ID: '123', GITHUB_STEP_SUMMARY: summary, VERCEL_CLI_PATH: '/verified/vercel'
   };
   const originalEnvironment = Object.fromEntries(Object.keys(environment).map((key) => [key, process.env[key]]));
   const originalFetch = globalThis.fetch;
@@ -201,14 +211,19 @@ test('READY reuse publishes alias, status and summary, then retries without anot
     meta: { ...gatewayMetadata(policy), [marker]: '1', thingtimePrebuiltPolicy: policyVersion,
       thingtimeBuildTarget: 'production', githubCommitSha: sha, githubCommitRef: 'main' }
   };
-  let binding = { projectId: 'prj_test', alias: 'thingtime.com', deploymentId: 'dpl_previous' };
-  const statuses = [];
-  const calls = [];
+  const bindings = new Map([
+    ['thingtime.com', { projectId: 'prj_test', alias: 'thingtime.com', deploymentId: 'dpl_previous' }],
+    ['www.thingtime.com', { projectId: 'prj_test', alias: 'www.thingtime.com', deploymentId: 'dpl_previous_www' }]
+  ]);
+  const statuses = [], calls = [], assignments = [];
+  let storageReady = true, postReady = true, candidateContract = true;
+  const runtimeLogs = async (options) => { assert.equal(options.deploymentId, deployment.id); calls.push('runtime-log-gate'); };
+  const aliasVerifier = async (check) => check({ signal: AbortSignal.timeout(1000) });
+  const publishFixture = (extra = {}) => publish({ runtimeLogs, aliasVerifier, ...extra });
   const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
   Object.assign(process.env, environment);
   globalThis.fetch = async (input, init = {}) => {
-    const url = new URL(String(input));
-    const method = init.method || 'GET';
+    const url = new URL(String(input)), method = init.method || 'GET';
     calls.push(`${method} ${url.origin}${url.pathname}`);
     if (url.hostname === 'api.github.com') {
       const path = url.pathname.replace('/repos/lopugit/thingtime', '');
@@ -223,45 +238,75 @@ test('READY reuse publishes alias, status and summary, then retries without anot
       if (path === '/v9/projects/prj_test') return json({ id: 'prj_test', name: 'thingtime', link: null });
       if (path === '/v9/projects/prj_test/custom-environments') return json({ environments: [] });
       if (path === '/v9/projects/prj_test/env') return json({ envs: [{ key: 'THINGTIME_GATEWAY_SECRET', type: 'encrypted', target: ['production'] }] });
-      if (path === '/v9/projects/prj_test/domains') return json({ domains: [{ name: 'thingtime.com', verified: true }] });
+      // Deliberately return the secondary alias first: canonical must be promoted first.
+      if (path === '/v9/projects/prj_test/domains') return json({ domains: [{ name: 'www.thingtime.com', verified: true }, { name: 'thingtime.com', verified: true }] });
       if (path === '/v7/deployments') return json({ deployments: [{ uid: deployment.id }] });
       if (path === '/v13/deployments/dpl_ready') return json(deployment);
-      if (path === '/v4/aliases/thingtime.com') return json(binding);
-      if (path.startsWith('/v4/aliases/')) return json({}, 404);
-      if (path === '/v2/deployments/dpl_ready/aliases' && method === 'POST') {
-        assert.deepEqual(JSON.parse(init.body), { alias: 'thingtime.com' });
-        binding = { ...binding, deploymentId: deployment.id }; return json(binding);
+      if (path.startsWith('/v4/aliases/')) return bindings.has(path.slice(12)) ? json(bindings.get(path.slice(12))) : json({}, 404);
+      if (/^\/v2\/deployments\/dpl_(ready|previous|previous_www)\/aliases$/.test(path) && method === 'POST') {
+        const { alias } = JSON.parse(init.body), deploymentId = path.split('/')[3];
+        assert.ok(bindings.has(alias));
+        assignments.push({ alias, deploymentId });
+        const binding = { ...bindings.get(alias), deploymentId }; bindings.set(alias, binding); return json(binding);
       }
     }
-    if (['thingtime-ready.vercel.app', 'thingtime.com'].includes(url.hostname)) {
+    if (url.hostname === 'thingtime-ready.vercel.app' || bindings.has(url.hostname)) {
       if (url.pathname === '/' || url.pathname === '/index.html') return new Response('<div id="root"></div><script src="/assets/app.js"></script>', { headers: { 'Content-Type': 'text/html' } });
       if (url.pathname === '/assets/app.js') return new Response('console.log("fixture")', { headers: { 'Content-Type': 'application/javascript' } });
-      if (url.pathname === '/.well-known/thingtime-capabilities.json') return json({ origin: 'https://thingtime.com', gateway: { environment: 'production', origin: 'https://thingtime.com', deploymentId: deployment.id } });
+      const deploymentId = url.hostname === 'thingtime-ready.vercel.app' ? deployment.id : bindings.get(url.hostname).deploymentId;
+      const next = deploymentId === deployment.id;
+      if (url.pathname === '/.well-known/thingtime-capabilities.json') return json({
+        schemaVersion: 1, origin: url.origin, features: { 'api.health-nitro': { version: next ? '1.3.0' : '1.2.0' }, ...(next && candidateContract ? { 'api.storage-accounting': { version: '1.0.0' } } : {}) },
+        operations: [{ feature: 'api.health-nitro', path: '/api/v1/health/nitro', methods: ['GET'] }],
+        gateway: { environment: 'production', origin: 'https://thingtime.com', deploymentId }
+      });
+      if (url.pathname === '/api/v1/health/nitro') {
+        // This is the actual rollout failure: the candidate is still a follower.
+        if (url.hostname === 'thingtime-ready.vercel.app') return json({ code: 'ENVIRONMENT_GATEWAY_CAPABILITY' }, 409);
+        const ready = next ? postReady : storageReady;
+        return json({ origin: url.origin, targetOrigin: url.origin, service: 'nitro', ok: ready, state: ready ? 'ready' : 'degraded', storageAccounting: { state: ready ? 'ready' : 'migration-required', expectedVersion: 1 } });
+      }
       if (url.pathname === '/api/root-data') return json({ ok: true });
     }
     throw new Error(`Unexpected fixture request: ${method} ${url.origin}${url.pathname}`);
   };
   try {
-    await publish();
-    assert.equal(binding.deploymentId, deployment.id);
+    storageReady = false;
+    await assert.rejects(publishFixture(), /storage-not-ready/);
+    assert.equal(assignments.length, 0);
+    storageReady = true; candidateContract = false;
+    await assert.rejects(publishFixture(), /storage-capability-unavailable/);
+    assert.equal(assignments.length, 0);
+    candidateContract = true;
+    await assert.rejects(publishFixture({ runtimeLogs: async () => { throw new Error('runtime-storage-errors-1'); } }), /runtime-storage-errors-1/);
+    assert.equal(assignments.length, 0);
+    postReady = false;
+    await assert.rejects(publishFixture(), /storage-not-ready/);
+    assert.equal(bindings.get('thingtime.com').deploymentId, 'dpl_previous');
+    assert.equal(bindings.get('www.thingtime.com').deploymentId, 'dpl_previous_www');
+    assert.equal(statuses.length, 0);
+    assert.deepEqual(assignments, [{ alias: 'thingtime.com', deploymentId: 'dpl_ready' }, { alias: 'thingtime.com', deploymentId: 'dpl_previous' }]);
+    postReady = true; calls.length = 0; assignments.length = 0;
+    await publishFixture();
     assert.equal(statuses.length, 1);
     assert.equal(statuses[0].target_url, 'https://thingtime-ready.vercel.app');
     assert.equal(statuses[0].context, 'Vercel prebuilt (production)');
+    assert.deepEqual(assignments, [{ alias: 'thingtime.com', deploymentId: 'dpl_ready' }, { alias: 'www.thingtime.com', deploymentId: 'dpl_ready' }]);
+    const firstPromotion = calls.findIndex((call) => call.startsWith('POST '));
+    assert.ok(calls.indexOf('runtime-log-gate') < firstPromotion);
+    assert.ok(calls.indexOf('GET https://thingtime.com/api/v1/health/nitro') < firstPromotion);
+    assert.equal(calls.includes('GET https://thingtime-ready.vercel.app/api/v1/health/nitro'), false);
+    assert.equal(calls.slice(0, firstPromotion).includes('GET https://www.thingtime.com/api/v1/health/nitro'), false);
     assert.match(await readFile(summary, 'utf8'), /Deployment: https:\/\/thingtime-ready\.vercel\.app/);
-    assert.ok(calls.includes('GET https://thingtime.com/.well-known/thingtime-capabilities.json'));
-    assert.ok(calls.includes('GET https://thingtime.com/api/root-data'));
-    assert.equal(calls.filter((call) => call.startsWith('POST ')).length, 2);
     const firstCalls = calls.length;
     await writeFile(summary, '');
-    await publish();
+    await publishFixture();
     assert.equal(statuses.length, 1);
     assert.equal(calls.slice(firstCalls).filter((call) => call.startsWith('POST ')).length, 0);
     assert.match(await readFile(summary, 'utf8'), /Environment: `production`/);
   } finally {
     globalThis.fetch = originalFetch;
-    for (const [key, value] of Object.entries(originalEnvironment)) {
-      if (value === undefined) delete process.env[key]; else process.env[key] = value;
-    }
+    for (const [key, value] of Object.entries(originalEnvironment)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -298,4 +343,62 @@ test('alias acceptance aborts an in-flight read at its deadline', async () => {
   let signal;
   await assert.rejects(verifyAlias(({ signal: value }) => { signal = value; return new Promise(() => {}); }, async () => {}, { timeoutMs: 15, onFailure: () => {} }), /deadline expired/);
   assert.equal(signal.aborted, true);
+});
+
+test('failed late-upload cleanup preserves the original publication error', async () => {
+  const branch = 'feature/cleanup-error', sha = 'a'.repeat(40), repository = 'lopugit/thingtime';
+  const environment = { GITHUB_REPOSITORY: repository, GH_TOKEN: 'fixture-gh', VERCEL_TEAM_ID: 'team_test', VERCEL_TEAM_SLUG: 'team', VERCEL_API_TOKEN: 'fixture-vercel', VERCEL_PROJECT_ID: 'prj_test', VERCEL_PROJECT_NAME: 'thingtime', SOURCE_REF: branch, SOURCE_SHA: sha, TARGET_ENVIRONMENT: 'preview', TARGET_ID: '', GITHUB_RUN_ID: '123', THINGTIME_CI_ROUTER_SECRET: 'fixture-ci', THINGTIME_PREVIEW_POLICY_ORIGIN: 'https://policy.example.test' };
+  const previous = Object.fromEntries(Object.keys(environment).map(key => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch, originalLog = console.log, logs = [];
+  const gateway = gatewayPolicy({ branch, target: { slug: 'preview' } });
+  const deployment = { id: 'dpl_ready', projectId: 'prj_test', url: 'feature-ready.vercel.app', readyState: 'READY', target: null, regions: ['syd1'], crons: [], meta: { ...gatewayMetadata(gateway), [marker]: '1', thingtimePrebuiltPolicy: policyVersion, thingtimeBuildTarget: 'preview', githubCommitSha: sha, githubCommitRef: branch, githubCommitOrg: 'lopugit', githubCommitRepo: 'thingtime' } };
+  const policy = { version: 1, enabled: true, noOpenPrGraceHours: 0, supersededGraceHours: 24, pruneSupersededOpenPr: false, inactivePullRequestDays: null };
+  const repo = { id: 42, full_name: repository, owner: { login: 'lopugit' }, name: 'thingtime', default_branch: 'main' };
+  const pr = { number: 12, state: 'open', head: { ref: branch, sha, repo }, base: { repo } };
+  const source = path => ({ type: 'file', encoding: 'base64', content: Buffer.from(
+    path.endsWith('/mongodb.ts') ? "import { requireGatewayDatabaseAccess } from '../deployment/environmentGateway'; class GatewayMongoClient extends mod.MongoClient { override async connect() { await requireGatewayDatabaseAccess(); await super.connect(); } }" :
+    path.endsWith('/environment-gateway.ts') ? "import { environmentGatewayIngress } from '../utils/environmentGateway'; await environmentGatewayIngress(event.req); runAdmittedGatewayWork(() => next());" :
+    path.endsWith('/mongoConnectionPolicy.ts') ? "export const mongoConnectionPolicy = 'proxy';" :
+    'export const requireGatewayDatabaseAccess = async () => { await gatewayAuthority.requireDatabase(); };'
+  ).toString('base64') });
+  let publicationFailed = false, cleanupReads = 0;
+  Object.assign(process.env, environment);
+  console.log = value => logs.push(String(value));
+  globalThis.fetch = async input => {
+    const url = new URL(String(input)), path = decodeURIComponent(url.pathname);
+    if (url.origin === environment.THINGTIME_PREVIEW_POLICY_ORIGIN) {
+      if (path.endsWith('thingtime-capabilities.json')) return Response.json({ schemaVersion: 1, origin: url.origin, features: { 'api.integration-ci-preview-retention': { version: '1.0.0' } }, operations: [{ feature: 'api.integration-ci-preview-retention', path: '/api/v1/integrations/ci/preview-retention', methods: ['POST'] }] });
+      return Response.json({ ok: true, repository, policy });
+    }
+    if (url.hostname === 'api.github.com') {
+      const route = path.replace(`/repos/${repository}`, '');
+      if (!route) return Response.json(repo);
+      if (route === `/git/ref/heads/${branch}`) return Response.json({ object: { sha } });
+      if (route === '/pulls') return Response.json([pr]);
+      if (route === '/contents/vercel.json') return Response.json({ content: Buffer.from(JSON.stringify({ regions: ['syd1'] })).toString('base64') });
+      if (route.startsWith('/contents/')) return Response.json(source(route));
+    }
+    if (url.hostname === 'api.vercel.com') {
+      if (path === '/v9/projects/prj_test') return Response.json({ id: 'prj_test', name: 'thingtime' });
+      if (path.endsWith('/custom-environments')) return Response.json({ environments: [] });
+      if (path.endsWith('/env')) return Response.json({ envs: [{ key: 'THINGTIME_GATEWAY_SECRET', type: 'encrypted', target: ['preview'] }] });
+      if (path.endsWith('/domains')) return Response.json({ domains: [] });
+      if (path === '/v7/deployments') return Response.json({ deployments: [{ uid: deployment.id }] });
+      if (path === '/v13/deployments/dpl_ready') {
+        if (publicationFailed) { cleanupReads++; return Response.json({}, { status: 503 }); }
+        return Response.json(deployment);
+      }
+    }
+    if (url.hostname === deployment.url) { publicationFailed = true; throw new Error('original-publish-failure'); }
+    throw new Error('Unexpected publication fixture request');
+  };
+  try {
+    await assert.rejects(publish(), { message: 'original-publish-failure' });
+    assert.equal(cleanupReads, 1);
+    assert.ok(logs.some(line => line.includes('Failed preview upload left for the next retention sweep')));
+    assert.ok(logs.every(line => !line.includes('fixture-ci') && !line.includes('fixture-gh') && !line.includes('fixture-vercel')));
+  } finally {
+    globalThis.fetch = originalFetch; console.log = originalLog;
+    for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
 });

@@ -754,6 +754,45 @@ function assertWorkflowSource() {
     readRetryCopies,
     "every gh_read_retry copy scopes that retry to a 422 carrying that exact message",
   );
+  // That replay horizon is minutes; this backoff spans 2-8s, and for a
+  // persistently oversize PR GitHub repeats the refusal indefinitely. Job
+  // 124090191975 spent 867s of the detector's 900s timeout replaying 28 such
+  // PRs inside `complete_large_pr_files`, was cancelled before publishing any
+  // `prs`/`any`, and reddened the unrelated PR that started it. So the retry
+  // stays the default and exactly one caller -- the optional enrichment whose
+  // failure path is an already-supported "inventory incomplete" degradation --
+  // declines it. Pin the opt-out per copy for the same reason the branch
+  // itself is pinned: a copy that drops the test silently restores the cost
+  // for every caller, and a copy that hardcodes `false` silently removes the
+  // recovery from the load-bearing reads.
+  assert.equal(
+    source.match(/&& \[ "\$\{LOPU_SLOW_DIFF_RETRY:-true\}" = true \]/gu)?.length,
+    readRetryCopies,
+    "every gh_read_retry copy honours the caller-scoped slow-diff retry opt-out",
+  );
+  assert.equal(
+    source.match(/^\s*local LOPU_SLOW_DIFF_RETRY=false$/gmu)?.length,
+    1,
+    "exactly one caller declines the slow-diff retry, and it does so by dynamic scope",
+  );
+  assert.match(
+    source,
+    /complete_large_pr_files\(\) \{[\s\S]*local LOPU_SLOW_DIFF_RETRY=false[\s\S]*if \[ "\$SECONDS" -ge "\$deadline" \]; then[\s\S]*deferred="\$\(\( deferred \+ 1 \)\)"/u,
+    "the advisory changed-file inventory is the caller that declines it, under a step-clock deadline",
+  );
+  // An advisory enrichment may never spend the authoritative detector's
+  // timeout, and a bounded inventory may never read as a complete one: an
+  // un-hydrated PR is indistinguishable from a PR that changed no files.
+  assert.match(
+    source,
+    /FILES_INVENTORY_DEADLINE_SECONDS: "600"/u,
+    "the detector publishes a changed-file hydration budget below its job timeout",
+  );
+  assert.match(
+    source,
+    /The changed-file inventory reached its \$\{deadline\}s budget with \$deferred PR\(s\) un-hydrated;[\s\S]*inventory incomplete\): \$deferred_numbers" >&2/u,
+    "a deferred changed-file inventory names every PR it dropped, on stderr",
+  );
   assert.match(
     source,
     /if ! gh_read_retry graphql --paginate --slurp[\s\S]*Could not read the open PR inventory from GitHub[\s\S]*successful but malformed PR inventory response/u,

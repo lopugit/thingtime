@@ -64,7 +64,8 @@ test('workflow keeps secretless builds while allowing protected comments and rec
   assert.match(prepare, /pull-requests: write/);
   assert.match(adminPrepare, /pull-requests: write/);
   assert.match(workflow, /RECOVERY_GH_TOKEN: \$\{\{ github.token \}\}/);
-  assert.match(develop, /pulls\?state=open&per_page=100/);
+  assert.match(develop, /completeInventory\(githubRequest, [^\n]+pulls\?state=open[^\n]+github: true/);
+  assert.doesNotMatch(develop, /Open preview PR inventory exceeds|MAX_RECONCILE_PULL_REQUESTS/);
   assert.match(develop, /Promise.allSettled\(\[reconcile\(config\)\]\)/);
   assert.doesNotMatch(develop.slice(develop.lastIndexOf('const main = async')), /reconcileStableDevelopAlias\(/);
   const build = workflow.slice(workflow.indexOf('\n  build:'), workflow.indexOf('\n  controller:'));

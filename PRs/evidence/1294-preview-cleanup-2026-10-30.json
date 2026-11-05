@@ -1,0 +1,3331 @@
+{
+  "schemaVersion": 1,
+  "performedBy": "Parent agent; operational report, separate from controller implementation",
+  "repository": "lopugit/thingtime",
+  "projectId": "prj_ZAX9FhGC2alHMXMwTHX96ql3EQ8v",
+  "completedAt": "2026-10-29T21:06:08.636Z",
+  "initialDeploymentCount": 688,
+  "verifiedDeletedCount": 399,
+  "currentDeploymentCount": 289,
+  "reasons": {
+    "no-open-pr": 172,
+    "source-lacks-gateway": 9,
+    "legacy-without-gateway-policy": 213,
+    "obsolete-unaliased-environment-without-gateway": 5
+  },
+  "deletions": [
+    {
+      "at": "2026-10-29T20:34:45.726Z",
+      "id": "dpl_6CBSgDrVMBmKdXHKcHnALWAo4cvv",
+      "url": "thingtime-ke7dvcl14-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:34:48.059Z",
+      "id": "dpl_GJHi9TVG9tGFX97yFWKihJLcSh7H",
+      "url": "thingtime-kz0fyo21b-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:34:50.149Z",
+      "id": "dpl_GApcuDwWPiE99C2U4HMHj5v1qSjD",
+      "url": "thingtime-c27inv35q-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:34:52.621Z",
+      "id": "dpl_Ei25MQBXMaquubqJV6n3AGZvCbUb",
+      "url": "thingtime-h9423ug8m-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:34:54.987Z",
+      "id": "dpl_C7cRC4EDVWGWQMr9f2WP6anDk5Qr",
+      "url": "thingtime-i4axj6xo3-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:34:56.967Z",
+      "id": "dpl_FSVvqhMuwSrd9XYVeEDNGNt6cYbN",
+      "url": "thingtime-7kg7rsiao-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:34:59.068Z",
+      "id": "dpl_EosDVsbZz8sZzyr3LQuU8iTZNSet",
+      "url": "thingtime-hsa1rqixg-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:01.224Z",
+      "id": "dpl_E5qnMzsATFjSETj6v7ULiDccmLoH",
+      "url": "thingtime-aihcerk7g-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:03.586Z",
+      "id": "dpl_AxHgRH4LbNnxfDne73zEDXkZeejy",
+      "url": "thingtime-bmbfesk4s-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:05.643Z",
+      "id": "dpl_HM2Xf3mywTg6NvFi2s7XFy82ZCWb",
+      "url": "thingtime-iqi25hu5l-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:07.940Z",
+      "id": "dpl_8kab2CRLJPSpXmYGQAvQXs45mVXh",
+      "url": "thingtime-ghkcxgydj-lopugits-projects.vercel.app",
+      "branch": "codex/commander-background-index",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:10.339Z",
+      "id": "dpl_BR3RpdLKHdytAMk7Yuiqq8ekpeVY",
+      "url": "thingtime-m5ofgv3lo-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:12.620Z",
+      "id": "dpl_Ei1UVEdoezAJSHwPjptQcRpd8ec9",
+      "url": "thingtime-c16aatlvw-lopugits-projects.vercel.app",
+      "branch": "codex/commander-background-index",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:14.711Z",
+      "id": "dpl_7rex5SmyXwiQTVui62hJd8pQBZeK",
+      "url": "thingtime-le04g6ovv-lopugits-projects.vercel.app",
+      "branch": "codex/emoji-picker-drafts-recents",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:17.201Z",
+      "id": "dpl_7t1awXbmAfpjAcEJYwBHESEuvjp8",
+      "url": "thingtime-o3mdswlxe-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:19.709Z",
+      "id": "dpl_H7HKoiTnALFp48y6DbcTKNrk5mFw",
+      "url": "thingtime-ixwsyeu2v-lopugits-projects.vercel.app",
+      "branch": "codex/commander-background-index",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:21.808Z",
+      "id": "dpl_AHSWLVxUQAQwo2uMXWvoNYFoPEkw",
+      "url": "thingtime-lb6imbt4n-lopugits-projects.vercel.app",
+      "branch": "codex/commander-background-index",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:23.797Z",
+      "id": "dpl_GAz4joG4TB39EZ9skjfGrqMkcUiN",
+      "url": "thingtime-82m9esqql-lopugits-projects.vercel.app",
+      "branch": "codex/emoji-picker-drafts-recents",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:26.016Z",
+      "id": "dpl_DmPLpfzuHuWEtsWB6D3g5eqKmpCa",
+      "url": "thingtime-2mqhdff0v-lopugits-projects.vercel.app",
+      "branch": "codex/storage-ledger-release-guard",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:28.131Z",
+      "id": "dpl_96mXKgwVGT8LiB8wKV8BYrxjv3Nh",
+      "url": "thingtime-c5ek09rfa-lopugits-projects.vercel.app",
+      "branch": "codex/commander-background-index",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:30.487Z",
+      "id": "dpl_osVY2ADrQLCD7b8j5yJUcDfFaAoX",
+      "url": "thingtime-r6now85zk-lopugits-projects.vercel.app",
+      "branch": "codex/storage-ledger-release-guard",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:34.671Z",
+      "id": "dpl_5UPpxmmyTYNaCQMkQSS7HhokoLtH",
+      "url": "thingtime-7ucvb2oza-lopugits-projects.vercel.app",
+      "branch": "codex/commander-background-index",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:36.725Z",
+      "id": "dpl_FqdAZ83K7Qbna6iXFr99oLWYB4Ro",
+      "url": "thingtime-f8z094xe0-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:38.829Z",
+      "id": "dpl_3Rib2YHNWFzWXn7CuvF5L6bkXhf4",
+      "url": "thingtime-cak7jr1sd-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:40.934Z",
+      "id": "dpl_Hqg47SGBspTibH4stPgnF3Fj5fCX",
+      "url": "thingtime-h3e3nel6n-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:47.107Z",
+      "id": "dpl_DfxPB4Va6EhTZSUyiXERzqfgKCWb",
+      "url": "thingtime-mpbnu7uya-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:49.363Z",
+      "id": "dpl_FAb6uVSDxxrBJLCqBQjZs836h34f",
+      "url": "thingtime-m9z82ity1-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:51.382Z",
+      "id": "dpl_2zNrK91C2yKHDYRowcb1rqHuVRbw",
+      "url": "thingtime-3gbjb8vse-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:53.493Z",
+      "id": "dpl_2Cj54j2fcbkNwgQXgSoWS5iXKxxZ",
+      "url": "thingtime-p8teea9kd-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:55.601Z",
+      "id": "dpl_9WsVAi9Wf62JCqFpUumAwjpZoGdR",
+      "url": "thingtime-q2kpgmchl-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:57.696Z",
+      "id": "dpl_ELVtwit36R3wbR6FihZCqP3eQUgJ",
+      "url": "thingtime-8qtw5kcdu-lopugits-projects.vercel.app",
+      "branch": "codex/autofill-browser-diagnostics",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:35:59.930Z",
+      "id": "dpl_38qorRUWCGkscTrzAPharfpJkqLa",
+      "url": "thingtime-jjme9abj8-lopugits-projects.vercel.app",
+      "branch": "codex/autofill-browser-diagnostics",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:01.953Z",
+      "id": "dpl_Dfxit4UDYhYvPnBujvALoy1eDnQ7",
+      "url": "thingtime-6tfjdk4s2-lopugits-projects.vercel.app",
+      "branch": "codex/builder-nested-blocks",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:03.984Z",
+      "id": "dpl_H79Qta4pX5pCntpkft96WWszwyiv",
+      "url": "thingtime-q9wx5l1g9-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:06.072Z",
+      "id": "dpl_GUmqrN72pHwFBpBAXvuT7UcRXMKo",
+      "url": "thingtime-if4rdbapj-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:08.244Z",
+      "id": "dpl_3qUpD62MyZCyaSjEtQLuT5bAXXjq",
+      "url": "thingtime-7gr50xk5f-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:10.353Z",
+      "id": "dpl_Hngq2D9276K5duXRGH61wprGHYni",
+      "url": "thingtime-eqtwsvswm-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:12.504Z",
+      "id": "dpl_FQfR16atQNQvxtf5cGdrb3ybjgz2",
+      "url": "thingtime-geghq2rx7-lopugits-projects.vercel.app",
+      "branch": "codex/autofill-browser-diagnostics",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:14.538Z",
+      "id": "dpl_84sMQEoi5kGkAkK9YcyPAhaZxGmd",
+      "url": "thingtime-3jp4xdiei-lopugits-projects.vercel.app",
+      "branch": "codex/builder-nested-blocks",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:16.562Z",
+      "id": "dpl_2GQQEUAcVzb2gwpHDWoZg8c82c4H",
+      "url": "thingtime-h8lvfi16s-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:18.655Z",
+      "id": "dpl_GkVsmmq4YhDWDrPfVhvZgQVsTMJi",
+      "url": "thingtime-87vvi6rx1-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:21.070Z",
+      "id": "dpl_HGBvX9tyUs7agAPjj9JwzDpPvSdb",
+      "url": "thingtime-fmpeavaid-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:23.367Z",
+      "id": "dpl_4RFfopvr9USAHvb4beTEEwgxi4tH",
+      "url": "thingtime-m4kb95rcy-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:25.473Z",
+      "id": "dpl_DrfukBdxE212h9eggmNaSKi8ozsK",
+      "url": "thingtime-9ujc856n5-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:27.592Z",
+      "id": "dpl_ma6wcQpA1pSr1nDajrRgvfWDoeDn",
+      "url": "thingtime-95hh570re-lopugits-projects.vercel.app",
+      "branch": "codex/builder-nested-blocks",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:32.389Z",
+      "id": "dpl_BrybrDETbgVJBEDAWLChGH6CgL8M",
+      "url": "thingtime-93r229ach-lopugits-projects.vercel.app",
+      "branch": "codex/builder-thing-navigation",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:42.785Z",
+      "id": "dpl_EaT5SR9bmX36ipbeqC46ViPHZ8Qg",
+      "url": "thingtime-4b0kngd4d-lopugits-projects.vercel.app",
+      "branch": "codex/builder-thing-navigation",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:49.052Z",
+      "id": "dpl_CddyZTCBSUphwddsfpVSwnro3hzV",
+      "url": "thingtime-6wl1xhpxv-lopugits-projects.vercel.app",
+      "branch": "codex/builder-nested-blocks",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:36:54.159Z",
+      "id": "dpl_2FKotGM2C27RoNqaiDZj3spJ9q55",
+      "url": "thingtime-8k3kbu956-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:37:01.287Z",
+      "id": "dpl_GmGTjQaDdZs3ZDaAMW6zsgV26U6f",
+      "url": "thingtime-aphiv2blb-lopugits-projects.vercel.app",
+      "branch": "codex/commander-background-index",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:37:08.762Z",
+      "id": "dpl_7qBaso5XiqBWJ2YdU9rhjvNdMz2d",
+      "url": "thingtime-mscrgfmmg-lopugits-projects.vercel.app",
+      "branch": "codex/autofill-native-display-name",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:37:16.853Z",
+      "id": "dpl_Dx7HspedDJ46Z6yhu16qX8hfaF6u",
+      "url": "thingtime-8zrrf9kay-lopugits-projects.vercel.app",
+      "branch": "codex/autofill-native-display-name",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:37:25.296Z",
+      "id": "dpl_3pJaPt74ZJ9vKaJrqR2mq11iEa3x",
+      "url": "thingtime-rjwdwj9sm-lopugits-projects.vercel.app",
+      "branch": "codex/builder-thing-navigation",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:37:32.370Z",
+      "id": "dpl_3BBbo2jvRbNgTWregKQHgTeorK5h",
+      "url": "thingtime-2jxrna009-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:37:40.356Z",
+      "id": "dpl_C51jdfRKWr44JYwemwoPTqopegs5",
+      "url": "thingtime-no0rxv67e-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:37:46.805Z",
+      "id": "dpl_J6ipFaBJn9bvKtpXTsCTnj71X42U",
+      "url": "thingtime-3heqnhovp-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:37:55.814Z",
+      "id": "dpl_2P1kFkLLTCQcz9YpXi7uCNd3tVAr",
+      "url": "thingtime-4ibnks3ip-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:02.108Z",
+      "id": "dpl_DB3BA7Y1aw4BPXbjvhmYsXeCK6Fy",
+      "url": "thingtime-olz30xr15-lopugits-projects.vercel.app",
+      "branch": "codex/builder-thing-navigation",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:11.048Z",
+      "id": "dpl_J2UgJqsBDKXF7mgXrKffdxmz9Aoz",
+      "url": "thingtime-bwuzswfur-lopugits-projects.vercel.app",
+      "branch": "codex/autofill-provider-experience",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:17.667Z",
+      "id": "dpl_6maH2fkj8pLdgLxBJt9hqUZmyfzB",
+      "url": "thingtime-q4554q5cz-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:19.854Z",
+      "id": "dpl_C8i3ciz8qbcm4MVMLxkhLHHpMXY1",
+      "url": "thingtime-d6zibdpil-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:21.916Z",
+      "id": "dpl_CQ8n6SZepiDeQPu2arPMC5ZSXwrx",
+      "url": "thingtime-4s4ciugsi-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:26.580Z",
+      "id": "dpl_8CjEZzzKRiiq1vno7HG6wLLXiEsW",
+      "url": "thingtime-ow93bcldz-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:28.564Z",
+      "id": "dpl_J3fzgkJwiixZDm6o3QAEgddz4WPh",
+      "url": "thingtime-p9a3zzatk-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:30.825Z",
+      "id": "dpl_AQ3LeB24KgXN3oZhY3gRZkmu6hPH",
+      "url": "thingtime-ow1ikr4t0-lopugits-projects.vercel.app",
+      "branch": "codex/autofill-link-recovery",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:32.867Z",
+      "id": "dpl_DAYCMyFi4GPGVTio1tqDDSnjUSKS",
+      "url": "thingtime-2c0oe5whp-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:34.958Z",
+      "id": "dpl_CcThKqcPumc6mQwBaqBqm1Hozkg5",
+      "url": "thingtime-oll8qmuow-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:37.085Z",
+      "id": "dpl_Gnucdd9D2HLwByTcpMSvqazfEyU1",
+      "url": "thingtime-b522wcrin-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:41.061Z",
+      "id": "dpl_G5SbkmXG8fBkVT5AenMfVibUPri9",
+      "url": "thingtime-9zxrdrs7b-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:43.134Z",
+      "id": "dpl_J1KyFmTsTU2HaP3c3Qcbu4ketMtV",
+      "url": "thingtime-m1sg8adrl-lopugits-projects.vercel.app",
+      "branch": "codex/ios-release-filesync-identity",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:45.873Z",
+      "id": "dpl_GPs3aLCepvAkJ4F1iyU4sEt2pLqw",
+      "url": "thingtime-71ixs9j3i-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:48.089Z",
+      "id": "dpl_C7rrAAEdhWDg5Q2shsXEkU8irdeR",
+      "url": "thingtime-dcpp2rs37-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:50.175Z",
+      "id": "dpl_nFtUw9tbmxEy1RZEZyJY8rgDYVnN",
+      "url": "thingtime-anjfudf0j-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:54.372Z",
+      "id": "dpl_DppaQMAFhPzQr6t6LvFTQPHhuSW2",
+      "url": "thingtime-e5gbhyr8a-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:56.470Z",
+      "id": "dpl_D1TPtyFPsyNw6DgiQfuMQjB3tVqv",
+      "url": "thingtime-cezpz3lf7-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:38:58.647Z",
+      "id": "dpl_FUppznKiUxQ3DJUVWupuYfnqyuab",
+      "url": "thingtime-4vn2fnqyp-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:00.961Z",
+      "id": "dpl_FmdoXNptEzrCXGW1qapFfUtjK6ch",
+      "url": "thingtime-ida3cyx9n-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:03.076Z",
+      "id": "dpl_7NxzvA21D7BG6D62LDBj33FJhmGt",
+      "url": "thingtime-b56gs8g7j-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:05.161Z",
+      "id": "dpl_uJ4suR2Q77siwsx25ny8FT632TQX",
+      "url": "thingtime-o4ok0ajl0-lopugits-projects.vercel.app",
+      "branch": "codex/ios-share-release-test-fixtures",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:07.254Z",
+      "id": "dpl_ERTM2GPEzKYeJ72gC78JaaaTXPEf",
+      "url": "thingtime-31cvcozej-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:09.605Z",
+      "id": "dpl_1UYDsk7SFNGP3iAk5n2VcCAkJcgh",
+      "url": "thingtime-nskxytklh-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:12.202Z",
+      "id": "dpl_5WbWr7byAUZquF8vRGKBeEn5BXmn",
+      "url": "thingtime-aghtc06pd-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:14.288Z",
+      "id": "dpl_8ZpizSmRGY6dYBNo16jY7nMSQifs",
+      "url": "thingtime-b7fnae60e-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:19.201Z",
+      "id": "dpl_D9pfcDHWjNBCkJg5dBQPU5kAXxDe",
+      "url": "thingtime-h5pu368tz-lopugits-projects.vercel.app",
+      "branch": "codex/ios-share-release-compat",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:21.228Z",
+      "id": "dpl_2gys8ujrpDviWbQgCmHVrDWpVwPH",
+      "url": "thingtime-gn8aplyj7-lopugits-projects.vercel.app",
+      "branch": "codex/ios-share-release-compat",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:23.222Z",
+      "id": "dpl_2H7dHqoZEqXXqQAxBX6vaqkwxTvr",
+      "url": "thingtime-pszh6pinr-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:25.368Z",
+      "id": "dpl_5ddazbw1vUd5zY72iB7ryyTguzqM",
+      "url": "thingtime-ofn31tuc6-lopugits-projects.vercel.app",
+      "branch": "codex/ios-all-share-types",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:27.400Z",
+      "id": "dpl_7n8dJRBvSzNcrGRC2vYYVbqH37wp",
+      "url": "thingtime-r48v6hhrs-lopugits-projects.vercel.app",
+      "branch": "codex/ios-all-share-types",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:29.996Z",
+      "id": "dpl_4emZpad1T7Rdf6Lnw9wjyyrCe3X1",
+      "url": "thingtime-6zxmldta2-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:31.909Z",
+      "id": "dpl_2gA1Y7Etz9qAN3vLZXALHax3jhHZ",
+      "url": "thingtime-g57ne9b6d-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:34.243Z",
+      "id": "dpl_GwTRvkb5w6jYisGcCTYBg7gSRkDH",
+      "url": "thingtime-hlcule6li-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:36.318Z",
+      "id": "dpl_8UTsW4WcMce6xSqeRPLfupXpU1zY",
+      "url": "thingtime-8q7fc2cl3-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:38.411Z",
+      "id": "dpl_Gpq2VndQcoN9PG7yUpsoDkEdpoLR",
+      "url": "thingtime-jyldxyyyb-lopugits-projects.vercel.app",
+      "branch": "codex/mcp-private-reporting-20261028",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:40.345Z",
+      "id": "dpl_C2dQn9kdEZoZGmqP82P6mZ76Um7c",
+      "url": "thingtime-gzenwlh6j-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:42.390Z",
+      "id": "dpl_36TF3ahuFuzH5zgiUtSg38AA2z5E",
+      "url": "thingtime-915b8gzeo-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:44.696Z",
+      "id": "dpl_BBTHqJePhn8aEoRYVb7SJLL81HnY",
+      "url": "thingtime-hribuipr1-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:46.832Z",
+      "id": "dpl_4rBxDYMBkyNmYvQuryJN57RQdmia",
+      "url": "thingtime-mi5n842id-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:49.030Z",
+      "id": "dpl_97fWmS1hoYh63rWnfKoazeDCyRNj",
+      "url": "thingtime-mlapbkrs0-lopugits-projects.vercel.app",
+      "branch": "codex/mcp-private-reporting-20261028",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:51.333Z",
+      "id": "dpl_JANFQgmNEfHhocdjrrHGvBbNXARp",
+      "url": "thingtime-cou6gv33f-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:53.630Z",
+      "id": "dpl_J1TTSUcVSPr5xmiCRGTZMrpSJ67b",
+      "url": "thingtime-126ifbx2c-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:55.712Z",
+      "id": "dpl_7enuJQ9cNK3t9tPpF6ESDrF4kP9C",
+      "url": "thingtime-hvv4y9lbh-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:57.655Z",
+      "id": "dpl_B4qLJgT2uaanmSBer59TVqihYkP4",
+      "url": "thingtime-ni7gtq1mj-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:39:59.800Z",
+      "id": "dpl_5vifUjMyKvboWaDXVwTUDwK93htn",
+      "url": "thingtime-nqpdb3yke-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:02.361Z",
+      "id": "dpl_HawGYH15VeDDx2txAv8VPYejnJbA",
+      "url": "thingtime-npkwt0kmm-lopugits-projects.vercel.app",
+      "branch": "codex/routes-map-workspace",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:04.773Z",
+      "id": "dpl_ChN4TkS7859iFn4cQFYHpS31p4s1",
+      "url": "thingtime-ahas9cjyn-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:06.823Z",
+      "id": "dpl_G5ahjCuNhKmj5UnWTMgcYTi2yhnX",
+      "url": "thingtime-5wm9e22x5-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:09.351Z",
+      "id": "dpl_9y8ALUS7WEdtjnjcoT1n9EJ6vedB",
+      "url": "thingtime-2qg72obvi-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:11.448Z",
+      "id": "dpl_Dg3ubKTkWxt1ix4nd8V97Pezz3Ab",
+      "url": "thingtime-ghyxqnje8-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:13.550Z",
+      "id": "dpl_ECEUEt2SHDCLedJ3hUjTvZ4LLKbj",
+      "url": "thingtime-5km8vanpg-lopugits-projects.vercel.app",
+      "branch": "codex/routes-map-workspace",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:15.936Z",
+      "id": "dpl_5ArLVABWUnjWH9rLdbPYKrqNkfvF",
+      "url": "thingtime-ioidpz9mu-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:18.261Z",
+      "id": "dpl_2oyLk7bg6ft8oGeTdYCxAaFzxVLJ",
+      "url": "thingtime-cdbcakq7q-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:20.343Z",
+      "id": "dpl_Cvf2HhspvbahvHVfxveLCywJDkC4",
+      "url": "thingtime-3p32kslb0-lopugits-projects.vercel.app",
+      "branch": "codex/expanded-block-actions",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:22.472Z",
+      "id": "dpl_EmKajTDkLzc2SsXdCtZKJ38xCMvD",
+      "url": "thingtime-2fvf77c1f-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:24.688Z",
+      "id": "dpl_GYgGAmbERgDj9TkhvmZAHHjx8joH",
+      "url": "thingtime-onmi77to2-lopugits-projects.vercel.app",
+      "branch": "codex/builder-app-browser",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:26.645Z",
+      "id": "dpl_8cqEKdnW2TPeNZ9QUqPFJqWHhG4m",
+      "url": "thingtime-mj6ikrsxr-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:29.039Z",
+      "id": "dpl_2gHtnLHsnN8Z49Linu3jDrhoRPW2",
+      "url": "thingtime-bmc7n89d4-lopugits-projects.vercel.app",
+      "branch": "codex/builder-app-browser",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:31.487Z",
+      "id": "dpl_Dw1dCEzMF3UdDeC9biUU3Q43CTqe",
+      "url": "thingtime-m8dq6ucl8-lopugits-projects.vercel.app",
+      "branch": "codex/mapbox-csp-sdk-20261028",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:33.454Z",
+      "id": "dpl_8mB6DkmHkaPUGefidT9cw59JJr7B",
+      "url": "thingtime-qkzx07ko0-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:35.557Z",
+      "id": "dpl_J15NTiLZVrn7yaYZ8H7bcbRac9GR",
+      "url": "thingtime-c3si3c0wy-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:37.662Z",
+      "id": "dpl_3cRivZjCvzJRmXrW6kzvDUEGvs5s",
+      "url": "thingtime-n5bylmbqt-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:39.749Z",
+      "id": "dpl_tetm5ZGA2mFjhhkpyhDPSEGKEbgT",
+      "url": "thingtime-k3dr07nlr-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:41.861Z",
+      "id": "dpl_Gveezyf2xXV5iJKTJEaemCwskH92",
+      "url": "thingtime-2d38o9r0a-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:44.365Z",
+      "id": "dpl_5Hc6s6AvpyaFuUAVb38ogT7DgwwF",
+      "url": "thingtime-2a0sriodb-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:46.582Z",
+      "id": "dpl_ERhnWT76ZF3vg4KGG1BSuDFxxW3L",
+      "url": "thingtime-cwuvcaowv-lopugits-projects.vercel.app",
+      "branch": "codex/thingtime-route-planner",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:50.290Z",
+      "id": "dpl_4nNbpvvaaTeyvG5jgmkiavRy6KK9",
+      "url": "thingtime-5us09sgh6-lopugits-projects.vercel.app",
+      "branch": "codex/thingtime-route-planner",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:52.347Z",
+      "id": "dpl_GgH43XEhG4uAiaaqBGd9Na1Q9Ubw",
+      "url": "thingtime-fao51mw7s-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:54.471Z",
+      "id": "dpl_9jRBpLs4qsp6YcJouY84vxXQviS5",
+      "url": "thingtime-i9ij2hfku-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:56.551Z",
+      "id": "dpl_9V2gFKW6ncwXxWbgvWWM2ci6TjTs",
+      "url": "thingtime-8pnsw6zd5-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:40:58.699Z",
+      "id": "dpl_Ba9aZ4JngEMoFRUAa6g188qGjCFA",
+      "url": "thingtime-8t69aqn1f-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:00.768Z",
+      "id": "dpl_2budSi8w1Vz2FWAfCH6izZ5LpGTf",
+      "url": "thingtime-il787yjml-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:02.859Z",
+      "id": "dpl_BUKxgAYacGBRH2gfGqHscSzkz58M",
+      "url": "thingtime-8iv05lb0w-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:05.102Z",
+      "id": "dpl_Jif93T3zFDVw978ntp8z3C9WBau9",
+      "url": "thingtime-clgb1rg2l-lopugits-projects.vercel.app",
+      "branch": "codex/native-passkey-repair-20261027",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:07.031Z",
+      "id": "dpl_HDEaDemQXPV6iVoW15z2a4RwJV8f",
+      "url": "thingtime-dpkb06mdr-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:09.218Z",
+      "id": "dpl_2aeyTrMFDyatndnX2pg1EVfCsLpe",
+      "url": "thingtime-3z6bthzdb-lopugits-projects.vercel.app",
+      "branch": "codex/brand-creative-freedom",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:11.729Z",
+      "id": "dpl_7BTioMdY8BLFdY7RakUVZhNsmJ2B",
+      "url": "thingtime-ls75rvc0c-lopugits-projects.vercel.app",
+      "branch": "codex/native-passkey-repair-20261027",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:13.712Z",
+      "id": "dpl_3TWQEcBCLM3EyxhBEkUWBdgAj3bx",
+      "url": "thingtime-mfxpv52ez-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:15.943Z",
+      "id": "dpl_7JyNJSAVhTnWJ3MDtsK8yYboJmPL",
+      "url": "thingtime-pxcn4mdtb-lopugits-projects.vercel.app",
+      "branch": "codex/password-manager-browser-20261027",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:18.122Z",
+      "id": "dpl_DtdeVSPt7c1frCFZmxAfwqCWrf7K",
+      "url": "thingtime-75nf3rwwa-lopugits-projects.vercel.app",
+      "branch": "codex/password-manager-browser-20261027",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:20.310Z",
+      "id": "dpl_DD4hUL3tBjC84JdrwV7oQmJAxUao",
+      "url": "thingtime-lkhc5jr0t-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:22.297Z",
+      "id": "dpl_Bc2ZQ4a8ekEkhWiMX3MR4T41isxo",
+      "url": "thingtime-l6lasbdxr-lopugits-projects.vercel.app",
+      "branch": "codex/mac-dev-production-policy",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:27.034Z",
+      "id": "dpl_BzTkiePDxp6A2cqBmuwDuGeZE6LS",
+      "url": "thingtime-hqr5ytz8k-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:29.044Z",
+      "id": "dpl_3N62Q8qRYWZczSqEpbcgQsVWNitE",
+      "url": "thingtime-r0wchdst8-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:32.699Z",
+      "id": "dpl_2Dr8jBc3xVTgmL2yhMxcGaVTKLrM",
+      "url": "thingtime-4f9gxqr87-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:34.888Z",
+      "id": "dpl_9ufep8JENViqRBz5HZ4JiggDsqPq",
+      "url": "thingtime-2pfk1fokv-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:41.245Z",
+      "id": "dpl_HcBh6pzhS6TgsbsuxzHnpw9856Tx",
+      "url": "thingtime-km243tdrn-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:43.223Z",
+      "id": "dpl_3eVF1RJbTpampVimjqnv5ZAD56rh",
+      "url": "thingtime-2peks9n2d-lopugits-projects.vercel.app",
+      "branch": "codex/oauth-native-darwin-groups-listener",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:45.621Z",
+      "id": "dpl_6h6F4qSMdyTJfgWX3L1KeymLZRLc",
+      "url": "thingtime-8az51dkfq-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:47.682Z",
+      "id": "dpl_HCAfWanVnBNb7qQXbEfb3d8bVzLk",
+      "url": "thingtime-iy6q2xege-lopugits-projects.vercel.app",
+      "branch": "codex/oauth-native-probe-reaping-listener",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:49.662Z",
+      "id": "dpl_3yYmSLmrQGnHresK1W46qbFeuyVC",
+      "url": "thingtime-ln3yup95w-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:51.602Z",
+      "id": "dpl_J8hjr4pKo4enUJGTzEcyf4bFWQgi",
+      "url": "thingtime-hy9zovrym-lopugits-projects.vercel.app",
+      "branch": "codex/oauth-native-preflight-listener",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:53.674Z",
+      "id": "dpl_FtDvLV95QUi8Tap8pXCwHzMv99wp",
+      "url": "thingtime-5h13bu1og-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:55.817Z",
+      "id": "dpl_ATczoV3TAommz1Td4ieqTd4hvwXN",
+      "url": "thingtime-73goto2ij-lopugits-projects.vercel.app",
+      "branch": "codex/oauth-native-compile-listener",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:57.881Z",
+      "id": "dpl_2zt9S3Rn4hmMBbu8a9qKZYirqAvW",
+      "url": "thingtime-ok6w8ehx5-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1224-gateway-develop-integration--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:41:59.976Z",
+      "id": "dpl_6GXrL1upPdbVVh1Rp2do3FrmPCTR",
+      "url": "thingtime-gwgpew3xy-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:02.130Z",
+      "id": "dpl_BJBYcMJiej4RoE8VT5kXpdbTxVkF",
+      "url": "thingtime-49433c8ms-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:04.183Z",
+      "id": "dpl_8NCjtjVwG8PoRxL4HZBy1JvR9aC1",
+      "url": "thingtime-k4g9llkio-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:06.032Z",
+      "id": "dpl_3p6v2976vKsfwpbrsFAQtDtqRSzd",
+      "url": "thingtime-j6sjcx1kj-lopugits-projects.vercel.app",
+      "branch": "codex/browser-device-folder-sync",
+      "reason": "source-lacks-gateway",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:08.352Z",
+      "id": "dpl_4Kt2qGFvMLoAVuJZENkR3Ph4Hyev",
+      "url": "thingtime-8sgt8la68-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:09.956Z",
+      "id": "dpl_5HhybtjUtuhPUFHcNLMjRNNu1PZd",
+      "url": "thingtime-3rua1e3dt-lopugits-projects.vercel.app",
+      "branch": "codex/browser-device-folder-sync",
+      "reason": "source-lacks-gateway",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:12.188Z",
+      "id": "dpl_Fyku9FA1YRBYoXoraD9rbnMdGKia",
+      "url": "thingtime-4gr99utty-lopugits-projects.vercel.app",
+      "branch": "codex/thing-render-component-persistence",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:14.200Z",
+      "id": "dpl_BthDhcaqFL8Lm3e2xS9KDSAn5jRT",
+      "url": "thingtime-9dnkobgqi-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:16.226Z",
+      "id": "dpl_8bNUy2aTD1vTk4qBgDhwjAg6VahG",
+      "url": "thingtime-ql8igmyom-lopugits-projects.vercel.app",
+      "branch": "codex/browser-device-folder-sync",
+      "reason": "source-lacks-gateway",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:18.309Z",
+      "id": "dpl_6HSwAWjPFViT6YicZ7JKFgqVrKpJ",
+      "url": "thingtime-8y3yx2vhy-lopugits-projects.vercel.app",
+      "branch": "codex/drawer-nested-levels",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:20.400Z",
+      "id": "dpl_2QwqkwCpGjMXxs9reoqpLEzuHRgj",
+      "url": "thingtime-mmyyomdof-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:21.981Z",
+      "id": "dpl_EVfmPMUq5Yfqv6fUAa7TKzd7y61E",
+      "url": "thingtime-7tbho53qt-lopugits-projects.vercel.app",
+      "branch": "codex/browser-device-folder-sync",
+      "reason": "source-lacks-gateway",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:23.981Z",
+      "id": "dpl_54RYqDPcVwmJ5tw5T4FqShhFn3uB",
+      "url": "thingtime-9sum093p7-lopugits-projects.vercel.app",
+      "branch": "codex/drawer-nested-levels",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:26.173Z",
+      "id": "dpl_5kv5KXy42PeuJbJCJAKpnWyaXU9F",
+      "url": "thingtime-sns8yamkc-lopugits-projects.vercel.app",
+      "branch": "codex/gateway-dedicated-connections",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:27.917Z",
+      "id": "dpl_4aGV3u3sd7z6JEb6yqNeUVJZVmqj",
+      "url": "thingtime-r1jqwdas4-lopugits-projects.vercel.app",
+      "branch": "codex/browser-device-folder-sync",
+      "reason": "source-lacks-gateway",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:30.954Z",
+      "id": "dpl_8Ko1Dc2TnURgy8kccdfs3VT65244",
+      "url": "thingtime-mjctj6ts5-lopugits-projects.vercel.app",
+      "branch": "codex/browser-device-folder-sync",
+      "reason": "source-lacks-gateway",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:32.991Z",
+      "id": "dpl_7d67DWRdgTBRqQaRghvE8TjDYeCF",
+      "url": "thingtime-6boo4hhwf-lopugits-projects.vercel.app",
+      "branch": "codex/gateway-dedicated-connections",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:34.918Z",
+      "id": "dpl_F6LRACKdKFs8knf8UDMdZvnaTjhC",
+      "url": "thingtime-7wi35yq1f-lopugits-projects.vercel.app",
+      "branch": "codex/gateway-dedicated-canary",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:37.134Z",
+      "id": "dpl_92qSsw9X2NfQEp6mofBBzQtMGJag",
+      "url": "thingtime-73mdoazx5-lopugits-projects.vercel.app",
+      "branch": "codex/gateway-dedicated-connections",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:39.288Z",
+      "id": "dpl_AnDQTfepDoyQ9HFU4xat1c9kSj4x",
+      "url": "thingtime-20yy1kl5d-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:40.905Z",
+      "id": "dpl_J1XcQ7pUsEbKo9dWSctZzeE6D1xX",
+      "url": "thingtime-opdpul2mf-lopugits-projects.vercel.app",
+      "branch": "codex/password-manager",
+      "reason": "source-lacks-gateway",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:43.258Z",
+      "id": "dpl_9BAFZ6CZKRPmPBKP1YcQ978nEXS8",
+      "url": "thingtime-9met0j82h-lopugits-projects.vercel.app",
+      "branch": "codex/thing-render-components",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:45.898Z",
+      "id": "dpl_HvxbN7NdEK6FUN4iyqLXjdwe9usG",
+      "url": "thingtime-cm48hwjwh-lopugits-projects.vercel.app",
+      "branch": "codex/typescript-zero-main",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:47.656Z",
+      "id": "dpl_95MjUBRFP8xegUegXHJJujwfezuG",
+      "url": "thingtime-55qs7opta-lopugits-projects.vercel.app",
+      "branch": "codex/password-manager",
+      "reason": "source-lacks-gateway",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:49.801Z",
+      "id": "dpl_7KJr3yqepqfufX2mEpMnVLbeY7io",
+      "url": "thingtime-f0ooq95s7-lopugits-projects.vercel.app",
+      "branch": "codex/password-generator-passkeys",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:51.875Z",
+      "id": "dpl_DrYhNXiQ74jELNpzjUbe1R8y1Bn3",
+      "url": "thingtime-3jvg9qq3g-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:53.455Z",
+      "id": "dpl_HbU6tUbYWxnB8ybp2MosjvzQ34tP",
+      "url": "thingtime-mjcxyx782-lopugits-projects.vercel.app",
+      "branch": "codex/service-account-library",
+      "reason": "source-lacks-gateway",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:55.544Z",
+      "id": "dpl_D6EmX3iBWcAyC7A1Hj2mD7bLvpfK",
+      "url": "thingtime-9nq05fpfh-lopugits-projects.vercel.app",
+      "branch": "codex/gateway-dedicated-connections",
+      "reason": "no-open-pr",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:57.161Z",
+      "id": "dpl_Hk2FhJb5qQwGLmbUyFGTX7XTx1DD",
+      "url": "thingtime-io05gyfxp-lopugits-projects.vercel.app",
+      "branch": "codex/drawer-renderable-row",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:42:58.685Z",
+      "id": "dpl_76jeUTAVkJJskbxuP7FFnp4D74C9",
+      "url": "thingtime-icerq6swk-lopugits-projects.vercel.app",
+      "branch": "codex/anonymous-local-first",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:43:00.259Z",
+      "id": "dpl_Ff8zK73pFv7TzekpBMyHRBXLchEq",
+      "url": "thingtime-mc88qk029-lopugits-projects.vercel.app",
+      "branch": "codex/anonymous-local-first",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:43:07.377Z",
+      "id": "dpl_EuSKoCwR3XMvkMWH2Un3M95GeAGR",
+      "url": "thingtime-hldsdxo0j-lopugits-projects.vercel.app",
+      "branch": "codex/select-design-system-main",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:43:14.010Z",
+      "id": "dpl_6QXuAY6CiuRLX578FmiHcfTtMFJ5",
+      "url": "thingtime-nphzz6lnq-lopugits-projects.vercel.app",
+      "branch": "codex/gateway-develop-integration",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:43:19.977Z",
+      "id": "dpl_4PjoXcXbduh57JHSKqPe1pn86wb8",
+      "url": "thingtime-70l6r1na6-lopugits-projects.vercel.app",
+      "branch": "codex/drawer-renderable-row",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:43:26.888Z",
+      "id": "dpl_Ea7GXjSwGuEZeDYbkTwAgXTrCJEp",
+      "url": "thingtime-7i9doj1wb-lopugits-projects.vercel.app",
+      "branch": "codex/gateway-develop-integration",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:43:33.401Z",
+      "id": "dpl_9YP9L3wFL8UsTG2DHqs3Uic2YwqW",
+      "url": "thingtime-9i322ptl6-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:43:39.885Z",
+      "id": "dpl_GMfPdGCn1mMqvN6nyVBuVPbX22a7",
+      "url": "thingtime-pdks7o9na-lopugits-projects.vercel.app",
+      "branch": "codex/browser-device-folder-sync",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:43:47.228Z",
+      "id": "dpl_7cYgb5qyg5RaK84H3fPaAMy5ZTZU",
+      "url": "thingtime-9n4kh27ev-lopugits-projects.vercel.app",
+      "branch": "codex/gateway-dedicated-connections",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:43:54.861Z",
+      "id": "dpl_GPgzW9zaaHhit5T4qzyqi47pCggf",
+      "url": "thingtime-kcism9id1-lopugits-projects.vercel.app",
+      "branch": "codex/select-design-system-main",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:44:01.900Z",
+      "id": "dpl_9BC7BGYRSng8hw3V3xUnNxVWAych",
+      "url": "thingtime-8j9dk9kes-lopugits-projects.vercel.app",
+      "branch": "codex/finish-first-guidance",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:44:09.804Z",
+      "id": "dpl_AA5QKRx3GVhyTwN1LPpTjWCDaMTK",
+      "url": "thingtime-e5v3z9fo3-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:44:19.727Z",
+      "id": "dpl_E57pBKTihx1CPZk2CooB2xaeXuj6",
+      "url": "thingtime-2eop16raw-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:44:30.053Z",
+      "id": "dpl_EHqvBxpHYZiFyxsTghwpiog5Z5uk",
+      "url": "thingtime-pmi5awsnt-lopugits-projects.vercel.app",
+      "branch": "codex/anonymous-local-first",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:44:37.778Z",
+      "id": "dpl_GwnHdgiiMX6pMDwLt3Sa1ueqKksa",
+      "url": "thingtime-4rr14yi5c-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:44:44.641Z",
+      "id": "dpl_X6Z8nxDeDBVCnGxNBYQFsaUNbQtf",
+      "url": "thingtime-mk10g1k8m-lopugits-projects.vercel.app",
+      "branch": "codex/environment-api-gateway",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:44:48.387Z",
+      "id": "dpl_9VmjqtD2sKum82mpyXUmdxoPQEJk",
+      "url": "thingtime-ppdtxg219-lopugits-projects.vercel.app",
+      "branch": "codex/environment-api-gateway",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:44:50.700Z",
+      "id": "dpl_EcvwibQ8rHWQ5wgAAhcLLx2hsVN9",
+      "url": "thingtime-27854knav-lopugits-projects.vercel.app",
+      "branch": "codex/environment-api-gateway",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:44:53.002Z",
+      "id": "dpl_nnsufSwEKWnqHLEmu7Y6wWByXAvR",
+      "url": "thingtime-44r2vnaod-lopugits-projects.vercel.app",
+      "branch": "codex/anonymous-local-first",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:44:57.001Z",
+      "id": "dpl_776iT4L3r3WGTZN3wAsSPfzecXm1",
+      "url": "thingtime-3odyqb0jh-lopugits-projects.vercel.app",
+      "branch": "sync/main-into-develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:44:58.872Z",
+      "id": "dpl_5yXXvvcb3YvUxC1AtjQfJSJuSFUu",
+      "url": "thingtime-hu7bb5g1o-lopugits-projects.vercel.app",
+      "branch": "codex/custom-drawer-items",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:01.810Z",
+      "id": "dpl_CFpm7yJAfUXyXGiQZzWAzY8xWn2x",
+      "url": "thingtime-91eb7nm4v-lopugits-projects.vercel.app",
+      "branch": "codex/environment-api-gateway",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:03.573Z",
+      "id": "dpl_HaRNKjZ2MNRvKhuPW5s3oYnPx7xn",
+      "url": "thingtime-mu3zzuwi9-lopugits-projects.vercel.app",
+      "branch": "codex/select-design-system",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:05.345Z",
+      "id": "dpl_DPCrBNgCfQVp3QTK66tcMhb8wRnp",
+      "url": "thingtime-cn09z9wp8-lopugits-projects.vercel.app",
+      "branch": "codex/custom-drawer-items",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:07.161Z",
+      "id": "dpl_7Kv5fLbzhig7x7KymKzHs4GuRHCX",
+      "url": "thingtime-1f4fgxt4w-lopugits-projects.vercel.app",
+      "branch": "codex/finish-first-guidance",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:09.231Z",
+      "id": "dpl_BSNFzmNMZQ8NHiWkSVJTNAxTSQdx",
+      "url": "thingtime-b5smc82dj-lopugits-projects.vercel.app",
+      "branch": "codex/password-manager",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:10.864Z",
+      "id": "dpl_EWbCTFQ8mmDjyrQB322xyGAZePP8",
+      "url": "thingtime-ht4cggqkd-lopugits-projects.vercel.app",
+      "branch": "codex/service-account-library",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:12.482Z",
+      "id": "dpl_CCdaDKBoMSSDB7AyanpNxbURemLK",
+      "url": "thingtime-9xtr1e8j5-lopugits-projects.vercel.app",
+      "branch": "codex/password-manager",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:14.251Z",
+      "id": "dpl_Fq5XvLs2422i2egcpaV3r3FTn7Qw",
+      "url": "thingtime-l10udwc0w-lopugits-projects.vercel.app",
+      "branch": "codex/anonymous-local-first",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:16.169Z",
+      "id": "dpl_FSDFiQWYicDDkp7rEMHcCwFX83c8",
+      "url": "thingtime-550wqr48i-lopugits-projects.vercel.app",
+      "branch": "codex/browser-device-folder-sync",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:17.722Z",
+      "id": "dpl_J3fAf5touGmzAp5J6knfmrNfYctj",
+      "url": "thingtime-ku8z0hvgo-lopugits-projects.vercel.app",
+      "branch": "codex/anonymous-local-first",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:19.526Z",
+      "id": "dpl_74ZURNmi5gzSZxxYSmPSegv31ooi",
+      "url": "thingtime-65h783udn-lopugits-projects.vercel.app",
+      "branch": "codex/browser-device-folder-sync",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:21.159Z",
+      "id": "dpl_22wBZTfMz8XamWEDc7Sj6dLrm66w",
+      "url": "thingtime-eyrsapgc9-lopugits-projects.vercel.app",
+      "branch": "codex/password-manager",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:22.879Z",
+      "id": "dpl_ARi9R4udh8VcWfp7LkohSRCQDS7d",
+      "url": "thingtime-317r5aht0-lopugits-projects.vercel.app",
+      "branch": "codex/media-maximum-size",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:27.101Z",
+      "id": "dpl_H2daw92skGk5dvEJj8kSpDdUd3KL",
+      "url": "thingtime-cn367dv67-lopugits-projects.vercel.app",
+      "branch": "codex/media-maximum-size",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:28.679Z",
+      "id": "dpl_68k9PrUp2pq9FzSnSZGQQVGKKKG9",
+      "url": "thingtime-7farn33h0-lopugits-projects.vercel.app",
+      "branch": "codex/anonymous-local-first",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:30.602Z",
+      "id": "dpl_GZjKYzLZ6ZawiGsosxWZANgWpjTq",
+      "url": "thingtime-cw5kxj0tb-lopugits-projects.vercel.app",
+      "branch": "codex/password-manager",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:32.300Z",
+      "id": "dpl_HxSZUBPvVpJ8a89WQhYysyNJFHVi",
+      "url": "thingtime-1luyxfru5-lopugits-projects.vercel.app",
+      "branch": "codex/promote-lopu-credential-selection",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:33.938Z",
+      "id": "dpl_8t7yMrQFX79mLEP1LCfB7wiPHvsp",
+      "url": "thingtime-2h9uhx0gt-lopugits-projects.vercel.app",
+      "branch": "codex/lopu-credential-acceptance",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:35.970Z",
+      "id": "dpl_EHBDH5b1K3KXozLCbEydRGQwJC2t",
+      "url": "thingtime-owx2sxm5b-lopugits-projects.vercel.app",
+      "branch": "codex/lopu-credential-acceptance",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:37.564Z",
+      "id": "dpl_AhnyaeKEUbFat5AvrneoCuyaGDft",
+      "url": "thingtime-1vwztxjr4-lopugits-projects.vercel.app",
+      "branch": "codex/browser-device-folder-sync",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:39.182Z",
+      "id": "dpl_A7C6Pi44JJpLfrC4LrZiMaXkX7fH",
+      "url": "thingtime-pf4pv91p0-lopugits-projects.vercel.app",
+      "branch": "codex/browser-device-folder-sync",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:40.745Z",
+      "id": "dpl_3wxzJjhrjqUnQpcucvbmdCouYFS3",
+      "url": "thingtime-cbrbw1zb8-lopugits-projects.vercel.app",
+      "branch": "codex/media-maximum-size",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:42.329Z",
+      "id": "dpl_AzkCjWUwX6Se6kPRffXLqriartYz",
+      "url": "thingtime-jv4x7k8ay-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:44.231Z",
+      "id": "dpl_AghpPFhGS12HPtax7m2WYE52BQoZ",
+      "url": "thingtime-b47uu1k9b-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:45.805Z",
+      "id": "dpl_G7mhwuiXKWGvBC7SFcY7ivhhsKYn",
+      "url": "thingtime-e3kkk65wo-lopugits-projects.vercel.app",
+      "branch": "codex/vercel-actions-receipts",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:47.505Z",
+      "id": "dpl_DskkXxjJtpMmhqWN2NCdPo2eiVrG",
+      "url": "thingtime-6r641yxw9-lopugits-projects.vercel.app",
+      "branch": "codex/vercel-actions-receipts",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:49.906Z",
+      "id": "dpl_FFKBSGiex2rmsL35JN3pp6oetpVJ",
+      "url": "thingtime-3vojt6fzg-lopugits-projects.vercel.app",
+      "branch": "codex/vercel-actions-receipts",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:51.729Z",
+      "id": "dpl_47FXjsmBTbwomeiK3sAATvRu9ETr",
+      "url": "thingtime-lix3b86qx-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1164-general-media-compressor--to-main",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:53.313Z",
+      "id": "dpl_Gizbzxt1YbAdKWXxsJ9dPzpwfqcg",
+      "url": "thingtime-d7ygpmgnb-lopugits-projects.vercel.app",
+      "branch": "codex/vercel-actions-receipts",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:55.671Z",
+      "id": "dpl_CMspQzEGk7YzgnHBCB3VEKnquwkB",
+      "url": "thingtime-1a32w4j6r-lopugits-projects.vercel.app",
+      "branch": "codex/promote-general-media-compressor",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:57.301Z",
+      "id": "dpl_CnGkiYqzWdJdR3QtHaybKP344KoJ",
+      "url": "thingtime-m28cb0iw7-lopugits-projects.vercel.app",
+      "branch": "codex/general-media-compressor",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:45:59.089Z",
+      "id": "dpl_AaNuRQ79XFmw9HDSvDYmgbhS4cLY",
+      "url": "thingtime-itswk2ooc-lopugits-projects.vercel.app",
+      "branch": "codex/activate-current-staging",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:00.916Z",
+      "id": "dpl_3oYQjcfmaMgKRNQWxDcHuzmbYRWb",
+      "url": "thingtime-qr6o5bw7f-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1207-vercel-actions-develop--to-main",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:02.532Z",
+      "id": "dpl_FaCrsfcQwen1c2pAG9t2Z6JHPRoG",
+      "url": "thingtime-2s5vsp8jw-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1018-import-openai-vault--to-main",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:04.076Z",
+      "id": "dpl_7KWwgejMHjjjrumwUgJL5pr2eNxk",
+      "url": "thingtime-5aw2opgf2-lopugits-projects.vercel.app",
+      "branch": "codex/vercel-actions-only",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:06.013Z",
+      "id": "dpl_4T5vDWUKX7dLg4bo7FEyBSVTgUhh",
+      "url": "thingtime-csc3nxqxn-lopugits-projects.vercel.app",
+      "branch": "codex/vercel-actions-develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:07.791Z",
+      "id": "dpl_AjqVR8w7SniTgDsSqcwrxZiEHB5J",
+      "url": "thingtime-1l0b35211-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-2-web-standards-builder-aa247b",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:09.432Z",
+      "id": "dpl_A7EWuy35i4Yda1hXQMDhcM4zzsUx",
+      "url": "thingtime-in4e2avq7-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-lopu-pr-comment-listener-1ef6d3",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:11.400Z",
+      "id": "dpl_9naifztfyrCvLusm8fgjtGtunj2c",
+      "url": "thingtime-cmi48k4zh-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-2-mobile-file-sync-4295d3",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:13.199Z",
+      "id": "dpl_4y86CEiRgdAFugUvMfRvUVkjSiwx",
+      "url": "thingtime-2p8ln9nf1-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-2-file-sync-release-769527",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:14.856Z",
+      "id": "dpl_B9e8bPyVZXvYEYs6YQto5Ck5pRCX",
+      "url": "thingtime-h0r0vyezn-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-pr263-codeql.HsPnP9-29bd00",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:16.508Z",
+      "id": "dpl_DqVTdrmWezETeviFxA1vqQT3kGJA",
+      "url": "thingtime-nwwgn3zgw-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-2-mac-menu-bar-source-4ed1d9",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:18.216Z",
+      "id": "dpl_7PhX1d8CFfn3EJAA6TZ58HybrevS",
+      "url": "thingtime-9zx2ea6ck-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-2-agent-browser-installed-0e29e3",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:20.071Z",
+      "id": "dpl_DkQV7T7tsavJELZQGWkBACqA22ny",
+      "url": "thingtime-hf7oofknn-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-2-media-pipeline-ace2ae",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:21.692Z",
+      "id": "dpl_EQQKtGMgBtzBV9JdGFoHcdpUBHiK",
+      "url": "thingtime-lbh74ekt6-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-post-rich-text-5e4acc",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:23.459Z",
+      "id": "dpl_2jUY85ppjx7vQeoRZL6n75mpzzYf",
+      "url": "thingtime-e3hmte928-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-2-password-import-fix-cd859e",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:25.282Z",
+      "id": "dpl_97A6eVWxEevSftxm3i3ym2DjwXCp",
+      "url": "thingtime-ouzvo3qla-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-post-rich-text-blocks-d5a2ed",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:26.952Z",
+      "id": "dpl_HRCfgZRHtkNCmFsbNkRewnpMaYo8",
+      "url": "thingtime-aj58xarvw-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-agent-overview-implementation-e0a889",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:28.597Z",
+      "id": "dpl_9x4JzQmkeQomccvA9zcVM8oGVUjh",
+      "url": "thingtime-hvpvvvp41-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-pr359-conflict-resolver-6f4046",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:30.274Z",
+      "id": "dpl_4ELLZ5dAFHNNvx6JYvBBdTn878A7",
+      "url": "thingtime-c7fvtfyvr-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-subspace-messages-views-06d138",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:32.247Z",
+      "id": "dpl_7uHuCebZ8pr4tjVbK3YKoLJJizGA",
+      "url": "thingtime-i32bchi6h-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-lopu-pr-synchronize-listener-8f843f",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:34.306Z",
+      "id": "dpl_HQJwdGj12GdQYe6XhUd7eL6pRF8G",
+      "url": "thingtime-3z8ogwl4v-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-commander-login-oauth-compat-aa5fc0",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:35.915Z",
+      "id": "dpl_FS8sJyjg42xTMyEcZizeWmrtsxyZ",
+      "url": "thingtime-4khypwb4b-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-thingtime-sso-plugin-auth-b5ec2c",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:37.609Z",
+      "id": "dpl_HwHJpYU1YY97RisURc1k7BgRy3nw",
+      "url": "thingtime-j157vt829-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-media-gallery-search-upgrades-33cf22",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:40.457Z",
+      "id": "dpl_Fu1bCYZ4qUzhz78J7Ryn4QSJHrYH",
+      "url": "thingtime-mzk0xr859-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-recovery-main-promotion-492120",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:42.075Z",
+      "id": "dpl_6csRiRWpxTvt3k5aS2T5v8zGHTX9",
+      "url": "thingtime-ftrl8cwt5-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-commander-search-single-frame-c6cb3f",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:43.726Z",
+      "id": "dpl_to2nYpEzL8Mu6QAkwPcVrguQuiWL",
+      "url": "thingtime-fi546rscw-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-pr299-performance-review-fb6be6",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:45.357Z",
+      "id": "dpl_B57DFA9vzEHbeyarK8n2jEXs8WqT",
+      "url": "thingtime-oln2zcrd0-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-rich-commander-previews-36f9e0",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:47.050Z",
+      "id": "dpl_7aUdpLnrUBvAaReVRrbFuFJ6xRR7",
+      "url": "thingtime-dqwedv07w-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-thingtime-peer-discovery-4ab614",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:48.632Z",
+      "id": "dpl_7U6nQ8MXRNnmgnBk6ZEZhDoAiTcq",
+      "url": "thingtime-iuqrybhpm-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-stack-progress-chat-main-ace0a5",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:50.317Z",
+      "id": "dpl_QMthq29dGmYaoPC2VQ7yFU7G1iVT",
+      "url": "thingtime-6fehrylw5-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-verify-missed-stack-1042c5",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:51.889Z",
+      "id": "dpl_6EujXfX78o8tDLmksXtVoCntHbhE",
+      "url": "thingtime-sbnrjjmmi-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-verify-thingtime-recovery-init-786255",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:53.588Z",
+      "id": "dpl_7D7pFnNtvExF8CXpEwuW7Yqpj9ZC",
+      "url": "thingtime-qbq2ox4nr-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-verify-pr68-updater-4dc547",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:55.198Z",
+      "id": "dpl_78oTLJkfp3yTxRVxrnXghRYjRxWT",
+      "url": "thingtime-45743oeih-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-lopu-pr-comment-listener-final-6373f0",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:56.804Z",
+      "id": "dpl_9h1w7Rhr5TaYL4fyWE1BxXQ2NzCT",
+      "url": "thingtime-8h7knegcj-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-ai-desktop-messenger-8d1588",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:58.362Z",
+      "id": "dpl_31wfVM3LMmh1PGdgDqUCFPBD5Dbt",
+      "url": "thingtime-1ffylr93k-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-unified-pr-agent-thingtime-4f99f3",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:46:59.898Z",
+      "id": "dpl_DWtn8dcfCj9RRo8KKkktL5FzNMiu",
+      "url": "thingtime-8qpn7iot0-lopugits-projects.vercel.app",
+      "branch": "codex/preserve-20261022-codex-thingtime-attachment-permalink-resolution-8dbdef",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:01.844Z",
+      "id": "dpl_BVYUzsj1MGrxHHcR9GVh5FcoXRNE",
+      "url": "thingtime-lyg6uel18-lopugits-projects.vercel.app",
+      "branch": "claude/upload-approval-scopes",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:03.714Z",
+      "id": "dpl_Go1N2xSPtLt6UPrgtPUxbF9fc9v5",
+      "url": "thingtime-8fv3hz1i0-lopugits-projects.vercel.app",
+      "branch": "codex/claude-preserve-20261022-third-party-app-integration-c96057",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:05.643Z",
+      "id": "dpl_HmgnmuWKxuAgU7x3txNfFE2QckQu",
+      "url": "thingtime-6rp73382y-lopugits-projects.vercel.app",
+      "branch": "claude/thingtime-features-verify-merge-603261",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:07.284Z",
+      "id": "dpl_JCgM4XtRAYqbMkwRA14G2pCar63S",
+      "url": "thingtime-c46v2lv2w-lopugits-projects.vercel.app",
+      "branch": "claude/thingtime-pr-review-loop-e60795",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:08.900Z",
+      "id": "dpl_DUJPuVADQN65Z6oBWeCqB9cQggcR",
+      "url": "thingtime-7fud32unq-lopugits-projects.vercel.app",
+      "branch": "claude/thingtime-design-system-01d6ee",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:10.419Z",
+      "id": "dpl_DHV2qEtG9N33M7QwY3wv16NisUjJ",
+      "url": "thingtime-k6psy9wmj-lopugits-projects.vercel.app",
+      "branch": "claude/all-branch-listener-concurrency-hotfix",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:12.224Z",
+      "id": "dpl_8WUoD1uHxWKnCyCW35QoajbTjEbW",
+      "url": "thingtime-pxm2ppdl1-lopugits-projects.vercel.app",
+      "branch": "codex/claude-preserve-20261022-session-ffdf75",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:14.037Z",
+      "id": "dpl_64gG83zPBGNfdwAW7ukEA5i9QAwB",
+      "url": "thingtime-pn7uz2ji9-lopugits-projects.vercel.app",
+      "branch": "codex/claude-preserve-20261022-session-fd429c",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:15.889Z",
+      "id": "dpl_2SMYAZgyYfNX4c3LK5Hj4UuFzXFJ",
+      "url": "thingtime-7lblrdn80-lopugits-projects.vercel.app",
+      "branch": "claude/fable-five-funtime",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:17.710Z",
+      "id": "dpl_2dMXwtS2x3uahDb5v2iLpkz7wBoB",
+      "url": "thingtime-ip3z4wlc5-lopugits-projects.vercel.app",
+      "branch": "claude/post-editor-media-badges-7b2acd",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:19.396Z",
+      "id": "dpl_GBhp2Za1wmWYJZZDNLquqmjDZx5s",
+      "url": "thingtime-p5cpzz0go-lopugits-projects.vercel.app",
+      "branch": "codex/claude-preserve-20261022-pokeworld-starsalign-thingtime-40cd5f",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:21.128Z",
+      "id": "dpl_JAbwT7sbFgVmK4KfQngGMDDXz3zL",
+      "url": "thingtime-atduei8k1-lopugits-projects.vercel.app",
+      "branch": "codex/claude-preserve-20261022-schema-drawer-components-lib-441b3b",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:23.223Z",
+      "id": "dpl_AWCkuE1kkhPVcvYfFVmZJTk3D5fp",
+      "url": "thingtime-ilehfwgyl-lopugits-projects.vercel.app",
+      "branch": "claude/nsfw-tos-media-moderation-58c301",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:24.871Z",
+      "id": "dpl_AcsVsab82wHZYU7Cc3eRWxio1G8m",
+      "url": "thingtime-3p6jswgsv-lopugits-projects.vercel.app",
+      "branch": "claude/nice-stonebraker-5622a4",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:27.943Z",
+      "id": "dpl_F5tLB1Ltw9SD939AwAWhWmrhYPdq",
+      "url": "thingtime-cjgdj6d1s-lopugits-projects.vercel.app",
+      "branch": "codex/claude-preserve-20261022-marketing-pages-admin-guard-ed2cd8",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:29.737Z",
+      "id": "dpl_CVHYSJbzBkxnHxBhaWvFAcxWy6YG",
+      "url": "thingtime-e4gpywtk6-lopugits-projects.vercel.app",
+      "branch": "claude/lopu-credits-codeql-url-assert",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:31.340Z",
+      "id": "dpl_BamkZbiyPayEzbtY74gPNZwQqa5A",
+      "url": "thingtime-bz353c4sm-lopugits-projects.vercel.app",
+      "branch": "claude/crystal-reservation-removal",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:32.948Z",
+      "id": "dpl_EkZQciXBg9gJcr8JJQLfk4vcinZk",
+      "url": "thingtime-bjbp0700v-lopugits-projects.vercel.app",
+      "branch": "claude/todo-index-budget",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:34.587Z",
+      "id": "dpl_BV95c1m3PXHcLPKBRw6maLhaS11m",
+      "url": "thingtime-l43qiya9m-lopugits-projects.vercel.app",
+      "branch": "claude/block-editor-ui-layout-75355b",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:36.165Z",
+      "id": "dpl_CvnRtaY8KcNMHkgp1yhkyDK3KN58",
+      "url": "thingtime-g2u2ptoga-lopugits-projects.vercel.app",
+      "branch": "claude/action-thing-permissions-336bc0",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:37.906Z",
+      "id": "dpl_EJMqTYtT5Ffp2mCP3sgBQTV6HpKT",
+      "url": "thingtime-56o1cjezt-lopugits-projects.vercel.app",
+      "branch": "claude/action-thing-permissions-be50ad",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:39.789Z",
+      "id": "dpl_4C3ZrdzmaEa7CvxUDhXhaGE7SXjR",
+      "url": "thingtime-hzmdlx6yd-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:41.451Z",
+      "id": "dpl_9MruRHxgXtmtsHUtj6dihHjsekML",
+      "url": "thingtime-57004hlch-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:43.189Z",
+      "id": "dpl_HKEf3qJcGjZhSocckQyDgUDBzsNt",
+      "url": "thingtime-l8mumi5np-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:44.753Z",
+      "id": "dpl_5hmUnMEpLaVwtY4BYQz8zDn26iXm",
+      "url": "thingtime-evqluehon-lopugits-projects.vercel.app",
+      "branch": "codex/thingtime-world-domination-todos-20260916-2104",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:46.524Z",
+      "id": "dpl_FzuH3yYV9fwtmZA4Xvtt9cahHYHY",
+      "url": "thingtime-mzrxjoar2-lopugits-projects.vercel.app",
+      "branch": "promote/pr-1070-lopu-credential-selection--to-main",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:48.106Z",
+      "id": "dpl_6xrEn1LSN15f6ybH8ozRJHx8Ze6b",
+      "url": "thingtime-lwke8w281-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:49.663Z",
+      "id": "dpl_GYu9WiAW1a21jf9ch14k4yC7WKdS",
+      "url": "thingtime-3mriaj13q-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:51.271Z",
+      "id": "dpl_9rKsEKTUjh8DGsHvAM3eRPQVGvaN",
+      "url": "thingtime-fndxesk8h-lopugits-projects.vercel.app",
+      "branch": "codex/chatgpt-plan-installed-local",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:53.110Z",
+      "id": "dpl_3Thg51rLKaFkLm1GAogrPDxcCpe2",
+      "url": "thingtime-j2sa3fhdo-lopugits-projects.vercel.app",
+      "branch": "codex/agent-overview-builder",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:54.730Z",
+      "id": "dpl_BXtG8tUYpRkmAZMhzLx9ayWy1ohk",
+      "url": "thingtime-65nph614i-lopugits-projects.vercel.app",
+      "branch": "codex/agent-overview-builder",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:56.569Z",
+      "id": "dpl_DWgrEPa6xSFW5CUhMyYhaXwYBNWe",
+      "url": "thingtime-1ubk81tm2-lopugits-projects.vercel.app",
+      "branch": "codex/agent-overview-builder",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:47:58.052Z",
+      "id": "dpl_EW5Xr56jfweyJsW7yR5Dtpk68RqF",
+      "url": "thingtime-52w8cdnkw-lopugits-projects.vercel.app",
+      "branch": "codex/agent-overview-builder",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:48:00.012Z",
+      "id": "dpl_4FkMwyzTZ5unA7Be7bCVDK2UhoLX",
+      "url": "thingtime-h44ilrs4r-lopugits-projects.vercel.app",
+      "branch": "codex/agent-overview-builder",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:49:14.736Z",
+      "id": "dpl_4qjKNMnPTHisXWex5q8F7M1L1fgi",
+      "result": "deleted-verified",
+      "reason": "legacy-without-gateway-policy",
+      "url": "thingtime-2750p5qn7-lopugits-projects.vercel.app",
+      "branch": "promote/pr-802-thingtime-funding-launch--to-main"
+    },
+    {
+      "at": "2026-10-29T20:50:11.303Z",
+      "id": "dpl_2PJ94dqhfTF2ZKRxLRCzf4ebEi7R",
+      "url": "thingtime-begmaeswq-lopugits-projects.vercel.app",
+      "branch": "codex/commander-session-persistence",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:50:18.453Z",
+      "id": "dpl_44pbmymaBm2LCyECpJDZNj3JitEU",
+      "url": "thingtime-qk0u3g8fc-lopugits-projects.vercel.app",
+      "branch": "codex/mail-release-recovery",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:50:24.635Z",
+      "id": "dpl_ASYfB2o7JdyfZ7QbxVN1YuL7rf6m",
+      "url": "thingtime-gmdnzbm2f-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:50:32.560Z",
+      "id": "dpl_4SAAaXD5z1afAaHJtmofVXyR2XVZ",
+      "url": "thingtime-emzrg45ui-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:50:39.580Z",
+      "id": "dpl_823jrrDvBtZaQQxaVVkZD2YA14TV",
+      "url": "thingtime-o7xgp5tk5-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:50:47.252Z",
+      "id": "dpl_4htfUjBC1bHu58uRvuNNpRK9AE4X",
+      "url": "thingtime-fag4q76fv-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:50:54.535Z",
+      "id": "dpl_5YCbBxPNW3PC1CNhpbhT7Gk1STHW",
+      "url": "thingtime-njwexxixf-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:03.590Z",
+      "id": "dpl_32QpPhFqRwPS21nf5Sznz1PNE8LG",
+      "url": "thingtime-ah92ou8qq-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:11.538Z",
+      "id": "dpl_A9JzBqmBaagauyFCBsBK5tQPbWv6",
+      "url": "thingtime-50vjsbwbw-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:18.639Z",
+      "id": "dpl_GcNDV6x6ipymvNCTBzCdWGSTsqSq",
+      "url": "thingtime-4j4jpqbg0-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:25.703Z",
+      "id": "dpl_HvHoeRC4HG26RJDFhdgFZbx42Ttn",
+      "url": "thingtime-oky626loa-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:27.342Z",
+      "id": "dpl_vVUtLYrwGbXKV6oLN9LEPDAJ5ygY",
+      "url": "thingtime-e50o43yhk-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:31.967Z",
+      "id": "dpl_CS8wbiedaGnucy6jbuqYHWmfCTUR",
+      "url": "thingtime-i8i9lonnf-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:33.536Z",
+      "id": "dpl_DrQ5pzkBhyHzseYj618kTo5xrnvw",
+      "url": "thingtime-6o8o3sgf3-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:35.412Z",
+      "id": "dpl_8bTxUUocB73u41GkkkfhQ2UdMJV5",
+      "url": "thingtime-aex8zabmz-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:37.229Z",
+      "id": "dpl_BubyaJGyMFHd4rQArEaXfGjyHs5s",
+      "url": "thingtime-lj4yxdcfz-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:38.811Z",
+      "id": "dpl_FiQn2rtN2oTEavnB9dGvXzz2yLfC",
+      "url": "thingtime-ro76qy3ca-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:40.361Z",
+      "id": "dpl_BP5JZ7EcqRD7eanZSxYjj2Fiu9Ax",
+      "url": "thingtime-l9z2icefx-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:42.086Z",
+      "id": "dpl_7veSCWwojY2VdF769rRhkB5odhku",
+      "url": "thingtime-laxwngks7-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:43.627Z",
+      "id": "dpl_EX7DmB9cGymVYSRfEDubmXVeQTD5",
+      "url": "thingtime-fdgerz065-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:45.226Z",
+      "id": "dpl_8UZJChfEe9AG3t45syRnapvL9Aqi",
+      "url": "thingtime-23b4nbn50-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:46.718Z",
+      "id": "dpl_86HSkq74JtCcfLSTaw3XkHJVFinX",
+      "url": "thingtime-ghztrjhsy-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:48.256Z",
+      "id": "dpl_5oXkfM4vG8T4qqUfhA6wrEdnPhWN",
+      "url": "thingtime-ihty68m12-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:50.186Z",
+      "id": "dpl_BHksSRNYt3nNngYeyiW1b6dXiqgX",
+      "url": "thingtime-6cgthn400-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:51.952Z",
+      "id": "dpl_FYBn9S3kaXCcMZRp3EEVxWmnjHNW",
+      "url": "thingtime-blemd1csw-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:53.471Z",
+      "id": "dpl_X1Yy4avujkJEs4xD9ACEEwsEEpei",
+      "url": "thingtime-gdp8vdw8a-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:55.400Z",
+      "id": "dpl_ACoyGxuCCnYJh81pjThNVpraG5ue",
+      "url": "thingtime-gbuvcohqx-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:56.941Z",
+      "id": "dpl_8EcH39viCV95pJWXZhyS22tWf2en",
+      "url": "thingtime-hz7w13cje-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:51:59.003Z",
+      "id": "dpl_5HhV59Cgk1KKE6FFLxQF5Mqjh3KK",
+      "url": "thingtime-7zki4jqxr-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:00.434Z",
+      "id": "dpl_AFweFi2XD5aVjqgsnBDovbNwu52H",
+      "url": "thingtime-59xq5nnqe-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:02.996Z",
+      "id": "dpl_FwHXuUWxfgzJPHsy5CBZQtL3sA2e",
+      "url": "thingtime-7vsi8ok62-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:04.824Z",
+      "id": "dpl_BwZ3hszSPmvMPS9mLxVcemmubeML",
+      "url": "thingtime-g07wtf6f9-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:06.376Z",
+      "id": "dpl_A8h4rDXVKnjN6A5siSqS3nrAe3Jf",
+      "url": "thingtime-k3kjuq0n6-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:07.943Z",
+      "id": "dpl_CeC4SHKcx78WVbdeY7wnfBSZKTzZ",
+      "url": "thingtime-4jys780dj-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:09.534Z",
+      "id": "dpl_EGXKLhzD4LifAuuzbJSPwdRCH3fU",
+      "url": "thingtime-98z25v2u8-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:11.403Z",
+      "id": "dpl_7tjjEd7zfVRTuiF7odQjaPskeieM",
+      "url": "thingtime-id5jtrsqc-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:12.940Z",
+      "id": "dpl_59qpBWwiiHJtW8hyj4CbWyTaMbFB",
+      "url": "thingtime-awsc0w0g0-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:14.854Z",
+      "id": "dpl_AjQK3Y2HZ77ku1ERp96XCopT8sKN",
+      "url": "thingtime-z9q08y2mw-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:16.627Z",
+      "id": "dpl_3NXGj2MPBawjj9Vrn2aDBNG4wqta",
+      "url": "thingtime-hfsdpx3kl-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:18.134Z",
+      "id": "dpl_EfPBqob35d3dFxJpWr7KqbRfi4Pt",
+      "url": "thingtime-or11cx1ft-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:19.672Z",
+      "id": "dpl_5H3KT7LtTmJrvsGfUvcErZN9i8W6",
+      "url": "thingtime-ctz6c5c7m-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:21.246Z",
+      "id": "dpl_HhrLwBd6zAPUuFe2gYqj9aHvxUH4",
+      "url": "thingtime-krzozqjvc-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:23.345Z",
+      "id": "dpl_GNJLhb85qmGK4ZyanmMAFoCRfhym",
+      "url": "thingtime-l6ocwcsfh-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:24.914Z",
+      "id": "dpl_7QkBU6SgTb29tuiE3cLUnk5Ru1aD",
+      "url": "thingtime-2chdzvqax-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:26.656Z",
+      "id": "dpl_51LsfW135Czo3nSZi4Mcqc2ECejs",
+      "url": "thingtime-m0vi8jf0y-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:28.169Z",
+      "id": "dpl_4cwVGkvGyigFsidBN7dQfLfuB8Mt",
+      "url": "thingtime-hh94stdcl-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:29.677Z",
+      "id": "dpl_74Zt43YFdxVfydJkjPzzA2z4iyku",
+      "url": "thingtime-rkitjhs7g-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:31.295Z",
+      "id": "dpl_7Yikvv64Y5PKmgyVeG3xLPR5nN31",
+      "url": "thingtime-7tbz90fpv-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:33.084Z",
+      "id": "dpl_BMFy3LZDYsBFRhoiAfSnG3iWbe7y",
+      "url": "thingtime-mymk4vv0k-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:34.737Z",
+      "id": "dpl_F8V5RY3aEawyNBs3TbP43oADaMUm",
+      "url": "thingtime-k96xojjr1-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:36.226Z",
+      "id": "dpl_GBCEJqX7USwoAw8iqcnMjP8praBV",
+      "url": "thingtime-poazanh1l-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:38.006Z",
+      "id": "dpl_6rnSAUrXk7NR3HFjNVEUWfVe5oBS",
+      "url": "thingtime-9wdwy8f3z-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:39.637Z",
+      "id": "dpl_DZtfs8d4PBAsGX3qyD5YpQg1QEqe",
+      "url": "thingtime-i1exulw7k-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:41.195Z",
+      "id": "dpl_A17VXDUHBa6LAVMRjyRQAAF8uZSU",
+      "url": "thingtime-nf5r38ncp-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:43.323Z",
+      "id": "dpl_EWuqgsTpeqt4jtLAcRDuFeHgZhms",
+      "url": "thingtime-7jjaak62z-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:45.021Z",
+      "id": "dpl_GCXaTeQMUbohSd91xNSXCb195r8x",
+      "url": "thingtime-nizvqaz90-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:46.600Z",
+      "id": "dpl_AwQVVPmvZCrQ2E48mYDC7ZcA14vh",
+      "url": "thingtime-qaa0a8y25-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:48.117Z",
+      "id": "dpl_CrtuHyJHxcjeZhZ179vBd2gFjdLG",
+      "url": "thingtime-oqllpgvon-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:50.609Z",
+      "id": "dpl_8aUBvx3gQuTnssFS1vhUGK925ya1",
+      "url": "thingtime-og36lpunf-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:52.218Z",
+      "id": "dpl_A8zZF6mhpr9H8Axz2Uxr69ECGHeY",
+      "url": "thingtime-m5eg3kt48-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:53.768Z",
+      "id": "dpl_9FPFCE1uJYaLgs5xKL8jab7u2p1F",
+      "url": "thingtime-f3hjbm64z-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:55.317Z",
+      "id": "dpl_23wXuBjDGh4DYbixqp4WX5XiDfDQ",
+      "url": "thingtime-8q98nexz7-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:56.939Z",
+      "id": "dpl_D8LuvGE5MGzc2wNzcEEdJrLheQ4S",
+      "url": "thingtime-1guj957y4-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:52:58.491Z",
+      "id": "dpl_4azS7dVXCnkgw3V64DnkN97dbjAL",
+      "url": "thingtime-akh9n67kr-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:53:02.985Z",
+      "id": "dpl_tgGgc6qopnskq6YyW6RMrAs2TcWY",
+      "url": "thingtime-17oyrwevh-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:53:04.771Z",
+      "id": "dpl_GRmFURT5UR1kgDPDwWRoxX2xE5ea",
+      "url": "thingtime-npjtux0v9-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T20:53:06.491Z",
+      "id": "dpl_2NV3dG88v7smjbP12LBEEyx5GacU",
+      "url": "thingtime-2mmvr6bns-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:03:17.181Z",
+      "id": "dpl_CxpCJp34gePP3xFffMqTRiYmY4Qq",
+      "url": "thingtime-p43besv18-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:03:25.057Z",
+      "id": "dpl_EMFeqgYfaWFQBtKQaPi9vyMXmL6C",
+      "url": "thingtime-5cjrup78d-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:03:31.288Z",
+      "id": "dpl_9WsBBZLmsjWsQkrsdY9KVw261Mso",
+      "url": "thingtime-e2gmzzpym-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:03:37.906Z",
+      "id": "dpl_GKEx9eJZfyWirJSpukq6gG1TRzAi",
+      "url": "thingtime-rfq4k1rk6-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:03:45.220Z",
+      "id": "dpl_GAGE7RcSguwoFCDnhHgSCRoZso42",
+      "url": "thingtime-4ganzvurw-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:03:52.802Z",
+      "id": "dpl_H8e4bzVLS2CfpZakoJj7b1uZRXZH",
+      "url": "thingtime-oo794issm-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:01.837Z",
+      "id": "dpl_6L1krdPf4tHCpc9PbQbKWyaoNBhu",
+      "url": "thingtime-58kipbtps-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:08.810Z",
+      "id": "dpl_FjtVq7Tinba1mmSEGrhrTtdxqKo1",
+      "url": "thingtime-9hnxriars-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:15.101Z",
+      "id": "dpl_13JUZt6mzPFhzniwkXcKrAC24yRh",
+      "url": "thingtime-6baaeah7k-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:21.430Z",
+      "id": "dpl_H2hDxgz75CnCvVv32QmifceSok7G",
+      "url": "thingtime-kqzpkwcgu-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:23.722Z",
+      "id": "dpl_4d1ea2X8jLVq1QNL6WjJdoRqRrEG",
+      "url": "thingtime-ouu7tjit6-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:25.359Z",
+      "id": "dpl_BAQEVXi11byuZWBDuJYvhhhkVd17",
+      "url": "thingtime-5q7e9iqth-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:26.983Z",
+      "id": "dpl_EBHM9siYHMABRxGQYtbxY68DHNHS",
+      "url": "thingtime-2wx3frs16-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:30.832Z",
+      "id": "dpl_3GsxXvNcLKxPgBzBYQ31Fh2ou3tE",
+      "url": "thingtime-kscvlh0aw-lopugits-projects.vercel.app",
+      "branch": "codex/remote-device-files",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:32.681Z",
+      "id": "dpl_F3fsfiTHg2MsgPLySTKtNsrYpDa8",
+      "url": "thingtime-dnsqhoaev-lopugits-projects.vercel.app",
+      "branch": "codex/library-maps-platforms",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:34.276Z",
+      "id": "dpl_Anp9XcAmDGwdy8WR3z1tf1euRamQ",
+      "url": "thingtime-i2p6t0zs6-lopugits-projects.vercel.app",
+      "branch": "codex/thingtime-continuity-ux",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:35.815Z",
+      "id": "dpl_31htDteMpdfCMCfVcoVS926ihfNJ",
+      "url": "thingtime-n0hb5yq3o-lopugits-projects.vercel.app",
+      "branch": "codex/messenger-space-lopu-filter",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:37.503Z",
+      "id": "dpl_DtWfoVtCN8kxy3WHgmyN1mEKTww1",
+      "url": "thingtime-pldp77llc-lopugits-projects.vercel.app",
+      "branch": "codex/drawer-link-reorder",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:39.036Z",
+      "id": "dpl_EKhxLLyGXpqsUrd8io614ZyzGqrh",
+      "url": "thingtime-j6xj9lfv6-lopugits-projects.vercel.app",
+      "branch": "claude/thingtime-ios-icon-testflight-0a4b22",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:40.834Z",
+      "id": "dpl_FQk3Lv5gc1zXJD1duziRG9b2EJZc",
+      "url": "thingtime-p5xu3ckgw-lopugits-projects.vercel.app",
+      "branch": "claude/easter-eggs-s4",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:42.603Z",
+      "id": "dpl_BYs5RpahwqcZvjRuXxV2MrmubgPD",
+      "url": "thingtime-b7w3nx155-lopugits-projects.vercel.app",
+      "branch": "claude/dx-test-runner-ci",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:04:44.232Z",
+      "id": "dpl_2oi8F2DCDsXCn3h2b4JRiw7PJk2C",
+      "url": "thingtime-hidjkiemc-lopugits-projects.vercel.app",
+      "branch": "claude/todo9-date-reviver-strict",
+      "reason": "legacy-without-gateway-policy",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:05:39.417Z",
+      "id": "dpl_5t3m8HfMaSbscDaRubJ5eQ57CWBy",
+      "url": "thingtime-qm1by5c3q-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "obsolete-unaliased-environment-without-gateway",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:05:40.964Z",
+      "id": "dpl_HRHBF3Vke7CZfrRv3UdfAKT9MBrH",
+      "url": "thingtime-8bqnrlp4z-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "obsolete-unaliased-environment-without-gateway",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:05:42.474Z",
+      "id": "dpl_GK4FFi9tJxXyPkaU1etD2PreLjiJ",
+      "url": "thingtime-hwchu0uo3-lopugits-projects.vercel.app",
+      "branch": "staging",
+      "reason": "obsolete-unaliased-environment-without-gateway",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:05:44.456Z",
+      "id": "dpl_AGjdtxyZrUNi5q2hNv5zsJ9bGh6e",
+      "url": "thingtime-6cyskumd2-lopugits-projects.vercel.app",
+      "branch": "develop",
+      "reason": "obsolete-unaliased-environment-without-gateway",
+      "result": "deleted-verified"
+    },
+    {
+      "at": "2026-10-29T21:05:46.056Z",
+      "id": "dpl_9nCCcV7RKntgzXqWUjKGkUofrJtc",
+      "url": "thingtime-xgtdhqwm6-lopugits-projects.vercel.app",
+      "branch": "staging",
+      "reason": "obsolete-unaliased-environment-without-gateway",
+      "result": "deleted-verified"
+    }
+  ],
+  "deletedIdsStillPresent": [],
+  "stableAliases": [
+    {
+      "alias": "master.previews.thingtime.com",
+      "before": "dpl_8dWNCcR64cEnuNS3XMcvGXMArd6V",
+      "after": "dpl_8dWNCcR64cEnuNS3XMcvGXMArd6V"
+    },
+    {
+      "alias": "dev.thingtime.com",
+      "before": "dpl_38yEEFSux8bLHGE56yFLpxPidFAc",
+      "after": "dpl_38yEEFSux8bLHGE56yFLpxPidFAc"
+    },
+    {
+      "alias": "*.previews.dev.thingtime.com",
+      "before": "dpl_CefuVbRkfYiewLTSxx6tx8m8CX5G",
+      "after": "dpl_CefuVbRkfYiewLTSxx6tx8m8CX5G"
+    },
+    {
+      "alias": "*.previews.thingtime.com",
+      "before": "dpl_CefuVbRkfYiewLTSxx6tx8m8CX5G",
+      "after": "dpl_CefuVbRkfYiewLTSxx6tx8m8CX5G"
+    },
+    {
+      "alias": "staging.thingtime.com",
+      "before": "dpl_J2SMQPi8ZQpcXymxKtEWDTBRoEei",
+      "after": "dpl_J2SMQPi8ZQpcXymxKtEWDTBRoEei"
+    },
+    {
+      "alias": "www.thingtime.com.au",
+      "before": "dpl_EsserNdfyVGY1GaHNQfZC1m29ZGs",
+      "after": "dpl_EsserNdfyVGY1GaHNQfZC1m29ZGs"
+    },
+    {
+      "alias": "thingtime.com.au",
+      "before": "dpl_EsserNdfyVGY1GaHNQfZC1m29ZGs",
+      "after": "dpl_EsserNdfyVGY1GaHNQfZC1m29ZGs"
+    },
+    {
+      "alias": "thingtime.com",
+      "before": "dpl_DpMWy8frMTmBNbvzkPKLUU5U2i2x",
+      "after": "dpl_DpMWy8frMTmBNbvzkPKLUU5U2i2x"
+    },
+    {
+      "alias": "www.thingtime.com",
+      "before": "dpl_EsserNdfyVGY1GaHNQfZC1m29ZGs",
+      "after": "dpl_EsserNdfyVGY1GaHNQfZC1m29ZGs"
+    }
+  ],
+  "allStableAliasesUnchanged": true,
+  "absentPublicSamples": [
+    {
+      "id": "dpl_D6EmX3iBWcAyC7A1Hj2mD7bLvpfK",
+      "reason": "no-open-pr",
+      "url": "https://thingtime-9nq05fpfh-lopugits-projects.vercel.app",
+      "status": 404,
+      "providerCode": "DEPLOYMENT_NOT_FOUND"
+    },
+    {
+      "id": "dpl_HbU6tUbYWxnB8ybp2MosjvzQ34tP",
+      "reason": "source-lacks-gateway",
+      "url": "https://thingtime-mjcxyx782-lopugits-projects.vercel.app",
+      "status": 404,
+      "providerCode": "DEPLOYMENT_NOT_FOUND"
+    },
+    {
+      "id": "dpl_2oi8F2DCDsXCn3h2b4JRiw7PJk2C",
+      "reason": "legacy-without-gateway-policy",
+      "url": "https://thingtime-hidjkiemc-lopugits-projects.vercel.app",
+      "status": 404,
+      "providerCode": "DEPLOYMENT_NOT_FOUND"
+    },
+    {
+      "id": "dpl_9nCCcV7RKntgzXqWUjKGkUofrJtc",
+      "reason": "obsolete-unaliased-environment-without-gateway",
+      "url": "https://thingtime-xgtdhqwm6-lopugits-projects.vercel.app",
+      "status": 404,
+      "providerCode": "DEPLOYMENT_NOT_FOUND"
+    }
+  ],
+  "retainedGatewayManifestVerification": {
+    "count": 67,
+    "allStillPresent": true,
+    "allGatewayV1": true,
+    "featureVersions": {
+      "1.1.0": 52,
+      "1.2.0": 12,
+      "1.0.1": 3
+    },
+    "note": "Advertised gateway versions vary; immutable source audit also verified Mongo gateway fencing and middleware in57 distinct retained source commits. This does not assert all sources use one exact minor version."
+  },
+  "health": [
+    {
+      "origin": "https://thingtime.com",
+      "status": 200,
+      "connected": true,
+      "pingMs": 12,
+      "error": null,
+      "checkedAt": "2026-10-29T21:06:10.181Z"
+    },
+    {
+      "origin": "https://dev.thingtime.com",
+      "status": 200,
+      "connected": true,
+      "pingMs": 47,
+      "error": null,
+      "checkedAt": "2026-10-29T21:06:10.338Z"
+    },
+    {
+      "origin": "https://master.previews.thingtime.com",
+      "status": 200,
+      "connected": true,
+      "pingMs": 47,
+      "error": null,
+      "checkedAt": "2026-10-29T21:06:10.273Z"
+    }
+  ],
+  "atlasAcceptance": {
+    "connectionCounts": null,
+    "alertResolved": null,
+    "reason": "Authenticated account lacks Thingtime Atlas project membership; no live connection-count or alert-state claim"
+  }
+}

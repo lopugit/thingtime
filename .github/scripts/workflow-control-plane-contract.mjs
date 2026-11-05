@@ -958,6 +958,22 @@ export function assertControlPlaneContract() {
   assert.match(codeqlHandoff, /^      actions: write$/mu);
   assert.match(codeqlHandoff, /gh workflow run codeql-analysis\.yml/u);
   assert.match(codeqlHandoff, /--ref "\$DEFAULT_BRANCH"/u);
+  // Nothing re-enters this privileged hop until the PR head moves, so a
+  // single-attempt dispatch converts a transient HTTP 500 from
+  // POST /actions/workflows/{id}/dispatches into a red check that outlives the
+  // outage (observed on PR #1035 @ 4952b234, run 39462996775). Pin the retry
+  // as a property — a bounded loop around the dispatch that only escalates
+  // once the budget is exhausted — rather than pinning one spelling of it.
+  assert.match(
+    codeqlHandoff,
+    /until gh workflow run codeql-analysis\.yml[\s\S]*?\n\s*do\n[\s\S]*?\n\s*done\b/u,
+    "the CodeQL dispatch retries instead of leaving a transient API outage red on the PR",
+  );
+  assert.match(
+    codeqlHandoff,
+    /\[ "\$attempt" -ge "\$attempts" \][\s\S]*?no unprivileged analysis was queued[\s\S]*?exit 1/u,
+    "an exhausted dispatch budget still fails closed, because no analysis was queued",
+  );
   assert.doesNotMatch(
     codeqlHandoff,
     /actions\/checkout|codeql-action\/(?:init|analyze)|LOPU_AGENT_BACKEND|ANTHROPIC|OPENAI|\bsecrets\./u,
@@ -1116,6 +1132,30 @@ export function assertControlPlaneContract() {
     codeqlBackfill,
     /!TRANSIENT_HTTP_STATUS\.test\(failure\)\) \{\n\s*throw new Error\(`CodeQL dispatch for PR/u,
     "the mutating CodeQL dispatch stays status-only and never replays on a transport reset",
+  );
+  // An exhausted installation budget is an account-wide, self-healing
+  // condition, never a defect in any PR, but GitHub reports the primary limit
+  // as HTTP 403 rather than 429, so the classifiers above left it fatal and one
+  // outage reddened every open PR at once (run 40990132440; run 39789495402
+  // eight days earlier). Pin the deferral as a property: the condition is
+  // recognised, it is NOT retried into the backoff -- the published reset is
+  // most of an hour out -- and the process exits 0 so the next scheduled pass
+  // replans from live state. Pin the fail-fast half too, or the repair could
+  // regress into swallowing a real permission failure.
+  assert.match(
+    codeqlBackfill,
+    /const GH_BUDGET_EXHAUSTED\s*=\s*\/[^\n]*HTTP \(\?:403\|429\)[^\n]*API rate limit/u,
+    "the backfill recognises an exhausted installation budget by status and message together",
+  );
+  assert.match(
+    codeqlBackfill,
+    /if \(GH_BUDGET_EXHAUSTED\.test\(failure\)\) \{[\s\S]*?budgetExhausted: true/u,
+    "an exhausted budget is tagged for deferral rather than burned through the transient backoff",
+  );
+  assert.match(
+    codeqlBackfill,
+    /if \(error\?\.budgetExhausted\) \{[\s\S]*?return;\n\s*\}\n\s*process\.stderr\.write\(`\$\{error\.stack[\s\S]*?process\.exitCode = 1/u,
+    "a deferred pass exits 0 while every other failure still fails the job",
   );
   assert.doesNotMatch(
     codeqlBackfill,

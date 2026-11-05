@@ -1,9 +1,13 @@
+import { readPreviewRetentionPolicy } from './preview-retention-policy.mjs';
+import { assertPreviewGatewaySource } from './preview-gateway-source.mjs';
+import { assertPreviewHasOpenPullRequest, reconcileOrphanPreviews } from './orphan-preview-cleanup.mjs';
 import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gatewayPolicy, gatewayMetadata, gatewayDeploymentIssue, gatewayRuntimeArgs, gatewayPublisherEnvironment, gatewaySecretConfigured, reconcileGatewayAliases, restoreGatewayAliases } from './environment-gateway-policy.mjs';
+import { checkStorageManifest, checkStorageReadiness, checkRuntimeLogs, waitForStorageReadiness } from './storage-release-gate.mjs';
 
 const exec = promisify(execFile);
 export const marker = 'thingtimeGithubActionsBuild';
@@ -131,8 +135,21 @@ async function context(branch, requested) {
   const sha = ref.object?.sha;
   if (!/^[a-f0-9]{40}$/.test(sha || '')) throw new Error('Invalid source SHA');
   const gateway = gatewayPolicy({ branch, target, owner: branch === 'main' && target.slug === 'preview' });
-  return { sha, branch, target, gateway, projectId: project.id };
+  return { sha, branch, target, gateway, projectId: project.id, repositoryId: repository.id, defaultBranch: repository.default_branch };
 }
+
+const previewConfig = (plan) => ({ ...plan, repository: required('GITHUB_REPOSITORY'), projectName: required('VERCEL_PROJECT_NAME'), teamSlug: required('VERCEL_TEAM_SLUG') });
+const previewGithub = (path, init) => github(path.replace(`/repos/${required('GITHUB_REPOSITORY')}`, ''), init);
+const assertPreviewOpen = async (plan) => {
+  if (plan.target.slug === 'preview' && !plan.gateway.owner && !['main', 'master', 'develop', 'staging', plan.defaultBranch].includes(plan.branch)) {
+    plan.retentionPolicy = await readPreviewRetentionPolicy(previewConfig(plan));
+    plan.refreshRetentionPolicy = () => readPreviewRetentionPolicy(previewConfig(plan));
+  }
+  await assertPreviewHasOpenPullRequest(plan, previewConfig(plan), previewGithub);
+};
+const assertGatewaySource = async (plan) => {
+  if (plan.target.slug === 'preview' && !plan.gateway.owner) await assertPreviewGatewaySource(required('GITHUB_REPOSITORY'), plan.sha, previewGithub);
+};
 
 async function existing(plan) {
   const params = new URLSearchParams({ projectId: plan.projectId, [`meta-${marker}`]: '1', 'meta-githubCommitSha': plan.sha, 'meta-thingtimeBuildTarget': plan.target.slug, limit: '100' });
@@ -183,6 +200,8 @@ async function prepare() {
     console.log(`Build-only plan: ${plan.branch} @ ${plan.sha} -> ${plan.target.slug}; publication disabled`);
     return;
   }
+  try { await assertPreviewOpen(plan); } catch (error) { if (error.message === 'Preview publication requires an open same-repository PR') return output({ should_build: 'false', should_publish: 'false' }); throw error; }
+  await assertGatewaySource(plan);
   const deployed = await existing(plan);
   const master = plan.target.kind === 'production' ? await existing(await context(plan.branch, 'preview')) : null;
   await output(planOutputs(plan, needsReleaseBuild(plan, deployed, master) ? null : deployed));
@@ -248,12 +267,14 @@ async function smoke(url, { api = true, signal } = {}) {
   await apiResponse.json();
 }
 
-export async function publish() {
+export async function publish({ runtimeLogs = checkRuntimeLogs, aliasVerifier = verifyAlias } = {}) {
   const branch = required('SOURCE_REF');
   const plan = await context(branch, required('TARGET_ENVIRONMENT'));
   if (plan.sha !== required('SOURCE_SHA') || plan.target.id !== (process.env.TARGET_ID || '')) {
     console.log('Source or environment advanced; a newer run owns deployment'); return;
   }
+  await assertPreviewOpen(plan);
+  await assertGatewaySource(plan);
   const variables = await vercel(`/v9/projects/${plan.projectId}/env`);
   if (!gatewaySecretConfigured(variables.envs || [], plan.target)) throw new Error('Scoped encrypted gateway bootstrap secret missing');
   const source = await github(`/contents/vercel.json?ref=${plan.sha}`);
@@ -312,6 +333,7 @@ export async function publish() {
       await writeFile(resolve(directory, 'vercel.json'), JSON.stringify(config));
       await applyOutputPolicy(directory, productConfig, plan.target);
       const args = deploymentArgs({ ...plan, regions: productConfig.regions, directory, teamSlug: required('VERCEL_TEAM_SLUG'), runId: required('GITHUB_RUN_ID'), repository: required('GITHUB_REPOSITORY') });
+      await assertPreviewOpen(plan);
       let stdout;
       try {
         ({ stdout } = await exec(required('VERCEL_CLI_PATH'), args, { env: gatewayPublisherEnvironment(plan.gateway, publisherEnvironment({ teamId: required('VERCEL_TEAM_ID'), projectId: plan.projectId, token: required('VERCEL_API_TOKEN') })), timeout: 15 * 60_000, maxBuffer: 4 * 1024 * 1024 }));
@@ -328,16 +350,35 @@ export async function publish() {
     }
     const issue = deploymentIssue(deployment, plan) || runtimePolicyIssue(deployment, productConfig, plan.target);
     if (issue || deployment.readyState !== 'READY') throw new Error(`Deployment verification failed (${issue || deployment.readyState})`);
+    await assertPreviewOpen(plan);
     url = `https://${deployment.url}`;
     await smoke(url, { api: !plan.gateway.owner });
+    // Before promotion this immutable candidate is intentionally a follower.
+    // Validate its local contract without granting it database ownership, then
+    // require the currently selected owner to report honest storage readiness.
+    if (plan.target.kind === 'production') {
+      await checkStorageManifest(url, { minimumVersion: '1.3.0', gateway: { ...plan.gateway, deploymentId: deployment.id } });
+      const currentOwner = aliasBefore.get(canonicalHost)?.deploymentId;
+      if (!currentOwner) throw new Error('Canonical storage owner missing before promotion');
+      await waitForStorageReadiness(plan.gateway.origin, { minimumVersion: '1.2.0', gateway: { ...plan.gateway, deploymentId: currentOwner } });
+      const until = Date.now();
+      await runtimeLogs({ cli: required('VERCEL_CLI_PATH'), projectId: plan.projectId, deploymentId: deployment.id, scope: required('VERCEL_TEAM_SLUG'), since: new Date(until - 30 * 60_000).toISOString(), until: new Date(until).toISOString() });
+    }
+    await assertPreviewOpen(plan);
     if ((await context(branch, plan.target.slug)).sha !== plan.sha) throw new Error('Branch advanced before alias publication');
+    if (plan.target.kind === 'production' && (await readAlias(canonicalHost))?.deploymentId !== aliasBefore.get(canonicalHost)?.deploymentId) throw new Error('Canonical storage owner changed before promotion');
+    // The canonical alias elects the database owner. Move it first so every
+    // subsequent alias can verify the new owner's real API, never the old one.
+    const orderedAliases = plan.target.kind === 'production' ? [canonicalHost, ...[...aliases].filter((name) => name !== canonicalHost)] : [...aliases];
     await reconcileGatewayAliases({
-      names: [...aliases], before: aliasBefore, deploymentId: deployment.id, read: readAlias, assign: assignAlias, remove: removeAlias,
-      verify: (name) => verifyAlias(async ({ signal }) => {
+      names: orderedAliases, before: aliasBefore, deploymentId: deployment.id, read: readAlias, assign: assignAlias, remove: removeAlias,
+      verify: (name) => aliasVerifier(async ({ signal }) => {
         if (name === new URL(plan.gateway.origin).hostname && plan.gateway.owner) await verifyCanonicalGateway(name, plan.gateway, deployment.id, signal);
         await smoke(`https://${name}`, { signal });
+        if (plan.target.kind === 'production') await checkStorageReadiness(`https://${name}`, { signal, minimumVersion: '1.3.0', gateway: { ...plan.gateway, deploymentId: deployment.id } });
       })
     });
+    await assertPreviewOpen(plan);
   } catch (error) {
     if (deployment) await restoreGatewayAliases({ before: aliasBefore, deploymentId: deployment.id, read: readAlias, assign: assignAlias, remove: removeAlias });
     else {
@@ -349,6 +390,13 @@ export async function publish() {
         const candidate = await vercel(`/v13/deployments/${current.deploymentId}`);
         if (!deploymentIssue(candidate, plan) && candidate.meta?.githubWorkflowRunId === required('GITHUB_RUN_ID')) await restoreGatewayAliases({ before: aliasBefore, deploymentId: candidate.id, read: readAlias, assign: assignAlias, remove: removeAlias });
       }
+    }
+    // This sweep reacts to the publication failure below, so it must never
+    // replace it. A provider error, an unreachable retention policy or a
+    // non-200 cancel leaves the upload for the next scheduled sweep instead.
+    if (deployment && plan.retentionPolicy && plan.target.slug === 'preview' && !plan.gateway.owner) {
+      try { await reconcileOrphanPreviews(previewConfig(plan), { github: previewGithub, vercel, deploymentIds: [deployment.id] }); }
+      catch (cleanupError) { console.log(`Failed preview upload left for the next retention sweep: ${cleanupError.message}`); }
     }
     throw error;
   }

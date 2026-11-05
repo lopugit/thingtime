@@ -1,5 +1,24 @@
 # Control-plane changelog
 
+## 2026-11-02 — Pass the existing team slug into prebuilt prepare
+
+- Map the protected environment’s `VERCEL_TEAM_SLUG` into authorization before
+  preview configuration reads it. Add a prepare-step regression so publication
+  job mappings cannot conceal a missing prepare input. No credentials or release
+  protection changed.
+
+## 2026-10-30 — Remove orphan preview deployments
+
+- Extend protected scheduled and PR-close cleanup to legacy and ordinary branch
+  deployments with complete inventories and fresh ownership/PR/alias fences.
+- Preserve production, stable branches, gateway owners and current aliases;
+  require open PRs for ordinary prebuilt feature previews and remove exact late
+  uploads after closure. Add required regression coverage and rollout checks.
+- Consume saved admin retention policy through capability-negotiated signed CI
+  reads; honor disabled/grace/superseded/inactivity settings and fresh mutation
+  fences. Add trusted zero-PR manual reconciliation; roll out the product policy
+  endpoint before activating this controller.
+
 ## 2026-10-27 — Record the confirmed hosted group-read failure
 
 - Preserve diagnostic run 40447212769: exact E1/E2/W source and artifact digest
