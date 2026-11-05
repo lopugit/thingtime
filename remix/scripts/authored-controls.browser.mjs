@@ -355,6 +355,18 @@ try {
 				await menu.waitFor({ state: 'visible' });
 				const editable = menu.locator('[contenteditable=true]').first();
 				await editable.waitFor();
+				const refusedRichCount = writes.length;
+				await editable.fill('');
+				await menu.getByRole('menuitem', { name: 'Save latest' }).click();
+				const richRefusalToast = tab.locator('.chakra-toast').filter({ hasText: 'Enter text before saving this field.' });
+				await richRefusalToast.waitFor();
+				await root.locator('[aria-busy="true"][data-tt-action]').waitFor({ state: 'detached' });
+				assert.equal(await menu.isVisible(), true, 'rich adapter refusal keeps the form visible');
+				assert.equal(writes.length, refusedRichCount, 'invalid rich text never reaches the API');
+				await richRefusalToast.getByRole('button', { name: 'Close', exact: true }).click();
+				await richRefusalToast.waitFor({ state: 'hidden' });
+				if (!(await menu.isVisible())) await root.getByRole('button', { name: 'More actions' }).click();
+				await menu.waitFor({ state: 'visible' });
 				const observations = [];
 				const observe = async (phase) =>
 					observations.push({
@@ -423,6 +435,13 @@ try {
 				assert.equal(saved.crystal.title, 'Native click snapshot');
 				await root.getByRole('button', { name: 'More actions' }).click();
 				await menu.waitFor({ state: 'visible' });
+				const invalidNative = menu.getByRole('textbox', { name: 'Plain title' });
+				await invalidNative.fill('');
+				const refusedNativeCount = writes.length;
+				await menu.getByRole('menuitem', { name: 'Save plain' }).click();
+				assert.equal(await menu.isVisible(), true, 'native validity refusal keeps the popup visible');
+				assert.equal(await invalidNative.evaluate(field => field.ownerDocument.activeElement === field && !field.validity.valid && !!field.validationMessage), true, 'invalid native field retains visible validation focus');
+				assert.equal(writes.length, refusedNativeCount, 'invalid native field never reaches the API');
 				await menu.getByRole('textbox', { name: 'Plain title' }).fill('No rich fields');
 				const count = writes.length;
 				const plainControl = menu.getByRole('menuitem', { name: 'Save plain' });
@@ -512,6 +531,8 @@ try {
 				iframe: true,
 				immediateFormattedSave: true,
 				plainMenuSubmit: true,
+				nativeInvalidMenuKeptOpen: true,
+				richInvalidMenuKeptOpen: true,
 				hiddenDefaultWithoutSdk: true,
 				requiredHiddenRefusal: true,
 				collapsedDirtyRetention: true,
