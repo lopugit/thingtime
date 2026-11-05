@@ -79,7 +79,7 @@ test('missing historical references stay missing; foreign, unrelated and duplica
 	);
 });
 
-test('capture follows bounded container references, preserves explicit unresolved refs and cannot borrow prototype properties', () => {
+test('capture follows authored container references, preserves explicit unresolved refs and cannot borrow prototype properties', () => {
 	assert.deepEqual(webpageComponentRefs([{ type: 'container', children: [...blocks, ...blocks] }]), ['card', 'missing']);
 	assert.deepEqual(webpageComponentRefs([{ type: 'condition', condition: { arg: 'query.view', equals: 'new' }, children: [
 		{ type: 'element', children: [{ type: 'collection', children: [{ type: 'component', component: 'nested' }] }] },
@@ -93,7 +93,8 @@ test('capture follows bounded container references, preserves explicit unresolve
 	);
 	let nested: any[] = [];
 	for (let index = 0; index < 26; index++) nested = [{ type: 'container', children: nested }];
-	assert.throws(() => webpageComponentRefs(nested), /nesting/);
+	assert.deepEqual(webpageComponentRefs(nested), []);
+	assert.deepEqual(webpageComponentRefs([...Array.from({ length: 1400 }, () => ({ type: 'text', text: 'Synthetic' })), ...blocks]), ['card', 'missing']);
 });
 
 test('device drafts retain exact definitions across reload, deduplicate edits and synchronize dependencies first after a lost reply', async () => {

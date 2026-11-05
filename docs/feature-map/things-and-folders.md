@@ -824,3 +824,13 @@ Explicit-kind list/count requests pass their required kinds to
 before Mongo planning while preserving the ordinary protected-kind exclusion.
 Legacy post compatibility retains the full library query. The helper truth-table
 regression covers mixed protected kinds and every retained managed guard.
+
+Timeline page capture and comparison share
+`app/timeline/pageBlockTraversal.ts`: an iterative preorder walk over authored
+container/element/collection/condition children. It rejects ancestor cycles
+without rejecting reused values and has no page block-count/nesting cap.
+`componentBindings.ts` retains existing reference validation and capture/ACL
+contracts; `componentDefinitions.ts` aligns nested stable identities. The
+compatible write corrections are `api.things` 1.49.2, `api.things-update` 1.18.1
+and `api.timeline` 1.19.1. Run `test:timeline` and the disposable
+`test:timeline:large-pages:acceptance` after a node-server build.
