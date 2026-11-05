@@ -72,7 +72,7 @@ export const LOPU_SETTINGS_PATH = 'settings.lopu';
 
 export const LOPU_SETTINGS_DEFAULTS: LopuSettings = {
  management: 'server',
-	launcher: true,
+	launcher: false,
 	dock: 'free',
 	dockMode: 'overlay',
 	attachCurrentPage: true,

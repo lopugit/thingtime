@@ -1360,6 +1360,9 @@ persisted; every check is client-side.
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- [ ] With no saved launcher choice, the floating Lopu icon stays hidden. Toggle **Floating Lopu icon** in the chat gear (page and floating window) and Settings → Lopu; verify the same choice after navigating, reload and a second tab. Preserve explicit on/off values. With it off, minimise/close/reopen via navigation without resurrecting the icon; keep chat and notification behavior intact. Check desktop and narrow mobile popovers through their last row.
+  Browser regression: `node remix/scripts/lopu-launcher.browser.mjs` (set `TT_PLAYWRIGHT_MODULE` to an installed Playwright module when it is not a local dependency; optionally set `TT_CHROMIUM_EXECUTABLE`). It runs the real chat, settings and persistence components with synthetic identity/catalog responses in a fresh browser profile, verifies stored preference readback, and writes desktop/mobile evidence to `/tmp/thingtime-lopu-launcher-acceptance`. It does not exercise AI providers or a deployed account session.
+
 - [ ] Model and settings popovers remain visible and clickable above the floating
   Lopu window/mobile scrim. Repeat on `/lopu` and embedded chat at 390×844,
   desktop, and a short viewport. Select a model after scrolling the list; toggle
