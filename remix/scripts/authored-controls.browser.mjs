@@ -252,6 +252,7 @@ try {
 	const webOrigin = `http://127.0.0.1:${ports.web}`;
 	const reports = [];
 	for (const [profile, viewport] of Object.entries({ desktop: { width: 1280, height: 900 }, mobile: { width: 390, height: 844 } })) {
+		if (process.env.AUTHORED_CONTROLS_PROFILE && process.env.AUTHORED_CONTROLS_PROFILE !== profile) continue;
 		const context = await browser.newContext({ viewport, isMobile: profile === 'mobile', hasTouch: profile === 'mobile' });
 		try {
 			await context.addCookies(
@@ -302,6 +303,43 @@ try {
 			for (const framed of [false, true]) {
 				if (framed) await tab.getByRole('button', { name: 'Toggle Builder iframe' }).click();
 				const root = framed ? tab.frameLocator('iframe') : tab;
+				assert.equal(await root.locator('.codex-editor').count(), 0, 'closed menus and details do not construct SDK roots');
+				await tab.getByRole('button', { name: 'Empty hidden default' }).click();
+				await root.getByRole('button', { name: 'Save deferred defaults' }).click();
+				await tab.locator('p[role="status"]').filter({ hasText: 'Enter text before saving this field.' }).waitFor();
+				const expectedToast = tab.locator('.chakra-toast').filter({ hasText: 'Enter text before saving this field.' });
+				await expectedToast.getByRole('button', { name: 'Close', exact: true }).click();
+				await expectedToast.waitFor({ state: 'hidden' });
+				assert.equal(await root.locator('.codex-editor').count(), 0, 'required validation does not require an SDK');
+				await tab.getByRole('button', { name: 'Refresh hidden default' }).click();
+				let deferredCount = writes.length;
+				await root.getByRole('button', { name: 'Save deferred defaults' }).click();
+				await waitFor(async () => writes.length === deferredCount + 1, 'hidden current default save');
+				await root.locator('[aria-busy="true"][data-tt-action]').waitFor({ state: 'detached' });
+				const defaultSaved = (await api('/api/v1/things?id=' + writes.at(-1).id, { cookie: owner.cookie })).data.thing;
+				assert.equal(defaultSaved.crystal.text, 'Newest hidden default');
+				assert.equal(defaultSaved.crystal.document.kind, 'rich-text');
+				assert.equal(await root.locator('.codex-editor').count(), 0, 'untouched hidden save keeps engine deferred');
+				const details = root.getByRole('group', { name: 'Deferred fields' });
+				const summary = details.locator('summary');
+				await summary.click();
+				const deferredEditor = details.locator('[contenteditable=true]').first();
+				await deferredEditor.waitFor({ timeout: 60000 });
+				const originalEditor = await deferredEditor.elementHandle();
+				await deferredEditor.fill('Retained dirty draft');
+				await summary.click();
+				await tab.getByRole('button', { name: 'Replace server default' }).click();
+				assert.equal(await root.locator('.codex-editor').count(), 1, 'once-opened SDK remains mounted while collapsed');
+				await summary.click();
+				assert.equal(await deferredEditor.innerText(), 'Retained dirty draft');
+				assert.equal(await deferredEditor.evaluate((node, original) => node === original, originalEditor), true);
+				await summary.click();
+				deferredCount = writes.length;
+				await root.getByRole('button', { name: 'Save deferred defaults' }).click();
+				await waitFor(async () => writes.length === deferredCount + 1, 'collapsed dirty draft save');
+				await root.locator('[aria-busy="true"][data-tt-action]').waitFor({ state: 'detached' });
+				const retainedSaved = (await api('/api/v1/things?id=' + writes.at(-1).id, { cookie: owner.cookie })).data.thing;
+				assert.equal(retainedSaved.crystal.text, 'Retained dirty draft');
 				const target = root.getByRole('button', { name: 'Context target' });
 				await target.waitFor({ timeout: 60000 }).catch(async (error) => {
 					await tab.screenshot({ path: join(reportDir, 'boot-failure.png') });
@@ -375,7 +413,7 @@ try {
 					);
 					throw error;
 				});
-				await delay(250);
+				await root.locator('[aria-busy="true"][data-tt-action]').waitFor({ state: 'detached' });
 				assert.equal(writes.length, before + 1, 'single write');
 				const saved = (await api('/api/v1/things?id=' + writes.at(-1).id, { cookie: owner.cookie })).data.thing;
 				assert.match(saved.crystal.text, /Latest/);
@@ -387,9 +425,68 @@ try {
 				await menu.waitFor({ state: 'visible' });
 				await menu.getByRole('textbox', { name: 'Plain title' }).fill('No rich fields');
 				const count = writes.length;
-				await menu.getByRole('menuitem', { name: 'Save plain' }).click();
-				await waitFor(async () => writes.length === count + 1, 'one plain save');
-				await delay(200);
+				const plainControl = menu.getByRole('menuitem', { name: 'Save plain' });
+				if (framed && profile === 'mobile') {
+					const mapped = await plainControl.evaluate((el) => {
+						const rect = el.getBoundingClientRect(),
+							view = el.ownerDocument.defaultView,
+							frame = view.frameElement,
+							outer = frame.getBoundingClientRect();
+						const sx = outer.width / frame.clientWidth,
+							sy = outer.height / frame.clientHeight;
+						const local = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+						const point = { x: outer.left + local.x * sx, y: outer.top + local.y * sy };
+						return {
+							point,
+							local,
+							scale: { x: sx, y: sy },
+							rect: rect.toJSON(),
+							frame: outer.toJSON(),
+							innerHit: el.contains(el.ownerDocument.elementFromPoint(local.x, local.y)),
+							outerHit: view.parent.document.elementFromPoint(point.x, point.y) === frame,
+							outerElement: (() => {
+								const hit = view.parent.document.elementFromPoint(point.x, point.y);
+								return hit
+									? {
+											tag: hit.tagName,
+											cls: String(hit.className),
+											role: hit.getAttribute('role'),
+											text: hit.textContent.slice(0, 240),
+											toast: !!hit.closest('.chakra-toast'),
+											html: hit.outerHTML.slice(0, 600)
+									  }
+									: null;
+							})()
+						};
+					});
+					await writeFile(
+						join(reportDir, 'mobile-iframe-hit-mapping.json'),
+						JSON.stringify({ locatorBox: await plainControl.boundingBox(), ...mapped }, null, 2)
+					);
+					await tab.screenshot({ path: join(reportDir, 'mobile-iframe-before-plain.png'), fullPage: true });
+					assert.equal(mapped.innerHit, true);
+					assert.equal(mapped.outerHit, true);
+					await tab.touchscreen.tap(mapped.point.x, mapped.point.y);
+				} else await plainControl.click();
+				await waitFor(async () => writes.length === count + 1, 'one plain save').catch(async (error) => {
+					await tab.screenshot({ path: join(reportDir, 'plain-submit-failure.png'), fullPage: true });
+					await writeFile(
+						join(reportDir, 'plain-submit-failure.json'),
+						JSON.stringify(
+							{
+								profile,
+								framed,
+								writes: writes.length,
+								status: await tab.locator('p[role="status"]').innerText(),
+								body: await plainControl.evaluate((el) => el.ownerDocument.body.innerText.slice(-1800))
+							},
+							null,
+							2
+						)
+					);
+					throw error;
+				});
+				await root.locator('[aria-busy="true"][data-tt-action]').waitFor({ state: 'detached' });
 				assert.equal(writes.length, count + 1);
 				assert.equal(writes.at(-1).crystal.title, 'No rich fields');
 				await target.focus();
@@ -409,7 +506,17 @@ try {
 			await tab.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 			assert.equal(await tab.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 			assert.deepEqual(errors, []);
-			reports.push({ profile, writes: writes.length, iframe: true, immediateFormattedSave: true, plainMenuSubmit: true, errors: errors.length });
+			reports.push({
+				profile,
+				writes: writes.length,
+				iframe: true,
+				immediateFormattedSave: true,
+				plainMenuSubmit: true,
+				hiddenDefaultWithoutSdk: true,
+				requiredHiddenRefusal: true,
+				collapsedDirtyRetention: true,
+				errors: errors.length
+			});
 		} finally {
 			await context.close();
 		}

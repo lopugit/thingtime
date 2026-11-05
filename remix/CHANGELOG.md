@@ -112,7 +112,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-11-06: Keep rich editor libraries, selection, tool panels and Action form ownership in Builder viewport documents; cover immediate formatted saves and ordinary menu submissions through a disposable real API.
+- 2026-11-06: Add editable rich fields, context menus and map scale/group controls; keep Editor.js in Builder viewport documents, flush the latest form snapshot, and defer hidden rich editors until first visibility. [Implementation and acceptance](../PRs/1364-codex-builder-rich-text-context-menu-add-authored-rich-text-fields-context-menus-and-map-marker-controls.md). **Codex (AI)**
+- 2026-11-06: Supply the real Node argument-vector shape in the parallel
+  workspace bootstrap test VM after early password-agent CLI discovery was
+  added. This repairs the release test fixture without changing app startup,
+  credentials or development/stable profile separation.
+  **Codex (AI)**
+
+- 2026-11-06: Correct the native upload-batch test peer to verify only requested
+  upload receipts. Exercise admission expiry and completion of all 256 files
+  across fresh bounded requests with retained operation IDs, receipt reuse and
+  no duplicate PUTs. Production expiry, authorization and resource policy are
+  unchanged; this is a test-only release follow-up.
+  **Codex (AI)**
 
 - 2026-11-06: Keep Mac folder settings mounted independently of background
   sync runs, preserve focused unsaved connection drafts while automatic checks

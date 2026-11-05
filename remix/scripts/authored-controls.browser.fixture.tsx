@@ -14,7 +14,42 @@ function RuntimeStatus() {
 }
 function Fixture() {
 	const [framed, setFramed] = React.useState(false);
+	const [deferredDefault, setDeferredDefault] = React.useState({
+		kind: 'rich-text',
+		blocks: [{ type: 'paragraph', data: { text: 'Initial hidden default' } }]
+	});
 	const blocks: WebpageBlock[] = [
+		{
+			id: 'deferred-form',
+			type: 'element',
+			tag: 'tt-form',
+			props: { identityName: 'id', completion: { ttArg: 'last' } },
+			children: [
+				{ id: 'deferred-title', type: 'element', tag: 'input', props: { type: 'hidden', name: 'title', value: 'Deferred default' } },
+				{
+					id: 'deferred-details',
+					type: 'element',
+					tag: 'details',
+					props: { 'aria-label': 'Deferred fields' },
+					children: [
+						{ id: 'deferred-summary', type: 'element', tag: 'summary', text: 'Deferred editor' },
+						{
+							id: 'deferred-rich',
+							type: 'element',
+							tag: 'tt-rich-text',
+							props: { name: 'document', plainTextName: 'text', required: true, resetKey: 'deferred-record', value: deferredDefault }
+						}
+					]
+				},
+				{
+					id: 'deferred-save',
+					type: 'element',
+					tag: 'button',
+					text: 'Save deferred defaults',
+					props: { type: 'button', 'data-tt-action': data.action }
+				}
+			]
+		},
 		{
 			id: 'context',
 			type: 'element',
@@ -97,11 +132,26 @@ function Fixture() {
 	const rendered = <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} interactive />;
 	return (
 		<ChakraProvider>
+			<button
+				type="button"
+				onClick={() => setDeferredDefault({ kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: 'Newest hidden default' } }] })}
+			>
+				Refresh hidden default
+			</button>
+			<button
+				type="button"
+				onClick={() => setDeferredDefault({ kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: 'Server replacement' } }] })}
+			>
+				Replace server default
+			</button>
+			<button type="button" onClick={() => setDeferredDefault({ kind: 'rich-text', blocks: [] })}>
+				Empty hidden default
+			</button>
 			<button type="button" onClick={() => setFramed(!framed)}>
 				Toggle Builder iframe
 			</button>
 			<WebpageRuntimeProvider pageId={data.page} pageKey={null} suiteKey={null} source="user" shared={false}>
-				<PageActionSurface actionEnabled>
+				<PageActionSurface actionEnabled data-testid="fixture-actions">
 					{framed ? <BuilderViewport size={{ width: 390, height: 844 }}>{rendered}</BuilderViewport> : rendered}
 					<RuntimeStatus />
 				</PageActionSurface>

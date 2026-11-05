@@ -13885,6 +13885,13 @@ separate from deterministic discovery/lease tests.
 
 ## Editable Mapbox maps and route planning
 
+- [ ] Keep ten collapsed rich fields deferred with zero SDK roots; submit a late
+  untouched default without opening, refuse a required empty value, and verify
+  open/type/collapse/source-refresh retains the same dirty editor. Cover both
+  the page and Builder iframe at desktop/mobile, including an immediate Save.
+  Dismiss the asserted validation toast through its ordinary Close control before
+  tapping the next nearby action; use owner/parent-document hit testing if a
+  native touch never reaches target capture.
 - [ ] Compose `tt-menu` target/content/ordinary trigger children and a named
   `tt-rich-text` field inside a normal form. Type/format and immediately Save;
   compare JSON and plainTextName with exact API readback. A menu hiding during
@@ -14331,6 +14338,19 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ### Mac strict inventory job
 
+- [ ] Electron bootstrap VM fixtures must model `process.argv` as an array,
+  even when testing ordinary startup without CLI arguments. Run
+  `node --test electron/test/dev-workspace.test.cjs`; parallel development
+  must keep its own name/profile, and packaged startup must keep the stable app.
+- [ ] Native upload-batch peers must verify only the submitted receipt subset.
+  Force the first admission window to expire after accepted bodies begin, then
+  complete all 256 files through fresh request identities with the same original
+  descriptor/operation IDs and stored receipts. Assert exactly one PUT per file,
+  both identity checks per window, retryable deadline rows, and no PUT admission
+  after expiry. Run the six `MacUploadBatchOperationTests` and canonical upload
+  batch journal recovery tests; never widen production deadlines to make a
+  host-dependent test pass. These synthetic checks do not establish live server
+  grant acceptance or identify an uninstrumented CI cancellation's cause.
 - [ ] On desktop and narrow mobile, expand a folder, open a connection draft,
   type without saving and keep input focus while an automatic check starts and
   finishes. The same input, expansion, scroll anchor and unsaved text must stay
