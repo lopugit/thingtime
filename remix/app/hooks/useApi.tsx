@@ -1646,11 +1646,6 @@ export function useApi() {
           getJson(`/api/v1/themes/shared${args?.limit ? `?limit=${encodeURIComponent(args.limit)}` : ''}`),
         []
       ),
-      // public gallery list (no id → every public theme, newest first)
-      listShared: useCallback(
-        async (args) => getJson(`/api/v1/themes/shared${args?.limit ? `?limit=${encodeURIComponent(args.limit)}` : ''}`),
-        []
-      ),
       save: useCallback(
         async (args) => {
           const { id, name, theme, visibility } = args;
