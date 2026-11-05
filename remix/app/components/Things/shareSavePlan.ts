@@ -42,7 +42,7 @@ export function shareParentId(plan: ShareSavePlan, path: string) {
 }
 export const shareTextCrystal = (text: string) => ({
   name: 'Shared text', text,
-  renderComponent: { render: { tag: 'article', props: { style: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } }, children: [
+  renderComponent: { name: 'Thing presentation', library: 'custom', category: 'general', render: { tag: 'article', props: { style: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } }, children: [
     { tag: 'h1', children: '{name}' }, { tag: 'p', children: '{text}' }
   ] } }
 });

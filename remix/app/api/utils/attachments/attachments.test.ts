@@ -4,6 +4,9 @@ import test from 'node:test';
 
 import {
 	ATTACHMENT_MIN_PART_BYTES,
+  ATTACHMENT_MAX_OBJECT_BYTES,
+  ATTACHMENT_MAX_PART_BYTES,
+  attachmentPartPlan,
 	attachmentExpectedPartBytes,
 	attachmentIdForRequest,
 	createReadyAttachmentPostInsertHook,
@@ -302,7 +305,7 @@ test('image-only starts reject zero bytes before reserving quota or creating an 
 		{
 			ok: false,
 			status: 400,
-			error: 'Attachment size must be between 1 byte and 5 TiB'
+			error: 'Attachment size must be between 1 byte and the S3 multipart ceiling of 53687091200000 bytes (10000 parts of at most 5 GiB)'
 		}
 	);
 	assert.equal(touched, false);
@@ -2882,4 +2885,18 @@ test('message shares preserve more than 25 opaque attachments while rejecting du
  assert.equal((await service.inspectForMessage('user-1', [...ids, ids[0]], 'message-1')).ok, false);
  docs[40].attachmentPurpose = 'post';
  assert.equal((await service.inspectForMessage('user-1', ids, 'message-1')).ok, false);
+});
+
+test('multipart planning accepts files beyond the old5TiB product cap and reports only the current S3 part ceiling', async () => {
+ const beyondOldCap = 5 * 1024 ** 4 + 1;
+ const plan = attachmentPartPlan(beyondOldCap);
+ assert.ok(plan.partCount <= 10000); assert.ok(plan.partSizeBytes <= ATTACHMENT_MAX_PART_BYTES);
+ const maximum = attachmentPartPlan(ATTACHMENT_MAX_OBJECT_BYTES);
+ assert.equal(maximum.partCount, 10000); assert.equal(maximum.partSizeBytes, ATTACHMENT_MAX_PART_BYTES);
+ assert.throws(() => attachmentPartPlan(ATTACHMENT_MAX_OBJECT_BYTES + 1), /too large/);
+ let reserved = false;
+ const service = createAttachmentService({ store: { reservePending: async () => { reserved = true; throw Error('must not reserve'); } } as any });
+ const overProtocol = await service.start('user-1', { purpose: 'post', filename: 'large.custom', contentType: 'application/octet-stream', sizeBytes: ATTACHMENT_MAX_OBJECT_BYTES + 1 });
+ assert.equal(overProtocol.ok, false); assert.equal(reserved, false);
+ if (!overProtocol.ok) assert.match(overProtocol.error, /S3 multipart ceiling/);
 });

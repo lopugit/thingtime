@@ -21,7 +21,7 @@ export function contextToolbarBlocks(actions: Pick<ContextToolbarAction, 'id' | 
 /** The adapter supplies selection and callbacks only. Layout, each label,
  * icon and control remain independent ordinary editable Builder blocks. Other
  * contexts can supply additional registered actions without another toolbar. */
-export function ContextActionToolbar({ scopeKey, documentKey = 'incoming-share-toolbar', actions, selected, onHeightChange }: { onHeightChange?: (height: number) => void; scopeKey: string; documentKey?: string; actions: ContextToolbarAction[]; selected: string }) {
+export function ContextActionToolbar({ scopeKey, documentKey = 'incoming-share-toolbar', actions, selected, onHeightChange, showLayoutControls = true }: { showLayoutControls?: boolean; onHeightChange?: (height: number) => void; scopeKey: string; documentKey?: string; actions: ContextToolbarAction[]; selected: string }) {
  const host = React.useRef<HTMLDivElement>(null);
  const [keyboardInset, setKeyboardInset] = React.useState(0);
  React.useEffect(() => {
@@ -41,7 +41,7 @@ export function ContextActionToolbar({ scopeKey, documentKey = 'incoming-share-t
  }, [onHeightChange, keyboardInset]);
  const defaults = React.useMemo(() => contextToolbarBlocks(actions), [actions]);
  return <Box ref={host} data-testid="context-action-toolbar" position="fixed" left={0} right={0} bottom={keyboardInset} style={Object.fromEntries(actions.flatMap(item => [[`--tt-context-${item.id}-background`, selected === item.id ? 'var(--tt-accent-tint, #fff2f8)' : 'var(--tt-card, #fff)'], [`--tt-context-${item.id}-border`, selected === item.id ? 'var(--tt-accent, #ba256b)' : 'var(--tt-border, #e9e7ee)']])) as React.CSSProperties} zIndex={DRAWER_Z} px={{ base: '12px', md: '24px' }} pt="8px" pb="max(12px, env(safe-area-inset-bottom))" background="var(--tt-card, #fff)" borderTop="1px solid var(--tt-border, #e9e7ee)" boxShadow="0 -8px 32px rgba(30, 20, 45, .035)" sx={{ 'button[aria-pressed="true"]': { background: 'var(--tt-accent-tint, #fff2f8)', borderColor: 'var(--tt-accent, #ba256b)', color: 'var(--tt-ink, #16161a)' }, 'button:focus-visible': { outline: '2px solid var(--tt-accent, #ba256b)', outlineOffset: '2px' } }}>
-  <Box maxW="900px" mx="auto"><SettingsDocumentHost documentKey={documentKey} defaultDocument={defaults} scopeKey={scopeKey} title="Context action toolbar" editLayoutLabel="Customise toolbar" clearMobileLaunchers>
+  <Box maxW="900px" mx="auto"><SettingsDocumentHost showLayoutControls={showLayoutControls} documentKey={documentKey} defaultDocument={defaults} scopeKey={scopeKey} title="Context action toolbar" editLayoutLabel="Customise toolbar" clearMobileLaunchers>
    {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} scope={{ toolbar: Object.fromEntries(actions.map(item => [item.id, selected === item.id])) }} actions={Object.fromEntries(actions.map(item => [item.id, () => item.run()]))}><WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} /></TransientBlockHost>}
   </SettingsDocumentHost></Box>
  </Box>;

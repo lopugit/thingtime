@@ -1,3 +1,4 @@
+import { discussionAttachmentMap } from './discussionAttachments';
 import { builderThingUpdateKinds } from '../../../schemas/builderThing';
 import { ownerFileSyncUploadOrigin, type FileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { decodeDiscussionCursor, encodeDiscussionCursor, discussionCursorConfigured } from './discussionCursor';
@@ -69,7 +70,6 @@ import {
   COLLECTION_SCHEMA_VERSIONS,
   DEVICE_CONTROL_THINGTIME,
 	EXTERNAL_RESERVED_ID_PREFIX,
-  MAX_TEXT_CHARS,
   MESSENGER_THINGTIME,
 	MIGRATION_DIAGNOSTIC_ID_PREFIX,
   ERROR_LOG_ID_PREFIX, ERROR_LOG_THINGTIME, MONGODB_CONNECTION_SNAPSHOT_ID_PREFIX, MONGODB_CONNECTION_SNAPSHOT_THINGTIME,
@@ -728,10 +728,7 @@ export const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'p
 // back to every default circle, i.e. the opposite filter.
 export const REQUESTABLE_VISIBILITIES: PostVisibility[] = [...VISIBILITIES, 'hidden', 'custom'];
 
-const MAX_TAGS = 12;
-const MAX_TAG_CHARS = 40;
 const MAX_SHARE_ID_CHARS = 128;
-const MAX_COMMENTS_PER_POST = 500;
 // Reactions are open-vocabulary (any emoji / multi-emoji token), so bound them:
 // a post holds at most this many DISTINCT tokens, and one user contributes at
 // most this many reaction things per post.
@@ -1168,7 +1165,7 @@ export const withMatch = (base: Record<string, any>, ...clauses: Record<string, 
   return and.length > 1 ? { $and: and } : and[0] || {};
 };
 
-// The tag cap counts code points, never bisecting a surrogate pair, and lone
+// Tags retain complete code points, never bisecting a surrogate pair, and lone
 // surrogates are dropped — stored tags must be well-formed UTF-16 so the
 // client's encodeURIComponent on a stored tag can never throw during render.
 // NFC normalization keeps composed and decomposed spellings of one visible
@@ -1181,7 +1178,6 @@ const canonicalTag = (value: string): string =>
       const codePoint = char.codePointAt(0) ?? 0;
       return codePoint < 0xd800 || codePoint > 0xdfff;
     })
-    .slice(0, MAX_TAG_CHARS)
     .join('');
 
 const sanitizeTags = (value: unknown): string[] | Fail => {
@@ -1192,7 +1188,6 @@ const sanitizeTags = (value: unknown): string[] | Fail => {
     if (typeof entry !== 'string') continue;
     const tag = canonicalTag(entry);
     if (tag && !tags.includes(tag)) tags.push(tag);
-    if (tags.length >= MAX_TAGS) break;
   }
   return tags;
 };
@@ -1623,12 +1618,6 @@ export const createThing = async (
     rootSubspaceId = interaction.rootSubspaceId;
   }
 
-  if (validated.thingtime.includes('comment') && target) {
-		// includeBlocked: the cap is a physical doc bound — blocked spam must not
-		// free up quota for more child docs under the same post
-		const commentCount = await countCommentsOf(target, { includeBlocked: true });
-    if (commentCount >= MAX_COMMENTS_PER_POST) return fail(400, 'This post has reached its comment limit');
-  }
 
   // Reaction caps apply to EVERY creation path (dedicated toggle + generic
   // POST /api/v1/things), so an attacker can't mint unbounded reaction things
@@ -2544,7 +2533,7 @@ const authorFlairFor = (flairs: AuthorFlairs, embed: SubspaceEmbed | null, subsp
 // commentSort=top|new|old — round 2 S7) re-orders the SHIPPED comment page:
 // null keeps the default (the newest RETURNED_COMMENTS, oldest → newest);
 // `top` = votes.score desc then older-first, `new` / `old` = by createdAt.
-// Level 1 is loaded whole per post (MAX_COMMENTS_PER_POST bounds it), so a
+// Level 1 is loaded whole per post for legacy feed projections, so a
 // sorted page is the true best / newest / oldest of the level. The deeper
 // shipped levels are DB-sliced to the newest REPLIES_PER_LEVEL per parent
 // before any score is known (resolveRelated), so they re-order among the
@@ -2909,29 +2898,17 @@ const toPublicDiscussionPage = async (
   const attachments = new Map<string, AttachmentPublicMetadata[]>();
   if (readable.length) {
     const things = await getThingsCollection();
-    // $topN retains only 26 documents per source even for legacy roots with
-    // unlimited media. Only canonical inherited, same-owner attachments can
-    // ride the source's authority. Explicit/private ACLs and app rows do not.
-    const groups = await things.aggregate([
-      { $match: withMatch({ thingtime: 'attachment', attachmentState: 'ready', acl: [ACL_INHERIT], appId: { $in: [null] } },
-        { $or: readable.map(doc => ({ targetId: doc.shareId, ownerId: doc.ownerId,
-          attachmentPurpose: thingtimeOf(doc).includes('comment') ? 'comment' : { $in: ['post', null] } })) },
-        visibleRelatedModerationClause(viewer?.id || null)) },
-      { $set: { discussionAttachmentOrder: { $cond: [
-        { $and: [{ $isNumber: '$attachmentSortIndex' }, { $gte: ['$attachmentSortIndex', 0] }, { $lte: ['$attachmentSortIndex', Number.MAX_SAFE_INTEGER] }] },
-        '$attachmentSortIndex', Number.MAX_SAFE_INTEGER] } } },
-      { $group: { _id: '$targetId', docs: { $topN: { n: 26, sortBy: { discussionAttachmentOrder: 1, createdAt: 1, shareId: 1 },
-        output: { shareId: '$shareId', ownerId: '$ownerId', targetId: '$targetId', attachmentSortIndex: '$attachmentSortIndex',
-          crystal: '$crystal', moderation: '$moderation', createdAt: '$createdAt' } } } } }
-    ] as any).toArray();
-    for (const group of groups) {
-      const media = orderAttachmentDocsByStoredSort(group.docs as any[]).flatMap(doc => {
-        const item = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation, { ownerView: !!viewer?.id && doc.ownerId === viewer.id });
-        return item ? [item] : [];
-      });
-      attachments.set(group._id, media);
-    }
+    const attachmentDocs = await things.find(withMatch(
+      { thingtime: 'attachment', attachmentState: 'ready', acl: [ACL_INHERIT], appId: { $in: [null] } },
+      { $or: readable.map(doc => ({ targetId: doc.shareId, ownerId: doc.ownerId,
+        attachmentPurpose: thingtimeOf(doc).includes('comment') ? 'comment' : { $in: ['post', null] } })) },
+      visibleRelatedModerationClause(viewer?.id || null)
+    ) as any).project({ shareId: 1, targetId: 1, ownerId: 1, attachmentState: 1, attachmentPurpose: 1, acl: 1, appId: 1,
+      attachmentSortIndex: 1, crystal: 1, moderation: 1, createdAt: 1 }).sort({ createdAt: 1, shareId: 1 }).toArray();
+    const sources = new Map(readable.map(doc => [doc.shareId, { ownerId: doc.ownerId, purpose: thingtimeOf(doc).includes('comment') ? 'comment' as const : 'post' as const }]));
+    for (const [targetId, media] of discussionAttachmentMap(attachmentDocs, sources, viewer?.id || null)) attachments.set(targetId, media);
   }
+
   return docs.map(doc => {
     const thing = byId.get(doc.shareId)!;
     const crystal = crystalOf(doc);
@@ -2939,7 +2916,7 @@ const toPublicDiscussionPage = async (
     const media = attachments.get(doc.shareId) || [];
     // The generic companion must not leak the removed body either.
     shapeDirectThingBody(doc, viewer, thing);
-    thing.attachments = media.slice(0, 25);
+    thing.attachments = media;
     return {
       id: doc.shareId, thingtime: thing.thingtime, type: (crystal.type as PostType) || 'text', author: thing.author,
       audience: thing.audience, visibility: thing.visibility as PostVisibility, acl: thing.acl,
@@ -2947,7 +2924,6 @@ const toPublicDiscussionPage = async (
       text: hidden ? '' : String(crystal.text || ''),
       richText: !hidden && crystal.richText && typeof crystal.richText === 'object' && !Array.isArray(crystal.richText) ? crystal.richText as Record<string, any> : null,
       images: hidden ? [] : (crystal.images as string[]) || [], attachments: thing.attachments,
-      ...(media.length > 25 ? { attachmentsTruncated: true as const } : {}),
       mediaLayout: hidden ? null : mediaLayoutOf(crystal), listing: hidden ? null : (crystal.listing as MarketplaceListing) || null,
       thing: !hidden && crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? crystal.thing as Record<string, any> : null,
       ...(!hidden && postThingReferences(crystal.thing).length ? { linkedThings: postThingReferences(crystal.thing).map(ref => ({ ...ref, thing: linked.get(ref.id) || null })) } : {}),
@@ -3618,7 +3594,7 @@ export const getFeed = async (
   // same normalization sanitizeTags applies at write time — the stored tags
   // are already trimmed/lowercased/capped, so an un-normalized filter could
   // never match anything
-  const tag = typeof query.tag === 'string' ? query.tag.trim().toLowerCase().slice(0, MAX_TAG_CHARS) : '';
+  const tag = typeof query.tag === 'string' ? query.tag.trim().toLowerCase() : '';
 
   const visibility = visibilityQueryFor(viewer, circles);
   if (!visibility) return { ok: true, posts: [], nextCursor: null, ranked: false, scope };
@@ -3644,7 +3620,7 @@ export const getFeed = async (
     range,
     query.preset === 'political' ? { tags: { $in: ['politics', 'political'] } } : {},
     query.preset === 'global' ? circleClause('public') : {},
-    query.preset === 'local' ? (query.near ? geoRadiusClause(query.near, query.radiusKm || 50) : { tags: (query.localTag || '').trim().toLowerCase().replace(/^#/, '').slice(0, MAX_TAG_CHARS) }) : {},
+    query.preset === 'local' ? (query.near ? geoRadiusClause(query.near, query.radiusKm || 50) : { tags: (query.localTag || '').trim().toLowerCase().replace(/^#/, '') }) : {},
     query.preset === 'rising' ? { createdAt: { $gte: new Date(Date.now() - 86400000) } } : {},
     scopedSubspaceIds ? { 'crystal.subspaceId': { $in: scopedSubspaceIds } } : {},
     ...subspaceFeedClauses(viewer)
@@ -4185,7 +4161,7 @@ export const listThings = async (
     // parent is their audience. Merge the old bounded residue into the same
     // stable cursor window without loading any descendants or migrating on read.
     const legacySeen = new Set<string>();
-    const legacy = discussionTarget.comments.slice(0, MAX_COMMENTS_PER_POST).flatMap(entry => {
+    const legacy = discussionTarget.comments.flatMap(entry => {
       const createdAt = new Date(entry.createdAt), id = entry.id;
       if (typeof id !== 'string' || !id || id.length > MAX_SHARE_ID_CHARS || /[$.\s\u0000-\u001f]/.test(id) || !Number.isFinite(+createdAt) || typeof entry.userId !== 'string' || !entry.userId) return [];
       if (legacySeen.has(id)) return [];
@@ -4869,7 +4845,7 @@ export const sharePost = async (
     return fail(403, 'Only public posts can be shared');
   }
 
-  const text = typeof input.text === 'string' ? input.text.trim().slice(0, MAX_TEXT_CHARS) : '';
+  const text = typeof input.text === 'string' ? input.text.trim() : '';
   // the quoter's own tags (the client harvests inline #hashtags from the
   // caption, exactly like the composer) — without these, a linkified caption
   // tag's search would exclude the very quote post it was tapped on
@@ -4884,7 +4860,7 @@ export const sharePost = async (
       crystal: { type: originalCrystal.type || 'text', text, images: [], listing: null },
       acl: input.acl,
       visibility: input.visibility,
-      // caption tags first so the quoter's intent survives the MAX_TAGS cap;
+      // Caption tags first retain the quoter's intentional ordering;
       // createThing dedupes the merge. Never carry a non-public original's
       // tags to audiences that can't view it.
       tags: [...inputTags, ...(aclOf(original).includes(ACL_ALL) ? original.tags || [] : [])],

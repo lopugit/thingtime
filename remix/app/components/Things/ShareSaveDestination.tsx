@@ -144,6 +144,8 @@ function ShareSaveSession({ shareId, text, files, directories = [], onSaved, bef
    const current = plan || await makeStableShareSavePlan(origin, ownerId, shareId, location.id, text, files, directories);
    if (plan && location.id !== plan.folderId) throw Error('Finish the interrupted save in its original location before choosing another destination.');
    validateShareSavePlan(current, shareId, files, text, directories);
+   if (current.text) await requireThingtimeCapability('api.things', '1.50.0', origin);
+   check();
    // Persist before the first write. No side effect occurs if recovery storage fails.
    await journal.setItem(key, current); check(); setPlan(current);
    const ids: string[] = [];

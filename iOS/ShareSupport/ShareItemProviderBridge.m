@@ -17,4 +17,16 @@
         completion(image, error);
     }];
 }
++ (void)loadTextFromProvider:(NSItemProvider *)provider
+             typeIdentifier:(NSString *)typeIdentifier
+                 completion:(void (^)(NSString *, NSError *))completion {
+    [provider loadItemForTypeIdentifier:typeIdentifier options:nil
+                     completionHandler:(NSItemProviderCompletionHandler)^(NSString *text, NSError *error) {
+        if (text && ![text isKindOfClass:NSString.class]) {
+            completion(nil, [NSError errorWithDomain:@"Thingtime.ShareProvider" code:1 userInfo:nil]);
+            return;
+        }
+        completion(text, error);
+    }];
+}
 @end

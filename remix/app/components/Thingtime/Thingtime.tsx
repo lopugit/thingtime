@@ -8,7 +8,7 @@ import { CommanderV1 } from '../Commander/CommanderV1Deprecated';
 import { CommanderV2 } from '../Commander/CommanderV2';
 // import { Magic } from "../Commander/Magic"
 import { blocksToText, getEditorJsDoc, LongTextEditor, textToBlocks } from '../Editor/LongTextEditor';
-import { EDITOR_JS_AUTO_DETECT_LIMITS, isEditorJsDocSafeToEdit } from '../Editor/editorJsValue';
+import { isExplicitEditorJsDocSafeToEdit, parseExplicitEditorJsDocString } from '../Editor/editorJsValue';
 import { Icon } from '../Icon/Icon';
 import { RichTextBlocks } from '../Kinds/kindRenderersMedia';
 import { useLopu } from '../Lopu/useLopu';
@@ -982,22 +982,15 @@ const ThingtimeTree = (args: ThingtimeComponentProps = {}) => {
 						source = String(thing);
 					}
 				}
-				if (source.length > EDITOR_JS_AUTO_DETECT_LIMITS.sourceLength) {
-					lopu({
-						title: 'Kept the value as-is',
-						description: 'This value is too large to convert into an Editor.js document safely.',
-						status: 'error'
-					});
-					return;
-				}
 
-				const next = editorJsDoc
-					? { ...editorJsDoc, kind: 'rich-text' }
+				const explicit = editorJsDoc || parseExplicitEditorJsDocString(source);
+				const next = explicit
+					? { ...explicit, kind: 'rich-text' }
 					: { kind: 'rich-text', blocks: textToBlocks(source) };
-				if (!isEditorJsDocSafeToEdit(next)) {
+				if (!isExplicitEditorJsDocSafeToEdit(next)) {
 					lopu({
 						title: 'Kept the value as-is',
-						description: 'This value would create an Editor.js document that is too large or deeply nested to edit safely.',
+						description: 'This value contains unsupported rich-text data or exceeds the stored document nesting format.',
 						status: 'error'
 					});
 					return;
@@ -1007,10 +1000,10 @@ const ThingtimeTree = (args: ThingtimeComponentProps = {}) => {
 			}
 
 			if (typeKey === 'string' && editorJsDoc) {
-				if (!isEditorJsDocSafeToEdit(editorJsDoc)) {
+				if (!isExplicitEditorJsDocSafeToEdit(editorJsDoc)) {
 					lopu({
 						title: 'Kept the Editor.js document intact',
-						description: 'This document is too large or deeply nested to flatten safely. Nothing was changed.',
+						description: 'This document contains unsupported values or exceeds the stored document nesting format. Nothing was changed.',
 						status: 'error'
 					});
 					return;

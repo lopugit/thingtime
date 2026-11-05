@@ -5,7 +5,7 @@ import { getThingtimeSchema, validateThingtimeCrystal } from './registry';
 import { registryToCardSource, schemaCopyPrefill } from '../components/Schemas/schemaBrowseTypes';
 import { interpolateRenderTree } from '../components/Things/thingsCore';
 
-test('public Post copies preserve constraints, nested fields, provenance and editable image/text preview', () => {
+test('public Post copies preserve uncapped content, nested fields, provenance and editable image/text preview', () => {
 	const source = builtinSchemaCopySource('post')!;
 	assert.deepEqual(source, builtinSchemaCopySource('schema-post'));
 	assert.deepEqual(source, builtinSchemaCopySource('builtin:post'));
@@ -14,8 +14,8 @@ test('public Post copies preserve constraints, nested fields, provenance and edi
 	if (!copy.ok) return;
 	assert.equal(copy.crystal.forkOf, 'schema-post');
 	const fields = copy.crystal.fields as any[];
-	assert.ok(fields.find(field => field.name === 'text').maxLength > 0);
-	assert.ok(fields.find(field => field.name === 'images').maxItems > 0);
+	assert.equal(fields.find(field => field.name === 'text').maxLength, undefined);
+	assert.equal(fields.find(field => field.name === 'images').maxItems, undefined);
 	assert.ok(fields.find(field => field.name === 'listing').children.find((field: any) => field.name === 'price'));
 	assert.equal(fields.at(-1).name, 'brand');
 	const preview = JSON.stringify(interpolateRenderTree(copy.crystal.render as any, { title: 'Shower gel', text: 'Citrus scent', images: ['/api/v1/attachments/content?id=saved'] }));

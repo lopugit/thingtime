@@ -31,10 +31,10 @@ test('post rich text preserves Editor.js markup, styles, whitespace, and a canon
 	assert.equal(result.crystal.text, 'Home  network public ip:\n113.29.241.145');
 });
 
-test('post rich text must be a complete bounded Editor.js document', () => {
+test('post rich text must be a complete Editor.js document', () => {
 	assert.equal(validatePost({ kind: 'rich-text' }).ok, false);
 	assert.equal(validatePost({ kind: 'rich-text', blocks: [{ type: 'paragraph', data: 'not-an-object' }] }).ok, false);
-	assert.equal(validatePost({ kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: 'x'.repeat(5001) } }] }).ok, false);
+	assert.equal(validatePost({ kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: 'x'.repeat(5001) } }] }).ok, true);
 });
 
 test('legacy plain-text post crystals remain unchanged when richText is omitted', () => {
@@ -43,4 +43,14 @@ test('legacy plain-text post crystals remain unchanged when richText is omitted'
 	if (result.ok !== true) return;
 	assert.equal(result.crystal.text, 'line one\nline two');
 	assert.equal('richText' in result.crystal, false);
+});
+
+test('explicit posts preserve long text and large rich documents beyond detection and product budgets', () => {
+ const long = 'Shared original text 🥰 '.repeat(1000);
+ const plain = validateThingtimeCrystal(['post'], { type: 'text', text: long });
+ assert.ok(plain.ok); if (plain.ok) assert.equal(plain.crystal.text, long.trim());
+ const rich = { blocks: Array.from({ length: 1200 }, (_, index) => ({ type: 'paragraph', data: { text: index === 0 ? long : `Shared block ${index}` } })) };
+ const result = validatePost(rich);
+ assert.ok(result.ok);
+ if (result.ok) { assert.deepEqual(result.crystal.richText, rich); assert.ok(String(result.crystal.text).includes('Shared block 1199')); }
 });

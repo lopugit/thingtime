@@ -61,6 +61,14 @@ struct ProviderShareItem: ShareItemSource {
             }
             return progress
         }
+        if (UTType(type)?.conforms(to: .plainText) == true || type == UTType.text.identifier),
+           !provider.registeredTypeIdentifiers.contains(where: { UTType($0)?.conforms(to: .fileURL) == true }) {
+            ShareItemProviderBridge.loadText(from: provider, typeIdentifier: type) { text, error in
+                guard let text else { completion(error ?? ShareItemImporter.Failure.noRepresentation); return }
+                do { try consume(text as NSString); completion(nil) } catch { completion(error) }
+            }
+            return progress
+        }
         provider.loadItem(forTypeIdentifier: type, options: nil) { item, error in
             guard let item else { completion(error ?? ShareItemImporter.Failure.noRepresentation); return }
             do { try consume(item); completion(nil) } catch { completion(error) }
@@ -186,6 +194,7 @@ final class ShareItemImporter {
         let batch = try inbox.begin()
         do {
             var textPaths: [String] = []
+            var supplementalTextPaths: [String] = []
             let total = sources.count + additionalText.count
             guard total > 0 else { throw ShareInbox.Failure.empty }
             for (index, source) in sources.enumerated() {
@@ -194,7 +203,8 @@ final class ShareItemImporter {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 do {
                     if let type = try await save(source, into: directory),
-                       UTType(type)?.conforms(to: .plainText) == true || (UTType(type)?.conforms(to: .url) == true && UTType(type)?.conforms(to: .fileURL) != true) {
+                       !source.registeredTypeIdentifiers.contains(where: { UTType($0)?.conforms(to: .fileURL) == true }),
+                       UTType(type)?.conforms(to: .plainText) == true || type == UTType.text.identifier || (UTType(type)?.conforms(to: .url) == true && UTType(type)?.conforms(to: .fileURL) != true) {
                         let candidates = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isRegularFileKey])
                         if candidates.count == 1, (try candidates[0].resourceValues(forKeys: [.isRegularFileKey])).isRegularFile == true {
                             textPaths.append("Item \(index + 1)/" + candidates[0].lastPathComponent)
@@ -211,11 +221,12 @@ final class ShareItemImporter {
                 let destination = inbox.uniqueURL(in: batch.payload, suggestedName: "Shared text.txt")
                 try Data(text.utf8).write(to: destination, options: .atomic)
                 textPaths.append(destination.lastPathComponent)
+                supplementalTextPaths.append(destination.lastPathComponent)
                 progress(sources.count + index + 1, total)
             }
             try cancellation.check()
             if let composerOrigin {
-                try ShareComposerMetadata(origin: ShareComposerSession.origin(composerOrigin), textPaths: textPaths).write(to: batch.directory)
+                try ShareComposerMetadata(origin: ShareComposerSession.origin(composerOrigin), textPaths: textPaths, supplementalTextPaths: supplementalTextPaths).write(to: batch.directory)
             }
             try inbox.commit(batch)
             return batch.id
@@ -249,6 +260,14 @@ final class ShareItemImporter {
         for type in types {
             try cancellation.check()
             let isURL = UTType(type)?.conforms(to: .url) == true
+            // Plain-text providers can vend a keyed NSString archive as their
+            // file representation. Ask the supported typed loader first; never
+            // unarchive unknown byte blobs or turn transport archives into files.
+            if (UTType(type)?.conforms(to: .plainText) == true || type == UTType.text.identifier),
+               !types.contains(where: { UTType($0)?.conforms(to: .fileURL) == true }) {
+                do { try await saveItem(source, type: type, into: directory); return type }
+                catch { try cancellation.check(); try clear(directory) }
+            }
             // UIKit's image-object representation is a keyed archive, not a
             // portable image file. Decode only through the typed public loader.
             if type == "com.apple.uikit.image" || type == UTType.image.identifier {

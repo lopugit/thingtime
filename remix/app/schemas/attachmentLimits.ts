@@ -3,4 +3,4 @@
 // request-body limits are enforced independently by the upload/API services.
 export const MAX_POST_ATTACHMENTS = Number.POSITIVE_INFINITY;
 export const MAX_ATTACHMENTS_PER_TARGET = 25;
-export const attachmentCountLimit = (purpose: string = 'post'): number => (['post', 'message', 'file', 'file-import'].includes(purpose) ? MAX_POST_ATTACHMENTS : MAX_ATTACHMENTS_PER_TARGET);
+export const attachmentCountLimit = (purpose: string = 'post'): number => (['post', 'comment', 'message', 'file', 'file-import'].includes(purpose) ? MAX_POST_ATTACHMENTS : MAX_ATTACHMENTS_PER_TARGET);

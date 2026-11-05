@@ -10,6 +10,7 @@ import CryptoKit
 struct ShareComposerMetadata: Codable {
     let origin: String
     let textPaths: [String]
+    var supplementalTextPaths: [String]?
     var accountId: String?
     var completed = false
     var submission: ShareComposerSubmission?
@@ -128,13 +129,16 @@ final class ShareComposerSession {
         }
         var text: [String] = []
         var inlinePaths = Set<String>()
+        let supplemental = Set(metadata.supplementalTextPaths ?? [])
+        var providerText = Set<String>()
         for path in metadata.textPaths {
-            let descriptor = try openFile(path: path)
-            let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
-            let bytes = try handle.readToEnd() ?? Data()
-            if let value = String(data: bytes, encoding: .utf8), !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let value = try inlineText(path: path) {
                 inlinePaths.insert(path)
-                text.append(value)
+                // A host often supplies the same String as both an attachment
+                // and attributedContentText. Preserve separate provider items,
+                // but do not repeat that transport-level supplemental caption.
+                if !supplemental.contains(path) { providerText.insert(value); text.append(value) }
+                else if !providerText.contains(value) { text.append(value) }
             }
         }
         return ["id": id.uuidString, "accountId": accountId, "apiOrigin": origin,
@@ -222,6 +226,31 @@ final class ShareComposerSession {
         metadata.completed = true
         try metadata.write(to: directory)
     }
+    /// Decode across bounded reads without allocating a second whole-file byte
+    /// buffer. The current web composer contract still requires a text String;
+    /// invalid or whitespace-only content stays an original file attachment.
+    private func inlineText(path: String) throws -> String? {
+        let handle = FileHandle(fileDescriptor: try openFile(path: path), closeOnDealloc: true)
+        defer { try? handle.close() }
+        var input = ShareTextBytes(handle: handle)
+        var decoder = UTF8()
+        var value = ""
+        var meaningful = false
+        while true {
+            switch decoder.decode(&input) {
+            case .scalarValue(let scalar):
+                value.unicodeScalars.append(scalar)
+                if !meaningful && !CharacterSet.whitespacesAndNewlines.contains(scalar) { meaningful = true }
+            case .emptyInput:
+                if let error = input.error { throw error }
+                return meaningful ? value : nil
+            case .error:
+                if let error = input.error { throw error }
+                return nil
+            }
+        }
+    }
+
     /// Importer-generated Item N groups retain the sender's attachment order,
     /// including 10+ items; descendants use a stable locale-independent ordering.
     private static func ordered(_ left: String, before right: String) -> Bool {
@@ -281,4 +310,25 @@ private final class ShareThumbnailReader {
     let descriptor: Int32
     init(descriptor: Int32) { self.descriptor = descriptor }
     deinit { close(descriptor) }
+}
+
+private struct ShareTextBytes: IteratorProtocol {
+    let handle: FileHandle
+    private var bytes = Data()
+    private var index = 0
+    private var ended = false
+    private(set) var error: Error?
+    init(handle: FileHandle) { self.handle = handle }
+    mutating func next() -> UInt8? {
+        if index == bytes.count {
+            guard !ended else { return nil }
+            do {
+                bytes = try handle.read(upToCount: ShareComposerSession.maxChunkBytes) ?? Data()
+                index = 0
+                if bytes.isEmpty { ended = true; return nil }
+            } catch { self.error = error; ended = true; return nil }
+        }
+        defer { index += 1 }
+        return bytes[index]
+    }
 }

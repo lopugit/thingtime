@@ -1,7 +1,7 @@
-export const MAX_LINKED_IMAGES = 8;
+export const MAX_LINKED_IMAGES = Number.POSITIVE_INFINITY;
 // Mirrors the post image URL bound in app/schemas/registry.ts without pulling
 // the server schema registry into the browser bundle.
-export const MAX_LINKED_IMAGE_URL_CHARS = 2048;
+export const MAX_LINKED_IMAGE_URL_CHARS = Number.POSITIVE_INFINITY;
 
 export type LinkedImageItem = {
 	id: string;
@@ -17,7 +17,6 @@ export const isLinkedImageUrl = (value: string): boolean => {
 	const trimmed = value.trim();
 	if (
 		!trimmed ||
-		trimmed.length > MAX_LINKED_IMAGE_URL_CHARS ||
 		/[\p{Cc}\p{Cf}\p{Cs}\s]/u.test(trimmed) ||
 		trimmed.includes('\\') ||
 		!/^https?:\/\//i.test(trimmed)

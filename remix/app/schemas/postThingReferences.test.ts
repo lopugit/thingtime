@@ -13,9 +13,9 @@ test('a multi-Thing post retains modes and inline values without copying supplie
   assert.deepEqual(composePostThing(postThingDraft(result.crystal.thing), postThingReferences(result.crystal.thing)), result.crystal.thing);
 });
 
-test('post reference validation rejects duplicates, invalid ids, modes and oversized sets', () => {
+test('post reference validation rejects duplicates, invalid ids and modes', () => {
   const item = { id: 'one', mode: 'data' };
-  for (const items of [[], [item, item], [{ ...item, id: '../private' }], [{ ...item, mode: 'execute' }], [null], Array.from({ length: 21 }, (_, index) => ({ ...item, id: `id-${index}` }))]) {
+  for (const items of [[], [item, item], [{ ...item, id: '../private' }], [{ ...item, mode: 'execute' }], [null]]) {
     assert.equal(validate({ kind: 'thing-collection', items }).ok, false);
   }
   for (const data of [null, [], 'text']) assert.equal(validate({ kind: 'thing-collection', items: [item], data }).ok, false);
@@ -47,4 +47,20 @@ test('Builder app metadata stays an owner folder crystal and rejects executable 
   assert.equal(validateThingtimeCrystal(['folder'], { name: 'Routes', metadata: [] }).ok, false);
   assert.equal(validateThingtimeCrystal(['folder'], { name: 'Routes', metadata: { constructor: { prototype: { x: true } } } }).ok, false);
   assert.equal(validateThingtimeCrystal(['folder'], { name: 'Long app '.repeat(30), builderApp: true, description: 'A'.repeat(800) }).ok, true);
+});
+
+test('large reference selections, legacy image lists, poll options and simple comments preserve complete input', () => {
+ const items = Array.from({ length: 40 }, (_, index) => ({ id: `item-${index}`, mode: index % 2 ? 'data' as const : 'interactive' as const }));
+ const thing = composePostThing(null, items);
+ const selected = validate(thing); assert.ok(selected.ok);
+ if (selected.ok) assert.deepEqual(postThingReferences(selected.crystal.thing), items);
+ const images = Array.from({ length: 27 }, (_, index) => `https://example.test/${index}/${'a'.repeat(3000)}.png`);
+ const imagePost = validateThingtimeCrystal(['post'], { type: 'image', images });
+ assert.ok(imagePost.ok); if (imagePost.ok) assert.deepEqual(imagePost.crystal.images, images);
+ const text = 'Original shared comment 🥰\n'.repeat(1000);
+ const comment = validateThingtimeCrystal(['comment'], { text });
+ assert.ok(comment.ok); if (comment.ok) assert.equal(comment.crystal.text, text.trim());
+ const poll = { kind: 'poll', question: 'Original question '.repeat(1000), options: Array.from({ length: 30 }, (_, index) => `Choice ${index} ${'label'.repeat(100)}`) };
+ const checked = validate(poll); assert.ok(checked.ok);
+ if (checked.ok) assert.deepEqual(checked.crystal.thing, poll);
 });

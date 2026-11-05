@@ -124,8 +124,7 @@ const COMPOSE_MODE_META: Record<ComposeMode, { label: string; emoji: string }> =
 };
 
 const MIN_POLL_OPTIONS = 2;
-const MAX_POLL_OPTIONS = 6;
-const MAX_POLL_OPTION_CHARS = 80;
+const MAX_POLL_OPTIONS = Number.POSITIVE_INFINITY;
 
 const TEXTAREA_PLACEHOLDERS: Record<ComposeMode, string> = {
   text: "What's on your mind? ✨",
@@ -404,7 +403,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
 	const parsedTags = canonicalPostTags([...tagsInput.split(','), ...extractInlineHashtags(text)]);
 
 	// poll mode: trimmed, bounded, non-empty option labels in row order
-	const parsedPollOptions = pollOptions.map((option) => option.trim().slice(0, MAX_POLL_OPTION_CHARS)).filter(Boolean);
+	const parsedPollOptions = pollOptions.map((option) => option.trim()).filter(Boolean);
 
 
   // this composer's session-scoped draft home (fresh per mount — see
@@ -635,12 +634,12 @@ const AccountPostComposer = (props: PostComposerProps) => {
 		const canonicalText = type === 'poll' ? '' : submittedText;
 		const canonicalListing = showListing
 			? {
-					title: title.trim().slice(0, 120),
+					title: title.trim(),
 					price: Math.round(Number(price) * 100) / 100,
 					currency: currency.trim().toUpperCase(),
 					category,
 					condition: condition === 'new' || condition === 'used' ? condition : null,
-					location: listingLocation.trim().slice(0, 120) || null,
+					location: listingLocation.trim() || null,
 					sold: false
 			  }
 			: null;
@@ -1086,7 +1085,6 @@ const AccountPostComposer = (props: PostComposerProps) => {
           color={INK}
           placeholder={activeSubspace ? `Title for s/${activeSubspace.slug}` : 'Title (optional)'}
           value={postTitle}
-          maxLength={300}
           onChange={(event) => setPostTitle(event.target.value)}
           aria-label="Post title"
           data-testid="composer-title"
@@ -1215,7 +1213,6 @@ const AccountPostComposer = (props: PostComposerProps) => {
                 size="sm"
                 borderRadius={RADIUS_SM}
                 placeholder={`Option ${idx + 1}`}
-                maxLength={MAX_POLL_OPTION_CHARS}
                 value={option}
                 onChange={(event) => {
                   const next = [...pollOptions];
@@ -1250,7 +1247,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
             </Button>
           )}
           <Text fontSize="10px" color={MUTED}>
-            {MIN_POLL_OPTIONS}–{MAX_POLL_OPTIONS} options · voters pick one and can change or remove their vote ✨
+            At least {MIN_POLL_OPTIONS} options · voters pick one and can change or remove their vote ✨
           </Text>
         </Flex>
       )}

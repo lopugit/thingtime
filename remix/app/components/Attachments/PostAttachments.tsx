@@ -367,7 +367,7 @@ const PostAttachmentsGallery = ({
 			cursor = start + size;
 		}
 	}
-	const gridColumns = Math.max(1, Math.min(layout.columns || 3, visualMedia.length, 6));
+	const gridColumns = Math.max(1, Math.min(layout.columns || 3, visualMedia.length));
 
 	return (
 		<Flex flexDirection="column" rowGap={compact ? 2 : 3} aria-label={ariaLabel}>

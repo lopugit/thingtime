@@ -4,6 +4,8 @@ This standalone fixture app opens the real iOS `UIActivityViewController`. Its U
 
 Build with `THINGTIME_WEB_URL` set to the task-owned isolated web origin when verifying the new `/share` route. The extension and app use normal independent web authentication; the bridge never copies cookies. System-sheet acceptance verifies native intake and original bytes. Verify signed-in prefill, publishing, messaging, saving and exact receipt recovery separately against the real isolated web/API path.
 
+Authenticated tests must keep generated credentials and sessions in transient fixture memory. Xcode 27 XCTest can log a password prefix even when typing into a secure field, so do not enter credentials through `typeText`. A separately authorized isolated WK fixture may bootstrap its own fresh API session through the supported `WKHTTPCookieStore`, scoped to the exact local origin and a nonpersistent store; label that as fixture bootstrap, keep normal UI-login evidence separate, and discard the fixture afterward. Never copy personal or existing browser sessions.
+
 The harness requires Xcode command-line tools, an installed iOS Simulator runtime, XcodeGen, Python 3 and FFmpeg. It respects the active Xcode selection or an explicit `DEVELOPER_DIR`.
 
 After building the final Thingtime simulator app, sign its host and share extension with the resolved App Group entitlements (an ad-hoc identity is sufficient on the isolated simulator). A build with signing disabled does not carry those entitlements and cannot prove shared-container delivery. Run from the repository root:

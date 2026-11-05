@@ -14557,6 +14557,11 @@ the isolated real-API/browser command and the metadata-only session boundary.
   Compare original bytes after download; retry the same request after lost
   replies without creating another object. Missing empty-upload capabilities,
   expired/bound drafts and changed metadata must refuse safely.
+- Share more than 5,000 characters, many rich blocks, long filenames and
+  annotations, long tags/URLs and large reference selections. Compare exact
+  stored/read values and every authorized attachment; no silent trimming or
+  old metadata limit may reject valid shared content. Keep processing chunk
+  sizes distinct from total selection size.
 - Edit the post text, switch destinations and return; preserve the edit and
   attachment order. Publish once and compare the exact server Thing and files.
 - Choose Message, select/search/create a conversation through ordinary Messenger,

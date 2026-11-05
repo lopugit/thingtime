@@ -258,7 +258,7 @@ export const LinkedImageGallery = React.memo((props: LinkedImageGalleryProps) =>
 						}}
 					/>
 					<Text fontSize="11px" color={MUTED} whiteSpace="normal">
-						{helperText ?? `One full http(s) image URL per line · ${Math.max(0, maxItems - items.length)} remaining`}
+						{helperText ?? (Number.isFinite(maxItems) ? `One full http(s) image URL per line · ${Math.max(0, maxItems - items.length)} remaining` : 'One full http(s) image URL per line')}
 					</Text>
 					<Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap">
 						<Button

@@ -19,7 +19,7 @@ const object = (v: unknown): v is Record<string, any> => !!v && typeof v === 'ob
 const identifier = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(v);
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(v);
 const hex = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
-export const validFileName = (v: unknown): v is string => typeof v === 'string' && v.length <= 255 && !v.includes('/') && validSyncPath(v);
+export const validFileName = (v: unknown): v is string => typeof v === 'string' && !!v.trim() && !/[\\/\p{Cc}\p{Cf}]/u.test(v) && v !== '.' && v !== '..';
 export function parseCloudFileCommit(value: unknown): CloudFileCommit {
 	if (!object(value) || Object.keys(value).some(k => !['id', 'operationId', 'expectedRevision', 'name', 'folderId', 'attachmentId', 'contentVersion', 'trashed', 'symbolicLink', 'syncDestination'].includes(k)) ||
 		!uuid(value.id) || !uuid(value.operationId) || (value.expectedRevision !== null && !identifier(value.expectedRevision)) ||

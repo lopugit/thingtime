@@ -14,6 +14,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { MongoClient } from 'mongodb';
+import { Resvg } from '@resvg/resvg-js';
 if (process.argv.includes('--browser-worker')) { await browserAcceptance(); process.exit(); }
 const source = fileURLToPath(new URL('..', import.meta.url));
 const evidence = process.env.SHARE_COMPOSER_EVIDENCE_DIR;
@@ -78,16 +79,18 @@ try {
  await writeFile(fixtureFile, JSON.stringify({ origin: webOrigin, apiOrigin: origin, cookie: owner.cookie, ownerId: owner.data.user.id, recipientId: recipient.data.user.id, chatId: chat.id }), { mode: 0o600 });
  console.log(`Isolated incoming-share UI ready: ${webOrigin}; API ${origin}. Evidence ${evidence}`);
  const extra = Object.fromEntries(Object.entries({ PLAYWRIGHT_MODULE: process.env.PLAYWRIGHT_MODULE, CHROMIUM_EXECUTABLE: process.env.CHROMIUM_EXECUTABLE, SHARE_COMPOSER_EVIDENCE_DIR: evidence }).filter(([, value]) => value));
+ if (process.argv.includes('--host-only')) { console.log('Host-only fixture ready; browser acceptance runs as a separate bounded worker.'); } else {
  const browser = start(process.execPath, [join(source, 'scripts/incoming-share-acceptance.mjs'), '--browser-worker', fixtureFile], extra, source);
  const timeout = setTimeout(() => { try { process.kill(-browser.child.pid, 'SIGTERM'); } catch {} }, 600000);
  const [code] = await once(browser.child, 'exit'); clearTimeout(timeout); console.log(browser.log()); assert.equal(code, 0, browser.log());
+ }
 } catch (error) {
  console.error(error.message); process.exitCode = 1;
 } finally {
  if (process.env.SHARE_COMPOSER_HOLD_FILE && server && server.child.exitCode === null) {
   const marker = process.env.SHARE_COMPOSER_HOLD_FILE; await writeFile(marker, 'Task-owned native acceptance host; remove this marker when native verification finishes.');
   console.log(`Retaining isolated UI for native acceptance, release marker: ${marker}`);
-  const deadline = Date.now() + 600000;
+  const deadline = Date.now() + 900000;
   while (Date.now() < deadline) { try { await readFile(marker); } catch { break; } await delay(1000); }
  }
  await client?.close();
@@ -99,11 +102,17 @@ try {
 async function browserAcceptance() {
  const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
  const fixture = JSON.parse(await readFile(process.argv.at(-1), 'utf8')), out = process.env.SHARE_COMPOSER_EVIDENCE_DIR;
+ await mkdir(out, { recursive: true });
  const browser = await chromium.launch({ headless: true, chromiumSandbox: true, executablePath: process.env.CHROMIUM_EXECUTABLE });
  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
  await context.addCookies(fixture.cookie.split('; ').map(pair => { const index = pair.indexOf('='); return { name: pair.slice(0, index), value: pair.slice(index + 1), url: fixture.origin, httpOnly: true, sameSite: 'Lax' }; }));
- const batches = ['post', 'message', 'save'].map(destination => ({ id: randomUUID(), destination, text: destination === 'message' ? 'Shared long message ' + 'x'.repeat(4100) : `Shared ${destination} text\nhttps://example.invalid/reference`, files: destination === 'message' ? Array.from({ length: 26 }, (_, index) => ({ id: `opaque-${index}`, name: `shared-${index}.unknown`, relativePath: '', type: 'application/octet-stream', bytes: Buffer.from(`opaque original message file ${index}`).toString('base64') })) : destination === 'save' ? [{ id: 'opaque-1', name: 'same.unknown', relativePath: 'folder/a/same.unknown', type: 'application/octet-stream', bytes: Buffer.from('exact first file').toString('base64') }, { id: 'opaque-2', name: 'same.unknown', relativePath: 'folder/b/same.unknown', type: 'application/octet-stream', bytes: Buffer.from('exact second file').toString('base64') }] : [{ id: 'opaque-1', name: 'shared.unknown', relativePath: '', type: 'application/octet-stream', bytes: Buffer.from('opaque original file bytes').toString('base64') }], directories: destination === 'save' ? ['folder/empty'] : [] }));
- for (const batch of batches) batch.files.push({ id: 'empty-file', name: 'empty.unknown', relativePath: '', type: 'application/octet-stream', bytes: '' });
+ const batches = ['post', 'message', 'save'].map(destination => ({ id: randomUUID(), destination, text: destination === 'message' ? 'Shared long message ' + 'x'.repeat(4100) : `Shared ${destination} text\n${'x'.repeat(destination === 'save' || destination === 'post' ? 20_000 : 0)}\nhttps://example.invalid/reference`, files: destination === 'message' ? Array.from({ length: 26 }, (_, index) => ({ id: `opaque-${index}`, name: `shared-${index}.unknown`, relativePath: '', type: 'application/octet-stream', bytes: Buffer.from(`opaque original message file ${index}`).toString('base64') })) : destination === 'save' ? [{ id: 'opaque-1', name: 'same.unknown', relativePath: 'folder/a/same.unknown', type: 'application/octet-stream', bytes: Buffer.from('exact first file').toString('base64') }, { id: 'opaque-2', name: 'same.unknown', relativePath: 'folder/b/same.unknown', type: 'application/octet-stream', bytes: Buffer.from('exact second file').toString('base64') }] : [{ id: 'opaque-1', name: 'shared.unknown', relativePath: '', type: 'application/octet-stream', bytes: Buffer.from('opaque original file bytes').toString('base64') }], directories: destination === 'save' ? ['folder/empty'] : [] }));
+ for (const [index, colour] of ['#59ff9c', '#ffa3b1'].entries()) {
+  const bytes = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="${colour}"/></svg>`).render().asPng();
+  batches[0].files.push({ id: `photo-${index}`, name: `photo-${index}.png`, relativePath: '', type: 'image/png', bytes: bytes.toString('base64') });
+ }
+ batches.push({ id: randomUUID(), destination: 'directories', text: '', files: [], directories: ['Only folders/empty'] });
+ for (const batch of batches.filter(item => item.destination !== 'directories')) batch.files.push({ id: 'empty-file', name: 'empty.unknown', relativePath: '', type: 'application/octet-stream', bytes: '' });
  await context.addInitScript(({ batches, ownerId }) => {
   window.thingtimeShare = { version: '1.0.0', request: async body => {
    const requestId = new URLSearchParams(location.search).get('requestId'), batch = batches.find(item => item.id === requestId);
@@ -138,17 +147,30 @@ async function browserAcceptance() {
   await page.screenshot({ path: join(out, name + '.png'), fullPage: true });
  };
  try {
-  for (const batch of batches) {
+  for (const batch of batches.filter(item => !process.env.SHARE_COMPOSER_SCOPE || (process.env.SHARE_COMPOSER_SCOPE === 'save' ? ['save', 'directories'].includes(item.destination) : item.destination === (process.env.SHARE_COMPOSER_SCOPE === 'message-preview' ? 'message' : process.env.SHARE_COMPOSER_SCOPE)))) {
    console.log(`Opening ${batch.destination}`);
+   let targetFolderId = null;
    await page.goto(`${fixture.origin}/share?requestId=${batch.id}`);
    await page.getByRole('heading', { name: 'New post', exact: true }).waitFor({ timeout: 90000 });
-   await page.getByRole('button', { name: batch.destination === 'save' ? 'Save as Thing / file' : batch.destination === 'message' ? 'Message' : 'Post', exact: true }).click();
+   await page.getByRole('button', { name: ['save', 'directories'].includes(batch.destination) ? 'Save as Thing / file' : batch.destination === 'message' ? 'Message' : /^(?:Post|Create post.*)$/, exact: true }).click();
    for (const width of [1440, 390]) { await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 }); await inspect(`${batch.destination}-${width}`); }
    if (batch.destination === 'post') {
     await page.getByRole('button', { name: 'Post ✨', exact: true }).waitFor();
     await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.getByRole('button', { name: 'Rows 🥞', exact: true }).waitFor({ timeout: 90000 });
+    await page.getByRole('button', { name: 'Rows 🥞', exact: true }).click();
+    for (let row = 2; row < 27; row++) await page.getByRole('button', { name: 'Add row', exact: true }).click();
+    await page.getByRole('button', { name: 'More images in row 27', exact: true }).waitFor();
+    await inspect('post-27-row-layout');
+    await page.getByRole('button', { name: 'Grid 🔳', exact: true }).click();
+    for (let column = 3; column < 7; column++) await page.getByRole('button', { name: 'More columns', exact: true }).click();
+    await page.getByText('7 columns', { exact: true }).waitFor();
+    await inspect('post-7-column-layout');
+    await page.getByRole('button', { name: 'Rows 🥞', exact: true }).click();
     await page.getByRole('button', { name: 'Customise toolbar', exact: true }).click();
-    const edits = [['context-label-post', 'Create post'], ['context-icon-post', '+']];
+    const customLabel = 'Create post ' + batch.id.slice(0, 4);
+    const oldGlyph = await page.locator('[data-block-id="context-icon-post"]').innerText();
+    const edits = [['context-label-post', customLabel], ['context-icon-post', oldGlyph === '+' ? '↗' : '+']];
     for (const [id, value] of edits) {
      await page.locator(`[data-block-id="${id}"]`).click();
      const drawer = page.locator('.ttBuilderDrawer').last();
@@ -163,7 +185,7 @@ async function browserAcceptance() {
     assert.deepEqual(stored.acl, ['tt:user']);
     await page.getByRole('button', { name: 'Done editing layout', exact: true }).click();
     await page.reload();
-    await page.getByRole('button', { name: 'Create post', exact: true }).waitFor({ timeout: 90000 });
+    await page.getByRole('button', { name: customLabel, exact: true }).waitFor({ timeout: 90000 });
     await inspect('toolbar-nested-edits-reloaded');
     checks.push({ editableToolbarDocumentId: stored.id, nestedBlockIds: edits.map(item => item[0]), reloadVerified: true });
     await page.getByRole('button', { name: 'Post ✨', exact: true }).click({ timeout: 90000 });
@@ -173,11 +195,14 @@ async function browserAcceptance() {
     await page.waitForFunction(() => window.__incomingShareOutcome?.destination === 'post', undefined, { timeout: 90000 });
     assert.equal(responses.filter(row => row.path === '/api/v1/attachments/uploads').length, beforeRecovery, 'Recovery must not reupload original files');
     const saved = await api(`/api/v1/things?id=${batch.id}`);
-    assert.equal(saved.post.text, batch.text); assert.equal(saved.post.attachments.length, batch.files.length); checks.push({ destination: 'post', id: saved.post.id, attachmentIds: saved.post.attachments.map(file => file.id), lostReceiptRecoveryVerified: true });
+    assert.equal(saved.post.text, batch.text); assert.equal(saved.post.attachments.length, batch.files.length); assert.equal(saved.post.mediaLayout.pattern.length, 27); checks.push({ destination: 'post', id: saved.post.id, attachmentIds: saved.post.attachments.map(file => file.id), lostReceiptRecoveryVerified: true });
    } else if (batch.destination === 'message') {
     await page.getByText('incoming-share-recipient', { exact: true }).last().click();
     const textarea = page.locator('textarea:visible').last(); await textarea.waitFor({ timeout: 30000 }); await textarea.focus();
     assert.equal(await textarea.inputValue(), batch.text); assert(await textarea.evaluate(node => node.selectionStart === node.value.length && node.selectionEnd === node.value.length));
+    await page.waitForFunction(() => document.querySelector('button[title="Send"]')?.disabled === false, undefined, { timeout: 90000 });
+    for (const width of [1440, 390]) { await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 }); await inspect(`message-expanded-attachments-${width}`); }
+    if (process.env.SHARE_COMPOSER_SCOPE === 'message-preview') { checks.push({ destination: 'message-preview', attachmentCount: batch.files.length, readyExpandedScrollDesktopMobile: true, publicationRepeated: false }); continue; }
     await textarea.fill(batch.text + ' appended');
     await page.setViewportSize({ width: 390, height: 480 }); await textarea.focus();
     await textarea.evaluate(node => node.scrollIntoView({ block: 'nearest' }));
@@ -189,6 +214,24 @@ async function browserAcceptance() {
     const saved = await api(`/api/v1/chats/messages?chatId=${fixture.chatId}`), message = saved.messages.find(item => item.text === batch.text + ' appended');
     assert(message); assert.equal(message.attachments.length, batch.files.length); checks.push({ destination: 'message', id: message.id, textLength: message.text.length });
    } else {
+    const locations = [];
+    for (const name of ['Acceptance parent ' + batch.id.slice(0, 4), 'Nested destination']) {
+     await page.getByRole('button', { name: 'New', exact: true }).click();
+     await page.getByRole('menuitem', { name: /New folder/ }).click();
+     const dialog = page.getByRole('dialog', { name: /New folder/ });
+     await dialog.getByPlaceholder('Folder name', { exact: true }).fill(name);
+     const createdResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/things' && response.request().method() === 'POST');
+     await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+     const created = await (await createdResponse).json(); assert(created.ok && created.thing?.id);
+     const read = (await api(`/api/v1/things?id=${created.thing.id}`)).thing;
+     assert.equal(read.crystal.name, name); assert.equal(read.folderId, targetFolderId);
+     await dialog.waitFor({ state: 'hidden' });
+     await page.locator(`[data-thing-id="${created.thing.id}"]`).getByText(name, { exact: true }).click();
+     await page.getByText(`Save in ${name}`, { exact: true }).waitFor();
+     targetFolderId = created.thing.id; locations.push(targetFolderId);
+    }
+    await inspect('save-created-nested-destination');
+    checks.push({ createdFolderIds: locations, selectedSaveLocationId: targetFolderId });
     await page.getByRole('button', { name: 'Save here', exact: true }).click({ timeout: 90000 });
     await page.waitForFunction(() => window.__incomingShareOutcome?.destination === 'save', { timeout: 90000 });
     const ids = await page.evaluate(() => window.__incomingShareOutcome.outcomeIds);
@@ -198,14 +241,16 @@ async function browserAcceptance() {
     for (const row of rows.filter(row => row.thingtime.includes('file'))) {
      const file = (await api(`/api/v1/files?id=${row.id}`)).file;
      const response = await context.request.get(fixture.origin + `/api/v1/attachments/content?id=${file.content.attachmentId}`); assert(response.ok());
-     const parts = [file.name]; for (let parent = row.folderId; parent;) { const folder = rows.find(item => item.id === parent); assert(folder); parts.unshift(folder.crystal.name); parent = folder.folderId; }
+     const parts = [file.name]; for (let parent = row.folderId; parent && parent !== targetFolderId;) { const folder = rows.find(item => item.id === parent); assert(folder); parts.unshift(folder.crystal.name); parent = folder.folderId; }
      const original = batch.files.find(item => (item.relativePath || item.name) === parts.join('/'));
      assert(original); assert.deepEqual(await response.body(), Buffer.from(original.bytes, 'base64'));
     }
     checks.push({ destination: 'save', ids });
    }
    await page.screenshot({ path: join(out, `${batch.destination}-success.png`), fullPage: true });
+   await writeFile(join(out, 'partial-web-evidence.json'), JSON.stringify({ checks, errors }, null, 2));
   }
+  await writeFile(join(out, 'partial-web-evidence.json'), JSON.stringify({ checks, errors }, null, 2));
   const switchBatch = batches[0];
   const beforeSwitch = responses.filter(row => row.path === '/api/v1/attachments/uploads').length;
   const switchResponse = await context.request.post(fixture.origin + '/api/v1/auth/register', { data: { username: 'incoming-share-switched-' + randomUUID().slice(0, 7), email: randomUUID() + '@example.invalid', displayName: 'Other isolated account', password: randomBytes(24).toString('hex') } });
@@ -216,6 +261,6 @@ async function browserAcceptance() {
   assert.equal(responses.filter(row => row.path === '/api/v1/attachments/uploads').length, beforeSwitch);
   checks.push({ accountSwitchClearsContentAndRefusesNativeAccess: true });
   assert.deepEqual(errors, []); await writeFile(join(out, 'web-evidence.json'), JSON.stringify({ fixture: 'native bridge only; real disposable product APIs', apiOrigin: fixture.apiOrigin, webOrigin: fixture.origin, checks, errors }, null, 2));
- } catch (error) { await page.screenshot({ path: join(out, 'failure.png'), fullPage: true }); await writeFile(join(out, 'failure-state.txt'), await page.locator('body').innerText()); await writeFile(join(out, 'http-responses.json'), JSON.stringify(responses, null, 2)); throw error; }
+ } catch (error) { await page.screenshot({ path: join(out, 'failure.png'), fullPage: true }); await writeFile(join(out, 'failure-state.txt'), await page.locator('body').innerText()); await writeFile(join(out, 'http-responses.json'), JSON.stringify(responses, null, 2)); await writeFile(join(out, 'partial-web-evidence.json'), JSON.stringify({ checks, errors }, null, 2)); throw error; }
  finally { await context.close(); await browser.close(); }
 }

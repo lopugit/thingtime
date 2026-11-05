@@ -193,7 +193,9 @@ export const useAttachmentUploads = (
 	);
 	const [uploads, setUploads] = React.useState<ComposerAttachmentUpload[]>(seedEntries);
 	const uploadsRef = React.useRef(uploads);
-	uploadsRef.current = uploads;
+	// Mutators advance this queue synchronously before publishing React state.
+	// A concurrent render may observe an older state snapshot; copying that
+	// snapshot back here would resurrect Waiting/Verifying after completion.
 	const mountedRef = React.useRef(true);
 	const ownerRef = React.useRef(ownerId ?? null);
 	const attemptsRef = React.useRef(new Map<string, number>(seedEntries.map((entry) => [entry.localId, 1])));

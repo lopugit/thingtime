@@ -182,7 +182,7 @@ test('managed attachment, moderation, user, and emoji fields are closed server-o
 	assert.deepEqual(fields.get('attachmentProfileSlot')?.values, ['avatar', 'banner']);
 });
 
-test('attachment metadata is normalized but its Thingtime kind remains protected from generic CRUD', () => {
+test('attachment filenames remain exact while types normalize and generic CRUD stays protected', () => {
 	const validated = validateThingtimeCrystal(['attachment'], {
 		name: '  clip.MP4 ',
 		size: 123,
@@ -192,7 +192,7 @@ test('attachment metadata is normalized but its Thingtime kind remains protected
 	assert.equal(validated.ok, true);
 	if (validated.ok !== true) return;
 	assert.deepEqual(validated.crystal, {
-		name: 'clip.MP4',
+		name: '  clip.MP4 ',
 		size: 123,
 		contentType: 'video/mp4',
 		mediaKind: 'video'

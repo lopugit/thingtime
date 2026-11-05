@@ -20,7 +20,7 @@ bytes; an image thumbnail is only a preview. Relative directories and Live Photo
 resources remain distinct.
 
 The web bridge supplies lazy file sources to the ordinary multipart uploader.
-Each native read is at most 256 KiB. Image previews use a bounded 640-pixel JPEG,
+Each native read is at most 256 KiB; this is a processing chunk, not a total-size limit. Image previews use a bounded 640-pixel JPEG,
 not a full-file base64 transfer. Existing upload approval, purpose, quota,
 moderation, authorization and exact-version content checks still apply.
 
@@ -43,6 +43,23 @@ hosted by SettingsDocumentHost and TransientBlockHost. Layout editing cannot
 execute adapter actions. This can support later quick actions without adding
 feature-specific native interface code.
 
+## No arbitrary sharing input limits
+
+The sharing flow has no product ceilings for text, rich-text block counts,
+file selections, filenames, annotations, tags, linked URLs or Thing references.
+Data values retain type, cycle and storage-integrity validation. Post and
+discussion readback preserve the full authorized attachment list. Input, storage
+and rendering must not silently trim content to an older product maximum.
+
+Bounded upload parts, thumbnail previews, pagination and read chunks manage
+resources without capping the original selection. Account storage accounting,
+request framing and actual operating-system/storage constraints remain in force.
+A refused or interrupted operation preserves the native original for recovery.
+Standalone portable archive transfer still has its separate existing total
+budgets; this sharing flow uploads files through the ordinary file transport
+and does not invoke that archive importer. Its metadata roundtrip accepts the
+long values introduced here.
+
 ## Contracts and recovery
 
 The native `thingtimeShare` bridge negotiates version 1.0.0 and exact origin /
@@ -55,10 +72,12 @@ originals and reconcile their existing identities before further mutation.
 
 Message send requires `api.chats-messages` 1.3.0; edit requires
 `api.chats-messages-edit` 1.1.0. These remove old product text/item ceilings.
-Private chat archive import negotiates `api.things-import` 1.12.0 so long
-message text also survives export and restoration.
-Empty originals in Post and Message negotiate `api.attachment-uploads` 1.8.0
-and `api.attachment-upload-complete` 1.6.0. Their ready zero-part upload is
+Private chat archive import negotiates `api.things-import` 1.13.0 so long
+message text also survives export and restoration. Saving long text requires
+`api.things` 1.50.0; Data strings have no product character ceiling.
+The compatible update and schema contracts are 1.19.0 and 1.2.0 respectively.
+Empty originals in Post and Message negotiate `api.attachment-uploads` 1.9.0
+and `api.attachment-upload-complete` 1.7.0. Their ready zero-part upload is
 verified through the ordinary storage lifecycle and retains draft expiry.
 Transport request framing and underlying storage constraints remain separate;
 errors must be explicit and must not truncate a selection.

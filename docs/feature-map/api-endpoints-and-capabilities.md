@@ -8,6 +8,9 @@ and message text without the old 25-item/4,000-character product ceilings.
 manifests derive these versions from `apiDocs.ts`; the Messenger client
 negotiates them before mutation. No new HTTP route or permission is introduced.
 Native sharing negotiates its own exact-origin `thingtimeShare` 1.x bridge.
+Zero-byte social files require upload-start 1.9.0 and upload-complete 1.7.0.
+Long shared Data text requires Things 1.50.0; updates, imports and the built-in
+schema descriptor publish compatible contracts 1.19.0, 1.13.0 and 1.2.0.
 Run `test:api-capabilities`, the attachment service tests, and the built-server
 incoming-share acceptance before release.
 

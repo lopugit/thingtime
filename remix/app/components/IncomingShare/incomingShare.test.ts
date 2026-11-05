@@ -28,7 +28,7 @@ test('incoming share preserves text and unknown formats and reads only bounded m
  assert.equal(reads.length, 3); assert.ok(reads.every(read => read.length <= 262144 && read.accountId === accountId && read.requestId === id && read.fileId === 'opaque-file'));
 });
 test('native origin, request and chunk refusals happen before file access', async () => {
- for (const overrides of [{ origin: 'https://elsewhere.example' }, { requestId: 'other' }, { version: '2.0.0' }, { maxChunkBytes: 0 }, { maxChunkBytes: 262145 }]) {
+ for (const overrides of [{ origin: 'https://elsewhere.example' }, { requestId: 'other' }, { version: '2.0.0' }, { maxChunkBytes: 0 }]) {
   const { bridge, reads } = mock(overrides);
   await assert.rejects(readIncomingShare(bridge, id, accountId, origin, new AbortController().signal)); assert.equal(reads.length, 0);
  }
@@ -73,4 +73,22 @@ test('native capability negotiation accepts compatible patch and minor upgrades'
  }
  const { bridge } = mock(); bridge.version = '2.0.0';
  await assert.rejects(readIncomingShare(bridge, id, accountId, origin, new AbortController().signal), /version/);
+});
+
+
+test('larger advertised bridge chunks keep client reads bounded and compatible', async () => {
+ const { bridge, reads } = mock({ maxChunkBytes: 1048576 });
+ const draft = await readIncomingShare(bridge, id, accountId, origin, new AbortController().signal);
+ await readAttachmentSlice(draft.files[0], 0, bytes.length);
+ assert.equal(reads.length, 3); assert.ok(reads.every(part => part.length <= 262144));
+});
+
+
+test('directory-only incoming shares remain valid and malformed folders never disappear silently', async () => {
+ const { bridge, reads } = mock(); const invoke = bridge.request;
+ bridge.request = async body => body.method === 'getIncomingShare' ? { id, accountId, apiOrigin: origin, text: '', attachments: [], directories: ['Only folders', 'Only folders/empty'] } : invoke(body);
+ const draft = await readIncomingShare(bridge, id, accountId, origin, new AbortController().signal);
+ assert.deepEqual(draft.files, []); assert.equal(draft.text, ''); assert.deepEqual(draft.directories, ['Only folders', 'Only folders/empty']); assert.equal(reads.length, 0);
+ bridge.request = async body => body.method === 'getIncomingShare' ? { id, accountId, apiOrigin: origin, text: '', attachments: [], directories: ['kept', 42] } : invoke(body);
+ await assert.rejects(readIncomingShare(bridge, id, accountId, origin, new AbortController().signal), /folder/);
 });

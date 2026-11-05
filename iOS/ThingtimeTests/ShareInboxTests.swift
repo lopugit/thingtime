@@ -353,6 +353,81 @@ final class ShareInboxTests: XCTestCase {
     }
 
 
+
+
+
+    func testInvalidUTF8TextRemainsAnIntactFileInsteadOfReplacementOrTruncation() throws {
+        let origin = URL(string: "https://thingtime.com")!
+        let batch = try inbox.begin()
+        let bytes = Data([0x61, 0xF0, 0x9F, 0x8C])
+        try bytes.write(to: batch.payload.appendingPathComponent("invalid.txt"))
+        try ShareComposerMetadata(origin: ShareComposerSession.origin(origin), textPaths: ["invalid.txt"]).write(to: batch.directory)
+        try inbox.commit(batch)
+        let session = try ShareComposerSession(inbox: inbox, id: batch.id, origin: origin)
+        let draft = try session.incoming(accountId: "test-owner")
+        XCTAssertEqual(draft["text"] as? String, "")
+        let files = try XCTUnwrap(draft["attachments"] as? [[String: Any]])
+        XCTAssertEqual(files.count, 1)
+        let chunk = try session.read(accountId: "test-owner", fileId: try XCTUnwrap(files[0]["id"] as? String), offset: 0, length: ShareComposerSession.maxChunkBytes)
+        XCTAssertEqual(Data(base64Encoded: try XCTUnwrap(chunk["base64"] as? String)), bytes)
+    }
+    func testInlineTextHasNoChunkSizeLimitAndDecodesSplitUTF8Scalars() async throws {
+        let text = String(repeating: "a", count: ShareComposerSession.maxChunkBytes - 1) + "🌏\n尾"
+        let origin = URL(string: "https://thingtime.com")!
+        let id = try await ShareItemImporter(inbox: inbox).save([], additionalText: [text], composerOrigin: origin) { _, _ in }
+        let session = try ShareComposerSession(inbox: inbox, id: id, origin: origin)
+        let draft = try session.incoming(accountId: "test-owner")
+        XCTAssertEqual(draft["text"] as? String, text)
+        XCTAssertEqual((draft["attachments"] as? [[String: Any]])?.count, 0)
+    }
+    func testPlainTextTypedLoaderAvoidsKeyedArchiveAttachmentAndDuplicateCaption() async throws {
+        let text = "Thingtime share acceptance – text\nUnicode: café 🌏"
+        let source = StubShareItem(types: ["public.utf8-plain-text"])
+        source.itemLoader = { _, consume, completion in
+            do { try consume(text as NSString); completion(nil) } catch { completion(error) }
+        }
+        source.fileLoader = { _, _, _ in XCTFail("A typed String must not be imported as its keyed-archive file transport") }
+        let origin = URL(string: "https://thingtime.com")!
+        let id = try await ShareItemImporter(inbox: inbox).save([source, source], additionalText: [text], composerOrigin: origin) { _, _ in }
+        let session = try ShareComposerSession(inbox: inbox, id: id, origin: origin)
+        let draft = try session.incoming(accountId: "test-owner")
+        XCTAssertEqual(draft["text"] as? String, text + "\n\n" + text, "Retain independent provider multiplicity; omit only the repeated supplemental caption")
+        XCTAssertEqual((draft["attachments"] as? [[String: Any]])?.count, 0)
+        XCTAssertEqual(source.calls, ["item:public.utf8-plain-text", "item:public.utf8-plain-text"])
+        let preserved = try sharedFiles().map { try Data(contentsOf: $0) }
+        XCTAssertEqual(preserved.count, 3)
+        XCTAssertTrue(preserved.allSatisfy { $0 == Data(text.utf8) })
+    }
+
+    func testExplicitTextFileReferenceKeepsOriginalEncodingAsAttachment() async throws {
+        let text = "Original UTF16 file – café 🌏"
+        let bytes = try XCTUnwrap(text.data(using: .utf16))
+        let original = root.appendingPathComponent("original.txt")
+        try bytes.write(to: original)
+        let source = StubShareItem(types: ["public.utf16-plain-text", "public.file-url"])
+        source.fileLoader = { _, consume, completion in
+            do { try consume(original); completion(nil) } catch { completion(error) }
+        }
+        let origin = URL(string: "https://thingtime.com")!
+        let id = try await ShareItemImporter(inbox: inbox).save([source], composerOrigin: origin) { _, _ in }
+        let session = try ShareComposerSession(inbox: inbox, id: id, origin: origin)
+        let draft = try session.incoming(accountId: "test-owner")
+        XCTAssertEqual(draft["text"] as? String, "")
+        let attachments = try XCTUnwrap(draft["attachments"] as? [[String: Any]])
+        XCTAssertEqual(attachments.count, 1)
+        let chunk = try session.read(accountId: "test-owner", fileId: try XCTUnwrap(attachments.first?["id"] as? String), offset: 0, length: ShareComposerSession.maxChunkBytes)
+        XCTAssertEqual(Data(base64Encoded: try XCTUnwrap(chunk["base64"] as? String)), bytes)
+    }
+    func testActualNSStringProviderPrefillsTextWithoutAnUpload() async throws {
+        let text = "Native NSString – café 🌏"
+        let origin = URL(string: "https://thingtime.com")!
+        let provider = ProviderShareItem(provider: NSItemProvider(object: text as NSString))
+        let id = try await ShareItemImporter(inbox: inbox).save([provider], additionalText: [text], composerOrigin: origin) { _, _ in }
+        let session = try ShareComposerSession(inbox: inbox, id: id, origin: origin)
+        let draft = try session.incoming(accountId: "test-owner")
+        XCTAssertEqual(draft["text"] as? String, text)
+        XCTAssertEqual((draft["attachments"] as? [[String: Any]])?.count, 0)
+    }
     func testEmptyAndWhitespaceTextSourcesRemainOriginalAttachments() async throws {
         let origin = URL(string: "https://thingtime.com")!
         let empty = StubShareItem(types: ["public.utf8-plain-text"])

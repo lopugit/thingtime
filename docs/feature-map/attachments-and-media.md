@@ -10,7 +10,7 @@ in JavaScript. Post, Message and Save retain the original source independently
 of their purpose-bound upload drafts. See [incoming sharing](../incoming-sharing.md)
 for native recovery, destination fences and the acceptance matrix.
 Zero-byte post/comment/message originals use the shared verified-empty upload
-path (`api.attachment-uploads` 1.8.0 and completion 1.6.0), retaining draft expiry,
+path (`api.attachment-uploads` 1.9.0 and completion 1.7.0), retaining draft expiry,
 owner/request fencing and quota accounting. Image-only and recording uploads
 retain nonempty validation. `attachments.test.ts` covers local empty bytes,
 replay, lease recovery and exact input/access refusals.
