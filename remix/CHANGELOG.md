@@ -114,6 +114,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-11-06: Local attachment storage now signs exact-version native download ranges for 60 seconds, requiring the exact Range header and trusted HTTPS origin; whole-object replay and altered range authority are refused. — Codex (AI)
 
+- 2026-11-06: Supply the real Node argument-vector shape in the parallel
+  workspace bootstrap test VM after early password-agent CLI discovery was
+  added. This repairs the release test fixture without changing app startup,
+  credentials or development/stable profile separation.
+  **Codex (AI)**
+
 - 2026-11-06: Correct the native upload-batch test peer to verify only requested
   upload receipts. Exercise admission expiry and completion of all 256 files
   across fresh bounded requests with retained operation IDs, receipt reuse and

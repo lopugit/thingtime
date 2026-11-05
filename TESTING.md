@@ -14314,6 +14314,10 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ### Mac strict inventory job
 
+- [ ] Electron bootstrap VM fixtures must model `process.argv` as an array,
+  even when testing ordinary startup without CLI arguments. Run
+  `node --test electron/test/dev-workspace.test.cjs`; parallel development
+  must keep its own name/profile, and packaged startup must keep the stable app.
 - [ ] Native upload-batch peers must verify only the submitted receipt subset.
   Force the first admission window to expire after accepted bodies begin, then
   complete all 256 files through fresh request identities with the same original
