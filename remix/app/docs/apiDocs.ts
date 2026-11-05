@@ -5845,8 +5845,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-uploads',
-		contractVersion: '1.9.0',
-		featureVersion: '1.9.0',
+		contractVersion: '1.10.0',
+		featureVersion: '1.10.0',
 		group: 'attachments',
 		title: 'Start attachment upload',
 		endpoint: '/api/v1/attachments/uploads',
@@ -5917,7 +5917,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			},
 			{ status: 507, description: 'Storage tier allowance exceeded.', body: { ok: false, error: 'This would exceed the account storage allowance' } }
 		],
-		notes: [
+		notes: ['Version 1.10.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.',
 			'The bucket remains private. Browser uploads use short-lived presigned UploadPart URLs, not public object access.',
 			'Post, comment, message, and custom-emoji attachments are unavailable while a custom MongoDB data endpoint is active. Profile media remains home-pinned identity data and may still use the private profile purposes.',
 			'Custom emojis accept one GIF, PNG, JPEG, or WebP image up to 512 KiB. Profile media accepts one supported raster image up to 64 MiB.'
@@ -6080,9 +6080,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-annotate',
-		contractVersion: '1.2.0',
-		featureVersion: '1.2.0',
-		group: 'attachments',
+		contractVersion: '1.3.0',
+		featureVersion: '1.3.0',
+		notes: ['Version 1.3.0 removes the application JSON body-size ceiling for authenticated shared-content writes. Authorization and rate admission precede incremental fatal UTF-8/JSON decoding; storage accounting and protocol constraints remain authoritative.'],
+    group: 'attachments',
 		title: 'Annotate attachment',
 		endpoint: '/api/v1/attachments/annotate',
 		summary: 'Sets or clears an owned ready attachment’s display filename, title, and description.',
@@ -6133,9 +6134,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-link',
-		contractVersion: '1.1.0',
-		featureVersion: '1.1.0',
-		group: 'attachments',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
+		notes: ['Version 1.2.0 removes the application JSON body-size ceiling for authenticated shared-content writes. Authorization and rate admission precede incremental fatal UTF-8/JSON decoding; storage accounting and protocol constraints remain authoritative.'],
+    group: 'attachments',
 		title: 'Link external media',
 		endpoint: '/api/v1/attachments/link',
 		summary: 'Mints a ready linked-attachment draft from an external media URL.',
@@ -6243,7 +6245,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Ordered independent results; inspect every status before recording progress.', body: { ok: true, version: 1, batchId: 'original UUID', digest: 'sha256', results: [] } }]
   }),
 	endpoint({
-    id: 'files', contractVersion: '1.11.0', featureVersion: '1.11.0', group: 'attachments', title: 'Inventory folders and recover file versions',
+    id: 'files', contractVersion: '1.12.0', featureVersion: '1.12.0', notes: ['Version 1.12.0 removes the application JSON body-size ceiling for authenticated shared-content writes. Authorization and rate admission precede incremental fatal UTF-8/JSON decoding; storage accounting and protocol constraints remain authoritative.'],
+    group: 'attachments', title: 'Inventory folders and recover file versions',
     endpoint: '/api/v1/files', summary: 'Inventory a private folder, read file revisions or conditionally commit a stable file Thing.',
     detail: 'Version 1.8.1 refuses first publication of a provenance-stamped upload at a different file ID, folder or filename; current moves and retained-version restores keep their existing semantics and do not rewrite original provenance. Complete private folder inventories use a bounded snapshot read and never return partial success. One file identity points at an immutable attachment version. Commits atomically bind owned durable file uploads, update metadata/accounting and append a private Timeline revision. Prior byte versions remain charged and recoverable. No overwrite occurs on revision mismatch. Home data plane only.',
     auth: { mode: 'session-or-bearer', description: 'Full owning user sessions only; scoped PAT, app, device and service credentials are rejected.' }, methods: ['GET', 'POST'],
@@ -7168,8 +7171,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages',
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'messenger',
     title: 'Chat messages',
     endpoint: '/api/v1/chats/messages',
@@ -7255,7 +7258,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: false, error: 'Not a member of this chat' }
       }
     ],
-		notes: [
+		notes: ['Version 1.4.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.',
 			'Version 1.0.1 projects custom emoji references using the canonical stored-upload emoji_ plus 64 lowercase hex digits, alongside legacy IDs. Existing read access and emoji scope checks are unchanged.',
 			'Sending draws from the chats.message rate-limit bucket (120 messages per minute).',
 			'Message rows are server-managed conversation plumbing; uploaded object bytes are billed exactly once through their attachment Things and refunded only after exact-version S3 deletion.',
@@ -7264,9 +7267,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages-edit',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
-    notes: ['Version 1.0.1 preserves canonical stored-upload custom emoji IDs when projecting the edited message. Editing rights and emoji ownership checks are unchanged.'],
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
+    notes: ['Version 1.2.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', 'Version 1.0.1 preserves canonical stored-upload custom emoji IDs when projecting the edited message. Editing rights and emoji ownership checks are unchanged.'],
     group: 'messenger',
     title: 'Edit message',
     endpoint: '/api/v1/chats/messages/edit',
@@ -9532,8 +9535,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.50.0',
-    contractVersion: '1.50.0',
+    featureVersion: '1.51.0',
+    contractVersion: '1.51.0',
 
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
@@ -9831,7 +9834,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         }
       }
     ],
-    notes: [
+    notes: ['Version 1.51.0 removes the application JSON body-size ceiling for authenticated Post and Data writes after authorization and rate admission.',
       'DELETE accepts private chat-archive roots only for a first-party user account on the same origin and the home data plane. Whole-archive attachment cleanup precedes accounted relational deletion. Individual historical rows remain protected. Optional expectedUpdatedAt is checked in the claiming transaction; a stale preview returns 409 before object cleanup. Incomplete cleanup returns a recoverable 503 without exposing storage details. PATs, app tokens and service accounts do not gain archive access.',
       'System kinds (user, theme, feed-algorithm, waitlist) are protected: this endpoint refuses to create, update, or delete them — they are managed exclusively by their dedicated endpoints (auth/register, users/profile, themes, algorithms, waitlist).',
       'Owner-library reads also include standalone personal custom emojis. Their content and image lifecycle remain managed by the dedicated emoji endpoints; generic creation, editing and deletion are not enabled.',
@@ -10123,8 +10126,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the author's USER flair in the post's subspace (additive)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.10.0',
-    contractVersion: '1.10.0',
+    featureVersion: '1.11.0',
+    contractVersion: '1.11.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
@@ -10192,7 +10195,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         }
       }
 		],
-		notes: [
+		notes: ['Version 1.11.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.',
 			'Uploaded bytes reserve the author account storage tier and remain private behind the stable authorized content route.',
 			'Deleting a comment or any ancestor permanently deletes every descendant attachment S3 version before its quota is refunded.',
 			'Custom Mongo data planes cannot bind or authorize home S3 comment attachments.'
@@ -11580,13 +11583,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.19.0: preserve Data text without a product string-length ceiling.
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.19.0',
-    contractVersion: '1.19.0',
+    featureVersion: '1.20.0',
+    contractVersion: '1.20.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
-    notes: ['Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
+    notes: ['Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
       'Version 1.18.1 corrects page Component discovery and identity comparison for large/deep valid authored block trees using cycle-safe iterative traversal. Existing Component ACL/capture and revision contracts remain unchanged. Version 1.18 preserves authored Collection source offsetInput, limitInput and totalPath mappings, explicit total bindings, selectedKey/itemKey/revealSelected presentation, and Map onSelectQueryParams/onRouteSelectQueryParams. These generic saved bindings grant no read or mutation authority. ' +
       'Version 1.16 accepts individually editable tt-upload Webpage blocks, preserving the shared uploader, ownership, attachment access and storage validation. ' +

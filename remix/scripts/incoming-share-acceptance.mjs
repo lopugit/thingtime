@@ -90,7 +90,9 @@ try {
  if (process.env.SHARE_COMPOSER_HOLD_FILE && server && server.child.exitCode === null) {
   const marker = process.env.SHARE_COMPOSER_HOLD_FILE; await writeFile(marker, 'Task-owned native acceptance host; remove this marker when native verification finishes.');
   console.log(`Retaining isolated UI for native acceptance, release marker: ${marker}`);
-  const deadline = Date.now() + 900000;
+  const holdMs = Number(process.env.SHARE_COMPOSER_HOLD_MS || 900000);
+  assert(Number.isSafeInteger(holdMs) && holdMs > 0, 'SHARE_COMPOSER_HOLD_MS must be a finite positive duration.');
+  const deadline = Date.now() + holdMs;
   while (Date.now() < deadline) { try { await readFile(marker); } catch { break; } await delay(1000); }
  }
  await client?.close();
@@ -113,6 +115,8 @@ async function browserAcceptance() {
  }
  batches.push({ id: randomUUID(), destination: 'directories', text: '', files: [], directories: ['Only folders/empty'] });
  for (const batch of batches.filter(item => item.destination !== 'directories')) batch.files.push({ id: 'empty-file', name: 'empty.unknown', relativePath: '', type: 'application/octet-stream', bytes: '' });
+ if (process.env.SHARE_COMPOSER_SCOPE === 'post-keyboard') { batches[0].text = 'Keyboard action reachability\nUnicode: café 🌏'; batches[0].files = []; }
+ if (process.env.SHARE_COMPOSER_SCOPE === 'contexts-keyboard') for (const batch of batches) { batch.text = 'Keyboard context draft'; batch.files = []; }
  await context.addInitScript(({ batches, ownerId }) => {
   window.thingtimeShare = { version: '1.0.0', request: async body => {
    const requestId = new URLSearchParams(location.search).get('requestId'), batch = batches.find(item => item.id === requestId);
@@ -147,15 +151,51 @@ async function browserAcceptance() {
   await page.screenshot({ path: join(out, name + '.png'), fullPage: true });
  };
  try {
-  for (const batch of batches.filter(item => !process.env.SHARE_COMPOSER_SCOPE || (process.env.SHARE_COMPOSER_SCOPE === 'save' ? ['save', 'directories'].includes(item.destination) : item.destination === (process.env.SHARE_COMPOSER_SCOPE === 'message-preview' ? 'message' : process.env.SHARE_COMPOSER_SCOPE)))) {
+  for (const batch of batches.filter(item => !process.env.SHARE_COMPOSER_SCOPE || (process.env.SHARE_COMPOSER_SCOPE === 'save-keyboard' ? item.destination === 'save' : process.env.SHARE_COMPOSER_SCOPE === 'contexts-keyboard' ? ['message', 'save'].includes(item.destination) : process.env.SHARE_COMPOSER_SCOPE === 'save' ? ['save', 'directories'].includes(item.destination) : item.destination === (process.env.SHARE_COMPOSER_SCOPE === 'message-preview' ? 'message' : process.env.SHARE_COMPOSER_SCOPE === 'post-keyboard' ? 'post' : process.env.SHARE_COMPOSER_SCOPE)))) {
    console.log(`Opening ${batch.destination}`);
    let targetFolderId = null;
    await page.goto(`${fixture.origin}/share?requestId=${batch.id}`);
    await page.getByRole('heading', { name: 'New post', exact: true }).waitFor({ timeout: 90000 });
    await page.getByRole('button', { name: ['save', 'directories'].includes(batch.destination) ? 'Save as Thing / file' : batch.destination === 'message' ? 'Message' : /^(?:Post|Create post.*)$/, exact: true }).click();
-   for (const width of [1440, 390]) { await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 }); await inspect(`${batch.destination}-${width}`); }
+   if (!['post-keyboard', 'contexts-keyboard', 'save-keyboard'].includes(process.env.SHARE_COMPOSER_SCOPE)) for (const width of [1440, 390]) { await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 }); await inspect(`${batch.destination}-${width}`); }
+   if (['contexts-keyboard', 'save-keyboard'].includes(process.env.SHARE_COMPOSER_SCOPE)) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    if (batch.destination === 'message') await page.getByText('incoming-share-recipient', { exact: true }).last().click();
+    const field = batch.destination === 'message' ? page.locator('textarea:visible').last() : page.getByPlaceholder(/Search all your things and computers/);
+    await field.focus();
+    await page.evaluate(() => { Object.defineProperty(visualViewport, 'height', { configurable: true, value: 420 }); visualViewport.dispatchEvent(new Event('resize')); });
+    await page.waitForTimeout(500);
+    const action = batch.destination === 'message' ? page.getByTitle('Send', { exact: true }) : page.getByRole('button', { name: 'Save here', exact: true });
+    const geometry = await action.evaluate(node => { const rect = node.getBoundingClientRect(), toolbar = document.querySelector('[data-testid="context-action-toolbar"]').getBoundingClientRect(), field = document.activeElement.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom, toolbarTop: toolbar.top, fieldTop: field.top, fieldBottom: field.bottom, hittable: node.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)) }; });
+    assert(geometry.top >= 0 && geometry.bottom <= geometry.toolbarTop + 1 && geometry.hittable, batch.destination + ' action reachable above keyboard toolbar: ' + JSON.stringify(geometry));
+    assert(geometry.fieldTop >= 0 && geometry.fieldBottom <= geometry.toolbarTop, batch.destination + ' focused input visible: ' + JSON.stringify(geometry));
+    await page.screenshot({ path: join(out, batch.destination + '-keyboard-viewport.png') });
+    checks.push({ destination: batch.destination + '-keyboard', geometry, visualViewportFixture: true, publicationRepeated: false }); continue;
+   }
    if (batch.destination === 'post') {
     await page.getByRole('button', { name: 'Post ✨', exact: true }).waitFor();
+    if (process.env.SHARE_COMPOSER_SCOPE === 'post-keyboard') {
+     await page.setViewportSize({ width: 390, height: 844 });
+     await page.locator('[contenteditable="true"]').first().focus();
+     await page.evaluate(() => { Object.defineProperty(visualViewport, 'height', { configurable: true, value: 420 }); visualViewport.dispatchEvent(new Event('resize')); });
+     await page.waitForTimeout(250);
+     const geometry = await page.getByRole('button', { name: 'Post ✨', exact: true }).evaluate(node => {
+      const rect = node.getBoundingClientRect(), toolbar = document.querySelector('[data-testid="context-action-toolbar"]').getBoundingClientRect();
+      const field = document.activeElement.getBoundingClientRect(), controls = document.querySelector('[data-testid="composer-submit-row"]').getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom, toolbarTop: toolbar.top, fieldTop: field.top, fieldBottom: field.bottom, controlsTop: controls.top, innerHeight, viewportHeight: visualViewport.height, viewportOffsetTop: visualViewport.offsetTop, visibleBottom: visualViewport.height + visualViewport.offsetTop, hittable: node.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)) };
+     });
+     assert(geometry.top >= 0 && geometry.bottom <= geometry.toolbarTop + 1 && geometry.bottom <= geometry.visibleBottom && geometry.hittable, 'Focused Post stays hit-test reachable above keyboard and toolbar: ' + JSON.stringify(geometry));
+     assert(geometry.fieldTop >= 0 && geometry.fieldBottom <= geometry.controlsTop, 'Focused editor remains visible above the docked actions: ' + JSON.stringify(geometry));
+     await page.screenshot({ path: join(out, 'post-keyboard-viewport.png') });
+     checks.push({ destination: 'post-keyboard', geometry, visualViewportFixture: true, publicationRepeated: false });
+     await page.evaluate(() => { Object.defineProperty(visualViewport, 'height', { configurable: true, value: 365 }); Object.defineProperty(visualViewport, 'offsetTop', { configurable: true, value: 269 }); visualViewport.dispatchEvent(new Event('scroll')); });
+     await page.waitForTimeout(500);
+     const panned = await page.getByRole('button', { name: 'Post ✨', exact: true }).evaluate(node => { const rect = node.getBoundingClientRect(), toolbar = document.querySelector('[data-testid="context-action-toolbar"]').getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom, toolbarTop: toolbar.top, toolbarBottom: toolbar.bottom, visibleTop: visualViewport.offsetTop, visibleBottom: visualViewport.offsetTop + visualViewport.height, hittable: node.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)) }; });
+     assert(panned.top >= panned.visibleTop && panned.bottom <= panned.toolbarTop && panned.toolbarTop >= panned.visibleTop && Math.abs(panned.toolbarBottom - panned.visibleBottom) <= 1 && panned.hittable, 'Native panned viewport keeps Post and toolbar visible: ' + JSON.stringify(panned));
+     await page.screenshot({ path: join(out, 'post-keyboard-panned.png') });
+     checks.push({ destination: 'post-keyboard-panned', geometry: panned, visualViewportFixture: true, publicationRepeated: false });
+     continue;
+    }
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.getByRole('button', { name: 'Rows 🥞', exact: true }).waitFor({ timeout: 90000 });
     await page.getByRole('button', { name: 'Rows 🥞', exact: true }).click();
@@ -261,6 +301,6 @@ async function browserAcceptance() {
   assert.equal(responses.filter(row => row.path === '/api/v1/attachments/uploads').length, beforeSwitch);
   checks.push({ accountSwitchClearsContentAndRefusesNativeAccess: true });
   assert.deepEqual(errors, []); await writeFile(join(out, 'web-evidence.json'), JSON.stringify({ fixture: 'native bridge only; real disposable product APIs', apiOrigin: fixture.apiOrigin, webOrigin: fixture.origin, checks, errors }, null, 2));
- } catch (error) { await page.screenshot({ path: join(out, 'failure.png'), fullPage: true }); await writeFile(join(out, 'failure-state.txt'), await page.locator('body').innerText()); await writeFile(join(out, 'http-responses.json'), JSON.stringify(responses, null, 2)); await writeFile(join(out, 'partial-web-evidence.json'), JSON.stringify({ checks, errors }, null, 2)); throw error; }
+ } catch (error) { await writeFile(join(out, 'failure-geometry.json'), JSON.stringify(await page.evaluate(() => { const rows = []; for (let node = document.activeElement; node; node = node.parentElement) { const css = getComputedStyle(node); rows.push({ tag: node.tagName, id: node.id, overflow: css.overflowY, height: node.clientHeight, scrollHeight: node.scrollHeight, scrollTop: node.scrollTop }); } return { scrollY, innerHeight, clientHeight: document.documentElement.clientHeight, visualViewport: visualViewport && { height: visualViewport.height, offsetTop: visualViewport.offsetTop, scale: visualViewport.scale }, ancestors: rows }; }), null, 2)); await page.screenshot({ path: join(out, 'failure.png'), fullPage: true }); await writeFile(join(out, 'failure-state.txt'), await page.locator('body').innerText()); await writeFile(join(out, 'http-responses.json'), JSON.stringify(responses, null, 2)); await writeFile(join(out, 'partial-web-evidence.json'), JSON.stringify({ checks, errors }, null, 2)); throw error; }
  finally { await context.close(); await browser.close(); }
 }

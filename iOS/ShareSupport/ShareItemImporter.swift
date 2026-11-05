@@ -226,7 +226,7 @@ final class ShareItemImporter {
             }
             try cancellation.check()
             if let composerOrigin {
-                try ShareComposerMetadata(origin: ShareComposerSession.origin(composerOrigin), textPaths: textPaths, supplementalTextPaths: supplementalTextPaths).write(to: batch.directory)
+                try ShareComposerMetadata(origin: ShareComposerSession.origin(composerOrigin), textPaths: textPaths, supplementalTextPaths: supplementalTextPaths, providerContainers: sources.indices.map { "Item \($0 + 1)" }).write(to: batch.directory)
             }
             try inbox.commit(batch)
             return batch.id

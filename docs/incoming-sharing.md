@@ -70,15 +70,21 @@ Local source retention, an uploaded draft, a committed server object and a nativ
 acknowledgement are separate states. Interrupted or uncertain operations retain
 originals and reconcile their existing identities before further mutation.
 
-Message send requires `api.chats-messages` 1.3.0; edit requires
-`api.chats-messages-edit` 1.1.0. These remove old product text/item ceilings.
+Message send requires `api.chats-messages` 1.4.0; edit requires
+`api.chats-messages-edit` 1.2.0. These remove old product text/item ceilings.
 Private chat archive import negotiates `api.things-import` 1.13.0 so long
 message text also survives export and restoration. Saving long text requires
-`api.things` 1.50.0; Data strings have no product character ceiling.
-The compatible update and schema contracts are 1.19.0 and 1.2.0 respectively.
-Empty originals in Post and Message negotiate `api.attachment-uploads` 1.9.0
+`api.things` 1.51.0; Data strings have no product character ceiling.
+The compatible update and schema contracts are 1.20.0 and 1.2.0 respectively.
+Empty originals in Post and Message negotiate `api.attachment-uploads` 1.10.0
 and `api.attachment-upload-complete` 1.7.0. Their ready zero-part upload is
 verified through the ordinary storage lifecycle and retains draft expiry.
+Authenticated shared-content JSON uses incremental fatal UTF-8 decoding after
+authorization and rate admission, without an application byte ceiling. Numeric
+budgets remain on unrelated control requests. Annotation, external-link and file
+metadata negotiate `api.attachment-annotate` 1.3.0, `api.attachment-link` 1.2.0
+and `api.files` 1.12.0. Multipart signing pages every part; completion sends only
+`uploadId` and the server enumerates all parts.
 Transport request framing and underlying storage constraints remain separate;
 errors must be explicit and must not truncate a selection.
 

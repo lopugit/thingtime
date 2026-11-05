@@ -418,6 +418,56 @@ final class ShareInboxTests: XCTestCase {
         let chunk = try session.read(accountId: "test-owner", fileId: try XCTUnwrap(attachments.first?["id"] as? String), offset: 0, length: ShareComposerSession.maxChunkBytes)
         XCTAssertEqual(Data(base64Encoded: try XCTUnwrap(chunk["base64"] as? String)), bytes)
     }
+
+    func testProviderContainersAreNotDirectoriesButRealEmptyFoldersAndDuplicatePathsSurvive() async throws {
+        let original = root.appendingPathComponent("original.bin")
+        let bytes = Data([1, 2, 3, 255])
+        try bytes.write(to: original)
+        let file = StubShareItem(types: ["public.data"])
+        file.fileLoader = { _, consume, completion in
+            do { try consume(original); completion(nil) } catch { completion(error) }
+        }
+        let folder = root.appendingPathComponent("Folder")
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("Empty"), withIntermediateDirectories: true)
+        try bytes.write(to: folder.appendingPathComponent("child.bin"))
+        let directory = StubShareItem(types: ["public.folder"])
+        directory.fileLoader = { _, consume, completion in
+            do { try consume(folder); completion(nil) } catch { completion(error) }
+        }
+        let origin = URL(string: "https://thingtime.com")!
+        let fileId = try await ShareItemImporter(inbox: inbox).save([file], composerOrigin: origin) { _, _ in }
+        let fileSession = try ShareComposerSession(inbox: inbox, id: fileId, origin: origin)
+        let fileDraft = try fileSession.incoming(accountId: "test-owner")
+        XCTAssertEqual(fileDraft["directories"] as? [String], [])
+        XCTAssertEqual((fileDraft["attachments"] as? [[String: Any]])?.count, 1)
+        let id = try await ShareItemImporter(inbox: inbox).save([directory, directory], composerOrigin: origin) { _, _ in }
+        let session = try ShareComposerSession(inbox: inbox, id: id, origin: origin)
+        let draft = try session.incoming(accountId: "test-owner")
+        XCTAssertEqual(draft["directories"] as? [String], ["Item 1/Folder", "Item 1/Folder/Empty", "Item 2/Folder", "Item 2/Folder/Empty"])
+        let files = try XCTUnwrap(draft["attachments"] as? [[String: Any]])
+        XCTAssertEqual(files.compactMap { $0["relativePath"] as? String }, ["Item 1/Folder/child.bin", "Item 2/Folder/child.bin"])
+        XCTAssertEqual(Set(files.compactMap { $0["id"] as? String }).count, 2)
+        for entry in files {
+            let chunk = try session.read(accountId: "test-owner", fileId: try XCTUnwrap(entry["id"] as? String), offset: 0, length: ShareComposerSession.maxChunkBytes)
+            XCTAssertEqual(Data(base64Encoded: try XCTUnwrap(chunk["base64"] as? String)), bytes)
+        }
+    }
+    func testActualFileURLProviderPreservesOriginalTextEncoding() async throws {
+        let bytes = try XCTUnwrap("Actual text file – café 🌏".data(using: .utf16))
+        let original = root.appendingPathComponent("original-utf16.txt")
+        try bytes.write(to: original)
+        let provider = ProviderShareItem(provider: try XCTUnwrap(NSItemProvider(contentsOf: original)))
+        let origin = URL(string: "https://thingtime.com")!
+        let id = try await ShareItemImporter(inbox: inbox).save([provider], composerOrigin: origin) { _, _ in }
+        let session = try ShareComposerSession(inbox: inbox, id: id, origin: origin)
+        let draft = try session.incoming(accountId: "test-owner")
+        XCTAssertEqual(draft["directories"] as? [String], [])
+        let files = try XCTUnwrap(draft["attachments"] as? [[String: Any]])
+        XCTAssertEqual(files.count, 1)
+        let fileId = try XCTUnwrap(files.first?["id"] as? String)
+        let read = try session.read(accountId: "test-owner", fileId: fileId, offset: 0, length: ShareComposerSession.maxChunkBytes)
+        XCTAssertEqual(Data(base64Encoded: try XCTUnwrap(read["base64"] as? String)), bytes)
+    }
     func testActualNSStringProviderPrefillsTextWithoutAnUpload() async throws {
         let text = "Native NSString – café 🌏"
         let origin = URL(string: "https://thingtime.com")!
@@ -427,6 +477,7 @@ final class ShareInboxTests: XCTestCase {
         let draft = try session.incoming(accountId: "test-owner")
         XCTAssertEqual(draft["text"] as? String, text)
         XCTAssertEqual((draft["attachments"] as? [[String: Any]])?.count, 0)
+        XCTAssertEqual(draft["directories"] as? [String], [], "Text is not a shared staging folder")
     }
     func testEmptyAndWhitespaceTextSourcesRemainOriginalAttachments() async throws {
         let origin = URL(string: "https://thingtime.com")!

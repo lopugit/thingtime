@@ -12,6 +12,7 @@ import { SettingsDocumentHost } from '~/components/Settings/SettingsDocumentHost
 import { TransientBlockHost } from '~/components/Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '~/components/Builder/WebpageBlocksRenderer';
 import { ContextActionToolbar } from '~/components/IncomingShare/ContextActionToolbar';
+import { contextLayoutHeight } from '~/components/IncomingShare/contextViewport';
 import { incomingShareBlocks } from '~/components/IncomingShare/incomingShareBlocks';
 import { incomingShareRequestId, readIncomingShare, type IncomingShareDraft, type IncomingShareSubmission } from '~/components/IncomingShare/incomingShare';
 export default function IncomingShareRoute() {
@@ -28,20 +29,41 @@ function IncomingShareSession({ identity, requestId, accountId, origin }: { iden
  const submissionRef = React.useRef<IncomingShareSubmission | null>(null);
  const [recoveredPost, setRecoveredPost] = React.useState<PendingPostSubmission | undefined>();
  const [visited, setVisited] = React.useState(() => new Set(['post']));
- const [toolbarHeight, setToolbarHeight] = React.useState(120);
+ const [toolbarHeight, setToolbarHeight] = React.useState(120), [toolbarVisibleHeight, setToolbarVisibleHeight] = React.useState(120);
+ const measureToolbar = React.useCallback((reserved: number, visible: number) => { setToolbarHeight(reserved); setToolbarVisibleHeight(visible); }, []);
  const heading = React.useRef<HTMLDivElement>(null), messageHost = React.useRef<HTMLDivElement>(null);
- const [headingHeight, setHeadingHeight] = React.useState(200), [layoutHeight, setLayoutHeight] = React.useState(window.innerHeight);
+ const surface = React.useRef<HTMLDivElement>(null);
+ const [headingHeight, setHeadingHeight] = React.useState(200), [layoutHeight, setLayoutHeight] = React.useState(contextLayoutHeight);
  React.useLayoutEffect(() => {
   const element = heading.current; if (!element) return;
   const observer = new ResizeObserver(() => setHeadingHeight(Math.ceil(element.getBoundingClientRect().height)));
-  observer.observe(element); const resize = () => setLayoutHeight(window.innerHeight); window.addEventListener('resize', resize);
+  observer.observe(element); const resize = () => setLayoutHeight(contextLayoutHeight()); window.addEventListener('resize', resize);
   return () => { observer.disconnect(); window.removeEventListener('resize', resize); };
  }, []);
  React.useEffect(() => {
-  if (mode !== 'message') return;
-  const frame = requestAnimationFrame(() => { const field = messageHost.current?.querySelector('textarea'); if (field && document.activeElement === field) field.scrollIntoView({ block: 'nearest' }); });
-  return () => cancelAnimationFrame(frame);
- }, [mode, toolbarHeight, layoutHeight]);
+  let frame = 0;
+  const check = (remaining: number) => {
+    const field = document.activeElement, viewport = window.visualViewport;
+    if (!viewport || !(field instanceof HTMLElement) || !field.matches('input, textarea, [contenteditable="true"]') || !surface.current?.contains(field)) return;
+    const toolbar = document.querySelector('[data-testid="context-action-toolbar"]')?.getBoundingClientRect();
+    const visibleBottom = toolbar?.bottom ?? viewport.height + viewport.offsetTop, visibleTop = visibleBottom - viewport.height;
+    const docks = [...surface.current.querySelectorAll('[data-context-dock]')].filter(node => !node.contains(field)).map(node => node.getBoundingClientRect()).filter(rect => rect.width && rect.height);
+    const bottom = Math.min(visibleBottom, toolbar?.top ?? Infinity, ...docks.map(rect => rect.top)) - 12;
+    const full = field.getBoundingClientRect(), selection = getSelection(), caret = field.isContentEditable && selection?.rangeCount && field.contains(selection.anchorNode) ? selection.getRangeAt(0).getBoundingClientRect() : null;
+    const rect = full.height <= bottom - visibleTop ? full : caret?.height ? caret : full;
+    const scroller = document.scrollingElement;
+    let adjusted = false;
+    if (scroller && rect.bottom > bottom) { scroller.scrollTop += rect.bottom - bottom; adjusted = true; }
+    else if (scroller && rect.top < visibleTop) { scroller.scrollTop += rect.top - visibleTop - 12; adjusted = true; }
+    if (adjusted && remaining > 0) frame = requestAnimationFrame(() => check(remaining - 1));
+  };
+  const reveal = () => {
+   cancelAnimationFrame(frame); frame = requestAnimationFrame(() => check(2));
+  };
+  const observer = new ResizeObserver(reveal); if (surface.current) observer.observe(surface.current); observer.observe(document.body);
+  window.addEventListener('focusin', reveal); window.visualViewport?.addEventListener('scroll', reveal); window.visualViewport?.addEventListener('resize', reveal); reveal();
+  return () => { observer.disconnect(); cancelAnimationFrame(frame); window.removeEventListener('focusin', reveal); window.visualViewport?.removeEventListener('scroll', reveal); window.visualViewport?.removeEventListener('resize', reveal); };
+ }, [mode, toolbarHeight]);
  const [status, setStatus] = React.useState(''), [complete, setComplete] = React.useState(false);
  const lifetime = React.useRef(new AbortController()), committing = React.useRef(false);
  React.useEffect(() => {
@@ -94,18 +116,19 @@ function IncomingShareSession({ identity, requestId, accountId, origin }: { iden
  };
  const choose = (value: string) => { if (submissionRef.current && submissionRef.current.destination !== value) { setStatus('Finish the existing submission before choosing another destination.'); return; } setVisited(previous => new Set([...previous, value])); setMode(value); };
  const actions = React.useMemo(() => [{ id: 'post', label: 'Post', glyph: '↗', run: () => choose('post') }, { id: 'message', label: 'Message', glyph: '↔', run: () => choose('message') }, { id: 'save', label: 'Save as Thing / file', glyph: '⊞', run: () => choose('save') }], []);
+ const compactViewport = !!window.visualViewport && (window.visualViewport.height < layoutHeight || window.visualViewport.height < 480);
  const title = complete ? 'Shared' : mode === 'message' ? 'New message' : mode === 'save' ? 'Save to Things' : 'New post';
  const summary = draft ? `${draft.files.length ? `${draft.files.length} shared ${draft.files.length === 1 ? 'file' : 'files'} · ` : ''}${draft.directories.length ? `${draft.directories.length} shared ${draft.directories.length === 1 ? 'folder' : 'folders'} · ` : ''}Your content is ready. Choose where it goes below.` : 'Your shared text, links and files stay together.';
  const message = status || (!accountId ? 'Sign in to choose an account for this share.' : !requestId || !window.thingtimeShare ? 'Open Thingtime from the system Share menu to receive content.' : !draft ? 'Opening shared content…' : '');
- return <Box as="main" data-testid="incoming-share" maxW="900px" mx="auto" width="100%" minH="100dvh" px={{ base: '16px', md: '28px' }} pt="24px" pb={`${toolbarHeight + 48}px`} minW={0} sx={{ 'input, textarea, button, [contenteditable="true"]': { scrollMarginBottom: 'calc(var(--tt-context-toolbar-height, 120px) + 24px)' } }} style={{ '--tt-context-toolbar-height': `${toolbarHeight}px` } as React.CSSProperties}>
+ return <Box ref={surface} as="main" data-testid="incoming-share" maxW="900px" mx="auto" width="100%" minH="100dvh" px={{ base: '16px', md: '28px' }} pt="24px" pb={`${toolbarHeight + 48}px`} minW={0} sx={{ 'input, textarea, button, [contenteditable="true"]': { scrollMarginBottom: 'calc(var(--tt-context-toolbar-height, 120px) + 24px)' } }} style={{ '--tt-context-toolbar-height': `${toolbarHeight}px`, '--tt-context-card-gap': compactViewport ? '8px' : '12px', '--tt-context-card-padding': compactViewport ? '8px' : '16px', '--tt-context-secondary-display': compactViewport ? 'none' : 'block' } as React.CSSProperties}>
   <Box ref={heading}><SettingsDocumentHost showLayoutControls={!!accountId} documentKey="incoming-share-intro" defaultDocument={incomingShareBlocks} scopeKey={identity} title="Incoming share heading" clearMobileLaunchers>
    {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={identity} scope={{ share: { title, summary, status: message, signedOut: !accountId, loginDisplay: accountId ? 'none' : 'inline-flex', loginHref: `/login?redirectTo=${encodeURIComponent(window.location.pathname + window.location.search)}` } }} enabled={!editing} actions={{}}><WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} /></TransientBlockHost>}
   </SettingsDocumentHost></Box>
   {draft && !complete && <>
-   {visited.has('post') && <Box hidden={mode !== 'post'}><PostComposer initialSubmission={recoveredPost} beforeSubmit={pending => begin('post', pending.shareId, undefined, JSON.stringify({ ...pending, unknownOutcome: true }))} incomingShareActive={mode === 'post'} initialDraft={{ id: draft.id, text: draft.text, files: draft.files }} onPosted={post => void finish(draft, [post.id])} /></Box>}
-   {visited.has('message') && <Box ref={messageHost} hidden={mode !== 'message'} height={`${Math.max(180, layoutHeight - headingHeight - toolbarHeight - 48)}px`} minH={0}><ShareMessageDestination shareId={draft.id} text={draft.text} files={draft.files} active={mode === 'message'} beforeSubmit={(targetId, operationId, payload) => begin('message', operationId, targetId, JSON.stringify(payload))} initialSubmission={submission?.destination === 'message' && submission.targetId && submission.recoveryPayload ? { targetId: submission.targetId, operationId: submission.operationId, recoveryPayload: submission.recoveryPayload } : undefined} onSent={message => finish(draft, [message.messageId])} /></Box>}
-   {visited.has('save') && <Box hidden={mode !== 'save'}><ShareSaveDestination shareId={draft.id} text={draft.text} files={draft.files} directories={draft.directories} beforeSubmit={(targetId, operationId, payload) => begin('save', operationId, targetId, JSON.stringify(payload))} initialSubmission={submission?.destination === 'save' && submission.targetId && submission.recoveryPayload ? { targetId: submission.targetId, operationId: submission.operationId, recoveryPayload: submission.recoveryPayload } : undefined} onSaved={ids => void finish(draft, ids)} /></Box>}
+   {visited.has('post') && <Box hidden={mode !== 'post'}><PostComposer initialSubmission={recoveredPost} beforeSubmit={pending => begin('post', pending.shareId, undefined, JSON.stringify({ ...pending, unknownOutcome: true }))} incomingShareActive={mode === 'post'} incomingShareToolbarHeight={toolbarVisibleHeight} initialDraft={{ id: draft.id, text: draft.text, files: draft.files }} onPosted={post => void finish(draft, [post.id])} /></Box>}
+   {visited.has('message') && <Box ref={messageHost} hidden={mode !== 'message'} height={`${Math.max(0, layoutHeight - headingHeight - toolbarHeight - (compactViewport ? 0 : 48))}px`} minH={0}><ShareMessageDestination shareId={draft.id} text={draft.text} files={draft.files} active={mode === 'message'} beforeSubmit={(targetId, operationId, payload) => begin('message', operationId, targetId, JSON.stringify(payload))} initialSubmission={submission?.destination === 'message' && submission.targetId && submission.recoveryPayload ? { targetId: submission.targetId, operationId: submission.operationId, recoveryPayload: submission.recoveryPayload } : undefined} onSent={message => finish(draft, [message.messageId])} /></Box>}
+   {visited.has('save') && <Box hidden={mode !== 'save'}><ShareSaveDestination active={mode === 'save'} toolbarHeight={toolbarVisibleHeight} shareId={draft.id} text={draft.text} files={draft.files} directories={draft.directories} beforeSubmit={(targetId, operationId, payload) => begin('save', operationId, targetId, JSON.stringify(payload))} initialSubmission={submission?.destination === 'save' && submission.targetId && submission.recoveryPayload ? { targetId: submission.targetId, operationId: submission.operationId, recoveryPayload: submission.recoveryPayload } : undefined} onSaved={ids => void finish(draft, ids)} /></Box>}
   </>}
-  {!complete && <ContextActionToolbar showLayoutControls={!!accountId} onHeightChange={setToolbarHeight} scopeKey={identity} actions={actions} selected={mode} />}
+  {!complete && <ContextActionToolbar showLayoutControls={!!accountId} onHeightChange={measureToolbar} scopeKey={identity} actions={actions} selected={mode} />}
  </Box>;
 }

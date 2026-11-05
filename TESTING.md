@@ -14613,9 +14613,11 @@ the isolated real-API/browser command and the metadata-only session boundary.
   clipped labels or overlap. Edit a toolbar icon, label, action and pixel block
   individually, save/reload, then restore the task fixture.
 - On the actual iOS keyboard, check the existing Post button's center hit target
-  above the context toolbar before submitting. Persist a non-secret exact-result
-  receipt before test cleanup; DOM innerText line wrapping is not a stored-text
-  equality check.
+  and all three destination buttons against the native keyboard frame, including
+  visual-viewport panning. Inspect the full native screenshot: DOM hit testing
+  alone can pass for a control obscured by the keyboard. Persist a non-secret
+  exact-result receipt before test cleanup; DOM innerText line wrapping is not
+  a stored-text equality check.
 - Create more than 500 comments through supported APIs in an isolated fixture.
   Verify exact direct/thread counts, bounded default/new/old/top preview windows,
   tie ordering and complete cursor access. Include large comment bodies, nested

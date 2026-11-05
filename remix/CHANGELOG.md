@@ -110,6 +110,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Remove application JSON body ceilings from authenticated shared-content writes after authorization and rate admission; retain strict UTF-8 decoding, cancellation and unrelated control budgets. Negotiate nine deliberate minor contracts, enumerate upload completion parts server-side, and verify all native share controls above the software keyboard. [Evidence and release boundaries](../PRs/1355-codex-share-composer-20261105-open-ios-shares-in-post-message-and-save-composers.md). **Codex (AI)**
+
 - 2026-11-06: Keep Mac folder settings mounted independently of background
   sync runs, preserve focused unsaved connection drafts while automatic checks
   run, and retain scoped resource measurements with explicit historical labels

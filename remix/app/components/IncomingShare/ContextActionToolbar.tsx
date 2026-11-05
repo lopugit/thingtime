@@ -5,6 +5,7 @@ import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { DRAWER_Z } from '../Nav/Drawer/useDrawer';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
+import { useContextViewportDock } from './useContextViewportDock';
 export type ContextToolbarAction = { id: string; label: string; glyph: string; run: () => void };
 export function contextToolbarBlocks(actions: Pick<ContextToolbarAction, 'id' | 'label' | 'glyph'>[]): WebpageBlock[] {
  const controls: WebpageBlock = { id: 'context-toolbar', type: 'element', tag: 'nav', props: { 'aria-label': 'Share destination' }, css: { display: 'flex', gap: '8px', width: '100%', 'min-width': '0', 'align-items': 'stretch' }, children: actions.map(item => ({
@@ -21,26 +22,12 @@ export function contextToolbarBlocks(actions: Pick<ContextToolbarAction, 'id' | 
 /** The adapter supplies selection and callbacks only. Layout, each label,
  * icon and control remain independent ordinary editable Builder blocks. Other
  * contexts can supply additional registered actions without another toolbar. */
-export function ContextActionToolbar({ scopeKey, documentKey = 'incoming-share-toolbar', actions, selected, onHeightChange, showLayoutControls = true }: { showLayoutControls?: boolean; onHeightChange?: (height: number) => void; scopeKey: string; documentKey?: string; actions: ContextToolbarAction[]; selected: string }) {
+export function ContextActionToolbar({ scopeKey, documentKey = 'incoming-share-toolbar', actions, selected, onHeightChange, showLayoutControls = true }: { showLayoutControls?: boolean; onHeightChange?: (height: number, visibleHeight: number) => void; scopeKey: string; documentKey?: string; actions: ContextToolbarAction[]; selected: string }) {
  const host = React.useRef<HTMLDivElement>(null);
- const [keyboardInset, setKeyboardInset] = React.useState(0);
- React.useEffect(() => {
-  const viewport = window.visualViewport;
-  if (!viewport) return;
-  const update = () => {
-   const editing = document.activeElement?.matches('input, textarea, [contenteditable="true"]');
-   setKeyboardInset(editing && viewport.scale === 1 ? Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop)) : 0);
-  };
-  viewport.addEventListener('resize', update); viewport.addEventListener('scroll', update); window.addEventListener('focusin', update); window.addEventListener('focusout', update); update();
-  return () => { viewport.removeEventListener('resize', update); viewport.removeEventListener('scroll', update); window.removeEventListener('focusin', update); window.removeEventListener('focusout', update); };
- }, []);
- React.useLayoutEffect(() => {
-  const element = host.current; if (!element || !onHeightChange) return;
-  const measure = () => onHeightChange(Math.ceil(element.getBoundingClientRect().height) + keyboardInset);
-  const observer = new ResizeObserver(measure); observer.observe(element); measure(); return () => observer.disconnect();
- }, [onHeightChange, keyboardInset]);
+ const measure = React.useCallback((height: number, reserved: number) => onHeightChange?.(reserved, height), [onHeightChange]);
+ useContextViewportDock(host, true, 0, measure);
  const defaults = React.useMemo(() => contextToolbarBlocks(actions), [actions]);
- return <Box ref={host} data-testid="context-action-toolbar" position="fixed" left={0} right={0} bottom={keyboardInset} style={Object.fromEntries(actions.flatMap(item => [[`--tt-context-${item.id}-background`, selected === item.id ? 'var(--tt-accent-tint, #fff2f8)' : 'var(--tt-card, #fff)'], [`--tt-context-${item.id}-border`, selected === item.id ? 'var(--tt-accent, #ba256b)' : 'var(--tt-border, #e9e7ee)']])) as React.CSSProperties} zIndex={DRAWER_Z} px={{ base: '12px', md: '24px' }} pt="8px" pb="max(12px, env(safe-area-inset-bottom))" background="var(--tt-card, #fff)" borderTop="1px solid var(--tt-border, #e9e7ee)" boxShadow="0 -8px 32px rgba(30, 20, 45, .035)" sx={{ 'button[aria-pressed="true"]': { background: 'var(--tt-accent-tint, #fff2f8)', borderColor: 'var(--tt-accent, #ba256b)', color: 'var(--tt-ink, #16161a)' }, 'button:focus-visible': { outline: '2px solid var(--tt-accent, #ba256b)', outlineOffset: '2px' } }}>
+ return <Box ref={host} data-testid="context-action-toolbar" position="fixed" left={0} right={0} style={Object.fromEntries(actions.flatMap(item => [[`--tt-context-${item.id}-background`, selected === item.id ? 'var(--tt-accent-tint, #fff2f8)' : 'var(--tt-card, #fff)'], [`--tt-context-${item.id}-border`, selected === item.id ? 'var(--tt-accent, #ba256b)' : 'var(--tt-border, #e9e7ee)']])) as React.CSSProperties} zIndex={DRAWER_Z} px={{ base: '12px', md: '24px' }} pt="8px" pb="max(12px, env(safe-area-inset-bottom))" background="var(--tt-card, #fff)" borderTop="1px solid var(--tt-border, #e9e7ee)" boxShadow="0 -8px 32px rgba(30, 20, 45, .035)" sx={{ 'button[aria-pressed="true"]': { background: 'var(--tt-accent-tint, #fff2f8)', borderColor: 'var(--tt-accent, #ba256b)', color: 'var(--tt-ink, #16161a)' }, 'button:focus-visible': { outline: '2px solid var(--tt-accent, #ba256b)', outlineOffset: '2px' } }}>
   <Box maxW="900px" mx="auto"><SettingsDocumentHost showLayoutControls={showLayoutControls} documentKey={documentKey} defaultDocument={defaults} scopeKey={scopeKey} title="Context action toolbar" editLayoutLabel="Customise toolbar" clearMobileLaunchers>
    {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} scope={{ toolbar: Object.fromEntries(actions.map(item => [item.id, selected === item.id])) }} actions={Object.fromEntries(actions.map(item => [item.id, () => item.run()]))}><WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} /></TransientBlockHost>}
   </SettingsDocumentHost></Box>

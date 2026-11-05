@@ -45,17 +45,19 @@ proportional to the visible history; it is not a constant-time operation.
 
 ## Validation and evidence boundaries
 
-The native source passes 32 focused tests and a generic simulator build. Eleven
+The native source passes 34 focused tests and a generic simulator build. Eleven
 system-share fixtures, the Photos retry and byte verification cover 55 files,
 including the JPEG and MOV resources of a Live Photo. Early system-sheet
 screenshots capture the transition while the web page loads; loaded-page
 acceptance is recorded separately.
 
 The web adapter has 35 focused tests; Messenger and Save have 18. Capability
-coverage passes 144 tests and schema coverage 300. Attachment tests cover
+coverage passes 147 tests after the final nine contract minor bumps and schema coverage 300. Attachment tests cover
 purpose ownership, duplicate refusal, empty-object bytes, replay and lease-loss
 recovery. Integrated TypeScript and all 300 schema checks pass on the final expanded
 source; scoped lint reports zero errors. No warnings occur on changed lines.
+The full feed suite passes 101 tests, Messenger passes 70, and the attachment
+entry passes 337, including the IncomingShare bridge and viewport regressions.
 The follow-up reader has 17 focused passing checks covering window order and
 ties, moderation, weighted interactions, overlapping roots and bounded exact
 counts.
@@ -82,16 +84,25 @@ duplicate basenames in distinct paths and a directory-only batch. Identity
 changes cleared or refused stale work. Independent toolbar label and icon edits
 survived save and reload.
 
-The joined native test reached authenticated prefill and the actual iOS
-keyboard, then exposed a Post hit-target occlusion. That acceptance path remains
-open while the keyboard layout is corrected. Browser checks do not substitute
-for the native result, and an uncertain publication is not replayed to obtain
-evidence.
+The joined native test published one real Post, preserved exact newline and
+Unicode content, received the native acknowledgement and independently read the
+same API object. A separate final geometry-only acceptance verified all three
+destination buttons, Post submit and the focused editor above the actual iOS
+keyboard, stable for six seconds; its full screenshot was inspected. It did not
+publish a second Post. Native metadata omits the generated staging container
+while preserving actual source folders and original bytes. These simulator
+results do not establish physical-device acceptance.
 
 Signed delivery uses the canonical ios-testflight workflow at the final merged
 source. Local distribution profiles lack the Share App Group, so development
 signing is not used as a release substitute. TestFlight processing and physical
 phone acceptance remain separate from the simulator and browser evidence.
+
+Integrating current main exposed a shared FileSync test fixture that referenced
+the macOS process transport on iOS. The fixture now selects the real platform
+transport and its page counter wraps the common protocol. Current-tree iOS
+build-for-testing passes; the existing 10,001-entry/79-page macOS regression
+passes unchanged. This repair changes test infrastructure only.
 
 ## Runbooks
 
@@ -99,3 +110,16 @@ phone acceptance remain separate from the simulator and browser evidence.
 - [Manual acceptance matrix](../TESTING.md#incoming-sharing-post-message-and-save)
 - Native harness: iOS/scripts/share-acceptance.sh
 - Browser/API harness: remix/scripts/incoming-share-acceptance.mjs
+
+## Shared-content transport follow-up
+
+The touched authenticated Post/Data, comments, messages, annotation, upload
+metadata, external-link and file metadata routes remove their old JSON byte
+budgets. Authorization and rate admission precede incremental fatal UTF-8/JSON
+decoding. Unrelated control calls retain their numeric budgets; malformed UTF-8,
+cancellation, stale sessions and unauthorized scoped callers are refused.
+Multipart completion carries only uploadId, and signing pages until every part
+is addressed. The nine additive minors are documented in incoming-sharing.md
+and tested against both generated manifests and client requirement maps.
+Focused parser/authorization coverage passes 22 tests. Final built real-API
+checks above the former body thresholds are recorded before source freeze.

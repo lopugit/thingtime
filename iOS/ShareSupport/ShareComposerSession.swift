@@ -11,6 +11,8 @@ struct ShareComposerMetadata: Codable {
     let origin: String
     let textPaths: [String]
     var supplementalTextPaths: [String]?
+    /// Generated provider namespaces are not user-supplied directories.
+    var providerContainers: [String]?
     var accountId: String?
     var completed = false
     var submission: ShareComposerSubmission?
@@ -141,9 +143,10 @@ final class ShareComposerSession {
                 else if !providerText.contains(value) { text.append(value) }
             }
         }
+        let providerContainers = Set(metadata.providerContainers ?? [])
         return ["id": id.uuidString, "accountId": accountId, "apiOrigin": origin,
                 "text": text.joined(separator: "\n\n"), "attachments": entries.filter { !inlinePaths.contains($0.path) }.map(\.json),
-                "directories": directories, "submission": metadata.submission?.json as Any? ?? NSNull()]
+                "directories": directories.filter { !providerContainers.contains($0) }, "submission": metadata.submission?.json as Any? ?? NSNull()]
     }
     func read(accountId: String, fileId: String, offset: UInt64, length: Int) throws -> [String: Any] {
         let metadata = try metadata(accountId: accountId)

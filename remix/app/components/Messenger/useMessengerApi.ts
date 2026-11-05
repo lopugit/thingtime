@@ -55,8 +55,8 @@ export const useMessengerApi = () => {
         await requireThingtimeCapability('api.chats-messages', '1.0.1');
         return getJson(`/api/v1/chats/messages${toQuery(args)}`);
       },
-      sendMessage: post('/api/v1/chats/messages', 'api.chats-messages', '1.3.0'),
-      editMessage: post('/api/v1/chats/messages/edit', 'api.chats-messages-edit', '1.1.0'),
+      sendMessage: post('/api/v1/chats/messages', 'api.chats-messages', '1.4.0'),
+      editMessage: post('/api/v1/chats/messages/edit', 'api.chats-messages-edit', '1.2.0'),
       deleteMessage: post('/api/v1/chats/messages/delete'),
       react: post('/api/v1/chats/react', 'api.chats-react', '1.0.3'),
       markRead: post('/api/v1/chats/read'),

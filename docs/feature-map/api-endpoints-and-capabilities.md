@@ -723,3 +723,18 @@ Large/deep editable Webpage capture is corrected by `api.things` 1.49.2,
 Timeline block traversal removes the hidden 1,200-block/24-level write and
 comparison limits; existing Component authorization and capture contracts remain.
 Both manifests derive these PATCH versions from the canonical endpoint registry.
+
+
+## Shared-content request transport
+
+Incoming sharing negotiates `api.things` 1.51.0, `api.things-update` 1.20.0,
+`api.things-comment` 1.11.0, `api.chats-messages` 1.4.0,
+`api.chats-messages-edit` 1.2.0, `api.attachment-uploads` 1.10.0,
+`api.attachment-annotate` 1.3.0, `api.attachment-link` 1.2.0 and `api.files`
+1.12.0. Both manifest generators derive these independent minors from apiDocs.
+The scoped shared-content JSON reader admits authorization/rate limits before
+streaming fatal UTF-8 decoding with no application body ceiling. Other control
+requests retain numeric budgets. Completion accepts only uploadId and enumerates
+parts server-side; presigning pages every part. See [incoming sharing](../incoming-sharing.md);
+run `test:shared-content`, `test:api-capabilities` and the isolated real-API
+`remix/scripts/shared-body-acceptance.mjs` harness.

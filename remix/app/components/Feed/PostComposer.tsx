@@ -34,6 +34,7 @@ import { capturePostEditorValue } from '~/components/Editor/postEditorSubmission
 import { useLopu } from '~/components/Lopu/useLopu';
 import { isLegacyLinkedSeedId } from '~/components/Attachments/useAttachmentUploads';
 import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
+import { ContextActionDock } from '~/components/IncomingShare/ContextActionDock';
 import { EditorSplit } from '~/components/Thingtime/EditorSplit';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
@@ -136,6 +137,7 @@ const TEXTAREA_PLACEHOLDERS: Record<ComposeMode, string> = {
 
 export type PostComposerProps = {
   incomingShareActive?: boolean;
+  incomingShareToolbarHeight?: number;
   initialSubmission?: PendingPostSubmission;
   beforeSubmit?: (submission: PendingPostSubmission) => Promise<void>;
   initialDraft?: { id: string; text: string; files?: readonly File[] };
@@ -1424,7 +1426,12 @@ const AccountPostComposer = (props: PostComposerProps) => {
 
       {/* footer: subspace destination + flair + circle + post (comments
       inherit the thread's circle) */}
-      <Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap" borderTop={BORDER} paddingTop={3}>
+      <ContextActionDock active={!!props.incomingShareActive} bottomOffset={props.incomingShareToolbarHeight}><Flex
+        data-testid="composer-submit-row"
+        alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap" borderTop={BORDER} paddingTop={3}
+        background={props.incomingShareActive ? 'var(--tt-card, #fff)' : undefined}
+        paddingBottom={props.incomingShareActive ? 3 : undefined}
+      >
         {!isComment && subspace && (
           <Flex
             alignItems="center"
@@ -1540,7 +1547,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
         >
           {isEdit ? 'Save ✨' : isComment ? 'Comment 💬' : 'Post ✨'}
         </Button>
-      </Flex>
+      </Flex></ContextActionDock>
 			</Box>
       {!isComment && (
         <CustomAudienceModal

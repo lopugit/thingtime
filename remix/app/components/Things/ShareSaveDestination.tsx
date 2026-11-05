@@ -1,3 +1,4 @@
+import { ContextActionDock } from '../IncomingShare/ContextActionDock';
 import React from 'react';
 import localforage from 'localforage';
 import { useSearchParams } from 'react-router';
@@ -20,13 +21,13 @@ import { makeStableShareSavePlan, shareParentId, shareTextCrystal, validateShare
 
 const journal = localforage.createInstance({ name: 'thingtime-incoming-share', storeName: 'saves' });
 const action = (operation: string) => ({ 'data-tt-action': '$transient', 'data-tt-action-inputs': JSON.stringify({ operation }) });
-const saveBlocks: WebpageBlock[] = [{ id: 'share-save-controls', type: 'element', tag: 'section', props: { 'aria-label': 'Save shared items' }, css: { display: 'grid', gap: '12px', padding: '16px', background: 'var(--tt-card, #fff)', border: '1px solid var(--tt-border, #ececef)', 'border-radius': '12px' }, children: [
+const saveBlocks: WebpageBlock[] = [{ id: 'share-save-controls', type: 'element', tag: 'section', props: { 'aria-label': 'Save shared items' }, css: { display: 'grid', gap: 'var(--tt-context-card-gap, 12px)', padding: 'var(--tt-context-card-padding, 16px)', background: 'var(--tt-card, #fff)', border: '1px solid var(--tt-border, #ececef)', 'border-radius': '12px' }, children: [
  { id: 'share-save-location', type: 'element', tag: 'p', text: '{save.location}', css: { margin: '0', 'font-weight': '600', 'overflow-wrap': 'anywhere' } },
- { id: 'share-save-status', type: 'element', tag: 'p', text: '{save.status}', props: { role: 'status', 'aria-live': 'polite' }, css: { margin: '0', 'min-height': '20px', 'font-size': '13px', 'overflow-wrap': 'anywhere' } },
+ { id: 'share-save-status', type: 'element', tag: 'p', text: '{save.status}', props: { role: 'status', 'aria-live': 'polite', style: { display: '{save.statusDisplay}' } }, css: { margin: '0', 'min-height': '20px', 'font-size': '13px', 'overflow-wrap': 'anywhere' } },
  { id: 'share-save-button', type: 'element', tag: 'button', text: 'Save here', props: { type: 'button', disabled: '{save.disabled}', 'aria-busy': '{save.busy}', ...action('save') }, css: { 'min-height': '48px', width: '100%', 'border-radius': '10px', border: '0', background: 'var(--tt-accent, #e24697)', color: 'var(--tt-accent-contrast, #fff)', 'font-weight': '650', cursor: 'pointer' } },
  { id: 'share-save-retry', type: 'element', tag: 'button', text: 'Retry attachments', props: { type: 'button', style: { display: '{save.retryDisplay}' }, ...action('retry') }, css: { 'min-height': '44px', background: 'transparent', color: 'inherit', border: '1px solid var(--tt-border, #ececef)', 'border-radius': '10px' } }
 ]}];
-export type ShareSaveDestinationProps = { shareId: string; text: string; files: File[]; directories?: string[]; onSaved: (ids: string[]) => void | Promise<void>;
+export type ShareSaveDestinationProps = { active?: boolean; toolbarHeight?: number; shareId: string; text: string; files: File[]; directories?: string[]; onSaved: (ids: string[]) => void | Promise<void>;
  beforeSubmit?: (targetId: string, operationId: string, payload: Record<string, unknown>) => Promise<void>;
  initialSubmission?: { targetId: string; operationId: string; recoveryPayload: string };
 };
@@ -36,7 +37,7 @@ export function ShareSaveDestination(props: ShareSaveDestinationProps) {
  if (user && plane !== 'home') return <p role="status">Saving files requires your home Things storage. Your shared content is retained; select home storage before saving.</p>;
  return user ? <ShareSaveSession key={`${user.id}:${window.location.origin}:${props.shareId}`} {...props} ownerId={user.id} /> : null;
 }
-function ShareSaveSession({ shareId, text, files, directories = [], onSaved, beforeSubmit, initialSubmission, ownerId }: ShareSaveDestinationProps & { ownerId: string }) {
+function ShareSaveSession({ active = true, toolbarHeight = 120, shareId, text, files, directories = [], onSaved, beforeSubmit, initialSubmission, ownerId }: ShareSaveDestinationProps & { ownerId: string }) {
  const api = useApi(); const apiRef = React.useRef(api); apiRef.current = api;
  const origin = window.location.origin;
  const scope = { ownerId, apiOrigin: origin, dataPlane: 'home' };
@@ -200,10 +201,10 @@ function ShareSaveSession({ shareId, text, files, directories = [], onSaved, bef
  const status = error || (!uploadsAllowed && pendingFiles.length ? 'Private file uploads need administrator approval. Shared files are retained; this view resumes when approval becomes available.' : busy ? `Saving… ${saved} items verified` : pending ? `${uploads.uploads.length - pending} of ${files.length} attachments ready` : 'Browse your things, create folders, then save in the current location.');
  return <section aria-label="Save as a Thing" style={{ minWidth: 0 }}>
   <ThingsPage locationPicker={locationPicker} />
-  <div style={{ position: 'sticky', bottom: 'var(--tt-context-toolbar-height, 100px)', zIndex: 3, padding: '8px 0' }}>
+  <ContextActionDock active={active} bottomOffset={toolbarHeight}><div style={{ padding: '8px 0', background: 'var(--tt-page-bg, #fff)' }}>
    <SettingsDocumentHost documentKey="incoming-share-save" defaultDocument={saveBlocks} scopeKey={key} title="Save shared items layout">
-    {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={key} enabled={!editing} scope={{ save: { location: `Save in ${location.name}`, status, busy, disabled: busy || !ready || (!uploadsAllowed && pendingFiles.length > 0) || uploads.snapshot.blocking || (!files.length && !text && !directories.length), retryDisplay: failedUploads ? 'block' : 'none' } }} actions={{ save, retry: () => { setError(''); uploads.retryAll(); } }}><WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} /></TransientBlockHost>}
+    {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={key} enabled={!editing} scope={{ save: { location: `Save in ${location.name}`, status, statusDisplay: error || busy || pending || (!uploadsAllowed && pendingFiles.length) ? 'block' : 'var(--tt-context-secondary-display, block)', busy, disabled: busy || !ready || (!uploadsAllowed && pendingFiles.length > 0) || uploads.snapshot.blocking || (!files.length && !text && !directories.length), retryDisplay: failedUploads ? 'block' : 'none' } }} actions={{ save, retry: () => { setError(''); uploads.retryAll(); } }}><WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} /></TransientBlockHost>}
    </SettingsDocumentHost>
-  </div>
+  </div></ContextActionDock>
  </section>;
 }
