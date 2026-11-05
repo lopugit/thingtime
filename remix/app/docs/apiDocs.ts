@@ -9539,6 +9539,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     featureVersion: '1.51.0',
     contractVersion: '1.51.0',
 
+
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -9835,7 +9836,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         }
       }
     ],
-    notes: ['Version 1.51.0 removes the application JSON body-size ceiling for authenticated Post and Data writes after authorization and rate admission.',
+    notes: ['Version 1.51.0 removes the application JSON body-size ceiling for authenticated Post and Data writes after authorization and rate admission.', "Version1.50 stores reusable tt-rich-text fields/read views, context-enabled tt-menu editable target/content/trigger slots, generic map marker scale/zoom/grouping presentation, and typed Action descriptors without a fixed input-count ceiling. Schema/ACL/JSON/resource-budget validation is unchanged.",
+
       'DELETE accepts private chat-archive roots only for a first-party user account on the same origin and the home data plane. Whole-archive attachment cleanup precedes accounted relational deletion. Individual historical rows remain protected. Optional expectedUpdatedAt is checked in the claiming transaction; a stale preview returns 409 before object cleanup. Incomplete cleanup returns a recoverable 503 without exposing storage details. PATs, app tokens and service accounts do not gain archive access.',
       'System kinds (user, theme, feed-algorithm, waitlist) are protected: this endpoint refuses to create, update, or delete them — they are managed exclusively by their dedicated endpoints (auth/register, users/profile, themes, algorithms, waitlist).',
       'Owner-library reads also include standalone personal custom emojis. Their content and image lifecycle remain managed by the dedicated emoji endpoints; generic creation, editing and deletion are not enabled.',
@@ -11586,11 +11588,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // Stored component and page-block arguments use the same media-addition guard as render edits.
     featureVersion: '1.20.0',
     contractVersion: '1.20.0',
+
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
-    notes: ['Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
+    notes: ['Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
+
     detail:
       'Version 1.18.1 corrects page Component discovery and identity comparison for large/deep valid authored block trees using cycle-safe iterative traversal. Existing Component ACL/capture and revision contracts remain unchanged. Version 1.18 preserves authored Collection source offsetInput, limitInput and totalPath mappings, explicit total bindings, selectedKey/itemKey/revealSelected presentation, and Map onSelectQueryParams/onRouteSelectQueryParams. These generic saved bindings grant no read or mutation authority. ' +
       'Version 1.16 accepts individually editable tt-upload Webpage blocks, preserving the shared uploader, ownership, attachment access and storage validation. ' +
@@ -13234,6 +13238,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     featureVersion: '1.41.0',
     contractVersion: '1.41.0',
 
+    notes: ["Version1.41 accepts typed Action descriptors above the former fixed count while retaining names, type validation, scoped capabilities and serialized input/execution budgets. Saved rich-text forms await their latest Editor.js snapshot before confirmation/dispatch."],
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
@@ -13453,13 +13458,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.11.0',
-    featureVersion: '1.11.0',
+    contractVersion: '1.12.0',
+    featureVersion: '1.12.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
-    notes: ['Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
+    notes: ["Version1.12 resolves individually editable tt-rich-text and context-enabled tt-menu children through the canonical Component/dependency renderer. Inert previews never activate editors or Actions.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
       'Version 1.11 resolves authored Collection source offsetInput, limitInput and totalPath mappings, explicit total bindings, selectedKey/itemKey/revealSelected presentation, and Map onSelectQueryParams/onRouteSelectQueryParams through the canonical editable composition renderer. Existing source negotiation, access and dependency checks remain. ' +
       'Version 1.9 resolves editable tt-upload controls alongside guarded map blocks. The page runtime supports opt-in local query state, marker selection, custom plain-text icons, title/custom labels, icon lists and authorized attachment avatars without page navigation. These presentation bindings grant no data or media access. ' +
@@ -13536,13 +13541,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'maps', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'maps',
+    id: 'maps', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'maps',
     title: 'Mapbox maps and route optimization', endpoint: '/api/v1/maps',
     summary: 'Owner-scoped Mapbox address search, selected permanent geocoding, route optimization and public browser map configuration.',
-    detail: 'Version 1.1 adds optional autocomplete:boolean on suggest (true by default, always false for permanent requests), optional allowlisted featureType/accuracy/matchCode metadata on suggestions, and alternative queries:[{id,query,expectedId?}] batch inputs in place of query. Batch replies return results:[{id,suggestions}] with the same cachePolicy; IDs remain in input order, duplicate addresses share provider work, and all inputs are validated before Vault access. Provider calls use processing chunks without a product item cap. Errors or cancellation return no partial batch. Permanent batches require each expectedId to match its fresh selected result. The same full-owner/Vault/origin boundaries and storage terms apply. POST operation suggest, optimize or browser-config with an owned Vault entry reference. Fixed Mapbox destinations only; no caller URLs, credentials or headers. Suggest returns transient address candidates; permanent:true requires expectedId from the selected candidate and a matching fresh permanent result. Account entitlement and Mapbox storage conditions still apply. Optimize accepts 2–12 stops (the Optimization v1 provider constraint), unique stop IDs and longitude/latitude pairs, driving, driving-traffic, walking or cycling, and roundtrip. A non-roundtrip keeps the first and last input stops fixed. Returns optimized stop IDs, GeoJSON, distance and duration for the current view only. Mapbox standard terms prohibit caching Navigation API results. browser-config returns only an owned public pk token for the Mapbox SDK, never a secret sk token. Responses are private/no-store; clients must not persist tokens or temporary provider results. Each operation is explicit and may incur provider usage charges. Negotiate api.maps 1.1.0 on the selected origin.',
+    detail: 'Version 1.2 adds optional authored markerScale, actual-zoom scaling, explicit markerGroupPath visual grouping and original itinerary ordinals; these do not change provider requests or storage rules. Version 1.1 adds optional autocomplete:boolean on suggest (true by default, always false for permanent requests), optional allowlisted featureType/accuracy/matchCode metadata on suggestions, and alternative queries:[{id,query,expectedId?}] batch inputs in place of query. Batch replies return results:[{id,suggestions}] with the same cachePolicy; IDs remain in input order, duplicate addresses share provider work, and all inputs are validated before Vault access. Provider calls use processing chunks without a product item cap. Errors or cancellation return no partial batch. Permanent batches require each expectedId to match its fresh selected result. The same full-owner/Vault/origin boundaries and storage terms apply. POST operation suggest, optimize or browser-config with an owned Vault entry reference. Fixed Mapbox destinations only; no caller URLs, credentials or headers. Suggest returns transient address candidates; permanent:true requires expectedId from the selected candidate and a matching fresh permanent result. Account entitlement and Mapbox storage conditions still apply. Optimize accepts 2–12 stops (the Optimization v1 provider constraint), unique stop IDs and longitude/latitude pairs, driving, driving-traffic, walking or cycling, and roundtrip. A non-roundtrip keeps the first and last input stops fixed. Returns optimized stop IDs, GeoJSON, distance and duration for the current view only. Mapbox standard terms prohibit caching Navigation API results. browser-config returns only an owned public pk token for the Mapbox SDK, never a secret sk token. Responses are private/no-store; clients must not persist tokens or temporary provider results. Each operation is explicit and may incur provider usage charges. Negotiate api.maps 1.2.0 on the selected origin.',
     auth: { mode: 'session', description: 'Full signed-in owner account; Vault references grant no access to another owner.' },
     methods: ['POST'],
-    steps: ['Save a Mapbox token in your private Vault.', 'Negotiate api.maps 1.1.0.', 'Call an explicit operation with that Vault entry ID.', 'Render temporary results without persistence.'],
+    steps: ['Save a Mapbox token in your private Vault.', 'Negotiate api.maps 1.2.0.', 'Call an explicit operation with that Vault entry ID.', 'Render temporary results without persistence.'],
     requestExamples: [{ name: 'Find addresses in one operation', description: 'Batch IDs correlate each result; exact-address queries may disable autocomplete.', method: 'POST', body: { operation: 'suggest', vaultId: '<owned-vault-entry-id>', autocomplete: false, queries: [{ id: 'one', query: 'Federation Square Melbourne' }, { id: 'two', query: 'Flinders Street Station Melbourne' }] } }, { name: 'Find an address', description: 'A Vault entry reference, not a token.', method: 'POST', body: { operation: 'suggest', vaultId: '<owned-vault-entry-id>', query: 'Federation Square Melbourne' } }],
     responseExamples: [{ status: 200, description: 'Transient address candidates', body: { ok: true, suggestions: [], cachePolicy: 'transient' } }, { status: 401, description: 'Sign in required', body: { ok: false, error: 'Sign in with a full account to use Maps.' } }, { status: 409, description: 'Selected address changed or provider unavailable', body: { ok: false, error: 'Map request could not be completed.' } }]
   }),

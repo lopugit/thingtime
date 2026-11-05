@@ -1,5 +1,6 @@
 import { requireSharedContentCapability, sharedContentWrite } from '~/utils/sharedContentCapabilities';
 import { requiresCollectionPagingContract } from '~/components/Builder/savedCollectionContract';
+import { AUTHORED_CONTROL_REQUIREMENTS, usesAuthoredControls } from '~/schemas/authoredControls';
 import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
 import { isBuilderThing } from '~/schemas/builderThing';
 import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
@@ -1222,6 +1223,8 @@ export function useApi() {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things-update', options);
+          if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+
           if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
@@ -1314,6 +1317,8 @@ export function useApi() {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things', options);
+          if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
@@ -1732,7 +1737,8 @@ export function useApi() {
         const actor = actionActor.current;
         const expectedPlane = planeRef.current;
         const origin = window.location.origin;
-        await requireThingtimeCapability('api.actions-run', args?.sharedRoot ? '1.40.1' : '1.40.0');
+        const manyInputs = args?.inputs && typeof args.inputs === 'object' && Object.keys(args.inputs).length > 16;
+        await requireThingtimeCapability('api.actions-run', manyInputs ? AUTHORED_CONTROL_REQUIREMENTS['api.actions-run'] : args?.sharedRoot ? '1.40.1' : '1.40.0');
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
         const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane });
         const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery));

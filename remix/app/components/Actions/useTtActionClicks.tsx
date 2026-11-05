@@ -8,6 +8,8 @@ import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { gatherFormFields, useWebpageRuntime } from '~/components/Builder/webpageRuntime';
+import { ownsAuthoredControl } from '../Builder/authoredControlOwnership';
+import { captureComponentFormFields } from '../Builder/componentFormFields';
 
 // The click half of the ttAction binding (componentTemplate.ts resolves the
 // markup half). Attach the returned handler as onClickCapture on a TRUSTED
@@ -159,7 +161,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			if (isTransientBlockTarget(origin)) return;
 			const control = origin?.closest?.('[data-tt-action]') as HTMLElement | null;
 			// closest() can walk past the wrapper — only act on controls INSIDE it
-			if (!control || !(event.currentTarget as HTMLElement).contains(control)) return;
+			if (!control || !ownsAuthoredControl(event.currentTarget as HTMLElement, control)) return;
 			// Reserved for an explicitly mounted transient adapter. Never prepare,
 			// record or gather its fields as a normal Action, even outside that host.
 			if (control.getAttribute('data-tt-action') === TRANSIENT_BLOCK_ACTION) return;
@@ -178,11 +180,17 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 					if (input && typeof input === 'object' && !Array.isArray(input)) {
 						const wrapper = event.currentTarget as HTMLElement;
 						const fieldset = control.closest('fieldset') as HTMLElement | null;
-						const group = fieldset && wrapper.contains(fieldset) ? fieldset : fallbackGroupRef.current?.(control, wrapper) || wrapper;
+						const group = fieldset && ownsAuthoredControl(wrapper, fieldset) ? fieldset : fallbackGroupRef.current?.(control, wrapper) || wrapper;
 						if (input.op === 'query' && input.form === true) {
+							if (busyRef.current) return;
 							const invalid = Array.from(group.querySelectorAll<HTMLInputElement>('input, select, textarea')).find((field) => !field.checkValidity());
 							if (invalid) { invalid.reportValidity(); return; }
-							localRef.current?.(localQueryFormInput(input, gatherFormFields(group)));
+							const identity = identityRef.current;
+							busyRef.current = true; control.setAttribute('aria-busy', 'true');
+							void captureComponentFormFields(group, gatherFormFields, () => mountedRef.current && identity === identityRef.current && control.isConnected)
+								.then(fields => { if (mountedRef.current && identity === identityRef.current) localRef.current?.(localQueryFormInput(input, fields)); })
+								.catch(error => { if (mountedRef.current && identity === identityRef.current) lopuRef.current({ title: 'Check the form', description: messageOf(error), status: 'error' }); })
+								.finally(() => { busyRef.current = false; control.removeAttribute('aria-busy'); });
 						} else localRef.current?.(input);
 					}
 				} catch {}
@@ -228,11 +236,6 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			}
 			const invalid = Array.from(group.querySelectorAll<HTMLInputElement>('input, select, textarea')).find((field) => !field.checkValidity());
 			if (invalid) { invalid.reportValidity(); return; }
-			try { inputs = { ...inputs, ...gatherFormFields(group) }; }
-			catch (error) {
-				lopuRef.current({ title: 'Check the form', description: messageOf(error), status: 'error' });
-				return;
-			}
 			busyRef.current = true;
 			const identity = identityRef.current;
 			const runRuntime = runtimeRef.current;
@@ -244,6 +247,9 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			reportPending?.(action);
 			(async () => {
 				try {
+					const fields = await captureComponentFormFields(group, gatherFormFields, () => mountedRef.current && identity === identityRef.current && control.isConnected);
+					if (!mountedRef.current || identity !== identityRef.current) return;
+					inputs = { ...inputs, ...fields };
 					if (confirmRef.current && !runtimeRef.current.sharedRun) {
 						const approved = await confirmRef.current({ action, inputs });
 						if (!mountedRef.current || identity !== identityRef.current || !approved) return;
@@ -297,10 +303,11 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 						runRuntime.report(report);
 						reportResult?.(report);
 					}
-				} catch {
+				} catch (error) {
 					if (mountedRef.current && identity === identityRef.current) {
-						lopuRef.current({ title: 'Could not run this action', status: 'error' });
-						const report = { action, ok: false, result: null, error: 'Could not run this action' };
+						const message = messageOf(error) || 'Could not run this action';
+						lopuRef.current({ title: 'Could not run this action', description: message, status: 'error' });
+						const report = { action, ok: false, result: null, error: message };
 						runRuntime.report(report);
 						reportResult?.(report);
 					}

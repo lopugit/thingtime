@@ -114,6 +114,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-11-06: Remove application JSON body ceilings from authenticated shared-content writes after authorization and rate admission; retain strict UTF-8 decoding, cancellation and unrelated control budgets. Negotiate nine deliberate minor contracts, enumerate upload completion parts server-side, and verify all native share controls above the software keyboard. [Evidence and release boundaries](../PRs/1355-codex-share-composer-20261105-open-ios-shares-in-post-message-and-save-composers.md). **Codex (AI)**
 
+- 2026-11-06: Add editable rich fields, context menus and map scale/group controls; keep Editor.js in Builder viewport documents, flush the latest form snapshot, and defer hidden rich editors until first visibility. [Implementation and acceptance](../PRs/1364-codex-builder-rich-text-context-menu-add-authored-rich-text-fields-context-menus-and-map-marker-controls.md). **Codex (AI)**
+
 - 2026-11-06: Local attachment storage now signs exact-version native download ranges for 60 seconds, requiring the exact Range header and trusted HTTPS origin; whole-object replay and altered range authority are refused. — Codex (AI)
 
 
@@ -154,6 +156,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   claiming every attention state means settings changed. See
   [PR 1357](../PRs/1357-codex-optimize-native-scan-page-reduce-native-sync-paging-cost-and-clarify-automatic-attention.md).
   **Codex (AI)**
+- 2026-11-06: Add reusable saved Editor.js fields/read views with awaited form
+  capture and paired plain text, editable contextual menus with keyboard/touch
+  access, and generic map visual scale/zoom adaptation and explicit association.
+  Preserve original route ordinals, SDK transforms, member actions and private
+  data boundaries; remove the fixed Action descriptor-count cap. **Codex (AI)**
 
 - 2026-11-05: Replace the iOS share completion dead end with a prefilled post composer, normal message destination and Things folder saving. Add an editable contextual bottom toolbar, bounded native file reads and durable share recovery. Remove arbitrary shared-data input ceilings and read comment previews/counts in bounded batches; see [implementation and acceptance](../PRs/1355-codex-share-composer-20261105-open-ios-shares-in-post-message-and-save-composers.md). **Codex (AI)**
 
