@@ -112,6 +112,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Wait for macOS to reap killed development process groups when a
+  zombie temporarily produces EPERM. Cleanup still requires ESRCH within the
+  existing deadline and preserves permission refusals and failed-test evidence.
+  **Codex (AI)**
+
 - 2026-11-06: Supply the real Node argument-vector shape in the parallel
   workspace bootstrap test VM after early password-agent CLI discovery was
   added. This repairs the release test fixture without changing app startup,

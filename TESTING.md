@@ -14311,6 +14311,12 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ### Mac strict inventory job
 
+- [ ] Development process-group cleanup must wait through macOS zombie `EPERM`
+  only after a successful SIGKILL and require eventual ESRCH within the existing
+  deadline. Run `node --test electron/test/local-runtime.test.cjs`; exercise the
+  real owned-child zombie transition, reject nonfinite deadlines before signalling,
+  and reject persistent, initial, SIGTERM and
+  SIGKILL permission failures. Preserve the original assertion if cleanup also fails.
 - [ ] Electron bootstrap VM fixtures must model `process.argv` as an array,
   even when testing ordinary startup without CLI arguments. Run
   `node --test electron/test/dev-workspace.test.cjs`; parallel development
