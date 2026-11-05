@@ -756,3 +756,13 @@ The prebuilt deployment prepare step maps `VERCEL_TEAM_ID`, `VERCEL_TEAM_SLUG`,
 must supply their own identifiers there; no values belong in source. A variable
 being present in the GitHub environment does not make it a step environment
 variable without this explicit mapping.
+
+### Clean native release test prerequisites
+
+Before the unsigned Thingtime Node suite, the Electron release worker builds
+`commander-indexer` from the checked-out source with the locked Cargo workspace,
+exports its exact debug executable as `THINGTIME_TEST_COMMANDER_INDEXER`, and
+verifies that executable exists. Tests use disposable fixture databases rather
+than an installed app helper. This runs before signing credential access; the
+contract check enforces the ordering. A product entry-point compile correction
+ships separately on `main`.
