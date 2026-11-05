@@ -14437,6 +14437,12 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ### Two-way transfers during initial indexing
 
+- Run `node --import tsx --test app/fileSync/cloudIndexChanges.client.test.ts`
+  from `remix`. A Timeline delta for a canonical zero-byte cloud file must
+  pass even though its sync entry has no multipart fingerprint. Nonempty files
+  without a fingerprint and malformed empty hashes must still fail. On the
+  signed installed app, retry an isolated two-way connection with a cloud-only
+  empty file and verify the exact local zero-byte path exists after transfer.
 - Run `npm --prefix remix run test:file-sync`. The two-way streaming regression
   holds both source feeds open while uploads and staged downloads confirm,
   repeats the check for one-sided edits from a sealed baseline, and exercises
