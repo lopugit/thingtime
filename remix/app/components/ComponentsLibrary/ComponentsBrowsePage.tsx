@@ -2,6 +2,7 @@ import { useWorkspaceRefresh } from '~/local-workspace/useWorkspaceRefresh';
 import { useComponentVersionDraft } from '~/drafts/useComponentVersionDraft';
 import { createWithDraft } from '~/drafts/createWithDraft';
 import { DraftSaveStatus } from '~/drafts/DraftPicker';
+import { thingBuilderHref } from '../Things/thingsCore';
 import React from 'react';
 import {
   Badge,
@@ -261,6 +262,7 @@ type ComponentCardProps = {
 const stop = (event: React.SyntheticEvent) => event.stopPropagation();
 
 const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, onSave, onSaveVersion, loadFamily }: ComponentCardProps) => {
+  const user = useWorkspaceUser();
   // `active` is the design currently on the card — the family's representative
   // until the designs click-through swaps in a sibling rendition. The rest of
   // the card body reads it through the `source` alias.
@@ -326,6 +328,8 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
   // id when the family holds two renditions of one library — the same rule
   // the page's own design switcher writes).
   const pageHref = (suffix = '') => {
+    const editor = !suffix && thingBuilderHref(source.entry, user?.id);
+    if (editor) return editor;
     const base = `/components/${encodeURIComponent(device ? active.id : deepLinkKeyFor(family))}${suffix}`;
     const query = new URLSearchParams({ catalog: device ? 'device' : 'online' });
     if (device || active.id === family.id) return `${base}?${query}`;

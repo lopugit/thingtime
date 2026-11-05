@@ -10,6 +10,7 @@ import type { ThingtimeStorage } from '../local-workspace/editorTree';
 import { safeJoin } from '~/utils';
 import { createLatestRevisionAutosave } from './latestRevisionAutosave';
 import type { LatestRevisionAutosaveCoordinator } from './latestRevisionAutosave';
+import { flushThingtimeSnapshot } from './flushThingtimeSnapshot';
 import { drainThingtimeMutationQueue } from './thingtimeMutationQueue';
 import {
 	hasPersistedThingtimeRuntimeMethods,
@@ -24,6 +25,8 @@ export interface ThingtimeTypes {
 	thingtime: any;
 	set: any;
 	setThingtime: any;
+	flushThingtimePersistence?: (signal?: AbortSignal) => Promise<void>;
+	canPersistThingtime?: boolean;
 	getThingtime: any;
 	thingtimeRef: any;
 	loading: boolean;
@@ -77,6 +80,8 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	const thingtimeRef = React.useRef(thingtimeState);
 	const hydrationResolvedRef = React.useRef(false);
 	const persistenceReadyRef = React.useRef(false);
+	const providerActiveRef = React.useRef(true);
+	React.useEffect(() => { providerActiveRef.current = true; return () => { providerActiveRef.current = false; }; }, []);
 	const persistenceRevisionRef = React.useRef(0);
 	// The autosave coordinator is created once, so it reads the storage key
 	// through a ref instead of closing over the first render's prop value.
@@ -356,6 +361,22 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		persistenceRef.current?.schedule(thingtimeRef.current, persistenceRevisionRef.current);
 		await persistenceRef.current?.flush();
 	}, [flushSetThingtimeQueue, persistLocal]);
+ const flushThingtimePersistence = React.useCallback(async (signal?: AbortSignal) => {
+  const expectedStorageKey = storageKey;
+  const assertCurrent = () => {
+   signal?.throwIfAborted();
+   if (!providerActiveRef.current || storageKeyRef.current !== expectedStorageKey) throw new Error('The active account changed before preferences finished saving.');
+   if (!persistLocal || loading || !persistenceReadyRef.current) throw new Error('Local preferences are not ready to save.');
+  };
+  await flushThingtimeSnapshot({
+   assertCurrent, drain: flushSetThingtimeQueue, read: () => thingtimeRef.current,
+   schedule: value => {
+    const revision = ++persistenceRevisionRef.current;
+    if (!persistenceRef.current?.schedule(value, revision)) throw new Error('Local preferences could not be scheduled for saving.');
+   },
+   flush: async () => { await persistenceRef.current?.flush(); }
+  });
+ }, [storageKey, persistLocal, loading, flushSetThingtimeQueue]);
 
 	const getThingtime = React.useCallback(
 		(...args) => {
@@ -579,6 +600,8 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		const newEverything = {
 			thingtime: thingtimeState,
 			setThingtime: setThingtime,
+			flushThingtimePersistence,
+			canPersistThingtime: persistLocal && !loading && persistenceReadyRef.current,
 			getThingtime: getThingtime,
 			thingtimeRef: thingtimeRef,
 			paths: paths,
@@ -594,11 +617,13 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		// ⚠️ ORDER OF THESE OPERATIONS IS IMPORTANT ⚠️
 		// 2
 		setEverything(EverythingRef.current); // 2
-	}, [thingtimeState, setThingtime, getThingtime, thingtimeRef, paths, loading, events, flushPersistence]);
+	}, [thingtimeState, setThingtime, flushThingtimePersistence, getThingtime, thingtimeRef, paths, loading, events, persistLocal, flushPersistence]);
 
 	Object.assign(Everything, {
 		thingtime: thingtimeState,
 		setThingtime: setThingtime,
+			flushThingtimePersistence,
+			canPersistThingtime: persistLocal && !loading && persistenceReadyRef.current,
 		getThingtime: getThingtime,
 		thingtimeRef: thingtimeRef,
 		paths: paths,

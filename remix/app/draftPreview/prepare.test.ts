@@ -55,3 +55,18 @@ test('new editable and transient block types cannot enable Actions in anonymous 
     await assert.rejects(() => prepareDraft(input), /Unsupported draft field/);
   }
 });
+
+test('Builder provenance survives draft export/reopen in either schema order without admitting mixed content kinds', async () => {
+  for (const prepend of [true, false]) {
+    const input = fixture();
+    for (const thing of input.things) thing.thingtime = prepend ? ['builder-thing', ...thing.thingtime] : [...thing.thingtime, 'builder-thing'];
+    const prepared = await prepareDraft(input);
+    for (const thing of prepared.manifest.things) assert.equal(thing.thingtime.at(-1), 'builder-thing');
+    assert.equal((await prepareDraft(prepared.json)).hash, prepared.hash);
+    assert.equal(prepared.manifest.things.length, 2);
+  }
+  for (const extra of ['data', 'action', 'schema', 'webpage']) {
+    const input = fixture(); input.things[1].thingtime.push('builder-thing', extra);
+    await assert.rejects(() => prepareDraft(input), /component and webpage Things only/);
+  }
+});

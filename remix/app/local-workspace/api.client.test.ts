@@ -240,7 +240,9 @@ test('anonymous library search stays scoped, supports paging, and never falls th
   assert.equal(page.things.length, 2); assert.equal(rest.things.length, 1); assert.equal(page.total, 3);
   assert.equal(page.things[0].author.username, 'local');
   await assert.rejects(api.things.search({ workspace: true, q: 'find me', author: 'other-account' }), /filters/);
-  await assert.rejects(api.things.search({ workspace: true, conditions: [{ field: 'name', value: 'find me' }] }), /filters/);
+  const filtered = await api.things.search({ workspace: true, conditions: [{ field: 'name', op: 'eq', value: 'Find me 0' }] });
+  assert.equal(filtered.things.length, 1);
+  await assert.rejects(api.things.search({ workspace: true, conditions: [{ field: '$where', op: 'eq', value: true }] }), /field/i);
   const controller = new AbortController(); controller.abort();
   await assert.rejects(api.things.search({ workspace: true }, { signal: controller.signal }), /abort/i);
   rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);

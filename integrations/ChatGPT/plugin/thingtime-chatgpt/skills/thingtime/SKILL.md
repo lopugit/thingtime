@@ -39,10 +39,33 @@ revoked or an account is missing.
 Never expose token values, authorization codes, bridge credentials, or refresh
 credentials in a response.
 
-Read/search actions may proceed when the user asks. Before any create, update,
-delete, comment, reaction, save, or share action, show the intended account,
-target, and effect and obtain clear confirmation. Treat delete and disconnect
-as irreversible from the current ChatGPT connection.
+Private agent task lifecycle reporting has dedicated tools:
+`prepare_thingtime_agent_task`, `get_thingtime_agent_task`, and
+`report_thingtime_agent_task`. Select the exact connected account and preserve
+its HTTPS origin. These tools require the independent `agents.report` grant;
+`things` alone does not grant it. When absent, explain the one-time Advanced
+connection authorization and reconnect requirement. Never silently expand
+permissions or read credentials. Use the host's supported authorization flow
+for an authorized permission change; never substitute the owner's public identity.
+
+For a task with standing authorization for private lifecycle reporting, use
+these tools without repeated routine confirmation. Prepare once using a stable
+chat/task identity; reuse the returned distinct Character and task IDs after
+resuming. Report only actual progress, verification, blockers, artifacts and
+measured values. Keep secrets and private source content out of summaries. A
+failed capability, membership or saved workspace check means reporting remains
+unavailable; continue independent authorized work and state the precise gap.
+This exception applies only to the bounded private lifecycle tools.
+
+Read/search actions may proceed when the user asks. For direct mutations,
+call `get_thingtime_confirmation_requirements` for the selected account and
+follow its current Thingtime settings. If required, state the intended account,
+target, and effect and obtain clear confirmation before passing
+`confirmed: true`. Omit `confirmed` when the account does not require it.
+Treat `confirmation_required` as a request for approval and never fabricate
+it. The user can adjust Thingtime's prompts under Settings → Connections →
+Thingtime connector confirmations; the AI app's own approval, permission, and
+credential rules still apply.
 
 For more than one exact ID, use `get_thingtime_things`; preserve its ordered
 per-ID found/not-found results. Discover and validate schemas before creating
@@ -50,14 +73,14 @@ typed data. Use `list_thingtime_related` for target, parent, folder, backlink,
 or bounded thread traversal, and `list_thingtime_changes` for resumable polling
 (it is not a deletion change stream).
 
-For a composed mutation or Capability workflow, always call the preview/start
-tool first. Explain the selected account and complete before/after plan, then
-stop for clear confirmation. Apply only the returned signed receipt. If a
-precondition is stale, build a new preview; never bypass it. Set `confirmed:
-true` only after that confirmation. Undo also creates
-a fresh preview and requires a second confirmation. Capability Things may only
-compose the published bounded mutation grammar — never invent URLs, API paths,
-database queries, operator objects, or executable code.
+For composed mutations, workflows, and undo, always obtain a fresh signed
+preview first. Inspect the complete plan, following preview pages when needed,
+and apply only its exact receipt. If `confirmationRequired` is true, obtain
+explicit approval for that account and plan and pass `confirmed: true`. If it
+is false, omit `confirmed`. Apply rechecks current settings and preconditions:
+rebuild a stale preview and never skip account, revision, or scope checks.
+Capability Things may only compose the published mutation grammar — never
+invent URLs, API paths, database queries, operator objects, or executable code.
 
 When the user or task supplies an exact Thing ID, always call
 `get_thingtime_thing`. Never rely on `list_thingtime_things`, a recent page, or
@@ -71,3 +94,26 @@ scope and ask the user to reconnect, open Advanced connection settings, and
 regenerate the scoped credential with that access rule. Removing the final
 account revokes every bridge and refresh credential in that ChatGPT connection.
 Do not suggest an unrestricted account-session credential.
+
+`coordinate_thingtime_agent_task` maintains one stable task post in the bound
+private Thingtime Agents subspace under the task Character. Supply a stable
+UUID-v4 `requestId`, `title`, `text`, and explicit `renderComponent` object.
+Keep content editable and reuse the existing post after restarts; verify its
+readback. This bounded operation uses standing private coordination authorization
+and retains the same scope, capability, membership and privacy checks.
+
+Coordination uses the existing private-subspace audience rules. It never changes
+the subspace visibility. If its owner deliberately changes that visibility,
+the ordinary product sharing rules apply and further reporting is refused.
+A successful coordinate receipt includes the stable `coordinationPostId`; use
+`get_thingtime_agent_task` to read the saved post back independently.
+
+Before delegation, prepare the child with its own stable `externalTaskId` and
+`parentExternalTaskId` set to the existing parent's stable task identity. The
+parent must already have a prepared live binding, project and task in the same
+owner, origin and exact saved workspace. The server derives `parentTaskId`,
+`sharedTaskId` and the inherited project, and grants the child's distinct
+Character read access only to the exact parent roots. Child records retain
+their own task parent while sharing the root task; the child cannot update
+parent roots. Preserve returned IDs and pass them to the delegate. Never invent
+parent IDs or silently create a replacement project.

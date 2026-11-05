@@ -1,6 +1,7 @@
 'use strict';
 
-const { governorFor, limits: resourceLimits } = require('./folder-resource-governor.cjs');
+const { governorFor, limits: resourceLimits, deviceLimits } = require('./folder-resource-governor.cjs');
+const { TransferWorkerDisconnected } = require('./folder-transfer-process.cjs');
 const { stageFolderDownload } = require('./folder-download.cjs');
 const { uploadFolderPart, uploadRetry, retryableUploadFailure } = require('./folder-upload.cjs');
 const { validateFolderBatchInput, validateFolderBatchReply } = require('./folder-validate-batch.cjs');
@@ -10,7 +11,7 @@ const { stageRangeMetadata } = require('./folder-stream.cjs');
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
 const { randomUUID } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
-const ACTIONS = new Set(['validate-folder-batch', 'upload-batch', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-download', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
+const ACTIONS = new Set(['validate-folder-batch', 'upload-batch', 'resources', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-download', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
 const supportsBatchPages = version => {
     const parts = typeof version === 'string' && version.length <= 32 && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(version);
     return !!parts && parts[1] === '1' && Number.isSafeInteger(Number(parts[2])) && Number.isSafeInteger(Number(parts[3])) && Number(parts[2]) >= 10;
@@ -87,7 +88,7 @@ async function readCapabilities(context, signal) {
             !manifest.features || typeof manifest.features !== 'object' || Array.isArray(manifest.features)) throw unavailable();
         // Only sync requirements are exposed. Never return arbitrary upstream data.
         const features = {};
-        for (const key of ['api.devices-node-identity', 'api.things', 'api.files', 'api.attachment-uploads', 'api.attachment-upload-parts',
+        for (const key of ['api.devices-node-identity', 'api.devices-sync-control', 'api.things', 'api.files', 'api.attachment-uploads', 'api.attachment-upload-parts',
             'api.attachment-upload-complete', 'api.attachment-content', 'api.file-sync-batches', 'api.actions-run', 'api.mongodb-endpoint']) {
             const version = manifest.features[key]?.version;
             if (typeof version === 'string' && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(version) && version.length <= 32) features[key] = { version };
@@ -216,7 +217,7 @@ function requestTiming(action, clock, diagnostic) {
 class DesktopFolderSync {
     constructor({ context, requestNative, verifyAccount = readAccount, capabilities = readCapabilities, fetchUpload = globalThis.fetch, timeoutMs = 300_000, diagnostic = () => {}, now = () => performance.now() }) {
         this.context = context; this.requestNative = requestNative; this.fetchUpload = fetchUpload; this.verifyAccount = verifyAccount;
-        this.now = now; this.capabilities = capabilities; this.timeoutMs = timeoutMs; this.diagnostic = diagnostic; this.generation = 0; this.active = null; this.streamWaiter = null; this.ordinaryQueue = []; this.quitting = false;
+        this.now = now; this.capabilities = capabilities; this.timeoutMs = timeoutMs; this.diagnostic = diagnostic; this.generation = 0; this.active = null; this.streamWaiter = null; this.resourceRequest = null; this.ordinaryQueue = []; this.quitting = false;
     }
     capture(event, input) {
         const context = this.context(), window = context.window;
@@ -227,6 +228,7 @@ class DesktopFolderSync {
         if (!input || typeof input !== 'object' || Array.isArray(input) || !UUID.test(input.requestId) ||
             !identifier(input.ownerId) || !identifier(input.deviceId) || !ACTIONS.has(input.action) ||
             (input.action !== 'context' && !(input.action === 'suspend' && input.origin === undefined) && input.origin !== apiOrigin) || Buffer.byteLength(JSON.stringify(stageRangeMetadata(input))) > (input.action === 'validate-folder-batch' ? 524_288 : input.action === 'upload-batch' ? 600_000 : 131_072)) throw unavailable();
+        if (input.deviceResourceLimits !== undefined) deviceLimits(input.deviceResourceLimits);
         if (input.resourceLimits !== undefined) {
             if (!input.rootId || typeof input.resourceScope !== 'string' || !input.resourceScope || input.resourceScope.length > 512 || !Object.keys(resourceLimits(input.resourceLimits)).length) throw unavailable();
         }
@@ -257,10 +259,10 @@ class DesktopFolderSync {
             origin: state.context.apiOrigin, action: 'suspend'
         }).catch(() => {});
     }
-    invalidate() { this.generation += 1; this.nativePageCapability = null; this.cancel(); this.cancel(this.streamWaiter); for (const item of [...this.ordinaryQueue]) this.cancel(item.state); }
+    invalidate() { this.generation += 1; this.nativePageCapability = null; this.cancel(); this.cancel(this.streamWaiter); this.cancel(this.resourceRequest); for (const item of [...this.ordinaryQueue]) this.cancel(item.state); }
     // before-quit can precede renderer pagehide while local services drain.
     // Preserve admission through that interval, but permit no further IO.
-    quit() { this.quitting = true; this.generation += 1; this.nativePageCapability = null; this.cancel(this.active, shutdownWait()); this.cancel(this.streamWaiter, shutdownWait()); for (const item of [...this.ordinaryQueue]) this.cancel(item.state, shutdownWait()); }
+    quit() { this.quitting = true; this.generation += 1; this.nativePageCapability = null; this.cancel(this.active, shutdownWait()); this.cancel(this.streamWaiter, shutdownWait()); this.cancel(this.resourceRequest, shutdownWait()); for (const item of [...this.ordinaryQueue]) this.cancel(item.state, shutdownWait()); }
     samePageCapability(context, input) {
         const cached = this.nativePageCapability;
         return cached && cached.window === context.window && cached.generation === context.generation &&
@@ -278,9 +280,9 @@ class DesktopFolderSync {
             apiCapabilities: value?.apiCapabilities ? structuredClone(value.apiCapabilities) : this.samePageCapability(context, input)?.apiCapabilities };
     }
     admit(state) {
-        if (state.lane === 'streamWaiter') {
-            if (this.streamWaiter) throw new Error('Another streaming wait is running.');
-            this.streamWaiter = state; return Promise.resolve();
+        if (state.lane === 'streamWaiter' || state.lane === 'resourceRequest') {
+            if (this[state.lane]) throw new Error('Another control request is running.');
+            this[state.lane] = state; return Promise.resolve();
         }
         if (!this.active) { this.active = state; return Promise.resolve(); }
         if (this.active.input.action === 'choose' || state.input.action === 'choose') throw new Error('Another folder request is running.');
@@ -316,16 +318,16 @@ class DesktopFolderSync {
         try { context = this.capture(event, input); }
         catch (error) { this.reportFailure(input?.action, 'capture', error); throw error; }
         if (input.action === 'suspend') {
-            const state = [this.active, this.streamWaiter, ...this.ordinaryQueue.map(item => item.state)].find(value => value && value.context.event.senderFrame === event.senderFrame &&
+            const state = [this.active, this.streamWaiter, this.resourceRequest, ...this.ordinaryQueue.map(item => item.state)].find(value => value && value.context.event.senderFrame === event.senderFrame &&
                 value.input.requestId === input.requestId && value.input.ownerId === input.ownerId && value.input.deviceId === input.deviceId);
             if (state) this.cancel(state);
             return {};
         }
         const timing = requestTiming(input.action, this.now, row => this.diagnostic(row));
         let outcome = 'failed', endReply;
-        const lane = input.action === 'scan-changes' ? 'streamWaiter' : 'active';
+        const lane = input.action === 'scan-changes' ? 'streamWaiter' : input.action === 'resources' ? 'resourceRequest' : 'active';
         const state = { context, folderDeadline: input.action === 'validate-folder-batch' ? this.now() + input.remainingMs : null, input: structuredClone(input), abort: new AbortController(), dispatched: false, lane, phase: 'admission' };
-        const policy = state.input.resourceLimits;
+        const policy = state.input.resourceLimits ?? { cpuPercent: 15, uploadBytesPerSecond: 625000, downloadBytesPerSecond: 625000 };
         const governedPayload = policy && ((['upload-part', 'upload-batch'].includes(input.action) && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||
             (input.action === 'stage-download' && (policy.downloadBytesPerSecond || policy.cpuPercent)) ||
             (['stage-finish', 'publish'].includes(input.action) && policy.cpuPercent));
@@ -339,16 +341,17 @@ class DesktopFolderSync {
             state.phase = previousPhase;
         };
         let governor;
+        const readResources = state.input.action === 'resources' && state.input.deviceResourceLimits === undefined;
         const nativeRequest = (request, extra = {}) => timing.measure('native', async () => {
-            const governed = request.rootId === state.input.rootId && state.input.resourceLimits ? { ...request, resourceLimits: state.input.resourceLimits, resourceScope: state.input.resourceScope } : request;
+            const governed = { ...request, ...(request.rootId === state.input.rootId && state.input.resourceLimits ? { resourceLimits: state.input.resourceLimits, resourceScope: state.input.resourceScope } : {}), ...(state.input.deviceResourceLimits ? { deviceResourceLimits: state.input.deviceResourceLimits } : {}) };
             const reply = await this.requestNative('folder-sync.request', governed, { ...extra, signal: extra.signal ?? state.abort.signal });
-            if (governor && reply?.resources?.version === 1) governor.observeNative(reply.resources);
+            if (governor && !readResources && reply?.resources?.version === 1) governor.observeNative(reply.resources);
             return reply;
         });
         try {
-            governor = governorFor(state.input, context);
             await timing.measure('queue', () => this.admit(state));
             await verify();
+            governor = governorFor(state.input, context);
             let apiCapabilities;
             if (state.input.action === 'context') {
                 state.phase = 'capability-verification';
@@ -411,22 +414,31 @@ class DesktopFolderSync {
                 signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), fetchUpload: this.fetchUpload,
                 requestNative: nativeRequest,
                 signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); }
-            }) : state.input.action === 'stage-download' ? await stageFolderDownload({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest }) : await nativeRequest({ ...state.input, origin: context.apiOrigin });
-            if (governor) value.resources = governor.snapshot();
+            }) : state.input.action === 'stage-download' ? await stageFolderDownload({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, diagnostic: this.diagnostic }) : await nativeRequest({ ...state.input, origin: context.apiOrigin });
+            if (governor && !readResources) value.resources = governor.snapshot();
             endReply = timing.begin('reply');
             state.phase = 'reply-verification';
             if (!value || typeof value !== 'object') throw unavailable();
             if (state.input.action === 'context') {
                 this.assertCurrent(state);
                 value.apiCapabilities = apiCapabilities;
+                const accessVersion = /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(value.capabilities?.fileAccessVersion ?? '');
+                if (Number(accessVersion?.[1]) >= 16 && value.capabilities?.fileResourceLimitsVersion === '1.1.0')
+                    value.capabilities = { ...value.capabilities, fileResourceLimitsVersion: '1.1.1' };
                 if (/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileResourceLimitsVersion ?? '') && /^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileStagingVersion ?? '') && /^1\.(1[7-9]|[2-9][0-9]|[1-9][0-9]{2,})\.(0|[1-9][0-9]*)$/.test(apiCapabilities?.features?.['api.attachment-content']?.version ?? ''))
-                    value.capabilities = { ...value.capabilities, fileDownloadVersion: '1.0.0' };
+                    value.capabilities = { ...value.capabilities, fileDownloadVersion: '1.0.1' };
                 if (/^1\.([2-9]|[1-9][0-9]+)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileAccessVersion ?? ''))
                     value.capabilities = { ...value.capabilities, fileUploadVersion: '1.1.0' };
             }
             await verify();
             if (!value || typeof value !== 'object' || value.requestId !== input.requestId || value.ownerId !== input.ownerId ||
                 value.deviceId !== input.deviceId || value.origin !== context.apiOrigin) throw unavailable();
+            // The read lane borrows the current governor without replacing its
+            // policy. Merge native gauges only after the exact reply is fenced.
+            if (governor && readResources && value.resources?.version === 1) {
+                governor.observeNative(value.resources);
+                value.resources = governor.snapshot();
+            }
             if (state.input.action === 'context') this.rememberPageCapability(context, state.input, value);
             if (input.action === 'read-range') {
                 const c = value.chunk;
@@ -447,8 +459,8 @@ class DesktopFolderSync {
                 this.reportFailure(input.action, state.phase, error);
                 // Only fixed, trusted native transport codes may retry. Source,
                 // account, capability and protocol refusals remain terminal.
-                if (state.phase === 'native-request' && error?.name === 'ThingtimeNodeBridgeError' &&
-                    ['node_timeout', 'node_unavailable'].includes(error.code)) throw transportRetry();
+                if (state.phase === 'native-request' && (error instanceof TransferWorkerDisconnected ||
+                    (error?.name === 'ThingtimeNodeBridgeError' && ['node_timeout', 'node_unavailable'].includes(error.code)))) throw transportRetry();
                 // Electron serializes Error.name in its rejection text. Normalize
                 // this exact native marker to the renderer's existing contract.
                 if (error?.name === 'ThingtimeNodeBridgeError' && error.code === 'folder_identity_retry' &&

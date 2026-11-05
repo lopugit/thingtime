@@ -66,7 +66,8 @@ function projectThemeContent(input: unknown, version: 1 | 2): TimelineSnapshot {
 
 /** Absent focus tokens keep the historical v1 contract exactly, including
  * partial themes. Do not inject current defaults into either version. */
-export function themeContentSnapshot(input: unknown): TimelineSnapshot {
+export function themeContentSnapshot(input: unknown, version?: 1 | 2): TimelineSnapshot {
+ if (version !== undefined) return projectThemeContent(input, version);
 	const theme = object(input) && object(input.crystal) ? input.crystal.theme : null;
 	const focus = object(theme) && ((object(theme.colors) && focusColors.some(key => own(theme.colors, key))) ||
 		(object(theme.general) && focusNumbers.some(key => own(theme.general, key))));

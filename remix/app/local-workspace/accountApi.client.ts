@@ -959,7 +959,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			}
 			// `author` is accepted but never trusted: the remote read below pins it
 			// to this workspace's own owner, so a caller cannot widen or redirect it.
-			if (Object.entries(args).some(([key, value]) => value !== undefined && !['q', 'thingtime', 'cursor', 'limit', 'workspace', 'author'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_SEARCH', 'These filters require the structured search adapter.');
+			if (Object.entries(args).some(([key, value]) => value !== undefined && !['q', 'thingtime', 'cursor', 'limit', 'workspace', 'author', 'conditions', 'mode'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_SEARCH', 'These filters require the structured search adapter.');
 			const { sync } = worker();
 			const localCursor = typeof args.cursor === 'string' && args.cursor.startsWith('local-search:');
 			const canReadRemote = navigator.onLine !== false && canSyncAccountWorkspace(scope) && !!owner.username && !localCursor;
@@ -1110,7 +1110,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		list: async (args: any = {}, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent();
 			if (scope.dataPlane === 'home' && args?.commentProjection === true && args.thingtime === 'comment' && !args.key && Object.entries(args).every(([key,value]) => value === undefined || ['target','thingtime','key','commentProjection','cursor','limit'].includes(key))) return readDiscussionComments(args, options);
-			if (Object.keys(args).some(key => !['thingtime', 'folder', 'cursor', 'limit', 'device'].includes(key))) return maskDeletedConversations(await online.things.list(args, options));
+			if (Object.keys(args).some(key => !['thingtime', 'folder', 'cursor', 'limit', 'device', 'builderApp'].includes(key))) return maskDeletedConversations(await online.things.list(args, options));
 			const { db, lease, sync } = worker();
 			// A cold offline route may never have fetched this exact server page.
 			// List the known local library with its own cursor and explicit partial
@@ -1125,7 +1125,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(query)));
 			const key = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
 			const kinds = typeof args.thingtime === 'string' ? args.thingtime.split(',') : args.thingtime || [];
-			const matches = (row: any) => row && kinds.every((kind: string) => row.thingtime?.includes(kind)) &&
+			const matches = (row: any) => row && (!args.builderApp || (row.thingtime?.includes('folder') && !row.folderId && row.crystal?.builderApp === true)) && kinds.every((kind: string) => row.thingtime?.includes(kind)) &&
 				(!args.folder || (args.folder === 'root' ? !row.folderId : row.folderId === args.folder));
 			const overlay = async (rows: any[]) => {
 				const library = await worker().files.library(), localFiles = new Map(library.things.map(row => [row.id, row]));

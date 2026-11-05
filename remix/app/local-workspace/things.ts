@@ -414,7 +414,7 @@ export class LocalThings {
 	async librarySnapshot(): Promise<LocalThing[]> {
 		return this.transaction('readonly', tx => this.librarySnapshotIn(tx));
 	}
-	async list(query: { thingtime?: string | string[]; folder?: string; target?: string; cursor?: string; limit?: number } = {}) {
+	async list(query: { thingtime?: string | string[]; folder?: string; target?: string; cursor?: string; limit?: number; builderApp?: boolean } = {}) {
 		const limit = Math.max(1, Math.min(200, Number(query.limit) || 50));
 		const kinds = typeof query.thingtime === 'string' ? query.thingtime.split(',') : query.thingtime || [];
 		return this.transaction('readonly', async tx => {
@@ -422,7 +422,7 @@ export class LocalThings {
 				query = { ...query, ...(query.folder ? { folder: await resolveAccountSuiteId(tx,query.folder) } : {}), ...(query.target ? { target: await resolveAccountSuiteId(tx,query.target) } : {}) };
 			}
 			let rows = (await this.librarySnapshotIn(tx, !query.target && (!query.folder || query.folder === 'root') && kinds.every(kind => kind === 'folder')))
-				.filter(row => isLocalLibraryThing(row, query.target) && kinds.every(kind => row.thingtime.includes(kind)) &&
+				.filter(row => (!query.builderApp || (row.thingtime.includes('folder') && !row.folderId && row.crystal.builderApp === true)) && isLocalLibraryThing(row, query.target) && kinds.every(kind => row.thingtime.includes(kind)) &&
 					(!query.folder || (query.folder === 'root' ? !row.folderId : row.folderId === query.folder)) &&
 					(!query.target || row.targetId === query.target))
 				.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));

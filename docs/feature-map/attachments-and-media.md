@@ -21,6 +21,33 @@ Known registered URL drafts/posts refresh without fetching external bytes;
 unfamiliar server-only links and other managed targets retain their dedicated
 online boundaries. Local API/draft/receipt tests pass; final-package native
 acceptance is tracked in [linked-media evidence](../../artifacts/anonymous-local-first-2026-10-23/linked-media/README.md).
+The packaged Mac Files uploader uses a versioned Electron bridge for nonempty
+S3 parts when the bundled loopback UI targets a remote HTTPS API. It reuses the
+ordinary attachment reservation, scoped part signer and completion checks. The
+host streams bounded chunks to the signed S3 object with exact length and
+checksum, and invalidates on account, endpoint or frame changes. HTTPS browser
+and same-origin local storage retain the existing upload path. Run
+`electron/test/attachment-upload.test.cjs` and `desktopAttachmentUpload.test.ts`
+for transport, origin, integrity and cancellation coverage.
+
+
+Cloud sync HTTP 403 diagnostics retain only the operation and a closed policy
+reason (upload approval, origin, account or credential-purpose refusal).
+`cloudTransport.test.ts` verifies redaction and terminal refusal behavior; a
+refusal never bypasses the ordinary attachment upload-approval gate.
+
+## iOS incoming shares
+
+`iOS/ShareExtension` supplies the system Share target. `iOS/ShareSupport` owns
+provider representations and the atomic local App Group inbox; the containing
+app drains complete batches into Documents/Shared on launch/foreground. The
+extension accepts arbitrary offered types and batches, preserves provider files
+and Live Photo resources, and never uploads under an implicit account. Normal
+Thingtime upload authorization/accounting applies when users explicitly upload
+the saved files. XcodeGen and the Fastlane archive verifier own embedding,
+signing and App Group validation. Run native importer/inbox tests and
+`iOS/scripts/share-acceptance.sh`; see TESTING's incoming-share checklist and
+[the iOS runbook](../../iOS/README.md#receive-content-from-the-ios-share-sheet).
 
 Cloud JSON sync requests classify HTTP 408/429/5xx as temporary transport waits.
 `syncJobJournal.ts` persists an optional, revision-guarded `retryAt`; automatic
@@ -97,6 +124,14 @@ recovers durable receipts without touching later edits. This is not an inode-CAS
 primitive: a racing uncoordinated writer is retained and leaves a pending conflict.
 Unsupported providers/volumes refuse. Process-kill, provider and authenticated
 installed-app acceptance remain tracked in the full sync ledger.
+
+`NativeFileDestination.rename` validates both descriptor-relative paths and
+directory anchors, retaining no-follow and exclusive/swap semantics. An older
+host kernel may reject `RENAME_RESOLVE_BENEATH` with `EINVAL`; only that error
+permits retry without the unsupported bit. Validated components and
+`RENAME_NOFOLLOW_ANY` still prevent path escape. Identity, content and recovery
+checks remain mandatory. `NativeFileDestinationTests` cover the compatibility
+path, symlinks, occupied destinations and mutation between attempts.
 
 
 `apple/FileSync/MobileSyncTrash.swift` (under `Sources/AppleFileSync`) provides

@@ -4,7 +4,7 @@ import { AccountPostCache } from './accountPosts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
-import { AccountThingSync, type AccountThing, type AccountSyncTransport } from './accountSync';
+import { AccountThingSync, accountThingCanCache, type AccountThing, type AccountSyncTransport } from './accountSync';
 import { WorkspaceDatabase, type WorkspaceLease } from './storage';
 const setup = (factory = new IDBFactory()) => {
  const db = new WorkspaceDatabase(factory, undefined, undefined, IDBKeyRange);
@@ -448,4 +448,14 @@ test('comment target touches require a refreshed parent delete basis and never s
    await f.sync.sync(transport); assert.equal(deletes.length, 2, 'a conflict cannot silently rebase or retry deletion');
   } finally { await f.db.close(); }
  }
+});
+
+
+test('Builder provenance accompanies ordinary account content without admitting protected or marker-only records', () => {
+ for (const kind of ['folder', 'schema', 'component', 'action', 'webpage']) {
+  assert.equal(accountThingCanCache({ thingtime: [kind, 'builder-thing'] }), true);
+  assert.equal(accountThingCanCache({ thingtime: ['builder-thing', kind] }), true);
+ }
+ for (const thingtime of [['builder-thing'], ['builder-thing', 'password-manager-entry'], ['component', 'builder-thing', 'user'], []])
+  assert.equal(accountThingCanCache({ thingtime }), false);
 });

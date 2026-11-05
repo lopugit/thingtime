@@ -1,8 +1,10 @@
 import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import { ComponentDataScope } from './ComponentSelect';
+import { ComponentInstanceIdentity } from './componentInstanceIdentity';
 import { ComponentDragBoundary } from './ComponentDrag';
 import { NativeControlsEnabled, ComponentLocalControl } from './NativeComponentControls';
 import { sourceFailure } from './sourceFailure';
+import { loadMapboxSourcePages } from './Maps/mapboxSource';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router';
@@ -22,7 +24,7 @@ import { DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS, MAX_WEBPAGE_SOURCE_INTERVAL_MS, MIN
 import { ChakraThingRenderer, isChakraThingNode, type ChakraThingNode } from '../Kinds/ChakraThingRenderer';
 import { HtmlThingRenderer, type HtmlThingNode } from '../Kinds/HtmlThingRenderer';
 import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
-import { useTtActionClicks, type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
+import { clickTtActionForEnter, useTtActionClicks, type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
 import { clearSourceCache, readSourceCache, useWebpageRuntime, writeSourceCache } from './webpageRuntime';
 
 // The ONE live-component path. A component thing renders live in exactly
@@ -79,7 +81,9 @@ export const useThingSource = ({
 	source,
 	cacheId,
 	argValues,
-	interactive
+	interactive,
+	loadAllPages = false,
+	resolvedInputs = false
 }: {
 	source: ThingSourceBinding | null | undefined;
 	// namespaces the localStorage cache line under the runtime's pageId — a
@@ -87,6 +91,9 @@ export const useThingSource = ({
 	cacheId: string;
 	argValues: Record<string, unknown>;
 	interactive: boolean;
+	// Map overlays consume every page, using the same delegated read/cache boundary.
+	loadAllPages?: boolean;
+	resolvedInputs?: boolean;
 }): { scope: ThingSourceScope; refetch: () => void } => {
 	const runtime = useWebpageRuntime();
 	const api = useApi();
@@ -94,20 +101,18 @@ export const useThingSource = ({
 	const character = useCharacterScope();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
-	const sourceKey = JSON.stringify(source || null);
+	const sourceKey = JSON.stringify(loadAllPages ? { source: source || null, allPages: true } : source || null);
 	const active = !!source && interactive;
 	const canRun = runtime.canRunSources || !!runtime.sharedRun;
 	const liveStream = source?.refresh === 'live' ? source.stream : undefined;
 	const liveSourceValid = !!liveStream && validateLiveSourceStream(liveStream);
-	// inputs interpolate {arg} tokens against the args and {query.x} against
-	// the URL — the same substitution the template itself gets
-	const inputsKey = JSON.stringify({ i: source?.inputs || null, a: argValues, q: runtime.query });
-	const inputs = React.useMemo(() => {
-		if (!source?.inputs) return {};
-		const resolved = resolveTemplate(source.inputs, { ...argValues, query: runtime.query });
-		return resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? (resolved as Record<string, unknown>) : {};
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- inputsKey is the serialised form
-	}, [inputsKey]);
+	// Only the resolved inputs identify a read. Selecting an unrelated panel
+	// or marker leaves this source, its existing result, and its cache intact.
+	const resolved = source?.inputs && !resolvedInputs
+		? resolveTemplate(source.inputs, { ...argValues, query: runtime.query })
+		: source?.inputs;
+	const inputsKey = JSON.stringify(resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? resolved : {});
+	const inputs = React.useMemo(() => JSON.parse(inputsKey) as Record<string, unknown>, [inputsKey]);
 	const binding = JSON.stringify([sourceKey, inputsKey, cacheId, dataPlane, character?.id || null]);
 	const initial = React.useMemo(
 		() => ({
@@ -146,10 +151,10 @@ export const useThingSource = ({
 	}, [intervalMs, interactive, canRun]);
 	const [local, setLocal] = React.useState(0);
 	// A manual refetch explicitly reconnects a live stream; action runs do not.
-	const runVersion = source?.refresh === 'live' ? runtime.refreshVersion + local * 1_000_000_007 : manual ? local : runtime.version + tick * 1_000_003 + local * 1_000_000_007;
-	// Action reports replace runtime.load; that cache is only used by action
-	// sources. A live stream keeps its connection until explicit refresh.
-	const sourceLoader = source?.refresh === 'live' ? null : runtime.load;
+	const runVersion = (source?.refresh === 'live' || manual ? runtime.refreshVersion : runtime.version + tick * 1_000_003) + local * 1_000_000_007;
+	// Automatic sources subscribe to the versioned shared loader. Manual
+	// sources read the current loader when mounted, rebound, or refetched.
+	const automaticLoader = !manual && source?.refresh !== 'live' ? runtime.load : null;
 	const signedIn = runtime.viewer.signedIn;
 	const cacheScope = runtime.cacheScope;
 	const pageId = runtime.pageId;
@@ -251,12 +256,16 @@ export const useThingSource = ({
 
 		(async () => {
 			try {
-				const shareKey = JSON.stringify({ a: source.action, i: inputs, t: tick, l: local });
-				const response: any = await sourceLoader!(shareKey, () =>
+				const run = (cursor?: string) => {
+					const pageInputs = cursor ? { ...inputs, cursor } : inputs;
+					const shareKey = JSON.stringify({ a: source.action, i: pageInputs, t: tick, l: local });
+					return runtime.load(shareKey, () =>
 					runtime.sharedRun
-						? runtime.sharedRun(source.action, inputs)
-						: apiRef.current.v1.actions.run({ action: source.action, inputs, source: 'component' })
-				);
+						? runtime.sharedRun(source.action, pageInputs)
+						: apiRef.current.v1.actions.run({ action: source.action, inputs: pageInputs, source: 'component' })
+					) as Promise<any>;
+				};
+				const response: any = loadAllPages ? await loadMapboxSourcePages(run, stale, inputs.cursor) : await run();
 				if (stale()) return;
 				if (response?.status === 'ok') {
 					if (!runtime.sharedRun) {
@@ -275,14 +284,14 @@ export const useThingSource = ({
 		return () => {
 			cancelled = true;
 		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are serialized bindings; runVersion includes explicit refreshes; only action sources subscribe to the version-keyed sourceLoader
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are serialized bindings; runVersion includes explicit refreshes; manual sources use the current shared loader without subscribing to Action reports
 	}, [
 		active,
 		signedIn,
 		canRun,
 		runtime.sharedRun,
 		runtime.identity,
-		sourceLoader,
+		automaticLoader,
 		cacheScope,
 		sourceKey,
 		inputsKey,
@@ -292,7 +301,8 @@ export const useThingSource = ({
 		binding,
 		dataPlane,
 		character?.id,
-		liveSourceValid
+		liveSourceValid,
+		loadAllPages
 	]);
 
 	const scope = React.useMemo<ThingSourceScope>(
@@ -358,6 +368,7 @@ export const LiveTemplate = ({
 }) => {
 	const runtime = useWebpageRuntime();
 	const workspaceScope = useWorkspaceScope();
+	const instanceIdentity = React.useContext(ComponentInstanceIdentity);
 	const navigate = useNavigate();
 	const location = useLocation();
 	const lopu = useLopu();
@@ -367,11 +378,17 @@ export const LiveTemplate = ({
 		)
 	);
 	// Explicit navigation starts a new component draft; source refreshes do not.
-	const identity = JSON.stringify([workspaceScope, runtime.pageId, runtime.query, render, baseScope]);
-	const [local, setLocal] = React.useState<{ identity: string; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
-	const active = local.identity === identity ? local : { identity, values: {} };
-	const [pending, setPending] = React.useState<{ identity: string; action: string | null }>({ identity, action: null });
+	const draftKey = JSON.stringify([workspaceScope, runtime.pageId, location.key, alreadyResolved ? null : render, instanceIdentity ?? baseScope]);
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque local state generation
+	const identity = React.useMemo(() => ({}), [runtime.identity, draftKey]);
+	const [local, setLocal] = React.useState<{ identity: object; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
+	const active = local.identity === identity ? local : { identity, values: {}, outcome: undefined };
+	const [pending, setPending] = React.useState<{ identity: object; action: string | null }>({ identity, action: null });
 	const onLocal = (input: Record<string, unknown>) => {
+		if (input.op === 'query' && input.scope === 'page') {
+			runtime.setPageQuery(input.params);
+			return;
+		}
 		if (input.op === 'query' || input.op === 'back') {
 			if (input.op === 'back' && hasComponentBackEntry(runtime.pageId, location, location.state)) {
 				navigate(-1);
@@ -421,7 +438,7 @@ export const LiveTemplate = ({
 	);
 	if (!resolved) return null;
 	return (
-		<NativeControlsEnabled.Provider key={identity} value={interactive}>
+		<NativeControlsEnabled.Provider key={`${runtime.identity.key}:${draftKey}`} value={interactive}>
 			<ComponentDragBoundary>
 			<ComponentLocalControl.Provider value={interactive ? onLocal : null}>
 				<ComponentDataScope.Provider value={liveScope}>
@@ -457,27 +474,7 @@ export const LiveTemplate = ({
 							}
 							onKeyDownCapture={
 								interactive
-									? (event) => {
-											const field = event.target as HTMLInputElement;
-											if (field.closest('[data-tt-native-control], [data-tt-native-upload]')) return;
-											if (
-												event.key !== 'Enter' ||
-												event.nativeEvent.isComposing ||
-												field.tagName !== 'INPUT' ||
-												['checkbox', 'radio', 'range', 'button', 'file'].includes(field.type)
-											)
-												return;
-											const group = field.closest('fieldset') || event.currentTarget;
-											const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
-											if (submit) {
-												const action = submit.getAttribute('data-tt-action');
-												const inputs = submit.getAttribute('data-tt-action-inputs') || '';
-												if (action !== LOCAL_UI_ACTION || /"op":"search"/.test(inputs)) {
-													event.preventDefault();
-													submit.click();
-												}
-											}
-									  }
+										? (event) => clickTtActionForEnter(event)
 									: undefined
 							}
 							onDoubleClickCapture={onDoubleClickCapture}

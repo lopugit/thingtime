@@ -6,6 +6,8 @@ on:
     paths:
       - 'iOS/**'
       - 'apple/Shared/**'
+      - 'apple/FileSync/**'
+      - 'filesystem-indexer/**'
       - 'apple/Widgets/**'
       - 'apple/Passwords/**'
       - 'apple/PasswordProvider/**'
@@ -69,6 +71,13 @@ jobs:
           sudo xcode-select --switch "$DEVELOPER_DIR"
           xcodebuild -version
           test "$(xcrun --sdk iphoneos --show-sdk-version)" = '26.2'
+
+      - name: Set up shared Rust indexer toolchain
+        if: env.RELEASE_OPERATION == 'upload'
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add --toolchain stable aarch64-apple-ios
+          echo "THINGTIME_RUST_CARGO=$HOME/.cargo/bin/cargo" >> "$GITHUB_ENV"
 
       - name: Set up Ruby and Fastlane
         uses: ruby/setup-ruby@v1
@@ -144,7 +153,7 @@ jobs:
         working-directory: iOS
         run: bundle exec fastlane prepare_release
 
-      - name: Build, verify phone/Watch/widget and upload
+      - name: Build, verify phone/Watch/widget/share extension and upload
         if: env.RELEASE_OPERATION == 'upload'
         working-directory: iOS
         run: bundle exec fastlane beta

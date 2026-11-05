@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   readlinkSync,
   readdirSync,
   rmSync,
@@ -128,6 +129,25 @@ test("immutable output variants coexist and richer valid output wins", () => {
   }
 })
 
+test("a Graphify query stamp does not invalidate the immutable baseline", () => {
+  const root = fixture()
+  try {
+    const current = computeSourceFingerprint(root)
+    const snapshot = finalizeSnapshot(root, writeOutput(root, "queried", 3), {
+      ...current,
+      version: "test",
+    })
+    const cache = path.join(snapshot.path, "cache")
+    mkdirSync(cache)
+    writeFileSync(path.join(cache, "last_query_stamp"), "1")
+    assert.equal(selectSnapshot(root, current.sourceFingerprint)?.path, snapshot.path)
+    writeFileSync(path.join(cache, "unexpected"), "unrelated")
+    assert.equal(selectSnapshot(root, current.sourceFingerprint), null)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test("bounded retention keeps the active snapshot and prunes superseded trees", () => {
   const root = fixture()
   try {
@@ -151,6 +171,8 @@ test("bounded retention keeps the active snapshot and prunes superseded trees", 
       version: "graphify test",
     })
 
+    git(root, ["add", "--", path.dirname(first.path), path.dirname(second.path), path.dirname(third.path)])
+    git(root, ["commit", "-qm", "save portable snapshots"])
     const result = pruneSnapshots(root, second, 2)
     assert.equal(result.retention, 2)
     assert.equal(result.retained.length, 2)
@@ -164,6 +186,51 @@ test("bounded retention keeps the active snapshot and prunes superseded trees", 
       false,
       "empty source-fingerprint directories are removed",
     )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("ensure and prune preserve local snapshots outside the committed retention bound", () => {
+  const root = fixture()
+  try {
+    const make = (name, nodes) => finalizeSnapshot(root, writeOutput(root, name, nodes), {
+      ...computeSourceFingerprint(root),
+      version: "graphify test",
+    })
+    const clean = make("clean", 1)
+    const dirty = make("dirty", 2)
+    const stagedEdit = make("staged edit", 3)
+    git(root, ["add", "--", clean.path, dirty.path, stagedEdit.path])
+    git(root, ["commit", "-qm", "commit three snapshots"])
+
+    const editedReport = (snapshot) => path.join(snapshot.path, "GRAPH_REPORT.md")
+    chmodSync(editedReport(dirty), 0o644)
+    writeFileSync(editedReport(dirty), "# local revision\n")
+    const original = readFileSync(editedReport(stagedEdit))
+    chmodSync(editedReport(stagedEdit), 0o644)
+    writeFileSync(editedReport(stagedEdit), "# staged revision\n")
+    git(root, ["add", "--", editedReport(stagedEdit)])
+    writeFileSync(editedReport(stagedEdit), original)
+
+    const untracked = make("untracked", 4)
+    const stagedNew = make("staged new", 5)
+    git(root, ["add", "--", stagedNew.path])
+    writeFileSync(path.join(root, "source.txt"), "active\n")
+    const active = make("active", 6)
+    const local = [dirty, stagedEdit, untracked, stagedNew, active]
+    const invoke = (command) => execFileSync(process.execPath, [
+      new URL("./graphify-cas.mjs", import.meta.url).pathname, command,
+    ], { cwd: root, encoding: "utf8" })
+
+    invoke("ensure")
+    assert.equal(existsSync(clean.path), false)
+    assert.deepEqual(new Set(listSnapshots(root).map(({ path }) => path)), new Set(local.map(({ path }) => path)))
+    assert.equal(readFileSync(editedReport(dirty), "utf8"), "# local revision\n")
+
+    invoke("prune")
+    assert.deepEqual(new Set(listSnapshots(root).map(({ path }) => path)), new Set(local.map(({ path }) => path)))
+    assert.equal(git(root, ["diff", "--cached", "--name-only", "--", stagedEdit.path]), path.relative(root, editedReport(stagedEdit)))
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
@@ -253,10 +320,12 @@ test("query cache preserves snapshot reuse, portable copying, and pruning", () =
     const snapshot = finalizeSnapshot(root, writeOutput(root, "queried", 2), {
       ...fingerprint, version: "graphify test",
     })
+    git(root, ["add", "--", snapshot.path])
+    git(root, ["commit", "-qm", "save queried snapshot before pruning"])
     invoke("query", "source")
     assert.equal(existsSync(path.join(snapshot.path, "cache", "last_query_stamp")), true)
     assert.equal(selectSnapshot(root, fingerprint.sourceFingerprint)?.path, snapshot.path)
-    assert.equal(invoke("ensure"), snapshot.path, "a query must not trigger a rebuild")
+    assert.equal(realpathSync(invoke("ensure")), realpathSync(snapshot.path), "a query must not trigger a rebuild")
     assert.equal(finalizeSnapshot(root, writeOutput(root, "queried", 2), {
       ...fingerprint, version: "graphify test",
     }).path, snapshot.path, "local query cache does not change artifact identity")
@@ -271,7 +340,7 @@ test("query cache preserves snapshot reuse, portable copying, and pruning", () =
     const next = finalizeSnapshot(root, writeOutput(root, "next", 3), {
       ...nextFingerprint, version: "graphify test",
     })
-    assert.equal(invoke("ensure"), next.path)
+    assert.equal(realpathSync(invoke("ensure")), realpathSync(next.path))
     assert.equal(existsSync(snapshot.path), false, "pruning includes queried snapshots")
     assert.equal(listSnapshots(root).length, 1)
   } finally {
@@ -844,6 +913,9 @@ test("a routed query holds its snapshot lock until the subprocess finishes", { t
       }
       JSON.parse(fs.readFileSync(path.join(snapshot, "manifest.json")));
     `, { mode: 0o755 })
+    const older = computeSourceFingerprint(root)
+    const untracked = finalizeSnapshot(root, writeOutput(root, "untracked older", 2), { ...older, version: "test" })
+    writeFileSync(path.join(root, "source.txt"), "reader source\n")
     const current = computeSourceFingerprint(root)
     finalizeSnapshot(root, writeOutput(root, "reader", 3), { ...current, version: "test" })
     const reader = spawn(process.execPath, [new URL("./graphify-cas.mjs", import.meta.url).pathname, "query", "source"], {
@@ -854,6 +926,7 @@ test("a routed query holds its snapshot lock until the subprocess finishes", { t
     const done = new Promise(resolve => reader.once("close", code => resolve({ code, stderr })))
     workers.push({ child: reader, done })
     await waitForLockMarker(root, "query-entered")
+    assert.equal(existsSync(untracked.path), true, "query must preserve an untracked snapshot")
     const lock = path.join(root, "graphify-out", ".locks", "writer")
     assert.equal(existsSync(lock), true)
     const contender = lockWorker(root, `

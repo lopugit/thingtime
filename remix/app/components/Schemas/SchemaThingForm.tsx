@@ -2,6 +2,7 @@ import { createWithDraft } from '~/drafts/createWithDraft';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useWorkspaceDraft } from '~/drafts/useWorkspaceDraft';
 import { DraftSaveStatus, DraftPicker } from '~/drafts/DraftPicker';
+import { BUILDER_THING_KIND } from '~/schemas/builderThing';
 import { restoreSchemaFormDraft, schemaFormValue } from '~/drafts/schemaFormDraft';
 import { GENERIC_NATIVE_SCHEMA_KINDS, schemaThingCreateInput } from '~/schemas/schemaCopies';
 import React from 'react';
@@ -366,7 +367,9 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
     creating.current = true;
     setPublishing(true);
     try {
-      const resp: any = await createWithDraft(draft, () => api.v1.things.create(schemaThingCreateInput(source, normalizedValue)));
+      const payload = schemaThingCreateInput(source, normalizedValue);
+      if (payload.thingtime.includes('data') || payload.thingtime.includes('folder')) payload.thingtime.push(BUILDER_THING_KIND);
+      const resp: any = await createWithDraft(draft, () => api.v1.things.create(payload));
       if (!resp?.ok) throw resp;
       // only link to /search when SearchPage can actually resolve the schema
       // — non-searchable builtin kinds (share/save/user/…) would dead-end on

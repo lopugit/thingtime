@@ -96,3 +96,21 @@ test('theme focus tokens use v2 while historical v1 bytes and validation stay fr
 		{ ...theme, colors: { focusBorder: false } }])
 		assert.throws(() => themeContentSnapshot({ ...oldValue, crystal: { name: 'Focus', theme: invalid } }));
 });
+
+
+test('theme-content v2 retains focus preferences while v1 preserves its immutable historical shape', () => {
+  const input = { crystal: before.crystal, tags: [], visibility: 'private' as const, folderId: null };
+  const legacy = themeContentSnapshot(input, 1);
+  const current = themeContentSnapshot(input);
+  assert.equal(legacy.version, 1);
+  assert.equal(current.version, 2);
+  const oldTheme = themeContentValue(legacy).crystal.theme as any;
+  assert.equal(Object.prototype.hasOwnProperty.call(oldTheme.colors, 'focusBorder'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(oldTheme.general, 'focusGlowBlur'), false);
+  assert.deepEqual(themeContentSnapshot(themeContentValue(legacy), 1), legacy);
+  assert.deepEqual(themeContentValue(current).crystal.theme, THINGTIME_THEME);
+  assert.throws(() => themeContentValue({ ...current, version: 1 }));
+  const theme = { colors: { focusBorder: '#26724d', focusGlowStart: '#55ffaa', focusGlowEnd: '#4488ff' }, general: { focusGlowBlur: 100, focusGlowOpacity: 0 } };
+  const focus = themeContentSnapshot({ ...input, crystal: { name: 'Focus', theme } });
+  assert.deepEqual(themeContentValue(focus).crystal.theme, theme);
+});

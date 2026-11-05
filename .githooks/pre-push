@@ -1,0 +1,7 @@
+#!/bin/sh
+# Upload complete immutable Graphify snapshots before their pointer commits.
+command -v git-lfs >/dev/null 2>&1 || {
+  echo "Git LFS is required; install it before pushing Graphify snapshots." >&2
+  exit 1
+}
+exec git lfs pre-push "$@"

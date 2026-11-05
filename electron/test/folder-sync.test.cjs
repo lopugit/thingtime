@@ -16,12 +16,18 @@ test('single-path inspection uses the same host account and origin fences', asyn
 });
 
 test('all inventory capture lifecycle operations retain policy and host identity fences', async () => {
-    for (const action of ['scan-stream', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard']) {
+    const operations = [
+        ...['scan-stream', 'scan-changes'].map(action => [action, 'one-way-supported']),
+        ...['scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard'].map(action => [action, 'backup-supported']),
+        ...['scan-capture', 'scan-status', 'scan-cancel'].map(action => [action, 'strict-async']),
+    ];
+    for (const [action, capturePolicy] of operations) {
         const f = fixture(), input = f.input({ action, rootId: randomUUID(), inventoryDeviceId: 'device',
-            capturePolicy: ['scan-stream', 'scan-changes'].includes(action) ? 'one-way-supported' : 'backup-supported', ignoreRules: 'node_modules/\n!keep/', excludedPaths: ['Library'] });
+            capturePolicy, ignoreRules: 'node_modules/\n!keep/', excludedPaths: ['Library'] });
         f.run(async (_method, request) => ({ ...request, roots: [], complete: true }));
         assert.equal((await f.host.request(f.event, input)).complete, true);
         assert.equal(f.calls[0].action, action);
+        assert.equal(f.calls[0].capturePolicy, capturePolicy);
         assert.equal(f.calls[0].ignoreRules, input.ignoreRules);
         assert.deepEqual(f.calls[0].excludedPaths, ['Library']);
         f.run(async (_method, request) => { f.account('other'); return { ...request, roots: [], complete: true }; });
@@ -291,6 +297,36 @@ test('server capability negotiation is anonymous, bounded, origin-bound and proj
     assert.deepEqual(await readCapabilities(context, new AbortController().signal), { schemaVersion: 1, origin: 'https://sync.test', features: { 'api.files': { version: '1.4.0' } } });
     for (mode of ['foreign', 'large', 'redirect']) await assert.rejects(readCapabilities(context, new AbortController().signal));
     mode = 'bad-version'; assert.deepEqual((await readCapabilities(context, new AbortController().signal)).features, {});
+});
+
+test('native context projects remote sync capability without trusting malformed versions or foreign origins', async () => {
+    const f = fixture();
+    let origin = f.context.apiOrigin, version = '1.0.0';
+    f.context.window.webContents.session = { fetch: async (url, init) => {
+        assert.equal(url, `${f.context.apiOrigin}/.well-known/thingtime-capabilities.json`);
+        assert.equal(init.credentials, 'omit');
+        assert.equal(init.redirect, 'error');
+        return Response.json({ schemaVersion: 1, origin, features: {
+            'api.devices-node-identity': { version: '1.0.0' },
+            'api.devices-sync-control': { version, private: 'excluded' },
+            unrelated: { version: '1.0.0' }
+        } });
+    } };
+    f.host.capabilities = readCapabilities;
+    f.run(async (_method, request) => ({ ...request, roots: [] }));
+    const context = () => f.host.request(f.event, f.input({ action: 'context', origin: undefined }));
+    assert.deepEqual((await context()).apiCapabilities, { schemaVersion: 1, origin, features: {
+        'api.devices-node-identity': { version: '1.0.0' },
+        'api.devices-sync-control': { version: '1.0.0' }
+    } });
+    for (version of [undefined, '1.bad.0', '1.01.0', '1.0.0-beta', '1.0.0+private', 1]) {
+        f.host.invalidate();
+        assert.equal(Object.hasOwn((await context()).apiCapabilities.features, 'api.devices-sync-control'), false);
+    }
+    origin = 'https://other.test'; version = '1.0.0'; f.host.invalidate();
+    const dispatched = f.calls.length;
+    await assert.rejects(context());
+    assert.equal(f.calls.length, dispatched);
 });
 
 test('streamed bytes require final browser-account verification and exact range binding', async () => {
@@ -573,7 +609,8 @@ test('real upload-part path sums every repeated authorization and child native c
 
 test('resource policy preserves connection binding and scoped native CPU feedback; malformed policy never dispatches', async () => {
  const f = fixture(), rootId = randomUUID();
- const input = f.input({ action: 'scan-status', rootId, resourceScope: 'connection', resourceLimits: { cpuPercent: 20, transferConcurrency: 2 } });
+ // Governors share CPU samples by device. Isolate this fixture from transfer-worker tests.
+ const input = f.input({ action: 'scan-status', rootId, deviceId: randomUUID(), resourceScope: 'connection', resourceLimits: { cpuPercent: 20, transferConcurrency: 2 } });
  f.run(async (_method, request) => ({ ...request, roots: [], resources: { version: 1, cpuPercent: 60, cpuStatus: 'measured', indexingCpuPercent: 60, sourceCpuPercent: null } }));
  const result = await f.host.request(f.event, input);
  assert.deepEqual(f.calls[0].resourceLimits, input.resourceLimits); assert.equal(f.calls[0].resourceScope, 'connection');
@@ -582,4 +619,64 @@ test('resource policy preserves connection binding and scoped native CPU feedbac
  const before = f.calls.length;
  await assert.rejects(f.host.request(f.event, f.input({ ...input, requestId: randomUUID(), resourceLimits: { transferConcurrency: 0 } })));
  assert.equal(f.calls.length, before);
+});
+
+test('rootless resources sample the active device governor without waiting for or changing its scoped transfer', async () => {
+ const { governorFor } = require('../lib/folder-resource-governor.cjs');
+ const f = fixture(), deviceId = randomUUID();
+ const transfer = f.input({ action: 'scan-status', rootId: randomUUID(), deviceId, resourceScope: 'connection',
+    resourceLimits: { cpuPercent: 12, transferConcurrency: 2 },
+    deviceResourceLimits: { transferBytesPerSecond: 5_000_000, scanBytesPerSecond: 1_000_000, cpuPercent: 15 } });
+ const context = { apiOrigin: transfer.origin, ownerId: transfer.ownerId };
+ const resources = { version: 1, cpuStatus: 'measured', cpuPercent: 4, sourceCpuPercent: 4, memoryBytes: 4096,
+  effectiveTransferConcurrency: 2, effectiveIndexingConcurrency: 1, scanBytesPerSecond: 1234 };
+ let started, release;
+ const held = new Promise(resolve => { started = resolve; });
+ const finish = new Promise(resolve => { release = resolve; });
+ f.run(async (_method, request) => {
+  if (request.action === 'scan-status') { started(); await finish; }
+  return { ...request, roots: [], resources: { ...resources, measuredAt: Date.now() } };
+ });
+ const active = f.host.request(f.event, transfer);
+ try {
+  await held;
+  const read = { action: 'resources', deviceId }, governor = governorFor(read, context);
+  assert.ok(governor);
+  governor.observeTransport({ cpuPercent: 2, currentUploadBytesPerSecond: 125_000, currentDownloadBytesPerSecond: 0 });
+  const sample = await f.host.request(f.event, f.input(read));
+  assert.equal(sample.resources.currentUploadBytesPerSecond, 125_000);
+  assert.equal(sample.resources.currentDownloadBytesPerSecond, 0);
+  assert.deepEqual(sample.resources.cpuScopes.sort(), ['source-thread', 'transport-process']);
+  assert.equal(sample.resources.memoryBytes, 4096);
+  assert.equal(sample.resources.scanBytesPerSecond, 1234);
+  assert.equal(sample.resources.transferBytesPerSecond, 5_000_000);
+  assert.deepEqual(governor.policy, { cpuPercent: 12, transferConcurrency: 2 });
+  assert.equal(governorFor({ ...read, deviceId: randomUUID() }, context), null);
+  assert.equal(governorFor(read, { ...context, apiOrigin: 'https://other.invalid' }), null);
+  assert.equal(governorFor(read, { ...context, ownerId: 'other-owner' }), null);
+  assert.equal(f.calls.at(-1).deviceResourceLimits, undefined, 'read never writes device limits');
+ } finally { release(); await active; }
+});
+
+
+test('desktop context advertises rootless live resource sampling only on compatible native hosts', async () => {
+ for (const [fileAccessVersion, fileResourceLimitsVersion, expected] of [
+  ['1.15.0', '1.1.0', '1.1.0'], ['1.16.0', '1.1.0', '1.1.1'], ['1.18.0', '1.2.0', '1.2.0']
+ ]) {
+  const f = fixture();
+  f.run(async (_method, request) => ({ ...request, roots: [], capabilities: { fileAccessVersion, fileResourceLimitsVersion } }));
+  const result = await f.host.request(f.event, f.input({ action: 'context' }));
+  assert.equal(result.capabilities.fileResourceLimitsVersion, expected);
+ }
+});
+
+test('desktop advertises the signed download recovery patch on compatible staging and server contracts', async () => {
+    const f = fixture();
+    f.run(async (_method, request) => ({ ...request, roots: [],
+        capabilities: { fileAccessVersion: '1.18.0', fileStagingVersion: '1.1.0', fileResourceLimitsVersion: '1.1.0' } }));
+    f.host.capabilities = async () => ({ schemaVersion: 1, origin: f.context.apiOrigin, features: {
+        'api.devices-node-identity': { version: '1.0.0' }, 'api.attachment-content': { version: '1.17.0' }
+    } });
+    const reply = await f.host.request(f.event, f.input({ action: 'context' }));
+    assert.equal(reply.capabilities.fileDownloadVersion, '1.0.1');
 });

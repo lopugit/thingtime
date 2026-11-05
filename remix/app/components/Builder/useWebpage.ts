@@ -6,7 +6,7 @@ import { resolveAccountWebpage } from '../../local-workspace/accountApi.client';
 import { currentAccountWorkspace, isAnonymousWorkspace } from '../../local-workspace/runtime.client';
 import { resolveLocalWebpage } from '../../local-workspace/api.client';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
-import { requiresEditableBlockContract } from './webpageBlocks';
+import { requiresEditableBlockContract, requiresEditableIntrinsicContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
 import React from 'react';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
@@ -78,7 +78,7 @@ export const loadWebpageClient = async (target: WebpageTarget): Promise<WebpageL
 			const data = await resolveAccountWebpage(account, target);
 			return { status: 'ready', data: { page: data.page, source: data.source, componentsByRef: buildComponentsByRef(data) } };
 		}
-		await requireThingtimeCapability('api.webpages-resolve', '1.3.0');
+		await requireThingtimeCapability('api.webpages-resolve', '1.8.1');
 		const response = await fetch(`/api/v1/webpages/resolve?${targetQuery(target)}`, { credentials: 'include' });
 		if ([400, 401, 403, 404].includes(response.status)) return { status: 'missing' };
 		if (!response.ok) return { status: 'error' };
@@ -409,9 +409,16 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
-				// Device saves use the bundled validator; negotiate only at remote transport.
+				// Device saves validate locally; only remote transport negotiates.
 				if (!isAnonymousWorkspace() && !currentAccountWorkspace()) {
-					if (hasLiveSourceBinding(blocks)) await requireThingtimeCapability('api.things', '1.37.0');
+					if (requiresEditableIntrinsicContract(blocks, ['tt-upload'])) {
+						await requireThingtimeCapability('api.things', '1.47.0');
+						if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.16.0');
+					} else if (requiresEditableIntrinsicContract(blocks)) {
+						await requireThingtimeCapability('api.things', '1.44.0');
+						if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.14.0');
+					}
+					else if (hasLiveSourceBinding(blocks)) await requireThingtimeCapability('api.things', '1.37.0');
 					else if (requiresEditableBlockContract(blocks)) await requireThingtimeCapability('api.things', '1.36.0');
 				}
 				const draftEventId = page && user?.id && historyEditable ? await draftHistory.flush() : null;

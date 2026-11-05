@@ -5,7 +5,8 @@
 	"description": "Consent-first MCP bridge for importing AI desktop conversations into Thingtime.",
 	"type": "module",
 	"bin": {
-		"thingtime-mcp": "dist/index.js"
+		"thingtime-mcp": "dist/index.js",
+		"thingtime-local": "dist/localCli.js"
 	},
 	"files": [
 		"dist",

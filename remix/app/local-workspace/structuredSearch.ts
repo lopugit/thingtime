@@ -1,5 +1,5 @@
 import { buildGroup, GENERIC_SEARCH_EXCLUDED_THINGTIME, DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, MAX_TEXT_QUERY_CHARS } from '../api/utils/things/searchGrammar';
-import { localSearchText } from './librarySearch';
+import { localSearchText } from './searchText';
 import { isLocalAttachment } from './attachments';
 import type { LocalThing } from './things';
 import { WorkspaceError } from './storage';
@@ -64,6 +64,15 @@ function compileMatch(clause: Record<string, any>): (row: Record<string, unknown
   };
  });
  return row => checks.every(check => check(row));
+}
+
+/** Reuse exactly the canonical condition grammar in local library projections. */
+export function localSearchConditionMatcher(conditions: unknown = [], mode: unknown = 'all') {
+ if (!Array.isArray(conditions)) invalid('conditions must be a list');
+ if (mode !== 'all' && mode !== 'any') invalid('Search mode must be all or any.');
+ const filter = (conditions as unknown[]).length ? buildGroup({ conditions, mode }, 1, { total: 0 }) : {};
+ if (filter.ok === false) invalid(filter.error);
+ return compileMatch(filter);
 }
 
 /** A bounded, read-only search of ONE leased workspace snapshot. Field filters

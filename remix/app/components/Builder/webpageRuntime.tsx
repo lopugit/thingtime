@@ -10,6 +10,9 @@ import { useLocation } from 'react-router';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { useCharacterScope } from '../Characters/CharacterScope';
+import { localQueryParams } from '../Actions/localUiAction';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 
 // The PAGE RUNTIME — what turns a composed page of component things into a
@@ -43,7 +46,7 @@ export type WebpageRuntimeViewer = {
 
 export type WebpageRuntime = {
 	// Opaque identity changes before protected state can cross viewer/page/link boundaries.
-	identity: object;
+	identity: { key: number };
 	pageId: string | null;
 	pageKey: string | null;
 	suiteKey: string | null;
@@ -56,6 +59,7 @@ export type WebpageRuntime = {
 	canRunSources: boolean;
 	cacheScope: string | null;
 	query: Record<string, string>;
+	setPageQuery: (params: unknown, merge?: boolean) => void;
 	version: number;
 	// Explicit Refresh/Retry requests, separate from completed control reports.
 	refreshVersion: number;
@@ -79,8 +83,9 @@ const INERT_VIEWER: WebpageRuntimeViewer = { signedIn: false, id: null, username
 
 // Outside a provider (the builder canvas, gallery thumbnails, /components
 // previews) the runtime is inert: nothing fetches, nothing installs.
+let nextRuntimeKey = 0;
 const INERT_RUNTIME: WebpageRuntime = {
-	identity: {},
+	identity: { key: 0 },
 	pageId: null,
 	pageKey: null,
 	suiteKey: null,
@@ -89,6 +94,7 @@ const INERT_RUNTIME: WebpageRuntime = {
 	canRunSources: false,
 	cacheScope: null,
 	query: {},
+	setPageQuery: () => {},
 	version: 0,
 	refreshVersion: 0,
 	last: null,
@@ -179,6 +185,8 @@ export const WebpageRuntimeProvider = ({
 	const workspaceScope = useWorkspaceScope();
 	const canRunSources = workspaceScope !== 'pending' && !!workspaceUser?.id;
 	const cacheScope = canRunSources && !shared ? workspaceScope : null;
+	const dataPlane = useDataPlane();
+	const characterId = useCharacterScope()?.id;
 	const location = useLocation();
 	const [version, setVersion] = React.useState(0);
 	const [refreshVersion, setRefreshVersion] = React.useState(0);
@@ -197,11 +205,31 @@ export const WebpageRuntimeProvider = ({
 		[user?.id, user?.temporary, workspaceUser?.id, workspaceUser?.username, workspaceUser?.displayName]
 	);
 	const runtimeSearch = pageRuntimeSearch(location.pathname, location.search);
-	const query = React.useMemo(() => queryScopeOf(runtimeSearch), [runtimeSearch]);
+	const urlQuery = React.useMemo(() => queryScopeOf(runtimeSearch), [runtimeSearch]);
 	// The bearer key participates only in this private dependency boundary.
 	// It is never a template value or a persistent cache key.
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- intentional opaque access-context token
-	const identity = React.useMemo(() => ({}), [workspaceScope, viewer.id, viewer.signedIn, pageId, shared, linkKey, enabled]);
+	const identity = React.useMemo(() => ({ key: ++nextRuntimeKey }), [workspaceScope, viewer.signedIn, viewer.id, characterId, dataPlane, pageId, pageKey, source, shared, linkKey, enabled]);
+	// An explicit route transition (even a back/forward visit to the same
+	// URL) starts a new page selection. Local updates leave the route alone.
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque route generation
+	const queryIdentity = React.useMemo(() => ({}), [identity, location.key, location.pathname, location.search]);
+	const activeQueryIdentity = React.useRef(queryIdentity);
+	activeQueryIdentity.current = queryIdentity;
+	const [localQuery, setLocalQuery] = React.useState<{ identity: object; values: Record<string, string> } | null>(null);
+	const query = localQuery?.identity === queryIdentity ? localQuery.values : urlQuery;
+	const setPageQuery = React.useCallback((params: unknown, merge = false) => {
+		if (!enabled || !pageId || activeQueryIdentity.current !== queryIdentity) return;
+		const validated = localQueryParams(params);
+		if (!validated) return;
+		const values = Object.fromEntries(validated);
+		setLocalQuery((current) => {
+			if (!merge) return { identity: queryIdentity, values };
+			const base = current?.identity === queryIdentity ? current.values : urlQuery;
+			const next = localQueryParams({ ...base, ...values });
+			return next ? { identity: queryIdentity, values: Object.fromEntries(next) } : current;
+		});
+	}, [enabled, pageId, queryIdentity, urlQuery]);
 	const sharedRun = React.useCallback(
 		async (action: string, inputs: Record<string, unknown>) => {
 			await requireThingtimeCapability('api.actions-run', '1.11.0');
@@ -274,6 +302,7 @@ export const WebpageRuntimeProvider = ({
 			canRunSources,
 			cacheScope,
 			query,
+			setPageQuery,
 			version,
 			refreshVersion,
 			last,
@@ -294,6 +323,7 @@ export const WebpageRuntimeProvider = ({
 			canRunSources,
 			cacheScope,
 			query,
+			setPageQuery,
 			version,
 			refreshVersion,
 			last,

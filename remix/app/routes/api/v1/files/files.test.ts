@@ -41,7 +41,7 @@ test('file routes use private full-account access, bounded same-origin JSON and 
 	assert.equal((await handlers.action({ request: request('POST', { Origin: 'https://foreign.test' }, '{}') })).status, 403);
 	assert.equal((await handlers.action({ request: request('POST', { 'Content-Type': 'text/plain' }, '{}') })).status, 415);
 	await assert.rejects(
-		handlers.action({ request: request('POST', {}, JSON.stringify({ value: 'x'.repeat(8192) })) }),
+		handlers.action({ request: request('POST', {}, JSON.stringify({ value: 'x'.repeat(32 * 1024) })) }),
 		(error: any) => error instanceof Response && error.status === 413
 	);
 	const before = calls;
@@ -57,8 +57,8 @@ test('file routes use private full-account access, bounded same-origin JSON and 
 
 test('file capability registers the real read and commit route', () => {
 	const manifest = thingtimeCapabilityManifest('https://example.test');
-	assert.equal(manifest.features['api.files'].version, '1.8.1');
-	assert.equal(createApiCapabilitiesManifest().features['api.files'], '1.8.1');
+	assert.equal(manifest.features['api.files'].version, '1.10.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.files'], '1.10.0');
 	assert.ok(manifest.operations.some((op) => op.path === '/api/v1/files' && op.methods.includes('GET') && op.methods.includes('POST')));
 });
 

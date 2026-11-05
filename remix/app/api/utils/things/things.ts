@@ -1,5 +1,6 @@
 import { interactionWrite, type InteractionState } from '../../../utils/interactionState';
 import { sanitizeTags, MAX_TAGS, MAX_TAG_CHARS } from '../../../schemas/thingTags';
+import { builderThingUpdateKinds } from '../../../schemas/builderThing';
 import { ownerFileSyncUploadOrigin, type FileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { decodeDiscussionCursor, encodeDiscussionCursor, discussionCursorConfigured } from './discussionCursor';
 import { newThingMutationCapture, recordThingMutation, recordFolderPlacement, type ThingMutationCapture } from '../timeline/recordMutation';
@@ -73,7 +74,7 @@ import {
   MAX_TEXT_CHARS,
   MESSENGER_THINGTIME,
 	MIGRATION_DIAGNOSTIC_ID_PREFIX,
-  ERROR_LOG_ID_PREFIX, ERROR_LOG_THINGTIME,
+  ERROR_LOG_ID_PREFIX, ERROR_LOG_THINGTIME, MONGODB_CONNECTION_SNAPSHOT_ID_PREFIX, MONGODB_CONNECTION_SNAPSHOT_THINGTIME,
 	MIGRATION_DIAGNOSTIC_THINGTIME,
   POST_TYPES as REGISTRY_POST_TYPES,
   PROTECTED_THINGTIME,
@@ -1229,6 +1230,9 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
     trimmed.startsWith(FOUND_POST_PREFIX) ||
     trimmed.startsWith('lopu-recording-') ||
     trimmed.startsWith('lopu-background-') ||
+    trimmed.startsWith('agent-reporting-') ||
+    trimmed.startsWith('storage-pending-') ||
+    trimmed.startsWith('storage-recovery-') ||
     trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) ||
     trimmed.startsWith(SCHEMA_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(COMPONENT_RESERVED_ID_PREFIX) ||
@@ -1236,7 +1240,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
 		trimmed.startsWith(ACTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SUBSCRIPTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SERVICE_QUOTA_RESERVED_ID_PREFIX) ||
-		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) || trimmed.startsWith(ERROR_LOG_ID_PREFIX) ||
+		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) || trimmed.startsWith(ERROR_LOG_ID_PREFIX) || trimmed.startsWith(MONGODB_CONNECTION_SNAPSHOT_ID_PREFIX) ||
 		trimmed.startsWith(APP_STORAGE_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(EXTERNAL_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SEEDED_DATA_SUITE_RESERVED_ID_PREFIX) ||
@@ -1580,6 +1584,8 @@ export const createThing = async (
 
   const folderAssignment = await resolveFolderAssignment(ownerId, input.folderId, validated.thingtime);
   if (isFail(folderAssignment)) return folderAssignment;
+  if (validated.thingtime.includes('folder') && validated.crystal.builderApp === true && folderAssignment.folderId)
+    return fail(400, 'Builder apps must be top-level folders');
 
   // subspace rules on attached things: banned users can't comment or react
   // inside the subspace, and locked posts take no new comments (mods excepted).
@@ -2993,14 +2999,19 @@ export const resolvePublicAudiences = async (
 // gates. Generic Things access must never become an alternate raw-byte read.
 const isDeviceControlThing = (doc: ThingDoc) => thingtimeOf(doc).some(kind => (DEVICE_CONTROL_THINGTIME as readonly string[]).includes(kind));
 
+const isPrivateConnectionThing = (doc: ThingDoc) => {
+  const kinds = thingtimeOf(doc);
+  return kinds.includes('external-auth-connection') || (kinds.includes('external-account') && doc.ownerId !== 'system');
+};
+
 export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   // Every `timeline-` kind (events, links, snapshot parts, branches, heads, notes, version names)
   // is protected History metadata reachable only through the Timeline API, never a generic read.
   if (thingtimeOf(doc).some(kind => typeof kind === 'string' && kind.startsWith('timeline-'))) return false;
-  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['lopu-instruction-transfer', 'lopu-instruction-part', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
+  if (isDeviceControlThing(doc) || isPrivateConnectionThing(doc) || thingtimeOf(doc).some(kind => ['lopu-instruction-transfer', 'lopu-instruction-part', 'agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
-	if ((thingtimeOf(doc).includes(FOUND_POST_KIND) || thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME))) return false;
+	if ((thingtimeOf(doc).includes(FOUND_POST_KIND) || thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME) || thingtimeOf(doc).includes(MONGODB_CONNECTION_SNAPSHOT_THINGTIME))) return false;
 	// Moderation-blocked things vanish from every ordinary read for everyone —
 	// owner included, same as blocked attachments. Admins review through the
 	// moderationFlag queue (which carries a bounded excerpt), never this path.
@@ -3096,7 +3107,7 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
-  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['lopu-instruction-transfer', 'lopu-instruction-part', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
+  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['lopu-instruction-transfer', 'lopu-instruction-part', 'agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
 	// terminal — a blocked or born-private comment under a clean post must
 	// vanish for non-owners too
@@ -3537,10 +3548,10 @@ export const activeSubspaceIdsOf = (viewer: Viewer): string[] =>
 
 export const parseChronoCursor = (cursor: string | null | undefined): { createdAt: Date; id: string } | null => {
   if (!cursor) return null;
-  const [ms, id] = cursor.split('_');
-  const time = Number(ms);
-  if (!Number.isFinite(time) || !id) return null;
-  return { createdAt: new Date(time), id };
+  const separator = cursor.indexOf('_');
+  if (separator <= 0 || separator === cursor.length - 1) return null;
+  const createdAt = new Date(Number(cursor.slice(0, separator)));
+  return Number.isFinite(createdAt.getTime()) ? { createdAt, id: cursor.slice(separator + 1) } : null;
 };
 
 export const chronoCursorClause = (cursor: { createdAt: Date; id: string }) => ({
@@ -3750,7 +3761,7 @@ export async function getThing(
   if (options.commentProjection && (app || isCustomMongoEndpointActive())) return fail(400, 'Discussion projection requires first-party home storage');
   let viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
-  if (!doc || isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['draft', 'lopu-instruction-transfer', 'lopu-instruction-part', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return fail(404, 'Thing not found');
+  if (!doc || isDeviceControlThing(doc) || isPrivateConnectionThing(doc) || thingtimeOf(doc).some(kind => ['lopu-instruction-transfer', 'lopu-instruction-part', 'agent-reporting-binding', 'agent-reporting-operation', 'draft', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return fail(404, 'Thing not found');
   if (options.commentProjection && doc.appId) return fail(404, 'Thing not found');
   if (!app) {
     const terminal = await resolveInheritChain(doc, d => aclOf(d).includes(ACL_INHERIT), findThing);
@@ -3838,6 +3849,10 @@ export async function getThing(
 export type ListThingsQuery = {
   commentProjection?: boolean;
   thingtime?: string[];
+  // Exact saved Schema Thing ID stamped on data.crystal.schemaId.
+  schemaId?: string | null;
+  // Exact user-authored relationship ID stamped on data.crystal.parentId.
+  parentId?: string | null;
   targetId?: string | null;
   // folder browse (own-things mode only): 'root' = things not filed anywhere,
   // a folder shareId = that folder's direct children, absent = everything
@@ -3847,7 +3862,19 @@ export type ListThingsQuery = {
   // First-party browsing of ONE app's namespace (the in-Thingtime "what has
   // this app stored for me" surface): own-things mode narrowed to root appId.
   appId?: string | null;
+  // First-party Builder app folders; this narrows the owner library before pagination.
+  builderAppOnly?: boolean;
 };
+
+// Keep the filter as a literal equality predicate so it can be conjoined with
+// owner/namespace/ACL predicates before the chronological cursor and limit.
+export const listCrystalIdMatch = (field: 'schemaId' | 'parentId', value: unknown): { ok: true; match: Record<string, string> | null } | Fail => {
+  if (value == null) return { ok: true, match: null };
+  if (typeof value !== 'string' || !value || value.length > MAX_SHARE_ID_CHARS || /[$.\s]/.test(value) || Array.from(value).some(char => char.charCodeAt(0) < 32))
+    return fail(400, `${field} must be a Thing ID`);
+  return { ok: true, match: { [`crystal.${field}`]: value } };
+};
+export const listSchemaIdMatch = (schemaId: unknown) => listCrystalIdMatch('schemaId', schemaId);
 
 // Unified list. Two modes:
 // - targetId set: things attached to a viewable target (comments/reactions of
@@ -3858,11 +3885,12 @@ export const listThings = async (
   viewerInput: string | Viewer,
   query: ListThingsQuery,
   app: AppLens = null,
-  context: { archiveOwnerId?: string } = {}
+  context: { archiveOwnerId?: string; signal?: AbortSignal } = {}
 ): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null; comments?: PublicCommentPageItem[] }> => {
   const cursorScope = { targetId: query.targetId || '', viewerId: asViewer(viewerInput)?.id || '', tokenId: asViewer(viewerInput)?.pat?.tokenId || '' };
   const discussionCursor = query.commentProjection && query.cursor != null ? decodeDiscussionCursor(query.cursor, cursorScope) : null;
   if (query.commentProjection) {
+    if (query.schemaId != null || query.parentId != null) return fail(400, 'Discussion projection does not accept crystal filters');
     if (app || query.appId != null || isCustomMongoEndpointActive()) return fail(400, 'Discussion projection requires first-party home storage');
     if (!query.targetId || query.folder || query.thingtime?.length !== 1 || query.thingtime[0] !== 'comment') return fail(400, 'Discussion projection requires target and thingtime=comment');
     if (query.limit !== undefined && (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > 20)) return fail(400, 'limit must be an integer between 1 and 20');
@@ -3872,6 +3900,12 @@ export const listThings = async (
   let viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const thingtime = (query.thingtime || []).filter((id) => typeof id === 'string' && id.trim());
+  if (query.builderAppOnly && (app || query.targetId || query.folder !== 'root' || query.appId || query.commentProjection))
+    return fail(400, 'Builder apps require the first-party root folder list');
+  const schemaFilter = listSchemaIdMatch(query.schemaId);
+  if (isFail(schemaFilter)) return schemaFilter;
+  const parentFilter = listCrystalIdMatch('parentId', query.parentId);
+  if (isFail(parentFilter)) return parentFilter;
 
   let match: Record<string, any>;
   let discussionTarget: ThingDoc | null = null;
@@ -3920,6 +3954,9 @@ export const listThings = async (
   if (thingtime.length) {
     match = withMatch(match, await thingtimeInClause(thingtime));
   }
+  if (query.builderAppOnly) match = withMatch(match, { thingtime: 'folder', 'crystal.builderApp': true });
+  if (schemaFilter.match) match = withMatch(match, schemaFilter.match);
+  if (parentFilter.match) match = withMatch(match, parentFilter.match);
   if (!app) {
     // visibility-restricted tokens: conjoin the audience fence so pages stay
     // full instead of being trimmed to nothing in memory (the per-doc
@@ -3933,9 +3970,10 @@ export const listThings = async (
   const parsed = query.commentProjection ? discussionCursor : parseChronoCursor(query.cursor);
   const pageMatch = parsed ? withMatch(match, chronoCursorClause(parsed)) : match;
 
+  context.signal?.throwIfAborted();
   const things = await getThingsCollection();
   let docs = (await things
-    .find(pageMatch as any)
+    .find(pageMatch as any, context.signal ? { signal: context.signal } : undefined)
     .sort({ createdAt: -1, shareId: 1 })
     .limit(limit + 1)
     .toArray()) as any as ThingDoc[];
@@ -5385,6 +5423,7 @@ export const deleteThing = async (
 export const deletePost = deleteThing;
 
 export type UpdateThingInput = {
+  thingtime?: unknown; // may add builder-thing; content schemas remain immutable
   crystal?: unknown;
   extended?: unknown;
   geo?: unknown;
@@ -5482,7 +5521,8 @@ export const updateThing = async (
         }
       : null);
 
-  const thingtime = thingtimeOf(doc);
+  const thingtime = builderThingUpdateKinds(thingtimeOf(doc), input.thingtime);
+  if (!thingtime) return fail(400, 'Updates may add builder-thing but cannot change content schemas');
   // system kinds mutate only through their dedicated utils (profile update,
   // themes, algorithms) — never the generic PATCH/PUT surface
   if (isProtectedThingtime(thingtime)) {
@@ -5641,6 +5681,8 @@ export const updateThing = async (
     }
     nextFolderId = assignment.folderId;
   }
+  if (thingtime.includes('folder') && validated.crystal.builderApp === true && nextFolderId)
+    return fail(400, 'Builder apps must be top-level folders');
 
   // token grants replace whole too (merging grant lists is ambiguous; null
   // clears). The sandbox guard above already ran, so a sandboxed token can
@@ -5659,7 +5701,7 @@ export const updateThing = async (
 	const nextStorageDoc: ThingDoc = {
 		...doc,
 		schemaVersion: THINGS_SCHEMA_VERSION,
-		thingtime,
+		thingtime: validated.thingtime,
       crystal: validated.crystal,
 		extended: nextExtended,
       tags
@@ -5690,7 +5732,7 @@ export const updateThing = async (
   const now = new Date();
   const set: Record<string, any> = {
     schemaVersion: THINGS_SCHEMA_VERSION,
-    thingtime,
+    thingtime: validated.thingtime,
     crystal: validated.crystal,
     ...(hasExtendedChange ? { extended: extended.value } : {}),
     ...(input.geo !== undefined ? { geo } : {}),
@@ -5902,13 +5944,10 @@ export const upsertThing = async (
   // A non-array, non-empty thingtime is a real (rejected) attempt to change it.
   const thingtimeProvided =
     input.thingtime !== undefined && input.thingtime !== null && !(Array.isArray(input.thingtime) && input.thingtime.length === 0);
-  if (thingtimeProvided) {
-    const wanted = Array.isArray(input.thingtime) ? [...input.thingtime].sort().join(',') : String(input.thingtime);
-    if (wanted !== [...thingtimeOf(existing)].sort().join(',')) {
-      return fail(400, 'A thing’s thingtime schemas can’t be changed');
-    }
+  if (thingtimeProvided && !builderThingUpdateKinds(thingtimeOf(existing), input.thingtime)) {
+    return fail(400, 'A thing’s content schemas cannot be changed');
   }
-  const updated = await updateThing(viewer || ownerId, shareId, input as UpdateThingInput, { replaceCrystal: true }, app);
+  const updated = await updateThing(viewer || ownerId, shareId, { ...input, thingtime: thingtimeProvided ? input.thingtime : undefined } as UpdateThingInput, { replaceCrystal: true }, app);
   if (isFail(updated)) return updated;
   return { ok: true, created: false, thing: updated.thing, post: updated.post };
 };

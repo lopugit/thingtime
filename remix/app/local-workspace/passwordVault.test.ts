@@ -193,3 +193,25 @@ test('a title scan refuses partial results when aborted, locked or retired durin
   }
  } finally { vault.dispose(); await db.close(); }
 });
+
+for (const scope of [anonymous, account]) test(`${scope.kind} unlocked previews expose only safe labels and stored icon references`, async () => {
+ const db = database(), gate = guard(), vault = new LocalPasswordVault(db, scope, gate.lease, origin);
+ try {
+  await vault.unlock(passphrase, true);
+  const id = crypto.randomUUID(), fileId = `att_${'a'.repeat(64)}`;
+  const item = { ...emptyPasswordEntry(), title: 'Preview fixture', icon: { kind: 'attachment' as const, fileId }, fields: [
+   { id: 'username', label: 'Username', type: 'text' as const, value: 'synthetic-user' },
+   { id: 'password', label: 'Password', type: 'password' as const, value: 'synthetic-preview-secret' },
+   { id: 'website', label: 'Website', type: 'url' as const, value: 'https://private-preview.example' }
+  ] };
+  await vault.save({ id, writeId: crypto.randomUUID(), revision: 0, entry: item });
+  await assert.rejects(vault.save({ id: crypto.randomUUID(), writeId: crypto.randomUUID(), revision: 0, entry: { ...item, icon: { kind: 'attachment', fileId: crypto.randomUUID() } } }), /uploaded icon/);
+  assert.equal((await vault.page()).entries.length, 1);
+  const preview = (await vault.page()).entries[0];
+  assert.equal(preview.username, 'synthetic-user'); assert.deepEqual(preview.icon, { kind: 'attachment', fileId });
+  assert.equal(preview.websiteIcon, undefined); assert.equal(preview.entry, undefined);
+  assert.ok(!JSON.stringify(preview).includes('synthetic-preview-secret')); assert.ok(!JSON.stringify(preview).includes('private-preview.example'));
+  const persisted = JSON.stringify(await rows(db, scope, gate.lease));
+  for (const value of ['synthetic-user', fileId, 'Preview fixture']) assert.ok(!persisted.includes(value));
+ } finally { vault.dispose(); await db.close(); }
+});

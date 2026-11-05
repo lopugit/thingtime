@@ -110,7 +110,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 				lease.assertCurrent(); options?.signal?.throwIfAborted();
 				return { ...page, things: page.things.map(project), posts: Object.fromEntries(page.things.filter(row => row.thingtime.includes('post')).map(row => [row.id, localPostProjection(row, all, LOCAL_WORKSPACE_OWNER, false, index)])), incomplete: false };
 			}
-			if (Object.entries(args).some(([key, value]) => value !== undefined && !['q', 'thingtime', 'cursor', 'limit', 'workspace'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_SEARCH', 'These filters require the structured search adapter.');
+			if (Object.entries(args).some(([key, value]) => value !== undefined && !['q', 'thingtime', 'cursor', 'limit', 'workspace', 'conditions', 'mode'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_SEARCH', 'These filters require the structured search adapter.');
 			const page = searchLocalLibrary(await service().librarySnapshot(), args);
 			lease.assertCurrent(); options?.signal?.throwIfAborted();
 			return { ...page, things: page.things.map(project) };

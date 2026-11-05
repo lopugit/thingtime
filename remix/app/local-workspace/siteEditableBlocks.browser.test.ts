@@ -37,7 +37,7 @@ test('global and site nested blocks remain individually editable after offline s
  const open = async () => {
   const selectBlock = page.getByLabel('Select block', { exact: true });
   const opener = page.getByRole('button', { name: 'Open the builder inspector', exact: true });
-  await Promise.any([selectBlock.waitFor({ state: 'visible' }), opener.waitFor({ state: 'visible' })]);
+  await Promise.race([selectBlock.waitFor({ state: 'visible' }), opener.waitFor({ state: 'visible' })]);
   if (!await selectBlock.isVisible()) await opener.click();
   await selectBlock.waitFor({ state: 'visible' });
  };

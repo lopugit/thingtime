@@ -294,7 +294,15 @@ export type ThingtimeNativeActivitySnapshot = {
 export type ThingtimeNativeActivityRequest = { version: '1.0.0'; action: 'list' } |
  { version: '1.0.0'; action: 'set-enabled'; id: string; enabled: boolean };
 
+export type DesktopAttachmentUploadRequest = { version: '1.0.0'; requestId: string } & (
+	| { action: 'open'; origin: string; ownerId: string; uploadId: string; partNumber: number; length: number; checksum: string }
+	| { action: 'chunk'; offset: number; bytes: Uint8Array }
+	| { action: 'finish' | 'cancel' }
+);
+
 export type ThingtimeDesktopBridge = {
+	attachmentUploadVersion?: string;
+	attachmentUploadRequest?: (request: DesktopAttachmentUploadRequest) => Promise<void>;
 	activityVersion?: string;
 	activityRequest?: (request: ThingtimeNativeActivityRequest) => Promise<ThingtimeNativeActivitySnapshot>;
 	fileExportVersion?: string;

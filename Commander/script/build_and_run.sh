@@ -123,18 +123,18 @@ compile_all() {
     echo "Commander requires Cargo to build its bundled search and filesystem indexer binaries" >&2
     exit 1
   fi
-  cargo build --locked --release --manifest-path "$ROOT_DIR/crates/commander-core/Cargo.toml"
-  cargo build --locked --release --manifest-path "$ROOT_DIR/crates/commander-indexer/Cargo.toml"
+  cargo build --locked --release --manifest-path "$ROOT_DIR/../filesystem-indexer/crates/core/Cargo.toml"
+  cargo build --locked --release --manifest-path "$ROOT_DIR/../filesystem-indexer/crates/indexer/Cargo.toml"
 
-  cargo test --locked --manifest-path "$ROOT_DIR/crates/commander-core/Cargo.toml"
-  cargo test --locked --manifest-path "$ROOT_DIR/crates/commander-indexer/Cargo.toml"
+  cargo test --locked --manifest-path "$ROOT_DIR/../filesystem-indexer/crates/core/Cargo.toml"
+  cargo test --locked --manifest-path "$ROOT_DIR/../filesystem-indexer/crates/indexer/Cargo.toml"
   swift test --package-path "$SWIFT_PACKAGE"
   swift build --package-path "$SWIFT_PACKAGE" -c release
 }
 
 bundle_all() {
-  local rust_binary="$ROOT_DIR/crates/commander-core/target/release/commander-search"
-  local rust_indexer_binary="$ROOT_DIR/crates/commander-indexer/target/release/commander-indexer"
+  local rust_binary="$ROOT_DIR/../filesystem-indexer/target/release/commander-search"
+  local rust_indexer_binary="$ROOT_DIR/../filesystem-indexer/target/release/commander-indexer"
   test -x "$rust_binary"
   test -x "$rust_indexer_binary"
   local swift_binary

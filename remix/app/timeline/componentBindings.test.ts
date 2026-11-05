@@ -81,6 +81,10 @@ test('missing historical references stay missing; foreign, unrelated and duplica
 
 test('capture follows bounded container references, preserves explicit unresolved refs and cannot borrow prototype properties', () => {
 	assert.deepEqual(webpageComponentRefs([{ type: 'container', children: [...blocks, ...blocks] }]), ['card', 'missing']);
+	assert.deepEqual(webpageComponentRefs([{ type: 'condition', condition: { arg: 'query.view', equals: 'new' }, children: [
+		{ type: 'element', children: [{ type: 'collection', children: [{ type: 'component', component: 'nested' }] }] },
+		{ type: 'component', component: 'missing' }
+	] }]), ['nested', 'missing']);
 	assert.deepEqual(Object.keys(bindingsForBlocks(blocks, { card: component('x') })), ['card']);
 	assert.deepEqual(Object.keys(bindingsForBlocks([{ type: 'component', component: 'toString' }], {})), []);
 	assert.throws(

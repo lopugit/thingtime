@@ -1,5 +1,83 @@
 # API endpoints and capabilities
 
+## Connector confirmations and large mutation plans
+
+`api.settings-connector-protections` 1.0.0 registers GET/POST
+`/api/v1/settings/connector-protections`; the current owning account alone may
+write its ten confirmation preferences, with `X-Thingtime-Expected-Actor` and
+same-origin validation. Connected Things PATs can read their own effective
+policy but cannot disable it. Missing settings default to enabled; failed
+negotiation/read requires confirmation. `api.chatgpt-mcp` 2.0.0 uses compact
+signed preview references, encrypted staged plans, paged review/history and
+single-use application. Current account preferences are checked again at
+application, including the underlying operation and workflow/undo rules.
+Run `test:chatgpt`, `test:api-capabilities`, and
+`test:connector-mutations:acceptance`. See the hosted connector documentation
+for staged text parts and unavoidable upstream transport constraints.
+
+`api.devices` and `api.devices-node-state` 1.14.0 add optional host resource
+measurements to the existing device state mirror. `DeviceResources.swift`
+samples host counters, `ThingtimeAPIClient` sends the fields only to a
+compatible paired origin, and `normalizeDeviceState` validates the scalar
+allowlist for writes and the owner-only read projection. Older snapshots omit
+these fields. Run `test:devices`, `test:api-capabilities`, and the
+`DeviceResourcesTests` Swift suite. See the [native node guide](../../macos/ThingtimeNode/README.md).
+
+`api.devices-sync-control` 1.1.0 adds `/api/v1/devices/sync-control` for the
+account browser and installed sync worker. `deviceSyncControl.ts` authenticates
+the owner and current device pairing, delivers an immutable request once, and
+accepts a result only from its claiming lease. Protected `device-sync-control`
+Things reuse the device queue/unique-key indexes, secure BinData payloads and
+shared control TTL; no new collection or index is introduced. File bytes and
+native grants remain on the device. Optional owner-private `roots[].sourcePath`
+location metadata survives the encrypted status result; it grants no ancestor
+access and never appears in a public manifest. Run `test:devices`, `test:api-capabilities`
+and `test:schemas`; see [browser device sync](../browser-device-sync.md).
+
+`api.admin-mongodb-connections` 1.1.0 registers the private administrator
+`GET /api/v1/admin/mongodb/connections` in the docs registry and Nitro map.
+The shared `useApi` client negotiates it against the selected origin. Its reply
+separates optional selected-server totals from paginated runtime/pool observations
+and explicitly declares incomplete coverage. Optional monitoring topology models,
+pool retention settings and allowlisted cumulative request-feature use explain
+deployment costs without claiming measured monitoring or exclusive socket use.
+Run `test:mongodb-connections`,
+`test:api-capabilities` and `scripts/mongodb-connections-acceptance.mjs`; see
+[connection inventory](../mongodb-connections.md).
+
+Private task reporting publishes `api.agent-reporting` 1.0.0 on
+`POST /api/v1/agents/reporting`; both manifests derive it from `apiDocs.ts` and
+the Nitro route map. The ChatGPT MCP surface publishes `api.chatgpt-mcp` 1.1.0
+and its separate `chatgpt.agent-reporting` 1.0.0 contract. OAuth authorization
+publishes `api.chatgpt-oauth-authorize` 1.2.0 and `chatgpt.oauth` 1.11.0 for
+the issuer-bound Codex CIMD and its exact ephemeral loopback callback.
+The reporting tools
+negotiate reporting, Characters and overview at the connected account's exact
+origin, and require `agents.report` independently of `things`. Run
+`test:agent-reporting`, `test:chatgpt` and `test:api-capabilities`; see
+[the reporting runbook](../agent-reporting.md).
+
+Explicit Thing presentation is shared crystal metadata: `registry.ts`
+`validateThingtimeCrystal` retains `renderComponent` after each typed content
+allowlist and validates embedded definitions through the canonical Component
+sanitizer. `api.things` 1.42.0 and `api.things-update` 1.13.0 advertise it through
+both generated manifests. The first-party create/PATCH/PUT client negotiates
+1.42.0 when it sends a declaration. Omitted PATCH metadata survives content
+edits; `null` remains an explicit unavailable renderer; replacement omission
+removes the declaration. Malformed declarations fail validation. Saved pointers
+never grant Component/dependency access. `renderComponentDeclaration.ts` shares
+the declaration grammar and root-over-nested post precedence with rendering.
+Run `test:schemas`, `test:feed`, `test:api-capabilities` and the isolated
+`subspace-messages-acceptance.mjs` typed-post/comment persistence checks.
+
+Environment API gateway ingress is negotiated through `api.environment-gateway`
+1.1.0 and `/.well-known/thingtime-capabilities.json`. Server deployments use
+the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by
+opt-in) with the `THINGTIME_MONGODB_CONNECTION_MODE` runtime override. Dedicated
+mode executes its own backend, advertises `gateway: null`, and refuses relay
+traffic; it does not imply an isolated database. See [the gateway runbook](../environment-api-gateway.md)
+for the audited environment mapping and pending activation evidence.
+
 Mobile device descriptors use `app/devices/platform.ts` across validation,
 projection, schemas and client types. `api.devices` 1.10.0 and
 `api.devices-pairing-claim` 1.1.0 add iOS/Android to the existing signed pairing
@@ -130,9 +208,24 @@ Saved theme history uses `api.themes` / `api.themes-delete` 1.1.1 and
 and retained deletion in its content transaction; no new endpoint or collection
 is introduced. See [the Timeline contract](../unified-timeline.md).
 
+`api.themes` 1.2.0 and `api.themes-shared` 1.1.0 add optional focus border,
+two glow colours, blur and strength tokens. Theme saves negotiate 1.2.0 through
+`theme/capabilities.ts`; older theme documents receive defaults without losing
+other settings. `test:theme` covers normalization and the authenticated route,
+while `test:api-capabilities` covers both manifests and client compatibility.
+
 All data access goes through `/api/v1/...` (`FUNDAMENTALS.md` §1). Nitro
 routes every documented endpoint to one catch-all handler; the docs registry is
 the source of truth for the route table and both capability manifests.
+
+Saved Webpage writes with editable intrinsic `tt-form`, `tt-select`, `tt-style`,
+`tt-change` and `tt-mapbox` blocks require `api.things` 1.44.0 on create and
+`api.things-update` 1.14.0 on update. Builder negotiates these before saving;
+`api.webpages-resolve` remains the independent read contract.
+
+Stored map source Actions are discovered through shared composition
+(`api.actions-run` 1.39.0) and retargeted to their copied IDs in private copies
+(`api.things-fork` 1.8.0). Map inputs and runtime row values do not grant access.
 
 ## Where the code lives
 
@@ -227,6 +320,17 @@ empty page; only known-clean saved pages may fetch their persisted tree.
 - Built server smoke: the discovery endpoint must return JSON with the selected
   origin, not the SPA shell (`verify:vercel-output`, preview `curl`).
 - `curl <base>/api/v1/<group>/<name>-docs` returns the entry as JSON.
+
+## MongoDB health failure shape
+
+`app/routes/api/v1/health/mongodb/_mongodb.tsx` preserves the complete
+`MongoConnectionStatus` shape when remote probes fail. `api.health-mongodb` 1.0.2
+includes `custom: false` (the remote request has no viewer-selected database)
+and `replicaSet: null` (unknown), alongside the existing disconnected/null
+fields, timestamp and sanitized error. The status response remains HTTP 200;
+it does not imply the database is connected. Remote health/status-data probes
+must not forward the local session cookie. Run the adjacent `_mongodb.test.ts`
+through `node --import tsx --test` from `remix/`, plus `test:api-capabilities`.
 
 ## Gotchas
 
@@ -444,7 +548,15 @@ both manifests and conditional client negotiation use the canonical docs entry.
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.2.0 is a
+`PasswordGenerator.tsx`, `PasswordIcon.tsx` and `PasswordPasskeySetup.tsx` compose
+editable settings blocks; secret output stays in the controlled entry draft.
+`passwords/generator.ts` owns WebCrypto/preset validation. `passwords/icons.ts`,
+`icons.client.ts` and `api/utils/passwords/icons.ts` own descriptors, anonymous
+image loading and the separately sealed list projection. `test:passwords` covers
+these boundaries; `scripts/password-tools.browser.html` is an isolated synthetic
+UI fixture, not native-provider acceptance.
+
+See [password-manager.md](../password-manager.md). `api.passwords` 1.3.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -591,17 +703,44 @@ the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
 
+
+## Mapbox provider integration
+
+`POST /api/v1/maps` negotiates `api.maps` 1.0.0. `api/utils/maps/route.ts`
+uses full-account authorization, owner-scoped Vault references and operation
+rate limits; `mapbox.ts` fixes provider destinations and redacts responses.
+Register `_maps.tsx` in Nitro and the canonical docs registry. Run `test:maps`
+and `test:api-capabilities`; see [maps](../maps.md) for provider storage constraints.
+The saved Builder `tt-mapbox` viewport loads the official `mapbox-gl` npm
+distribution JavaScript and CSS staged as Vite's same-origin public assets
+(`components/Builder/Maps/mapboxSdk.ts`).
+The application CSP permits only the Mapbox service and events origins in
+`connect-src`, with its existing `blob:` worker allowance; it does not permit a
+remote Mapbox script or eval. The separate Library SDK demo keeps its own
+opaque-origin policy and CDN loader.
+
+## Storage readiness and recovery
+
+`api.storage-accounting` 1.0.0 publishes shared deferred-accounting semantics
+from the canonical shared-feature registry to both manifests.
+`api.health-nitro` 1.3.0 adds honest recovering state and source-stamp checks;
+`api.lopu-recordings-run` 1.6.0 adds aggregate storageRecovery outcomes on the
+existing protected scheduler. Both manifests derive versions from apiDocs.ts.
+The dispatcher records allowlisted storage failure codes without logging response
+bodies. See [storage recovery](../storage-recovery.md) for transactional queue,
+worker, controller gates and the scheduled production monitor.
+
+
+Connections catalog, account/list, unlink, feed, filters and OAuth begin/callback
+publish independent 2.0.0 contracts through `apiDocs.ts` and both generated
+manifests. The existing `useApi` connection methods negotiate these requirements.
+There is no new endpoint. Owner-private encrypted grants replace shared tokens;
+OAuth app configuration is exact-origin/environment scoped. Read the auth map,
+README social OAuth setup and TESTING before provider acceptance.
 ## Environment gateway and index readiness
 
-Environment API gateway ingress is negotiated through `api.environment-gateway`
-1.1.0 and `/.well-known/thingtime-capabilities.json`. Server deployments use
-the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by
-opt-in) with the `THINGTIME_MONGODB_CONNECTION_MODE` runtime override. Dedicated
-mode executes its own backend, advertises `gateway: null`, and refuses relay
-traffic; it does not imply an isolated database. See [the gateway runbook](../environment-api-gateway.md)
-for the audited environment mapping and pending activation evidence.
-
-`app/api/utils/deployment/environmentGateway.ts` owns bounded discovery,
+The negotiated ingress contract and connection-mode policy are summarized at the
+top of this map. `app/api/utils/deployment/environmentGateway.ts` owns bounded discovery,
 admission and pool draining; `server/utils/environmentGateway.ts` validates
 origin-preserving signed relays before the normal route authorization path.
 `server/middleware/environment-gateway.ts`, the SPA fallback and capability
@@ -627,3 +766,30 @@ under timeline 1.23.0, preserving the frozen v1 reader. Run
 `test:owned-profiles`, `test:theme-sync`, `test:local-workspace`,
 `test:api-capabilities`, then built `test:environment-gateway:acceptance` in
 its disposable replica-set sandbox. See the local-workspace capacity checkpoint.
+Named Connections management is opt-in at `api.connections`,
+`api.connections-oauth-begin`, `api.connections-oauth-callback` and
+`api.connections-unlink` 2.1. `POST /api/v1/connections/named`
+(`api.connections-named` 1.0) verifies exact actor, origin, connection ID and
+a fixed operation. Token envelopes never cross the response boundary.
+Generic Things 1.46.3 also keeps private account and named grant metadata
+behind the origin-scoped Connections API. See
+`test:connections:oauth` and `test:api-capabilities`.
+
+Connection provider artwork negotiates `api.connections-provider-icon` 1.0.0.
+`GET /api/v1/connections/provider-icon?provider=<built-in-id>` serves cached
+PNG bytes, 204 when unavailable, or 404 for an unknown provider. This public
+asset stays on the document origin without opening a data-plane connection or
+forwarding user headers to the provider. Verify both manifests and route
+registration with `test:api-capabilities` and `test:connections:built`.
+
+## Dynamic map workspaces
+
+`api.things` 1.47.0 / `api.things-update` 1.16.0 accept editable `tt-upload` blocks.
+`api.webpages-resolve` 1.9.0 identifies the updated page contract.
+`PageActionSurface` and `webpageRuntime` support `$ui` query `scope: page`;
+`Builder/Maps/` renders custom marker text, labels, icon lists and authorized
+attachment avatars. `useWebpage` negotiates the upload save minimums.
+`GET /things` numeric summaries reuse canonical ACL-checked `listThings` pages
+through `api/utils/things/numericSummary.ts`, with exact schema/parent filters,
+no item-count cap and no partial success. Run the summary, map overlay/data,
+local UI, Webpage and capability tests plus live saved-page acceptance.

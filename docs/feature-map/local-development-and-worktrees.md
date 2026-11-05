@@ -10,6 +10,17 @@ worktree credentials. `agentTesting.ts` and `apiFallback.ts` fence the backend;
 commands live in [agent-browsers.md](../agent-browsers.md). Run the
 `electron/test/agent-browser-*.test.cjs` tests and full-app two-agent acceptance
 when changing allocation, networking, startup or cleanup.
+`electron/scripts/test-agent-acceptance-viewer.cjs` is an opt-in local test GUI
+for that existing isolated session, with fixed IPC and origin/task/tab fencing.
+Its supported startup, private-profile cleanup and exclusive credential-entry
+phase are in [installed-sync-acceptance.md](../installed-sync-acceptance.md).
+Run `node --test electron/test/acceptance-viewer.test.cjs` for its boundary checks;
+these do not establish GUI or installed-account sign-in acceptance. Select-all
+uses fixed focused-field selection against retained Puppeteer runtimes, and a
+refused operation fences input until a successful explicit frame refresh.
+`electron/scripts/acceptance-relay-keeper.cjs` derives renewal paths from the
+private descriptor, verifies the relay PID, and records bounded lifecycle status;
+run `electron/test/acceptance-relay-keeper.test.cjs` for path/failure regressions.
 `runtime/prepare-native.cjs` replaces Mac-traced native packages with locked
 Linux package trees and loads them during image construction. Keep its runtime
 lock synchronized with app native dependency upgrades and exercise a packaged
@@ -56,11 +67,18 @@ process can run a second foreground stack: `TT_WEB_PORT=… npm --prefix remix r
 | Headless API suite against a live stack | `npm --prefix remix run test:api -- --base http://127.0.0.1:<nitro>` |
 | Editable app composition fixture | `remix/scripts/test-builder-app-local.ts`, with explicit `TT_BUILDER_QA_ORIGIN` and private `TT_BUILDER_QA_SESSION`; loopback-only, real API, stable synthetic IDs. See README "Builder component SDK". |
 | Lint changed files | `corepack pnpm --dir remix run lint:files -- <files>` |
-| Types | `corepack pnpm --dir remix run typecheck` (raw) and `typecheck:ratchet` (warns above `scripts/typecheck-baseline.json`; lower the baseline with `--update-baseline` when the count drops) |
+| Types | `corepack pnpm --dir remix run typecheck` (raw) and `corepack pnpm --dir remix run typecheck:ratchet` (strict zero-error baseline; never raise it) |
+| Full lint | `corepack pnpm --dir remix run lint` (errors fail; warnings have no numeric budget) |
+| Gate and legacy-helper regressions | `npm --prefix remix run test:typecheck-ratchet`; `npm --prefix remix run test:smarts` |
 | Vercel output contract | `npm --prefix remix run verify:vercel-output` |
 | Graphify | `scripts/graphify update .` after code changes; `npm run test:graphify-cas` for the wrapper |
 | Electron restart storage | `corepack pnpm --dir electron run verify:renderer-restart` after `build:web` + `verify:web`; isolated multi-process Chromium acceptance of `electron/lib/renderer-server.cjs`, shared journal and drafts. Nitro uses `node_middleware`; the profile owns a stable, collision-checked origin. See `electron/README.md`. |
 | Local Electron bundle | `corepack pnpm --dir electron run build` runs `npm ci` for the separately locked `MCP/` helper before the web/native build and preserves an available installed app signing identity; a fresh worktree needs no manual MCP dependency install |
+| Retained development app | `corepack pnpm@10.12.1 --dir electron dev:parallel --workspace=<task> --prepare-only` snapshots the canonical runtime into a named development app with independent dependencies/profile/managed replica/ports. `dev-workspace.mjs` owns transactional preparation and process ownership; `--stop-workspace` stops its verified group while preserving state. Never install an unmerged candidate over stable. See `electron/README.md` and `electron/test/dev-workspace.test.cjs`. |
+
+See [static analysis baselines](../static-analysis-baselines.md) for the audit,
+workspace coverage and formatter/CI limitations. A compiler launch failure is
+not a clean run and cannot justify rewriting the baseline.
 
 ## Graphify snapshots and hooks
 
@@ -178,3 +196,21 @@ first, without loading real configuration. Pass an independently verified local
 **Linux isolated anonymous/offline acceptance** for commands and prerequisites.
 This proves the native web renderer in an isolated Linux browser. Installed Mac
 app controls, native runtime claims and deployed previews need separate evidence.
+## Commander native background indexing
+
+`Commander/apps/daemon/src/services/indexing.ts` schedules coalesced subtree updates and periodic full reconciliation;
+`filesystem-indexer/crates/indexer` owns transactional SQLite/WAL snapshots, ignore traversal and unique counters.
+`Commander/script/dev-parallel.sh` runs an isolated native development bundle beside the installed app;
+`Commander/script/verify-background-index.mjs` verifies its real bundled daemon against disposable filesystem events.
+Run Commander typecheck/tests, both Rust crates and the native checks in `Commander/docs/TESTING.md`. Index status
+changes negotiate the daemon's `commander.index-status` capability; no Thingtime data API is added by this lane.
+
+## Shared Rust filesystem workspace
+
+`filesystem-indexer/Cargo.toml` owns the local `core`, `indexer` and `ffi` crates
+and one lockfile. Native build scripts reference these paths directly; no
+registry release is required. `filesystem-indexer/README.md` documents consumers,
+iOS toolchains and isolated build outputs. Run workspace Cargo tests, the linked
+Swift/Rust fixture (`apple/FileSync/test-embedded-rust.sh`) and affected native
+host suites before signing and installing. Release listeners include changes in
+this directory for every consuming app.

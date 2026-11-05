@@ -12,7 +12,8 @@ import { componentPageHref, componentNavigationState } from '../Builder/componen
 import { ComponentAttachments, ComponentMedia } from '../Builder/ComponentAttachments';
 import { ComponentDiscussion } from '../Builder/ComponentDiscussion';
 import { ComponentMap } from '../Builder/ComponentMap';
-import { ComponentDialog, ComponentForm, ComponentCountdown, NativeControlsEnabled } from '../Builder/NativeComponentControls';
+import { ComponentMapbox } from '../Builder/Maps/ComponentMapbox';
+import { ComponentDialog, ComponentForm, ComponentCountdown, NativeControlsEnabled, ComponentDisplayOnly } from '../Builder/NativeComponentControls';
 import { ComponentUpload } from '../Builder/ComponentUpload';
 import React from 'react';
 import { HtmlTemplateField } from './HtmlTemplateField';
@@ -122,6 +123,9 @@ export const ALLOWED_PROPS = new Set([
 	'aria-valuetext',
 	'aria-hidden',
 	'aria-pressed',
+	'aria-checked',
+	'aria-busy',
+	'aria-disabled',
 	'aria-expanded',
 	'aria-selected',
 	'aria-current',
@@ -270,7 +274,7 @@ export type HtmlThingNode =
 			children?: HtmlThingNode[] | HtmlThingNode;
 	  };
 
-type RenderState = { count: number; mediaUrl: (url: string) => string };
+type RenderState = { displayOnly?: boolean; count: number; mediaUrl: (url: string) => string };
 
 function ComponentLink({ href, children, ...props }: Record<string, any>) {
 	const inRouter = useInRouterContext();
@@ -302,6 +306,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 
 	const tag = String(node.tag || 'div').toLowerCase();
 	if (tag === 'tt-media-pipeline') return <LocalMediaPipeline key={key} pipeline={node.props?.pipeline}>{renderChildren(node.children, depth + 1, state)}</LocalMediaPipeline>;
+	if (tag === 'tt-web-platform' && state.displayOnly) return <p key={key}>Web Platform programs are available on the interactive page.</p>;
 	if (tag === 'tt-web-platform') return <React.Suspense key={key} fallback={<p>Web Platform program</p>}><WebPlatformSurface program={node.props?.program} name={node.props?.name} /></React.Suspense>;
 	if (tag === 'tt-service-workspace') {
 		const name = typeof node.props?.name === 'string' ? node.props.name : undefined;
@@ -329,6 +334,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	if (tag === 'tt-media') return <ComponentMedia key={key} {...node.props} />;
 	if (tag === 'tt-select') return <ComponentSelect key={key} {...node.props} />;
 	if (tag === 'tt-map') return <ComponentMap key={key} {...node.props} />;
+	if (tag === 'tt-mapbox') return <ComponentMapbox key={key} {...node.props} />;
 	if (tag === 'tt-form')
 		return (
 			<ComponentForm
@@ -370,6 +376,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	}
 
 	const props = fieldProps(tag, sanitizeProps(node.props, tag));
+	if (state.displayOnly) { delete props['data-tt-action']; delete props['data-tt-action-inputs']; }
 	if (props.style) props.style = mapStyleMediaUrls(props.style, state.mediaUrl);
 	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]) || undefined;
 
@@ -405,16 +412,34 @@ const renderChildren = (children: HtmlThingNode[] | HtmlThingNode | undefined, d
 };
 
 export const HtmlThingRenderer = ({ node }: { node: HtmlThingNode }) => {
-	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl() };
+	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl(), displayOnly: React.useContext(ComponentDisplayOnly) };
 	return <>{renderNode(node, 0, 0, state)}</>;
 };
 
+// Authored images may keep a local fallback while a source loads or fails.
+// The fallback is a static same-origin asset: it does not carry user data or
+// expand the shared-media dependency graph to a second arbitrary source URL.
+function HtmlBlockImage({ elementProps, fallback }: { elementProps: Record<string, any>; fallback: string }) {
+ const [ready, setReady] = React.useState(false);
+ const [failed, setFailed] = React.useState(false);
+ const src = !failed && typeof elementProps.src === 'string' ? elementProps.src : undefined;
+ return <img {...elementProps} src={src || fallback} alt={typeof elementProps.alt === 'string' ? elementProps.alt : ''} referrerPolicy="no-referrer" loading="lazy" decoding="async"
+  style={{ ...elementProps.style, ...(!ready && src && { background: `center / contain no-repeat url("${fallback}")`, color: 'transparent' }) }}
+  onLoad={() => setReady(true)} onError={() => setFailed(true)} />;
+}
+
 /** Individual Builder elements share the exact HTML allowlist and URL policy. */
-export function HtmlBlockElement({ tag, attributes, editorProps, children }: {
- tag: string; attributes?: Record<string, unknown>; editorProps?: Record<string, any>; children?: React.ReactNode;
+export function HtmlBlockElement({ tag, attributes, editorProps, children, markerContent }: {
+ tag: string; attributes?: Record<string, unknown>; editorProps?: Record<string, any>; children?: React.ReactNode; markerContent?: React.ReactNode;
 }) {
  const mediaUrl = useSharedMediaUrl();
  if (tag === 'tt-media-pipeline') return <LocalMediaPipeline pipeline={attributes?.pipeline} editorProps={editorProps}>{children}</LocalMediaPipeline>;
+ if (tag === 'tt-mapbox') return <div {...editorProps}><ComponentMapbox {...attributes} markerContent={markerContent} /></div>;
+ if (tag === 'tt-upload') return <div {...editorProps}><ComponentUpload {...attributes} /></div>;
+ if (tag === 'tt-style') return <div {...editorProps}><ComponentStyle rules={attributes?.rules}>{children}</ComponentStyle></div>;
+ if (tag === 'tt-form') return <div {...editorProps}><ComponentForm {...attributes}>{children}</ComponentForm></div>;
+ if (tag === 'tt-select') return <div {...editorProps}><ComponentSelect {...attributes} /></div>;
+ if (tag === 'tt-change') return <span {...editorProps}><ComponentChange {...attributes}>{children}</ComponentChange></span>;
  const safeTag = ALLOWED_TAGS.has(tag) && !tag.startsWith('tt-') ? tag : 'div';
  const props = fieldProps(safeTag, sanitizeProps(attributes, safeTag));
  if (props.style) props.style = mapStyleMediaUrls(props.style, mediaUrl);
@@ -422,5 +447,9 @@ export function HtmlBlockElement({ tag, attributes, editorProps, children }: {
  const merged = { ...props, ...editorProps, style: { ...(props.style as React.CSSProperties), ...editorProps?.style } };
  if (FIELD_TAGS.has(safeTag)) return <HtmlTemplateField tag={safeTag as 'input' | 'textarea' | 'select'} fieldProps={merged}>{safeTag === 'select' ? children : undefined}</HtmlTemplateField>;
  if (safeTag === 'a') return <ComponentLink {...merged}>{children}</ComponentLink>;
+ const fallback = attributes?.['data-tt-image-fallback'];
+ if (safeTag === 'img' && typeof fallback === 'string' && /^\/[a-zA-Z0-9_/-]+\.(?:png|svg|webp)$/.test(fallback) && !fallback.startsWith('//')) {
+  return <HtmlBlockImage key={String(props.src ?? '')} elementProps={merged} fallback={fallback} />;
+ }
  return React.createElement(safeTag, merged, VOID_TAGS.has(safeTag) ? undefined : children);
 }

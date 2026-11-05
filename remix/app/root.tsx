@@ -2,8 +2,10 @@ import { LopuInstructionsSync } from './local-workspace/lopuInstructions.client'
 import { CharacterContentRoute } from './components/Characters/CharacterContentScope';
 import { LocalMediaDiagnostics } from './local-workspace/media.client';
 import { AccountSyncStatus } from './local-workspace/AccountSyncStatus';
+import { BrowserExtensionAccountBridge } from './components/Passwords/BrowserExtensionAccountBridge';
 import { ThingDraftsProvider } from './drafts/ThingDrafts';
 import { NativeSyncBootstrap } from './fileSync/NativeSyncBootstrap';
+import { RemoteSyncBootstrap } from './fileSync/RemoteSyncBootstrap';
 import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
 import { LOPU_WINDOW_Z } from './components/Nav/Drawer/useDrawer';
 import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
@@ -22,6 +24,7 @@ import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { WorkspaceThingtimeProvider } from './local-workspace/WorkspaceThingtimeProvider';
 import { TimelineHost } from './components/Timeline/TimelineHost';
 import { TimelineProvider } from './timeline/TimelineProvider';
+import { BUILDER_OVERLAY_CHROME_CSS } from './components/Builder/BuilderOverlayHost';
 import { DevKit } from './components/DevKit/DevKit';
 import { ElectronBridgeHost } from './components/Electron/ElectronBridgeHost';
 import { NativeBridgeHost } from './components/NativeBridge/NativeBridgeHost';
@@ -75,7 +78,8 @@ export default function App() {
   const { envFromCookie, titlePrefix } = rootData;
   const { pathname, search, hash } = useLocation();
   const isStandalonePage = pathname.startsWith('/t/');
-  const isAuthorizePopup = isStandalonePage || pathname === '/invite' || pathname === '/authorize' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
+  const isPasswordSurface = pathname === '/passwords' || pathname === '/settings/passwords';
+  const isAuthorizePopup = isStandalonePage || pathname === '/invite' || pathname === '/authorize' || pathname === '/passwords/provider' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
   React.useLayoutEffect(() => bindTransferIdentity(rootIdentity, contentOwnerId || LOCAL_WORKSPACE_OWNER, rootData.clientIdentityGeneration),
@@ -135,6 +139,7 @@ export default function App() {
       <GlobalStyles />
       <style>{`
         ${PAGE_VIEWPORT_CSS}
+        ${BUILDER_OVERLAY_CHROME_CSS}
         html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [data-testid="site-edit-pill"],
         html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [class~="tt.devKit"],
         html[data-lopu-sheet="open"] [data-testid="site-edit-pill"] { z-index: ${LOPU_WINDOW_Z - 1} !important; }
@@ -144,20 +149,22 @@ export default function App() {
          <TimelineProvider>
          {mounted && !isAuthorizePopup ? <TimelineHost /> : null}
         <VisualSettingsHost />
+        {mounted ? <BrowserExtensionAccountBridge /> : null}
         <LopuPageTracker />
         <ThemeHost />
         {/* Mirrors settings.lopu.position into the cache useLopu reads at fire time. */}
         <LopuPositionSync />
         {mounted ? <ElectronBridgeHost /> : null}
         {mounted && !identity.pending && rootData.dataPlane === 'home' && rootData.user?.id &&
-          rootData.user.accountKind === 'user' && !rootData.user.temporary ?
-          <NativeSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} /> : null}
+          rootData.user.accountKind === 'user' && !rootData.user.temporary && !rootData.user.isCharacter ?
+          <><NativeSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} />
+          <RemoteSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} /></> : null}
         {mounted ? <NativeBridgeHost /> : null}
         {/* Invite signup and authorization/pairing use a focused auth
             surface with their own chrome, so the app shell (nav, drawer trigger,
             DevKit bubble, Main's footer + its 900px spacer) stays out of it. */}
         <div id="lopuPageViewport">
-        {isAuthorizePopup ? null : <DevKit />}
+        {isAuthorizePopup || isPasswordSurface ? null : <DevKit />}
         {isAuthorizePopup ? null : <Nav />}
         <div id="lopuPageScroll">
         {isAuthorizePopup ? (
@@ -178,7 +185,7 @@ export default function App() {
         {isAuthorizePopup ? null : <DrawerSystem />}
         </div>
         {/* 🦄 Lopu: global floating launcher + draggable chat window (hidden on /lopu). */}
-        {mounted && !isAuthorizePopup ? <LopuHost /> : null}
+        {mounted && !isAuthorizePopup && !isPasswordSurface ? <LopuHost /> : null}
         {/* ⌘K quick switcher — global palette; renders nothing until opened. */}
         {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
         {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}

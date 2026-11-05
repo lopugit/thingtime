@@ -1,7 +1,8 @@
 import React from 'react';
+import { isPlainLinkClick } from '~/utils/linkNavigation';
 import { ComponentDataScope } from './ComponentSelect';
 import { NativeControlsEnabled } from './NativeComponentControls';
-import { createTransientLifetime, parseTransientBinding, TRANSIENT_BLOCK_ACTION, transientFieldValue, transientNamedField, type TransientBlockActions } from './transientBlockActions';
+import { createTransientLifetime, parseTransientBinding, TRANSIENT_BLOCK_ACTION, transientControlForTarget, transientFieldValue, transientNamedField, type TransientBlockActions } from './transientBlockActions';
 export type { TransientBlockActions, TransientBlockInvocation } from './transientBlockActions';
 
 export type TransientBlockHostProps = {
@@ -34,6 +35,11 @@ function TransientBlockSession({ scope, actions, enabled = true, onError, childr
 		// Dialog contents are authored blocks; only the browser's focus/top-layer
 		// capability is native. Builder edit mode keeps them ordinary open panels.
 		if (!enabled) return;
+		// Native checkboxes need a DOM property for the accessible mixed state.
+		// Use the authored ARIA binding only within this adapter's boundary.
+		for (const input of host.current?.querySelectorAll<HTMLInputElement>('input[type="checkbox"][aria-checked][data-tt-action="$transient"]') || []) {
+			if (input.closest('[data-tt-transient-boundary]') === host.current) input.indeterminate = input.getAttribute('aria-checked') === 'mixed';
+		}
 		for (const dialog of host.current?.querySelectorAll<HTMLDialogElement>('dialog[data-tt-action="$transient"]') || []) {
 			const binding = parseTransientBinding(dialog.getAttribute('data-tt-action-inputs'));
 			const desired = binding?.inputs.open === true || binding?.inputs.open === 'true';
@@ -49,14 +55,19 @@ function TransientBlockSession({ scope, actions, enabled = true, onError, childr
 		// Let checkbox/radio clicks reach React's change plugin: stopping native
 		// capture would suppress change and its controlled-value restoration.
 		if (!current.current.enabled) return;
-		const control = target.closest<HTMLElement>('[data-tt-action]');
+		const control = transientControlForTarget(root, target);
+		if (!control) return;
 		const checkedField = control?.tagName === 'INPUT' && ['checkbox', 'radio'].includes((control as HTMLInputElement).type);
 		if (checkedField && event.type === 'click') return;
-		event.stopPropagation();
-		if (!control || !root.contains(control)) return;
+
 		if (control.tagName === 'DIALOG' && event.type !== 'cancel') return;
+		// Authored links retain the browser's new-tab/window gestures. The
+		// adapter owns only an ordinary primary-button activation.
+		const mouse = event as unknown as MouseEvent;
+		if (control.tagName === 'A' && event.type === 'click' && !isPlainLinkClick(mouse)) return;
 		const field = ['INPUT', 'SELECT', 'TEXTAREA'].includes(control.tagName);
 		if (field !== change) return;
+		event.stopPropagation();
 		// A checkbox/radio change is derived from native click; cancelling its
 		// default would roll back the state even after the adapter accepts it.
 		if (!checkedField) event.preventDefault();

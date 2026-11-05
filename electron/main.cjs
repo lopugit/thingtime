@@ -13,8 +13,16 @@ if (parallelDevMode) {
 	if (!profilePath || !path.isAbsolute(profilePath)) {
 		throw new Error('Parallel development requires an isolated absolute profile path.');
 	}
-	app.setName('Thingtime Dev');
+	const developmentName = process.env.THINGTIME_DESKTOP_DEV_NAME || 'Thingtime Dev';
+	if (developmentName !== 'Thingtime Dev' && !/^Thingtime Dev [a-z0-9][a-z0-9-]{0,63}$/.test(developmentName)) throw new Error('Choose a valid isolated development app name.');
+	app.setName(developmentName);
 	app.setPath('userData', profilePath);
+}
+// Read-only installed CLI discovery runs before settings, sessions, vault state,
+// renderer startup or single-instance forwarding. It never opens profile files.
+if (process.argv.includes('--password-agent-info')) {
+	fs.writeSync(1, JSON.stringify({ profile: app.getPath('userData'), cli: app.isPackaged ? path.join(process.resourcesPath, 'password-agent.mjs') : path.join(__dirname, 'scripts/password-agent.mjs'), supported: ['linux', 'win32'].includes(process.platform) }) + '\n');
+	app.exit(0);
 }
 const { checkEndpointCompatibility, compatibilityError, probeEndpointCapabilities } = require('./lib/endpoint-compatibility.cjs');
 const { prepareAppLocations } = require('./lib/app-locations.cjs');
@@ -23,6 +31,7 @@ const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
 const { LocalRuntime, attachQuitSignals } = require('./lib/local-runtime.cjs');
 const { SessionAuthority, remoteOrigin, contentOrigin } = require('./lib/session-authority.cjs');
 const { ensureWindowVisible, loadWindow } = require('./lib/window-visibility.cjs');
+const { attachWindowZoom, windowZoomMenu } = require('./lib/window-zoom.cjs');
 const { AuthorityTransition } = require('./lib/authority-transition.cjs');
 const authorityTransition = new AuthorityTransition();
 const {
@@ -48,6 +57,7 @@ const {
 } = require('./lib/thingtime-node-bridge.cjs');
 
 const { DesktopFolderSync } = require('./lib/folder-sync.cjs');
+const { DesktopAttachmentUpload } = require('./lib/attachment-upload.cjs');
 const { SyncWindowLease } = require('./lib/sync-window.cjs');
 const { DesktopFileExport } = require('./lib/file-export.cjs');
 const { DesktopSpeechRecognition, requireSpeechSender } = require('./lib/speech-recognition.cjs');
@@ -93,6 +103,7 @@ let desktopServicesClosing = false;
 let desktopServicesClosed = false;
 async function closeDesktopServices() {
  const tasks = [];
+ if (process.platform !== 'darwin') tasks.push(passwordProvider.close());
  if (agentBrowsersPromise) tasks.push(agentBrowsersPromise.then(controller => controller.close()));
  if (localRuntime) tasks.push((async () => {
   try { await globalThis[Symbol.for('thingtime.chatgpt-plan.close')]?.(); }
@@ -103,7 +114,7 @@ async function closeDesktopServices() {
 }
 attachQuitSignals(app);
 app.on('before-quit', (event) => {
- if (desktopServicesClosed || (!localRuntime && !agentBrowsersPromise)) return;
+ if (desktopServicesClosed || (!localRuntime && !agentBrowsersPromise && process.platform === 'darwin')) return;
  event.preventDefault();
  if (desktopServicesClosing) return;
  desktopServicesClosing = true;
@@ -161,7 +172,11 @@ const desktopFileExport = new DesktopFileExport({
         apiOrigin: desktopSettings?.snapshot().selectedEndpoint.url }),
     choose: (window, options) => dialog.showSaveDialog(window, options)
 });
-app.on('before-quit', () => { syncWindowLease.quit(); desktopFolderSync.quit(); desktopFileExport.invalidate(); });
+const desktopAttachmentUpload = new DesktopAttachmentUpload({
+    context: () => ({ enabled: process.platform === 'darwin' && !parallelDevMode, window: mainWindow, appOrigin,
+        apiOrigin: activeAccountEndpoint() ? new URL(activeAccountEndpoint()).origin : null })
+});
+app.on('before-quit', () => { syncWindowLease.quit(); desktopFolderSync.quit(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); });
 
 
 function getSessionHash() {
@@ -375,7 +390,7 @@ function normalizeDesktopUrl(rawUrl) {
 }
 
 function setApiFallbackEndpoint(rawUrl) {
-	desktopFolderSync.invalidate(); desktopFileExport.invalidate();
+	desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate();
 	const endpointUrl = normalizeDesktopUrl(rawUrl);
 	if (!localRuntime?.runningEnabled) process.env.THINGTIME_API_FALLBACK_ORIGIN = new URL(endpointUrl).origin;
 	return endpointUrl;
@@ -1075,7 +1090,7 @@ async function initializeDesktopSettings() {
   }
  });
  await localRuntime.initialize();
- if (localRuntime.snapshot().enabled) await passwordProvider.disconnect();
+ if (localRuntime.snapshot().enabled && !parallelDevMode) await passwordProvider.disconnect();
 	desktopSettings = new DesktopSettingsStore({
 		filePath: path.join(app.getPath('userData'), 'desktop-settings.json'),
 		metadata: readWebBuildMetadata()
@@ -1774,6 +1789,7 @@ function createApplicationMenu() {
       ]
     },
     { role: 'editMenu' },
+    windowZoomMenu(() => mainWindow),
     { role: 'windowMenu' }
   ];
 
@@ -1818,17 +1834,18 @@ function createWindow() {
     }
   });
 
+  attachWindowZoom(mainWindow);
   mainWindow.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
-    if (isMainFrame && !isInPlace) { syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); }
+    if (isMainFrame && !isInPlace) { syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); }
   });
-  mainWindow.webContents.on('render-process-gone', () => { syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); });
+  mainWindow.webContents.on('render-process-gone', () => { syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); });
   const folderCookies = mainWindow.webContents.session.cookies;
   const folderAccountChanged = (_event, cookie) => {
-    if (cookie.name === 'tt_auth' || cookie.name === 'tt_accounts') { desktopFolderSync.invalidate(); desktopFileExport.invalidate(); }
+    if (cookie.name === 'tt_auth' || cookie.name === 'tt_accounts') { desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); }
   };
   folderCookies.on('changed', folderAccountChanged);
   mainWindow.on('closed', () => {
-    syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); folderCookies.removeListener('changed', folderAccountChanged);
+    syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); folderCookies.removeListener('changed', folderAccountChanged);
     mainWindow = null;
   });
   const syncWindow = mainWindow;
@@ -1865,6 +1882,7 @@ function createWindow() {
 }
 
 ipcMain.handle('thingtime-desktop:file-export', (event, request) => desktopFileExport.request(event, request));
+ipcMain.handle('thingtime-desktop:attachment-upload', (event, request) => desktopAttachmentUpload.request(event, request));
 ipcMain.handle('thingtime-desktop:folder-sync', (event, request) => desktopFolderSync.request(event, request));
 ipcMain.handle('thingtime-desktop:folder-sync-active', (event, request) => syncWindowLease.set(event, request));
 
@@ -1893,7 +1911,9 @@ ipcMain.handle('thingtime-desktop:speech-stop', (event, request) => {
 	return desktopSpeech.stop(request.sessionId);
 });
 
-const passwordProvider = require('./lib/password-provider.cjs').createPasswordProvider({ app, root: __dirname, origin: () => appOrigin, endpoint: activeAccountEndpoint });
+const passwordProvider = require('./lib/password-provider.cjs').createPasswordProvider({ app, root: __dirname, origin: () => appOrigin, endpoint: activeAccountEndpoint,
+  safeStorage, dialog, BrowserWindow, ipcMain, window: () => mainWindow,
+  context: () => ({ origin: appOrigin, endpoint: activeAccountEndpoint(), session: mainWindow?.webContents?.session }) });
 ipcMain.handle('thingtime-desktop:password-provider', (event, request) => passwordProvider(event, request));
 
 ipcMain.handle('thingtime-desktop:mail-sync', (event, request) => desktopMail.sync(event, request));
@@ -2013,6 +2033,7 @@ if (!singleInstanceLock) {
    const partition = rendererPartition();
    await (partition ? session.fromPartition(partition) : session.defaultSession).clearCache();
 			createWindow();
+      await passwordProvider.start()?.catch(() => { console.warn('The native password bridge could not start.'); });
       createApplicationMenu();
       if (!(parallelDevMode && process.env.THINGTIME_DESKTOP_DEV_TEST_ORIGIN)) void checkSelectedEndpointCompatibility({ syncNode: true }).catch((error) => {
         desktopSettingsLastError = error instanceof Error ? error.message : String(error);

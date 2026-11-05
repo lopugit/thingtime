@@ -13,6 +13,7 @@ import { DeviceAudioControls } from './DeviceAudioControls';
 import { DeviceApprovalCard } from './DeviceApprovalCard';
 import { DeviceCommandTimeline } from './DeviceCommandTimeline';
 import { DeviceConnectors } from './DeviceConnectors';
+import { DeviceDashboard } from './DeviceDashboard';
 import { DeviceNetworkControls } from './DeviceNetworkControls';
 import { DevicePowerControls } from './DevicePowerControls';
 import { DeviceSystemControls } from './DeviceSystemControls';
@@ -187,6 +188,7 @@ export const DeviceDetailsDrawer = memo(
 	}: DeviceDetailsDrawerProps) => {
 		const [drawerWidth, setDrawerWidth] = React.useState(DEVICE_DRAWER_DEFAULT_WIDTH);
 		const [resizing, setResizing] = React.useState(false);
+		const closeButtonRef = React.useRef<HTMLButtonElement>(null);
 		const resizeOrigin = React.useRef<{ pointerId: number; x: number; width: number } | null>(null);
 		const summary = state?.summary || null;
 		const isWatch = summary?.platform === 'watchos';
@@ -383,6 +385,7 @@ export const DeviceDetailsDrawer = memo(
 							</Box>
 						) : (
 							<>
+								<DeviceDashboard deviceId={state.deviceId} ownerId={ownerId} snapshot={snapshot} presence={presence} now={now} />
 								{isWatch ? (
 									<WatchDeviceDetails now={now} summary={summary} />
 								) : (
@@ -408,8 +411,12 @@ export const DeviceDetailsDrawer = memo(
 								) : null}
 
 								<Section deviceId={state.deviceId} key={`sync:${state.deviceId}`} label="File sync & backup" section="sync">
-									<Button as={RouterLink} to={deviceSyncPageHref(state.deviceId)} variant="outline" minHeight="44px" whiteSpace="normal">Open device sync &amp; backup</Button>
-                  <Button as={RouterLink} to="/things?activity=1" variant="ghost" minHeight="44px">Activity manager</Button>
+									<Flex gap={2} wrap="wrap">
+										<Button as={RouterLink} to={deviceSyncPageHref(state.deviceId)} variant="outline" minHeight="44px" whiteSpace="normal">
+											Open device sync &amp; backup
+										</Button>
+										<Button as={RouterLink} to="/things?activity=1" variant="ghost" minHeight="44px">Activity manager</Button>
+									</Flex>
 								</Section>
 								<Section deviceId={state.deviceId} key={`files:${state.deviceId}`} label="Live device filesystem" section="files">
                   {summary.capabilities?.some(capability => capability.id === 'filesystem.v1' && capability.supported && capability.enabled) ? <FilesystemThingsBrowser compact deviceId={state.deviceId} /> : <Text fontSize="12px">Update the Thingtime node on this device to browse its home folder.</Text>}
@@ -668,7 +675,7 @@ export const DeviceDetailsDrawer = memo(
 		);
 
 		if (presentation === 'page') return (
-			<Box background="var(--tt-card, #ffffff)" border="1px solid var(--tt-border, #ececef)" borderRadius="var(--tt-radius-lg, 16px)" color="var(--tt-ink, #17171c)" marginX="auto" maxWidth="1280px" minWidth={0} width="100%">
+			<Box data-tt-device-details="page" background="var(--tt-card, #ffffff)" border="1px solid var(--tt-border, #ececef)" borderRadius="var(--tt-radius-lg, 16px)" color="var(--tt-ink, #17171c)" marginX="auto" maxWidth="1280px" minWidth={0} width="100%">
 				<Flex borderBottom="1px solid var(--tt-border, #ececef)" justifyContent="flex-end" padding={3}>
 					<Button as={RouterLink} size="sm" to="/things" variant="outline">Back to Things</Button>
 				</Flex>
@@ -677,12 +684,13 @@ export const DeviceDetailsDrawer = memo(
 		);
 
 		return (
-			<Drawer isOpen={isOpen} onClose={onClose} placement="right" size="full">
+			<Drawer initialFocusRef={closeButtonRef} isOpen={isOpen} onClose={onClose} placement="right" size="full">
 				<DrawerOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} />
 				<DrawerContent
 					background="var(--tt-card, #ffffff)"
 					color="var(--tt-ink, #17171c)"
 					containerProps={{ zIndex: DRAWER_MODAL_Z }}
+					data-tt-device-details="drawer"
 					cursor={resizing ? 'ew-resize' : undefined}
 					marginLeft="auto"
 					maxWidth="100vw"
@@ -736,6 +744,7 @@ export const DeviceDetailsDrawer = memo(
 					/>
 					<DrawerCloseButton
 						aria-label="Close device details"
+						ref={closeButtonRef}
 						height={11}
 						marginTop={{ base: 'env(safe-area-inset-top)', md: 0 }}
 						pointerEvents="auto"

@@ -1,4 +1,4 @@
-import { validatePasswordEntry, validPasswordId, type PasswordEntry, type PasswordMetadata } from '../passwords/model';
+import { passwordPreviewUsername, validatePasswordEntry, validPasswordId, type PasswordEntry, type PasswordMetadata } from '../passwords/model';
 import { parseTotp } from '../passwords/totp';
 import { deviceVaultWriteDigest } from '../passwords/vaultCrypto';
 import { sealDevicePasswordValue, openDevicePasswordValue } from '../passwords/passwordValueCrypto';
@@ -61,7 +61,7 @@ export class LocalPasswordVault extends DeviceVaultSession {
   try { return validatePasswordEntry(JSON.parse(plain)); } catch { return refuse('VAULT_DAMAGED', 'This encrypted entry is invalid. Its saved data has been kept.', 422); }
  }
  private metadata(record: DevicePasswordRecord, entry: PasswordEntry): PasswordMetadata {
-  return { id: record.id, revision: record.revision, updatedAt: record.updatedAt, title: entry.title, passwordType: entry.passwordType };
+  return { id: record.id, revision: record.revision, updatedAt: record.updatedAt, title: entry.title, passwordType: entry.passwordType, username: passwordPreviewUsername(entry), ...(entry.icon ? { icon: entry.icon } : {}) };
  }
  async read(id: string, signal?: AbortSignal) {
   if (!validPasswordId(id)) refuse('PASSWORD_ID', 'Invalid password entry.', 400);

@@ -62,3 +62,14 @@ test('failed import rolls back all records and unresolved exports fail visibly',
 	const page = await things.create({ thingtime: ['webpage'], crystal: { name: 'Incomplete', blocks: [{ id: 'x', type: 'component', component: 'absent' }] } });
 	await assert.rejects(things.export([page.id]), /Missing component/); await db.close();
 });
+
+test('Builder app listings filter ordinary and nested folders before paging', async () => {
+ const { db, things } = fixture();
+ try {
+  const ordinary = await things.create({ thingtime: ['folder'], crystal: { name: 'Ordinary' } });
+  const app = await things.create({ thingtime: ['folder', 'builder-thing'], crystal: { name: 'App', builderApp: true } });
+  await things.create({ thingtime: ['folder', 'builder-thing'], folderId: ordinary.id, crystal: { name: 'Nested', builderApp: true } });
+  assert.deepEqual((await things.list({ builderApp: true, limit: 1 })).things.map(row => row.id), [app.id]);
+  assert.equal((await things.list({ builderApp: true, limit: 1 })).nextCursor, null);
+ } finally { await db.close(); }
+});

@@ -1,5 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
+import { CONNECTION_ICON_PATH } from '../../app/connections/providerIcons';
 import { apiEndpointDocs } from '../../app/docs/apiDocs';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
 import { gatewayAuthority, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
@@ -22,9 +23,10 @@ export const gatewayFailure = (status = 503, code = 'ENVIRONMENT_GATEWAY_UNAVAIL
   ok: false, code, error: 'The selected environment API gateway is unavailable or incompatible.'
 }, { status, headers: { 'Cache-Control': 'private, no-store' } });
 
-export const isGatewayDataPath = (pathname: string) => pathname === '/api' || pathname.startsWith('/api/') ||
-  pathname === '/social-card' || pathname === '/sitemap.xml' || apiEndpointDocs.some(doc => doc.endpoint === pathname &&
-    pathname !== THINGTIME_CAPABILITY_MANIFEST_PATH);
+export const isGatewayDataPath = (pathname: string) => pathname !== CONNECTION_ICON_PATH && (
+  pathname === '/api' || pathname.startsWith('/api/') || pathname === '/social-card' || pathname === '/sitemap.xml' ||
+  apiEndpointDocs.some(doc => doc.endpoint === pathname && pathname !== THINGTIME_CAPABILITY_MANIFEST_PATH)
+);
 
 const digestHeaders = (headers: Headers) => createHash('sha256').update(JSON.stringify(BOUND_HEADERS.map(name => [name, headers.get(name)]))).digest('hex');
 const sign = (payload: string, settings: GatewaySettings) => createHmac('sha256', settings.secret).update(payload).digest('base64url');

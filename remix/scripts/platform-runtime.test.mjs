@@ -76,6 +76,8 @@ test('build output survives main dist cleanup and runtime rebuilds invalidate th
 	const server = new EventEmitter();
 	try {
 		await mkdir(join(directory, 'scripts'));
+		await mkdir(join(directory, 'app/components/Account'), { recursive: true });
+		await cp(new URL('../app/components/Account/ssoHubOrigins.mjs', import.meta.url), join(directory, 'app/components/Account/ssoHubOrigins.mjs'));
 		await mkdir(join(directory, 'dist/platform'), { recursive: true });
 		for (const file of ['platform-runtime-plugin.mjs', 'platform-runtime.mjs', 'csp.mjs'])
 			await cp(new URL(file, import.meta.url), join(directory, 'scripts', file));

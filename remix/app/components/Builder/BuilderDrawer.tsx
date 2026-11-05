@@ -1,6 +1,6 @@
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { LIVE_SOURCES } from '~/schemas/liveSources';
-import { templateToBlocks } from './templateBlocks';
+import { expandedComponentBlock, templateToBlocks } from './templateBlocks';
 import { collectBlockIds, newBlockId } from './webpageBlocks';
 import { HEIC_IMAGE_ACCEPT } from '../Attachments/heicImage';
 import React from 'react';
@@ -13,7 +13,7 @@ import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl'
 import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
 import { sharePathForThing } from '~/components/Sharing/audienceCore';
 import { DRAWER_Z } from '../Nav/Drawer/useDrawer';
-import { defaultsFromArgs, sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
+import { sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
 import { BorderControl, CornersControl, SegmentedControl, ShadowControl, SidesControl } from './FigmaControls';
 import { cssLinesToRecord, cssRecordToLines } from './figmaControlValues';
 import {
@@ -397,6 +397,8 @@ const BlockInspector = ({
 		patch({ css: Object.keys(css).length ? css : undefined });
 	};
 	const [expandError, setExpandError] = React.useState('');
+	const [mediaUrlEditor, setMediaUrlEditor] = React.useState<string | null>(null);
+	const isMediaElement = block.type === 'element' && ['img', 'video', 'audio'].includes(block.tag || '');
 	const component = block.type === 'component' ? draft.componentsByRef[block.component || ''] : null;
 	const specs = React.useMemo(() => sanitizeArgSpecs(component?.crystal?.args), [component?.crystal?.args]);
 
@@ -460,15 +462,24 @@ const BlockInspector = ({
     {block.type === 'element' ? <>
      <FieldRow label="Element"><Input {...inputStyles} aria-label="Element tag" value={block.tag || 'div'} onChange={e => patch({ tag: e.target.value })} /></FieldRow>
      <FieldRow label="Text"><Textarea {...inputStyles} aria-label="Block text" value={block.text || ''} onChange={e => patch({ text: e.target.value })} /></FieldRow>
-     {['name', 'placeholder', 'defaultValue', 'href', 'src', 'alt', 'title', 'type', 'data-tt-action'].map(key => <FieldRow key={key} label={key}>
+     {['name', 'placeholder', 'defaultValue', 'href', 'src', 'alt', 'title', 'type', 'data-tt-action'].filter(key => key !== 'src' || !isMediaElement).map(key => <FieldRow key={key} label={key}>
       <Input {...inputStyles} aria-label={`Element ${key}`} value={String(block.props?.[key] ?? '')} onChange={e => patch({ props: { ...block.props, [key]: e.target.value } })} />
      </FieldRow>)}
      <FieldRow label="Action inputs"><StructuredValue key={block.id} value={block.props?.['data-tt-action-inputs']} onChange={value=>patch({props:{...block.props,'data-tt-action-inputs':value}})} /></FieldRow>
     </> : null}
-    {block.type === 'element' && ['img','video','audio'].includes(block.tag || '') ? <FieldRow label="Upload media">
-     <Button size="sm" isDisabled={!onUploadToBlock} onClick={() => uploadInputRef.current?.click()}>Upload file</Button>
-     <input ref={uploadInputRef} type="file" accept={`image/*,video/*,audio/*,${HEIC_IMAGE_ACCEPT}`} style={{display:'none'}} onChange={event => { const files=Array.from(event.target.files || []); if(files.length) onUploadToBlock?.(block.id,files); event.target.value=''; }} />
-    </FieldRow> : null}
+    {isMediaElement ? <>
+     <FieldRow label="Upload media">
+      <Button size="sm" isDisabled={!onUploadToBlock} onClick={() => uploadInputRef.current?.click()}>Upload file</Button>
+      <input ref={uploadInputRef} type="file" accept={block.tag === 'img' ? `image/*,${HEIC_IMAGE_ACCEPT}` : `${block.tag}/*`} style={{display:'none'}} onChange={event => { const files=Array.from(event.target.files || []); if(files.length) onUploadToBlock?.(block.id,files); event.target.value=''; }} />
+     </FieldRow>
+     <Button type="button" size="sm" alignSelf="start" variant="ghost" aria-expanded={mediaUrlEditor === block.id}
+      onClick={() => setMediaUrlEditor(mediaUrlEditor === block.id ? null : block.id)}>
+      {mediaUrlEditor === block.id ? 'Hide URL option' : 'Use URL instead'}
+     </Button>
+     {mediaUrlEditor === block.id ? <FieldRow label="Image or media URL">
+      <Input {...inputStyles} aria-label="Element src" value={String(block.props?.src ?? '')} onChange={e => patch({ props: { ...block.props, src: e.target.value } })} />
+     </FieldRow> : null}
+    </> : null}
     {block.type === 'element' && block.format ? <>
      <FieldRow label="Formatted value path"><Input {...inputStyles} value={String(block.format.arg || '')} onChange={e => patch({ format: { ...block.format, arg: e.target.value } })} /></FieldRow>
      <FieldRow label="Format"><Input {...inputStyles} value={String(block.format.kind || '')} onChange={e => patch({ format: { ...block.format, kind: e.target.value } })} /></FieldRow>
@@ -502,7 +513,7 @@ const BlockInspector = ({
 						</Text>
 					) : (
 						<FieldRow label="Text">
-							<Textarea aria-label="Block text" {...inputStyles} rows={4} value={block.text || ''} onChange={(event) => patch({ text: event.target.value })} />
+							<Textarea {...inputStyles} aria-label="Block text" rows={4} value={block.text || ''} onChange={(event) => patch({ text: event.target.value })} />
 						</FieldRow>
 					)}
 					<RichTextEditorButton block={block} patch={patch} />
@@ -656,7 +667,7 @@ const BlockInspector = ({
        const ids = collectBlockIds(draft.blocks);
        const children = templateToBlocks(component?.crystal?.render, kind => { const id = newBlockId(kind, ids); ids.add(id); return id; });
        const replace = (blocks: WebpageBlock[]): WebpageBlock[] => blocks.map(entry => entry.id === block.id
-        ? { id: entry.id, type: 'container', direction: 'column', gap: 0, css: entry.css, source: entry.source || component?.crystal?.source, args: { ...defaultsFromArgs(sanitizeArgSpecs(component?.crystal?.args)), ...component?.crystal?.savedArgs, ...entry.args }, children }
+        ? expandedComponentBlock(entry, component?.crystal, children)
         : { ...entry, ...(entry.children ? { children: replace(entry.children) } : {}) });
        draft.setBlocks(replace(draft.blocks)); setExpandError('');
       } catch (error) { setExpandError(error instanceof Error ? error.message : 'Could not expand this component'); }

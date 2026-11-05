@@ -2,7 +2,7 @@ import React from 'react';
 import { isTransientBlockTarget, TRANSIENT_BLOCK_ACTION } from '../Builder/transientBlockActions';
 import { CATALOG_RECORD_ACTION } from '~/schemas/catalogRecordsSuite';
 import { LOCAL_UI_ACTION, localQueryFormInput } from './localUiAction';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -74,6 +74,32 @@ export const runDelegatedAction = async (params: {
 export const REFRESH_ACTION = '$refresh';
 export const INSTALL_ACTION = '$install';
 
+/** Keyboard parity for named fields in Component and expanded page forms. */
+export const clickTtActionForEnter = (event: React.KeyboardEvent, requireFieldset = false): void => {
+	const field = event.target as HTMLInputElement;
+	if (field.closest('[data-tt-native-control], [data-tt-native-upload]')) return;
+	if (
+		event.key !== 'Enter' ||
+		event.nativeEvent.isComposing ||
+		field.tagName !== 'INPUT' ||
+		['checkbox', 'radio', 'range', 'button', 'file'].includes(field.type)
+	) return;
+	const fieldset = field.closest('fieldset');
+	if (requireFieldset && !fieldset) return;
+	const group = fieldset || event.currentTarget as HTMLElement;
+	const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
+	if (!submit) return;
+	const action = submit.getAttribute('data-tt-action');
+	if (action === LOCAL_UI_ACTION) {
+		try {
+			const input = JSON.parse(submit.getAttribute('data-tt-action-inputs') || '{}');
+			if (input?.op !== 'search' && !(input?.op === 'query' && input.scope === 'page' && input.form === true)) return;
+		} catch { return; }
+	}
+	event.preventDefault();
+	submit.click();
+};
+
 // A result that carries a `message` string narrates itself in the toast —
 // "You caught PIKACHU!" beats "38ms · 4 ops" on an app page. `title` and
 // `status` are honoured the same way; everything else keeps the run summary.
@@ -92,7 +118,7 @@ export const toastFromResult = (
 	return { title: title || (status === 'error' ? 'Hmm 🧯' : '⚡ Done ✓'), description: message || fallback.description, status };
 };
 
-export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler; onLocal?: (inputs: Record<string, unknown>) => void; onPending?: (action: string | null) => void; onResult?: (outcome: { action: string; ok: boolean; result: unknown; error: string | null }) => void }) => {
+export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler; onLocal?: (inputs: Record<string, unknown>) => void; onPending?: (action: string | null) => void; onResult?: (outcome: { action: string; ok: boolean; result: unknown; error: string | null }) => void; fallbackGroup?: (control: HTMLElement, boundary: HTMLElement) => HTMLElement }) => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
@@ -109,6 +135,8 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 	resultRef.current = options?.onResult;
 	const pendingRef = React.useRef(options?.onPending);
 	pendingRef.current = options?.onPending;
+	const fallbackGroupRef = React.useRef(options?.fallbackGroup);
+	fallbackGroupRef.current = options?.fallbackGroup;
 	const busyRef = React.useRef(false);
 	const mountedRef = React.useRef(true);
 	React.useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
@@ -118,8 +146,12 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 	const user = useWorkspaceUser();
 	const workspaceScope = useWorkspaceScope();
 	const hasWorkspace = workspaceScope !== 'pending' && !!user?.id;
-	const identityRef = React.useRef(workspaceScope);
-	identityRef.current = workspaceScope;
+	const location = useLocation();
+	// Retire pending confirmations on workspace, runtime or route changes.
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque action generation
+	const actionIdentity = React.useMemo(() => ({}), [workspaceScope, runtime.identity, location.key]);
+	const identityRef = React.useRef(actionIdentity);
+	identityRef.current = actionIdentity;
 	const navigate = useNavigate();
 
 	return React.useCallback(
@@ -137,7 +169,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			if (tag === 'input' || tag === 'select' || tag === 'textarea' || tag === 'option' || tag === 'label') return;
 			event.preventDefault();
 			event.stopPropagation();
-			if (busyRef.current || control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true') return;
+			if (control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true') return;
 			const action = control.getAttribute('data-tt-action') || '';
 			if (action === '$transient') return; // An enclosing transient host owns this intent; never persist or dispatch it.
 			if (!action) return;
@@ -147,7 +179,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 					if (input && typeof input === 'object' && !Array.isArray(input)) {
 						const wrapper = event.currentTarget as HTMLElement;
 						const fieldset = control.closest('fieldset') as HTMLElement | null;
-						const group = fieldset && wrapper.contains(fieldset) ? fieldset : wrapper;
+						const group = fieldset && wrapper.contains(fieldset) ? fieldset : fallbackGroupRef.current?.(control, wrapper) || wrapper;
 						if (input.op === 'query' && input.form === true) {
 							const invalid = Array.from(group.querySelectorAll<HTMLInputElement>('input, select, textarea')).find((field) => !field.checkValidity());
 							if (invalid) { invalid.reportValidity(); return; }
@@ -157,6 +189,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 				} catch {}
 				return;
 			}
+			if (busyRef.current) return;
 			if (action === REFRESH_ACTION) {
 				runtimeRef.current.refresh();
 				return;
@@ -188,7 +221,8 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			// component can hold several independent forms), else the whole
 			// component root. Fields win over static inputs, including explicit
 			// empty text; excluded or missing fields preserve static inputs.
-			const group = (control.closest('fieldset') as HTMLElement | null) || (event.currentTarget as HTMLElement);
+			const boundary = event.currentTarget as HTMLElement;
+			const group = (control.closest('fieldset') as HTMLElement | null) || fallbackGroupRef.current?.(control, boundary) || boundary;
 			if (group.querySelector('[data-tt-upload-blocking="true"]')) {
 				lopuRef.current({ title: 'Finish adding your file', description: 'Wait for the upload, then choose Use file before running this form.', status: 'info' });
 				return;
@@ -274,7 +308,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 				} finally {
 					control.removeAttribute('aria-busy');
 					busyRef.current = false;
-					if (mountedRef.current) reportPending?.(null);
+					if (mountedRef.current && identity === identityRef.current) reportPending?.(null);
 				}
 			})();
 		},

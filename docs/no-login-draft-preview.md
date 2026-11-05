@@ -46,7 +46,31 @@ npm --prefix MCP run build
 Connect a local stdio MCP host to the existing Thingtime server. This is the
 normal MCP entry, so the import/staging tools remain available and rendering
 is added as an optional, fail-closed capability. Use the regular server name
-and `MCP/dist/index.js`; do not register a separate `thingtime-drafts` server:
+and `MCP/dist/index.js`; do not register a separate feature-specific server.
+
+In a local Codex task, keep the hosted Thingtime MCP for account tools and run
+the local tools on demand. List the tools and their input schemas first:
+
+```sh
+node MCP/dist/localCli.js list
+printf '{}\n' | node MCP/dist/localCli.js call thingtime_capabilities
+node MCP/dist/localCli.js call thingtime_render_and_export --output ./draft-preview < arguments.json
+```
+
+The helper forwards the same documented renderer image, socket, binary and asset
+settings as the canonical stdio entry. Render calls allow 240 seconds for the
+bounded isolated operation and cleanup; ordinary local calls keep 60 seconds.
+Configuration refusals are actionable and redact input content and local paths.
+The currently connected hosted catalogue must advertise rendering before using
+it there; historical local stdio acceptance is not proof of hosted availability.
+
+Use a new output directory. It receives canonical JSON and PNG files with
+private permissions. The command prints render metadata, and keeps the draft,
+browser and output files on this machine. Local archive commands still use
+`THINGTIME_MCP_ALLOWED_ROOTS` and `THINGTIME_MCP_STATE_DIR` and require the
+existing per-operation confirmation.
+
+Hosts that need local tool discovery through MCP can still use stdio:
 
 ```json
 {

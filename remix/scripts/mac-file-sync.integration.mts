@@ -1,7 +1,8 @@
 // Opt-in real MacFolderSync + cloud acceptance. Picker/consent and credentials
 // are isolated test adapters; this never uses the installed Node or Keychain.
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp, mkdir, rm, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, mkdir, rm, stat, truncate, rename, symlink, readlink, lstat } from 'node:fs/promises';
+import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -13,6 +14,9 @@ import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { openSyncJournal } from '../app/fileSync/journal.client';
 import { runForegroundCloudSync } from '../app/fileSync/foregroundSync';
 import { runPagedForegroundCloudSync } from '../app/fileSync/pagedForegroundSync';
+import { readNativeIndexChanges } from '../app/fileSync/streamingIndex';
+import { readCloudIndexChanges } from '../app/fileSync/cloudIndexChanges.client';
+import type { ForegroundSyncInput } from '../app/fileSync/foregroundSync';
 import { readNativeInventory } from '../app/fileSync/nativeInventory';
 import { readCloudFolderInventoryPages } from '../app/fileSync/cloudInventoryPages.client';
 import { newFileSyncConfiguration } from '../app/fileSync/configuration';
@@ -26,12 +30,21 @@ import { readCloudPathEntry } from '../app/fileSync/cloudPath.client';
 import { createCloudSyncPort } from '../app/fileSync/cloudSyncPort.client';
 import { fingerprintSource } from '../app/fileSync/contentFingerprint';
 import { capabilitySatisfies } from '../app/api/utils/capabilities/capabilityContract';
+import { parseTimelineEntry } from '../app/timeline/contract';
+import { timelineFileVersion, fileRestoreCommand, checkFileRestoreReceipt, fileContentId } from '../app/fileSync/fileVersions';
 import type { CloudTransportRuntime } from '../app/fileSync/cloudTransport';
 
 const { FolderStream } = createRequire(import.meta.url)('../../electron/lib/folder-stream.cjs');
 
 const [fixturePath] = process.argv.slice(2);
+const fixtureIndexer = process.env.THINGTIME_MAC_SYNC_INDEXER_BIN;
+if (fixtureIndexer) {
+	assert.ok(path.isAbsolute(fixtureIndexer));
+	assert.ok((await stat(fixtureIndexer)).isFile(), 'The fixture Rust indexer must be a regular executable.');
+}
 const photoFixture = process.argv.includes('--photos');
+const symlinksOnly = process.argv.includes('--symlinks-only');
+const earlyFixture = process.argv.includes('--two-way-early');
 const pagedFixture = process.argv.includes('--paged');
 const wideFixture = process.argv.includes('--wide');
 const wideFolders = wideFixture ? 10001 : 0;
@@ -190,7 +203,7 @@ async function send(payload: any) {
 	});
 }
 const signal = new AbortController().signal;
-const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: pagedFixture ? '1.5.1' : '1.3.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.2.0', fileTrashVersion: '1.2.0' };
+const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.17.0', fileSymbolicLinksVersion: '1.0.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.2.0', fileTrashVersion: '1.2.0' };
 let deviceId: string | undefined, remoteRoot: string | undefined, configurationId: string | undefined;
 const deviceName = 'Mac sync acceptance ' + randomUUID();
 const factory = new IDBFactory();
@@ -243,7 +256,8 @@ try {
 	).device.id;
 	await writeFile(
 		path.join(directory, 'native.json'),
-		JSON.stringify({ base: base.origin, deviceId, credential, photoFixture, directory: pathToFileURL(directory + '/').href }),
+		JSON.stringify({ base: base.origin, deviceId, credential, photoFixture, directory: pathToFileURL(directory + '/').href,
+			...(fixtureIndexer ? { commanderIndexer: pathToFileURL(fixtureIndexer).href } : {}) }),
 		{ mode: 0o600 }
 	);
 	await startNative();
@@ -281,7 +295,7 @@ try {
 			crystal: {
 				...newFileSyncConfiguration({ name: deviceName, deviceId: deviceId!, localRootId: nativeRoot, remoteFolderId: remoteRoot!, ...(photoFixture ? { sourceKind: 'photos' } : {}) }),
 				mode: photoFixture ? 'backup' : 'two-way',
-				propagateDeletes: !photoFixture,
+				propagateDeletes: !photoFixture && !earlyFixture,
 				paused: false
 			}
 		})
@@ -507,7 +521,7 @@ try {
 				} } : journal,
 				runtime,
 				localTarget,
-				progress: value => { if (wideFixture && value.stage !== lastStage) {
+				progress: value => { if ((wideFixture || symlinksOnly) && value.stage !== lastStage) {
 					lastStage = value.stage; console.log('MAC_PAGED_STAGE sync-' + value.stage);
 				} }
 			},
@@ -515,10 +529,180 @@ try {
 		);
 		return result;
 	};
+	const exerciseSymbolicLinks = async () => {
+    // A link is an inert target-byte file version, never a read of its target.
+    // Exercise kind-only transitions with identical payload bytes as well.
+    const transitionPath = path.join(directory, 'selected/link-transition.bin');
+    const targetBytes = Buffer.from('../outside-sentinel.bin'), outsideBytes = randomBytes(313);
+    await writeFile(path.join(directory, 'outside-sentinel.bin'), outsideBytes);
+    await writeFile(transitionPath, targetBytes);
+    await run();
+    const linkNode = async () => { const node = (await inventory()).nodes.find(node => node.path === 'link-transition.bin'); assert.ok(node?.kind === 'file'); return node.file; };
+    const beforeLink = await linkNode();
+    await rm(transitionPath); await symlink(targetBytes, transitionPath);
+    await symlink('missing-target', path.join(directory, 'selected/dangling-link'));
+    await symlink(Buffer.from([255, 254, 47, 120]), path.join(directory, 'selected/non-utf8-link'));
+    await run();
+    const linked = await linkNode();
+    assert.equal(linked.id, beforeLink.id); assert.notEqual(linked.revision, beforeLink.revision);
+    assert.deepEqual(linked.symbolicLink, { format: 'posix-symlink-v1', targetBase64: targetBytes.toString('base64') });
+    const readCloudBytes = async (file: typeof linked) => { const response = await sessionFetch(new URL('/api/v1/attachments/content?id=' + file.content.attachmentId + '&cache=bytes', base)); assert.equal(response.status, 200); return Buffer.from(await response.arrayBuffer()); };
+    assert.deepEqual(await readCloudBytes(linked), targetBytes);
+    for (const [name, expected] of [['dangling-link', Buffer.from('missing-target')], ['non-utf8-link', Buffer.from([255, 254, 47, 120])]] as const) {
+      const node = (await inventory()).nodes.find(node => node.path === name); assert.ok(node?.kind === 'file');
+      assert.equal(node.file.symbolicLink?.targetBase64, expected.toString('base64')); assert.deepEqual(await readCloudBytes(node.file), expected);
+    }
+    const mismatch = await sessionFetch(new URL('/api/v1/files', base), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      ...fileRestoreCommand(linked, linked, randomUUID()), symbolicLink: { format: 'posix-symlink-v1', targetBase64: Buffer.from('wrong-target').toString('base64') }
+    }) });
+    assert.equal(mismatch.status, 409); await mismatch.body?.cancel(); assert.equal((await linkNode()).revision, linked.revision);
+    await rm(transitionPath); await writeFile(transitionPath, targetBytes); await run();
+    const ordinaryAgain = await linkNode(); assert.equal(ordinaryAgain.symbolicLink, undefined); assert.equal(ordinaryAgain.id, linked.id); assert.notEqual(ordinaryAgain.revision, linked.revision);
+    const linkHistory = (await api('/api/v1/timeline?' + new URLSearchParams({ ownerId: fixture.userId, dataPlane: 'home', thingId: linked.id }))).entries.map(parseTimelineEntry);
+    const priorLink = linkHistory.map((entry: import('../app/timeline/contract').TimelineEntry) => timelineFileVersion(entry.event, 'after')).find((file: typeof linked | null) => file?.revision === linked.revision);
+    assert.ok(priorLink?.symbolicLink);
+    const restoreLink = fileRestoreCommand(ordinaryAgain, priorLink, randomUUID());
+    await checkFileRestoreReceipt((await api('/api/v1/files', restoreLink)).file, restoreLink, priorLink, fixture.userId);
+    await stopNative(); journal.close(); journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange); await startNative();
+    await run(); assert.equal((await lstat(transitionPath)).isSymbolicLink(), true);
+    assert.deepEqual(await readlink(transitionPath, { encoding: 'buffer' }), targetBytes);
+    assert.deepEqual(await readFile(path.join(directory, 'outside-sentinel.bin')), outsideBytes, 'The outside target is never opened or modified by sync');
+    const stableLink = await linkNode(), transfersAfterLink = { ...counts }; await run();
+    assert.deepEqual(await linkNode(), stableLink); assert.deepEqual(counts, transfersAfterLink);
+    console.log('MAC_PAGED_STAGE symbolic-links-verified');
+
+	};
 	// No consent exists yet: a resumed worker must stop without prompting.
 	await assert.rejects(approveMobileSyncTarget(saved, scope, signal, request, caps, 'existing'));
 	await approveMobileSyncTarget(saved, scope, signal, request, caps);
 	// All retries below, including process restarts, can only reuse that grant.
+	if (earlyFixture) {
+		assert.ok(fixtureIndexer && pagedFixture);
+		const folder = path.join(directory, 'selected'), blocker = path.join(folder, 'zz-late-scan.bin');
+		await writeFile(blocker, new Uint8Array()); await truncate(blocker, 48 * 1024 * 1024);
+		const scanStartedAt = Date.now(), proofTimeout = AbortSignal.timeout(90_000);
+		let queue: Promise<unknown> = Promise.resolve();
+		const serialRequest: typeof request = (owner, command, requestSignal) => {
+			const next = queue.then(() => request(owner, {
+				...command, deviceResourceLimits: { scanBytesPerSecond: 400_000, transferBytesPerSecond: 5_000_000, cpuPercent: 15 },
+				...(command.action === 'scan-changes' ? { waitMilliseconds: 200 } : {})
+			}, requestSignal));
+			queue = next.catch(() => {});
+			return next;
+		};
+		const nativeIndex = () => {
+			const database = new DatabaseSync(path.join(directory, 'private-filesystem-index.sqlite3'), { readOnly: true });
+			try {
+				return database.prepare('SELECT g.mode, g.generation, g.coverage, g.indexed, g.entry_count AS entries FROM inventory_generations g JOIN inventory_scopes s ON s.id=g.scope WHERE s.root_id=? AND g.created_ms>=? ORDER BY g.created_ms DESC LIMIT 1').get(nativeRoot, scanStartedAt);
+			} finally { database.close(); }
+		};
+		const proof = new Map<string, { receipt: import('../app/fileSync/execute').SyncReceipt; at: number; nativeState: string; index: ReturnType<typeof nativeIndex> }>();
+		let notify!: () => void;
+		const both = new Promise<void>(resolve => { notify = resolve; });
+		let markLocal!: () => void;
+		const localObserved = new Promise<void>(resolve => { markLocal = resolve; });
+		let capture: string | undefined, localSequence = 0;
+		const input = async (current: AbortSignal, observe: boolean): Promise<ForegroundSyncInput> => {
+			const localTarget = await approveMobileSyncTarget(saved, scope, current, serialRequest, caps, 'existing');
+			return {
+				currentScope: () => scope, localTarget, runtime,
+				readConfiguration: async () => (await api('/api/v1/things?id=' + row.id)).thing,
+				authorizeDevice: async () => { await serialRequest(fixture.userId, { action: 'list' }, current); },
+				conditions: async () => (await serialRequest(fixture.userId, { action: 'conditions' }, current)).conditions!,
+				scanLocal: async () => (await serialRequest(fixture.userId, { action: 'scan', rootId: nativeRoot }, current)).entries!,
+				inspectLocal: async name => (await serialRequest(fixture.userId, { action: 'inspect', rootId: nativeRoot, path: name }, current)).inspectedEntry!,
+				streamLocalChanges: async function* (id, after, streamSignal, readyToFinish) {
+					capture = id;
+					for await (const page of readNativeIndexChanges({ ownerId: fixture.userId, deviceId: deviceId!, rootId: nativeRoot, captureId: id,
+						afterSequence: after, signal: streamSignal ?? current, readyToFinish, request: serialRequest })) {
+						localSequence = page.nextSequence;
+						if (page.changes.length) markLocal();
+						yield page;
+					}
+				},
+				streamRemoteChanges: async function* (id, after, streamSignal, readyToFinish, resume) {
+					const feedSignal = streamSignal ?? current;
+					const gate = AbortSignal.any([feedSignal, AbortSignal.timeout(30000)]);
+					let abort!: () => void;
+					try {
+						await Promise.race([localObserved, new Promise<void>((_resolve, reject) => {
+							abort = () => reject(gate.reason);
+							gate.addEventListener('abort', abort, { once: true }); if (gate.aborted) abort();
+						})]);
+					} finally { gate.removeEventListener('abort', abort); }
+					yield* readCloudIndexChanges(scope, remoteRoot!, { ...runtime, signal: feedSignal }, id, after, readyToFinish!, resume!);
+				},
+				inventory,
+				source: async entry => mobileFolderSource(fixture.userId, nativeRoot, entry, current, serialRequest, caps),
+				progress: () => {},
+				journal: observe ? { ...journal, pagedRuns: access => {
+					const runs = journal.pagedRuns(access);
+					return { ...runs, confirm: async (spec, receipt) => {
+						const result = await runs.confirm(spec, receipt);
+						const name = receipt.entry?.path;
+						if (spec.streaming?.source === 'both' && (name === 'local.bin' || name === 'remote.bin')) {
+							assert.ok(capture);
+							const page = (await serialRequest(fixture.userId, { action: 'scan-changes', rootId: nativeRoot,
+								inventoryDeviceId: deviceId!, captureId: capture, capturePolicy: 'one-way-supported', excludedPaths: [],
+								afterSequence: localSequence }, current)).changesPage;
+							const index = nativeIndex();
+							if (!index || index.mode !== 'backup' || index.indexed !== 0 || index.coverage !== 'scanning' ||
+								page?.state !== 'running' || page.generation.toLowerCase() !== String(index.generation).toLowerCase())
+								throw Error('The native capture was not live and unsealed at an early receipt: ' + JSON.stringify({ index, state: page?.state }));
+							proof.set(name, { receipt, at: Date.now(), nativeState: page.state, index });
+							if (proof.size === 2) notify();
+						}
+						return result;
+					} };
+				} } : journal
+			};
+		};
+		const controller = new AbortController(), current = AbortSignal.any([controller.signal, proofTimeout]),
+			stop = new Error('Stop after the two before-seal confirmations');
+		const running = runPagedForegroundCloudSync(saved, scope, await input(current, true), current);
+		void running.catch(() => {});
+		try {
+			await Promise.race([both, running.then(() => { throw Error('Early sync finished before two receipts were observed.'); })]);
+			const upload = proof.get('local.bin')!, download = proof.get('remote.bin')!;
+			assert.equal(upload.index?.generation, download.index?.generation);
+			const remote = (await api('/api/v1/files?' + new URLSearchParams({ id: upload.receipt.entry!.id, operationId: upload.receipt.operationId }))).receipt.file;
+			assert.equal(remote.revision, upload.receipt.entry!.version);
+			const content = await sessionFetch(new URL('/api/v1/attachments/content?' + new URLSearchParams({ id: remote.content.attachmentId, cache: 'bytes' }), base));
+			assert.equal(content.status, 200);
+			assert.equal(hash(new Uint8Array(await content.arrayBuffer())), hash(localBytes));
+			assert.equal(hash(await readFile(path.join(folder, 'remote.bin'))), hash(remoteBytes));
+			assert.equal(nativeIndex()?.indexed, 0);
+			console.log('MAC_PAGED_STAGE both-directions-confirmed-while-rust-indexing');
+			const cancelledAt = Date.now(), originalCapture = capture;
+			controller.abort(stop);
+			await assert.rejects(running, error => error === stop);
+			assert.ok(originalCapture);
+			const stopped = await serialRequest(fixture.userId, { action: 'scan-cancel', rootId: nativeRoot, inventoryDeviceId: deviceId!,
+				captureId: originalCapture, capturePolicy: 'one-way-supported', excludedPaths: [] }, AbortSignal.timeout(15000));
+			assert.equal(stopped.changesPage?.state, 'interrupted');
+			assert.ok(cancelledAt >= Math.max(upload.at, download.at));
+			await rename(blocker, path.join(directory, 'held-scan.bin'));
+			const countsBefore = { ...counts };
+			const resume = AbortSignal.timeout(120000);
+			const settled = await runPagedForegroundCloudSync(saved, scope, await input(resume, false), resume);
+			assert.ok('progress' in settled); assert.equal(settled.progress.operations, 0);
+			assert.equal(capture, originalCapture);
+			const entries = (await api('/api/v1/timeline?' + new URLSearchParams({ ownerId: fixture.userId, dataPlane: 'home', thingId: remote.id }))).entries.map(parseTimelineEntry);
+			assert.equal(entries.filter(entry => entry.event.mode === 'revision').length, 1);
+			assert.equal(entries.filter(entry => entry.event.operationId === upload.receipt.operationId).length, 1);
+			assert.equal(hash(await readFile(path.join(folder, 'remote.bin'))), hash(remoteBytes));
+			assert.equal(counts.puts, countsBefore.puts);
+			assert.equal(counts.publishes, countsBefore.publishes);
+			assert.ok(await journal.pagedCheckpoints(journalAccess).current());
+			console.log(JSON.stringify({ ok: true, scenario: 'Mac two-way transfer before initial index seal',
+				upload: { at: upload.at, nativeState: upload.nativeState, index: upload.index, operationId: upload.receipt.operationId, revision: remote.revision, sha256: hash(localBytes) },
+				download: { at: download.at, nativeState: download.nativeState, index: download.index, operationId: download.receipt.operationId, sha256: hash(remoteBytes) },
+				cancelledAt, sameNativeCaptureAfterResume: true, strictCheckpointAfterResume: true, duplicateTransfers: false, cloudHistoryRevisions: 1 }));
+		} finally { controller.abort(stop); await running.catch(() => {}); }
+	} else if (symlinksOnly) {
+		await run(); await exerciseSymbolicLinks();
+		console.log(JSON.stringify({ok:true, scenario:'Mac symlink round trip',nativeCalls,verifyCalls,nativePages,cloudPages,counts,checks:['regular-link-regular-kind-transitions','raw-target-bytes-no-follow','dangling-and-non-utf8-links','link-metadata-attachment-integrity','link-timeline-restore-after-restart','stable-convergence'],picker:'fixture',keychain:'not-used'}));
+	} else {
 	loseCloud = true;
 	losePublication = true;
 	await assert.rejects(run(), /Lost accepted cloud commit/);
@@ -614,6 +798,43 @@ try {
 		assert.equal(await journal.reviewDrafts(journalAccess).active(), null);
 		assert.ok(nativePages > 0 && cloudPages > 0);
 	}
+
+	// Join the real native edit and cloud publication paths to the exact same
+	// historical version/restore contract used by History. A cloud-only restore
+	// is insufficient: the next two-way pass must put those bytes back on disk.
+	assert.ok(capabilitySatisfies(manifest.features['api.timeline']?.version, '1.6.0'));
+	const originalLocal = oldInventory.nodes.find(node => node.path === 'local.bin');
+	assert.ok(originalLocal?.kind === 'file');
+	const currentLocal = (await inventory()).nodes.find(node => node.path === 'local.bin');
+	assert.ok(currentLocal?.kind === 'file');
+	const timeline = async (): Promise<import('../app/timeline/contract').TimelineEntry[]> => {
+		const result = await api('/api/v1/timeline?' + new URLSearchParams({ ownerId: fixture.userId, dataPlane: 'home', thingId: currentLocal.file.id }));
+		return result.entries.map(parseTimelineEntry);
+	};
+	const history = await timeline();
+	const historical = history.map(entry => timelineFileVersion(entry.event, 'after')).find(file => file?.revision === originalLocal.file.revision);
+	assert.ok(historical, 'The original native upload must be a selectable Timeline file version');
+	assert.ok(history.some(entry => timelineFileVersion(entry.event, 'after')?.revision === currentLocal.file.revision), 'The later edit must appear in the same file Timeline');
+	assert.equal(historical.id, currentLocal.file.id);
+	assert.notEqual(fileContentId(historical), fileContentId(currentLocal.file));
+	const restore = fileRestoreCommand(currentLocal.file, historical, randomUUID());
+	loseCloud = true;
+	await assert.rejects(api('/api/v1/files', restore), /Lost accepted cloud commit/);
+	const historyRestoreReceipt = await api('/api/v1/files', JSON.parse(JSON.stringify(restore)));
+	assert.equal(historyRestoreReceipt.replayed, true);
+	await checkFileRestoreReceipt(historyRestoreReceipt.file, restore, historical, fixture.userId);
+	assert.equal((await timeline()).filter(entry => entry.event.operationId === restore.operationId).length, 1, 'Lost restore reply must not duplicate Timeline publication');
+	await stopNative(); journal.close(); journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange); await startNative();
+	await run();
+	const afterHistoryRestore = await verifyBytes({ 'local.bin': localBytes, 'remote.bin': editedRemote });
+	assert.equal(afterHistoryRestore.find(node => node.path === 'local.bin')!.id, historical.id);
+	assert.equal(afterHistoryRestore.find(node => node.path === 'local.bin')!.revision, historyRestoreReceipt.file.revision);
+	const transfersAfterRestore = { ...counts };
+	await run();
+	assert.deepEqual(await verifyBytes({ 'local.bin': localBytes, 'remote.bin': editedRemote }), afterHistoryRestore);
+	assert.deepEqual(counts, transfersAfterRestore, 'A converged historical restore must not upload, stage or publish again');
+
+    await exerciseSymbolicLinks();
 
     // Fresh path observations distinguish a missing name from an old object's
     // missing id. Recreate the same nested path with two new stable identities.
@@ -741,6 +962,14 @@ try {
 				'stable-convergence',
 				'independent-replacements',
 				'retained-cloud-versions',
+                'symlink-raw-target-bytes-no-follow',
+                'regular-link-regular-kind-transitions',
+                'link-timeline-restore-after-restart',
+                'dangling-and-non-utf8-links',
+                'link-metadata-attachment-integrity',
+				'native-edit-timeline-history-and-restore',
+				'lost-history-restore-reply-exact-replay',
+				'history-restore-download-after-native-restart',
 				'fresh-cloud-path-replacement-and-alias-checks',
 				'revocation'
 			],
@@ -754,6 +983,7 @@ try {
 			keychain: 'not-used'
 		})
 	);
+    }
     }
     }
 } finally {

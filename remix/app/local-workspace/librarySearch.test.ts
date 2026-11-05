@@ -39,3 +39,14 @@ test('library search excludes relational activity and draft/attached files while
  const rows = [base, ...['save','reaction','vote','updown','action-run'].map(kind => ({ ...base, id: `local-${kind}`, thingtime: [kind] })), attachment('local-file'), attachment('local-draft', true), attachment('local-attached', false, true)];
  assert.deepEqual(searchLocalLibrary(rows, { q: 'needle' }).things.map(row => row.id).sort(), ['local-example','local-file']);
 });
+
+test('Builder searches preserve folder and app conditions through local paging', () => {
+ const base: LocalThing = { id: 'one', thingtime: ['folder', 'builder-thing'], crystal: { name: 'Example app', builderApp: true }, createdAt: '2026-11-05', updatedAt: '2026-11-05', revision: 1 };
+ const rows = [base, { ...base, id: 'two' }, { ...base, id: 'ordinary', crystal: { name: 'Example folder' } }, { ...base, id: 'nested', folderId: 'parent' }];
+ const conditions = [{ field: 'builderApp', op: 'eq', value: true }, { field: 'folderId', op: 'eq', value: null }];
+ const first = searchLocalLibrary(rows, { q: 'example', conditions, limit: 1 });
+ const second = searchLocalLibrary(rows, { q: 'example', conditions, limit: 1, cursor: first.nextCursor });
+ assert.deepEqual([...first.things, ...second.things].map(row => row.id).sort(), ['one', 'two']);
+ assert.throws(() => searchLocalLibrary(rows, { q: 'example', conditions: [], cursor: first.nextCursor }), /changed/ );
+ assert.throws(() => searchLocalLibrary(rows, { conditions: [{ field: '$where', op: 'eq', value: true }] }), /field/i);
+});

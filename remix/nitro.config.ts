@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
 import type { ModuleOptions as WorkflowModuleOptions } from 'workflow/nitro';
 import { defineNitroConfig } from 'nitro/config';
@@ -12,9 +13,9 @@ import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities
 import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore.ts';
 import { draftPreviewCsp } from './scripts/csp.mjs';
 
-const publicDir = new URL('./dist', import.meta.url).pathname;
-const embedDir = new URL('./dist/embed', import.meta.url).pathname;
-const designDocsDir = new URL('../docs/design', import.meta.url).pathname;
+const publicDir = fileURLToPath(new URL('./dist', import.meta.url));
+const embedDir = fileURLToPath(new URL('./dist/embed', import.meta.url));
+const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
 const apiHandler = './server/routes/api/[...].ts';
 const chatGptDiscoveryHandler = './server/routes/chatgpt-discovery.ts';
 const thingtimeCapabilitiesHandler = './server/handlers/thingtime-capabilities.ts';
@@ -22,12 +23,16 @@ const apiRoutes = [...apiV1RouteKeys, ...apiV1DocsRouteKeys];
 const workflowModuleConfig = {
   workflow: { dirs: ['workflows', 'app/api/utils'] }
 } satisfies { workflow: WorkflowModuleOptions };
+const desktopMiddleware = /^node[_-]middleware$/.test(process.env.NITRO_PRESET ?? '');
 
 export default defineNitroConfig({
   serverDir: 'server',
   // Electron owns the HTTP socket; Nitro's middleware preset assumes another
   // host serves public assets unless explicitly enabled. Keep cloud defaults.
-  ...(/^node[_-]middleware$/.test(process.env.NITRO_PRESET ?? '') ? { serveStatic: true } : {}),
+  ...(desktopMiddleware ? { serveStatic: true } : {}),
+  // Keep the Windows N-API addon on disk instead of feeding its .node file to
+  // Rolldown's JavaScript loader. The desktop build stages the host package.
+  ...(desktopMiddleware && process.platform === 'win32' ? { rolldownConfig: { external: ['@resvg/resvg-js'] } } : {}),
   modules: ['workflow/nitro'],
   ...workflowModuleConfig,
   compatibilityDate: '2026-07-02',
@@ -37,6 +42,9 @@ export default defineNitroConfig({
     '/draft-preview': { headers: { 'Content-Security-Policy': draftPreviewCsp, 'Cache-Control': 'no-store' } },
     '/draft-preview/**': { headers: { 'Content-Security-Policy': draftPreviewCsp, 'Cache-Control': 'no-store' } }
   },
+  // Browser image engines can be reached through shared schema imports. Do not
+  // instantiate their WASM while the API runner is starting.
+  wasm: { lazy: true },
   routes: {
     ...Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
     [THINGTIME_CAPABILITY_MANIFEST_PATH]: thingtimeCapabilitiesHandler,

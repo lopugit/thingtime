@@ -192,7 +192,7 @@ const ThingtimeTree = (args: ThingtimeComponentProps = {}) => {
 
 	const [circular, setCircular] = React.useState(props?.circular);
 
-	const thingtimeRef = React.useRef();
+	const thingtimeRef = React.useRef<HTMLDivElement | null>(null);
 
 	const [showFullPathContext, setShowFullPathContext] = React.useState(false);
 	// hover context on the key/property name itself (claude-todo 08 §5): shown

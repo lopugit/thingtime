@@ -1,6 +1,7 @@
 import { useWorkspaceDraft } from '~/drafts/useWorkspaceDraft';
 import { createWithDraft } from '~/drafts/createWithDraft';
 import { restoreDefinitionDraft, parseDefinitionSource, hasInvalidDefinitionNumbers, type DefinitionFields } from './definitionDraft';
+import { isBuilderThing, withBuilderThingKind } from '~/schemas/builderThing';
 import { DraftSaveStatus } from '~/drafts/DraftPicker';
 import React from 'react';
 import { Button, Flex, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Text, Textarea } from '@chakra-ui/react';
@@ -15,13 +16,13 @@ import { openThingHistory } from '~/components/Timeline/TimelineHost';
 import { useTimelineSession } from '~/timeline/TimelineProvider';
 
 type DefinitionThing = { id: string; author?: { id: string }; thingtime: string[]; crystal: Record<string, any>; updatedAt: string; timelineHeadId?: string };
-export function ThingDefinitionEditor(props: { id: string; initialThing?: DefinitionThing; onClose: () => void; onSaved?: (thing: DefinitionThing) => void }) {
+export function ThingDefinitionEditor(props: { id: string; initialThing?: DefinitionThing; onClose: () => void; onSaved?: (thing: DefinitionThing) => void; requireBuilder?: boolean }) {
  const user = useWorkspaceUser();
  const scope = useWorkspaceScope();
  const timeline = useTimelineSession();
  return <Editor key={`${scope}:${timeline.identity}:${props.id}`} {...props} actor={scope === 'pending' ? undefined : user?.id} localOnly={!!user?.localOnly} />;
 }
-function Editor({ id, actor, localOnly, initialThing, onClose, onSaved }: React.ComponentProps<typeof ThingDefinitionEditor> & { actor?: string; localOnly: boolean }) {
+function Editor({ id, actor, localOnly, initialThing, onClose, onSaved, requireBuilder }: React.ComponentProps<typeof ThingDefinitionEditor> & { actor?: string; localOnly: boolean }) {
  const api = useApi();
  const apiRef = React.useRef(api); apiRef.current = api;
  const initial = initialThing?.id === id && initialThing.author?.id === actor ? initialThing : null;
@@ -61,12 +62,13 @@ function Editor({ id, actor, localOnly, initialThing, onClose, onSaved }: React.
   let cancelled = false;
   void apiRef.current.v1.things.get({ id }).then((response: any) => {
    if (cancelled) return;
-   if (!response?.ok || !response.thing) throw new Error(response?.error || 'Could not open this definition');
+   if (!response?.ok || response.thing?.id !== id) throw new Error(response?.error || 'Could not open this definition');
    if (!actor || response.thing.author?.id !== actor) throw new Error('Save a private copy before editing this definition.');
+   if (requireBuilder && !isBuilderThing(response.thing)) throw new Error('This Thing has no saved Builder definition. Open its Thing data instead.');
    setThing(response.thing); if (!restored.current && !edited.current) { setDraftBase(response.thing.updatedAt); setSource(JSON.stringify(response.thing.crystal, null, 2)); }
   }).catch((failure: Error) => { if (!cancelled) setError(failure.message); });
   return () => { cancelled = true; active.current = false; };
- }, [id, actor]);
+ }, [id, actor, requireBuilder]);
  let parsed: any = null, parseError = '';
  try { if (source) parsed = parseDefinitionSource(source); } catch (failure) { parseError = failure instanceof SyntaxError ? 'The source contains invalid JSON.' : 'The source exceeds the safe editable JSON bounds.'; }
  const invalidNumbers = hasInvalidDefinitionNumbers(fields, parsed);
@@ -86,11 +88,11 @@ function Editor({ id, actor, localOnly, initialThing, onClose, onSaved }: React.
    // The canonical write owns completion. Neither recovery queue nor cleanup
    // may block it; the account facade supplies its own actor/data-plane fence.
    const history = localOnly ? Promise.resolve(null) : draft.flush().catch(() => null);
-   const response = await createWithDraft(accountDraft, () => apiRef.current.v1.things.update({ id, crystal: parsed, replaceCrystal: true, expectedUpdatedAt: draftBase }));
+   const response = await createWithDraft(accountDraft, () => apiRef.current.v1.things.update({ id, thingtime: withBuilderThingKind(thing.thingtime, thing.crystal), crystal: parsed, replaceCrystal: true, expectedUpdatedAt: draftBase, expectedActor: actor }));
    if (!response?.ok) throw new Error(response?.error || 'Could not save the definition');
    if (!localOnly) void history.then(eventId => draft.release(eventId)).catch(() => {});
    const readback = response.thing?.id === id ? response : await apiRef.current.v1.things.get({ id });
-   if (!readback?.ok || !readback.thing) throw new Error('Saved, but readback failed. Reopen the definition to check it.');
+   if (!readback?.ok || readback.thing?.id !== id || readback.thing.author?.id !== actor) throw new Error('Saved, but readback failed. Reopen the definition to check it.');
    if (!active.current) return;
    onSaved?.(readback.thing); onClose();
   } catch (failure: any) { if (active.current) setError(failure?.error || failure?.message || 'Could not save'); }

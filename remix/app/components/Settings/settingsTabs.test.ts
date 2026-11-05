@@ -39,3 +39,12 @@ test('agent browser security links to its actual settings category and disclosur
 	assert.equal(url.hash, '#agent-browser-security');
 	assert.ok(controls.includes(`id="${url.hash.slice(1)}"`), 'The settings disclosure must contain its deep-link target');
 });
+
+
+test('password manager is a reloadable category distinct from account sign-in security', () => {
+	assert.equal(settingsTabHref('passwords'), '/settings/passwords');
+	assert.equal(resolveSettingsTab('passwords'), 'passwords');
+	assert.equal(resolveSettingsTab(null, '#password-manager'), 'passwords');
+	assert.equal(resolveSettingsTab('security', '#password-manager'), 'security');
+	assert.equal(resolveSettingsTab(null, '#secure-vault'), 'security');
+});

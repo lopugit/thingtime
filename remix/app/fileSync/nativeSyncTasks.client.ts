@@ -1,12 +1,15 @@
+import { reportDeviceSyncHistoryStorage } from './deviceSyncHistory.client';
+import { createDeviceSyncHistoryRecorder } from './deviceSyncHistoryRecorder';
+import { deviceResourceKey, deviceSyncGovernor, readDeviceSyncResourcePolicy } from './deviceResourcePolicy';
 import { activityManager } from '~/activity/activityManager';
 import { fileSyncDownloadRequirements } from './signedDownloadTarget';
 import { createSyncProgressCache } from './syncProgressCache';
-import { SyncResourceGovernor, type SyncResourceStatus } from './resourceGovernor';
+import { type SyncResourceStatus } from './resourceGovernor';
 import { readCloudIndexChanges } from './cloudIndexChanges.client';
 import { readNativeIndexChanges } from './streamingIndex';
 import { SyncConditionsWait } from './foregroundSyncContext';
 import { SyncConnectionWait, isSyncConnectionFailure } from './syncConnectionWait';
-import { pauseSyncJobAdmission, type SyncJob } from './syncJobJournal';
+import { pauseSyncJobAdmission, retireStrictCapture, type SyncJob } from './syncJobJournal';
 import { holdDesktopSyncWindow, setDesktopSyncScheduled } from './desktopSyncWindow.client';
 import { createNativeSyncHost, getNativeSyncAdapter, isNativeSyncAdapterCurrent } from './nativeSyncHost.client';
 import { watchNativeSyncVisibility } from './nativeSyncVisibility';
@@ -20,7 +23,7 @@ import type { ForegroundSyncInput } from './foregroundSync';
 import type { InventoryIdentity } from './inventoryJournal';
 import { readCloudFolderInventoryPages } from './cloudInventoryPages.client';
 import { readCloudFolderInventory } from './cloudInventory.client';
-import { mobileFolderSource, supportsNativeInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging } from './mobileFolders.client';
+import { mobileFolderSource, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
 import { createConflictReviewController } from './conflictReviewController';
@@ -33,6 +36,20 @@ import { TIMELINE_CHANGED_EVENT } from '../timeline/clientEvents';
 
 export const nativeSyncTasks = createSyncTaskRuntime();
 export const supportsNativeSyncTasks = () => !!getNativeSyncAdapter();
+
+async function cancelSavedStrictCapture(job: SyncJob, adapter: NonNullable<ReturnType<typeof getNativeSyncAdapter>>, checkIdentity: () => void) {
+	if (!job.strictCaptureId) return;
+	const signal = AbortSignal.timeout(10_000), { scope, reviewed } = job;
+	const assertCurrent = () => {
+		signal.throwIfAborted(); checkIdentity();
+		if (!isNativeSyncAdapterCurrent(adapter)) throw Error('The active sync host changed.');
+	};
+	const host = await createNativeSyncHost({ ownerId: scope.ownerId, deviceId: scope.deviceId, adapter, signal, assertCurrent });
+	if (host.origin() !== scope.origin) throw Error('The selected sync server changed.');
+	await host.request(scope.ownerId, { action: 'scan-cancel', rootId: reviewed.configuration.localRootId,
+		inventoryDeviceId: scope.deviceId, captureId: job.strictCaptureId, capturePolicy: 'strict-async', excludedPaths: reviewed.configuration.excludedPaths,
+		...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}) }, signal);
+}
 
 /** Explicit runs persist admission separately from editable connection Things.
  * Relaunch resumes only that admitted job, using existing native consent. */
@@ -63,7 +80,14 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 		let journal: Awaited<ReturnType<typeof openSyncJournal>> | undefined;
 		let releaseWindow: (() => Promise<void>) | undefined, job: SyncJob | null = null;
 		let admissionPending: Promise<SyncJob | null> | undefined;
+		let strictCancellation: Promise<void> | undefined;
+		const cancelStrictCapture = () => {
+			if (!job?.strictCaptureId) return Promise.resolve();
+			return strictCancellation ??= cancelSavedStrictCapture(job, adapter, checkIdentity);
+		};
 		let disposeProgressCache: (() => void) | undefined;
+		let history: ReturnType<typeof createDeviceSyncHistoryRecorder> | undefined;
+		let historyStatus: 'paused' | 'complete' | 'error' = 'paused';
 		let jobs: ReturnType<Awaited<ReturnType<typeof openSyncJournal>>['jobs']> | undefined;
 		try {
 			check();
@@ -81,13 +105,14 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				if (failure) throw failure;
 			};
 			cancelCapture = async () => {
+				await cancelStrictCapture();
 				// Cleanup must outlive the aborted execution host, while retaining
 				// the same account generation, adapter, origin, device and root.
 				const cleanupSignal = AbortSignal.timeout(10_000);
 				const cleanupCheck = () => { cleanupSignal.throwIfAborted(); checkIdentity(); };
 				const streaming = await journal!.pagedRuns({ scope: binding, currentScope: () => { cleanupCheck(); return binding; } }).active();
 				const captures = [
-					...(streaming?.spec.streaming?.source === 'local' ? [{ id: streaming.spec.streaming.captureId, policy: 'one-way-supported' as const }] : []),
+					...(streaming?.spec.streaming && streaming.spec.streaming.source !== 'remote' ? [{ id: streaming.spec.streaming.captureId, policy: 'one-way-supported' as const }] : []),
 					...((job ?? resume)?.nativeCaptureId ? [{ id: (job ?? resume)!.nativeCaptureId!, policy: 'backup-supported' as const }] : [])
 				];
 				if (!captures.length) return;
@@ -102,12 +127,13 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			};
 			stopCleanup.install(saveStop); check();
 			if (adapter.platform === 'macos') releaseWindow = await holdDesktopSyncWindow(adapter.bridge); check();
-			const resources = reviewed.configuration.resourceLimits ? new SyncResourceGovernor(reviewed.configuration.resourceLimits) : undefined;
+			const resourceKey = deviceResourceKey(binding.origin, binding.ownerId, binding.deviceId);
+			const resources = deviceSyncGovernor(resourceKey, reviewed.configuration.resourceLimits);
 			let nativeResources: SyncResourceStatus | undefined;
-			const host = await createNativeSyncHost({ ...(resources ? { resourcePolicy: { resourceLimits: resources.limits, resourceScope: reviewed.id, observe: (value: SyncResourceStatus) => { nativeResources = value; resources.observe(value); } } } : {}), ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal, assertCurrent: check });
+			const host = await createNativeSyncHost({ ...(resources ? { resourcePolicy: { resourceLimits: reviewed.configuration.resourceLimits, resourceScope: reviewed.id, deviceResourceLimits: () => readDeviceSyncResourcePolicy(resourceKey), observe: (value: SyncResourceStatus) => { nativeResources = value; resources.observe(value); history?.observe(value); } } } : {}), ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal, assertCurrent: check });
 			if (host.origin() !== binding.origin) throw Error('The selected sync server changed.');
 			await host.requireCapability('api.things', reviewed.configuration.resourceLimits ? '1.39.0' : reviewed.configuration.ignoreRules ? '1.38.0' : '1.36.0');
-			if (resources) await host.requireCapability('api.file-sync-batches', '1.2.0');
+			if (reviewed.configuration.resourceLimits) await host.requireCapability('api.file-sync-batches', '1.2.0');
 			const downloadRequirements = fileSyncDownloadRequirements(reviewed.configuration);
 			for (const [feature, minimum] of Object.entries(downloadRequirements)) await host.requireCapability(feature, minimum);
 			if (Object.keys(downloadRequirements).length && !supportsNativeCloudStaging(host.capabilities)) throw Error('Update Thingtime before using a CPU target for downloads. This connection requires scoped native signed-range downloads.');
@@ -119,7 +145,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			if (reviewed.configuration.ignoreRules && !supportsNativeIgnoreRules(capabilities)) throw Error('Update Thingtime Mac before using this connection’s Gitignore rules.');
 			const currentScope = () => { check(); host.assertCurrent(); return binding; };
 			const runtime = { ...(resources ? { resources } : {}), currentScope, origin: host.origin, fetch: host.fetch, requireCapability: host.requireCapability };
-			const backup = supportsNativeBackupCapture(capabilities) && reviewed.configuration.mode === 'backup' && !reviewed.configuration.propagateDeletes;
+			let photoSource = false, backup = false, strictAsync = false;
 			let capturedSource: NativeBackupCapture | undefined;
 			const releaseLocalImport = async (inventory: InventoryIdentity) => {
 				if (!job?.localImport || JSON.stringify(job.localImport.inventory) !== JSON.stringify(inventory)) return;
@@ -148,18 +174,37 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					const changed = await jobs!.capture(job!, crypto.randomUUID()); check();
 					if (!changed) throw Error('The sync job changed before indexing.'); job = changed;
 				}
-				for await (const page of readNativeInventory({ ownerId: binding.ownerId, deviceId: binding.deviceId, rootId: reviewed.configuration.localRootId,
-					excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}), signal, request, ...options, ...(supportsNativeInventoryBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}), ...(backup ? { backupPolicy: reviewed.configuration, captureId: job!.nativeCaptureId,
-						onCaptureStatus: async value => {
+				const captureId = strictAsync ? crypto.randomUUID() : undefined;
+				if (captureId) {
+					const recorded = await jobs!.strictCapture(job!, captureId);
+					if (!recorded) throw Error('The sync job changed before strict indexing.');
+					job = recorded; strictCancellation = undefined; check();
+				}
+				let finished = false;
+				try {
+					for await (const page of readNativeInventory({ ownerId: binding.ownerId, deviceId: binding.deviceId, rootId: reviewed.configuration.localRootId,
+						excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}), signal, request, ...options, ...(captureId ? { strictAsync, captureId,
+							onStrictProgress: (indexed: number) => publish({ stage: 'scanning', confirmed: 0, total: 0, indexed }) } : {}),
+							...(!photoSource && supportsNativeInventoryBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}), ...(backup ? { backupPolicy: reviewed.configuration, captureId: job!.nativeCaptureId,
+							onCaptureStatus: async value => {
 							if (value.state === 'complete') capturedSource = value;
 							if (job!.nativeCaptureGeneration === value.generation) return;
 							const resetImport = !!job!.localImport && !!job!.nativeCaptureGeneration;
 							const changed = await jobs!.observeCapture(job!, value.generation); check();
 							if (!changed) throw Error('The sync job changed during indexing.'); job = changed;
 							if (resetImport) throw new NativeInventoryRetryWait('The native scan changed. Its new generation will import separately.');
-						},
-						onProgress: value => publish({ stage: 'scanning', confirmed: 0, total: 0, indexed: value.totalEntries, skipped: value.totalSkipped,
+							},
+							onProgress: value => publish({ stage: 'scanning', confirmed: 0, total: 0, indexed: value.totalEntries, skipped: value.totalSkipped,
 							coverage: value.coverage, consistency: value.consistency }) } : {}) })) yield page;
+					finished = true;
+				} finally {
+					if (captureId && !finished) await cancelStrictCapture().catch(() => {});
+				}
+				if (captureId) {
+					const cleared = await retireStrictCapture(jobs!, job!, cancelStrictCapture); check();
+					if (!cleared) throw Error('The sync job changed after strict indexing.');
+					job = cleared;
+				}
 				if (backup && !options?.retainCaptureUntilHandoff) {
 					const changed = await jobs!.capture(job!, null); check();
 					if (!changed) throw Error('The sync job changed after indexing.'); job = changed;
@@ -171,19 +216,33 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			disposeProgressCache = progressCache.dispose;
 			const publish = (progress: Parameters<typeof update>[0]['progress']) => {
 				check(); if (!progress) return;
+				progress = { ...progress, statisticsObservedAt: Date.now() };
 				if (resources) progress = { ...progress, resources: nativeResources ?? resources.status() };
 				update({ progress });
+				history?.stage(progress.stage);
 				progressCache.write(progress);
 				if (progress.stage === 'retained') window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
 			};
 			await withSyncRootLock(binding, async () => {
 				const roots = (await request(binding.ownerId, { action: 'list' }, signal)).roots;
 				assertPhotoSourcePolicy(reviewed.configuration, roots); check();
-				const inspect = supportsNativePathInspection(capabilities) && roots.some(root => root.id === reviewed.configuration.localRootId && root.sourceKind !== 'photos');
+				photoSource = roots.find(root => root.id === reviewed.configuration.localRootId)?.sourceKind === 'photos';
+				if (!photoSource) assertNativeFolderInventoryCoverage(capabilities, reviewed.configuration);
+				backup = !photoSource && supportsNativeBackupCapture(capabilities) && reviewed.configuration.mode === 'backup' && !reviewed.configuration.propagateDeletes;
+				const photoPages = photoSource && supportsNativePhotoInventoryPages(capabilities);
+				strictAsync = photoPages || (!photoSource && capabilities.platform === 'macos' && !backup && supportsNativeStrictCapture(capabilities));
+				const inspect = photoSource ? photoPages : supportsNativePathInspection(capabilities);
 				const localTarget = ['download', 'two-way'].includes(reviewed.configuration.mode)
 					? await approveMobileSyncTarget(reviewed, binding, signal, request, capabilities, resume ? 'existing' : 'request') : undefined;
+				let prior = await jobs!.read(); check();
+				let resumeJob = resume;
+				if (resume && (prior?.id !== resume.id || prior.revision !== resume.revision)) return;
+				if (prior?.strictCaptureId) {
+					prior = await retireStrictCapture(jobs!, prior, saved => cancelSavedStrictCapture(saved, adapter, checkIdentity)); check();
+					if (!prior) return;
+					if (resume) resumeJob = prior;
+				}
 				if (!resume) {
-					const prior = await jobs!.read(); check();
 					// A new approved revision cannot borrow the earlier native job.
 					// Cancel its same-connection scan before dropping that ticket.
 					if (prior?.nativeCaptureId && (prior.state === 'paused' || JSON.stringify(prior.reviewed.configuration) === JSON.stringify(reviewed.configuration)) && JSON.stringify(prior.reviewed) !== JSON.stringify(reviewed)) {
@@ -192,17 +251,31 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					}
 				}
 				check();
-				admissionPending = resume ? jobs!.begin(resume, Date.now(), crypto.randomUUID()) : jobs!.admit(reviewed, crypto.randomUUID(), intervalMs);
+				admissionPending = resumeJob ? jobs!.begin(resumeJob, Date.now(), crypto.randomUUID()) : jobs!.admit(reviewed, crypto.randomUUID(), intervalMs);
 				job = await admissionPending;
 				if (!job) return; // A stopped/completed/replaced discovery is never replayed.
 				if (stopRequested) await jobs!.transition(job, 'paused');
 				check();
+				// Use the same admitted device/origin, and fence by account
+				// generation without the run's abort so Stop can record its end.
+				const historyJournal = journal!.deviceHistory({ scope: binding, assertCurrent: checkIdentity });
+				history = createDeviceSyncHistoryRecorder({
+					write: sample => historyJournal.append(sample),
+					...(adapter.platform === 'macos' ? { readResources: async (readSignal: AbortSignal) => {
+						check(); readSignal.throwIfAborted();
+						const result = await request(binding.ownerId, { action: 'resources' }, readSignal);
+						check(); readSignal.throwIfAborted();
+						if (result.roots.length || !result.deviceResourceLimits) throw Error('The device did not confirm sync resources.');
+						return result.resources;
+					} } : {}),
+					onStorageStatus: available => { checkIdentity(); reportDeviceSyncHistoryStorage(binding, available); }
+				});
 				await runPagedForegroundCloudSync(reviewed, binding, {
 					currentScope, localTarget, journal: journal!, runtime, progress: publish,
 					...(host.uploadBatch ? { uploadBatch: host.uploadBatch } : {}),
 					...(host.folderBatch ? { folderBatch: host.folderBatch } : {}),
 					...(supportsNativeAuthorizationContext(capabilities) ? { nativeOperationGuards: true as const } : {}),
-					...(inspect && supportsNativeStreamingIndex(capabilities) && !reviewed.configuration.propagateDeletes ? {
+					...(!photoSource && inspect && supportsNativeStreamingIndex(capabilities) && !reviewed.configuration.propagateDeletes ? {
 						streamLocalChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>) => readNativeIndexChanges({ ownerId: binding.ownerId, deviceId: binding.deviceId,
 							rootId: reviewed.configuration.localRootId, captureId, afterSequence, readyToFinish, signal: streamSignal ?? signal, request, excludedPaths: reviewed.configuration.excludedPaths, ignoreRules: reviewed.configuration.ignoreRules,
 							...(supportsNativeStreamingBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}) }),
@@ -216,7 +289,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 						const key = 'tt:sync-inventory:' + syncScopeKey(binding);
 						writeStampedCache(key, descriptor); pruneCacheNamespace('tt:sync-inventory:', key, 32);
 					},
-					transfer: value => { check(); update({ transfer: value }); },
+					transfer: value => { check(); update({ transfer: value }); history?.transfer(value); },
 					progressSession: descriptor => {
 						check(); update({ progressDescriptor: descriptor });
 						const key = 'tt:sync-progress-tree:' + syncScopeKey(binding);
@@ -276,9 +349,14 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					})
 				}, signal);
 				check(); const finished = await jobs!.finish(job, Date.now()); check();
+				if (finished) historyStatus = 'complete';
 				if (finished?.state === 'scheduled' && adapter.platform === 'macos') await setDesktopSyncScheduled(true, adapter.bridge);
 			}, undefined, signal);
 		} catch (error) {
+			// If the remote feed or a guarded transfer fails, stop only this
+			// connection's native scanner. The durable stream ID/cursors stay
+			// intact for retry, and a failed account check cannot cancel another run.
+			if (reviewed.configuration.mode === 'two-way' && !signal.aborted) await cancelCapture?.().catch(() => {});
 			const failed = job ?? (resume?.intervalMs !== undefined ? resume : null);
 			if (failed && jobs && !signal.aborted && isSyncConnectionFailure(error)) {
 				const delay = error instanceof SyncConnectionWait ? error.retryAfterMs : undefined;
@@ -286,14 +364,23 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				throw new SyncConnectionWait(error instanceof SyncConnectionWait ? error.message :
 					'Waiting for the connection to return. Saved transfer progress will continue automatically.', delay);
 			}
-			if (failed && jobs && !signal.aborted && !(error instanceof SyncConditionsWait) && !(error instanceof NativeInventoryRetryWait)) await jobs.attention(failed);
+			if (failed && jobs && !signal.aborted && !(error instanceof SyncConditionsWait) && !(error instanceof NativeInventoryRetryWait)) {
+				historyStatus = 'error';
+				await jobs.attention(failed);
+			}
 			throw error;
 		} finally {
 			disposeProgressCache?.();
 			// The stop hook uses this journal after immediate abort. Keep it open
 			// until durable pause and independent capture cancellation settle.
-			await stopCleanup.finish().catch(() => {});
-			disposeActivity(); visibility?.dispose(); journal?.close(); unsubscribe(); window.removeEventListener('pagehide', leave);
+			const cleanup = stopCleanup.finish().then(() => historyStatus, () => 'error' as const);
+			const historyFinish = history?.finish(cleanup);
+			await cleanup;
+			// A slow optional sample write must not hold the run or host open.
+			// Only the journal handle outlives the runner, until its write settles.
+			if (historyFinish) void historyFinish.finally(() => journal?.close());
+			else journal?.close();
+			disposeActivity(); visibility?.dispose(); unsubscribe(); window.removeEventListener('pagehide', leave);
 			await releaseWindow?.();
 		}
 	}, () => {
@@ -321,9 +408,19 @@ export async function pauseNativeSyncJob(scope: SyncScope, generation: number) {
 		for (let attempt = 0; attempt < 3; attempt++) {
 			await nativeSyncTasks.cancel(scope); check();
 			const job = await jobs.read();
-			if (!job || ['paused', 'complete'].includes(job.state) || await jobs.pause(job)) {
-				await nativeSyncTasks.cancel(scope); return;
+			const paused = job && (['paused', 'complete'].includes(job.state) ? job : await jobs.pause(job));
+			if (job && !paused) continue;
+			await nativeSyncTasks.cancel(scope);
+			if (paused?.strictCaptureId) {
+				const adapter = getNativeSyncAdapter();
+				if (!adapter) throw Error('Pause saved. Native indexing cleanup could not be confirmed.');
+				try {
+					await retireStrictCapture(jobs, paused, saved => cancelSavedStrictCapture(saved, adapter, check));
+				} catch {
+					throw Error('Pause saved. Native indexing cleanup could not be confirmed.');
+				}
 			}
+			return;
 		}
 		throw Error('The sync job changed while stopping. Please retry.');
 	} finally { journal?.close(); }

@@ -1,3 +1,4 @@
+import { BUILDER_THING_KIND } from '../schemas/builderThing';
 import type { AccountAlgorithmSync } from './accountAlgorithms';
 import { isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
 import { captureAccountThingChanges } from './accountTimeline';
@@ -29,7 +30,7 @@ export type SyncState = 'pending' | 'syncing' | 'conflict' | 'error' | 'synced';
 export type AccountThingWrite = ThingWrite & { acl?: string[]; visibility?: string };
 export type AccountThing = LocalThing & { author: { id: string }; acl: string[]; visibility: string; accountAttachmentIds?: string[] };
 const LOCAL_KINDS = new Set(['data', 'folder', 'webpage', 'component', 'schema', 'action', 'post', 'comment']);
-export const accountThingCanCache = (row: any): row is AccountThing => (!Array.isArray(row?.attachments) || row.attachments.length === 0) && Array.isArray(row?.thingtime) && row.thingtime.length > 0 && row.thingtime.every((kind: string) => LOCAL_KINDS.has(kind));
+export const accountThingCanCache = (row: any): row is AccountThing => (!Array.isArray(row?.attachments) || row.attachments.length === 0) && Array.isArray(row?.thingtime) && row.thingtime.length > 0 && row.thingtime.some((kind: string) => LOCAL_KINDS.has(kind)) && row.thingtime.every((kind: string) => LOCAL_KINDS.has(kind) || kind === BUILDER_THING_KIND);
 type FrozenWrite = { id: string; operationId: string; version: number; method: 'create' | 'update'; body: Record<string, unknown> };
 type FrozenDelete = Omit<FrozenWrite, 'method'> & { method: 'delete' };
 export type AccountSyncRecord = {

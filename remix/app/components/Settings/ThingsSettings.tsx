@@ -18,6 +18,7 @@ export function ThingsSettings() {
 	const devices = useDeviceStore({ userId: user?.id, enabled: available && !!user && !user.temporary && user.accountKind === 'user' });
 	const ids = React.useMemo(() => devices.devices.flatMap((device) => (device.summary?.id ? [device.summary.id] : [])), [devices.devices]);
 	const node = useLocalThingtimeNode(null, devices.refreshList, devices.loading ? undefined : ids);
+	const [localOpen, setLocalOpen] = React.useState(false);
 	const [dismissed, setDismissed] = useNodePanelPreference(user?.id);
 	return (
 		<>
@@ -27,7 +28,7 @@ export function ThingsSettings() {
 				{node.available ? (
 					<>
 						<LocalNodeSetupCard state={node} controlFor={node.controlFor} onAction={node.executeAction} onRefresh={node.refresh} />
-                        {user?.id ? <DesktopFolderAccess ownerId={user.id} pairedDeviceIds={node.pairedDeviceIds} ownedDeviceIds={ids} /> : null}
+                        {user?.id ? <DesktopFolderAccess active={localOpen} ownerId={user.id} pairedDeviceIds={node.pairedDeviceIds} ownedDeviceIds={ids} /> : null}
 						<SettingRow
 							label="Show connection panel on Things"
 							hint="When off, the panel returns whenever the node or its permissions need attention."

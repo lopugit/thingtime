@@ -1,3 +1,4 @@
+import type { VerificationContext } from '~/passwords/verificationPolicy';
 import { createHash } from 'node:crypto';
 import { createCookie } from '~/api/cookies';
 import { signPurposeToken, verifyPurposeToken } from './jwt';
@@ -25,7 +26,7 @@ export const responseChallenge = (response: any): string | null => {
 export const challengeCookieName = (kind: Ceremony, challenge: string) =>
 	`${prefix(kind)}_${createHash('sha256').update(challenge).digest('hex').slice(0, 24)}`;
 export type LoginChallenge = { challenge: string; rpID: string; origin?: string; cookieName?: string };
-export type RegistrationChallenge = LoginChallenge & { userId: string };
+export type RegistrationChallenge = LoginChallenge & { userId: string; passwordVerification?: { requestId: string; context: VerificationContext } };
 
 // Independent cookies prevent one tab, autofill or a repeated click replacing
 // another request's expected challenge. Keep at most three per ceremony kind.

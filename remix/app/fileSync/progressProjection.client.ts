@@ -1,5 +1,7 @@
 import { createSyncIgnorePolicy } from './syncIgnore';
 import { openSyncJournal } from './journal.client';
+import type { ConfirmedSyncCursor } from './pagedRunJournal';
+import type { SyncOperation } from './execute';
 import type { InventoryCursor, InventoryIdentity } from './inventoryJournal';
 import { assertProgressScope, parseSyncProgressDescriptor, type SyncProgressDescriptor, type SyncProgressRow, type SyncProgressSource } from './progressProjection';
 import { syncPathKey, type SyncEntry, type SyncScope } from './reconcile';
@@ -28,30 +30,55 @@ export function createJournalSyncProgressSource(descriptor: SyncProgressDescript
 				let next: InventoryCursor | null = null;
 				do { const page = await inventory.read(capture, next ?? undefined); for (const entry of page.entries) yield entry; next = page.next; } while (next);
 			};
-			const left = entries(saved.run.plan.local), right = entries(saved.run.plan.remote);
-			let a = await left.next(), b = await right.next(), batch: SyncEntry[] = [];
+			const observations = async function* (): AsyncGenerator<SyncEntry> {
+				const left = entries(saved.run.plan.local), right = entries(saved.run.plan.remote);
+				let a = await left.next(), b = await right.next();
+				while (!a.done || !b.done) {
+					const ak = a.done ? null : syncPathKey(a.value.path), bk = b.done ? null : syncPathKey(b.value.path);
+					if (ak !== null && ak === bk && a.value!.path !== b.value!.path) throw Error('Sync progress filenames require collision review.');
+					if (ak !== null && (bk === null || ak <= bk)) {
+						yield a.value!; a = await left.next(); if (ak === bk) b = await right.next();
+					} else { yield b.value!; b = await right.next(); }
+				}
+			};
+			const early = await runs.earlyProgressSource(saved.run);
+			const effects = async function* (): AsyncGenerator<SyncOperation> {
+				if (!early) return;
+				let next: ConfirmedSyncCursor | null = null;
+				do {
+					const page = await runs.readConfirmed(early, next ?? undefined);
+					for (const { operation } of page.rows) yield operation;
+					next = page.next;
+				} while (next);
+			};
+			const left = observations(), right = effects();
+			let a = await left.next(), b = await right.next();
+			let batch: { entry: SyncEntry; observed: boolean; early?: SyncOperation }[] = [];
 			const ignored = createSyncIgnorePolicy(saved.run.plan.ignoreRules, saved.run.plan.excludedPaths);
 			const flush = async () => {
-				const operations = await runs.operationsForPaths(saved.run, batch.map(entry => entry.path));
-				return batch.map((entry, i): SyncProgressRow => {
+				const operations = await runs.operationsForPaths(saved.run, batch.map(({ entry }) => entry.path));
+				return batch.map(({ entry, observed, early }, i): SyncProgressRow => {
 					const operation = operations[i];
 					return { entry: operation?.mutation.kind === 'copy' ? operation.mutation.source : operation?.mutation.kind === 'trash' ? operation.mutation.expected : entry,
-						operation, excluded: ignored.ignored(entry.path, entry.kind) };
+						operation, early, observed, excluded: observed && ignored.ignored(entry.path, entry.kind) };
 				});
 			};
 			while (!a.done || !b.done) {
 				assertProgressScope(saved, currentScope); signal?.throwIfAborted();
-				// IndexedDB string keys use code-unit order, not locale order.
-				const order = a.done ? 1 : b.done ? -1 : syncPathKey(a.value.path) < syncPathKey(b.value.path) ? -1 : syncPathKey(a.value.path) > syncPathKey(b.value.path) ? 1 : 0;
-				if (order === 0) {
-					if (a.value!.path !== b.value!.path) throw Error('Sync progress filenames require collision review.');
-					batch.push(a.value!); a = await left.next(); b = await right.next();
-				} else if (order < 0) { batch.push(a.value!); a = await left.next(); }
-				else { batch.push(b.value!); b = await right.next(); }
+				const ak = a.done ? null : syncPathKey(a.value.path), bk = b.done ? null : syncPathKey(b.value.mutation.path);
+				if (ak !== null && (bk === null || ak <= bk)) {
+					const entry = a.value!;
+					if (ak === bk && entry.path !== b.value!.mutation.path) throw Error('Sync progress filenames require collision review.');
+					batch.push({ entry, observed: true, ...(ak === bk ? { early: b.value! } : {}) });
+					a = await left.next(); if (ak === bk) b = await right.next();
+				} else {
+					const early = b.value!, mutation = early.mutation;
+					if (mutation.kind !== 'copy') throw Error('Early sync progress contains a deletion.');
+					batch.push({ entry: mutation.source, observed: false, early }); b = await right.next();
+				}
 				if (batch.length === 128) { for (const row of await flush()) yield row; batch = []; }
 			}
 			if (batch.length) for (const row of await flush()) yield row;
-			// Even an empty inventory must verify the selected run exists.
 			else await runs.operationsForPaths(saved.run, []);
 		} finally { journal.close(); }
 	} };

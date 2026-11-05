@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	parseMobileFolderResult,
+	supportsNativeSourcePaths,
+	validNativeSourcePath,
 	supportsNativePartPayloadBytes,
 	mobileFolderSource,
 	requestMobileFolders,
@@ -9,6 +11,9 @@ import {
 	supportsMobileSyncConditions,
 	supportsMobileFolderPublication,
 	supportsNativePathInspection,
+	supportsNativePhotoInventoryPages,
+	supportsNativeBackupCapture,
+	assertNativeFolderInventoryCoverage,
 	type FolderRequest
 } from './mobileFolders.client';
 import { nativeBridgeMessageEvent } from '../utils/nativeBridge';
@@ -27,6 +32,24 @@ test('single-path inspection negotiates the native contract and requires explici
 	assert.equal(parse({ entry: null })?.inspectedEntry, null);
 	for (const patch of [{ entry: undefined }, { complete: false }, { path: 'other' }, { rootId: 'other' },
 		{ entry: { ...entry, path: 'other' } }, { entry: { ...entry, size: -1 } }]) assert.throws(() => parse(patch));
+});
+test('photo inventory pages negotiate independently of legacy folder pages', () => {
+	for (const [platform, version, supported] of [
+		['macos', '1.18.0', false], ['macos', '1.19.0', true],
+		['ios', '1.4.0', false], ['ios', '1.5.0', true], ['ios', '1.6.0', true],
+		['macos', '2.0.0', false], ['android', '1.99.0', false]
+	] as const) assert.equal(supportsNativePhotoInventoryPages({ platform, fileAccessVersion: version }), supported);
+});
+test('iOS Rust backup negotiates per-entry pages without advertising strict folder coverage', () => {
+	const modern = { platform: 'ios', fileAccessVersion: '1.5.0', fileInventoryStrictCoverage: false } as const;
+	assert.equal(supportsNativeBackupCapture(modern), true);
+	assert.equal(supportsNativeBackupCapture({ ...modern, fileAccessVersion: '1.4.0' }), false);
+	assert.doesNotThrow(() => assertNativeFolderInventoryCoverage(modern, { mode: 'backup', propagateDeletes: false }));
+	for (const mode of ['two-way', 'download', 'upload', 'backup'] as const) {
+		assert.throws(() => assertNativeFolderInventoryCoverage(modern, { mode, propagateDeletes: true }), /one-way Backup/);
+		if (mode !== 'backup') assert.throws(() => assertNativeFolderInventoryCoverage(modern, { mode, propagateDeletes: false }), /complete folder inventory/);
+	}
+	assert.doesNotThrow(() => assertNativeFolderInventoryCoverage({ platform: 'macos', fileAccessVersion: '1.19.0' }, { mode: 'two-way', propagateDeletes: false }));
 });
 test('native folder capability is explicit and account/origin/request responses are fenced', () => {
 	assert.equal(supportsMobileFolders({ platform: 'ios', isNativeWebView: true } as any), false);
@@ -478,4 +501,19 @@ test('only negotiated Mac sources propagate exact accepted payload measurements'
     { sha256: 'a'.repeat(64), ...(known && payloadBytes === 3 ? { payloadBytes: 3 } : {}) });
   }
  }
+});
+
+
+test('Mac source paths remain exact owner-bound metadata, separate from relative IO paths', () => {
+ const sourcePath = '/Volumes/External/Projects/Music library';
+ assert.equal(supportsNativeSourcePaths({ platform: 'macos', fileAccessVersion: '1.15.0' }), true);
+ for (const bridge of [{ platform: 'macos', fileAccessVersion: '1.14.0' }, { platform: 'macos', fileAccessVersion: '2.15.0' }, { platform: 'ios', fileAccessVersion: '1.15.0' }] as const) assert.equal(supportsNativeSourcePaths(bridge), false);
+ assert.equal(parseMobileFolderResult(response({ roots: [{ ...root, sourcePath }] }), expected, { action: 'list' })?.roots[0].sourcePath, sourcePath);
+ assert.equal(parseMobileFolderResult(response({ ownerId: 'other', roots: [{ ...root, sourcePath }] }), expected, { action: 'list' }), null);
+ for (const path of ['relative/folder', '//remote/share', '/a/../b', '/a/./b', '/a//b', '/a\0b']) {
+  assert.equal(validNativeSourcePath(path), false);
+  assert.throws(() => parseMobileFolderResult(response({ roots: [{ ...root, sourcePath: path }] }), expected, { action: 'list' }), /Invalid native/);
+ }
+ assert.throws(() => parseMobileFolderResult(response({ roots: [{ ...root, sourcePath, sourceKind: 'photos', photoAccess: 'full' }] }), expected, { action: 'list' }), /Invalid native/);
+ assert.equal(validNativeSourcePath('/'), true);
 });

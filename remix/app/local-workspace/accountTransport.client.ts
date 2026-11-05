@@ -1,3 +1,4 @@
+import { isBuilderThing, BUILDER_THING_REQUIREMENTS } from '../schemas/builderThing';
 import { REMOTE_TRANSFER_EXPORT_VERSION, REMOTE_TRANSFER_CONTENT_VERSION } from '../utils/thingTransfer/remoteCapabilities';
 import { requiresEditableBlockContract, type WebpageBlock } from '../components/Builder/webpageBlocks';
 import type { AccountDraftTransport } from './accountDrafts';
@@ -93,6 +94,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'attachments/delete' && args.targetId !== undefined) await requireThingtimeCapability('api.attachment-delete', args.retainReceipt === true ? '1.7.0' : '1.6.0');
 		if (endpoint === 'things/export' && args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', REMOTE_TRANSFER_CONTENT_VERSION);
+		if (endpoint === 'things' && ['POST', 'PATCH', 'PUT'].includes(method) && isBuilderThing(args)) await requireThingtimeCapability('api.things', BUILDER_THING_REQUIREMENTS['api.things']);
 		const blocks = (args.crystal as { blocks?: unknown } | undefined)?.blocks;
 		if (endpoint === 'things' && ['POST', 'PATCH', 'PUT'].includes(method) && Array.isArray(blocks) && requiresEditableBlockContract(blocks as WebpageBlock[])) await requireThingtimeCapability('api.things', '1.35.0');
 		if (endpoint === 'things' && method === 'DELETE' && args.retainAttachmentReceipts === true) await requireThingtimeCapability('api.things', '1.42.0');

@@ -1,5 +1,6 @@
 import { FILESYSTEM_MAX_BYTES } from '~/api/utils/devices/deviceFilesystemCore';
 import { isFolder, thingDisplayName, type ThingsThing } from './thingsCore';
+import { isCloudFilesystemFile } from './filesystemCloudFile';
 import type { FileClipboard, FileLocation } from './filesystemClient';
 
 export type FilesystemTransferPort = {
@@ -44,11 +45,10 @@ export const transferFilesystem = async (clipboard: FileClipboard, destination: 
         result.push({ item, children: await plan(await port.list(itemLocation(item)), depth + 1) });
       } else {
         if (item.inode && item.inode.type !== 'file') throw new Error('Links and special files cannot be transferred.');
-        if (!item.inode && !item.thingtime.includes('attachment')) throw new Error('This folder contains other Things. Use the main Things copy action to preserve them.');
-        const size = item.inode?.size ?? Number(item.crystal.size);
+        if (!item.inode && !isCloudFilesystemFile(item) && !item.thingtime.includes('attachment')) throw new Error('This folder contains other Things. Use the main Things copy action to preserve them.');
+        if (isCloudFilesystemFile(item) && (item.crystal.trashed !== false || item.crystal.symbolicLink)) throw Error('Trashed files and symbolic links cannot be copied.');
+        const size = item.inode?.size ?? Number(isCloudFilesystemFile(item) ? item.crystal.content?.size : item.crystal.size);
         if (!Number.isSafeInteger(size) || size < 0) throw new Error('A source file has invalid size metadata.');
-        // Paired-device commands still use their bounded wire buffers. Native
-        // Thingtime copies pass immutable File/Blob handles between adapters.
         if ((item.inode || destination.deviceId) && (size > FILESYSTEM_MAX_BYTES || (bytes += size) > 128 * 1024 * 1024)) throw new Error('Paired-device transfers support files up to 32 MiB each and 128 MiB total.');
         result.push({ item });
       }

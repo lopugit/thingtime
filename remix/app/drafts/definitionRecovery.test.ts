@@ -5,6 +5,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { createWithDraft } from './createWithDraft';
 import { restoreDefinitionDraft } from '../components/Builder/DefinitionEditor/definitionDraft';
+import { withBuilderThingKind } from '../schemas/builderThing';
 
 const text = readFileSync(new URL('../components/Builder/DefinitionEditor/ThingDefinitionEditor.tsx', import.meta.url), 'utf8');
 const source = ts.createSourceFile('ThingDefinitionEditor.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -42,13 +43,14 @@ test('a server conflict preserves both account and Timeline drafts', async () =>
 	await evaluate('save', {
         localOnly: false,
 		pending: { current: false }, active: { current: true }, thing: { thingtime: ['component'], updatedAt: 'new-version' },
-		createWithDraft, invalidNumbers: false, parsed: { name: 'Recovered' }, parseError: '', staleDraft: false, draftBase: 'old-version', id: 'component-id', actor: 'owner-id',
+		createWithDraft, withBuilderThingKind, invalidNumbers: false, parsed: { name: 'Recovered' }, parseError: '', staleDraft: false, draftBase: 'old-version', id: 'component-id', actor: 'owner-id',
 		validateThingtimeCrystal: () => ({ ok: true }), setSaving: () => {}, setError: (value: string) => { error = value; },
 		accountDraft: { flush: async () => {}, retire: async () => { cleared = true; } },
 		draft: { flush: async () => 'event-id', release: async () => { released = true; } },
 		apiRef: { current: { v1: { things: { update: async (input: any) => { submitted = input; return { ok: false, error: 'Version conflict' }; } } } } }
 	})();
 	assert.equal(submitted.expectedUpdatedAt, 'old-version');
+	assert.deepEqual(submitted.thingtime, ['component', 'builder-thing'], 'The original content kind and Builder provenance accompany the guarded save');
 	assert.equal(error, 'Version conflict');
 	assert.equal(cleared, false);
 	assert.equal(released, false);
@@ -70,10 +72,10 @@ test('local definition saves retain conditional writes and local drafts without 
  const history = () => { throw new Error('Account Timeline must not be used by anonymous editor'); };
  await evaluate('save', {
   localOnly: true, pending: { current: false }, active: { current: true }, thing: { thingtime: ['action'], updatedAt: 'old' },
-  createWithDraft, invalidNumbers: false, parsed: { name: 'Offline', steps: [{ op: 'return', value: true }] }, parseError: '', staleDraft: false, draftBase: 'old', id: 'local-action', actor: 'local-workspace',
+  createWithDraft, withBuilderThingKind, invalidNumbers: false, parsed: { name: 'Offline', steps: [{ op: 'return', value: true }] }, parseError: '', staleDraft: false, draftBase: 'old', id: 'local-action', actor: 'local-workspace',
   validateThingtimeCrystal: () => ({ ok: true }), setSaving() {}, setError(value: string) { error = value; },
   accountDraft: { flush: async () => {}, retire: async () => { cleared = true; } }, draft: { flush: history, release: history },
-  apiRef: { current: { v1: { things: { update: async (input: unknown) => { submitted = input; return { ok: true }; }, get: async () => ({ ok: true, thing: { id: 'local-action' } }) } } } },
+  apiRef: { current: { v1: { things: { update: async (input: unknown) => { submitted = input; return { ok: true }; }, get: async () => ({ ok: true, thing: { id: 'local-action', author: { id: 'local-workspace' } } }) } } } },
   onSaved: () => { saved = true; }, onClose: () => { closed = true; }
  })();
  assert.equal(error,''); assert.equal(submitted.expectedUpdatedAt,'old'); assert.equal(submitted.replaceCrystal,true);

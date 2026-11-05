@@ -1,3 +1,4 @@
+import { thingPresentationData } from '../Thingtime/renderComponentDeclaration';
 import React from 'react';
 import { Box, Text } from '@chakra-ui/react';
 import { ThingView } from '~/components/Thingtime/ThingView';
@@ -27,7 +28,7 @@ export function PostInteractiveThing({ thing, compact }: { thing: ThingsThing; c
   const owner = !!user?.id && thing.author?.id === user.id;
   const component = thing.thingtime.includes('component');
   const webpage = thing.thingtime.includes('webpage');
-  if (!component && !webpage) return <ThingView thing={thing.crystal.thing || thing.crystal} compact={compact} />;
+  if (!component && !webpage) return <ThingView thing={thingPresentationData(thing.crystal)} compact={compact} />;
   // Reuse the canonical runtime: visitors execute only the shared read-only
   // composition, and owner mutations still go through the action confirmation.
   return <WebpageRuntimeProvider key={`${user?.id || 'anonymous'}:${thing.id}`} pageId={thing.id} pageKey={typeof thing.crystal.pageKey === 'string' ? thing.crystal.pageKey : null} suiteKey={null} source={owner ? 'user' : 'system'} shared={!owner}>

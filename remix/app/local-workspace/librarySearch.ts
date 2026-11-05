@@ -1,22 +1,13 @@
 import { isLocalLibraryThing, type LocalThing } from './things';
+import { localSearchConditionMatcher } from './structuredSearch';
 import { WorkspaceError } from './storage';
 
-export type LibrarySearchQuery = { q?: unknown; thingtime?: unknown; cursor?: unknown; limit?: unknown };
+export type LibrarySearchQuery = { q?: unknown; thingtime?: unknown; cursor?: unknown; limit?: unknown; conditions?: unknown; mode?: unknown };
 const invalid = (message: string): never => { throw new WorkspaceError('INVALID_LOCAL_SEARCH', message); };
 const fold = (text: string) => text.normalize('NFKC').toLowerCase();
 
-/** Search authored values, not JSON field names or local bookkeeping. The
- * workspace's record/byte quotas bound this scan; values were validated on write. */
-export function localSearchText(row: LocalThing) {
- const pending: unknown[] = [row.crystal, row.tags || []], text: string[] = [];
- while (pending.length) {
-  const value = pending.pop();
-  if (typeof value === 'string') text.push(value);
-  else if (Array.isArray(value)) for (const entry of value) pending.push(entry);
-  else if (value && typeof value === 'object') for (const entry of Object.values(value)) pending.push(entry);
- }
- return fold(text.join('\n'));
-}
+export { localSearchText } from './searchText';
+import { localSearchText } from './searchText';
 
 /** A library-only literal text search. Public/structured discovery retains its
  * own API contract; this helper grants no identity, ACL or remote authority. */
@@ -28,7 +19,8 @@ export function searchLocalLibrary(rows: LocalThing[], query: LibrarySearchQuery
  const kinds = [...new Set(String(query.thingtime || '').split(',').map(kind => kind.trim()).filter(Boolean))].sort();
  if (kinds.length > 20 || kinds.some(kind => kind.length > 64)) invalid('Too many or invalid search kinds.');
  const limit = Math.max(1, Math.min(50, Math.floor(Number(query.limit) || 20)));
- const key = JSON.stringify([q, kinds]);
+ const match = localSearchConditionMatcher(query.conditions, query.mode);
+ const key = JSON.stringify([q, kinds, ...(query.conditions !== undefined || query.mode !== undefined ? [query.conditions || [], query.mode || 'all'] : [])]);
  if (key.length > 1500) invalid('Search filters are too large. Use fewer kinds.');
  let after: string | undefined;
  if (query.cursor !== undefined && query.cursor !== null && query.cursor !== '') {
@@ -39,7 +31,7 @@ export function searchLocalLibrary(rows: LocalThing[], query: LibrarySearchQuery
    after = cursor[1];
   } catch { invalid('Invalid or changed search cursor. Start a new search.'); }
  }
- let matches = rows.filter(row => isLocalLibraryThing(row) && (!kinds.length || kinds.some(kind => row.thingtime.includes(kind))) && (!q || localSearchText(row).includes(q)))
+ let matches = rows.filter(row => isLocalLibraryThing(row) && match({ ...row, shareId: row.id, createdAt: new Date(row.createdAt), updatedAt: new Date(row.updatedAt) }) && (!kinds.length || kinds.some(kind => row.thingtime.includes(kind))) && (!q || localSearchText(row).includes(q)))
   .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
  const total = matches.length;
  if (after) {

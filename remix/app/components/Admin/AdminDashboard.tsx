@@ -25,6 +25,8 @@ import {
   Tr
 } from '@chakra-ui/react';
 
+import { MongoConnectionInventory } from './MongoConnectionInventory';
+import { PreviewRetentionSettings } from './PreviewRetentionSettings';
 import { SystemVault } from './SystemVault';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { CIControlDashboard } from '~/components/Admin/CIControl/CIControlDashboard';
@@ -1024,6 +1026,12 @@ export const AdminDashboard = () => {
           </TabPanel>
           <TabPanel px={0}>
             <CIControlDashboard cacheIdentity={user.id} />
+          </TabPanel>
+          <TabPanel px={0}>
+            <MongoConnectionInventory key={user.id} />
+          </TabPanel>
+          <TabPanel px={0}>
+            <PreviewRetentionSettings key={user.id} />
           </TabPanel>
           <TabPanel px={0}>
             <IntegrationManager />

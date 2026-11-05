@@ -170,7 +170,8 @@ test('owned file transport binds metadata and exact bytes to one account, plane 
  try{
   rootIdentity.confirm(rootIdentity.read().generation);bindLocalWorkspace(false,rootIdentity.read().generation,scope);
   const transport=accountThingTransport(scope,{assertCurrent(){},onInvalidate:()=>()=>{}}).files,signal=new AbortController().signal;
-  await assert.rejects(transport.retention('file',signal),/incompatible/); // Prior test's other-origin manifest must be rejected and evicted.
+  // The capability checker scopes cached manifests by origin; another origin
+  // cannot poison this request or require a failing first attempt.
   await transport.retention('file',signal);assert.equal(calls.at(-1).url,'/api/v1/attachments/content?id=file&cache=retain&download=1');
   const retained = await transport.bytes('file',key,3,signal); assert.ok(retained instanceof Blob);
   assert.deepEqual(new Uint8Array(await retained.arrayBuffer()),bytes);
@@ -327,4 +328,23 @@ test('atomic attachment edits refuse media-only update contracts before transpor
   assert.equal(writes.length,1);assert.equal(mutations.length,2);
   assert.deepEqual(JSON.parse(writes[0].body),op.body);
  }finally{Object.assign(globalThis,saved);}
+});
+
+test('Builder sync requires the provenance capability before sending saved definitions', async () => {
+ const saved = { window: globalThis.window, fetch: globalThis.fetch };
+ const origin = 'https://builder-sync-capability.test', scope = { kind: 'account' as const, origin, ownerId: 'owner', dataPlane: 'home' };
+ let version = '1.45.0', mutations = 0;
+ Object.assign(globalThis, { window: { location: { origin }, dispatchEvent() {} }, fetch: async (url: string) => {
+  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.things': { version }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  mutations++; return Response.json({ ok: true });
+ } });
+ try {
+  rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(false, rootIdentity.read().generation, scope);
+  const transport = accountThingTransport(scope, { assertCurrent() {}, onInvalidate: () => () => {} });
+  const operation = { id: 'component', operationId: 'create-component', version: 1, method: 'create' as const, body: { thingtime: ['component', 'builder-thing'], crystal: { name: 'Card' } } };
+  await assert.rejects(transport.write(operation, new AbortController().signal), /incompatible/);
+  assert.equal(mutations, 0);
+  version = '1.46.0'; await transport.write(operation, new AbortController().signal);
+  assert.equal(mutations, 1);
+ } finally { Object.assign(globalThis, saved); }
 });

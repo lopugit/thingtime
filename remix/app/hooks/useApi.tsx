@@ -7,6 +7,9 @@ import { WorkspaceApiIdentity } from '../local-workspace/apiIdentity';
 import { useOfflineWorkspace, type WorkspaceUser } from './useWorkspaceUser';
 import { accountApi, startAccountWorkspaceSync, type AccountLocalView } from '../local-workspace/accountApi.client';
 import { anonymousApi } from '../local-workspace/api.client';
+import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
+import { isBuilderThing } from '~/schemas/builderThing';
+import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { FILE_SYNC_REQUIREMENTS } from '~/fileSync/configuration';
 import { parseCloudFile, parseCloudFileCommit, type CloudFileCommit } from '~/fileSync/cloudFile';
@@ -35,7 +38,9 @@ import { rootIdentity } from '../utils/rootIdentity';
 import { createBrowserActionHost, finishBrowserAction } from '~/components/Actions/browserActionHost';
 import { withPostRequestDeadline } from './postRequest';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
-import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { THEME_CAPABILITY_REQUIREMENTS } from '~/theme/capabilities';
+import { PREVIEW_RETENTION_REQUIREMENTS } from '~/api/utils/ciControl/previewRetentionCore';
+import { requireThingtimeCapability, type CapabilityTransport } from '~/api/utils/capabilities/requireCapability.client';
 import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
@@ -162,9 +167,9 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
     files: {
       read: useCallback(async (scope: TimelineScope, id: string, options?: { signal?: AbortSignal }) => {
         if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
-        await requireThingtimeCapability('api.files', '1.0.0');
-        await requireThingtimeCapability('api.actions-run', '1.7.0');
-        await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+        await requireThingtimeCapability('api.files', '1.0.0', scope.apiOrigin);
+        await requireThingtimeCapability('api.actions-run', '1.7.0', scope.apiOrigin);
+        await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0', scope.apiOrigin);
         const result = await getJson(`/api/v1/files${toQuery({ id })}`, { ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
         const file = parseCloudFile(result?.file);
         if (file.id !== id) throw Error('File identity changed.');
@@ -173,8 +178,8 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       commit: useCallback(async (scope: TimelineScope, input: CloudFileCommit, options?: { signal?: AbortSignal }) => {
         if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
         const command = parseCloudFileCommit(input);
-        await requireThingtimeCapability('api.files', '1.0.0');
-        await requireThingtimeCapability('api.actions-run', '1.7.0');
+        await requireThingtimeCapability('api.files', command.symbolicLink ? '1.9.0' : '1.0.0', scope.apiOrigin);
+        await requireThingtimeCapability('api.actions-run', '1.7.0', scope.apiOrigin);
         return asyncFetcher.submit(command, { action: '/api/v1/files', ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
       }, [asyncFetcher])
     },
@@ -406,7 +411,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       passkeys: {
         list: useCallback(async () => getJson('/api/v1/auth/passkeys'), [getJson]),
         registerOptions: useCallback(
-          async (args: { password: string; signal?: AbortSignal }) => asyncFetcher.submit({ password: args?.password }, { action: '/api/v1/auth/passkeys/register-options', signal: args.signal }),
+          async (args: { password: string; verificationRequestId?:string; signal?: AbortSignal }) => asyncFetcher.submit({ password: args?.password, ...(args.verificationRequestId ? {verificationRequestId:args.verificationRequestId} : {}) }, { action: '/api/v1/auth/passkeys/register-options', signal: args.signal }),
           [asyncFetcher]
         ),
         register: useCallback(
@@ -452,6 +457,19 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       }
     },
     settings: {
+      connectorProtections: useCallback(async (expectedActor: string, signal?: AbortSignal) => {
+        await requireThingtimeCapability(CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_VERSION);
+        signal?.throwIfAborted();
+        return getJson(CONNECTOR_PROTECTIONS_PATH, { expectedActor, signal, expectedApiOrigin: window.location.origin });
+      }, [getJson]),
+      setConnectorProtections: useCallback(async (expectedActor: string, confirmations: ConnectorConfirmationPatch, signal?: AbortSignal) => {
+        await requireThingtimeCapability(CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_VERSION);
+        signal?.throwIfAborted();
+        return asyncFetcher.submit({ confirmations }, {
+          action: CONNECTOR_PROTECTIONS_PATH, expectedActor, signal, expectedApiOrigin: window.location.origin,
+          characterId: character?.id, errorContext: 'save Thingtime connector confirmations'
+        });
+      }, [asyncFetcher, character?.id]),
       lopuPrompt: useCallback(async (options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.settings-lopu-prompt', '2.0.0');
         const result = await getJson('/api/v1/settings/lopu-prompt?scope=base', options);
@@ -552,6 +570,20 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
 				async (args?: { limit?: number }, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
         [getJson]
       ),
+      mongodbConnections: useCallback(async (args: { cursor?: string; limit?: number }, scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.admin-mongodb-connections', '1.1.0', scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        return getJson(`/api/v1/admin/mongodb/connections${toQuery(args)}`, { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal });
+      }, [getJson]),
+      ciPreviewRetention: useCallback(async (scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.admin-ci-preview-retention', PREVIEW_RETENTION_REQUIREMENTS['api.admin-ci-preview-retention'], scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        const requestScope = { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal };
+        return getJson('/api/v1/admin/ci/preview-retention', requestScope);
+      }, []),
+      setCiPreviewRetention: useCallback(async (args: Record<string, unknown>, scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.admin-ci-preview-retention', PREVIEW_RETENTION_REQUIREMENTS['api.admin-ci-preview-retention'], scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        const requestScope = { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal };
+        return asyncFetcher.submit(args, { ...requestScope, action: '/api/v1/admin/ci/preview-retention', errorContext: 'save preview retention rules' });
+      }, [asyncFetcher]),
       ciCredentials: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/credentials', options), [getJson]),
       ciFeatureStacks: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/stacks', options), [getJson]),
       ciStackChat: useCallback(async (runId: string) => getJson(`/api/v1/admin/ci/stacks/chat${toQuery({ runId })}`), [getJson]),
@@ -883,7 +915,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
 							sizeBytes: number;
 							purpose?: AttachmentUploadPurpose;
 						},
-						options?: { signal?: AbortSignal }
+						options?: ThingRequestOptions
 					) => {
 						await requireThingtimeCapability('api.attachment-uploads', args.purpose === 'file' || args.purpose === 'file-import' ? '1.5.0' : '1.4.1');
 						if (args.purpose === 'file' || args.purpose === 'file-import') await requireThingtimeCapability('api.attachment-upload-complete', '1.4.0');
@@ -900,7 +932,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
 							},
 							{
 								action: '/api/v1/attachments/uploads',
-								signal: options?.signal,
+								...options,
 								errorContext: 'prepare a file upload'
 							}
 						);
@@ -922,12 +954,12 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
 					[asyncFetcher]
 				),
 				complete: useCallback(
-					async (args: { uploadId: string }, options?: { signal?: AbortSignal }) => {
+					async (args: { uploadId: string }, options?: ThingRequestOptions) => {
 						const ret = asyncFetcher.submit(
 							{ uploadId: args?.uploadId },
 							{
 								action: '/api/v1/attachments/uploads/complete',
-								signal: options?.signal,
+								...options,
 								errorContext: 'verify a file upload'
 							}
 						);
@@ -937,12 +969,12 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
 					[asyncFetcher]
 				),
 				abort: useCallback(
-					async (args: { uploadId: string }, options?: { signal?: AbortSignal }) => {
+					async (args: { uploadId: string }, options?: ThingRequestOptions) => {
 						const ret = asyncFetcher.submit(
 							{ uploadId: args?.uploadId },
 							{
 								action: '/api/v1/attachments/uploads/abort',
-								signal: options?.signal,
+								...options,
 								errorContext: 'cancel a file upload'
 							}
 						);
@@ -1118,7 +1150,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
     },
     things: {
       fork: useCallback(async (args: { id: string; key?: string }) => {
-        await requireThingtimeCapability('api.things-fork', '1.6.0');
+        await requireThingtimeCapability('api.things-fork', '1.8.0');
         return asyncFetcher.submit({ id: args.id, key: args.key }, { action: '/api/v1/things/fork' });
       }, [asyncFetcher]),
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
@@ -1195,7 +1227,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
-          await requireThingtimeCapability('api.things', args?.commentProjection ? '1.27.0' : args?.target ? '1.22.0' : args?.folder === 'root' ? '1.39.1' : '1.14.0');
+          await requireThingtimeCapability('api.things', args?.builderApp ? '1.45.0' : args?.commentProjection ? '1.27.0' : args?.target ? '1.22.0' : args?.folder === 'root' ? '1.39.1' : '1.14.0');
           return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
@@ -1206,7 +1238,8 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
               cursor: args?.cursor,
               limit: args?.limit,
               // session-auth data browser: narrow own-things to ONE app's namespace
-              appId: args?.appId
+              appId: args?.appId,
+              builderApp: args?.builderApp
             })}`, { ...options, expectedDataPlane }
           );
         },
@@ -1220,6 +1253,10 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           if (args?.crystal?.configurationVersion !== undefined && args?.crystal?.localRootId !== undefined) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
           if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
@@ -1235,6 +1272,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
           return asyncFetcher.submit(
             {
               id: args?.id,
+              ...(args?.thingtime !== undefined ? { thingtime: args.thingtime } : {}),
               geo: args?.geo,
               crystal: args?.crystal,
               ...(args?.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: args.expectedUpdatedAt } : {}),
@@ -1279,8 +1317,11 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         [asyncFetcher]
       ),
       upsert: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
+          return asyncFetcher.submit(
             {
               id: args?.id,
               thingtime: args?.thingtime,
@@ -1292,7 +1333,8 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
               tokenAcl: args?.tokenAcl
             },
             { action: '/api/v1/things', method: 'PUT' }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), [getJson]),
@@ -1300,6 +1342,9 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           if (args?.thingtime?.includes('file-sync')) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
 					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
@@ -1323,7 +1368,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       ),
       react: useCallback(
         async (args) => {
-          await requireThingtimeCapability('api.things-react', '1.2.0');
+          await requireThingtimeCapability('api.things-react', '1.2.1');
           return asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react', errorContext: 'save your reaction' });
         },
         [asyncFetcher]
@@ -1402,17 +1447,36 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
     // third-party app connections (Reddit, YouTube, Mastodon, …) — link
     // external accounts, browse their feeds, manage AI feed filters
     connections: {
-      providers: useCallback(async () => getJson('/api/v1/connections/providers'), [getJson]),
-      list: useCallback(async () => getJson('/api/v1/connections'), [getJson]),
+      providers: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-providers', '2.0.0'); return getJson('/api/v1/connections/providers', options); }, [getJson]),
+      list: useCallback(async (options?: ThingRequestOptions, includeNamed = false) => {
+        await requireThingtimeCapability('api.connections', includeNamed ? '2.1.0' : '2.0.0');
+        return getJson('/api/v1/connections' + (includeNamed ? '?includeNamed=1' : ''), options);
+      }, [getJson]),
       connect: useCallback(
-        async (args) => asyncFetcher.submit({ provider: args?.provider, fields: args?.fields }, { action: '/api/v1/connections' }),
+        async (args) => { await requireThingtimeCapability('api.connections', args?.named ? '2.1.0' : '2.0.0'); return asyncFetcher.submit({
+          provider: args?.provider, fields: args?.fields, named: args?.named, expectedOwnerId: args?.expectedOwnerId
+        }, { action: '/api/v1/connections', expectedApiOrigin: args?.expectedApiOrigin }); },
         [asyncFetcher]
       ),
-      unlink: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/connections/unlink' }), [asyncFetcher]),
+      unlink: useCallback(async (args) => {
+        await requireThingtimeCapability('api.connections-unlink', args?.named ? '2.1.0' : '2.0.0');
+        return asyncFetcher.submit({ id: args?.id, expectedOwnerId: args?.expectedOwnerId },
+          { action: '/api/v1/connections/unlink', expectedApiOrigin: args?.expectedApiOrigin });
+      }, [asyncFetcher]),
+      useNamed: useCallback(async (args) => {
+        await requireThingtimeCapability('api.connections-named', '1.0.0');
+        return asyncFetcher.submit({ id: args.id, operation: args.operation, expectedOwnerId: args.expectedOwnerId },
+          { action: '/api/v1/connections/named', expectedActor: args.expectedOwnerId, expectedApiOrigin: args.expectedApiOrigin });
+      }, [asyncFetcher]),
       // SSO account linking: begin returns the provider's authorize URL — send
       // the browser there; the callback lands back on /connections
       oauthBegin: useCallback(
-        async (args) => asyncFetcher.submit({ provider: args?.provider }, { action: '/api/v1/connections/oauth/begin' }),
+        async (args) => {
+          await requireThingtimeCapability('api.connections-oauth-begin', args?.named ? '2.1.0' : '2.0.0');
+          if (args?.named) await requireThingtimeCapability('api.connections-oauth-callback', '2.1.0');
+          return asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId, named: args?.named },
+            { action: '/api/v1/connections/oauth/begin', expectedApiOrigin: args?.expectedApiOrigin });
+        },
         [asyncFetcher]
       ),
       // the Thingtime-managed virtual YouTube subscription list
@@ -1426,8 +1490,9 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         [asyncFetcher]
       ),
       feed: useCallback(
-        async (args) =>
-          getJson(
+        async (args) => {
+          await requireThingtimeCapability('api.connections-feed', '2.0.0');
+          return getJson(
             `/api/v1/connections/feed${toQuery({
               connection: args?.connection,
               cursor: args?.cursor,
@@ -1435,20 +1500,21 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
               sync: args?.sync,
               deepen: args?.deepen
             })}`
-          ),
+          ); },
         [getJson]
       ),
-      filters: useCallback(async () => getJson('/api/v1/connections/filters'), [getJson]),
+      filters: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-filters', '2.0.0'); return getJson('/api/v1/connections/filters', options); }, [getJson]),
       saveFilter: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          await requireThingtimeCapability('api.connections-filters', '2.0.0');
+          return asyncFetcher.submit(
             { id: args?.id, name: args?.name, prompt: args?.prompt, action: args?.action, enabled: args?.enabled },
             { action: '/api/v1/connections/filters' }
-          ),
+          ); },
         [asyncFetcher]
       ),
       removeFilter: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id, remove: true }, { action: '/api/v1/connections/filters' }),
+        async (args) => { await requireThingtimeCapability('api.connections-filters', '2.0.0'); return asyncFetcher.submit({ id: args?.id, remove: true }, { action: '/api/v1/connections/filters' }); },
         [asyncFetcher]
       )
     },
@@ -1668,6 +1734,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         async (args) => {
           await requireThingtimeCapability('api.themes', '1.3.0');
           const { id, name, theme, visibility } = args;
+          await requireThingtimeCapability('api.themes', THEME_CAPABILITY_REQUIREMENTS['api.themes']);
           return asyncFetcher.submit({ id, name, theme, visibility }, { action: '/api/v1/themes' });
         },
         [asyncFetcher]

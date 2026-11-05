@@ -1,3 +1,6 @@
+import { REMOTE_SYNC_HISTORY_REQUIREMENTS } from '~/fileSync/remoteSyncProtocol';
+import { isGatewayDataPath } from '../../server/utils/environmentGateway';
+import { CONNECTION_ICON_FEATURE, CONNECTION_ICON_PATH, CONNECTION_ICON_VERSION } from '../connections/providerIcons';
 import { FILE_SYNC_RESOURCE_REQUIREMENTS } from '~/fileSync/configuration';
 import { fileSyncDownloadRequirements } from '~/fileSync/signedDownloadTarget';
 import { MOBILE_DEVICE_REQUIREMENTS } from '../devices/platform';
@@ -7,8 +10,75 @@ import test from 'node:test';
 
 import { apiEndpointDocs, apiRouteCapabilityId, createApiCapabilitiesManifest } from './apiDocs';
 import { routeModules } from '../../server/routes/api/[...]';
+import { MAPS_FEATURE, MAPS_FEATURE_VERSION } from '../schemas/maps';
 import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
+
+test('connector protection preferences are registered and negotiated independently', () => {
+  const feature = 'api.settings-connector-protections';
+  const path = '/api/v1/settings/connector-protections';
+  const route = createApiCapabilitiesManifest(Object.keys(routeModules));
+  const manifest = thingtimeCapabilityManifest('https://connector-settings.test');
+  assert.equal(typeof routeModules['v1/settings/connector-protections'], 'function');
+  assert.equal(route.features[feature], '1.0.0');
+  assert.equal(manifest.origin, 'https://connector-settings.test');
+  assert.equal(manifest.features[feature].version, '1.0.0');
+  assert.deepEqual(manifest.operations.find(operation => operation.path === path), {
+    feature, methods: ['GET', 'POST'], path
+  });
+  for (const compatible of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(compatible, '1.0.0'), true);
+  for (const incompatible of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(incompatible, '1.0.0'), false);
+  assert.equal(route.features['api.chatgpt-mcp'], '2.0.0');
+  assert.equal(manifest.features['api.chatgpt-mcp'].version, '2.0.0');
+});
+
+test('editable map uploads and numeric summaries require their deployed contracts', () => {
+  const route = createApiCapabilitiesManifest().features;
+  const manifest = thingtimeCapabilityManifest('https://planner.test');
+  assert.equal(manifest.origin, 'https://planner.test');
+  for (const [feature, minimum, previous] of [
+    ['api.things', '1.48.0', '1.46.3'],
+    ['api.things-update', '1.17.0', '1.15.1'],
+    ['api.webpages-resolve', '1.10.0', '1.8.1'],
+    ['api.actions-run', '1.39.0', '1.38.0'],
+    ['api.things-fork', '1.8.0', '1.7.0']
+  ]) {
+    assert.equal(route[feature], minimum);
+    assert.equal(manifest.features[feature].version, minimum);
+    assert.equal(capabilitySatisfies(minimum, minimum), true);
+    for (const unsupported of [undefined, previous, '2.0.0']) {
+      assert.equal(capabilitySatisfies(unsupported, minimum), false);
+    }
+  }
+});
+
+test('private agent reporting is registered in both manifests with an independent contract', () => {
+  assert.equal(typeof routeModules['v1/agents/reporting'], 'function');
+  const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
+  const manifest = thingtimeCapabilityManifest('https://reporting.example');
+  assert.equal(legacy.features['api.agent-reporting'], '1.0.0');
+  assert.equal(manifest.origin, 'https://reporting.example');
+  assert.equal(manifest.features['api.agent-reporting'].version, '1.0.0');
+  assert.equal(manifest.features['api.chatgpt-mcp'].version, '2.0.0');
+  assert.equal(legacy.features['api.tokens'], '1.1.0');
+  assert.equal(manifest.features['api.tokens'].version, '1.1.0');
+  assert.equal(legacy.features['api.chatgpt-oauth-authorize'], '1.2.0');
+  assert.equal(manifest.features['api.chatgpt-oauth-authorize'].version, '1.2.0');
+  assert.ok(manifest.operations.some(operation => operation.path === '/api/v1/agents/reporting' && operation.feature === 'api.agent-reporting' && operation.methods.includes('POST')));
+  for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), true);
+  for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+});
+
+test('maps runtime and both manifests expose the negotiated owner provider contract', () => {
+  assert.equal(typeof routeModules['v1/maps'], 'function');
+  const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
+  const manifest = thingtimeCapabilityManifest('https://thingtime.test');
+  assert.equal(legacy.features[MAPS_FEATURE], MAPS_FEATURE_VERSION);
+  assert.equal(manifest.features[MAPS_FEATURE].version, MAPS_FEATURE_VERSION);
+  assert.ok(manifest.operations.some(op => op.path === '/api/v1/maps' && op.feature === MAPS_FEATURE && op.methods.includes('POST')));
+  assert.equal(capabilitySatisfies('1.1.0', MAPS_FEATURE_VERSION), true);
+  for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, MAPS_FEATURE_VERSION), false);
+});
 
 test('Timeline synchronization is registered and versioned on both capability manifests', () => {
 	assert.equal(createApiCapabilitiesManifest().features['api.mongodb-endpoint'], '1.1.0');
@@ -46,11 +116,11 @@ test('JSON Action inputs and draft-saving suites negotiate both origin manifests
 	const route = createApiCapabilitiesManifest().features;
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
 	for (const [feature, minimum, previous] of [
-		['api.things', '1.38.0', '1.32.0'], ['api.things-update', '1.13.0', '1.9.0'],
-		['api.actions-run', '1.38.0', '1.35.0'], ['api.webpages-suites-install', '1.7.0', '1.6.0']
+		['api.things', '1.38.0', '1.32.0'], ['api.things-update', '1.17.0', '1.9.0'],
+		['api.actions-run', '1.39.0', '1.35.0'], ['api.webpages-suites-install', '1.7.0', '1.6.0']
 	]) {
-		assert.equal(route[feature], feature === 'api.things' ? '1.42.0' : minimum);
-		assert.equal(wellKnown[feature].version, feature === 'api.things' ? '1.42.0' : minimum);
+		assert.equal(route[feature], feature === 'api.things' ? '1.48.0' : minimum);
+		assert.equal(wellKnown[feature].version, feature === 'api.things' ? '1.48.0' : minimum);
 		assert.equal(capabilitySatisfies(route[feature], minimum), true);
 		for (const version of [undefined, previous, '2.0.0']) assert.equal(capabilitySatisfies(version, minimum), false);
 	}
@@ -66,7 +136,7 @@ test('external avatar export requires the bounded-download contract on both mani
 test('emoji transfer, library and move capabilities reject pre-support origins', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
   for (const [feature, version] of [['api.things-export', '1.18.0'], ['api.things-import', '1.15.0'], ['api.things', '1.38.0'], ['api.things-bulk', '1.6.0']]) {
-    assert.equal(manifest.features[feature].version, feature === 'api.things' ? '1.42.0' : version);
+    assert.equal(manifest.features[feature].version, feature === 'api.things' ? '1.48.0' : version);
     assert.equal(capabilitySatisfies(version, version), true);
     assert.equal(capabilitySatisfies('1.0.0', version), false);
     assert.equal(capabilitySatisfies('2.0.0', version), false);
@@ -78,17 +148,17 @@ test('archive root moves negotiate the additive bulk contract on both manifests'
   assert.equal(createApiCapabilitiesManifest().features['api.things-bulk'], '1.6.0');
   assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-bulk'].version, '1.6.0');
   for (const version of [undefined, '1.3.0', '1.3.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.4.0'), false);
-  for (const version of ['1.4.0', '1.4.1', '1.5.0']) assert.equal(capabilitySatisfies(version, '1.4.0'), true);
+  for (const version of ['1.5.0', '1.5.1', '1.6.0']) assert.equal(capabilitySatisfies(version, '1.5.0'), true);
 });
 
 test('archive library and folder export reject origins without complete archive traversal', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
   for (const [feature, required, previous] of [['api.things', '1.38.0', '1.13.1'], ['api.things-export', '1.18.0', '1.9.0']]) {
-    assert.equal(manifest.features[feature].version, feature === 'api.things' ? '1.42.0' : required);
+    assert.equal(manifest.features[feature].version, feature === 'api.things' ? '1.48.0' : required);
     for (const version of [undefined, previous, '2.0.0']) assert.equal(capabilitySatisfies(version, required), false);
     assert.equal(capabilitySatisfies(required, required), true);
   }
-  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.42.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.48.0');
   assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.18.0');
 });
 
@@ -108,13 +178,13 @@ test('live-chat shared emoji export requires the additive contract on both manif
 
 test('shared dependency reads negotiate the additive Things contract on both manifests', () => {
 	// Preserve the newer archive contracts on top of the recording and Widgets additions.
-	assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.42.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things'].version, '1.42.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.48.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things'].version, '1.48.0');
 	assert.equal(capabilitySatisfies('1.8.2', '1.7.5'), true);
 	assert.equal(capabilitySatisfies('1.8.1', '1.8.2'), false);
 	assert.equal(capabilitySatisfies('1.8.3', '1.8.2'), true);
-	assert.equal(createApiCapabilitiesManifest().features['api.things-update'], '1.13.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-update'].version, '1.13.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.things-update'], '1.17.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-update'].version, '1.17.0');
 	assert.equal(capabilitySatisfies('1.7.1', '1.7.0'), true);
 	assert.equal(capabilitySatisfies('1.7.0', '1.7.1'), false);
 	assert.equal(capabilitySatisfies('1.6.0', '1.5.1'), true);
@@ -123,7 +193,7 @@ test('shared dependency reads negotiate the additive Things contract on both man
 
 test('standalone Thing copying negotiates the additive copy contract on both manifests', () => {
 	const version = createApiCapabilitiesManifest().features['api.things-fork'];
-	assert.equal(version, '1.7.0');
+	assert.equal(version, '1.8.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-fork'].version, version);
 	assert.equal(capabilitySatisfies(version, '1.0.0'), true);
 	for (const unsupported of ['', '1.0.0', '1.1.0', '1.1.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.2.0'), false);
@@ -133,8 +203,8 @@ test('standalone Thing copying negotiates the additive copy contract on both man
 });
 
 test('Data Thing controls negotiate the shared-content action contract', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.actions-run'], '1.38.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.actions-run'].version, '1.38.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.actions-run'], '1.39.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.actions-run'].version, '1.39.0');
 	for (const unsupported of ['', '1.1.0', '1.2.0', '1.2.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.3.0'), false);
 	assert.equal(capabilitySatisfies('1.3.1', '1.3.0'), true);
 });
@@ -224,7 +294,8 @@ test('capabilities publish the native Apple notification device contract', () =>
 	assert.equal(manifest.features['api.watch-pairing'], '1.2.0');
 	assert.equal(manifest.features['api.watch-sync'], '1.1.0');
 	assert.equal(manifest.features['api.watch-things'], '1.1.0');
-	assert.equal(manifest.features['api.devices'], '1.13.0');
+	assert.equal(manifest.features['api.devices'], '1.14.0');
+	assert.equal(manifest.features['api.devices-node-state'], '1.14.0');
 	assert.equal(manifest.features['api.attachment-uploads'], '1.7.0');
 	assert.equal(manifest.features['api.attachment-upload-parts'], '1.1.0');
 	assert.equal(manifest.features['api.attachment-upload-complete'], '1.5.1');
@@ -358,20 +429,27 @@ test('admin preview dispatch publishes its protected-controller contract version
 
 test('storage-aware health and the corrected email environment gate publish their contract updates', () => {
 	const manifest = createApiCapabilitiesManifest();
-	assert.equal(manifest.features['api.health-nitro'], '1.2.0');
+	assert.equal(manifest.features['api.health-nitro'], '1.3.0');
+	assert.equal(manifest.features['api.lopu-recordings-run'], '1.6.0');
 	assert.equal(manifest.features['api.email-config'], '1.0.1');
 });
 
 test('pooled MongoDB diagnostics publish compatible patches in both manifests', () => {
 	const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
-	for (const feature of ['api.health-mongodb', 'api.mongodb-status', 'api.mongodb-status-data']) {
-		assert.equal(legacy.features[feature], '1.0.1');
-		assert.equal(manifest.features[feature].version, '1.0.1');
-		assert.equal(capabilitySatisfies('1.0.1', '1.0.0'), true);
-		assert.equal(capabilitySatisfies('1.0.0', '1.0.1'), false);
-		assert.equal(capabilitySatisfies('2.0.0', '1.0.1'), false);
-		assert.equal(capabilitySatisfies(undefined, '1.0.1'), false);
+	for (const [feature, version] of [
+		['api.health-mongodb', '1.0.2'],
+		['api.mongodb-status', '1.0.1'],
+		['api.mongodb-status-data', '1.0.1']
+	] as const) {
+		assert.equal(legacy.features[feature], version);
+		assert.equal(manifest.features[feature].version, version);
+		assert.equal(capabilitySatisfies(version, '1.0.0'), true);
+		assert.equal(capabilitySatisfies('1.0.0', version), false);
+		assert.equal(capabilitySatisfies('2.0.0', version), false);
+		assert.equal(capabilitySatisfies(undefined, version), false);
 	}
+	assert.equal(capabilitySatisfies('1.0.2', '1.0.1'), true);
+	assert.equal(capabilitySatisfies('1.0.1', '1.0.2'), false);
 });
 
 test('subspace lifecycle + notification type additions publish their contract versions', () => {
@@ -438,7 +516,7 @@ test('subspace user flairs publish their contract versions', () => {
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
-	assert.equal(manifest.features['api.things'], '1.42.0');
+	assert.equal(manifest.features['api.things'], '1.48.0');
 	assert.equal(manifest.features['api.things-feed'], '1.8.0');
 });
 
@@ -487,7 +565,7 @@ test('subspace reports publish their contract versions', () => {
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
-	assert.equal(manifest.features['api.things'], '1.42.0');
+	assert.equal(manifest.features['api.things'], '1.48.0');
 	assert.equal(manifest.features['api.things-feed'], '1.8.0'); // S6: scope
 });
 
@@ -511,7 +589,7 @@ test('subspace discovery publishes its contract versions', () => {
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
-	assert.equal(manifest.features['api.things'], '1.42.0');
+	assert.equal(manifest.features['api.things'], '1.48.0');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
 	assert.equal(manifest.features['api.subspaces-get'], '1.6.0');
 });
@@ -538,7 +616,7 @@ test('run chat advertises both origin-scoped contracts and rejects incompatible 
 test('agent testing and task installation negotiate their additive contracts', () => {
   const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
   for (const [feature, minimum, previous] of [
-    ['api.health-nitro', '1.2.0', '1.1.0'],
+    ['api.health-nitro', '1.3.0', '1.1.0'],
     ['api.webpages-suites-install', '1.7.0', '1.6.0']
   ]) {
     assert.equal(legacy.features[feature], minimum);
@@ -601,7 +679,7 @@ test('Lopu continuation clients reject origins without checkpoint and renewable-
 
  test('builder SDK contracts reject missing, older and incompatible action origins', () => {
  const manifest = thingtimeCapabilityManifest('https://thingtime.test');
- for (const [feature, required, previous] of [['api.actions-run', '1.7.0', '1.6.0'], ['api.things', '1.38.0', '1.19.0'], ['api.things-update', '1.6.0', '1.3.0']]) {
+ for (const [feature, required, previous] of [['api.actions-run', '1.7.0', '1.6.0'], ['api.things', '1.39.0', '1.19.0'], ['api.things-update', '1.6.0', '1.3.0']]) {
   assert.equal(capabilitySatisfies(manifest.features[feature].version, required), true);
   assert.equal(capabilitySatisfies(previous, required), false);
   assert.equal(capabilitySatisfies('2.0.0', required), false);
@@ -663,7 +741,7 @@ test('native aggregate chat activities have origin-scoped capability coverage', 
 test('service workspace clients negotiate the native builder contract', () => {
  const manifest = createApiCapabilitiesManifest();
  assert.equal(manifest.features['api.builder-workspaces'], '1.0.1');
- assert.equal(manifest.features['api.webpages-resolve'], '1.8.0');
+ assert.equal(manifest.features['api.webpages-resolve'], '1.10.0');
  for (const actual of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(actual, '1.0.1'), false);
  for (const actual of ['1.0.1', '1.0.2', '1.1.0']) assert.equal(capabilitySatisfies(actual, '1.0.1'), true);
 });
@@ -677,8 +755,8 @@ test('comment media readers require the attachment metadata projection', () => {
 test('cursor discussion clients require the additive 1.27 contract while media keeps 1.24 compatibility', () => {
   const source = createApiCapabilitiesManifest();
   const origin = thingtimeCapabilityManifest('https://discussion.test');
-  assert.equal(source.features['api.things'], '1.42.0');
-  assert.equal(origin.features['api.things'].version, '1.42.0');
+  assert.equal(source.features['api.things'], '1.48.0');
+  assert.equal(origin.features['api.things'].version, '1.48.0');
   for (const old of [undefined, '1.24.0', '1.25.0', '1.26.0', '2.0.0']) assert.equal(capabilitySatisfies(old, '1.27.0'), false);
   for (const current of ['1.27.0', '1.27.1', '1.29.0']) assert.equal(capabilitySatisfies(current, '1.27.0'), true);
   assert.equal(capabilitySatisfies('1.24.0', '1.24.0'), true, 'the prior gallery contract remains independently compatible');
@@ -712,11 +790,20 @@ test('range programs require the additive owned-boundary contract', () => {
 
  test('password manager registers its live route and version on both discovery manifests', () => {
   const doc = apiEndpointDocs.find(doc => doc.id === 'passwords');
-  assert.equal(doc?.featureVersion, '1.3.0');
+  assert.equal(doc?.featureVersion, '1.8.0');
   assert.deepEqual(doc?.methods, ['GET', 'POST']);
-  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.3.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.3.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.8.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.8.0');
   assert.equal(typeof routeModules['v1/passwords'], 'function');
+  for (const version of ['1.5.0', '1.5.1', '1.6.0']) assert.equal(capabilitySatisfies(version, '1.5.0'), true);
+  for (const version of [undefined, '1.4.0', '1.4.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.5.0'), false);
+  for (const version of ['1.6.0', '1.6.1', '1.7.0']) assert.equal(capabilitySatisfies(version, '1.6.0'), true);
+  for (const version of [undefined, '1.5.0', '1.5.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.6.0'), false);
+  for (const version of ['1.6.1', '1.6.2', '1.7.0']) assert.equal(capabilitySatisfies(version, '1.6.1'), true);
+  for (const version of [undefined, '1.6.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.6.1'), false);
+  assert.match(doc?.detail || '', /website-icon/);
+  assert.match(doc?.detail || '', /verification-settings/);
+  assert.match(doc?.detail || '', /reuseRecentDeviceVerification/);
  });
 
 test('mobile pairing requirements are advertised by both manifests and reject desktop-only claims', () => {
@@ -729,6 +816,8 @@ test('mobile pairing requirements are advertised by both manifests and reject de
  assert.equal(route['api.devices-pairing-claim'], '1.2.0');
  assert.equal(manifest['api.devices-pairing-claim'].version, '1.2.0');
  for (const version of [undefined, '1.0.0', '1.1.0', '2.0.0']) assert.equal(capabilitySatisfies(version, MOBILE_DEVICE_REQUIREMENTS['api.devices-pairing-claim']), false);
+  for (const version of ['1.7.0', '1.7.1', '1.8.0']) assert.equal(capabilitySatisfies(version, '1.7.0'), true);
+  for (const version of [undefined, '1.6.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.7.0'), false);
 });
 
 
@@ -740,7 +829,7 @@ test('backup retention advertises owner-only holds and deferred cleanup together
 	}
 	assert.deepEqual(manifest.operations.find(v => v.path === '/api/v1/attachments/content')?.methods, ['GET', 'POST']);
 	for (const v of [undefined, '1.14.0', '2.0.0']) assert.equal(capabilitySatisfies(v, '1.15.0'), false);
-	for (const v of ['1.15.0', '1.15.1', '1.16.0']) assert.equal(capabilitySatisfies(v, '1.15.0'), true);
+	for (const v of ['1.15.0', '1.16.0', '1.16.0']) assert.equal(capabilitySatisfies(v, '1.15.0'), true);
 });
 
 
@@ -862,9 +951,9 @@ test('local ChatGPT plan capabilities cover both manifests and reject unsupporte
 test('live overview and saved source contracts exist on both origin manifests', () => {
   const route = createApiCapabilitiesManifest().features;
   const origin = thingtimeCapabilityManifest('https://thingtime.test').features;
-  for (const [feature, minimum] of [['api.agent-overview', '2.0.0'], ['api.things', '1.38.0'], ['api.things-update', '1.13.0'], ['api.webpages-resolve', '1.8.0']]) {
-    assert.equal(route[feature], feature === 'api.things' ? '1.42.0' : minimum);
-    assert.equal(origin[feature].version, feature === 'api.things' ? '1.42.0' : minimum);
+  for (const [feature, minimum] of [['api.agent-overview', '2.0.0'], ['api.things', '1.38.0'], ['api.things-update', '1.17.0'], ['api.webpages-resolve', '1.10.0']]) {
+    assert.equal(route[feature], feature === 'api.things' ? '1.48.0' : minimum);
+    assert.equal(origin[feature].version, feature === 'api.things' ? '1.48.0' : minimum);
     assert.equal(capabilitySatisfies(route[feature], minimum), true);
     for (const absent of [undefined, '0.0.0', feature === 'api.agent-overview' ? '3.0.0' : '2.0.0']) assert.equal(capabilitySatisfies(absent, minimum), false);
   }

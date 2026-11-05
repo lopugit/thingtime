@@ -47,7 +47,17 @@ export type ActionRunTraceEntry = {
 	note?: string;
 };
 
+/** Trusted host policy only; never supplied by an authored Action or HTTP body. */
+export type ActionOperationPolicy = {
+ step: (operation: string) => Promise<void>;
+ create: (schemaId: string, values: Record<string, unknown>, step: string) => Promise<{ acl: string[]; shareId?: string; crystal?: Record<string, unknown> }>;
+ access: (id: string, operation: 'read' | 'update') => Promise<void>;
+ update: (id: string, values: Record<string, unknown>) => Promise<void>;
+ search: (schema: unknown, scope: unknown) => Promise<void>;
+};
+
 export type ActionBudget = {
+ operationPolicy?: ActionOperationPolicy;
 	assertAuthorized?: () => Promise<void>;
 	usedLookup?: boolean;
 	deadline: number;
@@ -304,6 +314,7 @@ export const executeProgram = async (
 		for (let index = 0; index < program.steps.length; index += 1) {
 			await budget.assertAuthorized?.();
 			const step = program.steps[index];
+ await budget.operationPolicy?.step(step.op);
 			const label = stepPrefix ? `${stepPrefix}.${index + 1}` : String(index + 1);
 			const startedAt = Date.now();
 			let target: string | undefined;
@@ -351,7 +362,8 @@ export const executeProgram = async (
 				}
 				const values = resolveValue(step.values, scope);
 				if (!values || typeof values !== 'object' || Array.isArray(values)) runError(`Step ${label} values resolved to non-object data`);
-				const created = await host.createThing({
+				const policyCreate = await budget.operationPolicy?.create(schema.id, values as Record<string, unknown>, label);
+ const created = await host.createThing({
 					thingtime: ['data'],
 					// Actions mint PRIVATE. createThing's standalone-content
 					// default is the public audience, which is the right default
@@ -362,10 +374,11 @@ export const executeProgram = async (
 					// thing would otherwise republish it to the world. An explicit
 					// audience is a v2 grammar question (declared + derived as an
 					// effect), never an implicit default.
-					acl: [ACL_OWNER],
+					acl: policyCreate?.acl ?? [ACL_OWNER],
+ ...(policyCreate?.shareId ? { shareId: policyCreate.shareId } : {}),
 					// scope/provenance stamps spread LAST so no resolved value
 					// can clobber them (SchemaThingForm posture)
-					crystal: { ...(values as Record<string, unknown>), schema: schema.name, schemaId: schema.id }
+					crystal: { ...(values as Record<string, unknown>), ...policyCreate?.crystal, schema: schema.name, schemaId: schema.id }
 				});
 				if (isFail(created)) runError(`Step ${label} create failed: ${created.error}`);
 				const doc = (created as { ok: true; doc: { shareId: string; crystal?: unknown; createdAt?: Date } }).doc;
@@ -374,7 +387,8 @@ export const executeProgram = async (
 			} else if (step.op === 'things.get') {
 				const id = resolveValue(step.id, scope);
 				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
-				const included = budget.shared?.data.get(String(id));
+				await budget.operationPolicy?.access(String(id), 'read');
+ const included = budget.shared?.data.get(String(id));
 				const got = included
 					? { ok: true as const, thing: { id: included.shareId, thingtime: included.thingtime, crystal: included.crystal } }
 					: await host.getThing(String(id));
@@ -390,6 +404,7 @@ export const executeProgram = async (
 				target = thing.id;
 				scope.steps[index] = { id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal };
 			} else if (step.op === 'things.search') {
+ await budget.operationPolicy?.search(step.schema, step.scope);
 				const docs = await host.search(
 					{
 						...step,
@@ -413,7 +428,8 @@ export const executeProgram = async (
 					program.id,
 					label
 				);
-				note = `${docs.length} match${docs.length === 1 ? '' : 'es'}${step.scope === 'public' || step.scope === 'system' ? ` (${step.scope})` : ''}`;
+				if (budget.operationPolicy) for (const doc of docs) await budget.operationPolicy.access(String(doc.shareId), 'read');
+ note = `${docs.length} match${docs.length === 1 ? '' : 'es'}${step.scope === 'public' || step.scope === 'system' ? ` (${step.scope})` : ''}`;
 				scope.steps[index] = docs.map((doc: any) => ({
 					id: doc.shareId,
 					crystal: doc.crystal || {},
@@ -423,7 +439,8 @@ export const executeProgram = async (
 			} else if (step.op === 'things.update') {
 				const id = resolveValue(step.id, scope);
 				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
-				const current = await host.getThing(String(id));
+				await budget.operationPolicy?.access(String(id), 'update');
+ const current = await host.getThing(String(id));
 				if (current.ok === false) runError(`Step ${label} update target unreadable: ${current.error}`);
 				const currentThing = (current as { ok: true; thing: { id: string; thingtime?: string[]; crystal: unknown } }).thing;
 				if (!isDataThing(currentThing.thingtime)) {
@@ -449,7 +466,8 @@ export const executeProgram = async (
 				// `$step.2.crystal` read, or a returned `$step.2`, would silently
 				// carry (or lose) schema/schemaId. Spreading keeps the stamp local
 				// to this update, exactly like the things.create path above.
-				const patch: Record<string, unknown> = { ...(values as Record<string, unknown>) };
+				await budget.operationPolicy?.update(String(id), values as Record<string, unknown>);
+ const patch: Record<string, unknown> = { ...(values as Record<string, unknown>) };
 				const currentCrystal = (currentThing.crystal || {}) as Record<string, unknown>;
 				if (typeof currentCrystal.schema === 'string') patch.schema = currentCrystal.schema;
 				else delete patch.schema;
@@ -463,7 +481,8 @@ export const executeProgram = async (
 			} else if (step.op === 'things.delete') {
 				const id = resolveValue(step.id, scope);
 				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
-				const current = await host.getThing(String(id));
+				await budget.operationPolicy?.access(String(id), 'update');
+ const current = await host.getThing(String(id));
 				if (current.ok === false) runError(`Step ${label} delete target unreadable: ${current.error}`);
 				const currentThing = (current as { ok: true; thing: { id: string; thingtime?: string[]; crystal: unknown; author?: { id?: string } } }).thing;
 				if (!isDataThing(currentThing.thingtime)) {

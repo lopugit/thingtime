@@ -1,0 +1,48 @@
+{
+  "baseMain": "f07a96dea1821d10180dab82737460e2c9a79995",
+  "featureStart": "ad2ea0524eebc818ee1274dc227a0d2438664029",
+  "rawTypecheck": {
+    "exitCode": 0,
+    "diagnostics": 0
+  },
+  "clientBuild": {
+    "exitCode": 0
+  },
+  "serverBuild": {
+    "exitCode": 0
+  },
+  "workspace": {
+    "passed": 909,
+    "failed": 0,
+    "skipped": 110
+  },
+  "offlineShell": {
+    "passed": 4
+  },
+  "contracts": {
+    "passed": 152
+  },
+  "timeline": {
+    "passed": 266
+  },
+  "schemas": {
+    "passed": 297
+  },
+  "mcp": {
+    "passed": 63,
+    "failed": 0,
+    "skipped": 3
+  },
+  "nativeRuntimeUnit": {
+    "passed": 11
+  },
+  "graphifyCas": {
+    "passed": 27
+  },
+  "bundleTests": {
+    "passed": 22
+  },
+  "liveAcceptance": "not_run",
+  "deployedAcceptance": "not_authorized",
+  "prMergedIntoMain": false
+}

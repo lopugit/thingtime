@@ -2,6 +2,36 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Main integration — 2026-11-05
+
+Merged fetched main `f07a96dea1821d10180dab82737460e2c9a79995` into the
+existing feature checkpoint `ad2ea0524eebc818ee1274dc227a0d2438664029` in an
+isolated worktree. The PR remains open and no deployment is authorized by this
+maintenance merge. PR #998 (`8b8cc294`) and #999 (`5fdc18d9`) are already main
+ancestors: preserve their foundations while keeping the broader matrix open.
+
+The combined source keeps workspace privacy/independent queues and adopts
+main's Builder provenance, file/device surfaces and Action policy hardening.
+The local CLI retains canonical renderer configuration, safe diagnostics and a
+240-second host deadline covering isolated work and cleanup. A fixed-port asset
+preflight defect found during integration is corrected and tested at the
+selected task origin. Main password presentation uses device storage without a
+network fallback; unsupported device attachment-icon queue mapping is refused
+before upload while ordinary password files/import remain usable.
+
+Verification below is historical unless explicitly labeled 5 November. P0 is
+combined regression plus corrected site editable-block acceptance; P1 is the
+remaining identity/origin/plane/Character/provider/device matrix; P2 is signed
+native, current-head CI and separately authorized deployed acceptance. The
+currently connected hosted MCP catalogue lacks renderer tools; older local
+stdio proof is a different acceptance path.
+
+Accepted verification: raw TypeScript zero errors, complete client/server builds,
+909 workspace checks plus four shell checks, 152 contract checks, 266 Timeline
+checks, 297 schema checks, 63 MCP checks and focused runtime/bundle checks.
+Explicit browser/render opt-ins remain skipped. [Exact checks, initial failures,
+corrections and remaining acceptance](../artifacts/anonymous-main-integration-2026-11-05/README.md).
+
 ## Current checkpoint — 2026-10-27
 
 The post-delete/quote checkpoint `c8105d7cd9ee7cffd1caea865bf1182a60e5f9a5`

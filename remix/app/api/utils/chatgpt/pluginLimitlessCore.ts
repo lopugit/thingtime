@@ -2,8 +2,6 @@ export const THINGTIME_MCP_UI_RESOURCE_URI = 'ui://thingtime/review.html';
 export const THINGTIME_CAPABILITY_CONTRACT_URI = 'thingtime://capability-contract';
 export const THINGTIME_MUTATION_RECEIPT_PURPOSE = 'thingtime-mcp-mutation-preview';
 
-export const MAX_LIMITLESS_MUTATION_OPERATIONS = 25;
-export const MAX_LIMITLESS_MUTATION_BYTES = 48 * 1024;
 export const MAX_LIMITLESS_HISTORY = 50;
 export const MAX_LIMITLESS_WORKFLOW_RUNS = 25;
 
@@ -31,7 +29,7 @@ export type LimitlessMutationPreview = {
   createdAt: string;
   operations: LimitlessMutationPreviewItem[];
   inverseOperations: LimitlessMutationOperation[];
-  source?: { kind: 'undo'; historyId: string };
+  source?: { kind: 'undo'; historyId: string } | { kind: 'workflow'; runId: string };
 };
 
 export type ThingtimeMcpHistoryEntry = {
@@ -52,7 +50,7 @@ export type ThingtimeMcpWorkflowRun = {
   capabilityName: string;
   createdAt: string;
   updatedAt: string;
-  status: 'awaiting_confirmation' | 'applied' | 'cancelled' | 'failed';
+  status: 'awaiting_confirmation' | 'previewed' | 'applied' | 'cancelled' | 'failed';
   previewId?: string;
   historyId?: string;
   summaries: string[];
@@ -71,19 +69,11 @@ const boundedId = (value: unknown): string | null => {
   return id && id.length <= 128 ? id : null;
 };
 
-const jsonSize = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).byteLength;
-
-const cloneJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-
 export const normalizeLimitlessMutationOperations = (
   raw: unknown,
   { assignCreateIds = true }: { assignCreateIds?: boolean } = {}
 ): Failure | Success<LimitlessMutationOperation[]> => {
   if (!Array.isArray(raw) || !raw.length) return { ok: false, error: 'operations must be a non-empty list' };
-  if (raw.length > MAX_LIMITLESS_MUTATION_OPERATIONS) {
-    return { ok: false, error: `At most ${MAX_LIMITLESS_MUTATION_OPERATIONS} operations may be previewed together` };
-  }
-
   const operations: LimitlessMutationOperation[] = [];
   const ids = new Set<string>();
   for (let index = 0; index < raw.length; index += 1) {
@@ -96,8 +86,9 @@ export const normalizeLimitlessMutationOperations = (
 
     if (action === 'create') {
       if (!isRecord(candidate.thing)) return { ok: false, error: `operations[${index}].thing must be an object` };
-      const thing = cloneJson(candidate.thing);
-      const id = boundedId(thing.shareId ?? thing.id) || (assignCreateIds ? crypto.randomUUID() : null);
+      const thing = { ...candidate.thing };
+      const proposedId = thing.shareId ?? thing.id;
+      const id = proposedId === undefined && assignCreateIds ? crypto.randomUUID() : boundedId(proposedId);
       if (!id) return { ok: false, error: `operations[${index}] create needs a stable id` };
       delete thing.id;
       thing.shareId = id;
@@ -116,10 +107,13 @@ export const normalizeLimitlessMutationOperations = (
       if (candidate.expectedUpdatedAt !== undefined && (typeof candidate.expectedUpdatedAt !== 'string' || Number.isNaN(new Date(candidate.expectedUpdatedAt).getTime()))) {
         return { ok: false, error: `operations[${index}].expectedUpdatedAt must be an ISO timestamp` };
       }
+      if (['id', 'shareId', 'replaceCrystal', 'expectedUpdatedAt'].some((key) => Object.prototype.hasOwnProperty.call(candidate.patch, key))) {
+        return { ok: false, error: `operations[${index}].patch cannot contain mutation control fields` };
+      }
       operations.push({
         action,
         id,
-        patch: cloneJson(candidate.patch),
+        patch: candidate.patch,
         ...(candidate.replaceCrystal === true ? { replaceCrystal: true } : {}),
         ...(typeof candidate.expectedUpdatedAt === 'string' ? { expectedUpdatedAt: candidate.expectedUpdatedAt } : {})
       });
@@ -135,9 +129,6 @@ export const normalizeLimitlessMutationOperations = (
     });
   }
 
-  if (jsonSize(operations) > MAX_LIMITLESS_MUTATION_BYTES) {
-    return { ok: false, error: `Mutation plans may contain at most ${MAX_LIMITLESS_MUTATION_BYTES} bytes` };
-  }
   return { ok: true, value: operations };
 };
 
@@ -183,7 +174,7 @@ export const buildLimitlessMutationPreview = ({
 
     if (operation.action === 'create') {
       previewItems.push({ ...operation, before: null, after: operation.thing || null, summary: `Create Thing ${operation.id}` });
-      inverseOperations.unshift({ action: 'delete', id: operation.id });
+      inverseOperations.push({ action: 'delete', id: operation.id });
       continue;
     }
 
@@ -197,7 +188,7 @@ export const buildLimitlessMutationPreview = ({
     }
     if (operation.action === 'delete') {
       previewItems.push({ ...operation, expectedUpdatedAt, before, after: null, summary: `Delete Thing ${operation.id}` });
-      inverseOperations.unshift({ action: 'create', id: operation.id, thing: restorableThing(before!) });
+      inverseOperations.push({ action: 'create', id: operation.id, thing: restorableThing(before!) });
       continue;
     }
 
@@ -216,7 +207,7 @@ export const buildLimitlessMutationPreview = ({
       after,
       summary: `Update Thing ${operation.id}: ${Object.keys(patch).sort().join(', ') || 'no fields'}`
     });
-    inverseOperations.unshift({
+    inverseOperations.push({
       action: 'update',
       id: operation.id,
       patch: restoredPatch(before!),
@@ -230,58 +221,57 @@ export const buildLimitlessMutationPreview = ({
     accountId,
     createdAt: now.toISOString(),
     operations: previewItems,
-    inverseOperations
+    inverseOperations: inverseOperations.reverse()
   };
-  if (jsonSize(preview) > MAX_LIMITLESS_MUTATION_BYTES) {
-    return { ok: false, error: 'The before/after preview is too large for a safe signed receipt; split it into smaller operations' };
-  }
   return { ok: true, value: preview };
 };
 
 const inputAtPath = (inputs: Record<string, unknown>, rawPath: unknown): unknown => {
-  if (typeof rawPath !== 'string' || !/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){0,4}$/.test(rawPath)) return undefined;
+  if (typeof rawPath !== 'string' || !/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/.test(rawPath)) return undefined;
   let current: unknown = inputs;
   for (const segment of rawPath.split('.')) {
-    if (!isRecord(current) || !(segment in current)) return undefined;
+    if (!isRecord(current) || !Object.prototype.hasOwnProperty.call(current, segment)) return undefined;
     current = current[segment];
   }
   return current;
 };
 
-const resolveWorkflowValue = (
-  value: unknown,
-  inputs: Record<string, unknown>,
-  depth: number,
-  budget: { nodes: number }
-): Failure | Success<unknown> => {
-  budget.nodes += 1;
-  if (depth > 8 || budget.nodes > 1000) return { ok: false, error: 'Capability input expansion is too deeply nested or large' };
-  if (Array.isArray(value)) {
-    const result: unknown[] = [];
-    for (const item of value) {
-      const resolved = resolveWorkflowValue(item, inputs, depth + 1, budget);
-      if (!resolved.ok) return resolved;
-      result.push(resolved.value);
+const resolveWorkflowValue = (value: unknown, inputs: Record<string, unknown>): Failure | Success<unknown> => {
+  const root: { value?: unknown } = {};
+  // Traverse iteratively so nesting is limited by the underlying data format,
+  // rather than the workflow compiler's call stack or a small product cap.
+  const stack: Array<{ value: unknown; set: (resolved: unknown) => void }> = [{ value, set: (resolved) => { root.value = resolved; } }];
+  while (stack.length) {
+    const item = stack.pop()!;
+    if (Array.isArray(item.value)) {
+      const result: unknown[] = new Array(item.value.length);
+      item.set(result);
+      for (let index = item.value.length - 1; index >= 0; index -= 1) {
+        stack.push({ value: item.value[index], set: (resolved) => { result[index] = resolved; } });
+      }
+    } else if (isRecord(item.value)) {
+      const keys = Object.keys(item.value);
+      if (keys.length === 1 && keys[0] === '$input') {
+        const path = item.value.$input;
+        const resolved = inputAtPath(inputs, path);
+        if (resolved === undefined) return { ok: false, error: `Missing workflow input: ${String(path)}` };
+        item.set(resolved);
+        continue;
+      }
+      if (keys.some((key) => key.startsWith('$'))) {
+        return { ok: false, error: 'Capability objects may only use the exact {$input:"path"} placeholder form' };
+      }
+      const result: Record<string, unknown> = {};
+      item.set(result);
+      for (let index = keys.length - 1; index >= 0; index -= 1) {
+        const key = keys[index];
+        stack.push({ value: item.value[key], set: (resolved) => { Object.defineProperty(result, key, { value: resolved, enumerable: true, writable: true, configurable: true }); } });
+      }
+    } else {
+      item.set(item.value);
     }
-    return { ok: true, value: result };
   }
-  if (!isRecord(value)) return { ok: true, value };
-  if (Object.keys(value).length === 1 && '$input' in value) {
-    const resolved = inputAtPath(inputs, value.$input);
-    return resolved === undefined
-      ? { ok: false, error: `Missing workflow input: ${String(value.$input)}` }
-      : { ok: true, value: cloneJson(resolved) };
-  }
-  if (Object.keys(value).some((key) => key.startsWith('$'))) {
-    return { ok: false, error: 'Capability objects may only use the exact {$input:"path"} placeholder form' };
-  }
-  const result: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value)) {
-    const resolved = resolveWorkflowValue(child, inputs, depth + 1, budget);
-    if (!resolved.ok) return resolved;
-    result[key] = resolved.value;
-  }
-  return { ok: true, value: result };
+  return { ok: true, value: root.value };
 };
 
 export const compileThingtimeCapability = ({
@@ -297,7 +287,7 @@ export const compileThingtimeCapability = ({
     return { ok: false, error: 'Thing is not a Thingtime Capability v1 data Thing' };
   }
   const name = typeof crystal.name === 'string' && crystal.name.trim() ? crystal.name.trim().slice(0, 120) : String(thing.id || 'Capability');
-  const resolved = resolveWorkflowValue(crystal.operations, inputs, 0, { nodes: 0 });
+  const resolved = resolveWorkflowValue(crystal.operations, inputs);
   if (resolved.ok === false) return { ok: false, error: resolved.error };
   const normalized = normalizeLimitlessMutationOperations(resolved.value);
   if (normalized.ok === false) return { ok: false, error: normalized.error };
@@ -324,11 +314,9 @@ export const THINGTIME_CAPABILITY_CONTRACT = {
     }
   },
   placeholder: { $input: 'path.to.value' },
-  limits: {
-    operations: MAX_LIMITLESS_MUTATION_OPERATIONS,
-    bytes: MAX_LIMITLESS_MUTATION_BYTES,
-    expansionDepth: 8,
-    expansionNodes: 1000
+  transport: {
+    stagedPlans: 'stage_thingtime_mutation_plan',
+    pagedReview: 'get_thingtime_mutation_preview'
   }
 } as const;
 
@@ -348,7 +336,7 @@ export const thingtimePromptDefinitions = [
   {
     name: 'thingtime_safe_change',
     title: 'Preview a safe Thingtime change',
-    description: 'Build a bounded mutation plan, inspect its diff, and wait for confirmation before apply.',
+    description: 'Build a mutation plan, inspect its full diff, and follow the selected account’s confirmation requirements before apply.',
     arguments: [{ name: 'goal', description: 'The change the user wants.', required: true }]
   },
   {
@@ -368,17 +356,18 @@ export const thingtimePromptDefinitions = [
 export const renderThingtimeMcpUi = (): string => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-:root{color-scheme:light dark;font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}body{margin:0;background:transparent;color:CanvasText}.shell{border:1px solid color-mix(in srgb,CanvasText 16%,transparent);border-radius:18px;overflow:hidden;background:Canvas}.head,.toolbar,.actions{display:flex;align-items:center;justify-content:space-between;gap:10px}.head{padding:15px 17px;border-bottom:1px solid color-mix(in srgb,CanvasText 12%,transparent)}h1{font-size:15px;margin:0}.badge,.count{font-size:11px;padding:4px 8px;border-radius:999px;background:color-mix(in srgb,CanvasText 8%,transparent)}main{padding:16px}.toolbar{margin-bottom:12px;align-items:flex-end}.tabs{display:flex;gap:5px}.empty{opacity:.68;font-size:13px}.grid{display:grid;gap:10px}.card{border:1px solid color-mix(in srgb,CanvasText 13%,transparent);border-radius:13px;padding:12px}.cardhead{display:grid;grid-template-columns:auto minmax(0,1fr);gap:9px;align-items:start}.title{font-weight:650;font-size:13px;overflow-wrap:anywhere}.meta{font-size:11px;opacity:.65;margin-top:3px}.summary{font-size:12px;margin-top:8px;white-space:pre-wrap;overflow-wrap:anywhere}.diff{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}.pane{min-width:0}.label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;opacity:.62;margin-bottom:4px}pre{margin:0;padding:9px;border-radius:9px;background:color-mix(in srgb,CanvasText 6%,transparent);font:10px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:250px;overflow:auto}.ok{color:#16803a}.bad{color:#b42318}.confirm{font-size:12px;display:flex;align-items:flex-start;gap:7px;margin-top:13px}.actions{justify-content:flex-start;flex-wrap:wrap;margin-top:9px}button{appearance:none;border:1px solid color-mix(in srgb,CanvasText 20%,transparent);background:Canvas;color:CanvasText;border-radius:9px;padding:7px 10px;font:inherit;font-size:12px;cursor:pointer}button[aria-pressed="true"]{background:CanvasText;color:Canvas}button:disabled{opacity:.45;cursor:not-allowed}.primary{background:CanvasText;color:Canvas}.status{font-size:11px;opacity:.7}details summary{cursor:pointer;font-size:11px;margin-top:8px}.raw{max-height:440px}@media(max-width:520px){.shell{border-radius:14px}.head,main{padding:13px}.toolbar{align-items:flex-start;flex-direction:column}.diff{grid-template-columns:1fr}.tabs{width:100%}.tabs button{flex:1}}
+:root{color-scheme:light dark;font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}body{margin:0;background:transparent;color:CanvasText}.shell{border:1px solid color-mix(in srgb,CanvasText 16%,transparent);border-radius:18px;overflow:hidden;background:Canvas}.head,.toolbar,.actions{display:flex;align-items:center;justify-content:space-between;gap:10px}.head{padding:15px 17px;border-bottom:1px solid color-mix(in srgb,CanvasText 12%,transparent)}h1{font-size:15px;margin:0}.badge,.count{font-size:11px;padding:4px 8px;border-radius:999px;background:color-mix(in srgb,CanvasText 8%,transparent)}main{padding:16px}.toolbar{margin-bottom:12px;align-items:flex-end}.tabs{display:flex;gap:5px}.empty{opacity:.68;font-size:13px}.grid{display:grid;gap:10px}.card{border:1px solid color-mix(in srgb,CanvasText 13%,transparent);border-radius:13px;padding:12px}.cardhead{display:grid;grid-template-columns:auto minmax(0,1fr);gap:9px;align-items:start}.title{font-weight:650;font-size:13px;overflow-wrap:anywhere}.meta{font-size:11px;opacity:.65;margin-top:3px}.summary{font-size:12px;margin-top:8px;white-space:pre-wrap;overflow-wrap:anywhere}.diff{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}.pane{min-width:0}.label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;opacity:.62;margin-bottom:4px}pre{margin:0;padding:9px;border-radius:9px;background:color-mix(in srgb,CanvasText 6%,transparent);font:10px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:250px;overflow:auto}.ok{color:#16803a}.bad{color:#b42318}.confirm{font-size:12px;display:flex;align-items:flex-start;gap:7px;margin-top:13px}.actions{justify-content:flex-start;flex-wrap:wrap;margin-top:9px}button{appearance:none;border:1px solid color-mix(in srgb,CanvasText 20%,transparent);background:Canvas;color:CanvasText;border-radius:9px;padding:7px 10px;font:inherit;font-size:12px;cursor:pointer}button[aria-pressed="true"]{background:CanvasText;color:Canvas}button:disabled{opacity:.45;cursor:not-allowed}.primary{background:CanvasText;color:Canvas}.status{font-size:12px;opacity:.8}.actions button{min-height:44px}.actions button:focus-visible,.tabs button:focus-visible{outline:2px solid currentColor;outline-offset:2px}details summary{cursor:pointer;font-size:11px;margin-top:8px}.raw{max-height:440px}@media(max-width:520px){.shell{border-radius:14px}.head,main{padding:13px}.toolbar{align-items:flex-start;flex-direction:column}.diff{grid-template-columns:1fr}.tabs{width:100%}.tabs button{flex:1}}
 </style></head><body><section class="shell"><header class="head"><h1>Thingtime ✨</h1><span class="badge">Limitless, bounded</span></header><main id="root"><div class="empty">Thingtime results will appear here.</div></main></section>
 <script type="module">
 const root=document.getElementById('root');
 const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let current={},tab='result',selected=new Set(),busy=false;
+let current={},tab='result',selected=new Set(),busy=false,reviewPages=new Map();
 const json=(v)=>esc(JSON.stringify(v,null,2));
 const rowsOf=(data)=>data.things||data.schemas||data.history||data.runs||data.results||data.operations||data.preview?.operations||data.result?.things||data.result?.schemas||[];
 const card=(item,i)=>{const title=item?.crystal?.name||item?.title||item?.summary||item?.id||item?.name||('Item '+(i+1));const meta=[item?.action,item?.thingtime?.join?.(' + '),item?.status,item?.updatedAt||item?.createdAt].filter(Boolean).join(' · ');const diff=(item?.before!==undefined||item?.after!==undefined)?'<div class="diff"><div class="pane"><div class="label">Before</div><pre>'+json(item.before)+'</pre></div><div class="pane"><div class="label">After</div><pre>'+json(item.after)+'</pre></div></div>':'';return '<article class="card"><div class="cardhead"><input class="pick" type="checkbox" data-index="'+i+'" '+(selected.has(i)?'checked':'')+' aria-label="Select '+esc(title)+'"><div><div class="title">'+esc(title)+'</div><div class="meta">'+esc(meta)+'</div></div></div><div class="summary '+(item?.ok===false?'bad':item?.ok===true?'ok':'')+'">'+esc(item?.error||item?.description||'')+'</div>'+diff+'<details><summary>Full details</summary><pre>'+json(item)+'</pre></details></article>'};
-const render=(payload)=>{if(payload!==undefined)current=payload?.structuredContent??payload?.toolOutput??payload??{};const data=current;const rawRows=rowsOf(data);const list=Array.isArray(rawRows)?rawRows:(rawRows?[rawRows]:[]);const canApply=Boolean(data.receipt&&data.confirmationRequired);const body=tab==='raw'?'<pre class="raw">'+json(data)+'</pre>':tab==='diff'?((data.preview?.operations||data.operations||[]).map(card).join('')||'<div class="empty">No before/after diff in this result.</div>'):(list.slice(0,50).map(card).join('')||'<div class="card"><div class="title">'+esc(data.message||data.error||'Ready')+'</div><div class="summary">'+json(data)+'</div></div>');root.innerHTML='<div class="toolbar"><div class="tabs"><button data-tab="result" aria-pressed="'+(tab==='result')+'">Result</button><button data-tab="diff" aria-pressed="'+(tab==='diff')+'">Diff</button><button data-tab="raw" aria-pressed="'+(tab==='raw')+'">Raw</button></div><span class="count">'+selected.size+' selected</span></div><div class="grid">'+body+'</div>'+(canApply?'<label class="confirm"><input id="confirm" type="checkbox"> I reviewed the full plan and want to apply it to '+esc(data.account?.label||data.account?.id||'this account')+'.</label><div class="actions"><button id="apply" class="primary" disabled>Apply signed plan</button><span id="status" class="status"></span></div>':'');bind()};
-const bind=()=>{root.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{tab=el.dataset.tab;render()}));root.querySelectorAll('.pick').forEach(el=>el.addEventListener('change',()=>{const i=Number(el.dataset.index);el.checked?selected.add(i):selected.delete(i);render()}));const confirm=root.querySelector('#confirm'),apply=root.querySelector('#apply');if(confirm&&apply)confirm.addEventListener('change',()=>apply.disabled=!confirm.checked||busy);if(apply)apply.addEventListener('click',async()=>{if(busy||!confirm?.checked)return;busy=true;apply.disabled=true;const status=root.querySelector('#status');if(status)status.textContent='Applying…';try{if(!window.openai?.callTool)throw new Error('Apply this confirmed plan from the chat to continue.');const args={receipt:current.receipt,accountId:current.account?.id,confirmed:true,...(current.run?.id?{runId:current.run.id}:{})};const result=await window.openai.callTool('apply_thingtime_mutation',args);busy=false;selected.clear();tab='result';render(result)}catch(error){busy=false;if(status)status.textContent=error?.message||'Could not apply.'}})};
+const render=(payload)=>{if(payload!==undefined){const incoming=payload?.structuredContent??payload?.toolOutput??payload??{};if(incoming.preview?.previewId===current.preview?.previewId&&incoming.preview&&current.receipt){current={...current,...incoming};}else{current=incoming;reviewPages=new Map();}if(current.preview)reviewPages.set(current.preview.cursor??0,current.preview);}const data=current;const rawRows=rowsOf(data);const list=Array.isArray(rawRows)?rawRows:(rawRows?[rawRows]:[]);const page=data.preview;const canApply=Boolean(data.receipt&&page?.nextCursor===null);const previous=page?[...reviewPages.keys()].filter(v=>v<page.cursor).sort((a,b)=>b-a)[0]:undefined;const paging=page&&((page.cursor??0)>0||page.nextCursor!==null)?'<div class="actions">'+(previous!==undefined?'<button id="prev">Previous page</button>':'')+'<span id="page-range" class="status" tabindex="-1">Operations '+(page.cursor+1)+'–'+(page.cursor+page.operations.length)+' of '+page.total+'</span>'+(page.nextCursor!==null?'<button id="next">Next page</button>':'')+'</div>':'';const body=tab==='raw'?'<pre class="raw">'+json(data)+'</pre>':tab==='diff'?((data.preview?.operations||data.operations||[]).map(card).join('')||'<div class="empty">No before/after diff in this result.</div>'):(list.map(card).join('')||'<div class="card"><div class="title">'+esc(data.message||data.error||'Ready')+'</div><div class="summary">'+json(data)+'</div></div>');root.innerHTML='<div class="toolbar"><div class="tabs"><button data-tab="result" aria-pressed="'+(tab==='result')+'">Result</button><button data-tab="diff" aria-pressed="'+(tab==='diff')+'">Diff</button><button data-tab="raw" aria-pressed="'+(tab==='raw')+'">Raw</button></div><span class="count">'+selected.size+' selected</span></div><div class="grid">'+body+'</div>'+paging+(canApply&&data.confirmationRequired?'<label class="confirm"><input id="confirm" type="checkbox"> I reviewed the full plan and want to apply it to '+esc(data.account?.label||data.account?.id||'this account')+'.</label>':'')+'<div class="actions">'+(canApply?'<button id="apply" class="primary" '+(data.confirmationRequired?'disabled':'')+'>Apply signed plan</button>':'')+'<span id="status" class="status" role="status">'+esc(data.error||'')+'</span></div>';bind()};
+const focusRange=()=>root.querySelector('#page-range')?.focus({preventScroll:false});
+const bind=()=>{const prev=root.querySelector('#prev'),next=root.querySelector('#next'),status=root.querySelector('#status');if(prev)prev.addEventListener('click',()=>{const cursor=[...reviewPages.keys()].filter(v=>v<current.preview.cursor).sort((a,b)=>b-a)[0];if(cursor!==undefined){current={...current,preview:reviewPages.get(cursor)};render();focusRange();}});if(next)next.addEventListener('click',async()=>{if(busy)return;const cursor=current.preview.nextCursor;const cached=reviewPages.get(cursor);if(cached){current={...current,preview:cached};render();focusRange();return;}busy=true;next.disabled=true;if(status)status.textContent='Loading…';try{if(!window.openai?.callTool)throw new Error('Continue review in the chat using the next page cursor.');const result=await window.openai.callTool('get_thingtime_mutation_preview',{receipt:current.receipt,accountId:current.account?.id,cursor});const data=result?.structuredContent??result?.toolOutput??result;if(data?.preview?.previewId!==current.preview.previewId||data?.preview?.cursor!==cursor)throw new Error(data?.error||'Could not load the next page.');busy=false;selected.clear();render(result);focusRange();}catch(error){busy=false;next.disabled=false;if(status)status.textContent=error?.message||'Could not load the next page.';}});root.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{tab=el.dataset.tab;render()}));root.querySelectorAll('.pick').forEach(el=>el.addEventListener('change',()=>{const i=Number(el.dataset.index);el.checked?selected.add(i):selected.delete(i);render()}));const confirm=root.querySelector('#confirm'),apply=root.querySelector('#apply');if(confirm&&apply)confirm.addEventListener('change',()=>apply.disabled=!confirm.checked||busy);if(apply)apply.addEventListener('click',async()=>{if(busy||(current.confirmationRequired&&!confirm?.checked))return;busy=true;apply.disabled=true;const status=root.querySelector('#status');if(status)status.textContent='Applying…';try{if(!window.openai?.callTool)throw new Error('Apply this confirmed plan from the chat to continue.');const args={receipt:current.receipt,accountId:current.account?.id,...(confirm?.checked?{confirmed:true}:{}),...(current.run?.id?{runId:current.run.id}:{})};const result=await window.openai.callTool('apply_thingtime_mutation',args);busy=false;const data=result?.structuredContent??result?.toolOutput??result;if(data?.code==='confirmation_required'){current={...current,...data};render();root.querySelector('#confirm')?.focus();return;}selected.clear();tab='result';render(result)}catch(error){busy=false;apply.disabled=Boolean(current.confirmationRequired&&!confirm?.checked);if(status)status.textContent=error?.message||'Could not apply.'}})};
 window.addEventListener('message',event=>{if(event.source!==window.parent)return;const message=event.data;if(message?.jsonrpc==='2.0'&&message.method==='ui/notifications/tool-result')render(message.params)});
 if(window.openai?.toolOutput)render(window.openai.toolOutput);
 </script></body></html>`;

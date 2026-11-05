@@ -1,3 +1,4 @@
+import { BUILDER_THING_KIND } from '../schemas/builderThing';
 import type { BrowserActionHost } from '../components/Actions/browserActionRuntime';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 import { localThingProjection, LocalThings, type ThingWrite } from './things';
@@ -22,7 +23,8 @@ const fields = (value: Record<string, unknown>, allowed: string[]) => {
 	for (const key of Object.keys(value)) if (!allowed.includes(key)) refuse(`The local adapter does not support the ${key} request field`);
 };
 const editableKinds = (kinds: unknown) => {
-	if (!Array.isArray(kinds) || !kinds.length || kinds.some((kind) => !['data', 'schema', 'component', 'action', 'webpage', 'folder'].includes(kind)))
+	const editable = ['data', 'schema', 'component', 'action', 'webpage', 'folder'];
+ if (!Array.isArray(kinds) || !kinds.some(kind => editable.includes(kind)) || kinds.some(kind => kind !== BUILDER_THING_KIND && !editable.includes(kind)))
 		refuse('This local request supports editable definitions, Data and folders; other kinds need their dedicated adapter');
 };
 // ID shape is not authority: every operation below resolves its target through

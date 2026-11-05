@@ -1,6 +1,9 @@
 import React, { memo } from 'react';
+import { Link } from 'react-router';
+import { browseClickIntent, BROWSE_CONTROLS_SX } from '../Things/browseInteraction';
 
 import { Box, Flex, Text } from '@chakra-ui/react';
+import { deviceThingsPageHref } from './deviceNavigation';
 import { Laptop, Monitor, Server, Smartphone, Watch as WatchIcon } from 'lucide-react';
 
 import { deriveDevicePresence } from './deviceCore';
@@ -98,40 +101,45 @@ export type DeviceCardProps = {
 	pendingCommandCount?: number;
 	pendingApprovalCount?: number;
 	now?: number;
+	controls?: React.ReactNode;
 	onSelect: (deviceId: string) => void;
-	onOpen?: (deviceId: string) => void;
 	onContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 };
 
 export const DeviceCard = memo(
-	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect, onOpen, onContextMenu }: DeviceCardProps) => {
+	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect, onContextMenu, controls }: DeviceCardProps) => {
 		const observed = snapshot?.observed;
 		const model = device.system?.model || (device.platform === 'watchos' ? 'Apple Watch' : device.platform) || 'Device';
 		const version = device.system?.osVersion || device.nodeVersion || null;
 
 		return (
+			<Box position="relative" role="group" sx={BROWSE_CONTROLS_SX}>
 			<Box
 				_focusVisible={{ boxShadow: '0 0 0 3px var(--tt-accent-soft, rgba(244, 114, 182, 0.25))' }}
 				_hover={{ borderColor: 'var(--tt-border-strong, #d4d4d8)', transform: 'translateY(-1px)' }}
 				aria-label={`Open ${device.name}`}
-			title={onOpen ? 'Double-click or press Enter to browse saved files. Right-click for device settings.' : undefined}
-				aria-pressed={selected}
-				as="button"
+				title="Open device page"
+				as={Link}
 				background={selected ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.08))' : 'var(--tt-card, #ffffff)'}
 				border="1px solid"
 				borderColor={selected ? 'var(--tt-accent, #f472b6)' : 'var(--tt-border, #ececef)'}
 				borderRadius="var(--tt-radius-lg, 16px)"
 				boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
 				color="var(--tt-ink, #17171c)"
+				display="block"
 				minWidth={0}
-				onClick={(event) => { if (onOpen && (event.detail === 0 || window.matchMedia('(pointer: coarse)').matches)) onOpen(device.id); else onSelect(device.id); }}
-				onDoubleClick={() => onOpen?.(device.id)}
-				onKeyDown={(event) => { if (onOpen && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpen(device.id); } }}
+				onClick={(event) => {
+					const intent = browseClickIntent(event);
+					if (intent === 'select' || intent === 'ignore') event.preventDefault();
+					if (intent === 'select') onSelect(device.id);
+				}}
 				onContextMenu={(event) => onContextMenu?.(device.id, event)}
 				padding={4}
+				paddingTop={controls ? 10 : 4}
+				sx={controls ? { '@media (hover: none), (pointer: coarse)': { paddingTop: '56px' } } : undefined}
 				textAlign="left"
 				transition="border-color 120ms ease, transform 120ms ease, background 120ms ease"
-				type="button"
+				to={deviceThingsPageHref(device.id)}
 				width="100%"
 			>
 				<Flex alignItems="flex-start" gap={3}>
@@ -148,10 +156,10 @@ export const DeviceCard = memo(
 						<DevicePlatformIcon platform={device.platform} />
 					</Flex>
 					<Box flex="1" minWidth={0}>
-						<Text fontSize="14px" fontWeight={700} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+						<Text as="span" display="block" fontSize="14px" fontWeight={700} title={device.name} isTruncated>
 							{device.name}
 						</Text>
-						<Text color="var(--tt-muted, #71717a)" fontSize="11px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+						<Text as="span" display="block" color="var(--tt-muted, #71717a)" fontSize="11px" isTruncated>
 							{model}
 							{version ? ` · ${version}` : ''}
 						</Text>
@@ -167,6 +175,8 @@ export const DeviceCard = memo(
 					{pendingCommandCount > 0 ? <DeviceStatusPill label={`${pendingCommandCount} queued`} tone="accent" /> : null}
 					{pendingApprovalCount > 0 ? <DeviceStatusPill label={`${pendingApprovalCount} approval`} tone="warning" /> : null}
 				</Flex>
+			</Box>
+				{controls}
 			</Box>
 		);
 	}

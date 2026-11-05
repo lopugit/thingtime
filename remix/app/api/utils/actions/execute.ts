@@ -5,6 +5,7 @@ import {
 	schemaScopeAllows,
 	schemaIdentityOf,
 	type ActionBudget,
+ type ActionOperationPolicy,
 	type ActionProgram,
 	type ActionRuntimeHost,
 	type ActionRunTraceEntry
@@ -54,7 +55,7 @@ import {
 import { emitSystemNotification } from '../notifications/notifications';
 import { bindPacks } from './packs/index';
 import type { SharedComposition } from './sharedComposition';
-export type { ActionRunTraceEntry } from '../../../actions/runtime';
+export type { ActionRunTraceEntry, ActionOperationPolicy } from '../../../actions/runtime';
 
 // The Action Thing executor — the run-time half of the bounded-execution
 // contract (save-time lives in registry.ts sanitizeActionCrystal).
@@ -456,7 +457,7 @@ const executeActionRun = async (
 	viewer: Viewer,
 	request: { action?: unknown; inputs?: unknown; source?: unknown; execution?: unknown; executionVersion?: unknown },
 	shared?: SharedComposition,
-	context?: { firstPartyActorId?: string; browserOnly?: boolean; assertAuthorized?: () => Promise<void> }
+	context?: { firstPartyActorId?: string; browserOnly?: boolean; assertAuthorized?: () => Promise<void>; operationPolicy?: ActionOperationPolicy }
 ): Promise<RunActionResult> => {
 	// Shared programs receive neither the author's nor the visitor's private
 	// account authority. Only stored composition reads are added below.
@@ -532,6 +533,7 @@ const executeActionRun = async (
 	const startedAt = new Date();
 	const budget: ActionBudget = {
 		assertAuthorized: context?.assertAuthorized,
+ operationPolicy: context?.operationPolicy,
 		deadline: Date.now() + limits.timeoutMs,
 		opsRemaining: limits.maxOperations,
 		maxDepth: limits.maxDepth,

@@ -11,9 +11,9 @@ export const assertVaultIdentity = ({ ownerId, keyId }: { ownerId: string; keyId
   if (typeof ownerId !== 'string' || !ownerId || ownerId.length > 200 ||
     typeof keyId !== 'string' || !/^vault-key-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(keyId)) throw vaultFailure();
 };
-export const vaultValueContext = (ownerId: string, keyId: string, recordId: string, purpose: 'oauth' | 'secret') => {
+export const vaultValueContext = (ownerId: string, keyId: string, recordId: string, purpose: 'oauth' | 'secret' | 'password-icon') => {
   assertVaultIdentity({ ownerId, keyId });
-  if (typeof recordId !== 'string' || !recordId || recordId.length > 200 || !['oauth', 'secret'].includes(purpose)) throw vaultFailure();
+  if (typeof recordId !== 'string' || !recordId || recordId.length > 200 || !['oauth', 'secret', 'password-icon'].includes(purpose)) throw vaultFailure();
   return ['thingtime-vault-value:v2', ownerId, keyId, recordId, purpose];
 };
 export const vaultPasswordContext = (ownerId: string, keyId: string) => ['thingtime-vault-password:v1', ownerId, keyId, 'scrypt-32768-8-3'];

@@ -5,6 +5,45 @@ Thingtime application, separate from the stateless agent export sandbox in
 [no-login-draft-preview.md](no-login-draft-preview.md). The full local-first
 rollout is **not ready to merge** until the outstanding rows below are verified.
 
+## Main integration — 2026-11-05
+
+This maintenance merge brings fetched `origin/main` at
+`f07a96dea1821d10180dab82737460e2c9a79995` into the existing feature head
+`ad2ea0524eebc818ee1274dc227a0d2438664029`. It preserves the feature branch,
+private device workspaces and independent content/draft/file synchronization.
+PR #1000 stays open; this does not merge the feature into main or deploy it.
+The original no-login renderer and posting-independent foundations from PRs
+[#998](https://github.com/lopugit/thingtime/pull/998) and
+[#999](https://github.com/lopugit/thingtime/pull/999) are already in main. Their
+historical evidence does not establish acceptance of this combined tree.
+
+Main's newer Builder provenance, device/cloud-file controls, encrypted password
+icons and server Action permission policy are reconciled with the existing
+local adapters. The local CLI now forwards only the renderer's documented
+configuration and allows its bounded work plus cleanup deadline. Its safe
+configuration refusals never expose payloads or credentials. The currently
+connected hosted Thingtime catalogue does not expose render/export; retained
+local stdio acceptance must not be described as current hosted acceptance.
+
+Device password previews retain safe username/icon metadata. Device attachment
+icons remain unavailable until file receipts can be remapped into the independent
+entry queue; upload refuses before bytes are stored, and imported icon bytes
+remain ordinary encrypted archive attachments. Existing password entries and
+files remain editable. Online account icon behavior remains available.
+
+Completion priorities remain explicit: P0 combined-contract regression and the
+corrected `siteEditableBlocks` acceptance; P1 the remaining identity, origin,
+data-plane, Character, provider and device matrix; P2 signed installed-native,
+exact-head CI and separately authorized deployed acceptance. Prior counts are
+checklist states, not a completion percentage. Historical passes below retain
+their exact source/runtime scope; broader local-first work remains incomplete.
+
+Accepted verification: raw TypeScript zero errors, complete client/server builds,
+909 workspace checks plus four shell checks, 152 contract checks, 266 Timeline
+checks, 297 schema checks, 63 MCP checks and focused runtime/bundle checks.
+Explicit browser/render opt-ins remain skipped. [Exact checks, initial failures,
+corrections and remaining acceptance](../artifacts/anonymous-main-integration-2026-11-05/README.md).
+
 ## Current continuation — 2026-10-25
 
 The continuation starts from `5ab9283a19feca1a8328aa066ed037435032a9e8`

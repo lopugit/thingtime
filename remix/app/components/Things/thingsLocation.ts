@@ -26,12 +26,12 @@ export const writeThingsLocation = (params: URLSearchParams, state: ThingsLocati
   return next;
 };
 
-export const thingBrowseHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>, search = '') => {
-  if (!isFolder(thing)) {
+export const thingBrowseHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal' | 'author'>>, search = '', viewerId?: string | null) => {
+  const href = thingOpenHref(thing, 'things', viewerId);
+  if (href.startsWith('/builder') || !isFolder(thing)) {
     const params = new URLSearchParams(search);
-    return characterContentPath(params.get('localPlane') === 'home' && params.get('workspaceOwner')
-      ? thingHistoryHref(thing.id, 'home', params.get('workspaceOwner')!)
-      : thingOpenHref(thing, 'things'), params.get('character'));
+    return characterContentPath(params.get('localPlane') === 'home' && params.get('workspaceOwner') && !href.startsWith('/builder')
+      ? thingHistoryHref(thing.id, 'home', params.get('workspaceOwner')!) : href, params.get('character'));
   }
   const next = new URLSearchParams(search);
   next.set('folder', thing.id);
