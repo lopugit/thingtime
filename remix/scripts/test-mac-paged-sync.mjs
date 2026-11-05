@@ -78,7 +78,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
             const target = process.env.THINGTIME_MAC_PAGED_EVIDENCE_PATH;
             assert.ok(target.startsWith('/'), 'Evidence path must be absolute');
             const sourcePaths = execFileSync('rg', ['--files', '../apple/FileSync/Sources', '../macos/ThingtimeNode/Sources', '../filesystem-indexer/crates/indexer/src', 'app/fileSync', 'app/api/utils/files', '../electron/lib'], { cwd: root, encoding: 'utf8' }).trim().split('\n').filter(p => /\.(swift|rs|ts|tsx|mts|cjs|mjs)$/.test(p));
-            sourcePaths.push('../macos/ThingtimeNode/Tests/MacFolderSyncFixture/main.swift', 'scripts/mac-file-sync.integration.mts', 'scripts/mac-fixture-transport.mjs', 'scripts/mac-fixture-host.mts', 'scripts/test-mac-paged-sync.mjs'); sourcePaths.sort();
+            sourcePaths.push('../macos/ThingtimeNode/Tests/MacFolderSyncFixture/main.swift', 'scripts/mac-file-sync.integration.mts', 'scripts/mac-fixture-transport.mjs', 'scripts/mac-fixture-host.mts', 'scripts/mac-fixture-http-observer.mjs', 'scripts/test-mac-paged-sync.mjs'); sourcePaths.sort();
             const sha = async p => createHash('sha256').update(await readFile(p)).digest('hex');
             const files = Object.fromEntries(await Promise.all(sourcePaths.map(async p => [p, await sha(resolve(root, p))])));
             const metadata = { capturedAt: new Date().toISOString(), head: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
@@ -228,7 +228,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
         THINGTIME_FIXTURE_REQUEST_TIMINGS: join(directory, 'http-request-timings.jsonl')
 	};
 	const startServer = async (admin = false) => {
-		server = start(process.execPath, ['--input-type=module', '-e', "import {createServer} from 'node:http'; import {appendFileSync} from 'node:fs'; const app=await import('./.output/server/index.mjs'); if(typeof app.middleware!=='function')throw Error('Build Nitro with NITRO_PRESET=node_middleware');createServer((req,res)=>{if(req.method==='PUT'&&req.url.split('?')[0]==='/api/v1/attachments/local-object')appendFileSync(process.env.THINGTIME_FIXTURE_REQUEST_TIMINGS,JSON.stringify({at:Date.now(),operation:'attachment-object-put'})+String.fromCharCode(10));return app.middleware(req,res)}).listen(Number(process.env.NITRO_PORT),'127.0.0.1');"], { ...env, ...(admin ? { ADMIN_USERNAMES: username } : {}) });
+		server = start(process.execPath, ['--input-type=module', '-e', "import {createServer} from 'node:http'; import {createFixtureHttpObserver} from './scripts/mac-fixture-http-observer.mjs'; const observe=createFixtureHttpObserver(process.env.THINGTIME_FIXTURE_REQUEST_TIMINGS); const app=await import('./.output/server/index.mjs'); if(typeof app.middleware!=='function')throw Error('Build Nitro with NITRO_PRESET=node_middleware');createServer((req,res)=>{observe(req);return app.middleware(req,res)}).listen(Number(process.env.NITRO_PORT),'127.0.0.1');"], { ...env, ...(admin ? { ADMIN_USERNAMES: username } : {}) });
 		const output = collect(server);
 		await wait(async () => {
 			assert.equal(server.exitCode, null, 'Built server exited: ' + output().slice(-500));

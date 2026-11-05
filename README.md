@@ -5914,6 +5914,11 @@ capabilities, uses fresh composite authorization and native operation guards,
 and keeps the real transfer worker's global fetch path. Both renderer and native
 device policies must confirm the requested budget. Its first-PUT measurement is
 server receipt of the worker's request; it is not renderer fetch invocation.
+The observer normalizes the native HTTP PUT target and separates runs with an
+append-position barrier. Its focused regression uses the real native network
+uploader and verifies that signed query values and body bytes are never logged.
+Exact end-to-end native PUT timing still requires a passing combined acceptance
+run; observer unit coverage alone is not that evidence.
 The canonical two-way proof requires a storage provider that supplies signed
 HTTPS download ranges. It checks that real capability before starting its timing
 run. The local attachment-storage adapter currently lacks `signDownloadRange`,

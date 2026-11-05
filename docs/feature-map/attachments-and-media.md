@@ -617,6 +617,9 @@ manager and renderer host factories with only synthetic IPC/window/session
 adapters. Negotiation, composite authorization, native guards, transfer worker,
 byte/CPU governors and signing remain canonical. Its server observes worker PUTs;
 timing rows separate native identity admission/HTTP and digest-worker wall time.
+`scripts/mac-fixture-http-observer.mjs` records the canonical native PUT method
+and normalized object endpoint through an append barrier; its regression uses
+the actual native HTTP uploader without recording signed query/body data.
 Full native two-way acceptance requires a provider-backed signed HTTPS download
 target; local attachment storage currently lacks it. The explicit
 `--upload-start-diagnostic` keeps the same connection/capabilities with an empty

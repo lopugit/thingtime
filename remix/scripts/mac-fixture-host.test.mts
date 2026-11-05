@@ -49,3 +49,13 @@ test('fixture refuses noncanonical context framing before a benchmark', async ()
  const f = setup(caps, false);
  await assert.rejects(createMacFixtureHost(f.input));
 });
+
+test('failed host construction unregisters its digest observer', async () => {
+ const f = setup(caps, false); let digests = 0;
+ f.input.diagnostic = ((row: any) => { if (row.phase === 'digest-worker') digests++; }) as any;
+ await assert.rejects(createMacFixtureHost(f.input));
+ const { createRequire } = await import('node:module');
+ const { governedHash } = createRequire(import.meta.url)('../../electron/lib/folder-transfer-process.cjs');
+ await governedHash(undefined, Buffer.from('synthetic'), f.input.signal);
+ assert.equal(digests, 0);
+});

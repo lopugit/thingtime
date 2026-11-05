@@ -14449,6 +14449,11 @@ the isolated real-API/browser command and the metadata-only session boundary.
   prerequisites, and non-interfering digest observation. The early proof must
   use the real host manager/transfer worker and confirm equal renderer/native
   byte and CPU policies before timing; observe worker PUTs at the fixture server.
+  Exercise `mac-fixture-http-observer.test.mjs` against the actual native HTTP
+  uploader: normalize origin/absolute/slash request targets, exclude earlier
+  seed PUTs by append position, retain only closed diagnostic fields, and keep
+  failed host construction from leaking a digest observer. This does not replace
+  a later full native timestamp/receipt acceptance run.
   Before timing, require an owned signed HTTPS download target from the selected
   storage provider. Local attachment storage currently lacks that prerequisite;
   record it as unavailable, never disable the negotiated native path or count a

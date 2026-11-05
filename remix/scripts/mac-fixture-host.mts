@@ -25,8 +25,10 @@ export async function createMacFixtureHost(input: {
  resourcePolicy: NonNullable<Parameters<typeof createDesktopFolderHost>[0]['resourcePolicy']>;
  diagnostic(row: Record<string, unknown>): void;
 }) {
+ const removeDigestObserver = () => { digestObservers.delete(input.diagnostic); };
  digestObservers.add(input.diagnostic);
- input.signal.addEventListener('abort', () => digestObservers.delete(input.diagnostic), { once: true });
+ input.signal.addEventListener('abort', removeDigestObserver, { once: true });
+ try {
  const mainFrame = { url: input.origin };
  // Only renderer/IPC surfaces are synthetic. Account/capability/consent checks,
  // native operations, transfer workers and HTTP use their canonical paths.
@@ -57,6 +59,9 @@ export async function createMacFixtureHost(input: {
      !supportsNativePartUploads(host.capabilities) || !supportsNativeCloudStaging(host.capabilities))
   throw Error('The real fixture host is missing native context, upload or download support');
  return host;
+ } catch (error) {
+  removeDigestObserver(); input.signal.removeEventListener('abort', removeDigestObserver); throw error;
+ }
 }
 
 export function macFixtureWorkerOptions(host: Awaited<ReturnType<typeof createMacFixtureHost>>, ownerId: string, deviceId: string, signal: AbortSignal) {

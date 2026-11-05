@@ -236,7 +236,7 @@ async function measured<T>(phase: string, work: () => Promise<T>): Promise<T> {
 }
 const serverPuts = async () => {
  if (!fixture.requestTimings) throw Error('Canonical worker requires server-side PUT observation');
- try { return (await readFile(fixture.requestTimings, 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line)); }
+ try { return (await readFile(fixture.requestTimings, 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(event => event.operation === 'attachment-object-put'); }
  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error; }
 };
 let caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.17.0', fileSymbolicLinksVersion: '1.0.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.2.0', fileTrashVersion: '1.2.0' };
@@ -775,6 +775,7 @@ try {
 		};
 		const controller = new AbortController(), current = AbortSignal.any([controller.signal, proofTimeout]),
 			stop = new Error(uploadStartDiagnostic ? 'Stop after the upload-start diagnostic receipt' : 'Stop after the two before-seal confirmations');
+        const serverPutBaseline = (await serverPuts()).length;
 		transferRunStartedAt = Date.now();
         earlyIdentityStartTotalMs = nativeIdentityTiming.totalMs;
 		console.log('MAC_PAGED_STAGE early-input-start');
@@ -818,14 +819,15 @@ try {
             assert.equal((await serverPuts()).length, serverPutCountBefore, 'Native transfer worker must not replay a PUT on resume');
 			assert.equal(counts.publishes, countsBefore.publishes);
 			assert.ok(await journal.pagedCheckpoints(journalAccess).current());
-            const observedPuts = (await serverPuts()).filter(event => event.at >= transferRunStartedAt);
+            const observedPuts = (await serverPuts()).slice(serverPutBaseline);
             assert.equal(observedPuts.length, 1, 'Exactly one native worker upload PUT is expected');
             firstTransferMs = observedPuts[0].at - transferRunStartedAt;
+            assert.ok(firstTransferMs >= 0, 'Server timestamp must not precede the observation append barrier');
 			assert.ok(firstLocalChangeMs !== null && firstAdmittedMs !== null && firstTransferMs !== null);
 			assert.ok(firstLocalChangeMs <= firstAdmittedMs && firstAdmittedMs <= firstTransferMs);
 			console.log(JSON.stringify({ ok: true, scenario: uploadStartDiagnostic ? 'Canonical upload-start diagnostic with empty cloud folder' : 'Mac two-way transfer before initial index seal',
                 proofKind: uploadStartDiagnostic ? 'upload-start-diagnostic' : 'two-way-before-seal', twoWayAcceptance: !uploadStartDiagnostic,
-				firstLocalChangeMs, firstAdmittedMs, firstAdmittedPath, firstPutMs: firstTransferMs, firstPutObservation: 'server-received native transfer-worker PUT', earlyFirstRequestMs,
+				firstLocalChangeMs, firstAdmittedMs, firstAdmittedPath, serverPutBaseline, serverPutEvents: await serverPuts(), firstPutMs: firstTransferMs, firstPutObservation: 'server-received native transfer-worker PUT', earlyFirstRequestMs,
                 parity: { capabilities: caps, nativeOperationGuards: true, compositeAuthorization: true, customMutationHook: false,
                     canonicalDesktopManager: true, canonicalRendererHost: true, canonicalTransferWorkerSelected: true,
                     rendererDevicePolicy: readDeviceSyncResourcePolicy(deviceResourceKey(base.origin, fixture.userId, deviceId!)) },
@@ -839,7 +841,7 @@ try {
 			// Keep a bounded, non-secret stage snapshot when the deliberate
 			// before-seal deadline fires; otherwise its only symptom is a timeout.
 			console.log(JSON.stringify({ earlyTimingFailure: true, firstLocalChangeMs, firstAdmittedMs,
-				firstAdmittedPath, firstPutMs: firstTransferMs, firstPutObservation: 'server-received native transfer-worker PUT', earlyFirstRequestMs,
+				firstAdmittedPath, serverPutBaseline, serverPutEvents: await serverPuts(), firstPutMs: firstTransferMs, firstPutObservation: 'server-received native transfer-worker PUT', earlyFirstRequestMs,
                 parity: { capabilities: caps, nativeOperationGuards: true, compositeAuthorization: true, customMutationHook: false,
                     canonicalDesktopManager: true, canonicalRendererHost: true, canonicalTransferWorkerSelected: true,
                     rendererDevicePolicy: readDeviceSyncResourcePolicy(deviceResourceKey(base.origin, fixture.userId, deviceId!)) },
