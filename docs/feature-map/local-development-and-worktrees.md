@@ -28,6 +28,14 @@ full-app launch, not only host-side module checks.
 
 ## First ten minutes in a fresh checkout or worktree
 
+Development group cleanup in `electron/lib/local-runtime.cjs` requires ESRCH
+before deleting temporary state. After a successful SIGKILL, macOS can briefly
+return EPERM for a zombie-only group: [XNU's group-signal filter and return
+code](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_sig.c#L1612-L1621).
+Poll only within the existing kill deadline; persistent EPERM and permission
+failures before or during signal delivery remain errors. The owned-child zombie
+and permission regressions live in `electron/test/local-runtime.test.cjs`.
+
 ```sh
 npm run worktree-bootstrap          # deps relink, env copy, .claude/launch.json, hooksPath
 npm run web-ports                   # this checkout's derived ports + PM2 name
@@ -168,3 +176,9 @@ iOS toolchains and isolated build outputs. Run workspace Cargo tests, the linked
 Swift/Rust fixture (`apple/FileSync/test-embedded-rust.sh`) and affected native
 host suites before signing and installing. Release listeners include changes in
 this directory for every consuming app.
+
+The early Mac sync fixture uses `scripts/mac-fixture-tls.mjs` and the test-only
+`mac-fixture-worker-trust.cjs` preload for ephemeral HTTPS byte storage on 28313.
+API/native identity remain on 28311; only the exact canonical transfer-worker
+child receives the public test CA. `mac-fixture-tls.test.mjs` covers correct,
+wrong and missing CA trust plus unrelated-child isolation. No OS trust changes.

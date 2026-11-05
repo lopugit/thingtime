@@ -14345,6 +14345,12 @@ the isolated real-API/browser command and the metadata-only session boundary.
   even when testing ordinary startup without CLI arguments. Run
   `node --test electron/test/dev-workspace.test.cjs`; parallel development
   must keep its own name/profile, and packaged startup must keep the stable app.
+- [ ] Development process-group cleanup must wait through macOS zombie `EPERM`
+  only after a successful SIGKILL and require eventual ESRCH within the existing
+  deadline. Run `node --test electron/test/local-runtime.test.cjs`; exercise the
+  real owned-child zombie transition, reject nonfinite deadlines before signalling,
+  and reject persistent, initial, SIGTERM and
+  SIGKILL permission failures. Preserve the original assertion if cleanup also fails.
 - [ ] Native upload-batch peers must verify only the submitted receipt subset.
   Force the first admission window to expire after accepted bodies begin, then
   complete all 256 files through fresh request identities with the same original
@@ -14501,6 +14507,46 @@ the isolated real-API/browser command and the metadata-only session boundary.
   verify its final catalog publishes atomically.
 
 ### Two-way transfers during initial indexing
+
+- Run `pnpm --dir remix run test:files:mac-fixture-transport`. Hold a native
+  `scan-changes` response while inspect/read complete through their independent
+  lane; verify out-of-order result/chunk IDs, atomic stage frames, cancellation
+  acknowledgements, EOF rejection of active and queued requests exactly once, and
+  identity duration accumulation across native restarts and out-of-order samples.
+  The same command checks canonical host capability negotiation, fresh composite
+  authorization, absence of a custom mutation hook, refusal of missing native
+  prerequisites, and non-interfering digest observation. The early proof must
+  use the real host manager/transfer worker and confirm equal renderer/native
+  byte and CPU policies before timing; observe worker PUTs at the fixture server.
+  Exercise `mac-fixture-http-observer.test.mjs` against the actual native HTTP
+  uploader: normalize origin/absolute/slash request targets, exclude earlier
+  seed PUTs by append position, retain only closed diagnostic fields, and keep
+  failed host construction from leaking a digest observer. This does not replace
+  a later full native timestamp/receipt acceptance run.
+  Before timing, require an owned signed HTTPS download target from the selected
+  storage provider. The disposable local provider uses HTTPS port 28313 with an
+  ephemeral private CA; API/native identity stay on HTTP port 28311. Require the
+  TLS regression to accept the exact canonical child and reject wrong/no CA,
+  and verify unrelated forks receive no extra trust. Cleanup all task keys,
+  certificates and listeners; never modify OS trust, disable verification or
+  relax shipping child environment filters. Missing prerequisites remain a
+  failure, never a reason to downgrade the native path.
+  The separate `--upload-start-diagnostic` mode keeps a canonical two-way
+  connection with an initially empty synthetic cloud folder; require exact
+  upload hash/receipt, unsealed capture and strict no-replay resume. Its explicit
+  `twoWayAcceptance: false` result must be rejected by the original two-way proof
+  validator. Downloads are deliberately unexercised in that diagnostic. Fixture framing must retain the
+  canonical NodeWireCodec sorted-key encoding across context refreshes.
+  Record per-call native identity admission/HTTP, host account/native service,
+  source/configuration checks and digest-worker elapsed time separately.
+  Receipt observers must share a fresh production feed result without adding a
+  second native poll. Preserve the production iterator's 25-second indexing /
+  2-second indexed waits; never inject a faster fixture-only polling cadence.
+  Build `MacFolderSyncFixture` and run the normal-budget before-seal proof below.
+  Retain per-action enqueue/start/end and queue/service aggregates separately
+  from summed native identity-verification time (which includes admission and
+  HTTP and can overlap across concurrent requests). Preserve all native
+  authorization, cancellation, session checks and strict hash/resume assertions.
 
 - Run `node --import tsx --test app/fileSync/cloudIndexChanges.client.test.ts`
   from `remix`. A Timeline delta for a canonical zero-byte cloud file must

@@ -125,6 +125,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   credentials or development/stable profile separation.
   **Codex (AI)**
 
+- 2026-11-06: Wait for macOS to reap killed development process groups when a
+  zombie temporarily produces EPERM. Cleanup still requires ESRCH within the
+  existing deadline and preserves permission refusals and failed-test evidence.
+  **Codex (AI)**
+
 
 - 2026-11-06: Correct the native upload-batch test peer to verify only requested
   upload receipts. Exercise admission expiry and completion of all 256 files
@@ -132,6 +137,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   no duplicate PUTs. Production expiry, authorization and resource policy are
   unchanged; this is a test-only release follow-up.
   **Codex (AI)**
+
+- 2026-11-06: Add disposable HTTPS attachment bytes with an ephemeral CA scoped to the exact canonical transfer-worker child; reject missing/wrong trust and preserve normal TLS, native authorization and two-way proof semantics. No OS trust or shipping launcher changes. Original full two-way before-seal proof passes at 5 MB/s and 15% CPU; first native server-received PUT 19.030s, synthetic scope only. [PR 1363 evidence](../PRs/1363-codex-native-sync-fixture-lanes-canonical-native-two-way-proof.md). **Codex (AI)**
+
+- 2026-11-06: Compose the canonical desktop host/transfer worker in early sync acceptance, negotiate real capabilities and composite authorization, verify renderer/native resource parity, and record safe per-call/server-observed timings. Make the disposable Mac sync fixture multiplex native request IDs so polling can overlap inspect/read through the existing production lanes. Add cancellation/EOF transport regressions and safe queue/service/identity timing aggregates; retain all identity and exact-byte acceptance checks. **Codex (AI)**
 
 
 - 2026-11-06: Keep Mac folder settings mounted independently of background

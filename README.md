@@ -5909,11 +5909,54 @@ for the isolated browser harness and remaining native acceptance gates.
 
 ### Disposable Mac paged-sync acceptance
 
+The early fixture composes the production `DesktopFolderSync` and
+`createDesktopFolderHost` factories around a synthetic renderer/IPC surface,
+a real disposable API session and the production Swift adapter. It negotiates
+capabilities, uses fresh composite authorization and native operation guards,
+and keeps the real transfer worker's global fetch path. Both renderer and native
+device policies must confirm the requested budget. Its first-PUT measurement is
+server receipt of the worker's request; it is not renderer fetch invocation.
+The observer normalizes the native HTTP PUT target and separates runs with an
+append-position barrier. Its focused regression uses the real native network
+uploader and verifies that signed query values and body bytes are never logged.
+The 6 November canonical full two-way fixture run passed with first server-received
+native PUT at 19.030s; [PR 1363 evidence](PRs/1363-codex-native-sync-fixture-lanes-canonical-native-two-way-proof.md)
+records source fingerprints and its synthetic-only scope. Observer unit coverage
+alone is not end-to-end timing evidence.
+The canonical two-way proof requires a storage provider that supplies signed
+HTTPS download ranges. It checks that real capability before starting its timing
+run. The disposable fixture serves the canonical local attachment provider on
+HTTPS port 28313 while API and native identity stay on HTTP loopback port 28311.
+A fresh private one-day CA trusts only setup byte requests and the exact canonical
+transfer-worker child through a fixture-only preload. Other children and shipping
+launch code remain unchanged; certificate verification stays enabled. The fixture
+removes its keys, certificates and processes after completion. Focused tests must
+reject wrong and missing CA trust; no OS/keychain trust is installed.
+For upload-start attribution without exercising unsupported download storage, use
+`pnpm --dir remix run test:files:mac-paged -- --two-way-early --normal-early-budget --upload-start-diagnostic`.
+This keeps the canonical two-way connection but starts with an empty synthetic
+cloud folder. Its result is explicitly `upload-start-diagnostic`, reports
+`twoWayAcceptance: false`, and cannot satisfy the original two-direction proof.
+It must still verify the exact uploaded hash/receipt before seal, strict resume,
+and no replay. It does not establish native download acceptance.
+The debug-only Swift fixture observes identity admission/HTTP clock boundaries;
+digest-worker timing includes worker admission, IPC and scheduling.
+
+The fixture pipe multiplexes request IDs against one production native manager.
+`scan-changes` has an independent polling lane; active requests remain serialized,
+and cancellation keeps a lane occupied until the native manager acknowledges it.
+Early proof receipt checks share the next fresh production feed page, preserving
+its normal long-poll policy and avoiding competing proof-only polling requests.
+Run `pnpm --dir remix run test:files:mac-fixture-transport` for transport regressions.
+The early timing proof records queue and service aggregates plus summed native
+identity verification separately; these measurements do not establish installed
+app performance. Raw native stderr and throwable messages are never forwarded.
+
 Build the current server and non-shipping Swift fixture, then run:
 
 ```sh
 swift build --package-path macos/ThingtimeNode --product MacFolderSyncFixture
-(cd remix && NITRO_PRESET=node-server pnpm exec nitro build)
+NITRO_PRESET=node_middleware pnpm --dir remix run build:server
 pnpm --dir remix run test:files:mac-paged
 ```
 
