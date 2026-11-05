@@ -2997,7 +2997,10 @@ email whose link points at the attacker.
       An unsigned or expired `local-object` URL answers 403; with the variable
       unset every request answers 404; the module throws when `VERCEL` is set.
       `npm --prefix remix run test:attachments` covers the multipart, copy,
-      signature and traversal cases without a server.
+      signature and traversal cases without a server. Native range targets must
+      return exact 206 bytes for the signed version and Range; altered key,
+      version, method, expiry, signature, or missing/changed Range must fail.
+      Range-only URLs must never serve a whole object or a clamped range.
 - [ ] Download all (PR: download-all attachments): a post with two or more
       stored attachments shows a `Download all · N files · size` pill under its
       gallery/file rows (single-file posts and linked-only galleries show none).
