@@ -3,6 +3,7 @@ import { resolveBlockProps } from './templateBlocks';
 import { contentSlot } from './contentSlots';
 import { ComponentCollection } from './ComponentCollection';
 import { ComponentDataScope } from './ComponentSelect';
+import { ComponentInstanceIdentity } from './componentInstanceIdentity';
 import { useWebpageRuntime } from './webpageRuntime';
 import React from 'react';
 import { createPortal } from 'react-dom';
@@ -711,13 +712,18 @@ const ComponentBlockView = ({
 	onUnowned?: TtActionUnownedHandler;
 }) => {
 	const crystal = component?.crystal;
+	const inheritedScope = React.useContext(ComponentDataScope);
+	const markerInstance = React.useContext(ComponentInstanceIdentity);
 	const specs = React.useMemo(() => sanitizeArgSpecs(crystal?.args), [crystal?.args]);
-	const valuesKey = JSON.stringify({ s: crystal?.savedArgs, b: block.args });
+	const boundArgs = markerInstance
+		? resolveTemplate(block.args || {}, inheritedScope) as Record<string, unknown>
+		: block.args || {};
+	const valuesKey = JSON.stringify({ s: crystal?.savedArgs, b: boundArgs });
 	const argValues = React.useMemo(
 		() => ({
 			...defaultsFromArgs(specs),
 			...(crystal?.savedArgs && typeof crystal.savedArgs === 'object' ? crystal.savedArgs : {}),
-			...(block.args || {})
+			...boundArgs
 		}),
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is the serialised form of savedArgs+block.args
 		[specs, valuesKey]
@@ -790,7 +796,7 @@ const ComponentBlockView = ({
 	return (
 		<LiveTemplate
 			render={resolved}
-			scope={{ ...argValues, ...source.scope }}
+			scope={{ ...(markerInstance ? inheritedScope : {}), ...argValues, ...source.scope }}
 			interactive={interactive && (!chrome || chrome.seamlessMode === 'view')}
 			onUnowned={onUnowned}
 			confirm={confirm}
@@ -897,6 +903,15 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
  const formatNow = useFormatClock(block.format, scope);
  const editing = !!chrome && chrome.seamlessMode !== 'view';
  const attributes = resolveBlockProps(block.props || {}, scope) as Record<string, any>;
+ const reveal = attributes['data-tt-reveal'];
+ React.useLayoutEffect(() => {
+  // An authored target can reveal itself when its bound selection changes.
+  // No global selector, navigation, polling or focus theft is involved.
+  const selected = (typeof reveal === 'string' && reveal !== '') || (typeof reveal === 'number' && Number.isFinite(reveal)) || reveal === true;
+  if (!editing && props.interactive && selected) {
+   authoredRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+ }, [editing, props.interactive, reveal, runtime.identity]);
  if (attributes['data-tt-action-inputs'] && typeof attributes['data-tt-action-inputs'] === 'object') attributes['data-tt-action-inputs'] = JSON.stringify(attributes['data-tt-action-inputs']);
  const selected = chrome?.selectedId === block.id;
  const hovered = chrome?.hoverId === block.id;
@@ -948,7 +963,8 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
  </div>;
  const slot = contentSlot(props.contentSlots, attributes['data-tt-content-slot']);
  const text = block.format ? resolveTemplate({ ttFormat: block.format }, { ...scope, clock: { now: formatNow } }) : resolveTemplate(block.text || '', scope);
- const element = <HtmlBlockElement tag={block.tag || 'div'} attributes={{ ...attributes, ...(editing && ['details', 'dialog'].includes(block.tag || '') ? { open: true } : {}) }} editorProps={editorProps}>
+ const element = <HtmlBlockElement tag={block.tag || 'div'} attributes={{ ...attributes, ...(editing && ['details', 'dialog'].includes(block.tag || '') ? { open: true } : {}) }} editorProps={editorProps}
+  markerContent={block.tag === 'tt-mapbox' && block.children?.length ? children : undefined}>
   {typeof text === 'string' || typeof text === 'number' ? (editing && !text && block.text ? block.text : text) : null}{block.children ? children : null}{slot ? slot({ scope, editing }) : null}
  </HtmlBlockElement>;
  if (block.tag === 'tt-upload') return <ComponentUploadEnabled.Provider value={!!props.interactive && !editing && runtime.source === 'user' && !runtime.sharedRun}>{element}</ComponentUploadEnabled.Provider>;

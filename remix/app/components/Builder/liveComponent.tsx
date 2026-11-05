@@ -1,5 +1,6 @@
 import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import { ComponentDataScope } from './ComponentSelect';
+import { ComponentInstanceIdentity } from './componentInstanceIdentity';
 import { ComponentDragBoundary } from './ComponentDrag';
 import { NativeControlsEnabled, ComponentLocalControl } from './NativeComponentControls';
 import { sourceFailure } from './sourceFailure';
@@ -366,6 +367,7 @@ export const LiveTemplate = ({
 	children?: React.ReactNode;
 }) => {
 	const runtime = useWebpageRuntime();
+	const instanceIdentity = React.useContext(ComponentInstanceIdentity);
 	const user = useCurrentUser();
 	const navigate = useNavigate();
 	const location = useLocation();
@@ -376,7 +378,7 @@ export const LiveTemplate = ({
 		)
 	);
 	// Explicit navigation starts a new component draft; source refreshes do not.
-	const draftKey = JSON.stringify([user?.id, runtime.pageId, location.key, alreadyResolved ? null : render, baseScope]);
+	const draftKey = JSON.stringify([user?.id, runtime.pageId, location.key, alreadyResolved ? null : render, instanceIdentity ?? baseScope]);
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque local state generation
 	const identity = React.useMemo(() => ({}), [runtime.identity, draftKey]);
 	const [local, setLocal] = React.useState<{ identity: object; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });

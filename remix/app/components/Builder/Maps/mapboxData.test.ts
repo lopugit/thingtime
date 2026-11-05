@@ -9,14 +9,14 @@ test('Mapbox primitives retain only valid finite coordinates', () => {
 	assert.deepEqual(mapboxPoints([
 		{ id: 'one', coordinates: [144.9, -37.8], label: 'Stop one' },
 		{ id: 'bad', coordinates: [500, 0], label: 'Bad' }
-	]), [{ id: 'one', coordinates: [144.9, -37.8], label: 'Stop one' }]);
+	]), [{ id: 'one', coordinates: [144.9, -37.8], label: 'Stop one', item: { id: 'one', coordinates: [144.9, -37.8], label: 'Stop one' } }]);
 	assert.equal(mapboxRoute({ type: 'LineString', coordinates: [[144.9, -37.8], [145, -37.9]] })?.geometry.coordinates.length, 2);
 	assert.equal(mapboxRoute({ type: 'LineString', coordinates: [[144.9, -37.8], [999, 0]] }), null);
 });
 
 test('favourite projections validate stored coordinates, keep labels separate from marker text', () => {
 	assert.deepEqual(mapboxFavouritePoints([{ id: 'place', crystal: { title: '<script>address</script>', longitude: 144, latitude: -37 } }, { id: 'bad', crystal: { longitude: '144', latitude: -37 } }]), [
-		{ id: 'place', coordinates: [144, -37], label: '<script>address</script>', markerLabel: '•', color: '#167d8d', group: 'favourite' }
+		{ id: 'place', coordinates: [144, -37], label: '<script>address</script>', markerLabel: '•', color: '#167d8d', group: 'favourite', item: { id: 'place', crystal: { title: '<script>address</script>', longitude: 144, latitude: -37 } } }
 	]);
 	assert.equal(mapboxPoints([{ coordinates: [144, -37], color: 'url(evil)' }])[0].color, undefined);
 });

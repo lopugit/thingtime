@@ -17,10 +17,10 @@ const origin = 'http://127.0.0.1:' + ports.web;
 const { chromium } = await import(process.env.TT_PLAYWRIGHT_MODULE || 'playwright');
 const html = `<!doctype html><html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body { background: #f4f7f6; color: #233838; font: 16px system-ui; }
+body { margin: 0; background: #f4f7f6; color: #233838; font: 16px system-ui; }
 #root { max-width: 860px; margin: 24px auto; padding: 0 16px; }
 h1 { font-weight: 700; }
-[aria-label="Routes fixture map"] { position: relative; background: repeating-linear-gradient(27deg, #c8ded5, #c8ded5 40px, #ddebe6 40px, #ddebe6 42px); }
+[aria-label$="fixture map"] { position: relative; background: repeating-linear-gradient(27deg, #c8ded5, #c8ded5 40px, #ddebe6 40px, #ddebe6 42px); }
 fieldset { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 12px; }
 #root input, #root button:not([data-tt-map-point]) { padding: 8px 12px; border: 1px solid #547477; border-radius: 8px; background: white; min-height: 44px; }
 #root button:not([data-tt-map-point]) { margin-right: 8px; }
@@ -46,7 +46,7 @@ let browser;
 try {
 	await server.listen();
 	await mkdir(screenshots, { recursive: true, mode: 0o700 });
-	browser = await chromium.launch({ ...(process.env.TT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.TT_CHROMIUM_EXECUTABLE } : {}) });
+	browser = await chromium.launch({ chromiumSandbox: true, ...(process.env.TT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.TT_CHROMIUM_EXECUTABLE } : {}) });
 	for (const [profile, viewport] of Object.entries({ desktop: { width: 1280, height: 840 }, mobile: { width: 390, height: 844 } })) {
 		const context = await browser.newContext({ viewport, isMobile: profile === 'mobile', hasTouch: profile === 'mobile' });
 		try { await exercise(context, profile); }
@@ -63,11 +63,11 @@ async function exercise(context, profile) {
 	const errors = [];
 	const calls = new Map();
 	page.on('pageerror', (error) => errors.push(error.message));
-	await page.addInitScript(() => {
+	const installSdk = () => {
 		window.fixtureMaps = { created: 0, removed: 0 };
 		window.mapboxgl = {
 			Map: class {
-				constructor({ container }) { this.container = container; window.fixtureMaps.created++; }
+				constructor({ container }) { if (!(container instanceof window.HTMLElement)) throw new Error('Map host belongs to another document'); this.container = container; window.fixtureMaps.created++; }
 				addControl() {}
 				on(event, callback) { if (event === 'load') queueMicrotask(callback); }
 				fitBounds() {}
@@ -82,12 +82,18 @@ async function exercise(context, profile) {
 				isEmpty() { return false; }
 			},
 			Marker: class {
-				constructor({ element }) { this.element = element; }
+				constructor({ element }) {
+					if (!(element instanceof window.HTMLElement)) throw new Error('Marker belongs to another document');
+					this.element = element;
+					element.setAttribute('role', 'img');
+					element.setAttribute('aria-label', 'SDK marker');
+					element.setAttribute('tabindex', '0');
+				}
 				setLngLat([longitude]) { this.longitude = longitude; return this; }
 				addTo(map) {
 					this.element.style.position = 'absolute';
-					this.element.style.left = '12%';
-					this.element.style.top = this.longitude > 144.96 ? '54%' : '24%';
+					this.element.style.left = '8%';
+					this.element.style.top = this.longitude > 144.96 ? '56%' : '8%';
 					map.container.append(this.element);
 					return this;
 				}
@@ -95,9 +101,16 @@ async function exercise(context, profile) {
 				remove() { this.element.remove(); }
 			}
 		};
-	});
+	};
+
+	const sdkScript = '(' + installSdk.toString() + ')();';
+	await page.addInitScript(code => { if (window === window.top) window.eval(code); }, sdkScript);
+	await page.route(origin + '/vendor/mapbox-gl/**/mapbox-gl.js', route => route.fulfill({ contentType: 'text/javascript', body: sdkScript }));
+	await page.route(origin + '/vendor/mapbox-gl/**/mapbox-gl.css', route => route.fulfill({
+		contentType: 'text/css', body: '[aria-label="Composed fixture map"] { position: relative; background: #c8ded5 }'
+	}));
 	await page.route(origin + '/.well-known/thingtime-capabilities.json', route => route.fulfill({ json: {
-		schemaVersion: 1, origin, features: { 'api.maps': { version: '1.0.0' }, 'api.attachment-content': { version: '1.12.0' }, 'api.actions-run': { version: '1.37.0' } }
+		schemaVersion: 1, origin, features: { 'api.maps': { version: '1.0.0' }, 'api.webpages-resolve': { version: '1.10.0' }, 'api.attachment-content': { version: '1.12.0' }, 'api.actions-run': { version: '1.39.0' } }
 	} }));
 	await page.route(origin + '/api/v1/maps', route => {
 		assert.equal(route.request().postDataJSON().operation, 'browser-config');
@@ -119,7 +132,7 @@ async function exercise(context, profile) {
 		let result;
 		if (action === 'fixture-favourites') {
 			result = { items: [
-				{ id: 'fixture-quay', coordinates: [144.95, -37.81], crystal: { title: 'Copper Quay', markerIcon: '★', markerLabelMode: 'both', markerLabel: 'Coffee and a river walk', markerIcons: ['✦', '☕'], markerAvatarAttachmentId: 'fixture-avatar' } },
+				{ id: 'fixture-quay', component: 'other-component', renderComponent: 'other-component', coordinates: [144.95, -37.81], crystal: { title: 'Copper Quay', markerIcon: '★', markerLabelMode: 'both', markerLabel: 'Coffee and a river walk', markerIcons: ['✦', '☕'], markerAvatarAttachmentId: 'fixture-avatar' } },
 				{ id: 'fixture-fern', coordinates: [144.97, -37.82], crystal: { title: 'Fern Library', markerLabelMode: 'title' } }
 			] };
 		} else if (action === 'fixture-search') {
@@ -268,8 +281,9 @@ async function exercise(context, profile) {
 		assert.deepEqual(await page.evaluate(() => window.fixtureMaps), { created: 2, removed: 1 });
 		await page.getByRole('button', { name: 'Open a deep link' }).click();
 		await page.waitForURL('**?favouriteId=fixture-fern');
+		await exerciseComposed(page, profile);
 		assert.deepEqual(errors, []);
-		console.log(profile + ' marker, details, search, list, draft, focus, manual refresh and navigation passed');
+		console.log(profile + ' legacy and composed marker, details, search, list, draft, focus, manual refresh and navigation passed');
 	} catch (error) {
 		releaseSlowDetail();
 		releaseSlowSuggestion();
@@ -277,4 +291,88 @@ async function exercise(context, profile) {
 		console.error(profile, { errors, text: (await page.locator('body').innerText()).slice(0, 700) });
 		throw error;
 	}
+}
+
+
+async function exerciseComposed(page, profile) {
+	await page.getByRole('button', { name: 'Open composed marker fixture' }).click();
+	const map = page.getByRole('region', { name: 'Composed fixture map' });
+	const quay = map.getByRole('button', { name: 'Saved · Copper Quay' });
+	const fern = map.getByRole('button', { name: 'Saved · Fern Library' });
+	const quayDraft = map.getByRole('textbox', { name: 'Draft Copper Quay' });
+	const fernDraft = map.getByRole('textbox', { name: 'Draft Fern Library' });
+	await quay.waitFor();
+	await fern.waitFor();
+	assert.equal(await map.getByText('Row: Coffee and a river walk', { exact: true }).count(), 1);
+	assert.equal(await page.getByText('Unexpected row-selected component', { exact: true }).count(), 0);
+	const anchors = map.locator('[data-tt-map-point]');
+	assert.equal(await anchors.count(), 2);
+	assert.deepEqual(await anchors.evaluateAll(nodes => nodes.map(node => [node.getAttribute('role'), node.getAttribute('aria-label'), node.getAttribute('tabindex')])), [
+		[null, null, null], [null, null, null]
+	]);
+	await quayDraft.fill('Composed fixture draft');
+	assert.equal(await fernDraft.inputValue(), '');
+	const detailScroll = page.getByLabel('Fixture detail scroll');
+	await detailScroll.evaluate(node => { node.scrollTop = node.scrollHeight; });
+	await quay.focus();
+	await quay.press('Enter');
+	const quayDetail = page.getByText('Selected marker: fixture-quay', { exact: true });
+	await quayDetail.waitFor();
+	assert.equal(await quay.getAttribute('aria-pressed'), 'true');
+	assert.equal(await quay.evaluate(node => node === document.activeElement), true);
+	assert.equal(await quayDraft.inputValue(), 'Composed fixture draft');
+	assert.ok(await detailScroll.evaluate(node => node.scrollTop < 40), 'new selection reveals the detail in its own scrolling region');
+	await detailScroll.evaluate(node => { node.scrollTop = node.scrollHeight; });
+	const bottom = await detailScroll.evaluate(node => node.scrollTop);
+	await quay.press('Enter');
+	assert.equal(await detailScroll.evaluate(node => node.scrollTop), bottom, 'same selection does not move the scroll container again');
+	assert.equal(await quay.evaluate(node => node === document.activeElement), true);
+	await fern.click();
+	await page.getByText('Selected marker: fixture-fern', { exact: true }).waitFor();
+	assert.equal(await quayDraft.inputValue(), 'Composed fixture draft');
+	assert.equal(await fernDraft.inputValue(), '');
+	assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+	await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+	await page.screenshot({ path: join(screenshots, profile + '-composed.png'), fullPage: true });
+
+	await page.getByRole('button', { name: 'Remove fixture markers' }).click();
+	await anchors.first().waitFor({ state: 'detached' });
+	await page.getByRole('button', { name: 'Restore fixture markers' }).click();
+	await quayDraft.waitFor();
+	assert.equal(await quayDraft.inputValue(), '', 'removed markers do not retain abandoned input');
+	await quayDraft.fill('Draft before identity change');
+	const mapCount = await page.evaluate(() => window.fixtureMaps.created);
+	await page.getByRole('button', { name: 'Switch fixture database' }).click();
+	await page.waitForFunction(count => window.fixtureMaps.created > count, mapCount);
+	await quayDraft.waitFor();
+	assert.equal(await quayDraft.inputValue(), '', 'a data-plane identity change clears protected drafts');
+
+	await page.getByRole('button', { name: 'Edit marker composition' }).click();
+	const template = page.getByLabel('Map marker template');
+	await template.getByText('Authored marker note', { exact: true }).click();
+	await page.getByText('Selected block: marker-note', { exact: true }).waitFor();
+	await page.getByRole('textbox', { name: 'Edit selected marker note' }).fill('Updated marker note');
+	await template.getByText('Updated marker note', { exact: true }).waitFor();
+	await template.getByRole('button', { name: 'Saved ·' }).click();
+	await page.getByText('Selected block: marker-content', { exact: true }).waitFor();
+	await page.getByRole('button', { name: 'View marker composition' }).click();
+	await quay.waitFor();
+	assert.equal(await map.getByText('Updated marker note', { exact: true }).count(), 2);
+
+	const topMaps = await page.evaluate(() => window.fixtureMaps.created);
+	await page.getByRole('button', { name: 'Render map in viewport iframe' }).click();
+	const frame = page.frameLocator('iframe[title="Responsive page preview"]');
+	const framedMap = frame.getByRole('region', { name: 'Composed fixture map' });
+	const framedQuay = framedMap.getByRole('button', { name: 'Saved · Copper Quay' });
+	await framedQuay.waitFor();
+	assert.equal(await framedMap.evaluate(node => node.ownerDocument.defaultView.fixtureMaps.created), 1);
+	assert.equal(await framedMap.evaluate(node => node.ownerDocument.defaultView.innerWidth), 390);
+	assert.equal(await page.evaluate(() => window.fixtureMaps.created), topMaps);
+	assert.equal(await framedMap.evaluate(node => node.ownerDocument.querySelectorAll('link[data-tt-mapbox-css]').length), 1);
+	assert.equal(await framedQuay.evaluate(node => node instanceof node.ownerDocument.defaultView.HTMLElement), true);
+	await framedQuay.focus();
+	await framedQuay.press('Enter');
+	await page.getByText('Selected marker: fixture-quay', { exact: true }).waitFor();
+	assert.equal(await framedQuay.evaluate(node => node === node.ownerDocument.activeElement), true);
+	await page.screenshot({ path: join(screenshots, profile + '-iframe.png'), fullPage: true });
 }

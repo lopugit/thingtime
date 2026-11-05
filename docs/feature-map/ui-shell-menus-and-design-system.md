@@ -1,5 +1,26 @@
 # UI shell, menus and design system
 
+## Editable map markers and connector settings
+
+Saved `tt-mapbox` Webpage elements may contain ordinary editable child blocks,
+including literal saved Component references. The existing resolver and sharing
+traversal authorize those references. Each marker receives `point` (normalized
+geometry/appearance/selection) and `item` (the authorized source row); the SDK
+positions stable neutral hosts while normal Builder rendering owns controls,
+layout and accessible names. Editing reveals the child template. An authored
+`data-tt-reveal` value reveals that element when its bound selection changes,
+without navigation or stealing focus. No private app definition is bundled.
+Clients authoring this composition require `api.things` 1.48.0,
+`api.things-update` 1.17.0 and `api.webpages-resolve` 1.10.0.
+
+Settings → Connections → Thingtime connector confirmations
+(`#connector-confirmations`) uses SettingsDocumentHost with independently editable labels, native inputs and
+status blocks; TransientBlockHost binds state and actions. Ten individual
+checkboxes and an all/mixed checkbox control only Thingtime prompts. Account
+changes clear previous settings; writes preserve content and use one inline
+status/error. Authentication, scopes, revisions and host approvals remain
+independent. Run the focused connector tests and desktop/mobile browser fixture.
+
 Saved map workspaces use the shared `$ui` query action with `scope: 'page'`
 for dynamic tabs, filtering and details while retaining URL deep-link defaults.
 `webpageRuntime.tsx` clears transient query and form state at actual navigation or
