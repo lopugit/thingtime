@@ -393,3 +393,14 @@ owning document. `Builder/authoredControlOwnership.ts` follows actual same-origi
 iframe ancestry for React portal controls while refusing unrelated documents.
 The real API regression is `npm --prefix remix run test:authored-controls:browser`
 (requires a built node-server handler, mongod and isolated Playwright/Chromium).
+
+Authored `tt-menu` lifetime follows its owned popup/target DOM elements, not
+React children reference identity. Same-record source refreshes reconcile
+conditional triggers and item roles without hiding the popup or moving focus.
+A payload-free local activation acknowledgement in
+`Builder/componentControlActivation.ts` from the existing Action handler dismisses the owning menu only after native validity and awaited rich
+snapshots succeed. Native submit dismisses on its valid submit event. Invalid
+fields retain their menu and validation focus; click propagation is irrelevant.
+Actual slot replacement, disable and unmount end the binding. `scripts/routes-map.browser.mjs` covers same-popup refresh, conditional controls, replacement/disable,
+keyboard focus and iframe ownership; the real API authored-control fixture
+retains ordinary/rich form submission coverage.

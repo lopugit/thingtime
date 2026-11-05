@@ -211,10 +211,10 @@ Final source checks include TypeScript, 150 capability/client contracts,
 (341 + 31). Scoped lint has zero errors; inherited hook/mixed-operator warnings
 remain reported in the logs. No new native Post publication was performed.
 
-Graph retention temporarily preserves the three complete baseline variants
-inherited from main plus this PR's current output (four archives total), to avoid
-generated rename conflicts during CI. Exactly one snapshot is active; the
-project default and global policy are unchanged. The
+Graph retention temporarily preserves the exact complete baseline set from the
+pinned main integration plus this PR's current output, to avoid generated rename
+conflicts during CI. Exactly one snapshot is active; the finite archive count is
+recorded in task evidence. The project default and global policy are unchanged. The
 final refresh is structural only, with the semantic coverage limitation above.
 
 The final read-only main refresh contained only native-sync fixture and
@@ -222,3 +222,10 @@ Electron development-process lifecycle changes. They were integrated without
 changing sharing runtime; the focused imported suites pass 16 fixture cases
 and 20 local-runtime cases. The accepted UI/Data/native evidence remains
 applicable; no additional publication or broad acceptance run was needed.
+
+The subsequent menu-refresh base fix changes only authored-menu lifecycle and
+control-activation notification. Sharing callbacks/content negotiation compose
+without source conflicts. Focused ownership/form/menu-position/Action-request
+checks pass 17 cases, and integrated TypeScript passes. No sharing data path,
+Editor layout or capability contract changes, so accepted Data/UI/native
+evidence is reused without another publication.

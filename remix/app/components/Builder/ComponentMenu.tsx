@@ -3,6 +3,7 @@ import { ComponentStyle } from './ComponentStyle';
 import { ComponentDialogHost, NativeControlsEnabled } from './NativeComponentControls';
 import type { ComponentStyleRule } from './componentStyleRules';
 import { menuPosition, setMenuDisplay } from './componentMenuPosition';
+import { COMPONENT_CONTROL_ACTIVATED } from './componentControlActivation';
 
 const menuStyles: ComponentStyleRule[] = [
 	{ selector: ':where(.tt-native-menu-content)', declarations: { padding: '8px 0', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '6px', background: 'var(--tt-card, white)', color: 'inherit', 'min-width': '180px', 'max-width': 'calc(100vw - 24px)', 'max-height': 'min(480px, 90dvh)', overflow: 'auto', 'box-shadow': '0 10px 15px -3px rgb(0 0 0 / .1), 0 4px 6px -4px rgb(0 0 0 / .1)' } },
@@ -27,28 +28,44 @@ export function ComponentMenu({ name, triggerContent, className, contentClassNam
 	const restore = React.useRef<HTMLElement | null>(null);
 	const id = React.useId();
 	const [open, setOpen] = React.useState(false);
+	const [elements, setElements] = React.useState<{ owner: HTMLDivElement; popup: HTMLElement | null; target: HTMLElement | null; document: Document } | null>(null);
+	const reconcile = React.useRef<(() => void) | null>(null);
 	const [dialogHost, setDialogHost] = React.useState<HTMLDivElement | null>(null);
 	const host = React.useMemo(() => dialogHost ? { element: dialogHost, restoreFocus: () => restore.current?.focus() } : null, [dialogHost]);
 	const label = typeof name === 'string' && name.trim() ? name.slice(0, 200) : 'Open menu';
 	const context = contextMenu === true;
+	// React children are fresh values whenever a surrounding source reconciles.
+	// Native popup lifetime belongs to the actual owned DOM slots instead.
 	React.useLayoutEffect(() => {
 		const owner = root.current;
+		if (!owner) return;
+		const slot = (name: string) => Array.from(owner.querySelectorAll<HTMLElement>(`[data-tt-menu-slot="${name}"]`))
+			.find(element => element.closest('[data-tt-native-menu]') === owner) ?? null;
+		const popup = context ? slot('content') : content.current;
+		const target = context ? slot('target') : trigger.current;
+		const document = owner.ownerDocument;
+		setElements(previous => previous?.owner === owner && previous.popup === popup && previous.target === target && previous.document === document
+			? previous : { owner, popup, target, document });
+	}, [children, context]);
+	React.useLayoutEffect(() => {
+		const owner = elements?.owner;
 		if (!owner) return;
 		const ownerDocument = owner.ownerDocument;
 		const view = ownerDocument.defaultView;
 		if (!view) return;
 		// A nested menu owns its own slots, controls and events.
 		const owned = (element: Element) => element.closest('[data-tt-native-menu]') === owner;
-		const slot = (name: string) => Array.from(owner.querySelectorAll<HTMLElement>(`[data-tt-menu-slot="${name}"]`)).find(owned);
-		const popup = context ? slot('content') : content.current;
-		const target = context ? slot('target') : trigger.current;
-		const buttons = context ? Array.from(owner.querySelectorAll<HTMLElement>('[data-tt-menu-trigger="true"]')).filter(owned) : trigger.current ? [trigger.current] : [];
+		const popup = elements.popup;
+		const target = elements.target;
+		let buttons: HTMLElement[] = [];
 		if (!popup || !target) return;
 		const cleanups: (() => void)[] = [];
-		const attribute = (element: HTMLElement, key: string, value: string | null) => {
+		const buttonCleanups = new Map<HTMLElement, (() => void)[]>();
+		const itemCleanups = new Map<HTMLElement, (() => void)[]>();
+		const attribute = (element: HTMLElement, key: string, value: string | null, restoreInto = cleanups) => {
 			const previous = element.getAttribute(key);
 			if (value === null) element.removeAttribute(key); else element.setAttribute(key, value);
-			cleanups.push(() => { if (previous === null) element.removeAttribute(key); else element.setAttribute(key, previous); });
+			restoreInto.push(() => { if (previous === null) element.removeAttribute(key); else element.setAttribute(key, previous); });
 		};
 		attribute(popup, 'popover', 'auto');
 		attribute(popup, 'id', id);
@@ -63,16 +80,39 @@ export function ComponentMenu({ name, triggerContent, className, contentClassNam
 		setMenuDisplay(popup.style, authoredDisplay, false);
 		Object.assign(popup.style, { position: 'fixed', inset: 'auto', margin: '0', maxWidth: 'calc(100vw - 24px)', maxHeight: 'calc(100dvh - 24px)' });
 		cleanups.push(() => { if (previousStyle === null) popup.removeAttribute('style'); else popup.setAttribute('style', previousStyle); });
-		buttons.forEach((button) => {
-			attribute(button, 'aria-haspopup', 'menu'); attribute(button, 'aria-controls', id); attribute(button, 'aria-expanded', 'false');
-			attribute(button, 'aria-disabled', !enabled || disabled === true ? 'true' : button.getAttribute('aria-disabled'));
-		});
 		let anchor: { left: number; right: number; top: number; bottom: number } | null = null;
 		let search = { text: '', time: 0 };
 		const isOpen = () => popup.matches(':popover-open');
+		const refreshButtons = () => {
+			const next = context ? Array.from(owner.querySelectorAll<HTMLElement>('[data-tt-menu-trigger="true"]')).filter(owned) : trigger.current ? [trigger.current] : [];
+			for (const [button, undo] of buttonCleanups) if (!next.includes(button)) {
+				undo.reverse().forEach(cleanup => cleanup()); buttonCleanups.delete(button);
+			}
+			for (const button of next) {
+				if (!buttonCleanups.has(button)) {
+					const undo: (() => void)[] = [];
+					attribute(button, 'aria-haspopup', 'menu', undo); attribute(button, 'aria-controls', id, undo); attribute(button, 'aria-expanded', 'false', undo);
+					attribute(button, 'aria-disabled', !enabled || disabled === true ? 'true' : button.getAttribute('aria-disabled'), undo);
+					buttonCleanups.set(button, undo);
+				}
+				button.setAttribute('aria-expanded', String(isOpen()));
+			}
+			buttons = next;
+		};
 		const choices = () => Array.from(popup.querySelectorAll<HTMLElement>('button, a[href], [role="menuitem"]'))
 			.filter((item) => owned(item) && !item.closest('[data-tt-form-field], [hidden], [inert]') && !item.matches(':disabled, [aria-disabled="true"]') && item.getClientRects().length > 0);
-		const sync = () => { const value = isOpen(); setMenuDisplay(popup.style, authoredDisplay, value); setOpen(value); buttons.forEach((button) => button.setAttribute('aria-expanded', String(value))); };
+		const refreshItems = () => {
+			const next = isOpen() ? choices() : [];
+			for (const [item, undo] of itemCleanups) if (!next.includes(item)) {
+				undo.reverse().forEach(cleanup => cleanup()); itemCleanups.delete(item);
+			}
+			for (const item of next) if (!itemCleanups.has(item) && item.getAttribute('role') !== 'menuitem') {
+				const undo: (() => void)[] = []; attribute(item, 'role', 'menuitem', undo); itemCleanups.set(item, undo);
+			}
+		};
+		const sync = () => {
+			const value = isOpen(); setMenuDisplay(popup.style, authoredDisplay, value); setOpen(value); refreshButtons(); refreshItems();
+		};
 		const close = (focus = false) => { if (isOpen()) popup.hidePopover(); sync(); if (focus && restore.current?.isConnected) restore.current.focus(); };
 		const place = () => {
 			if (!isOpen()) return;
@@ -87,7 +127,6 @@ export function ComponentMenu({ name, triggerContent, className, contentClassNam
 			anchor = point ? { left: point.x, right: point.x, top: point.y, bottom: point.y } : source.getBoundingClientRect();
 			if (!isOpen()) { setMenuDisplay(popup.style, authoredDisplay, true); popup.showPopover(); }
 			sync();
-			choices().forEach((item) => { if (item.getAttribute('role') !== 'menuitem') attribute(item, 'role', 'menuitem'); });
 			place(); const items = choices(); (last ? items.at(-1) : items[0])?.focus();
 		};
 		const eventElement = (event: Event) => event.target instanceof view.Element && owned(event.target) ? event.target : null;
@@ -104,7 +143,22 @@ export function ComponentMenu({ name, triggerContent, className, contentClassNam
 			if (button) { event.preventDefault(); event.stopPropagation(); if (isOpen()) close(true); else show(button); return; }
 			if (element.closest('[data-tt-form-field]')) return;
 			const item = element.closest<HTMLElement>('button, a[href], [role="menuitem"]');
-			if (item && popup.contains(item) && !item.matches(':disabled, [aria-disabled="true"]')) close();
+			if (item && popup.contains(item) && !item.matches(':disabled, [aria-disabled="true"]')) {
+				// Delegated Actions acknowledge their validated snapshot separately.
+				if (item.closest('[data-tt-action]')) return;
+				// Native submit validation happens after click dispatch. Only an
+				// actual submit event may dismiss that form's menu.
+				if (item instanceof view.HTMLButtonElement && item.type === 'submit' && item.form) return;
+				close();
+			}
+		};
+		const activated = (event: Event) => {
+			const element = eventElement(event);
+			if (element && popup.contains(element) && !element.closest('[data-tt-form-field]')) close();
+		};
+		const submitted = (event: Event) => {
+			const element = eventElement(event);
+			if (element && popup.contains(element)) close();
 		};
 		const keydown = (event: KeyboardEvent) => {
 			const element = eventElement(event); if (!element) return;
@@ -133,15 +187,28 @@ export function ComponentMenu({ name, triggerContent, className, contentClassNam
 		const lifecycle = () => close();
 		const beforeToggle = (event: Event) => setMenuDisplay(popup.style, authoredDisplay, (event as ToggleEvent).newState === 'open');
 		owner.addEventListener('contextmenu', contextEvent); owner.addEventListener('click', click); owner.addEventListener('keydown', keydown);
+		owner.addEventListener(COMPONENT_CONTROL_ACTIVATED, activated); owner.addEventListener('submit', submitted);
 		popup.addEventListener('beforetoggle', beforeToggle); popup.addEventListener('toggle', sync); view.addEventListener('resize', place); view.addEventListener('scroll', place, true); view.addEventListener('pagehide', lifecycle);
 		const visibility = () => { if (ownerDocument.hidden) close(); }; ownerDocument.addEventListener('visibilitychange', visibility);
 		const observer = new view.ResizeObserver(place); observer.observe(popup);
+		const refresh = () => {
+			if (!popup.isConnected || !target.isConnected) return;
+			if (isOpen() && restore.current && !restore.current.isConnected) close();
+			else { sync(); place(); }
+		};
+		reconcile.current = refresh;
+		refresh();
 		return () => {
+			if (reconcile.current === refresh) reconcile.current = null;
 			close(); observer.disconnect(); owner.removeEventListener('contextmenu', contextEvent); owner.removeEventListener('click', click); owner.removeEventListener('keydown', keydown);
 			popup.removeEventListener('beforetoggle', beforeToggle); popup.removeEventListener('toggle', sync); view.removeEventListener('resize', place); view.removeEventListener('scroll', place, true); view.removeEventListener('pagehide', lifecycle); ownerDocument.removeEventListener('visibilitychange', visibility);
+			owner.removeEventListener(COMPONENT_CONTROL_ACTIVATED, activated); owner.removeEventListener('submit', submitted);
 			cleanups.reverse().forEach((cleanup) => cleanup());
+			for (const undo of buttonCleanups.values()) undo.reverse().forEach(cleanup => cleanup());
+			for (const undo of itemCleanups.values()) undo.reverse().forEach(cleanup => cleanup());
 		};
-	}, [context, enabled, disabled, children, id, label, contentClassName]);
+	}, [elements, context, enabled, disabled, id, label, contentClassName]);
+	React.useLayoutEffect(() => { reconcile.current?.(); }, [children]);
 	return <ComponentStyle rules={menuStyles}>
 		<div ref={root} data-tt-native-menu="" className={context && typeof className === 'string' ? className : undefined} style={{ display: 'contents' }}>
 			<ComponentDialogHost.Provider value={host}>
