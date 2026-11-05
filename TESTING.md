@@ -14311,6 +14311,26 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ### Mac strict inventory job
 
+- [ ] On desktop and narrow mobile, expand a folder, open a connection draft,
+  type without saving and keep input focus while an automatic check starts and
+  finishes. The same input, expansion, scroll anchor and unsaved text must stay
+  mounted. Save remains disabled during an active run and the saved connection
+  stays unchanged. Retry automatic sync must also retain the settings subtree.
+- [ ] With an existing resource measurement, refresh policy/status without a
+  new sample: retain readings with an explicit last-measured label. Idle CPU
+  and memory must never pretend to be current. A cold start stays unknown;
+  account/origin/device authority changes clear prior protected measurements.
+  Run `node remix/scripts/test-sync-continuity-ui.mjs` and
+  `node remix/scripts/test-device-sync-resources-ui.mjs` for isolated browser
+  regressions; verify the installed native path separately.
+- [ ] Before publishing a signed Mac release, build the disposable Rust indexer
+  fixture with `cargo build --locked --manifest-path filesystem-indexer/Cargo.toml
+  -p commander-indexer`, set `THINGTIME_TEST_COMMANDER_INDEXER` to that exact
+  executable, then run `swift test --package-path macos/ThingtimeNode` from a
+  clean SwiftPM scratch directory. The executable target must compile when
+  imported by its tests; its `@main` entry cannot live in Swift's special
+  `main.swift` file. The photo-original tests must use the isolated fixture
+  index database rather than depend on an installed app helper.
 - [ ] During a signed Mac transfer long enough to sample, open **Total Sync &
   Backup usage**. Verify positive directional throughput while a file is still
   running, that the configured limits do not change during refresh, and that

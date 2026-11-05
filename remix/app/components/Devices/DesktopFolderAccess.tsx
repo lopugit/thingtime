@@ -1,13 +1,12 @@
 import { DeviceSyncResources } from './DeviceSyncResources';
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
-import { Box, Button, FormControl, FormLabel, Select, Text } from '@chakra-ui/react';
+import { Box, Button, FormControl, FormLabel, Select, Spinner, Text } from '@chakra-ui/react';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useDataPlane } from '~/hooks/useDataPlane';
 import { rootIdentity } from '~/utils/rootIdentity';
 import { getElectronBridge } from '~/utils/electronBridge';
 import { createDesktopFolderHost, type FolderHost } from '~/fileSync/desktopFolders.client';
 import { MobileFolderAccess } from './MobileFolderAccess';
-import { nativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
 
 /** Local status supplies candidates only. The signed host and paired node must
  * both verify the active account before these controls can access any folder. */
@@ -79,16 +78,10 @@ function DeviceFolders({ ownerId, candidates, generation, active, showResourceSu
 	);
 }
 function VerifiedFolders({ ownerId, deviceId, generation, active }: { ownerId: string; deviceId: string; generation: number; active: boolean }) {
-	const task = useSyncExternalStore(nativeSyncTasks.subscribe, nativeSyncTasks.read, nativeSyncTasks.read);
-	let taskHost: FolderHost | undefined;
-	if (task?.scope.ownerId === ownerId && task.scope.deviceId === deviceId && task.scope.dataPlane === 'home') {
-		try { task.host?.assertCurrent(); taskHost = task.host; } catch { /* Reauthorize after stop or identity change. */ }
-	}
 	const [host, setHost] = useState<FolderHost>(),
 		[error, setError] = useState(''),
 		[attempt, setAttempt] = useState(0);
 	useEffect(() => {
-		if (taskHost) { setHost(undefined); return; }
 		const controller = new AbortController(),
 			bridge = getElectronBridge();
 		setError('');
@@ -112,12 +105,15 @@ function VerifiedFolders({ ownerId, deviceId, generation, active }: { ownerId: s
 				if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Folder access is unavailable.');
 			});
 		return () => controller.abort();
-	}, [ownerId, deviceId, generation, attempt, taskHost]);
-	if (taskHost || host) return <MobileFolderAccess active={active} ownerId={ownerId} deviceId={deviceId} host={taskHost ?? host} />;
+	}, [ownerId, deviceId, generation, attempt]);
+	// Settings own a stable, independently verified host. Borrowing a task host
+	// ties the entire editor tree to that run's abort signal and unmounts cards
+	// when the run finishes, even though account/origin authority is unchanged.
+	if (host) return <MobileFolderAccess active={active} ownerId={ownerId} deviceId={deviceId} host={host} />;
 	return (
 		<Box marginTop={2}>
 			<Text fontSize="12px" role={error ? 'alert' : undefined}>
-				{error || 'Verifying this Mac’s account connection…'}
+				{error || <Spinner as="span" size="xs" role="status" aria-label="Verifying this Mac’s account connection" />}
 			</Text>
 			{error ? (
 				<Button marginTop={2} size="sm" variant="outline" onClick={() => setAttempt((value) => value + 1)}>
