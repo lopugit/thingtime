@@ -1,3 +1,4 @@
+import { attachmentSourcePreview, isAttachmentSourceFile, readAttachmentSlice } from './attachmentFileSource';
 import { attachmentCountLimit } from '~/schemas/attachmentLimits';
 import { withAttachmentRateLimitRetry } from './attachmentRateLimitRetry';
 import { HeicImageError, isHeicImage, prepareHeicImage } from './heicImage';
@@ -192,7 +193,9 @@ export const useAttachmentUploads = (
 	);
 	const [uploads, setUploads] = React.useState<ComposerAttachmentUpload[]>(seedEntries);
 	const uploadsRef = React.useRef(uploads);
-	uploadsRef.current = uploads;
+	// Mutators advance this queue synchronously before publishing React state.
+	// A concurrent render may observe an older state snapshot; copying that
+	// snapshot back here would resurrect Waiting/Verifying after completion.
 	const mountedRef = React.useRef(true);
 	const ownerRef = React.useRef(ownerId ?? null);
 	const attemptsRef = React.useRef(new Map<string, number>(seedEntries.map((entry) => [entry.localId, 1])));
@@ -279,7 +282,13 @@ export const useAttachmentUploads = (
 			let partSizeBytes = canResume ? savedPlan.partSizeBytes : 0;
 			let partCount = canResume ? savedPlan.partCount : 0;
 			try {
-				if (convertHeic && !prepareLocalImage && isHeicImage(file)) {
+				if (isAttachmentSourceFile(file) && !existing?.previewUrl) {
+					// A native preview is a bounded thumbnail, never the original file.
+					const preview = await attachmentSourcePreview(file).catch(() => null);
+					if (!isCurrent(localId, attempt) || controller.signal.aborted) return;
+					if (preview) patchUpload(localId, attempt, { previewUrl: URL.createObjectURL(preview) });
+				}
+				if (convertHeic && !prepareLocalImage && !isAttachmentSourceFile(file) && isHeicImage(file)) {
 					file = await prepareHeicImage(file);
 					if (!isCurrent(localId, attempt) || controller.signal.aborted) return;
 					if (maxBytesPerFile && file.size > maxBytesPerFile)
@@ -321,7 +330,7 @@ export const useAttachmentUploads = (
 					uploadId = typeof prepared?.id === 'string' ? prepared.id : null;
 					partSizeBytes = Number(prepared?.partSizeBytes);
 					partCount = Number(prepared?.partCount);
-					const readyEmptyFile = purpose === 'file' && file.size === 0 && prepared?.state === 'ready' && partCount === 0;
+					const readyEmptyFile = file.size === 0 && prepared?.state === 'ready' && partCount === 0;
 					if (!uploadId || !Number.isSafeInteger(partSizeBytes) || partSizeBytes <= 0 || !Number.isSafeInteger(partCount) || (partCount <= 0 && !readyEmptyFile)) {
 						throw new Error('invalid upload plan');
 					}
@@ -348,7 +357,7 @@ export const useAttachmentUploads = (
 				if (desktop) {
 					for (let partNumber = 1; partNumber <= partCount; partNumber++) {
 						const range = multipartPartRange(partNumber, partSizeBytes, file.size);
-						const body = file.slice(range.start, range.end, '');
+						const body = await readAttachmentSlice(file, range.start, range.end, controller.signal);
 						await desktop.put(uploadId!, partNumber, body, controller.signal, reportProgress);
 						committedBytes += body.size;
 					}
@@ -360,7 +369,7 @@ export const useAttachmentUploads = (
 						for (let partNumber = first; partNumber <= last; partNumber += 1) {
 							if (!isCurrent(localId, attempt)) return;
 							const range = multipartPartRange(partNumber, partSizeBytes, file.size);
-							const body = file.slice(range.start, range.end, '');
+							const body = await readAttachmentSlice(file, range.start, range.end, controller.signal);
 							bodies.set(partNumber, body);
 							requested.push({ partNumber, checksumSha256: await sha256Base64(body) });
 						}
@@ -473,7 +482,7 @@ export const useAttachmentUploads = (
 			const next = accepted.map((file) => {
 				const localId = localUploadId();
 				const mediaKind = localFileMediaKind(file);
-				const previewUrl = !isHeicImage(file) && (mediaKind === 'image' || mediaKind === 'video') ? URL.createObjectURL(file) : null;
+				const previewUrl = !isAttachmentSourceFile(file) && !isHeicImage(file) && (mediaKind === 'image' || mediaKind === 'video') ? URL.createObjectURL(file) : null;
 				attemptsRef.current.set(localId, 1);
 				return {
 					purpose: purposeForFileRef.current?.(file) ?? uploadPurpose,
@@ -735,6 +744,12 @@ export const useAttachmentUploads = (
 		const uploadPlans = uploadPlansRef.current;
 		return () => {
 			mountedRef.current = false;
+			// React StrictMode replays this effect in the same turn. A ref-based
+			// incoming selection may already be uploading; abort only a real
+			// unmount, after allowing that same instance to re-establish its effect.
+			// isCurrent is false immediately; owner changes still abort synchronously.
+			queueMicrotask(() => {
+			if (mountedRef.current) return;
 			queueRef.current = [];
 			// Teardown intentionally reads the latest upload snapshot, not the one
 			// captured when this mount-only effect was installed.
@@ -750,6 +765,7 @@ export const useAttachmentUploads = (
 			activeRequests.clear();
 			activeXhrs.clear();
 			uploadPlans.clear();
+			});
 		};
 	}, [cleanupUpload]);
 

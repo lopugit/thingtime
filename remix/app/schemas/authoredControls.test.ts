@@ -34,3 +34,9 @@ test('new authored contract discovery is cycle-safe and requirements reject old 
 		assert.equal(capabilitySatisfies('2.0.0', minimum), false);
 	}
 });
+test('valid large shared arrays do not become function argument limits during discovery', () => {
+	const rows: unknown[] = Array(200_000).fill(0);
+	assert.equal(usesAuthoredControls({ rows }), false);
+	rows[0] = { tag: 'tt-rich-text' };
+	assert.equal(usesAuthoredControls({ rows }), true);
+});

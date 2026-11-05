@@ -1,5 +1,20 @@
 # API endpoints and capabilities
 
+## Incoming-share message compatibility
+
+`api.chats-messages` 1.3.0 accepts large purpose-matched attachment selections
+and message text without the old 25-item/4,000-character product ceilings.
+`api.chats-messages-edit` 1.1.0 removes the matching edit ceiling. Both public
+manifests derive these versions from `apiDocs.ts`; the Messenger client
+negotiates them before mutation. No new HTTP route or permission is introduced.
+Native sharing negotiates its own exact-origin `thingtimeShare` 1.x bridge.
+Zero-byte social files require upload-start 1.9.0 and upload-complete 1.7.0.
+Long shared Data text requires Things 1.50.0; updates, imports and the built-in
+schema descriptor publish compatible contracts 1.19.0, 1.13.0 and 1.2.0.
+Run `test:api-capabilities`, the attachment service tests, and the built-server
+incoming-share acceptance before release.
+
+
 ## Connector confirmations and large mutation plans
 
 `api.settings-connector-protections` 1.0.0 registers GET/POST
@@ -708,3 +723,30 @@ Large/deep editable Webpage capture is corrected by `api.things` 1.49.2,
 Timeline block traversal removes the hidden 1,200-block/24-level write and
 comparison limits; existing Component authorization and capture contracts remain.
 Both manifests derive these PATCH versions from the canonical endpoint registry.
+
+
+## Shared-content request transport
+
+Incoming sharing negotiates `api.things` 1.51.0, `api.things-update` 1.20.0,
+`api.things-comment` 1.11.0, `api.chats-messages` 1.4.0,
+`api.chats-messages-edit` 1.2.0, `api.attachment-uploads` 1.10.0,
+`api.attachment-annotate` 1.3.0, `api.attachment-link` 1.2.0 and `api.files`
+1.12.0. Both manifest generators derive these independent minors from apiDocs.
+The scoped shared-content JSON reader admits authorization/rate limits before
+streaming fatal UTF-8 decoding with no application body ceiling. Other control
+requests retain numeric budgets. Completion accepts only uploadId and enumerates
+parts server-side; presigning pages every part. See [incoming sharing](../incoming-sharing.md);
+run `test:shared-content`, `test:api-capabilities` and the isolated real-API
+`remix/scripts/shared-body-acceptance.mjs` harness.
+
+The merged shared-value Action contract is `api.actions-run` 1.42.0. The
+authored-controls branch independently used 1.41.0, so that origin alone must
+not satisfy clients requiring complete shared Data values. Both generators
+read the canonical version; shared-content Action clients require 1.42.0, while
+older authored-control-only minima remain valid for their narrower contract.
+
+`api.timeline` 1.19.2 corrects ordinary revision copy/reconstruction for valid
+broad content. Existing snapshot parts handle breadth beyond inline processing
+windows; no total-content node cap remains. Full-content checkout, merge,
+export and restore clients require this patch. Metadata reads retain their
+older minima. Run `test:timeline`; the wire/parts formats are unchanged.

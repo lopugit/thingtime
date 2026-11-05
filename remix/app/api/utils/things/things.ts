@@ -1,3 +1,5 @@
+import { relatedCommentPipeline, relatedInteractionPipeline, pagedThreadCounts, tallyRelatedUpdown, tallyRelatedPoll, type CountedPollVote, type CountedUpdown } from './relatedWindows';
+import { discussionAttachmentMap } from './discussionAttachments';
 import { builderThingUpdateKinds } from '../../../schemas/builderThing';
 import { ownerFileSyncUploadOrigin, type FileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { decodeDiscussionCursor, encodeDiscussionCursor, discussionCursorConfigured } from './discussionCursor';
@@ -69,7 +71,6 @@ import {
   COLLECTION_SCHEMA_VERSIONS,
   DEVICE_CONTROL_THINGTIME,
 	EXTERNAL_RESERVED_ID_PREFIX,
-  MAX_TEXT_CHARS,
   MESSENGER_THINGTIME,
 	MIGRATION_DIAGNOSTIC_ID_PREFIX,
   ERROR_LOG_ID_PREFIX, ERROR_LOG_THINGTIME, MONGODB_CONNECTION_SNAPSHOT_ID_PREFIX, MONGODB_CONNECTION_SNAPSHOT_THINGTIME,
@@ -92,12 +93,12 @@ import {
   UPDOWN_THINGTIME
 } from '~/schemas/registry';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
-import { pollShapeOfCrystal, tallyPollVotes, type PollVoteEntry, type PublicPollVotes } from './pollCore';
+import { pollShapeOfCrystal, type PublicPollVotes } from './pollCore';
 import { parseGeo, publicGeo, geoRadiusClause, type GeoLocation, type StoredGeoLocation } from '~/schemas/geo';
 import { rankSubspacePosts } from '../subspaces/subspaceCore';
 import { updownTalliesFor } from './updown';
 import type { DefaultAlgorithmId } from '~/components/Feed/defaultAlgorithms';
-import { emptyUpdownVotes, orderCommentPage, tallyUpdown, type CommentSort, type PublicUpdownVotes, type UpdownEntry } from './updownCore';
+import { emptyUpdownVotes, orderCommentPage, type CommentSort, type PublicUpdownVotes } from './updownCore';
 import {
 	assertSubspaceInteraction,
 	assertSubspacePosting,
@@ -728,10 +729,7 @@ export const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'p
 // back to every default circle, i.e. the opposite filter.
 export const REQUESTABLE_VISIBILITIES: PostVisibility[] = [...VISIBILITIES, 'hidden', 'custom'];
 
-const MAX_TAGS = 12;
-const MAX_TAG_CHARS = 40;
 const MAX_SHARE_ID_CHARS = 128;
-const MAX_COMMENTS_PER_POST = 500;
 // Reactions are open-vocabulary (any emoji / multi-emoji token), so bound them:
 // a post holds at most this many DISTINCT tokens, and one user contributes at
 // most this many reaction things per post.
@@ -1168,7 +1166,7 @@ export const withMatch = (base: Record<string, any>, ...clauses: Record<string, 
   return and.length > 1 ? { $and: and } : and[0] || {};
 };
 
-// The tag cap counts code points, never bisecting a surrogate pair, and lone
+// Tags retain complete code points, never bisecting a surrogate pair, and lone
 // surrogates are dropped — stored tags must be well-formed UTF-16 so the
 // client's encodeURIComponent on a stored tag can never throw during render.
 // NFC normalization keeps composed and decomposed spellings of one visible
@@ -1181,7 +1179,6 @@ const canonicalTag = (value: string): string =>
       const codePoint = char.codePointAt(0) ?? 0;
       return codePoint < 0xd800 || codePoint > 0xdfff;
     })
-    .slice(0, MAX_TAG_CHARS)
     .join('');
 
 const sanitizeTags = (value: unknown): string[] | Fail => {
@@ -1192,7 +1189,6 @@ const sanitizeTags = (value: unknown): string[] | Fail => {
     if (typeof entry !== 'string') continue;
     const tag = canonicalTag(entry);
     if (tag && !tags.includes(tag)) tags.push(tag);
-    if (tags.length >= MAX_TAGS) break;
   }
   return tags;
 };
@@ -1623,12 +1619,6 @@ export const createThing = async (
     rootSubspaceId = interaction.rootSubspaceId;
   }
 
-  if (validated.thingtime.includes('comment') && target) {
-		// includeBlocked: the cap is a physical doc bound — blocked spam must not
-		// free up quota for more child docs under the same post
-		const commentCount = await countCommentsOf(target, { includeBlocked: true });
-    if (commentCount >= MAX_COMMENTS_PER_POST) return fail(400, 'This post has reached its comment limit');
-  }
 
   // Reaction caps apply to EVERY creation path (dedicated toggle + generic
   // POST /api/v1/things), so an attacker can't mint unbounded reaction things
@@ -2069,7 +2059,7 @@ export const resolveProfiles = async (userIds: string[]): Promise<Map<string, Fe
 // their full doc so the projection can surface post-shaped comment bodies
 // (rich ["post","comment"] things); legacy eras have no doc.
 type CommentEntry = { id: string; userId: string; text: string; createdAt: Date; doc?: ThingDoc };
-type ReactionEntry = { userId: string; emoji: string };
+type ReactionEntry = { userId: string; emoji: string; count?: number };
 
 type RelatedThings = {
   commentsByTarget: Map<string, CommentEntry[]>;
@@ -2078,24 +2068,22 @@ type RelatedThings = {
   reactionsByTarget: Map<string, ReactionEntry[]>;
   // poll vote things per page-doc shareId (see pollCore.ts) — one query for
   // the whole page, folded into the same fetch as comments/reactions
-  votesByTarget: Map<string, PollVoteEntry[]>;
+  votesByTarget: Map<string, CountedPollVote[]>;
   // up/down vote entries per post AND comment shareId (things/updownCore.ts)
-  updownByTarget: Map<string, UpdownEntry[]>;
+  updownByTarget: Map<string, CountedUpdown[]>;
   shareCountByTarget: Map<string, number>;
   // direct-reply counts per comment shareId
   commentCountByTarget: Map<string, number>;
+  legacyCommentCountByTarget: Map<string, number>;
 };
 
 // One batched pass for a page of post docs: standalone comment/reaction
 // things for those posts plus live share counts across both eras. Embedded
 // v1 residue on each doc is merged in per-post below.
-// Field whitelists for the child-thing passes below. These reads are
-// unbounded by design — a page's complete comment and reaction set — so what
-// is NOT fetched matters more than what is. Un-projected, a viral post drags
-// its entire `crystal` (rich comment bodies, image lists, arbitrary `thing`
-// payloads) plus `extended` (up to 512KB per doc) and `acl` across the wire to
-// render a handful of comment rows and an emoji tally.
-//
+// Field whitelist for bounded database-selected comment windows. Bodies enter
+// the process only after per-parent $topN selection; interaction queries return
+// compact counts/viewer state instead of complete reacting-user documents.
+// Counts are separate from the number of eagerly displayed rows.
 // Every field here is one the projection's consumers actually read: the
 // pass-1/level loops below, mergedCommentsOf/mergedReactionsOf, and
 // buildComment + the attachment target pass in toPublicPosts. `_id` rides
@@ -2143,21 +2131,6 @@ export const RELATED_CHILD_PROJECTION = {
   listing: 1
 } as const;
 
-// The interim kind-era docs carry their payload as flat top-level fields.
-const RELATED_LEGACY_PROJECTION = {
-  schemaVersion: 1,
-  parentId: 1,
-  kind: 1,
-  ownerId: 1,
-  commentId: 1,
-  createdAt: 1,
-  text: 1,
-  token: 1
-} as const;
-
-// Reactions only ever contribute (userId, emoji) pairs.
-const RELATED_REACTION_PROJECTION = { schemaVersion: 1, targetId: 1, ownerId: 1, thingtime: 1, 'crystal.emoji': 1, 'crystal.direction': 1 } as const;
-
 // Related interaction projections must apply the same pending-content rule as
 // canView/canViewInherited: blocked content is invisible to everyone, while a
 // pending text thing remains visible to its owner. Keeping this as one clause
@@ -2172,175 +2145,99 @@ export const visibleRelatedModerationClause = (viewerId: string | null): Record<
 			}
 		: { 'moderation.status': { $nin: ['blocked', 'pending'] } };
 
-const resolveRelated = async (docs: ThingDoc[], viewerId: string | null): Promise<RelatedThings> => {
+const resolveRelated = async (docs: ThingDoc[], viewerId: string | null, commentSort: CommentSort | null = null): Promise<RelatedThings> => {
   const legacy = await legacyThingReadsRequired();
-  const ids = docs.map((doc) => doc.shareId);
+  const ids = docs.map(doc => doc.shareId);
   const commentsByTarget = new Map<string, CommentEntry[]>();
   const reactionsByTarget = new Map<string, ReactionEntry[]>();
-  const votesByTarget = new Map<string, PollVoteEntry[]>();
-  const updownByTarget = new Map<string, UpdownEntry[]>();
+  const votesByTarget = new Map<string, CountedPollVote[]>();
+  const updownByTarget = new Map<string, CountedUpdown[]>();
   const shareCountByTarget = new Map<string, number>();
   const commentCountByTarget = new Map<string, number>();
-  if (!ids.length) return { commentsByTarget, reactionsByTarget, votesByTarget, updownByTarget, shareCountByTarget, commentCountByTarget };
-
+  const legacyCommentCountByTarget = new Map<string, number>();
+  const result = { commentsByTarget, reactionsByTarget, votesByTarget, updownByTarget, shareCountByTarget, commentCountByTarget, legacyCommentCountByTarget };
+  if (!ids.length) return result;
   const things = await getThingsCollection();
-	const moderation = visibleRelatedModerationClause(viewerId);
-  const [related, legacyRelational, shareCounts] = await Promise.all([
-    things
-      .find(withMatch({ targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction', 'vote', UPDOWN_THINGTIME] } }, moderation) as any)
-      .project(RELATED_CHILD_PROJECTION)
-      .sort({ createdAt: 1, shareId: 1 })
-      .toArray() as Promise<any[]>,
-    // interim relational era: kind:'reaction'/'comment' docs linked by parentId
-    // (written by the pre-unification relational model; converted by the things
-    // migration, folded here until then)
-    legacy ? things
-      .find(withMatch({ kind: { $in: ['comment', 'reaction'] }, parentId: { $in: ids } }, moderation) as any)
-      .project(RELATED_LEGACY_PROJECTION)
-      .sort({ createdAt: 1 })
-      .toArray() as Promise<any[]> : Promise.resolve([]),
-    things
-      .aggregate([
-        {
-					$match: withMatch(
-						legacy ? { $or: [{ thingtime: 'share', targetId: { $in: ids } }, { shareOfId: { $in: ids } }] } : { thingtime: 'share', targetId: { $in: ids } },
-						moderation
-					)
-				},
-        { $group: { _id: { $ifNull: ['$targetId', '$shareOfId'] }, count: { $sum: 1 } } }
-      ])
-      .toArray() as Promise<any[]>
+  const moderation = visibleRelatedModerationClause(viewerId);
+  const aggregate = (pipeline: any[]) => things.aggregate(pipeline, { allowDiskUse: true }).toArray() as Promise<any[]>;
+  const interactions = async (targets: string[], includeLegacy: boolean, excludeEmbedded = false) => {
+    const rows = await aggregate(relatedInteractionPipeline({ ids: targets, collection: things.collectionName, moderation, viewerId, legacy: includeLegacy, updownKind: UPDOWN_THINGTIME, excludeEmbedded }));
+    for (const row of rows) {
+      const target = String(row._id.target), userId = row._id.viewer ? viewerId || '' : '';
+      if (row._id.kind === 'reaction') {
+        const entries = reactionsByTarget.get(target) || []; entries.push({ userId, emoji: String(row._id.token || ''), count: row.count }); reactionsByTarget.set(target, entries);
+      } else if (row._id.kind === 'vote') {
+        const entries = votesByTarget.get(target) || []; entries.push({ userId, optionIndex: Number(row._id.token), count: row.count }); votesByTarget.set(target, entries);
+      } else {
+        const entries = updownByTarget.get(target) || []; entries.push({ userId, direction: row._id.token, count: row.count }); updownByTarget.set(target, entries);
+      }
+    }
+  };
+  const [commentGroups, , shareCounts] = await Promise.all([
+    aggregate(relatedCommentPipeline({ ids, collection: things.collectionName, moderation, projection: RELATED_CHILD_PROJECTION, limit: RETURNED_COMMENTS, legacy, includeEmbedded: true, sort: commentSort, updownKind: UPDOWN_THINGTIME })),
+    interactions(ids, legacy, docs.some(doc => Object.keys(doc.reactions || {}).length > 0)),
+    aggregate([
+      { $match: withMatch(legacy ? { $or: [{ thingtime: 'share', targetId: { $in: ids } }, { shareOfId: { $in: ids } }] } : { thingtime: 'share', targetId: { $in: ids } }, moderation) },
+      { $group: { _id: { $ifNull: ['$targetId', '$shareOfId'] }, count: { $sum: 1 } } }
+    ])
   ]);
-
-  const pushComment = (target: string, entry: CommentEntry) => {
-    const list = commentsByTarget.get(target) || [];
-    // a doc can surface through more than one pass (a comment page's doc is
-    // ALSO its parent's child) — never list the same reply twice
-    if (list.some((existing) => existing.id === entry.id)) return;
-    list.push(entry);
-    commentsByTarget.set(target, list);
+  // Window only small identities/order descriptors in MongoDB. Fetch selected
+  // bodies separately so twenty valid large comments never share one BSON doc.
+  const hydrateGroups = async (groups: any[]) => {
+    const selected = groups.flatMap(group => group.docs || []);
+    if (!selected.length) return groups;
+    const modernIds = selected.filter(row => row._relatedSource === 'modern').map(row => row.shareId);
+    const legacyIds = selected.filter(row => row._relatedSource === 'legacy').map(row => row._relatedDocumentId);
+    const embedded = selected.filter(row => row._relatedSource === 'embedded');
+    const [modern, oldRows, embeddedRows] = await Promise.all([
+      modernIds.length ? things.find(withMatch({ shareId: { $in: modernIds }, thingtime: 'comment' }, moderation) as any).project(RELATED_CHILD_PROJECTION).toArray() : [],
+      legacyIds.length ? things.find(withMatch({ _id: { $in: legacyIds }, kind: 'comment' }, moderation) as any).project({ ownerId: 1, parentId: 1, text: 1, createdAt: 1 }).toArray() : [],
+      embedded.length ? aggregate([
+        { $match: { shareId: { $in: [...new Set(embedded.map(row => row.targetId))] } } }, { $unwind: '$comments' },
+        { $match: { 'comments.id': { $in: embedded.map(row => row.shareId) } } },
+        { $project: { shareId: '$comments.id', targetId: '$shareId', ownerId: '$comments.userId', createdAt: '$comments.createdAt', crystal: { text: '$comments.text' } } }
+      ]) : []
+    ]);
+    const modernById = new Map(modern.map((row: any) => [String(row.shareId), row]));
+    const oldById = new Map(oldRows.map((row: any) => [String(row._id), row]));
+    const embeddedById = new Map(embeddedRows.map(row => [`${row.targetId}\0${row.shareId}`, row]));
+    return groups.map(group => ({ ...group, docs: (group.docs || []).flatMap((descriptor: any) => {
+      const source = descriptor._relatedSource;
+      const row: any = source === 'modern' ? modernById.get(String(descriptor.shareId)) : source === 'legacy' ? oldById.get(String(descriptor._relatedDocumentId)) : embeddedById.get(`${descriptor.targetId}\0${descriptor.shareId}`);
+      const targetId = source === 'legacy' ? row?.parentId : row?.targetId;
+      if (!row || targetId !== descriptor.targetId || row.ownerId !== descriptor.ownerId) return [];
+      return [source === 'modern' ? row : { ...descriptor, crystal: source === 'legacy' ? { text: row.text } : row.crystal }];
+    }) }));
   };
-  const pushReaction = (target: string, entry: ReactionEntry) => {
-    const list = reactionsByTarget.get(target) || [];
-    list.push(entry);
-    reactionsByTarget.set(target, list);
-  };
-  const pushUpdown = (target: string, entry: UpdownEntry) => {
-    const list = updownByTarget.get(target) || [];
-    list.push(entry);
-    updownByTarget.set(target, list);
-  };
-
-  for (const doc of related as ThingDoc[]) {
-    const target = doc.targetId as string;
-    if (thingtimeOf(doc).includes('comment')) {
-      pushComment(target, {
-        id: doc.shareId,
-        userId: doc.ownerId,
-        text: String(doc.crystal?.text || ''),
-        createdAt: new Date(doc.createdAt),
-        doc
-      });
-    } else if (thingtimeOf(doc).includes('reaction')) {
-      pushReaction(target, { userId: doc.ownerId, emoji: String(doc.crystal?.emoji || '') });
-    } else if (thingtimeOf(doc).includes('vote')) {
-      const list = votesByTarget.get(target) || [];
-      list.push({ userId: String(doc.ownerId), optionIndex: Number(doc.crystal?.optionIndex) });
-      votesByTarget.set(target, list);
-    } else if (thingtimeOf(doc).includes(UPDOWN_THINGTIME)) {
-      pushUpdown(target, { userId: String(doc.ownerId), direction: doc.crystal?.direction });
+  const addGroup = (group: any, seen?: Set<string>): string[] => {
+    const target = String(group._id), next: string[] = [];
+    commentCountByTarget.set(target, group.count);
+    if (group.legacyCount) legacyCommentCountByTarget.set(target, group.legacyCount);
+    const entries = commentsByTarget.get(target) || [];
+    for (const doc of (group.docs || []).slice().reverse()) {
+      if (seen?.has(doc.shareId)) continue;
+      seen?.add(doc.shareId); next.push(doc.shareId);
+      entries.push({ id: String(doc.shareId), userId: doc.ownerId, text: String(doc.crystal?.text || ''), createdAt: new Date(doc.createdAt), ...(doc._relatedLegacy ? {} : { doc }) });
     }
-  }
-  for (const doc of legacyRelational as ThingDoc[]) {
-    const target = doc.parentId as string;
-    if (doc.kind === 'comment') {
-      pushComment(target, {
-        id: String(doc.commentId || doc._id),
-        userId: doc.ownerId,
-        text: String((doc as any).text || ''),
-        createdAt: new Date(doc.createdAt)
-      });
-    } else if (doc.kind === 'reaction') {
-      pushReaction(target, { userId: doc.ownerId, emoji: String(doc.token || '') });
-    }
-  }
+    commentsByTarget.set(target, entries); return next;
+  };
+  for (const group of await hydrateGroups(commentGroups)) addGroup(group);
   for (const row of shareCounts) shareCountByTarget.set(String(row._id), row.count);
-
-  // Deeper levels, one batched round-trip per level: threads ship THREE
-  // levels of replies (REPLIES_PER_LEVEL per parent per level) so opening any
-  // visible thread never needs a fetch — the client lazily fetches level 4+.
-  // Each processed level fetches its comments' own reactions; the last level
-  // fetches direct reply COUNTS only (no docs). Page docs' own children were
-  // already fetched by pass 1 against the page ids, so page ids are excluded
-  // (a comment-page doc reappearing as its parent's child once doubled its
-  // replies), and seenIds keeps cycles/self-references out.
-  const pageIdSet = new Set(ids);
-  const seenIds = new Set<string>(ids);
-  let levelIds = [...commentsByTarget.values()]
-    .flat()
-    .map((entry) => entry.id)
-    .filter((id) => !pageIdSet.has(id));
+  const seen = new Set(ids);
+  let levelIds = [...commentsByTarget.values()].flatMap(entries => entries.map(entry => entry.id)).filter(id => !seen.has(id));
+  for (const id of levelIds) seen.add(id);
   for (let depth = 0; depth <= SHIPPED_REPLY_LEVELS && levelIds.length; depth++) {
     const withDocs = depth < SHIPPED_REPLY_LEVELS;
-    const [levelReactions, replyGroups] = await Promise.all([
-      things
-        .find(withMatch({ targetId: { $in: levelIds }, thingtime: { $in: ['reaction', UPDOWN_THINGTIME] } }, moderation) as any)
-        .project(RELATED_REACTION_PROJECTION)
-        .sort({ createdAt: 1, shareId: 1 })
-        .toArray() as Promise<any[]>,
-      // blocked replies neither ship as docs nor inflate per-level counts —
-      // this mirrors the first-pass related queries above (a blocked doc must
-      // vanish from EVERY thread payload, not just level 1)
-      things
-        .aggregate(
-          withDocs
-            ? [
-                { $match: withMatch({ targetId: { $in: levelIds }, thingtime: 'comment' }, moderation) },
-                { $sort: { createdAt: -1, shareId: 1 } },
-                // Project BEFORE the $group: $push accumulates every matching
-                // reply into one document, and $group is capped at 100MB with
-                // allowDiskUse unset — pushing whole $$ROOT docs made a large
-                // enough thread fail the request outright, not merely run slow.
-                // Only REPLIES_PER_LEVEL of them survive the $slice anyway.
-                { $project: RELATED_CHILD_PROJECTION },
-                { $group: { _id: '$targetId', count: { $sum: 1 }, docs: { $push: '$$ROOT' } } },
-                { $project: { count: 1, docs: { $slice: ['$docs', REPLIES_PER_LEVEL] } } }
-              ]
-            : [
-                { $match: withMatch({ targetId: { $in: levelIds }, thingtime: 'comment' }, moderation) },
-                { $group: { _id: '$targetId', count: { $sum: 1 } } }
-              ]
-        )
-        .toArray() as Promise<any[]>
+    const [groups] = await Promise.all([
+      aggregate(withDocs ? relatedCommentPipeline({ ids: levelIds, collection: things.collectionName, moderation, projection: RELATED_CHILD_PROJECTION, limit: REPLIES_PER_LEVEL, legacy: false, sort: 'new', updownKind: UPDOWN_THINGTIME }) : [
+        { $match: withMatch({ targetId: { $in: levelIds }, thingtime: 'comment' }, moderation) }, { $group: { _id: '$targetId', count: { $sum: 1 } } }
+      ]), interactions(levelIds, false)
     ]);
-    for (const doc of levelReactions as ThingDoc[]) {
-      if (thingtimeOf(doc).includes(UPDOWN_THINGTIME)) {
-        pushUpdown(doc.targetId as string, { userId: String(doc.ownerId), direction: doc.crystal?.direction });
-      } else {
-        pushReaction(doc.targetId as string, { userId: doc.ownerId, emoji: String(doc.crystal?.emoji || '') });
-      }
-    }
-    const nextLevelIds: string[] = [];
-    for (const group of replyGroups) {
-      commentCountByTarget.set(String(group._id), group.count);
-      // stored newest-first for the slice; readers want oldest → newest
-      for (const doc of ((group.docs as ThingDoc[]) || []).reverse()) {
-        if (seenIds.has(doc.shareId)) continue;
-        seenIds.add(doc.shareId);
-        nextLevelIds.push(doc.shareId);
-        pushComment(String(group._id), {
-          id: doc.shareId,
-          userId: doc.ownerId,
-          text: String(doc.crystal?.text || ''),
-          createdAt: new Date(doc.createdAt),
-          doc
-        });
-      }
-    }
-    levelIds = nextLevelIds;
+    const next: string[] = [];
+    for (const group of await hydrateGroups(groups)) next.push(...addGroup(group, seen));
+    levelIds = next;
   }
-
-  return { commentsByTarget, reactionsByTarget, votesByTarget, updownByTarget, shareCountByTarget, commentCountByTarget };
+  return result;
 };
 
 // Attachments are relational protected Things. Resolve one bounded query for
@@ -2409,44 +2306,12 @@ const boundAttachmentPresence = async (ownerId: string, targetId: string): Promi
 // Total comment count for whole threads (every descendant, not just direct
 // children) — one $graphLookup per page of ids, following targetId chains
 // through v2 comment things.
-const resolveThreadCounts = async (ids: string[], viewerId: string | null): Promise<Map<string, number>> => {
-  const totals = new Map<string, number>();
-  if (!ids.length) return totals;
-  const things = await getThingsCollection();
-  const rows = (await things
-    .aggregate([
-      { $match: { shareId: { $in: ids } } },
-      { $project: { shareId: 1 } },
-      {
-        $graphLookup: {
-          from: things.collectionName,
-          startWith: '$shareId',
-          connectFromField: 'shareId',
-          connectToField: 'targetId',
-          as: 'thread',
-          // blocked comments (and via graph pruning their whole subtrees)
-          // don't count — totals must match the visible lists
-          restrictSearchWithMatch: withMatch({ thingtime: 'comment' }, visibleRelatedModerationClause(viewerId))
-        }
-      },
-      { $project: { shareId: 1, total: { $size: '$thread' } } }
-    ])
-    .toArray()) as any[];
-  for (const row of rows) totals.set(String(row.shareId), row.total);
-  return totals;
-};
+const resolveThreadCounts = async (ids: string[], viewerId: string | null): Promise<Map<string, number>> =>
+  ids.length ? pagedThreadCounts(await getThingsCollection(), ids, visibleRelatedModerationClause(viewerId)) : new Map();
 
 // Merge a post's v1 embedded comments with its standalone comment things.
-const mergedCommentsOf = (doc: ThingDoc, related: RelatedThings): CommentEntry[] => {
-  const embedded: CommentEntry[] = (doc.comments || []).map((comment) => ({
-    id: comment.id,
-    userId: comment.userId,
-    text: comment.text,
-    createdAt: new Date(comment.createdAt)
-  }));
-  const standalone = related.commentsByTarget.get(doc.shareId) || [];
-  return [...embedded, ...standalone].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
-};
+const mergedCommentsOf = (doc: ThingDoc, related: RelatedThings): CommentEntry[] =>
+  [...(related.commentsByTarget.get(doc.shareId) || [])].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
 
 export const layeredPostCommentCounts = (
 	direct: number,
@@ -2482,7 +2347,7 @@ const mergedReactionsOf = (doc: ThingDoc, related: RelatedThings): ReactionEntry
 const reactionCountsOf = (entries: ReactionEntry[]): Record<string, number> => {
   const counts: Record<string, number> = {};
   entries.forEach((entry) => {
-    if (entry.emoji) counts[entry.emoji] = (counts[entry.emoji] || 0) + 1;
+    if (entry.emoji) counts[entry.emoji] = (counts[entry.emoji] || 0) + (entry.count ?? 1);
   });
   return counts;
 };
@@ -2544,8 +2409,8 @@ const authorFlairFor = (flairs: AuthorFlairs, embed: SubspaceEmbed | null, subsp
 // commentSort=top|new|old — round 2 S7) re-orders the SHIPPED comment page:
 // null keeps the default (the newest RETURNED_COMMENTS, oldest → newest);
 // `top` = votes.score desc then older-first, `new` / `old` = by createdAt.
-// Level 1 is loaded whole per post (MAX_COMMENTS_PER_POST bounds it), so a
-// sorted page is the true best / newest / oldest of the level. The deeper
+// Level 1 selects its bounded true best/newest/oldest window in MongoDB before
+// loading bodies, including interim and embedded legacy candidates. The deeper
 // shipped levels are DB-sliced to the newest REPLIES_PER_LEVEL per parent
 // before any score is known (resolveRelated), so they re-order among the
 // replies that already ship rather than re-querying per parent — the
@@ -2581,7 +2446,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   const commentSort = options.commentSort ?? null;
   // a sorted page can ship ANY of the level's comments, so the legacy
   // embedded entries (a bounded v1 array) all need their authors resolved
-  const embeddedPage = (doc: ThingDoc) => (commentSort ? doc.comments || [] : (doc.comments || []).slice(-RETURNED_COMMENTS));
+  const embeddedPage = (_doc: ThingDoc): NonNullable<ThingDoc['comments']> => []; // Embedded authors now come from the bounded unified window.
   const things = await getThingsCollection();
 
   // one level of share resolution
@@ -2597,7 +2462,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   // protected attachment metadata, and public view stats. Run them together
   // so neither attachments nor views add serial read latency.
 	const [related, threadCounts, viewStats, savedIds] = await Promise.all([
-    resolveRelated(allDocs, viewerId),
+    resolveRelated(allDocs, viewerId, commentSort),
     resolveThreadCounts(allDocs.map((doc) => doc.shareId), viewerId),
     resolveViewStats(allDocs.map((doc) => doc.shareId)),
     // the viewer's library saves across the page (one query, never N+1);
@@ -2690,7 +2555,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     entry,
     id: entry.id,
     createdAtMs: entry.createdAt.getTime(),
-    score: commentSort === 'top' ? tallyUpdown(related.updownByTarget.get(entry.id) || [], null).score : 0
+    score: commentSort === 'top' ? tallyRelatedUpdown(related.updownByTarget.get(entry.id) || [], null).score : 0
   });
   // one level's shipped page in the requested order (null = today's page)
   const pageOf = (entries: CommentEntry[], limit: number): CommentEntry[] =>
@@ -2723,7 +2588,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       tags: comment.doc?.tags || [],
       reactionCounts: reactionCountsOf(commentReactions),
       viewerReactions: viewerReactionsOf(commentReactions, viewerId),
-      votes: tallyUpdown(related.updownByTarget.get(comment.id) || [], viewerId),
+      votes: tallyRelatedUpdown(related.updownByTarget.get(comment.id) || [], viewerId),
       authorFlair: authorFlairOf(rootSubspaceId, comment.userId),
       commentCount: related.commentCountByTarget.get(comment.id) || 0,
       comments: replies.map((reply) => buildComment(reply, comment.id, rootSubspaceId)),
@@ -2761,9 +2626,9 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     const allComments = mergedCommentsOf(doc, related);
     const rootSubspaceId = rootSubspaceOf(doc);
     const comments = pageOf(allComments, RETURNED_COMMENTS).map((comment) => buildComment(comment, doc.shareId, rootSubspaceId));
-    // the counter reports the WHOLE thread: v2 descendants via $graphLookup
-    // plus the legacy-era entries (no doc) that graph traversal can't see
-    const totalComments = (threadCounts.get(doc.shareId) ?? 0) + allComments.filter((entry) => !entry.doc).length;
+    // The counter reports the whole thread through bounded keyset descendant reads
+    // plus exact legacy-era direct counts, retained outside the displayed window
+    const totalComments = (threadCounts.get(doc.shareId) ?? 0) + (related.legacyCommentCountByTarget.get(doc.shareId) || 0);
     const reactions = mergedReactionsOf(doc, related);
 
     const shareTarget = targetIdOf(doc);
@@ -2804,7 +2669,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     // poll posts carry their live tally (votes were fetched in the same
     // batched resolveRelated pass as comments/reactions — no extra query)
     const pollShape = pollShapeOfCrystal(crystal);
-    const pollVotes = pollShape ? tallyPollVotes(pollShape.optionCount, related.votesByTarget.get(doc.shareId) || [], viewerId) : null;
+    const pollVotes = pollShape ? tallyRelatedPoll(pollShape.optionCount, related.votesByTarget.get(doc.shareId) || [], viewerId) : null;
 
     return {
       id: doc.shareId,
@@ -2833,7 +2698,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       tags: doc.tags || [],
       reactionCounts: reactionCountsOf(reactions),
       viewerReactions: viewerReactionsOf(reactions, viewerId),
-      votes: tallyUpdown(related.updownByTarget.get(doc.shareId) || [], viewerId),
+      votes: tallyRelatedUpdown(related.updownByTarget.get(doc.shareId) || [], viewerId),
       title: redacted ? null : typeof crystal.title === 'string' && crystal.title ? crystal.title : null,
       subspace: subspaceEmbed
         ? {
@@ -2854,7 +2719,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       authorFlair: authorFlairOf(rootSubspaceId, doc.ownerId),
       subspaceMod,
       commentCount: totalComments,
-      commentCounts: layeredPostCommentCounts(allComments.length, totalComments, comments.length),
+      commentCounts: layeredPostCommentCounts(related.commentCountByTarget.get(doc.shareId) || 0, totalComments, comments.length),
       comments,
       shareCount: liveShareCountOf(doc, related),
       isShare: !!shareTarget && thingtimeOf(doc).includes('share'),
@@ -2909,29 +2774,17 @@ const toPublicDiscussionPage = async (
   const attachments = new Map<string, AttachmentPublicMetadata[]>();
   if (readable.length) {
     const things = await getThingsCollection();
-    // $topN retains only 26 documents per source even for legacy roots with
-    // unlimited media. Only canonical inherited, same-owner attachments can
-    // ride the source's authority. Explicit/private ACLs and app rows do not.
-    const groups = await things.aggregate([
-      { $match: withMatch({ thingtime: 'attachment', attachmentState: 'ready', acl: [ACL_INHERIT], appId: { $in: [null] } },
-        { $or: readable.map(doc => ({ targetId: doc.shareId, ownerId: doc.ownerId,
-          attachmentPurpose: thingtimeOf(doc).includes('comment') ? 'comment' : { $in: ['post', null] } })) },
-        visibleRelatedModerationClause(viewer?.id || null)) },
-      { $set: { discussionAttachmentOrder: { $cond: [
-        { $and: [{ $isNumber: '$attachmentSortIndex' }, { $gte: ['$attachmentSortIndex', 0] }, { $lte: ['$attachmentSortIndex', Number.MAX_SAFE_INTEGER] }] },
-        '$attachmentSortIndex', Number.MAX_SAFE_INTEGER] } } },
-      { $group: { _id: '$targetId', docs: { $topN: { n: 26, sortBy: { discussionAttachmentOrder: 1, createdAt: 1, shareId: 1 },
-        output: { shareId: '$shareId', ownerId: '$ownerId', targetId: '$targetId', attachmentSortIndex: '$attachmentSortIndex',
-          crystal: '$crystal', moderation: '$moderation', createdAt: '$createdAt' } } } } }
-    ] as any).toArray();
-    for (const group of groups) {
-      const media = orderAttachmentDocsByStoredSort(group.docs as any[]).flatMap(doc => {
-        const item = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation, { ownerView: !!viewer?.id && doc.ownerId === viewer.id });
-        return item ? [item] : [];
-      });
-      attachments.set(group._id, media);
-    }
+    const attachmentDocs = await things.find(withMatch(
+      { thingtime: 'attachment', attachmentState: 'ready', acl: [ACL_INHERIT], appId: { $in: [null] } },
+      { $or: readable.map(doc => ({ targetId: doc.shareId, ownerId: doc.ownerId,
+        attachmentPurpose: thingtimeOf(doc).includes('comment') ? 'comment' : { $in: ['post', null] } })) },
+      visibleRelatedModerationClause(viewer?.id || null)
+    ) as any).project({ shareId: 1, targetId: 1, ownerId: 1, attachmentState: 1, attachmentPurpose: 1, acl: 1, appId: 1,
+      attachmentSortIndex: 1, crystal: 1, moderation: 1, createdAt: 1 }).sort({ createdAt: 1, shareId: 1 }).toArray();
+    const sources = new Map(readable.map(doc => [doc.shareId, { ownerId: doc.ownerId, purpose: thingtimeOf(doc).includes('comment') ? 'comment' as const : 'post' as const }]));
+    for (const [targetId, media] of discussionAttachmentMap(attachmentDocs, sources, viewer?.id || null)) attachments.set(targetId, media);
   }
+
   return docs.map(doc => {
     const thing = byId.get(doc.shareId)!;
     const crystal = crystalOf(doc);
@@ -2939,7 +2792,7 @@ const toPublicDiscussionPage = async (
     const media = attachments.get(doc.shareId) || [];
     // The generic companion must not leak the removed body either.
     shapeDirectThingBody(doc, viewer, thing);
-    thing.attachments = media.slice(0, 25);
+    thing.attachments = media;
     return {
       id: doc.shareId, thingtime: thing.thingtime, type: (crystal.type as PostType) || 'text', author: thing.author,
       audience: thing.audience, visibility: thing.visibility as PostVisibility, acl: thing.acl,
@@ -2947,7 +2800,6 @@ const toPublicDiscussionPage = async (
       text: hidden ? '' : String(crystal.text || ''),
       richText: !hidden && crystal.richText && typeof crystal.richText === 'object' && !Array.isArray(crystal.richText) ? crystal.richText as Record<string, any> : null,
       images: hidden ? [] : (crystal.images as string[]) || [], attachments: thing.attachments,
-      ...(media.length > 25 ? { attachmentsTruncated: true as const } : {}),
       mediaLayout: hidden ? null : mediaLayoutOf(crystal), listing: hidden ? null : (crystal.listing as MarketplaceListing) || null,
       thing: !hidden && crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? crystal.thing as Record<string, any> : null,
       ...(!hidden && postThingReferences(crystal.thing).length ? { linkedThings: postThingReferences(crystal.thing).map(ref => ({ ...ref, thing: linked.get(ref.id) || null })) } : {}),
@@ -3618,7 +3470,7 @@ export const getFeed = async (
   // same normalization sanitizeTags applies at write time — the stored tags
   // are already trimmed/lowercased/capped, so an un-normalized filter could
   // never match anything
-  const tag = typeof query.tag === 'string' ? query.tag.trim().toLowerCase().slice(0, MAX_TAG_CHARS) : '';
+  const tag = typeof query.tag === 'string' ? query.tag.trim().toLowerCase() : '';
 
   const visibility = visibilityQueryFor(viewer, circles);
   if (!visibility) return { ok: true, posts: [], nextCursor: null, ranked: false, scope };
@@ -3644,7 +3496,7 @@ export const getFeed = async (
     range,
     query.preset === 'political' ? { tags: { $in: ['politics', 'political'] } } : {},
     query.preset === 'global' ? circleClause('public') : {},
-    query.preset === 'local' ? (query.near ? geoRadiusClause(query.near, query.radiusKm || 50) : { tags: (query.localTag || '').trim().toLowerCase().replace(/^#/, '').slice(0, MAX_TAG_CHARS) }) : {},
+    query.preset === 'local' ? (query.near ? geoRadiusClause(query.near, query.radiusKm || 50) : { tags: (query.localTag || '').trim().toLowerCase().replace(/^#/, '') }) : {},
     query.preset === 'rising' ? { createdAt: { $gte: new Date(Date.now() - 86400000) } } : {},
     scopedSubspaceIds ? { 'crystal.subspaceId': { $in: scopedSubspaceIds } } : {},
     ...subspaceFeedClauses(viewer)
@@ -4185,7 +4037,7 @@ export const listThings = async (
     // parent is their audience. Merge the old bounded residue into the same
     // stable cursor window without loading any descendants or migrating on read.
     const legacySeen = new Set<string>();
-    const legacy = discussionTarget.comments.slice(0, MAX_COMMENTS_PER_POST).flatMap(entry => {
+    const legacy = discussionTarget.comments.flatMap(entry => {
       const createdAt = new Date(entry.createdAt), id = entry.id;
       if (typeof id !== 'string' || !id || id.length > MAX_SHARE_ID_CHARS || /[$.\s\u0000-\u001f]/.test(id) || !Number.isFinite(+createdAt) || typeof entry.userId !== 'string' || !entry.userId) return [];
       if (legacySeen.has(id)) return [];
@@ -4869,7 +4721,7 @@ export const sharePost = async (
     return fail(403, 'Only public posts can be shared');
   }
 
-  const text = typeof input.text === 'string' ? input.text.trim().slice(0, MAX_TEXT_CHARS) : '';
+  const text = typeof input.text === 'string' ? input.text.trim() : '';
   // the quoter's own tags (the client harvests inline #hashtags from the
   // caption, exactly like the composer) — without these, a linkified caption
   // tag's search would exclude the very quote post it was tapped on
@@ -4884,7 +4736,7 @@ export const sharePost = async (
       crystal: { type: originalCrystal.type || 'text', text, images: [], listing: null },
       acl: input.acl,
       visibility: input.visibility,
-      // caption tags first so the quoter's intent survives the MAX_TAGS cap;
+      // Caption tags first retain the quoter's intentional ordering;
       // createThing dedupes the merge. Never carry a non-public original's
       // tags to audiences that can't view it.
       tags: [...inputTags, ...(aclOf(original).includes(ACL_ALL) ? original.tags || [] : [])],
