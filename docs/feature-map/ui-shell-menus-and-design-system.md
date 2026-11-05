@@ -2,6 +2,23 @@
 
 ## Editable map markers and connector settings
 
+Saved `tt-rich-text` fields/read views reuse `LongTextEditor`/`RichTextBlocks`.
+`componentFormFields.ts` captures native fields at activation and awaits trusted
+editor adapters before confirmation/dispatch; JSON plus optional plain text share
+one snapshot. `tt-menu contextMenu:true` adopts editable target/content slots and
+an ordinary touch trigger. The native popup remains mounted while hidden, uses
+its owning document/window, and leaves field typing/toolbars alone. The safe
+intrinsic allowlists, `templateToBlocks` and `HtmlBlockElement` share both tags.
+Run authored-control, template, editor, capability and composed browser checks.
+
+Map overlays accept optional visual scale/SDK zoom adaptation and explicit keyed
+association. `Maps/mapboxScale.ts` keeps SDK anchor transforms intact;
+`mapboxGrouping.ts` preserves every original authorized member without coordinate
+merging. `markerGroup` and `map` scopes supply editable badge/menu composition.
+Ordinal labels are computed from all rank-sorted items before coordinate filtering.
+No application-specific menu or marker definition is committed. See the canonical
+Builder guide and `TESTING.md` for input, iframe, grouping and mobile acceptance.
+
 Saved `tt-mapbox` Webpage elements may contain ordinary editable child blocks,
 including literal saved Component references. The existing resolver and sharing
 traversal authorize those references. Each marker receives `point` (normalized
@@ -346,3 +363,13 @@ lookup omits unrelated values. The server PNG is the displayed preview.
 `sharePreviewLink.test.ts` covers link preservation/refusal;
 `scripts/share-preview-acceptance.mjs` covers disposable real API and browser
 acceptance. See `docs/seo-social-metadata.md` for template/capability contracts.
+
+Builder rich text inside responsive viewport documents loads the same Editor.js
+library and standard tools in the holder's document via the fixed bundled
+`Editor/editorJsRuntime.entry.ts` module. `editorJsRuntime.ts` shares a load per
+document and permits recovery after load failure; it does not start another app
+or API runtime. Selection, tool panels, keyboard guards and cleanup use the
+owning document. `Builder/authoredControlOwnership.ts` follows actual same-origin
+iframe ancestry for React portal controls while refusing unrelated documents.
+The real API regression is `npm --prefix remix run test:authored-controls:browser`
+(requires a built node-server handler, mongod and isolated Playwright/Chromium).
