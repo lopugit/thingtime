@@ -127,7 +127,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   **Codex (AI)**
 
 ### 2026-11-05
-- Serve verified zero-byte attachment objects through the authenticated byte-cache route even when storage returns no stream (`api.attachment-content` 1.17.2). Extend the disposable Mac paged fixture with nested mixed-size files, explicit synthetic resource limits, and per-phase/native/HTTP timing while keeping installed sync state separate. — Codex (AI)
+- Serve verified zero-byte attachment objects through the authenticated byte-cache route even when storage returns no stream (`api.attachment-content` 1.17.2). Extend the disposable Mac paged fixture with nested mixed-size files, explicit synthetic resource limits, and per-phase/native/HTTP timing while keeping installed sync state separate. [PR #1352 details](../PRs/1352-codex-sync-large-folder-performance-fix-empty-attachment-reads-and-validate-mixed-large-folder-sync.md). — Codex (AI)
 - Add account-scoped connector confirmation controls in Settings → Connections,
   staged large mutation plans, paged signed review and single-use receipts.
 - Let saved map elements compose their markers from ordinary editable child
