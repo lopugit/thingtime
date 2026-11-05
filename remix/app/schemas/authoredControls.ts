@@ -21,7 +21,7 @@ export function usesAuthoredControls(value: unknown): boolean {
 			if ((record.tag === 'tt-mapbox' || record.chakra === 'Mapbox') && props && typeof props === 'object' && ['markerScale', 'markerScaleWithZoom', 'markerScaleReferenceZoom', 'markerGroupPath'].some(key => key in props)) return true;
 			if (Array.isArray(record.inputs) && record.inputs.length > 16) return true;
 		}
-		pending.push(...Object.values(node));
+		for (const child of Object.values(node)) pending.push(child);
 	}
 	return false;
 }

@@ -93,6 +93,7 @@ function Fixture() {
 										name: 'document',
 										plainTextName: 'text',
 										label: 'Authored text',
+										required: true,
 										resetKey: 'synthetic-record',
 										value: { kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: 'Initial' } }] }
 									}
@@ -119,7 +120,7 @@ function Fixture() {
 									id: 'plain-input',
 									type: 'element',
 									tag: 'input',
-									props: { name: 'title', 'aria-label': 'Plain title' }
+									props: { name: 'title', 'aria-label': 'Plain title', required: true }
 								},
 								{ id: 'plain-save', type: 'element', tag: 'button', text: 'Save plain', props: { type: 'button', 'data-tt-action': data.action } }
 							]

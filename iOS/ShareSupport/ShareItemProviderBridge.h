@@ -14,6 +14,10 @@ NS_ASSUME_NONNULL_BEGIN
               typeIdentifier:(NSString *)typeIdentifier
                   completion:(void (^)(UIImage * _Nullable, NSError * _Nullable))completion
     NS_SWIFT_NAME(loadImage(from:typeIdentifier:completion:));
++ (void)loadTextFromProvider:(NSItemProvider *)provider
+             typeIdentifier:(NSString *)typeIdentifier
+                 completion:(void (^)(NSString * _Nullable, NSError * _Nullable))completion
+    NS_SWIFT_NAME(loadText(from:typeIdentifier:completion:));
 @end
 
 NS_ASSUME_NONNULL_END

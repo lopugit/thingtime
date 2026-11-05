@@ -79,3 +79,14 @@ Built middleware SHA-256:
   checks/merge and deployment evidence remain separate delivery gates. No
   personal sync configuration, Home grant or user files were changed by the
   synthetic acceptance run.
+
+## Main integration
+
+Integrated main `9515d781` after the comparison. Incoming filename validation,
+shared-content API versions and authored controls remain intact. Only appended
+feature-map/changelog text required a source resolution; both entries were kept.
+Immutable graph variants from both sides were restored byte-for-byte before a
+current structural refresh with bounded retention. The compound/cloud-file and
+custom-policy/client regressions passed again against the integrated tree.
+The added custom-policy fixture is explicitly typed as `ForegroundSyncInput` so
+its optional mutation hook is checked by the raw TypeScript run.

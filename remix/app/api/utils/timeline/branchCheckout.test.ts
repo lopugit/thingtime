@@ -53,7 +53,7 @@ test('checkout transport validates exact source identity, complete content, boun
  assert.throws(() => parseBranchCheckout(result, 'other', request));
  assert.throws(() => parseBranchCheckout({ ...result, head: { ...result.head, revision: 2 } }, 'user-1', request));
  assert.throws(() => parseBranchCheckout({ ...result, snapshot: { ...result.snapshot, value: { crystal: {} } } }, 'user-1', request));
- assert.throws(() => branchCrystalSnapshot(result.snapshot, { huge: 'x'.repeat(4 * 1024 * 1024) }));
+ assert.equal((branchCrystalSnapshot(result.snapshot, { huge: 'x'.repeat(4 * 1024 * 1024) }).value as any).crystal.huge.length, 4 * 1024 * 1024);
 });
 
 

@@ -1,4 +1,4 @@
-import { canonicalLinkedAttachmentUrl, linkedMediaTypeForUrl, MAX_ATTACHMENT_TITLE_CHARS, MAX_ATTACHMENT_DESCRIPTION_CHARS, MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS, type LinkedAttachmentMediaKind } from '../../api/utils/attachments/attachmentCore';
+import { canonicalLinkedAttachmentUrl, linkedMediaTypeForUrl, type LinkedAttachmentMediaKind } from '../../api/utils/attachments/attachmentCore';
 
 /** Portable content, not a database backup or an authorization envelope.
  * Importers must create new, private, caller-owned Things through normal APIs.
@@ -68,13 +68,13 @@ const keys = (value: Record<string, unknown>, allowed: string[]) => {
   for (const key of Object.keys(value)) if (!allowed.includes(key)) invalid(`Unsupported transfer field: ${key}`);
 };
 const id = (value: unknown): value is string => typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,199}$/.test(value);
-const strings = (value: unknown, max: number): value is string[] => Array.isArray(value) && value.length <= max &&
-  value.every((item) => typeof item === 'string' && item.length <= 500) && new Set(value).size === value.length;
+const strings = (value: unknown, max: number, maxLength = 500): value is string[] => Array.isArray(value) && value.length <= max &&
+  value.every((item) => typeof item === 'string' && item.length <= maxLength) && new Set(value).size === value.length;
 
 const validateAnnotations = (entry: Record<string, unknown>) => {
-  for (const [field, max] of Object.entries({ title: MAX_ATTACHMENT_TITLE_CHARS, description: MAX_ATTACHMENT_DESCRIPTION_CHARS, filenamePreview: MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS })) {
+  for (const field of ['title', 'description', 'filenamePreview']) {
     const text = entry[field];
-    if (text !== undefined && (typeof text !== 'string' || text.trim() !== text || !text || text.length > max || /[\p{Cf}\p{Cs}]/u.test(text) || [...text].some((char) => /\p{Cc}/u.test(char) && !(field === 'description' && char === '\n')))) return invalid('Invalid attachment annotation');
+    if (text !== undefined && (typeof text !== 'string' || text.trim() !== text || !text || /[\p{Cf}\p{Cs}]/u.test(text) || [...text].some((char) => /\p{Cc}/u.test(char) && !(field === 'description' && char === '\n')))) return invalid('Invalid attachment annotation');
   }
 };
 
@@ -107,7 +107,7 @@ export const validateTransfer = (value: unknown): ThingTransfer => {
     if (!object(thing.crystal)) return invalid('Invalid Thing content');
     json(thing.crystal);
     if (thing.extended !== undefined) json(thing.extended);
-    if (thing.tags !== undefined && !strings(thing.tags, 500)) return invalid('Invalid tags');
+    if (thing.tags !== undefined && !strings(thing.tags, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY)) return invalid('Invalid tags');
     for (const field of ['folderId', 'targetId']) if (thing[field] !== undefined && !id(thing[field])) return invalid(`Invalid ${field}`);
     docs.set(thing.id, thing as TransferThing);
   }
@@ -134,7 +134,7 @@ export const validateTransfer = (value: unknown): ThingTransfer => {
     // backslashes, absolute paths, URL fetching, and case-fold collisions.
     if (file.path !== `files/${files.size.toString().padStart(6, '0')}`) return invalid('Invalid archive file path');
     if (!id(file.targetId) || !docs.has(file.targetId)) return invalid('A file target is missing');
-    if (typeof file.name !== 'string' || !file.name.length || file.name.length > 500 || [...file.name].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) return invalid('Invalid file name');
+    if (typeof file.name !== 'string' || !file.name.length || [...file.name].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) return invalid('Invalid file name');
     if (typeof file.mime !== 'string' || !/^[\w.+-]+\/[\w.+-]+$/.test(file.mime) || file.mime.length > 200) return invalid('Invalid file type');
     if (typeof file.bytes !== 'number' || !Number.isSafeInteger(file.bytes) || file.bytes < 0) return invalid('Invalid file size');
     bytes += file.bytes;

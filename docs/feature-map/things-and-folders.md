@@ -1,5 +1,20 @@
 # Things and folders
 
+## Incoming-share location selection
+
+`ThingsPage` accepts an optional `locationPicker` adapter. It keeps the existing
+list/grid/columns, breadcrumbs and folder creation while staying inside `/share`.
+`ShareSaveDestination.tsx` saves through the ordinary home-plane Things and Files
+APIs, reads results back, and retains immutable retry commands. Shared relative
+paths recreate their folder hierarchy, including empty directories. The sticky
+**Save here** controls are individual Builder blocks. See
+[incoming sharing](../incoming-sharing.md).
+Shared text uses the canonical Data sanitizer without a product string-length
+ceiling (`api.things` 1.50.0). It preserves explicit embedded Component defaults
+through exact readback and retry, rather than reporting a normalization change
+as a failed save. Types, cycles, storage admission and access checks still apply.
+
+
 `validateThingtimeCrystal` preserves explicit `renderComponent` metadata across
 typed and data Thing writes. See [the presentation contract](api-endpoints-and-capabilities.md)
 for saved/embedded definitions, PATCH/replacement semantics and tests.
