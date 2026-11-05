@@ -72,7 +72,7 @@ try {
     }, 'restarted built Nitro HTTP server');
   };
   const manifest = (await api('/.well-known/thingtime-capabilities.json')).data;
-  assert.equal(manifest.origin, origin); assert.equal(manifest.features['api.things'].version, '1.49.0');
+  assert.equal(manifest.origin, origin); assert.equal(manifest.features['api.things'].version, '1.49.2');
   const owner = await register(), other = await register();
   assert(owner.cookie && other.cookie, 'Separate API-created accounts must have authenticated sessions');
   const schema = await api('/api/v1/things', { cookie: owner.cookie, body: { thingtime: ['schema'], acl: ['tt:all'], crystal: { name: 'Synthetic count schema', fields: [] } } });
