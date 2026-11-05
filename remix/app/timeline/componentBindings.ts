@@ -1,5 +1,6 @@
 import { copyBoundedJson } from '../utils/boundedJson.ts';
 import { parseTimelineEvent, type TimelineEvent, type TimelineSnapshot } from './contract.ts';
+import { pageBlockTraversal } from './pageBlockTraversal.ts';
 
 /** Each authored reference is an atomic immutable capture, linked through the
  * ordinary Timeline relation records. No page accumulates a version list. */
@@ -13,22 +14,10 @@ const validRef = (value: unknown): value is string => typeof value === 'string' 
 
 export function webpageComponentRefs(blocks: unknown): string[] {
 	const refs = new Set<string>();
-	let visited = 0;
-	const walk = (items: unknown, depth: number) => {
-		if (!Array.isArray(items)) return;
-		if (depth > 24) throw new Error('Page components exceed the nesting limit.');
-		for (const raw of items) {
-			if (++visited > 1200) throw new Error('Page components exceed the block limit.');
-			if (!raw || typeof raw !== 'object') continue;
-			if (raw.type === 'component' && typeof raw.component === 'string' && validRef(raw.component.trim())) refs.add(raw.component.trim());
-			if (refs.size > MAX_COMPONENT_BINDINGS) throw new Error('Page components exceed the capture limit.');
-			// Every authored container can hide a Component dependency, including
-			// inactive condition branches. Discovery must match the renderer so
-			// resolution, sharing, and captured versions apply the same ACL fence.
-			if (['container', 'element', 'collection', 'condition'].includes(raw.type)) walk(raw.children, depth + 1);
-		}
-	};
-	walk(blocks, 0);
+	for (const raw of pageBlockTraversal(blocks)) {
+		if (raw.type === 'component' && typeof raw.component === 'string' && validRef(raw.component.trim())) refs.add(raw.component.trim());
+		if (refs.size > MAX_COMPONENT_BINDINGS) throw new Error('Page components exceed the capture limit.');
+	}
 	return [...refs];
 }
 

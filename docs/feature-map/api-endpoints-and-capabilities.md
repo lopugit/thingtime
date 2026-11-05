@@ -702,3 +702,9 @@ expression output budget. Programs using it negotiate execution protocol 1.40;
 encoding performs no HTTP operation. Both capability manifests derive this
 version from the canonical registry. Run expression, browser Action protocol
 and capability tests.
+
+Large/deep editable Webpage capture is corrected by `api.things` 1.49.2,
+`api.things-update` 1.18.1 and `api.timeline` 1.19.1. The shared iterative
+Timeline block traversal removes the hidden 1,200-block/24-level write and
+comparison limits; existing Component authorization and capture contracts remain.
+Both manifests derive these PATCH versions from the canonical endpoint registry.

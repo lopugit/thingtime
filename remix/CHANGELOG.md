@@ -110,6 +110,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-05: Fix large/deep editable Webpage saves that passed validation but
+  rolled back when Timeline discovery hit hidden block/nesting caps. Share
+  cycle-safe iterative traversal across capture and comparison; preserve
+  Component authorization, CAS and transactional revisions. Add disposable
+  real-API and reused-node/cycle regressions. **Codex (AI)**
+
 - 2026-11-05: Replace shared preview artwork with Editorial/Colour Blocks and
   three invitation themes; add an editable preview customiser with URL-carried
   theme/layout choices and anonymous content autofill. Details and acceptance:

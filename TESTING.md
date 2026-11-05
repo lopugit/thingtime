@@ -14522,3 +14522,18 @@ the isolated real-API/browser command and the metadata-only session boundary.
   transitions, search, selection reveal, identity changes and 403 behavior.
   Synthetic Action transport timings are renderer evidence; real API timing
   requires the disposable replica acceptance fixture separately.
+
+### Large editable Webpage Timeline capture — 2026-11-05
+
+- Run `npm --prefix remix run test:timeline:large-pages:acceptance` after a
+  node-server build. The fixture starts its own disposable replica/server and
+  API-created identities; it never uses production data or inherited credentials.
+- Save more than 1,200 individually editable blocks and more than 24 nested
+  containers through the ordinary update alias. Verify exact block identities,
+  successful readback, retained revisions and a working version preview.
+- Include an owned Component and another account's private Component. The owned
+  definition is captured; the inaccessible one remains explicitly unavailable.
+  Large/deep trees must not bypass Component ACLs, CAS or transactional history.
+- Compare/restore Components nested inside containers, elements, collections and
+  inactive conditions. Match stable block IDs, preserve duplicate-ID refusal,
+  reject ancestor cycles and permit reused objects/lists in separate positions.
