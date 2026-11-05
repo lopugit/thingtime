@@ -10,6 +10,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { gatherFormFields, useWebpageRuntime } from '~/components/Builder/webpageRuntime';
 import { ownsAuthoredControl } from '../Builder/authoredControlOwnership';
 import { captureComponentFormFields } from '../Builder/componentFormFields';
+import { notifyComponentControlActivation } from '../Builder/componentControlActivation';
 
 // The click half of the ttAction binding (componentTemplate.ts resolves the
 // markup half). Attach the returned handler as onClickCapture on a TRUSTED
@@ -188,10 +189,10 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 							const identity = identityRef.current;
 							busyRef.current = true; control.setAttribute('aria-busy', 'true');
 							void captureComponentFormFields(group, gatherFormFields, () => mountedRef.current && identity === identityRef.current && control.isConnected)
-								.then(fields => { if (mountedRef.current && identity === identityRef.current) localRef.current?.(localQueryFormInput(input, fields)); })
+								.then(fields => { if (mountedRef.current && identity === identityRef.current) { localRef.current?.(localQueryFormInput(input, fields)); notifyComponentControlActivation(control); } })
 								.catch(error => { if (mountedRef.current && identity === identityRef.current) lopuRef.current({ title: 'Check the form', description: messageOf(error), status: 'error' }); })
 								.finally(() => { busyRef.current = false; control.removeAttribute('aria-busy'); });
-						} else localRef.current?.(input);
+						} else { localRef.current?.(input); notifyComponentControlActivation(control); }
 					}
 				} catch {}
 				return;
@@ -199,6 +200,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			if (busyRef.current) return;
 			if (action === REFRESH_ACTION) {
 				runtimeRef.current.refresh();
+				notifyComponentControlActivation(control);
 				return;
 			}
 			if (!signedIn && (!runtimeRef.current.sharedRun || action === INSTALL_ACTION)) {
@@ -215,6 +217,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 					.finally(() => {
 						busyRef.current = false;
 					});
+				notifyComponentControlActivation(control);
 				return;
 			}
 			let inputs: Record<string, unknown> = {};
@@ -254,6 +257,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 						const approved = await confirmRef.current({ action, inputs });
 						if (!mountedRef.current || identity !== identityRef.current || !approved) return;
 					}
+					notifyComponentControlActivation(control);
 					// source: 'component' NARROWS server-side resolution to actions
 					// this viewer owns. Markup can name any id, so the delegated
 					// path must never hand the viewer's authority to a stranger's
