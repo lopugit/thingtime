@@ -4023,7 +4023,9 @@ const prepareThingsList = async (
       ? [...PROTECTED_THINGTIME, ...FOLDER_UNFILEABLE]
       : [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME];
     match = withMatch(
-      ownerLibraryMatch(viewer.id, hiddenKinds, context.archiveOwnerId === viewer.id && !viewer.pat && !query.appId && !isCustomMongoEndpointActive()),
+      // Legacy post compatibility can also match kind:'post' on a differently
+      // stamped row, so only prune when the filter really requires a kind.
+      ownerLibraryMatch(viewer.id, hiddenKinds, context.archiveOwnerId === viewer.id && !viewer.pat && !query.appId && !isCustomMongoEndpointActive(), thingtime.includes('post') ? undefined : thingtime),
       await legacyThingReadsRequired() ? { $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] } : { thingtime: { $exists: true } }
     );
     if (folder === 'root') {

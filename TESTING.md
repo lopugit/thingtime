@@ -14406,6 +14406,10 @@ the isolated real-API/browser command and the metadata-only session boundary.
   the exact count against ordinary cursor traversal, exercises literal archive,
   schema, parent, namespace and public/private PAT filters, and verifies distant
   offset windows without exposing another account's rows or totals.
+- Compare explicit data-only and mixed data/protected-kind counts/pages with the
+  unfiltered owner library. Prune impossible managed-kind OR exceptions without
+  admitting mixed protected rows; preserve legacy post/folder aliases and the
+  retained managed-kind guards.
 - Confirm `count=true` rejects cursor/limit/offset/exact-ID/discussion parameters,
   duplicate filters, unsupported query keys and anonymous reads. Errors and
   cancellation must never return a partial total. Counts carry private/no-store.

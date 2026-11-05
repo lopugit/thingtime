@@ -42,7 +42,7 @@ async function api(path, { cookie, token, body, method = body === undefined ? 'G
     ...(cookie ? { Cookie: cookie } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(45000) });
   const text = await response.text(); let data; try { data = JSON.parse(text); } catch { data = null; }
-  assert.equal(response.status, status, `${method} ${path.split('?')[0]} unexpected status`);
+  assert.equal(response.status, status, `${method} ${path.split('?')[0]} unexpected status${typeof data?.error === 'string' ? `: ${data.error}` : ''}`);
   return { data, ms: Math.round((performance.now() - start) * 100) / 100, bytes: Buffer.byteLength(text),
     cache: response.headers.get('cache-control'), cookie: (response.headers.getSetCookie?.() || []).map(value => value.split(';')[0]).join('; ') };
 }
@@ -80,7 +80,7 @@ try {
   const query = new URLSearchParams({ thingtime: 'data', schemaId, parentId, excludeArchived: 'true' });
   const list = '/api/v1/things?' + query;
   const fixtures = Array.from({ length: 120 }, (_, index) => ({ id: `fixture-${index}`, thingtime: ['data'],
-    crystal: { schemaId, parentId, rank: index, archived: index >= 113, note: 'x'.repeat(8192) } }));
+    crystal: { schemaId, parentId, rank: index, archived: index >= 113, note: 'x'.repeat(4096), detail: 'x'.repeat(4096) } }));
   // Supported import avoids hitting the normal per-minute interactive-write
   // bucket while keeping all fixture validation and accounting in the API.
   const imported = await api('/api/v1/things/import', { cookie: owner.cookie, body: {
@@ -157,7 +157,7 @@ try {
       'archive/schema/parent/namespace filters', 'invalid count/offset refusal', 'visible ordinal page equals canonical cursor traversal', 'numeric summary compatibility', 'ordered exact-ID joins preserve duplicates and collapse missing/private positions'],
     performance: { serialExactJoin: serialJoin, batchedExactJoin: { requests: 1, ms: batchedJoin.ms, bytes: batchedJoin.bytes }, baselineFullProjection: { requests: baseline.requests, ms: baseline.ms, bytes: baseline.bytes },
       count: { requests: 1, firstAfterServerRestartMs: counted.ms, repeatMs: warmCount.ms, bytes: counted.bytes }, distantPage: { requests: 1, firstAfterServerRestartMs: distant.ms, repeatMs: warmDistant.ms, bytes: distant.bytes } },
-    limitations: ['Cold observations restart the API process; they do not evict operating-system or MongoDB caches. Synthetic measurements are not a production latency benchmark.', 'Offset and exact counts observe current authorization; they do not reserve a transaction snapshot.'] };
+    limitations: ['Cold observations restart the API process; they do not evict operating-system or MongoDB caches. Synthetic measurements are not a production latency benchmark.', 'Offset and exact counts observe current authorization; they do not reserve a transaction snapshot.', 'The existing data writer limits each string field to 5000 characters; synthetic 8 KiB payloads use two 4096-character fields. This read/count check does not establish unlimited data writes.'] };
   if (process.env.THINGS_COUNT_REPORT) await writeFile(process.env.THINGS_COUNT_REPORT, JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify(report));
 } finally {

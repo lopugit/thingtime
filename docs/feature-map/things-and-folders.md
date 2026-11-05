@@ -818,3 +818,9 @@ has no product item cap; deployed URL and response transports remain finite.
 Clients should chunk by encoded URL bytes (and split again on a transport
 refusal) and retain all input positions, instead of truncating the selection.
 Small processing chunks can preserve input positions across related-row joins.
+
+Explicit-kind list/count requests pass their required kinds to
+`ownerLibraryQuery.ts`, pruning impossible exact managed-kind OR exceptions
+before Mongo planning while preserving the ordinary protected-kind exclusion.
+Legacy post compatibility retains the full library query. The helper truth-table
+regression covers mixed protected kinds and every retained managed guard.

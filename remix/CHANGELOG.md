@@ -115,7 +115,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   selected list rows, and publish map pages progressively. Add complete-address
   batch geocoding with allowlisted match quality. Private app composition stays
   in saved Things. Diagnose interrupted dependency installers without stealing
-  live locks. Deployment and real-account acceptance remain separate checks.
+  live locks. Prune impossible managed-kind query alternatives for explicit
+  kinds while preserving mixed protected-kind and legacy compatibility checks.
+  Deployment and real-account acceptance remain separate checks.
+  See [PR 1351](../PRs/1351-codex-routes-home-performance-add-precise-collection-paging-and-progressive-maps.md).
   **Codex (AI)**
 
 ### 2026-11-05
