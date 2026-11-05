@@ -215,3 +215,9 @@ Graph retention is temporarily two complete snapshots for this PR's main
 baseline/current output, to avoid generated rename conflicts during CI. Exactly
 one alias is active; the project default and global policy are unchanged. The
 final refresh is structural only, with the semantic coverage limitation above.
+
+The final read-only main refresh contained only native-sync fixture and
+Electron development-process lifecycle changes. They were integrated without
+changing sharing runtime; the focused imported suites pass 16 fixture cases
+and 20 local-runtime cases. The accepted UI/Data/native evidence remains
+applicable; no additional publication or broad acceptance run was needed.
