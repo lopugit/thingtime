@@ -37,23 +37,67 @@ struct FixturePhotoResources: PhotoResourceProvider {
 }
 // Observe the unchanged monotonic clock calls already surrounding native
 // identity admission and HTTP. Each verification owns its TaskLocal sample.
+struct FixtureRequestContext: Sendable {
+    let id: String
+    let action: String
+    let path: String
+    let started: Double
+}
+enum FixtureRequestClockContext { @TaskLocal static var request: FixtureRequestContext? }
+private let fixtureTimingActions: Set<String> = ["validate-folder-batch", "upload-batch", "resources", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
+func fixtureTimingLabel(_ value: JSONValue?, path: Bool = false) -> String {
+    guard case .string(let text) = value else { return "other" }
+    return (path ? ["local.bin", "remote.bin"].contains(text) : fixtureTimingActions.contains(text)) ? text : "other"
+}
 final class FixtureIdentityClock: @unchecked Sendable {
     private let lock = NSLock()
     private var values: [Double] = []
+    private let request: FixtureRequestContext?
+    private let checkID: Int?
+    init(checkID: Int? = nil, request: FixtureRequestContext? = FixtureRequestClockContext.request) {
+        self.checkID = checkID; self.request = request
+    }
     func append(_ value: Double) { lock.lock(); values.append(value); lock.unlock() }
     func summary() -> JSONValue {
         lock.lock(); let times = values; lock.unlock()
+        var result: [String: JSONValue] = [
+            "checkId": checkID.map { .number(Double($0)) } ?? .null,
+            "requestId": request.map { .string($0.id) } ?? .null,
+            "action": request.map { .string($0.action) } ?? .null,
+            "path": request.map { .string($0.path) } ?? .null,
+            "nativeRequestStartedMs": request.map { .number($0.started * 1000) } ?? .null,
+            "clock": .string("native-system-uptime-ms"),
+            "clockPointsMs": .array(times.map { .number($0 * 1000) })
+        ]
         guard !times.isEmpty, times.count % 4 == 0 else {
-            return .object(["complete": .bool(false), "clockSamples": .number(Double(times.count))])
+            result["complete"] = .bool(false); result["clockSamples"] = .number(Double(times.count))
+            return .object(result)
         }
-        var admission = 0.0, http = 0.0
+        var admission = 0.0, http = 0.0, intervals: [JSONValue] = []
         for i in stride(from: 0, to: times.count, by: 4) {
             admission += (times[i + 1] - times[i]) * 1000
             http += (times[i + 3] - times[i + 2]) * 1000
+            intervals.append(.object(["admissionStartMs": .number(times[i] * 1000), "admissionEndMs": .number(times[i + 1] * 1000),
+                "httpStartMs": .number(times[i + 2] * 1000), "httpEndMs": .number(times[i + 3] * 1000)]))
         }
-        return .object(["complete": .bool(true), "attempts": .number(Double(times.count / 4)),
-                        "admissionMs": .number(admission), "httpMs": .number(http)])
+        result["complete"] = .bool(true); result["attempts"] = .number(Double(times.count / 4))
+        result["admissionMs"] = .number(admission); result["httpMs"] = .number(http); result["intervals"] = .array(intervals)
+        return .object(result)
     }
+}
+func fixtureClockSelfTest() throws {
+    let old = FixtureRequestContext(id: "old-request", action: "read", path: "local.bin", started: 1)
+    let new = FixtureRequestContext(id: "new-request", action: "inspect", path: "remote.bin", started: 10)
+    let sample = FixtureRequestClockContext.$request.withValue(old) { FixtureIdentityClock(checkID: 1) }
+    [1.1, 1.3, 1.4, 1.5].forEach(sample.append)
+    let result = FixtureRequestClockContext.$request.withValue(new) { sample.summary() }
+    guard case .object(let fields) = result, fields["requestId"] == .string("old-request"), fields["path"] == .string("local.bin"),
+          fields["complete"] == .bool(true), case .number(let admission) = fields["admissionMs"], abs(admission - 200) < 0.001,
+          case .array(let intervals) = fields["intervals"], intervals.count == 1 else { throw MobileFolderStore.Failure.invalid }
+    let partial = FixtureIdentityClock(request: new); partial.append(10)
+    guard case .object(let incomplete) = partial.summary(), incomplete["complete"] == .bool(false), incomplete["admissionMs"] == nil,
+          incomplete["requestId"] == .string("new-request") else { throw MobileFolderStore.Failure.invalid }
+    FileHandle.standardOutput.write(Data("{\"ok\":true,\"fixtureClockSelfTest\":true}\n".utf8))
 }
 enum FixtureIdentityClockContext { @TaskLocal static var sample: FixtureIdentityClock? }
 actor Cooldowns {
@@ -108,6 +152,7 @@ final class StreamWriter: @unchecked Sendable {
 }
 @main struct Fixture {
     @MainActor static func main() async throws {
+        if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--self-test-timing" { try fixtureClockSelfTest(); return }
         guard CommandLine.arguments.count == 2 else { throw MobileFolderStore.Failure.invalid }
         let configurationURL = URL(fileURLWithPath: CommandLine.arguments[1])
         let attributes = try FileManager.default.attributesOfItem(atPath: configurationURL.path)
@@ -150,7 +195,7 @@ final class StreamWriter: @unchecked Sendable {
             verify: { owner, device in
                 identityChecks += 1
                 let started = ProcessInfo.processInfo.systemUptime
-                let sample = FixtureIdentityClock()
+                let sample = FixtureIdentityClock(checkID: identityChecks)
                 defer {
                     identityCalls.append(sample.summary())
                     let elapsed = (ProcessInfo.processInfo.systemUptime - started) * 1000
@@ -200,6 +245,9 @@ final class StreamWriter: @unchecked Sendable {
                 requests[id] = Task { @MainActor in
                     defer { requests.removeValue(forKey: id) }
                     let started = ProcessInfo.processInfo.systemUptime
+                    let requestContext = FixtureRequestContext(id: id, action: fixtureTimingLabel(fields["action"]),
+                        path: fixtureTimingLabel(fields["path"], path: true), started: started)
+                    let lane = fields["action"] == .string("scan-changes") ? "poll" : fields["action"] == .string("resources") && (fields["rootId"] == nil || fields["rootId"] == .null) ? "resources" : "active"
                     var response: [String: JSONValue]
                     do {
                         let stream: (@Sendable (Data) throws -> Void)?
@@ -216,7 +264,9 @@ final class StreamWriter: @unchecked Sendable {
                                 return bytes.subdata(in: start..<(start + count))
                             }
                         } else { receive = nil }
-                        response = ["ok": .bool(true), "result": try await service.handle(packet.request, stream: stream, receive: receive)]
+                        response = ["ok": .bool(true), "result": try await FixtureRequestClockContext.$request.withValue(requestContext) {
+                            try await service.handle(packet.request, stream: stream, receive: receive)
+                        }]
                     } catch {
                         // Never serialize a throwable message or request fields.
                         response = ["ok": .bool(false), "error": .string(Task.isCancelled ? "fixture-cancelled" : "fixture-refused")]
@@ -226,7 +276,10 @@ final class StreamWriter: @unchecked Sendable {
                     response["identityCalls"] = .array(Array(identityCalls.dropFirst(reportedIdentityCalls)))
                     reportedIdentityCalls = identityCalls.count
                     response["identityTiming"] = .object(["totalMs": .number(identityTotalMilliseconds), "maxMs": .number(identityMaxMilliseconds)])
-                    response["serviceMs"] = .number((ProcessInfo.processInfo.systemUptime - started) * 1000)
+                    let ended = ProcessInfo.processInfo.systemUptime
+                    response["serviceMs"] = .number((ended - started) * 1000)
+                    response["nativeRequestTiming"] = .object(["startedMs": .number(started * 1000), "endedMs": .number(ended * 1000),
+                        "clock": .string("native-system-uptime-ms"), "lane": .string(lane), "action": .string(requestContext.action), "path": .string(requestContext.path)])
                     response["cooldowns"] = await cooldowns.snapshot()
                     do { try output.write(.object(response)) } catch { /* Reader EOF/exit rejects pipe callers. */ }
                 }

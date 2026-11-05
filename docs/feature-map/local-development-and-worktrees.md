@@ -182,3 +182,9 @@ The early Mac sync fixture uses `scripts/mac-fixture-tls.mjs` and the test-only
 API/native identity remain on 28311; only the exact canonical transfer-worker
 child receives the public test CA. `mac-fixture-tls.test.mjs` covers correct,
 wrong and missing CA trust plus unrelated-child isolation. No OS trust changes.
+
+Fixture phase evidence uses `FixtureReceiptObservations` and request timing in
+`mac-fixture-transport.mjs`; native clock provenance lives only in the
+`Tests/MacFolderSyncFixture` executable (`--self-test-timing`). Proof observers
+must drain before success/resume while leaving the consumer unblocked. Shipping
+Swift sources, authorization, rates and native active-slot policy are unchanged.

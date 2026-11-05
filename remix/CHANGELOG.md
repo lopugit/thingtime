@@ -137,6 +137,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-11-06: Compose the canonical desktop host/transfer worker in early sync acceptance, negotiate real capabilities and composite authorization, verify renderer/native resource parity, and record safe per-call/server-observed timings. Make the disposable Mac sync fixture multiplex native request IDs so polling can overlap inspect/read through the existing production lanes. Add cancellation/EOF transport regressions and safe queue/service/identity timing aggregates; retain all identity and exact-byte acceptance checks. **Codex (AI)**
 
+- 2026-11-06: Observe before-seal receipts asynchronously without blocking the transfer consumer; retain per-operation readiness/claim and per-session native admission/HTTP provenance. The one instrumented synthetic two-way proof passes at 5 MB/s/15% CPU; rates, fresh authorization and shipping concurrency remain unchanged. [Qualified phase evidence](../PRs/1363-codex-native-sync-fixture-lanes-canonical-native-two-way-proof.md#instrumented-follow-up). **Codex (AI)**
+
 - 2026-11-06: Keep Mac folder settings mounted independently of background
   sync runs, preserve focused unsaved connection drafts while automatic checks
   run, and retain scoped resource measurements with explicit historical labels

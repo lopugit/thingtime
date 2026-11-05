@@ -1,23 +1,30 @@
 // Test-only framed pipe adapter. Never used by the installed native host.
+const fixtureActions = new Set(["validate-folder-batch", "upload-batch", "resources", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]);
+export const fixtureActionLabel = action => fixtureActions.has(action) ? action : 'other';
+export const fixturePathLabel = path => ['local.bin','remote.bin'].includes(path) ? path : 'other';
 export class MacFixtureTransport {
   pending = new Map();
   lanes = new Map();
   retired = new Set();
   closed;
   timings = {};
-  constructor({ write, createStream, now = () => performance.now(), timeoutMs = 280_000 }) {
-    Object.assign(this, { write, createStream, now, timeoutMs });
+  constructor({ write, createStream, now = () => performance.now(), timeoutMs = 280_000, observeRequest = (_event) => {} }) {
+    Object.assign(this, { write, createStream, now, timeoutMs, observeRequest });
     this.epoch = now();
   }
-  record(action, field, value, queuedAt, startedAt) {
+  record(action, field, value, queuedAt, startedAt, endedAt) {
     const row = this.timings[action] ??= { count: 0, queueTotalMs: 0, queueMaxMs: 0, serviceTotalMs: 0, serviceMaxMs: 0 };
     if (field === 'queue') {
       row.count++;
       row.firstEnqueueMs ??= queuedAt - this.epoch;
       row.firstStartMs ??= startedAt - this.epoch;
-    } else row.lastEndMs = this.now() - this.epoch;
+    } else row.lastEndMs = endedAt - this.epoch;
     row[field + 'TotalMs'] += value;
     row[field + 'MaxMs'] = Math.max(row[field + 'MaxMs'], value);
+  }
+  observe(row, phase, at, outcome) {
+    try { this.observeRequest({ requestId: row.id, action: fixtureActionLabel(row.payload.action),
+      path: fixturePathLabel(row.payload.path), lane: row.lane, phase, at, ...(outcome ? { outcome } : {}) }); } catch {}
   }
   frame(payload) {
     const metadata = { ...payload };
@@ -39,14 +46,15 @@ export class MacFixtureTransport {
     const prior = this.lanes.get(lane) ?? Promise.resolve();
     this.lanes.set(lane, prior.then(() => done));
     return new Promise((resolve, reject) => {
-      const row = { id, payload, signal, resolve, reject, release, queuedAt, startedAt: undefined, stream: undefined };
-      this.pending.set(id, row);
+      const row = { id, payload, signal, resolve, reject, release, lane, queuedAt, startedAt: undefined, stream: undefined };
+      this.pending.set(id, row); this.observe(row, 'enqueue', queuedAt);
       row.abort = () => this.cancel(row, signal.reason ?? Error('Fixture request aborted'));
       signal?.addEventListener('abort', row.abort, { once: true });
       void prior.then(() => {
         if (!this.pending.has(id)) return;
         if (this.closed) { this.finish(row, this.closed); return; }
         row.startedAt = this.now(); this.record(payload.action, 'queue', row.startedAt - queuedAt, queuedAt, row.startedAt);
+        this.observe(row, 'start', row.startedAt);
         try {
           if (payload.action === 'read-range') row.stream = this.createStream(payload);
           row.timer = setTimeout(() => {
@@ -61,7 +69,7 @@ export class MacFixtureTransport {
     if (this.pending.get(row.id) !== row || row.cancelled) return;
     if (row.startedAt === undefined) { this.finish(row, error); return; }
     // Reject the caller immediately but retain the manager lane until its reply.
-    row.cancelled = true; row.reject(error); clearTimeout(row.timer);
+    row.cancelled = true; this.observe(row, 'cancel', this.now()); row.reject(error); clearTimeout(row.timer);
     row.signal?.removeEventListener('abort', row.abort);
     row.timer = setTimeout(() => this.close(Error('Fixture cancellation acknowledgement timeout')), 5000);
     try { this.write(this.frame({ action: 'fixture-cancel', requestId: row.id })); }
@@ -71,7 +79,9 @@ export class MacFixtureTransport {
     if (this.pending.get(row.id) !== row) return;
     this.pending.delete(row.id); this.retired.add(row.id);
     clearTimeout(row.timer); row.signal?.removeEventListener('abort', row.abort);
-    if (row.startedAt !== undefined) this.record(row.payload.action, 'service', this.now() - row.startedAt);
+    const endedAt = this.now();
+    if (row.startedAt !== undefined) this.record(row.payload.action, 'service', endedAt - row.startedAt, undefined, undefined, endedAt);
+    this.observe(row, 'end', endedAt, row.cancelled || row.signal?.aborted ? 'cancelled' : error ? 'refused' : 'ok');
     row.release();
     if (!row.cancelled) error ? row.reject(error) : row.resolve(value);
   }
@@ -156,4 +166,38 @@ export function validateFixtureProofKind(result, mode) {
       (diagnostic ? result.download?.exercised !== false : result.download?.nativeState !== 'running'))
     throw Error('Fixture result does not prove the requested acceptance mode');
   return result;
+}
+
+// Proof observations must never hold the production transfer consumer.
+// Register fresh-page provenance after durable commit; drain before fixture success.
+export class FixtureReceiptObservations {
+  pending = new Set();
+  registered = new Set();
+  errors = [];
+  constructor(now = () => performance.now()) {
+    this.now = now;
+    this.failed = new Promise((_, reject) => { this.rejectFailure = reject; });
+    this.failed.catch(() => {}); // A later caller races this; never leak an unhandled rejection.
+  }
+  async confirm(identity, commit, observe) {
+    const result = await commit(), committedAt = this.now();
+    this.schedule(identity, () => observe(result, committedAt));
+    return result;
+  }
+  schedule(identity, observe) {
+    if (this.registered.has(identity)) throw Error('Duplicate receipt observation');
+    this.registered.add(identity);
+    // Invoke now, so the fresh-page barrier is registered before consume continues.
+    let observation;
+    try { observation = observe(); } catch (error) { observation = Promise.reject(error); }
+    const task = Promise.resolve(observation).then(undefined, error => {
+      this.errors.push(error);
+      if (this.errors.length === 1) this.rejectFailure(error);
+    }).finally(() => { this.pending.delete(task); });
+    this.pending.add(task);
+  }
+  async drain() {
+    while (this.pending.size) await Promise.all([...this.pending]);
+    if (this.errors.length) throw this.errors[0];
+  }
 }
