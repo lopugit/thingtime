@@ -135,3 +135,13 @@ After merging current main, a real Save-picker smoke created and navigated a
 parent and nested folder, verified exact parent IDs, retained the /share route
 and confirmed reachable Save here without submitting content. Integrated
 TypeScript and the 20 focused merged navigation/Save tests pass.
+
+## Final Graphify coverage
+
+The scoped semantic refresh completed 74 of 117 required slices before the
+bounded delivery deadline. Its complete cache entries were retained as validated
+immutable variants; no partial graph replaced the active snapshot. The final
+source uses the canonical structural refresh with clustering, report and HTML.
+Current semantic coverage of the ten changed Markdown files remains incomplete;
+the structural output must not be described as full current documentation
+indexing. This limitation does not change the application acceptance above.
