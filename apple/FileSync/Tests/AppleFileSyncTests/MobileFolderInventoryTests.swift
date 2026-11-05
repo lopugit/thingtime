@@ -13,6 +13,58 @@ final class MobileFolderInventoryTests: XCTestCase {
         return (source, try FolderBookmark.create(source), .init(owner: owner, deviceId: "fixture-device", rootId: UUID().uuidString.lowercased()), root.appendingPathComponent("journal"))
     }
 
+    /// Shared paging/storage assertions exercise the supported native contract.
+    /// macOS retains strict FSEvents coverage; iOS backup is explicitly per-entry.
+    private func sealedInventory(_ store: MobileFolderInventory, _ scope: MobileFolderInventory.Scope,
+                                 id: String, bookmark: Data, excludedPaths: [String] = [],
+                                 ignoreRules: String? = nil) throws -> MobileFolderInventory.Capture {
+        #if os(macOS)
+        return try store.capture(scope, id: id, bookmark: bookmark, excludedPaths: excludedPaths, ignoreRules: ignoreRules)
+        #else
+        let capture = try store.prepareBackup(scope, id: id, generation: UUID().uuidString.lowercased(),
+            bookmark: bookmark, excludedPaths: excludedPaths, ignoreRules: ignoreRules)
+        XCTAssertEqual(capture.consistency, "per-entry")
+        try store.sealBackup(scope, capture: capture, bookmark: bookmark)
+        return capture
+        #endif
+    }
+
+    func testRealTransportAdvertisesStrictCapabilityAndEnforcesItsBoundary() throws {
+        let (source, bookmark, scope, directory) = try fixture()
+        try Data("actual bytes".utf8).write(to: source.appendingPathComponent("kept"))
+        let store = try RustIndexFixture.inventory(directory: directory)
+        let capability = try store.capabilities()
+        XCTAssertEqual(capability.version, 1)
+        #if os(macOS)
+        XCTAssertTrue(capability.strictCoverage)
+        try store.checkStrictVolume(bookmark: bookmark)
+        let capture = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark)
+        XCTAssertNil(capture.consistency)
+        #else
+        XCTAssertTrue(RustEmbeddedInventoryTransport.isAvailable)
+        XCTAssertFalse(capability.strictCoverage)
+        for action in [
+            { try store.checkStrictVolume(bookmark: bookmark) },
+            { _ = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark) },
+            { _ = try store.prepareInline(scope, id: UUID().uuidString.lowercased(), generation: UUID().uuidString.lowercased(), bookmark: bookmark) },
+            { _ = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark, preparingGeneration: UUID().uuidString.lowercased()) }
+        ] {
+            XCTAssertThrowsError(try action()) { error in
+                guard case RustInventoryTransportFailure.operation("strict_watcher_unavailable") = error else {
+                    return XCTFail("Expected the exact unsupported strict-watcher refusal, got \(error)")
+                }
+            }
+        }
+        let capture = try sealedInventory(store, scope, id: UUID().uuidString.lowercased(), bookmark: bookmark)
+        XCTAssertEqual(capture.coverage, "full")
+        XCTAssertEqual(capture.totalSkipped, 0)
+        #endif
+        let entry = try XCTUnwrap(store.read(scope, capture: capture, bookmark: bookmark, offset: 0).entries.first)
+        XCTAssertEqual(entry.path, "kept")
+        XCTAssertEqual(entry.size, 12)
+        XCTAssertEqual(try Data(contentsOf: source.appendingPathComponent(entry.path)), Data("actual bytes".utf8))
+    }
+
     func testIgnoreRulesPruneDependenciesBeforeOpenAndBindCapturePolicy() throws {
         let (source, bookmark, scope, directory) = try fixture()
         for name in ["project/node_modules", ".venv", "cache", "hard"] {
@@ -33,11 +85,13 @@ final class MobileFolderInventoryTests: XCTestCase {
         let exclusions = ["hard"], store = try RustIndexFixture.inventory(directory: directory)
         let scanned = try MobileFolderReader.scan(bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules)
         XCTAssertEqual(Set(scanned.map(\.path)), expected)
+        #if os(macOS)
         let strictID = UUID().uuidString.lowercased()
         let strict = try store.capture(scope, id: strictID, bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules)
         XCTAssertEqual(Set(try store.read(scope, capture: strict, bookmark: bookmark, offset: 0, ignoreRules: rules).entries.map(\.path)), expected)
         XCTAssertThrowsError(try store.read(scope, capture: strict, bookmark: bookmark, offset: 0))
         XCTAssertThrowsError(try store.capture(scope, id: strictID, bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules + "# policy change"))
+        #endif
         let id = UUID().uuidString.lowercased()
         let backup = try store.prepareBackup(scope, id: id, generation: UUID().uuidString.lowercased(), bookmark: bookmark, excludedPaths: exclusions, ignoreRules: rules)
         XCTAssertEqual(backup.coverage, "full"); XCTAssertEqual(backup.totalSkipped, 0)
@@ -64,7 +118,7 @@ final class MobileFolderInventoryTests: XCTestCase {
         let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(entry)) as! [String: Any]
         XCTAssertTrue(try XCTUnwrap(json["path"] as? String).utf8.elementsEqual(nfd.utf8), "JSON transport must preserve matching bytes")
         let store = try RustIndexFixture.inventory(directory: directory)
-        let capture = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark, ignoreRules: "/" + nfc)
+        let capture = try sealedInventory(store, scope, id: UUID().uuidString.lowercased(), bookmark: bookmark, ignoreRules: "/" + nfc)
         let page = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0, ignoreRules: "/" + nfc)
         XCTAssertTrue(try XCTUnwrap(page.entries.first).path.utf8.elementsEqual(nfd.utf8), "Folded identity keys must not rewrite emitted paths")
     }
@@ -75,8 +129,8 @@ final class MobileFolderInventoryTests: XCTestCase {
         let composed = "café", decomposed = "cafe\u{301}"
         XCTAssertEqual(composed, decomposed) // Swift equivalence must not bind rules.
         XCTAssertFalse(MobileFolderIgnoreRules.sameText(composed, decomposed))
-        _ = try store.capture(scope, id: id, bookmark: bookmark, ignoreRules: composed)
-        XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark, ignoreRules: decomposed))
+        _ = try sealedInventory(store, scope, id: id, bookmark: bookmark, ignoreRules: composed)
+        XCTAssertThrowsError(try sealedInventory(store, scope, id: id, bookmark: bookmark, ignoreRules: decomposed))
         for bad in ["\0"] {
             XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: Data(), ignoreRules: bad)) { error in
                 guard case MobileFolderStore.Failure.invalid = error else { return XCTFail("Invalid rules must fail before touching the grant") }
@@ -91,7 +145,7 @@ final class MobileFolderInventoryTests: XCTestCase {
         }
         let store = try RustIndexFixture.inventory(directory: directory)
         // The capture itself has no new fields and survives the paging upgrade.
-        let capture = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark)
+        let capture = try sealedInventory(store, scope, id: UUID().uuidString.lowercased(), bookmark: bookmark)
         XCTAssertEqual(try store.read(scope, capture: capture, bookmark: bookmark, offset: 0).entries.count, 128)
         let first = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0, pageSize: 512)
         XCTAssertEqual(first.entries.count, 512); XCTAssertEqual(first.nextOffset, 512)
@@ -249,23 +303,37 @@ final class MobileFolderInventoryTests: XCTestCase {
         let small = try MobileFolderReader.scan(bookmark: bookmark, excludedPaths: exclusions)
         XCTAssertEqual(Set(small.map(\.path)), ["Library-copy", "keep", "keep/file"])
         let store = try RustIndexFixture.inventory(directory: directory), id = UUID().uuidString.lowercased()
-        let capture = try store.capture(scope, id: id, bookmark: bookmark, excludedPaths: exclusions)
+        let capture = try sealedInventory(store, scope, id: id, bookmark: bookmark, excludedPaths: exclusions)
         let page = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0)
         XCTAssertEqual(Set(page.entries.map(\.path)), Set(small.map(\.path)))
         XCTAssertEqual(capture.totalEntries, 3)
-        XCTAssertEqual(try store.capture(scope, id: id, bookmark: bookmark, excludedPaths: exclusions.reversed()), capture)
-        XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark, excludedPaths: []))
+        XCTAssertEqual(try sealedInventory(store, scope, id: id, bookmark: bookmark, excludedPaths: exclusions.reversed()), capture)
+        XCTAssertThrowsError(try sealedInventory(store, scope, id: id, bookmark: bookmark, excludedPaths: []))
         XCTAssertThrowsError(try MobileFolderReader.scan(bookmark: bookmark))
+        #if os(macOS)
         XCTAssertThrowsError(try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark))
+        #else
+        let partial = try sealedInventory(store, scope, id: UUID().uuidString.lowercased(), bookmark: bookmark)
+        XCTAssertEqual(partial.coverage, "partial")
+        XCTAssertGreaterThan(partial.totalSkipped ?? 0, 0)
+        #endif
     }
 
-    func testFailedCaptureCannotRetryWithAnotherExclusionPolicy() throws {
+    func testCaptureFailureOrPartialBackupCannotChangeExclusionPolicy() throws {
         let (source, bookmark, scope, directory) = try fixture()
         XCTAssertEqual(mkfifo(source.appendingPathComponent("blocked").path, 0o600), 0)
         let store = try RustIndexFixture.inventory(directory: directory), id = UUID().uuidString.lowercased()
+        #if os(macOS)
         XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark))
-        XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark, excludedPaths: ["blocked"]))
-        let next = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark, excludedPaths: ["blocked"])
+        #else
+        let partial = try sealedInventory(store, scope, id: id, bookmark: bookmark)
+        XCTAssertEqual(partial.coverage, "partial")
+        let gaps = try store.readSkipped(scope, capture: partial, bookmark: bookmark, offset: 0).skipped
+        XCTAssertEqual(gaps.map(\.path), ["blocked"])
+        XCTAssertEqual(gaps.map(\.reason), [.fifo])
+        #endif
+        XCTAssertThrowsError(try sealedInventory(store, scope, id: id, bookmark: bookmark, excludedPaths: ["blocked"]))
+        let next = try sealedInventory(store, scope, id: UUID().uuidString.lowercased(), bookmark: bookmark, excludedPaths: ["blocked"])
         XCTAssertEqual(next.totalEntries, 0)
     }
 
@@ -284,9 +352,9 @@ final class MobileFolderInventoryTests: XCTestCase {
         let (source, bookmark, scope, directory) = try fixture()
         for index in 0..<10_001 { try Data().write(to: source.appendingPathComponent("file-\(index)")) }
         let store = try RustIndexFixture.inventory(directory: directory), id = UUID().uuidString.lowercased()
-        let capture = try store.capture(scope, id: id, bookmark: bookmark)
+        let capture = try sealedInventory(store, scope, id: id, bookmark: bookmark)
         XCTAssertEqual(capture.totalEntries, 10_001)
-        XCTAssertEqual(try store.capture(scope, id: id, bookmark: bookmark), capture)
+        XCTAssertEqual(try sealedInventory(store, scope, id: id, bookmark: bookmark), capture)
         try Data("later edit".utf8).write(to: source.appendingPathComponent("file-0"))
         let database = directory.deletingLastPathComponent().appendingPathComponent(".shared-index/filesystem-index.sqlite3")
         let transport = PageCountingTransport(base: try RustIndexFixture.transport(database: database))
@@ -315,7 +383,7 @@ final class MobileFolderInventoryTests: XCTestCase {
         XCTAssertEqual(paths, Set((0..<10_001).map { "file-\($0)" }))
         try reopened.discard(scope, capture: capture, bookmark: bookmark)
         XCTAssertThrowsError(try reopened.read(scope, capture: capture, bookmark: bookmark, offset: 0))
-        let replacement = try reopened.capture(scope, id: id, bookmark: bookmark)
+        let replacement = try sealedInventory(reopened, scope, id: id, bookmark: bookmark)
         XCTAssertNotEqual(replacement.generation, capture.generation)
         XCTAssertThrowsError(try reopened.read(scope, capture: capture, bookmark: bookmark, offset: 0))
         XCTAssertEqual(try Data(contentsOf: source.appendingPathComponent("file-0")), Data("later edit".utf8))
@@ -324,7 +392,7 @@ final class MobileFolderInventoryTests: XCTestCase {
     func testEmptyCaptureAndWrongGenerationScopeOrBookmarkRefused() throws {
         let (_, bookmark, scope, directory) = try fixture()
         let store = try RustIndexFixture.inventory(directory: directory)
-        let capture = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark)
+        let capture = try sealedInventory(store, scope, id: UUID().uuidString.lowercased(), bookmark: bookmark)
         let page = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0)
         XCTAssertTrue(page.entries.isEmpty); XCTAssertNil(page.nextOffset)
         let wrong = MobileFolderInventory.Capture(id: capture.id, generation: UUID().uuidString, totalEntries: 0)
@@ -336,18 +404,28 @@ final class MobileFolderInventoryTests: XCTestCase {
         XCTAssertThrowsError(try store.read(scope, capture: capture, bookmark: bookmark, offset: -1))
     }
 
-    func testLinkAndDuplicateIdentityNeverSeal() throws {
+    func testStrictDuplicateIdentityRefusalAndBackupGapPreserveSymbolicLinks() throws {
         let (source, bookmark, scope, directory) = try fixture()
         try Data("test".utf8).write(to: source.appendingPathComponent("first"))
         try FileManager.default.linkItem(at: source.appendingPathComponent("first"), to: source.appendingPathComponent("second"))
         let store = try RustIndexFixture.inventory(directory: directory), id = UUID().uuidString.lowercased()
+        #if os(macOS)
         XCTAssertThrowsError(try store.capture(scope, id: id, bookmark: bookmark)) { error in
             XCTAssertEqual((error as? MobileFolderReader.ScanFailure)?.reason, .duplicateIdentity)
             XCTAssertTrue(["first", "second"].contains((error as? MobileFolderReader.ScanFailure)?.path ?? ""))
         }
+        #else
+        let partial = try sealedInventory(store, scope, id: id, bookmark: bookmark)
+        XCTAssertEqual(partial.coverage, "partial")
+        XCTAssertEqual(partial.totalEntries, 1)
+        let gaps = try store.readSkipped(scope, capture: partial, bookmark: bookmark, offset: 0).skipped
+        XCTAssertEqual(gaps.map(\.reason), [.duplicateIdentity])
+        XCTAssertTrue(["first", "second"].contains(try XCTUnwrap(gaps.first?.path)))
+        try store.discard(scope, capture: partial, bookmark: bookmark)
+        #endif
         try FileManager.default.removeItem(at: source.appendingPathComponent("second"))
         try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("second"), withDestinationURL: source.appendingPathComponent("first"))
-        let capture = try store.capture(scope, id: id, bookmark: bookmark)
+        let capture = try sealedInventory(store, scope, id: id, bookmark: bookmark)
         XCTAssertEqual(capture.totalEntries, 2)
         let rows = try store.read(scope, capture: capture, bookmark: bookmark, offset: 0).entries
         XCTAssertNotNil(rows.first { $0.path == "second" }?.symbolicLink)
@@ -458,7 +536,7 @@ final class MobileFolderInventoryTests: XCTestCase {
             let (source, bookmark, scope, directory) = try fixture()
             for i in 0..<3 { try Data().write(to: source.appendingPathComponent("file-\(i)")) }
             let store = try RustIndexFixture.inventory(directory: directory)
-            let capture = try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark)
+            let capture = try sealedInventory(store, scope, id: UUID().uuidString.lowercased(), bookmark: bookmark)
             let file = directory.deletingLastPathComponent().appendingPathComponent(".shared-index/filesystem-index.sqlite3")
             let records = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil)?.allObjects.compactMap { $0 as? URL } ?? []
             XCTAssertFalse(records.contains(where: { $0.lastPathComponent.hasPrefix("inventory.sqlite") }))
@@ -486,7 +564,7 @@ final class MobileFolderInventoryTests: XCTestCase {
         }
         do { try await work.value; XCTFail("Cancelled capture completed") } catch is CancellationError { }
         let store = try RustIndexFixture.inventory(directory: directory)
-        XCTAssertEqual(try store.capture(scope, id: UUID().uuidString.lowercased(), bookmark: bookmark).totalEntries, 1)
+        XCTAssertEqual(try sealedInventory(store, scope, id: UUID().uuidString.lowercased(), bookmark: bookmark).totalEntries, 1)
     }
 }
 

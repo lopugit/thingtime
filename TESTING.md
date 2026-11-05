@@ -14479,6 +14479,17 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ## Shared Rust filesystem index and sync — 2026-11-04
 
+- iOS embedded inventory regression (2026-11-06): run the real simulator
+  `ThingtimeTests/MobileFolderInventoryTests` and the full native suite. Assert
+  capabilities report `strictCoverage: false` and every strict entry point
+  refuses with `strict_watcher_unavailable`; do not substitute polling coverage.
+  Shared paging, Unicode/policy binding, DB corruption, scope, restart and
+  cancellation checks use explicit `backup-supported` / `per-entry` captures
+  on iOS. Verify unsupported files remain explicit partial-coverage gaps.
+  Run the same Swift suite on macOS plus Rust workspace tests to retain real
+  strict FSEvents mutation, watcher-loss, sealing and cancellation coverage.
+  No runtime capability gate, skip or mock replaces either platform contract.
+
 - Build from the top-level `filesystem-indexer/Cargo.toml`; run its workspace
   tests and `apple/FileSync/test-embedded-rust.sh`. Commander, Mac Node and iOS
   must reference this workspace directly, with no second engine source tree or

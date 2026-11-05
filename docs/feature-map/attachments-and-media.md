@@ -1,5 +1,14 @@
 # Attachments and media
 
+The shared `MobileFolderInventoryTests` use macOS strict capture and iOS's
+explicit supported backup mode for persisted paging/integrity assertions.
+The real embedded iOS transport must advertise no strict watcher coverage and
+refuse strict capture, async strict preparation and inline strict preparation.
+`MobileFolderBridge.startInventoryCapture` requires `backup-supported` for
+folders and calls `prepareBackup`/`sealBackup`; legacy strict calls still refuse.
+Run that suite on both platforms and Rust workspace tests; see `TESTING.md`
+"Shared Rust filesystem index and sync" for the separate coverage guarantees.
+
 ## Incoming shares
 
 The iOS system Share extension hosts the ordinary `/share` web composer through
