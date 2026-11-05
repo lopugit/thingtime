@@ -74,7 +74,7 @@ export default function App() {
   const { pathname, search, hash } = useLocation();
   const isStandalonePage = pathname.startsWith('/t/');
   const isPasswordSurface = pathname === '/passwords' || pathname === '/settings/passwords';
-  const isAuthorizePopup = isStandalonePage || pathname === '/invite' || pathname === '/authorize' || pathname === '/passwords/provider' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
+  const isAuthorizePopup = isStandalonePage || pathname === '/share' || pathname === '/invite' || pathname === '/authorize' || pathname === '/passwords/provider' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
   React.useLayoutEffect(() => bindTransferIdentity(rootIdentity, rootData.user?.id, rootData.clientIdentityGeneration),

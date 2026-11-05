@@ -25,3 +25,10 @@ test('required content ignores empty heading/list formatting markers but accepts
 	assert.equal(componentRichTextHasContent({ blocks: [{ type: 'header', data: { level: 2, text: '<br>' } }, { type: 'list', data: { style: 'ordered', items: [{ content: '', items: [] }] } }] }), false);
 	assert.equal(componentRichTextHasContent(componentRichTextDocument('#')), true);
 });
+test('large explicit rich lists retain content without a function argument ceiling', () => {
+	const items = Array(200_000).fill('');
+	const document = { blocks: [{ type: 'list', data: { style: 'unordered', items } }] };
+	assert.equal(componentRichTextHasContent(document), false);
+	items[0] = 'Preserved first item';
+	assert.equal(componentRichTextHasContent(document), true);
+});

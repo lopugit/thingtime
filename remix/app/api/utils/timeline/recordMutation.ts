@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { copyBoundedJson } from '../../../utils/boundedJson.ts';
 import { TIMELINE_RESERVED_PREFIX, parseTimelineEvent, type TimelineEvent, type TimelineSnapshot } from '../../../timeline/contract.ts';
 import { appendTimelineEvent } from './repository.ts';
-import { isProtectedThingtime } from '../../../schemas/registry.ts';
+import { MAX_STORABLE_NESTING, isProtectedThingtime } from '../../../schemas/registry.ts';
 import { currentContentStorageSizeBytes, thingStorageSizeBytes, StorageMutationError } from '../storage/storageCore.ts';
 import { markUserStorageNeedsReconcile, retainDeletedThingStorage } from '../storage/userStorage';
 import { timelineMutationContext } from './mutationContext';
@@ -22,7 +22,7 @@ export function thingContentSnapshot(doc: any): TimelineSnapshot | null {
 			thingtime: doc.thingtime ?? ['data'], crystal: doc.crystal ?? null, extended: doc.extended ?? null,
 			tags: doc.tags ?? [], acl: doc.acl ?? ['tt:user'], folderId: doc.folderId ?? null, targetId: doc.targetId ?? null,
 			geo: doc.geo ?? null
-		}, { maxBytes: TIMELINE_SNAPSHOT_MAX_BYTES, maxDepth: 90, maxNodes: 90_000, sortKeys: true }, 'Thing revision')
+		}, { maxBytes: TIMELINE_SNAPSHOT_MAX_BYTES, maxDepth: MAX_STORABLE_NESTING + 1, maxNodes: Infinity, sortKeys: true }, 'Thing revision')
 	};
 }
 

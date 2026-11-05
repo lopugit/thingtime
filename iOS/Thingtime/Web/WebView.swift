@@ -21,9 +21,11 @@ struct WebView: UIViewRepresentable {
         configuration.userContentController.addUserScript(MobileFolderBridge.script)
         configuration.userContentController.addUserScript(FileExportBridge.script)
         configuration.userContentController.add(context.coordinator, name: Self.nativeMessageHandlerName)
+        context.coordinator.configureShareComposer(configuration: configuration, origin: url)
 
         let webView = ThingtimeWKWebView(frame: .zero, configuration: configuration)
         context.coordinator.webView = webView
+        context.coordinator.shareComposer?.webView = webView
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
@@ -54,7 +56,11 @@ struct WebView: UIViewRepresentable {
         // A destination switch always drops the previous origin's widget content
         // and detaches its queued uploads, even when a widget tap is delivered in
         // the same update. Widget navigation alone stays within the same origin.
-        if rootChanged { WidgetStore.clear(); context.coordinator.resetChatActivity() }
+        if rootChanged {
+            WidgetStore.clear(); context.coordinator.resetChatActivity()
+            context.coordinator.configureShareComposer(configuration: webView.configuration, origin: url)
+            context.coordinator.shareComposer?.webView = webView
+        }
         context.coordinator.mobileDevice.suspend()
         context.coordinator.mobileFolders.suspend()
         context.coordinator.fileExports.suspend()
@@ -69,6 +75,14 @@ struct WebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
         var loadedRootURL: URL?
+        var shareComposer: ShareComposerBridge?
+        func configureShareComposer(configuration: WKWebViewConfiguration, origin: URL) {
+            configuration.userContentController.removeScriptMessageHandler(forName: ShareComposerBridge.name, contentWorld: .page)
+            let bridge = ShareComposerBridge(origin: origin)
+            shareComposer = bridge
+            configuration.userContentController.addScriptMessageHandler(bridge, contentWorld: .page, name: ShareComposerBridge.name)
+            configuration.userContentController.addUserScript(ShareComposerBridge.script(origin: origin))
+        }
         let mobileDevice = MobileDeviceBridge()
         let mobileFolders = MobileFolderBridge()
         let fileExports = FileExportBridge()

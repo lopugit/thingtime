@@ -1,5 +1,6 @@
+import { copyTimelineContent, TIMELINE_CONTENT_MAX_DEPTH } from './contentJson.ts';
 import { copyBoundedJson } from '../utils/boundedJson.ts';
-import { parseTimelineEvent, TIMELINE_EVENT_MAX_BYTES, type TimelineEvent, type TimelineSnapshot } from './contract.ts';
+import { parseTimelineEvent, type TimelineEvent, type TimelineSnapshot } from './contract.ts';
 import {
 	isTimelineBranchId,
 	parseTimelineBranchEntry,
@@ -69,11 +70,7 @@ export function parseBranchMergeRequest(input: unknown): BranchMergeRequest {
 /** A bounded transport view. Durable changes still use the unchanged event,
  * link and branch-command schemas on both sides of synchronization. */
 export function parseBranchMergePreview(input: unknown, ownerId: string, request: BranchMergeRequest): BranchMergePreview {
-	const value = copyBoundedJson(
-		input,
-		{ maxBytes: TIMELINE_EVENT_MAX_BYTES, maxDepth: 100, maxNodes: 200_000, sortKeys: true },
-		'Branch merge preview'
-	) as any;
+	const value = copyTimelineContent(input, 'Branch merge preview', 4) as any;
 	if (
 		!keys(value, [
 			'branch',
@@ -110,13 +107,13 @@ export function parseBranchMergePreview(input: unknown, ownerId: string, request
 			throw new Error('Invalid branch comparison content');
 		versionContent(snapshot);
 	}
-	if (!Array.isArray(value.conflicts) || value.conflicts.length > 2000) throw new Error('Invalid branch conflicts');
+	if (!Array.isArray(value.conflicts)) throw new Error('Invalid branch conflicts');
 	const paths = new Set<string>();
 	for (const conflict of value.conflicts) {
 		if (
 			!keys(conflict, ['path', 'base', 'current', 'incoming']) ||
 			!Array.isArray(conflict.path) ||
-			conflict.path.length > 96 ||
+			conflict.path.length > TIMELINE_CONTENT_MAX_DEPTH ||
 			conflict.path.some((part: unknown) => typeof part !== 'string')
 		)
 			throw new Error('Invalid branch conflict');

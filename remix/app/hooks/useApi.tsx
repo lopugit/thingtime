@@ -1,3 +1,4 @@
+import { requireSharedContentCapability, sharedContentWrite } from '~/utils/sharedContentCapabilities';
 import { requiresCollectionPagingContract } from '~/components/Builder/savedCollectionContract';
 import { AUTHORED_CONTROL_REQUIREMENTS, usesAuthoredControls } from '~/schemas/authoredControls';
 import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
@@ -149,7 +150,7 @@ export function useApi() {
     files: {
       read: useCallback(async (scope: TimelineScope, id: string, options?: { signal?: AbortSignal }) => {
         if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
-        await requireThingtimeCapability('api.files', '1.0.0', scope.apiOrigin);
+        await requireSharedContentCapability('api.files', { expectedApiOrigin: scope.apiOrigin });
         await requireThingtimeCapability('api.actions-run', '1.7.0', scope.apiOrigin);
         await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0', scope.apiOrigin);
         const result = await getJson(`/api/v1/files${toQuery({ id })}`, { ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
@@ -160,7 +161,7 @@ export function useApi() {
       commit: useCallback(async (scope: TimelineScope, input: CloudFileCommit, options?: { signal?: AbortSignal }) => {
         if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
         const command = parseCloudFileCommit(input);
-        await requireThingtimeCapability('api.files', command.symbolicLink ? '1.9.0' : '1.0.0', scope.apiOrigin);
+        await requireSharedContentCapability('api.files', { expectedApiOrigin: scope.apiOrigin });
         await requireThingtimeCapability('api.actions-run', '1.7.0', scope.apiOrigin);
         return asyncFetcher.submit(command, { action: '/api/v1/files', ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
       }, [asyncFetcher])
@@ -188,11 +189,11 @@ export function useApi() {
         return parseTimelineBranchLookupResult(result, scope.ownerId, lookup);
       }, []),
       checkoutBranch: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: BranchCheckoutRequest, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.8.0');
+        await requireSharedContentCapability('api.timeline');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       branchMerge: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: BranchMergeRequest, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', request.componentChoices === undefined ? '1.7.0' : '1.11.0');
+        await requireSharedContentCapability('api.timeline');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       entry: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
@@ -218,7 +219,7 @@ export function useApi() {
       }, [asyncFetcher]),
       // Strict gate: a 1.17 server answers `export=1&eventId=` with a plain entry read (HTTP 200), so the manifest is the only reliable signal.
       exportVersion: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.18.0');
+        await requireSharedContentCapability('api.timeline');
         const result = await getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId, export: 1 })}`, options);
         return parseTimelineVersionExport(result, scope.ownerId, eventId);
       }, []),
@@ -237,8 +238,8 @@ export function useApi() {
         return asyncFetcher.submit(event, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       version: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: VersionRequest) => {
-        // Undo first: it always carries componentMode, which alone would negotiate 1.12.0 and earn a 400 from an older server.
-        await requireThingtimeCapability('api.timeline', request.mode === 'undo' ? '1.18.0' : request.recover ? '1.14.0' : request.componentMode ? '1.12.0' : scope.dataPlane === 'home' ? '1.6.0' : '1.1.0');
+        // Full content operations require the corrected broad-snapshot reader.
+        await requireSharedContentCapability('api.timeline');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId });
       }, [asyncFetcher])
     },
@@ -887,11 +888,8 @@ export function useApi() {
 						},
 						options?: ThingRequestOptions
 					) => {
-						await requireThingtimeCapability('api.attachment-uploads', args.purpose === 'file' || args.purpose === 'file-import' ? '1.5.0' : '1.4.1');
-						if (args.purpose === 'file' || args.purpose === 'file-import') await requireThingtimeCapability('api.attachment-upload-complete', '1.4.0');
-						if (args.purpose === 'recording-import') {
-							await requireThingtimeCapability('api.attachment-upload-complete', '1.3.0');
-						}
+						await requireSharedContentCapability('api.attachment-uploads', options);
+            await requireSharedContentCapability('api.attachment-upload-complete', options);
 						const ret = asyncFetcher.submit(
 							{
 								requestId: args?.requestId,
@@ -925,6 +923,7 @@ export function useApi() {
 				),
 				complete: useCallback(
 					async (args: { uploadId: string }, options?: ThingRequestOptions) => {
+            await requireSharedContentCapability('api.attachment-upload-complete', options);
 						const ret = asyncFetcher.submit(
 							{ uploadId: args?.uploadId },
 							{
@@ -969,14 +968,15 @@ export function useApi() {
 			// binds/orders/deletes like an upload but its bytes stay on the original
 			// site (duplicates allowed; unbound mints expire in 24h)
 			link: useCallback(
-				async (args: { url: string; purpose?: 'post' | 'comment'; mediaKind?: 'image' | 'video' | 'file' }, options?: { signal?: AbortSignal }) => {
+				async (args: { url: string; purpose?: 'post' | 'comment'; mediaKind?: 'image' | 'video' | 'file' }, options?: ThingRequestOptions) => {
+          await requireSharedContentCapability('api.attachment-link', options);
 					const ret = asyncFetcher.submit(
 						{
 							url: args?.url,
 							...(args?.purpose && args.purpose !== 'post' ? { purpose: args.purpose } : {}),
 							...(args?.mediaKind ? { mediaKind: args.mediaKind } : {})
 						},
-						{ action: '/api/v1/attachments/link', errorContext: 'add linked media', signal: options?.signal }
+						{ action: '/api/v1/attachments/link', errorContext: 'add linked media', ...options }
 					);
 					ret.then(refreshRootData).catch(() => {});
 					return ret;
@@ -986,16 +986,18 @@ export function useApi() {
 			// owner display metadata on a ready attachment (media page + lightbox
 			// text) — omit a field to keep it, null/'' clears it
 			annotate: useCallback(
-				async (args: { id: string; filenamePreview?: string | null; title?: string | null; description?: string | null }) =>
-					asyncFetcher.submit(
+				async (args: { id: string; filenamePreview?: string | null; title?: string | null; description?: string | null }, options?: ThingRequestOptions) => {
+          await requireSharedContentCapability('api.attachment-annotate', options);
+					return asyncFetcher.submit(
 						{
 							id: args?.id,
 							...(args && 'filenamePreview' in args ? { filenamePreview: args.filenamePreview } : {}),
 							...(args && 'title' in args ? { title: args.title } : {}),
 							...(args && 'description' in args ? { description: args.description } : {})
 						},
-						{ action: '/api/v1/attachments/annotate', errorContext: 'save media details' }
-					),
+						{ action: '/api/v1/attachments/annotate', errorContext: 'save media details', ...options }
+					);
+        },
 				[asyncFetcher]
 			)
 		},
@@ -1121,20 +1123,20 @@ export function useApi() {
     things: {
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
         return withExportDeadline(async signal => {
-          await requireThingtimeCapability('api.things-export', '1.15.1');
+          await requireSharedContentCapability('api.things-export');
           if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
           signal.throwIfAborted();
           return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
         }, options?.signal);
       }, [asyncFetcher]),
       import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things-import', '1.11.0');
+        await requireSharedContentCapability('api.things-import');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
       // subspaces (the "🪐 My subspaces" chip); default all
       feed: useCallback(async (args) => {
-        await requireThingtimeCapability('api.things-feed', '1.8.0');
+        await requireSharedContentCapability('api.things-feed');
         return getJson(`/api/v1/things/feed${toQuery(args)}`);
       }, []),
       // the explore board — public trending posts; `anon: 1` keeps logged-out
@@ -1155,18 +1157,21 @@ export function useApi() {
       // only on the URL). `mode` is meaningless without conditions, so the GET
       // URL drops it to keep cache keys stable.
       search: useCallback(
-        async (args) => {
+        async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+          if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const { conditions, mode, ...rest } = args || {};
-          if (rest.near !== undefined) await requireThingtimeCapability('api.things-search', '1.3.0');
+          await requireSharedContentCapability('api.things-search', options);
           if (rest.anon && !conditions && rest.near === undefined) {
-            return getJson(`/api/v1/things/search${toQuery(rest)}`);
+            return getJson(`/api/v1/things/search${toQuery(rest)}`, { ...options, expectedDataPlane });
           }
-          return asyncFetcher.submit(args || {}, { action: '/api/v1/things/search' });
+          return asyncFetcher.submit(args || {}, { action: '/api/v1/things/search', ...options, expectedDataPlane });
         },
         [asyncFetcher]
       ),
       userPosts: useCallback(async (args) => {
-        await requireThingtimeCapability('api.things-user', '1.7.0');
+        await requireSharedContentCapability('api.things-user');
         await requireThingtimeCapability('api.attachment-content', '1.8.0');
         return getJson(`/api/v1/things/user${toQuery(args)}`);
       }, []),
@@ -1180,8 +1185,8 @@ export function useApi() {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
-          await requireThingtimeCapability('api.things', args?.sharedRoot ? '1.49.1' : '1.40.0');
-          await requireThingtimeCapability('api.attachment-content', '1.9.0');
+          await requireSharedContentCapability('api.things', options);
+          await requireSharedContentCapability('api.attachment-content', options);
           return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
         },
 				[getJson]
@@ -1191,7 +1196,7 @@ export function useApi() {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
-          await requireThingtimeCapability('api.things', args?.builderApp ? '1.45.0' : args?.commentProjection ? '1.27.0' : args?.target ? '1.22.0' : args?.folder === 'root' ? '1.39.1' : '1.14.0');
+          await requireSharedContentCapability('api.things', options);
           return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
@@ -1217,7 +1222,9 @@ export function useApi() {
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
-          if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update']);
+          if (sharedContentWrite(args)) await requireSharedContentCapability('api.things-update', options);
+          if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+
           if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
@@ -1267,7 +1274,7 @@ export function useApi() {
       // multi-select move/copy/delete/share — see /docs/api things-bulk
       bulk: useCallback(
         async (args) => {
-          if (args?.op === 'move') await requireThingtimeCapability('api.things-bulk', '1.4.0');
+          await requireSharedContentCapability('api.things-bulk');
           return asyncFetcher.submit(
             {
               op: args?.op,
@@ -1284,6 +1291,7 @@ export function useApi() {
       ),
       upsert: useCallback(
         async (args) => {
+          if (sharedContentWrite(args)) { await requireSharedContentCapability('api.things'); await requireSharedContentCapability('api.things-update'); }
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
@@ -1308,7 +1316,9 @@ export function useApi() {
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
-          if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things']);
+          if (sharedContentWrite(args)) await requireSharedContentCapability('api.things', options);
+          if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
@@ -1369,7 +1379,7 @@ export function useApi() {
         // simple text comments send { id, text }; rich comments add
 				// type/images/listing/thing/mediaLayout/tags/attachments — comments share the post schema
         async (args) => {
-          await requireThingtimeCapability('api.things-comment', '1.8.0');
+          await requireSharedContentCapability('api.things-comment');
 					const attachmentIds = args?.attachmentIds;
 					const ret = asyncFetcher.submit(
 						buildThingCommentRequestPayload(args),
@@ -1384,7 +1394,7 @@ export function useApi() {
       ),
       share: useCallback(
         async (args) => {
-          await requireThingtimeCapability('api.things-share', '1.3.0');
+          await requireSharedContentCapability('api.things-share');
           return asyncFetcher.submit(
             // tags: the quote caption's harvested inline #hashtags — merged
             // server-side with the tags carried from the original post
@@ -1727,8 +1737,7 @@ export function useApi() {
         const actor = actionActor.current;
         const expectedPlane = planeRef.current;
         const origin = window.location.origin;
-        const manyInputs = args?.inputs && typeof args.inputs === 'object' && Object.keys(args.inputs).length > 16;
-        await requireThingtimeCapability('api.actions-run', manyInputs ? AUTHORED_CONTROL_REQUIREMENTS['api.actions-run'] : args?.sharedRoot ? '1.40.1' : '1.40.0');
+        await requireSharedContentCapability('api.actions-run', { expectedApiOrigin: origin });
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
         const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane });
         const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery));

@@ -39,7 +39,7 @@ const attachment = (overrides: Record<string, unknown> = {}) => ({
 	...overrides
 });
 
-test('attachment metadata is canonical, bounded, and derives a safe media kind', () => {
+test('attachment metadata is canonical, hygienic, and derives a safe media kind', () => {
 	assert.deepEqual(
 		sanitizeAttachmentPublicMetadata({
 			name: '  Holiday Photo.PNG  ',
@@ -50,7 +50,7 @@ test('attachment metadata is canonical, bounded, and derives a safe media kind',
 		{
 			ok: true,
 			crystal: {
-				name: 'Holiday Photo.PNG',
+				name: '  Holiday Photo.PNG  ',
 				size: 42,
 				contentType: 'image/png',
 				mediaKind: 'image'
@@ -307,7 +307,7 @@ test('moderation-hidden bound ids are exempt from the sync cover and re-stamp af
 	assert.equal(attachmentModerationHidesFromPublic(undefined), false);
 });
 
-test('owner display filename/title/description are optional, bounded, hygienic, and never stored empty', () => {
+test('owner display filename/title/description are optional, hygienic, and never stored empty', () => {
 	const annotated = sanitizeAttachmentPublicMetadata({
 		name: 'sunset.jpg',
 		size: 42,
@@ -347,10 +347,10 @@ test('owner display filename/title/description are optional, bounded, hygienic, 
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 'two\nlines' }).ok, false);
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', description: 'bad\ttab' }).ok, false);
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 'bad‮title' }).ok, false);
-	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 'x'.repeat(201) }).ok, false);
-	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', description: 'x'.repeat(2001) }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 'x'.repeat(201) }).ok, true);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', description: 'x'.repeat(2001) }).ok, true);
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 42 }).ok, false);
-	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', filenamePreview: 'x'.repeat(256) }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', filenamePreview: 'x'.repeat(256) }).ok, true);
 });
 
 test('annotated crystals stay canonical for projection and accounting; foreign keys still fail closed', () => {
@@ -429,7 +429,7 @@ const linkedDoc = (overrides: Record<string, unknown> = {}) => ({
 	...overrides
 });
 
-test('linked URLs are plain bounded http(s) with no credentials or control characters', () => {
+test('linked URLs are plain http(s) with no credentials or control characters', () => {
 	assert.equal(canonicalLinkedAttachmentUrl('https://example.com/a.jpg'), 'https://example.com/a.jpg');
 	assert.equal(canonicalLinkedAttachmentUrl('  https://example.com/a.jpg  '), 'https://example.com/a.jpg');
 	assert.equal(canonicalLinkedAttachmentUrl('http://example.com'), 'http://example.com');
@@ -437,7 +437,7 @@ test('linked URLs are plain bounded http(s) with no credentials or control chara
 	assert.equal(canonicalLinkedAttachmentUrl('https://user:pass@example.com/a.jpg'), null);
 	assert.equal(canonicalLinkedAttachmentUrl('https://example.com/a b.jpg'), null);
 	assert.equal(canonicalLinkedAttachmentUrl('https://example.com/a\\b.jpg'), null);
-	assert.equal(canonicalLinkedAttachmentUrl(`https://example.com/${'a'.repeat(2048)}.jpg`), null);
+	assert.equal(canonicalLinkedAttachmentUrl(`https://example.com/${'a'.repeat(2048)}.jpg`), `https://example.com/${'a'.repeat(2048)}.jpg`);
 	assert.equal(canonicalLinkedAttachmentUrl('javascript:alert(1)'), null);
 	assert.equal(canonicalLinkedAttachmentUrl(42), null);
 });
@@ -543,4 +543,17 @@ test('the owner keeps seeing their own pending attachment (flagged); others neve
 	assert.equal(toAttachmentPublicMetadata('attachment-1', crystal, { status: 'blocked' }, { ownerView: true }), null);
 	// clear/nsfw are unaffected by ownerView
 	assert.equal(toAttachmentPublicMetadata('attachment-1', crystal, { status: 'nsfw' }, { ownerView: true })?.nsfw, true);
+});
+
+test('original filenames and long metadata preserve all valid input without product caps', () => {
+ const name = `  ${'original-file'.repeat(100)}.custom  `;
+ const title = 'Long title '.repeat(100);
+ const description = 'Detailed original description\n'.repeat(300);
+ const filenamePreview = 'Visible filename '.repeat(100);
+ const result = sanitizeAttachmentPublicMetadata({ name, size: 0, contentType: 'application/octet-stream', title, description, filenamePreview });
+ assert.ok(result.ok);
+ if (result.ok) { assert.equal(result.crystal.name, name); assert.equal(result.crystal.title, title.trim()); assert.equal(result.crystal.description, description.trim()); assert.equal(result.crystal.filenamePreview, filenamePreview.trim()); }
+ const longUrl = `https://example.test/${'path'.repeat(2000)}/original.custom`;
+ assert.equal(canonicalLinkedAttachmentUrl(longUrl), longUrl);
+ assert.equal(linkedAttachmentNameForUrl(`https://example.test/${encodeURIComponent(name)}`), name);
 });

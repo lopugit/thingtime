@@ -8,7 +8,7 @@ import {
 	EDITOR_JS_HEADING_LEVELS,
 	getEditorJsValueSignature,
 	isEditorJsDoc,
-	isEditorJsDocSafeToEdit
+	isExplicitEditorJsDocSafeToEdit
 } from './editorJsValue';
 import type { EditorJsDoc } from './editorJsValue';
 import { createOrderedEditorJsChangeQueue } from './editorJsChangeQueue';
@@ -986,7 +986,7 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 
 	// Keep this wrapper mounted for unsafe external replacements so it can bump
 	// the generation above and invalidate any save draining from the old editor.
-	if (isEditorJsDoc(props.value) && !isEditorJsDocSafeToEdit(props.value)) {
+	if (isEditorJsDoc(props.value) && !isExplicitEditorJsDocSafeToEdit(props.value)) {
 		return (
 			<Box
 				role="note"
@@ -997,7 +997,7 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 				color="var(--tt-muted, #9a9aa6)"
 				fontSize="13px"
 			>
-				This Editor.js document is too large or deeply nested for safe editing. Its complete value is preserved; use view mode for a bounded preview.
+				This rich-text document contains unsupported values or exceeds the stored document nesting format. Its complete value is preserved.
 			</Box>
 		);
 	}

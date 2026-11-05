@@ -1,3 +1,4 @@
+import { attachmentPurposeAllowsEmpty } from './attachmentCore';
 import { parseFileSyncUploadOrigin, sameFileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { logFinalizationFailure, type AttachmentFinalizationStage } from './finalizationDiagnostic';
 import { activeAttachmentRetention, attachmentRetention } from './attachmentRetention';
@@ -61,7 +62,8 @@ export const ATTACHMENT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 export const ATTACHMENT_READY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 export const ATTACHMENT_MIN_PART_BYTES = MIN_CONTENT_PART_BYTES;
 export const ATTACHMENT_MAX_PART_BYTES = MAX_CONTENT_PART_BYTES;
-export const ATTACHMENT_MAX_OBJECT_BYTES = 5 * 1024 * 1024 * 1024 * 1024;
+// AWS multipart limit:10000 parts of at most5GiB each (current S3 object ceiling).
+export const ATTACHMENT_MAX_OBJECT_BYTES = 10_000 * ATTACHMENT_MAX_PART_BYTES;
 export const MAX_PART_URLS_PER_REQUEST = 20;
 export const MAX_EXPIRED_ATTACHMENTS_PER_REAP = 1000;
 export const ATTACHMENT_REAP_WALL_CLOCK_MS = 25 * 1000;
@@ -774,8 +776,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const requestedId = raw.requestId === undefined ? null : normalizeId(raw.requestId);
 			if (raw.requestId !== undefined && !requestedId) return fail(400, 'Invalid attachment request id');
 			const sizeBytes = Number(raw.sizeBytes);
-			if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 0 || (sizeBytes === 0 && (intent.purpose !== 'file' || raw.sizeBytes !== 0)) || sizeBytes > ATTACHMENT_MAX_OBJECT_BYTES) {
-				return fail(400, 'Attachment size must be between 1 byte and 5 TiB');
+			if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 0 || (sizeBytes === 0 && (!attachmentPurposeAllowsEmpty(intent.purpose) || raw.sizeBytes !== 0)) || sizeBytes > ATTACHMENT_MAX_OBJECT_BYTES) {
+				return fail(400, `Attachment size must be between ${attachmentPurposeAllowsEmpty(intent.purpose) ? '0 bytes' : '1 byte'} and the S3 multipart ceiling of ${ATTACHMENT_MAX_OBJECT_BYTES} bytes (10000 parts of at most 5 GiB)`);
 			}
 			const sanitized = sanitizeAttachmentPublicMetadata({
 				name: raw.filename,
@@ -865,6 +867,12 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
         if (reserved.attachmentFileSyncOrigin && !sameFileSyncUploadOrigin(reserved.attachmentFileSyncOrigin, fileSyncOrigin)) return fail(409, 'Sync upload origin changed');
         if (!reserved.attachmentFileSyncOrigin) reserved = await dependencies.store.recordFileSyncOrigin(ownerId, id, requestFingerprint, fileSyncOrigin);
       }
+            // Empty social drafts have no multipart work to repeat. Return the
+            // original ready plan only while its ordinary draft is unbound/live.
+            if (sizeBytes === 0 && attachmentPurposeAllowsEmpty(intent.purpose) && intent.purpose !== 'file' && reserved.attachmentState === 'ready') {
+                if (reserved.targetId || !(reserved.attachmentExpiresAt instanceof Date) || reserved.attachmentExpiresAt.getTime() <= dependencies.now().getTime()) return fail(409, 'Attachment request cannot be resumed', { code: 'upload_unavailable', retryable: false });
+                return { ok: true, upload: { ...uploadPlan(reserved), state: 'ready' } };
+            }
 			// Recording starts can be replayed after a lost completion receipt.
 			// The owner and exact metadata fingerprint have already been checked.
 			if (['recording', 'file', 'password'].includes(intent.purpose) && reserved.attachmentState === 'ready') {
@@ -877,8 +885,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			}
 			// Exact file starts recover interrupted completion through the same
 			// fenced finalizer, including a completed MPU whose ready write was lost.
-			const resumableFileFinalization = intent.purpose === 'file' && reserved.objectSizeBytes === sizeBytes &&
-				reserved.attachmentPurpose === 'file' && reserved.attachmentState === 'finalizing';
+			const resumableFileFinalization = (intent.purpose === 'file' || (sizeBytes === 0 && attachmentPurposeAllowsEmpty(intent.purpose))) && reserved.objectSizeBytes === sizeBytes &&
+				reserved.attachmentPurpose === intent.purpose && reserved.attachmentState === 'finalizing';
 			if (
 				(reserved.attachmentState !== 'pending' && !resumableFileFinalization) ||
 				!reserved.attachmentExpiresAt ||
@@ -1105,7 +1113,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (!finalizationClaim.acquired) {
 				return finalizationInProgress();
 			}
-			if (!doc.uploadId && !(doc.objectSizeBytes === 0 && doc.attachmentPurpose === 'file')) {
+			if (!doc.uploadId && !(doc.objectSizeBytes === 0 && attachmentPurposeAllowsEmpty(doc.attachmentPurpose))) {
 				stage = 'revert-lease';
 				await dependencies.store.revertFinalizing(ownerId, id, finalizationLeaseId);
 				return fail(409, 'Attachment upload is not ready to finalize', {
@@ -1629,7 +1637,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		inspectForPurpose(ownerId, attachmentIds, 'comment', MAX_ATTACHMENTS_PER_TARGET, expectedTargetId);
 
 	const inspectForMessage = (ownerId: string, attachmentIds: readonly unknown[], expectedTargetId?: unknown) =>
-		inspectForPurpose(ownerId, attachmentIds, 'message', MAX_ATTACHMENTS_PER_TARGET, expectedTargetId);
+		inspectForPurpose(ownerId, attachmentIds, 'message', attachmentCountLimit('message'), expectedTargetId);
 
 	const inspectForEmoji = async (ownerId: string, attachmentIds: readonly unknown[], expectedTargetId?: unknown) => {
 		if (attachmentIds.length !== 1) return fail(400, 'Choose exactly one custom emoji image');

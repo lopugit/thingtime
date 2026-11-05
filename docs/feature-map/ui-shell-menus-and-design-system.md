@@ -1,5 +1,25 @@
 # UI shell, menus and design system
 
+## Incoming sharing and contextual toolbar
+
+`/share` uses the focused shell in `app/root.tsx`, with the existing Post,
+Messenger and Things destination interfaces. `IncomingShare/ContextActionToolbar`
+accepts registered action descriptors and the active context. Its persisted
+`SettingsDocumentHost` document contains individually editable buttons, labels,
+icons and accents; `TransientBlockHost` binds selection and permitted actions.
+`ThingsPage.locationPicker` retains folder navigation and creation while keeping
+**Save here** above the measured, full-width toolbar. See
+[incoming sharing](../incoming-sharing.md) and the incoming-sharing checklist in
+`TESTING.md`; `scripts/incoming-share-acceptance.mjs` exercises real disposable
+API data and desktop/mobile rendering.
+
+`ContextActionDock`, `useContextViewportDock` and `contextViewport` share keyboard
+placement across the toolbar and existing destination controls. Keep CSS layout
+coordinates distinct from client rectangles when WebKit pans its visual
+viewport; count the pan once. Focus reveal uses measured control bounds and
+bounded settling, while the Builder blocks remain individually editable.
+`test:attachments` includes the IncomingShare viewport/bridge regressions.
+
 ## Editable map markers and connector settings
 
 Saved `tt-rich-text` fields/read views reuse `LongTextEditor`/`RichTextBlocks`.

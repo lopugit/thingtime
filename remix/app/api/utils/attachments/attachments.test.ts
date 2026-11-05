@@ -4,6 +4,9 @@ import test from 'node:test';
 
 import {
 	ATTACHMENT_MIN_PART_BYTES,
+  ATTACHMENT_MAX_OBJECT_BYTES,
+  ATTACHMENT_MAX_PART_BYTES,
+  attachmentPartPlan,
 	attachmentExpectedPartBytes,
 	attachmentIdForRequest,
 	createReadyAttachmentPostInsertHook,
@@ -278,7 +281,7 @@ test('start reserves billed pending metadata before creating the S3 MPU', async 
 	}
 });
 
-test('non-file starts reject zero bytes before reserving quota or creating an MPU', async () => {
+test('image-only starts reject zero bytes before reserving quota or creating an MPU', async () => {
 	let touched = false;
 	const service = createAttachmentService({
 		store: {
@@ -295,13 +298,14 @@ test('non-file starts reject zero bytes before reserving quota or creating an MP
 	assert.deepEqual(
 		await service.start('user-1', {
 			filename: 'empty.bin',
+      purpose: 'profile-avatar',
 			contentType: 'application/octet-stream',
 			sizeBytes: 0
 		}),
 		{
 			ok: false,
 			status: 400,
-			error: 'Attachment size must be between 1 byte and 5 TiB'
+			error: 'Attachment size must be between 1 byte and the S3 multipart ceiling of 53687091200000 bytes (10000 parts of at most 5 GiB)'
 		}
 	);
 	assert.equal(touched, false);
@@ -2387,7 +2391,7 @@ test('subspace uploads stamp slot-specific purposes and bound raster limits befo
 });
 
 
-test('posts accept more than 25 owned ready attachments without relaxing other purposes or identity validation', async () => {
+test('posts and messages accept large owned selections without relaxing comment or identity validation', async () => {
 	let purpose: 'post' | 'comment' | 'message' = 'post';
 	const ids = Array.from({ length: 80 }, (_, index) => `large-gallery-${index}`);
 	const service = createAttachmentService({
@@ -2401,7 +2405,7 @@ test('posts accept more than 25 owned ready attachments without relaxing other p
 	purpose = 'comment';
 	assert.equal((await service.inspectForComment('user-1', ids)).ok, false);
 	purpose = 'message';
-	assert.equal((await service.inspectForMessage('user-1', ids)).ok, false);
+	assert.equal((await service.inspectForMessage('user-1', ids)).ok, true);
 	assert.equal((await service.inspectForPost('user-1', ids)).ok, false);
 });
 
@@ -2505,7 +2509,18 @@ test('bound Messenger media rechecks target membership even for its uploader', a
   }
 });
 
-test('zero-byte file starts finalize a real stored object and replay the same request without MPU or duplicate quota', async () => {
+test('empty social uploads require an exact numeric zero before storage reservation', async () => {
+    let reserves = 0;
+    const service = createAttachmentService({ store: { reservePending: async () => { reserves++; throw Error('must not reserve'); } } as any });
+    for (const purpose of ['post', 'comment', 'message']) for (const sizeBytes of ['0', null, false, -1]) {
+        const result = await service.start('user-1', { purpose, filename: 'empty.custom', contentType: 'application/octet-stream', sizeBytes });
+        assert.equal(result.ok, false);
+        if (!result.ok) assert.equal(result.status, 400);
+    }
+    assert.equal(reserves, 0);
+});
+
+for (const purpose of ['file', 'post', 'comment', 'message']) test(`zero-byte ${purpose} starts finalize a real stored object and replay without MPU or duplicate quota`, async () => {
     const { mkdtemp, rm } = await import('node:fs/promises');
     const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
     const { createLocalAttachmentStorage } = await import('./localAttachmentStorage');
@@ -2530,19 +2545,19 @@ test('zero-byte file starts finalize a real stored object and replay the same re
                 doc.attachmentState = 'finalizing'; doc.attachmentFinalizationLeaseId = lease; return { doc, acquired: true };
             },
             renewFinalizing: async (_owner: string, id: string, lease: string) => stored.get(id)?.attachmentFinalizationLeaseId === lease ? stored.get(id)! : null,
-            markReady: async (_owner: string, id: string, crystal: any, version: string, _expires: Date, lease: string) => {
+            markReady: async (_owner: string, id: string, crystal: any, version: string, expires: Date, lease: string) => {
                 const doc = stored.get(id)!; assert.equal(doc.attachmentFinalizationLeaseId, lease);
                 Object.assign(doc, { crystal, objectVersionId: version, attachmentState: 'ready', moderation: { status: 'skipped' } });
-                delete doc.attachmentExpiresAt; delete doc.attachmentFinalizationLeaseId; return doc;
+                if (purpose === 'file') delete doc.attachmentExpiresAt; else doc.attachmentExpiresAt = expires; delete doc.attachmentFinalizationLeaseId; return doc;
             }
         };
         const service = createAttachmentService({ store, getS3: () => s3, customMongoActive: () => false, now: () => now });
-        const input = { requestId: 'empty-backup-1', purpose: 'file', filename: 'empty.txt', contentType: 'application/octet-stream', sizeBytes: 0 };
+        const input = { requestId: 'empty-backup-1', purpose, filename: 'empty.txt', contentType: 'application/octet-stream', sizeBytes: 0 };
         const first = await service.start('user-1', input); assert.ok(first.ok);
         if (!first.ok) return;
         assert.equal(first.upload.state, 'ready'); assert.equal(first.upload.partCount, 0);
         const id = first.upload.id as string, doc = stored.get(id)!;
-        assert.equal(doc.objectSizeBytes, 0); assert.ok(doc.objectVersionId); assert.equal(doc.attachmentExpiresAt, undefined);
+        assert.equal(doc.objectSizeBytes, 0); assert.ok(doc.objectVersionId); if (purpose === 'file') assert.equal(doc.attachmentExpiresAt, undefined); else assert.ok(doc.attachmentExpiresAt instanceof Date);
         const receipt = await service.fingerprint({ id: 'user-1' }, id); assert.ok(receipt.ok);
         if (receipt.ok) { assert.equal(receipt.size, 0); assert.equal(receipt.fingerprint.partCount, 0);
             assert.equal(receipt.fingerprint.sha256, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'); }
@@ -2553,6 +2568,12 @@ test('zero-byte file starts finalize a real stored object and replay the same re
         assert.equal((await service.complete('user-1', { uploadId: id })).ok, true);
         assert.equal((await service.start('user-1', { ...input, filename: 'different.txt' })).ok, false);
         assert.equal((await service.fingerprint({ id: 'other' }, id)).ok, false);
+        if (purpose !== 'file') {
+            doc.targetId = 'already-bound';
+            assert.equal((await service.start('user-1', input)).ok, false);
+            delete doc.targetId; doc.attachmentExpiresAt = now;
+            assert.equal((await service.start('user-1', input)).ok, false);
+        }
         assert.equal(reserves, 1); assert.equal(emptyPuts, 1); assert.equal(multipart, 0);
     } finally { await rm(directory, { recursive: true, force: true }); }
 });
@@ -2740,7 +2761,7 @@ test('same nonempty file start resumes interrupted completion through the origin
     assert.equal((await service.start('user-1', { ...input, sizeBytes: 4 })).ok, false);
 });
 
-test('same empty start resumes a failed finalization only through active and expired lease fences', async () => {
+for (const purpose of ['file', 'post', 'message']) test(`same empty ${purpose} start resumes failed finalization only through active and expired lease fences`, async () => {
     const { mkdtemp, rm, readdir } = await import('node:fs/promises');
     const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
     const { createLocalAttachmentStorage } = await import('./localAttachmentStorage');
@@ -2768,17 +2789,17 @@ test('same empty start resumes a failed finalization only through active and exp
                 return { doc, acquired: true };
             },
             renewFinalizing: async (_owner: string, _id: string, lease: string) => doc?.attachmentFinalizationLeaseId === lease ? doc : null,
-            markReady: async (_owner: string, _id: string, crystal: any, version: string, _expiry: Date, lease: string) => {
+            markReady: async (_owner: string, _id: string, crystal: any, version: string, expiry: Date, lease: string) => {
                 marks++; assert.equal(doc!.attachmentFinalizationLeaseId, lease);
                 if (marks === 1) throw Error('transient ready persistence failure after stored empty PUT');
                 Object.assign(doc!, { crystal, objectVersionId: version, attachmentState: 'ready', moderation: { status: 'skipped' } });
-                delete doc!.attachmentExpiresAt; delete doc!.attachmentFinalizationLeaseId; return doc;
+                if (purpose === 'file') delete doc!.attachmentExpiresAt; else doc!.attachmentExpiresAt = expiry; delete doc!.attachmentFinalizationLeaseId; return doc;
             }
         };
         const service = createAttachmentService({ store, now: () => clock, customMongoActive: () => false,
             getS3: () => ({ ...local, putEmptyObject: async input => { puts++; return local.putEmptyObject(input); },
                 headObject: async input => { heads++; return local.headObject(input); } }) });
-        const input = { requestId: 'empty-recovery-request', purpose: 'file', filename: 'empty.txt', contentType: 'application/octet-stream', sizeBytes: 0 };
+        const input = { requestId: 'empty-recovery-request', purpose, filename: 'empty.txt', contentType: 'application/octet-stream', sizeBytes: 0 };
         const failed = await service.start('user-1', input);
         assert.equal(failed.ok, false); if (!failed.ok) assert.equal(failed.status, 503);
         const reserved = doc! as AttachmentDoc, identity = reserved.shareId, key = reserved.objectKey;
@@ -2851,6 +2872,35 @@ test('sync upload origin is saved before byte authority and exact legacy retries
   assert.equal(stamps, 1); assert.equal(creates, 1);
 });
 
+test('message shares preserve more than 25 opaque attachments while rejecting duplicates and wrong purpose', async () => {
+ const docs = Array.from({ length: 41 }, (_, index) => attachmentDoc({
+  shareId: `shared-file-${index}`, attachmentState: 'ready', attachmentPurpose: 'message', uploadId: undefined,
+  crystal: { name: `${index}.custom`, size: 10, contentType: 'application/x-custom', mediaKind: 'file' }
+ }));
+ const service = createAttachmentService({ store: { getOwnedMany: async () => docs } as any, now: () => now, customMongoActive: () => false });
+ const ids = docs.map(doc => doc.shareId);
+ const result = await service.inspectForMessage('user-1', ids, 'message-1');
+ assert.equal(result.ok, true);
+ if (result.ok) assert.deepEqual(result.attachments.map(file => file.id), ids);
+ assert.equal((await service.inspectForMessage('user-1', [...ids, ids[0]], 'message-1')).ok, false);
+ docs[40].attachmentPurpose = 'post';
+ assert.equal((await service.inspectForMessage('user-1', ids, 'message-1')).ok, false);
+});
+
+test('multipart planning accepts files beyond the old5TiB product cap and reports only the current S3 part ceiling', async () => {
+ const beyondOldCap = 5 * 1024 ** 4 + 1;
+ const plan = attachmentPartPlan(beyondOldCap);
+ assert.ok(plan.partCount <= 10000); assert.ok(plan.partSizeBytes <= ATTACHMENT_MAX_PART_BYTES);
+ const maximum = attachmentPartPlan(ATTACHMENT_MAX_OBJECT_BYTES);
+ assert.equal(maximum.partCount, 10000); assert.equal(maximum.partSizeBytes, ATTACHMENT_MAX_PART_BYTES);
+ assert.throws(() => attachmentPartPlan(ATTACHMENT_MAX_OBJECT_BYTES + 1), /too large/);
+ let reserved = false;
+ const service = createAttachmentService({ store: { reservePending: async () => { reserved = true; throw Error('must not reserve'); } } as any });
+ const overProtocol = await service.start('user-1', { purpose: 'post', filename: 'large.custom', contentType: 'application/octet-stream', sizeBytes: ATTACHMENT_MAX_OBJECT_BYTES + 1 });
+ assert.equal(overProtocol.ok, false); assert.equal(reserved, false);
+ if (!overProtocol.ok) assert.match(overProtocol.error, /S3 multipart ceiling/);
+});
+
 test('local provider mints HTTPS native targets only after exact owner and version verification', async () => {
 	const { mkdtemp, rm } = await import('node:fs/promises');
 	const { tmpdir } = await import('node:os');
@@ -2886,4 +2936,5 @@ test('local provider mints HTTPS native targets only after exact owner and versi
 			assert.equal((await local.handleRequest(new Request(result.target.url))).status, 403);
 		}
 	} finally { await rm(directory, { recursive: true, force: true }); }
+
 });
