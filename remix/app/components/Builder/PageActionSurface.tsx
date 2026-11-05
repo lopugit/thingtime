@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { LOCAL_UI_ACTION, localQueryHref, reduceLocalUi } from '../Actions/localUiAction';
 import { componentNavigationState, componentPageHref, hasComponentBackEntry } from './componentNavigation';
+import { ownsAuthoredControl } from './authoredControlOwnership';
 import { ComponentDataScope } from './ComponentSelect';
 import { ComponentLocalControl } from './NativeComponentControls';
 import { useWebpageRuntime } from './webpageRuntime';
@@ -24,7 +25,7 @@ export const isExpandedPageAction = (target: { closest: (selector: string) => El
 /** A page-level fallback must never collect fields from unrelated rows. */
 export const expandedActionGroup = (control: HTMLElement, boundary: HTMLElement): HTMLElement => {
 	const group = control.closest<HTMLElement>('[data-tt-action-group]');
-	return group && boundary.contains(group) ? group : control;
+	return group && ownsAuthoredControl(boundary, group) ? group : control;
 };
 
 export const PageActionSurface = ({

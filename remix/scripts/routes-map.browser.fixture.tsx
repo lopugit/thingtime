@@ -20,7 +20,7 @@ const blocks: WebpageBlock[] = [
 	{ id: 'title', type: 'element', tag: 'h1', text: 'Routes browser fixture' },
 	{ id: 'notice', type: 'element', tag: 'p', text: 'Synthetic records and map backdrop' },
 	{ id: 'map', type: 'element', tag: 'tt-mapbox', props: {
-		title: 'Routes fixture map', height: 380, vaultId: 'synthetic-vault',
+		title: 'Routes fixture map', height: 380, markerScale: 0.5, vaultId: 'synthetic-vault',
 		favouritesSource: { action: 'fixture-favourites' },
 		selectedFavouriteId: '{query.favouriteId}', onSelectQuery: 'favouriteId', queryScope: 'page'
 	} },

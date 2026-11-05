@@ -129,3 +129,43 @@ access or Permanent Geocoding entitlement. Smoke the built manifest and map
 endpoint, then verify a real account/Vault request, selection, optimization,
 visible map and saved user data reload on the deployed origin. Use separate
 synthetic local identities for local UI tests.
+
+
+## Authored marker presentation (api.maps1.2.0)
+
+`tt-mapbox` accepts `markerScale` (base multiplier, default1),
+`markerScaleWithZoom` (defaultfalse) and `markerScaleReferenceZoom` (default12).
+Actual SDK zoom drives a bounded visual multiplier through the owner window's
+animation frame. The stable SDK anchor keeps its positioning transform while an
+inner visual scales; data sources and SDK markers do not restart per zoom/base
+change. Authored scope includes `map.zoom`, `map.markerScale` and
+`map.markerBaseScale`. Use `var(--tt-map-marker-min-target,44px)` as actual marker
+button minimum dimensions to retain screen touch targets. Native top-layer menus
+and dialogs retain viewport positioning.
+
+Optional `markerGroupPath` reads an explicit key from `{point,item}`. Equal
+nonempty string/finite-number keys associate visuals; missing keys and unrelated
+colocated points remain independent. `markerGroup` supplies `key`, `count`,
+`selected` and `members:[{point,item}]`, retaining original authorized IDs, roles
+and rows. Existing point/item use the first member. A keyed singleton already
+has its stable visual identity before other pages arrive. Original route geometry
+and fit points remain unchanged. Route labels use the complete rank-sorted item
+list before coordinate filtering; explicit source `markerLabel` remains
+authoritative. These are presentation contracts, never coordinate inference or
+new sharing grants.
+
+Use the shared authored `tt-menu contextMenu:true` target/content slots and
+ordinary trigger for member actions. `tt-rich-text` fields/read views preserve
+Editor.js JSON and optional plain text from one awaited save. For edit forms,
+bind field `resetKey` to the record ID when local selection changes; do not use
+updatedAt, which would discard same-record drafts during refresh. A generated
+`tt-form` operation identity remounts its descendants only after a matching
+successful completion, retaining uncertain retries. No generated form-identity
+template scope is exposed.
+
+Default native marker faces scale inside transparent targets that retain at
+least44px on-screen interaction size. Authored Components can use the documented
+minimum-target CSS variable for the same separation. Transient optimized stop
+IDs reorder resolved members within the complete itinerary's existing slots;
+unresolved rows retain a slot, and explicit source markerLabel values remain
+authoritative. Optimization does not persist rank or coordinates implicitly.

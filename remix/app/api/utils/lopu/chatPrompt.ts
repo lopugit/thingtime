@@ -16,7 +16,6 @@ import {
   ACTION_SEARCH_SCOPES,
   ACTION_STEP_OPS,
   COMPONENT_ARG_TYPES,
-  MAX_ACTION_INPUTS,
   MAX_ACTION_STEPS,
   MAX_SCHEMA_NAME_CHARS,
   MAX_WEBPAGE_BLOCK_DEPTH,
@@ -128,7 +127,7 @@ const grammars = (): string => {
     'Interactive controls: put `"ttAction": "<actionKey>"` (and optional `"ttActionInputs": { key: "{arg}" }`) on a button/element node — clicking runs that action AS THE VIEWER. Named form fields (input/select/textarea with `name`) inside the component are read into the inputs automatically.\n' +
     `Arg descriptors: \`{ name, type: ${COMPONENT_ARG_TYPES.join(' | ')}, label?, description?, default?, values? (enum), min?/max? (number), maxLength? (string) }\`, max 16 args. componentKey is a lowercase-dashed slug.\n` +
     '\n### Actions\n' +
-    `\`{ name, actionKey (lowercase-dashed), description?, category?, inputs: [{ name, type: ${ACTION_INPUT_TYPES.join(' | ')}, label?, required?, default?, values? (enum), min?, max?, maxLength? }] (≤ ${MAX_ACTION_INPUTS}), steps: [...] (1–${MAX_ACTION_STEPS}), capabilities: [{ capability: ${ACTION_CAPABILITIES.join(' | ')}, schemas?: [schema names], actions?: [actionKeys] }], limits?: { timeoutMs ≤ ${ACTION_LIMIT_CEILINGS.timeoutMs}, maxOperations ≤ ${ACTION_LIMIT_CEILINGS.maxOperations}, maxDepth, maxChildActions, maxResultBytes, maxInputBytes } }\`\n` +
+    `\`{ name, actionKey (lowercase-dashed), description?, category?, inputs: [{ name, type: ${ACTION_INPUT_TYPES.join(' | ')}, label?, required?, default?, values? (enum), min?, max?, maxLength? }], steps: [...] (1–${MAX_ACTION_STEPS}), capabilities: [{ capability: ${ACTION_CAPABILITIES.join(' | ')}, schemas?: [schema names], actions?: [actionKeys] }], limits?: { timeoutMs ≤ ${ACTION_LIMIT_CEILINGS.timeoutMs}, maxOperations ≤ ${ACTION_LIMIT_CEILINGS.maxOperations}, maxDepth, maxChildActions, maxResultBytes, maxInputBytes } }\`\n` +
     `Step ops: ${ACTION_STEP_OPS.join(', ')}. Shapes: \`{ op: "things.create", schema, values }\`, \`{ op: "things.get", id }\`, \`{ op: "things.search", schema?, scope?: ${ACTION_SEARCH_SCOPES.join(' | ')}, where?: { field: value }, limit?, sort?: { field, dir } }\`, ` +
     '`{ op: "things.update", id, values }`, `{ op: "things.delete", id }`, `{ op: "actions.invoke", action, inputs? }`, `{ op: "compute", value }`, `{ op: "each", list, action, inputs? }`, `{ op: "fail", message }`, `{ op: "return", value }`. Any step may carry `when: <value>` (falsy skips it).\n' +
     'Values are literals, whole-value refs (`"$input.name"`, `"$step.1"`, `"$step.2.id"`, `"$now"`, `"$viewer.id"`, `"$item"`, `"$index"`), `{ ttConcat: [...] }` text composition, or pure expressions `{ ttExpr: ["fn", ...args] }`. ' +

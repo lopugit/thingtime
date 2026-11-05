@@ -21,15 +21,16 @@ export const watchEditorStyleCarry = (
 	apply: (id: string, tokens: TextStyleTokens) => void,
 	preferences: () => StyleCarryPreferences
 ) => {
-	const observer = new MutationObserver((records) => {
+	const view = holder.ownerDocument.defaultView!;
+	const observer = new view.MutationObserver((records) => {
 		if (holder.dataset.ttRestoring === 'true') return;
 		for (const record of records) {
-			const removed = Array.from(record.removedNodes).find((n): n is HTMLElement => n instanceof HTMLElement && n.matches('.ce-block'));
+			const removed = Array.from(record.removedNodes).find((n): n is HTMLElement => n instanceof view.HTMLElement && n.matches('.ce-block'));
 			const addition = records.find(
 				(r) =>
 					r.target === record.target && r.previousSibling === record.previousSibling && r.nextSibling === record.nextSibling && r.addedNodes.length
 			);
-			const added = Array.from(addition?.addedNodes || []).find((n): n is HTMLElement => n instanceof HTMLElement && n.matches('.ce-block'));
+			const added = Array.from(addition?.addedNodes || []).find((n): n is HTMLElement => n instanceof view.HTMLElement && n.matches('.ce-block'));
 			if (!removed || !added || removed.dataset.id === added.dataset.id) continue;
 			const raw = removed.querySelector<HTMLElement>('[data-tt-style]')?.dataset.ttStyle;
 			if (!raw || !added.dataset.id) continue;

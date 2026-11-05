@@ -24,7 +24,7 @@ const nodeBoundaryLength = (node: Node): number => (node.nodeType === Node.TEXT_
 
 const isAtTrueTextFieldBoundary = (field: HTMLElement, event: KeyboardEvent): boolean => {
 	if (typeof window === 'undefined') return false;
-	const selection = window.getSelection();
+	const selection = field.ownerDocument.defaultView?.getSelection();
 	const focusNode = selection?.focusNode;
 	if (!selection?.isCollapsed || !focusNode || (focusNode !== field && !field.contains(focusNode))) return false;
 
@@ -75,7 +75,7 @@ export const preserveEditorJsTextFieldKeydown = (event: KeyboardEvent): void => 
 		return;
 	}
 	const field = getEditorJsTextField(event.target);
-	if (typeof HTMLElement !== 'undefined' && field instanceof HTMLElement && isAtTrueTextFieldBoundary(field, event)) return;
+	if (field && (field as HTMLElement).nodeType === 1 && isAtTrueTextFieldBoundary(field as HTMLElement, event)) return;
 
 	event.stopPropagation();
 	if (!event.key.startsWith('Arrow')) return;
@@ -85,7 +85,7 @@ export const preserveEditorJsTextFieldKeydown = (event: KeyboardEvent): void => 
 	// reproduce the native Selection movement before stopping the event.
 	if (typeof window === 'undefined') return;
 
-	const selection = window.getSelection();
+	const selection = (field as HTMLElement)?.ownerDocument.defaultView?.getSelection();
 	if (!selection || typeof selection.modify !== 'function') return;
 	event.preventDefault();
 
@@ -99,10 +99,11 @@ export const preserveEditorJsTextFieldKeydown = (event: KeyboardEvent): void => 
  * The observer covers blocks and captions that tools add after initial render.
  */
 export const watchEditorJsTextFieldKeydowns = (holder: HTMLElement): (() => void) => {
+	const view = holder.ownerDocument.defaultView!;
 	const guardedFields = new Set<HTMLElement>();
 
 	const guard = (element: Element) => {
-		if (!(element instanceof HTMLElement) || guardedFields.has(element)) return;
+		if (!(element instanceof view.HTMLElement) || guardedFields.has(element)) return;
 		element.addEventListener('keydown', preserveEditorJsTextFieldKeydown);
 		guardedFields.add(element);
 	};
@@ -114,10 +115,10 @@ export const watchEditorJsTextFieldKeydowns = (holder: HTMLElement): (() => void
 
 	guardFieldsWithin(holder);
 
-	const observer = new MutationObserver((records) => {
+	const observer = new view.MutationObserver((records) => {
 		for (const record of records) {
 			for (const node of record.addedNodes) {
-				if (node instanceof Element) guardFieldsWithin(node);
+				if (node instanceof view.Element) guardFieldsWithin(node);
 			}
 		}
 

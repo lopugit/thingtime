@@ -5,14 +5,7 @@
 // file only observes events and calls Editor.js's public blocks.move() API —
 // one move per completed gesture, so one history event.
 
-import {
-	autoscrollStep,
-	describeBlockMove,
-	evaluatePress,
-	planKeyboardMove,
-	planPointerMove,
-	TOUCH_LONG_PRESS_MS
-} from './editorJsBlockReorder';
+import { autoscrollStep, describeBlockMove, evaluatePress, planKeyboardMove, planPointerMove, TOUCH_LONG_PRESS_MS } from './editorJsBlockReorder';
 import type { BlockRect, PressState } from './editorJsBlockReorder';
 
 const SETTINGS_GRIP_SELECTOR = '.ce-toolbar__settings-btn';
@@ -50,6 +43,8 @@ export const watchEditorJsBlockReorder = (
 	getEditor: () => EditorLike | null,
 	options: WatchEditorJsBlockReorderOptions = {}
 ): (() => void) => {
+	const document = holder.ownerDocument,
+		window = document.defaultView!;
 	if (typeof window === 'undefined') return () => {};
 
 	// ————— aria-live announcements (keyboard + drag share it) —————
@@ -141,7 +136,7 @@ export const watchEditorJsBlockReorder = (
 	};
 
 	const stopAutoscroll = () => {
-		if (autoscrollFrame !== undefined) cancelAnimationFrame(autoscrollFrame);
+		if (autoscrollFrame !== undefined) window.cancelAnimationFrame(autoscrollFrame);
 		autoscrollFrame = undefined;
 	};
 
@@ -154,9 +149,9 @@ export const watchEditorJsBlockReorder = (
 				window.scrollBy(0, step);
 				updateDrag(drag.lastClientY);
 			}
-			autoscrollFrame = requestAnimationFrame(tick);
+			autoscrollFrame = window.requestAnimationFrame(tick);
 		};
-		autoscrollFrame = requestAnimationFrame(tick);
+		autoscrollFrame = window.requestAnimationFrame(tick);
 	};
 
 	const clearGesture = () => {

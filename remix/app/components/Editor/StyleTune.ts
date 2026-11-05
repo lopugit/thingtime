@@ -12,13 +12,14 @@ import type { AlignKey, FontKey, TextStyleTokens } from './styleTokens';
 //
 // Interaction is EVENT-DELEGATED off data attributes: editor.js's settings
 // popover clones custom tune HTML, which silently drops addEventListener
-// bindings — one global capture listener + a blockId→tune registry survives
-// the clone.
+// bindings — one refcounted capture listener per owning document and a
+// per-instance tune registry survive the clone.
 
 type TuneParams = {
 	api: any;
 	data?: unknown;
 	block?: any;
+	config?: { ownerDocument?: Document };
 };
 
 const BUTTON_BASE =
@@ -30,15 +31,12 @@ const ACTIVE_RING = '0 0 0 2px var(--tt-accent-tint, #fff5fa), 0 0 0 3px var(--t
 const TUNE_REGISTRY = new Map<string, StyleTune>();
 let nextTuneId = 0;
 
-let delegationBound = false;
+const delegations = new WeakMap<Document, { users: number; listener: (event: MouseEvent) => void }>();
 
-const bindDelegation = () => {
-	if (delegationBound || typeof document === 'undefined') return;
-	delegationBound = true;
-
-	document.addEventListener(
-		'click',
-		(event) => {
+const bindDelegation = (document: Document): (() => void) => {
+	let delegation = delegations.get(document);
+	if (!delegation) {
+		const listener = (event: MouseEvent) => {
 			const target = event.target as HTMLElement | null;
 			const button = target?.closest?.(
 				'[data-tt-style-color], [data-tt-style-size], [data-tt-style-font], [data-tt-style-align], [data-tt-style-reset], [data-tt-style-custom]'
@@ -48,7 +46,7 @@ const bindDelegation = () => {
 			const panel = button.closest('[data-tt-style-tune]') as HTMLElement | null;
 			const tuneId = panel?.getAttribute('data-tt-tune-id');
 			const tune = tuneId ? TUNE_REGISTRY.get(tuneId) : undefined;
-			if (!panel || !tune) return;
+			if (!panel || !tune || tune.document !== document) return;
 
 			event.preventDefault();
 			event.stopPropagation();
@@ -73,9 +71,21 @@ const bindDelegation = () => {
 
 			// repaint the panel the user actually clicked (it may be a clone)
 			paintPanel(panel, tune.data);
-		},
-		true
-	);
+		};
+		delegation = { users: 0, listener };
+		delegations.set(document, delegation);
+		document.addEventListener('click', listener, true);
+	}
+	delegation.users++;
+	let active = true;
+	return () => {
+		if (!active) return;
+		active = false;
+		if (--delegation.users === 0) {
+			document.removeEventListener('click', delegation.listener, true);
+			delegations.delete(document);
+		}
+	};
 };
 
 // active-state styling driven purely by data attributes, so it works on any
@@ -130,14 +140,23 @@ export class StyleTune {
 	wrapper: HTMLElement | null = null;
 	closeDialog?: () => void;
 	observer?: MutationObserver;
+	document?: Document;
+	private releaseDelegation?: () => void;
 
-	constructor({ api, data, block }: TuneParams) {
+	constructor({ api, data, block, config }: TuneParams) {
 		this.api = api;
 		this.block = block;
 		this.data = sanitizeStyleTokens(data);
 
-		bindDelegation();
+		this.bindDocument(config?.ownerDocument ?? block?.holder?.ownerDocument ?? globalThis.document);
 		TUNE_REGISTRY.set(this.tuneId, this);
+	}
+
+	private bindDocument(document?: Document) {
+		if (!document || document === this.document) return;
+		this.releaseDelegation?.();
+		this.document = document;
+		this.releaseDelegation = bindDelegation(document);
 	}
 
 	blockId(): string | null {
@@ -152,6 +171,8 @@ export class StyleTune {
 
 	// every block's content gets wrapped so validated styles apply live
 	wrap(blockContent: HTMLElement): HTMLElement {
+		const document = blockContent.ownerDocument;
+		this.bindDocument(document);
 		const wrapper = document.createElement('div');
 		wrapper.classList.add('tt-style-tune-wrap');
 		wrapper.dataset.ttTuneId = this.tuneId;
@@ -189,10 +210,11 @@ export class StyleTune {
 		this.closeDialog?.();
 		const initial = { ...this.data };
 		this.closeDialog = openStyleDialog({
+			ownerDocument: this.document,
 			initial,
 			title: 'Block text style',
 			alignment: true,
-			emPixels: this.wrapper ? parseFloat(getComputedStyle(this.wrapper).fontSize) || 16 : 16,
+			emPixels: this.wrapper ? parseFloat(this.document?.defaultView?.getComputedStyle(this.wrapper).fontSize) || 16 : 16,
 			preview: (tokens) => this.replace(tokens, 'Preview block style'),
 			cancel: () => this.replace(initial, 'Cancel block style'),
 			historyCommand: (redo) =>
@@ -218,6 +240,7 @@ export class StyleTune {
 	// settings-popover UI: colour swatches, size chips, font chips, alignment.
 	// Structure only — no listeners (see delegation note above).
 	render(): HTMLElement {
+		const document = this.document ?? globalThis.document;
 		const panel = document.createElement('div');
 		panel.setAttribute('data-tt-style-tune', '');
 		panel.setAttribute('data-tt-tune-id', this.tuneId);
@@ -305,7 +328,10 @@ export class StyleTune {
 
 	destroy() {
 		this.closeDialog?.();
+		this.closeDialog = undefined;
 		this.observer?.disconnect();
+		this.releaseDelegation?.();
+		this.releaseDelegation = undefined;
 		TUNE_REGISTRY.delete(this.tuneId);
 	}
 }

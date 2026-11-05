@@ -370,7 +370,7 @@ export function requiresEditableBlockContract(blocks: WebpageBlock[]): boolean {
 /** New intrinsic element boundaries accepted by the saved Webpage writer. */
 export function requiresEditableIntrinsicContract(
  blocks: WebpageBlock[],
- tags: readonly string[] = ['tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-mapbox', 'tt-upload']
+ tags: readonly string[] = ['tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-mapbox', 'tt-upload', 'tt-menu', 'tt-rich-text']
 ): boolean {
  const pending = [...blocks];
  while (pending.length) {

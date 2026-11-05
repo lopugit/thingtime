@@ -29,6 +29,7 @@ import { watchEditorStyleCarry, type StyleCarryPreferences } from './editorStyle
 import { watchEditorBlockChrome } from './editorBlockChrome';
 import { useLopu } from '../Lopu/useLopu';
 import { captureEditorDraft } from './editorDraftSnapshot';
+import { loadEditorJsRuntime } from './editorJsRuntime';
 
 export { getEditorJsDoc, isEditorJsDoc, parseEditorJsDocString } from './editorJsValue';
 export type { EditorJsBlock, EditorJsDoc } from './editorJsValue';
@@ -378,42 +379,14 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 
 		(async () => {
 			if (!holderRef.current) return;
-			popoverViewportCleanup = watchEditorJsPopoverViewport(holderRef.current);
+			popoverViewportCleanup = watchEditorJsPopoverViewport(holderRef.current, holderRef.current.ownerDocument.defaultView!);
 			inlinePositionCleanup = watchEditorJsInlinePosition(holderRef.current);
 
-			const [
-				{ default: EditorJS },
-				{ default: Header },
-				{ default: List },
-				{ default: Quote },
-				{ default: Checklist },
-				{ default: Delimiter },
-				{ default: Table },
-				{ default: CodeTool },
-				{ default: Warning },
-				{ default: Embed },
-				{ default: SimpleImage },
-				{ default: Marker },
-				{ default: InlineCode },
-				{ default: Underline }
-			] = await Promise.all([
-				import('@editorjs/editorjs'),
-				import('@editorjs/header'),
-				import('@editorjs/list'),
-				import('@editorjs/quote'),
-				import('@editorjs/checklist'),
-				import('@editorjs/delimiter'),
-				import('@editorjs/table'),
-				import('@editorjs/code'),
-				import('@editorjs/warning'),
-				import('@editorjs/embed'),
-				import('@editorjs/simple-image'),
-				import('@editorjs/marker'),
-				import('@editorjs/inline-code'),
-				import('@editorjs/underline')
-			]);
+			const ownerDocument = holderRef.current.ownerDocument;
+			const ownerWindow = ownerDocument.defaultView!;
+			const { EditorJS, Header, List, Quote, Checklist, Delimiter, Table, CodeTool, Warning, Embed, SimpleImage, Marker, InlineCode, Underline } = await loadEditorJsRuntime(ownerDocument);
 
-			if (cancelled || !holderRef.current) return;
+			if (cancelled || !holderRef.current || holderRef.current.ownerDocument !== ownerDocument) return;
 
 			const initial = valueRef.current;
 			const blocks = isEditorJsDoc(initial) ? initial.blocks : textToBlocks(String(initial ?? ''));
@@ -452,7 +425,7 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 				...(enabled('marker') ? { marker: Marker as any } : {}),
 				...(enabled('inlineCode') ? { inlineCode: InlineCode as any } : {}),
 				...(enabled('underline') ? { underline: Underline as any } : {}),
-				...(enabled('style') ? { style: StyleTune as any, textStyle: InlineStyle as any } : {})
+				...(enabled('style') ? { style: { class: StyleTune as any, config: { ownerDocument } }, textStyle: { class: InlineStyle as any, config: { ownerDocument } } } : {})
 			};
 
 			// Editor.js's ReadOnly module clears the DOCUMENT selection while a new
@@ -465,7 +438,7 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 			// after isReady (only if still wiped and still attached, so a user who
 			// re-clicked meanwhile is never fought).
 			const foreignSelection = (() => {
-				const selection = window.getSelection();
+				const selection = ownerWindow.getSelection();
 				if (!selection || selection.rangeCount === 0) return null;
 				const range = selection.getRangeAt(0);
 				if (holderRef.current?.contains(range.startContainer)) return null;
@@ -473,7 +446,7 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 			})();
 			const restoreForeignSelection = () => {
 				if (!foreignSelection || !foreignSelection.startContainer.isConnected) return;
-				const selection = window.getSelection();
+				const selection = ownerWindow.getSelection();
 				// rangeCount > 0 means someone re-established a caret after the wipe
 				// (the user clicked, or — version-dependent — Editor.js placed one in
 				// its own holder); fighting it risks worse than the wipe. Empirically
@@ -524,7 +497,7 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 			restoreRef.current = async (doc) => {
 				await editor.isReady;
 				if (destroyedRef.current) return;
-				const active = document.activeElement;
+				const active = ownerDocument.activeElement;
 				const shouldFocus = holderRef.current?.closest('.tt-editor-session')?.contains(active);
 				const index = Math.max(0, editor.blocks.getCurrentBlockIndex());
 				const activeBlock = editor.blocks.getBlockByIndex(index);
@@ -547,10 +520,10 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 					const field = fields?.[Math.max(0, fieldIndex)] || fields?.[0];
 					if (field) {
 						field.focus({ preventScroll: true });
-						const range = document.createRange();
+						const range = ownerDocument.createRange();
 						range.selectNodeContents(field);
 						range.collapse(false);
-						const selection = window.getSelection();
+						const selection = ownerWindow.getSelection();
 						selection?.removeAllRanges();
 						selection?.addRange(range);
 					}

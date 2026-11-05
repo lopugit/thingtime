@@ -112,6 +112,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Keep rich editor libraries, selection, tool panels and Action form ownership in Builder viewport documents; cover immediate formatted saves and ordinary menu submissions through a disposable real API.
+
 - 2026-11-06: Keep Mac folder settings mounted independently of background
   sync runs, preserve focused unsaved connection drafts while automatic checks
   run, and retain scoped resource measurements with explicit historical labels
@@ -134,6 +136,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   claiming every attention state means settings changed. See
   [PR 1357](../PRs/1357-codex-optimize-native-scan-page-reduce-native-sync-paging-cost-and-clarify-automatic-attention.md).
   **Codex (AI)**
+- 2026-11-06: Add reusable saved Editor.js fields/read views with awaited form
+  capture and paired plain text, editable contextual menus with keyboard/touch
+  access, and generic map visual scale/zoom adaptation and explicit association.
+  Preserve original route ordinals, SDK transforms, member actions and private
+  data boundaries; remove the fixed Action descriptor-count cap. **Codex (AI)**
 
 - 2026-11-05: Fix large/deep editable Webpage saves that passed validation but
   rolled back when Timeline discovery hit hidden block/nesting caps. Share

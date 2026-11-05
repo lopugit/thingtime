@@ -1,4 +1,5 @@
 import { requiresCollectionPagingContract } from './savedCollectionContract';
+import { AUTHORED_CONTROL_REQUIREMENTS, usesAuthoredControls } from '~/schemas/authoredControls';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { requiresEditableBlockContract, requiresEditableIntrinsicContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
@@ -393,7 +394,11 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
-				if (requiresCollectionPagingContract(blocks)) {
+				if (usesAuthoredControls(blocks)) {
+					await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things']);
+					await requireThingtimeCapability('api.webpages-resolve', AUTHORED_CONTROL_REQUIREMENTS['api.webpages-resolve']);
+					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update']);
+				} else if (requiresCollectionPagingContract(blocks)) {
 					await requireThingtimeCapability('api.things', '1.49.0');
 					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.18.0');
 				} else if (requiresEditableIntrinsicContract(blocks, ['tt-upload'])) {

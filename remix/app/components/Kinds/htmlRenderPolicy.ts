@@ -12,6 +12,8 @@ export const HTML_ALLOWED_TAGS = new Set([
 	'tt-change',
 	'tt-drop',
 	'tt-form',
+	'tt-rich-text',
+	'tt-menu',
 	'tt-select',
 	'tt-map',
 	'tt-mapbox',

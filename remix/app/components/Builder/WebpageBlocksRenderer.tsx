@@ -968,7 +968,7 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
   {typeof text === 'string' || typeof text === 'number' ? (editing && !text && block.text ? block.text : text) : null}{block.children ? children : null}{slot ? slot({ scope, editing }) : null}
  </HtmlBlockElement>;
  if (block.tag === 'tt-upload') return <ComponentUploadEnabled.Provider value={!!props.interactive && !editing && runtime.source === 'user' && !runtime.sharedRun}>{element}</ComponentUploadEnabled.Provider>;
- return block.tag === 'tt-media-pipeline' || block.tag === 'tt-mapbox' || block.tag === 'tt-form' || block.tag === 'tt-change' || block.tag === 'tt-select'
+ return block.tag === 'tt-media-pipeline' || block.tag === 'tt-mapbox' || block.tag === 'tt-form' || block.tag === 'tt-change' || block.tag === 'tt-select' || block.tag === 'tt-menu' || block.tag === 'tt-rich-text'
   ? <NativeControlsEnabled.Provider value={block.tag === 'tt-form' ? editing || props.interactive !== false : ['tt-mapbox', 'tt-change', 'tt-select'].includes(block.tag || '') ? !!props.interactive && !editing : props.interactive !== false && !editing}>{element}</NativeControlsEnabled.Provider>
   : element;
 };
