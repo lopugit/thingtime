@@ -52,7 +52,7 @@ screenshots capture the transition while the web page loads; loaded-page
 acceptance is recorded separately.
 
 The web adapter has 35 focused tests; Messenger and Save have 18. Capability
-coverage passes 147 tests after the final nine contract minor bumps and schema coverage 300. Attachment tests cover
+coverage passes 148 tests after the final nine contract minor bumps and schema coverage 300. Attachment tests cover
 purpose ownership, duplicate refusal, empty-object bytes, replay and lease-loss
 recovery. Integrated TypeScript and all 300 schema checks pass on the final expanded
 source; scoped lint reports zero errors. No warnings occur on changed lines.
@@ -145,3 +145,8 @@ source uses the canonical structural refresh with clustering, report and HTML.
 Current semantic coverage of the ten changed Markdown files remains incomplete;
 the structural output must not be described as full current documentation
 indexing. This limitation does not change the application acceptance above.
+
+Final main integration includes scoped local-storage native range signing. The
+shared-content body routes, validators and nine client minima are unchanged.
+Both capability generators pass 148 tests, and the merged attachment/local
+storage regression passes 96 tests, including exact range authority and expiry.
