@@ -81,6 +81,10 @@ Run `npm --prefix remix run test:chatgpt`, `test:api-capabilities`,
 - [ ] Before signed delivery, run release packaging tests and archive/IPA
       validation with the new share App ID/profile. Confirm Apple processing and
       the installed build separately; a main merge is not an iPhone installation.
+- [ ] Run `node --test iOS/scripts/tests/rust-release-toolchain.test.mjs` before
+      changing release toolchain setup. Check Homebrew/custom Cargo locations,
+      fail-closed missing executables, and device plus both simulator Rust targets
+      before the pre-credential native test stage.
 
 ## Native desktop UI zoom — 2026-10-27
 

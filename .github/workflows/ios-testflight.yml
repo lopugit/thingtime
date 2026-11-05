@@ -76,8 +76,11 @@ jobs:
         if: env.RELEASE_OPERATION == 'upload'
         run: |
           rustup toolchain install stable --profile minimal
-          rustup target add --toolchain stable aarch64-apple-ios
-          echo "THINGTIME_RUST_CARGO=$HOME/.cargo/bin/cargo" >> "$GITHUB_ENV"
+          rustup target add --toolchain stable aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+          cargo_bin="$(rustup which --toolchain stable cargo)"
+          test -x "$cargo_bin"
+          echo "THINGTIME_RUST_CARGO=$cargo_bin" >> "$GITHUB_ENV"
+          echo "RUSTUP_TOOLCHAIN=stable" >> "$GITHUB_ENV"
 
       - name: Set up Ruby and Fastlane
         uses: ruby/setup-ruby@v1
