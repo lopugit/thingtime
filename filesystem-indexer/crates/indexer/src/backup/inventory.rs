@@ -1898,7 +1898,8 @@ fn page(
     write_value(
         output,
         &json!({"generation":current.generation,"entries":entries,"nextAfter":if more {last} else {None},
-        "nextOffset":(more && after.is_none()).then_some(offset+entries.len()),"coverage":current.coverage,"totalEntries":total,"rootVersion":current.root_stamp}),
+        "nextOffset":(more && after.is_none()).then_some(offset+entries.len()),"coverage":current.coverage,"totalEntries":total,"rootVersion":current.root_stamp,
+        "status":current}),
     )
 }
 

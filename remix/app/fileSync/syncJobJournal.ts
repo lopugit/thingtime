@@ -1,4 +1,5 @@
 import { SYNC_RETRY_DELAY_MS, SYNC_RETRY_MAX_MS } from './syncConnectionWait';
+import { isSyncJobFailure, syncJobFailure, SyncJobConfigurationChanged, type SyncJobFailure } from './syncJobFailure';
 import { parseFileSyncConfiguration } from './configuration';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { journalScope, type JournalAccess } from './journalScope';
@@ -16,6 +17,8 @@ export type SyncJob = {
 	state: 'runnable' | 'scheduled' | 'paused' | 'attention' | 'complete';
 	/** Absent on existing one-shot admissions. Editable Things cannot opt in. */
 	intervalMs?: number;
+	/** Fixed allowlisted diagnostic only; legacy jobs have no recorded reason. */
+	failureReason?: SyncJobFailure;
 	nextRunAt?: number;
 	/** Durable not-before time for an unfinished transiently interrupted attempt. */
 	retryAt?: number;
@@ -72,6 +75,7 @@ function validate(value: SyncJob): SyncJob {
 	if (!value || value.version !== 1 || value.key !== syncScopeKey(value.scope) ||
 		!Number.isSafeInteger(value.revision) || value.revision < 1 ||
 		!['runnable', 'scheduled', 'paused', 'attention', 'complete'].includes(value.state) ||
+		(value.failureReason !== undefined && !isSyncJobFailure(value.failureReason)) ||
 		(value.intervalMs !== undefined && !SYNC_INTERVALS.some(interval => interval === value.intervalMs)) ||
 		(value.nextRunAt !== undefined && (!Number.isSafeInteger(value.nextRunAt) || value.nextRunAt < 0 || !['scheduled', 'paused', 'attention'].includes(value.state))) ||
 		(value.state === 'scheduled' && (value.intervalMs === undefined || value.nextRunAt === undefined)) ||
@@ -190,7 +194,7 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 					const unfinished = previous && previous.state !== 'complete' && previous.nextRunAt === undefined;
 					const policyChanged = !!unfinished && JSON.stringify(previous.reviewed.configuration) !== JSON.stringify(reviewed.configuration);
 					if (policyChanged && previous.state !== 'paused')
-						throw Error('An unfinished sync job belongs to different settings. Restore its settings before retrying.');
+						throw new SyncJobConfigurationChanged();
 					const repeat = intervalMs ?? (previous && (syncJobEnabled(previous) || previous.state === 'attention') ? previous.intervalMs : undefined);
 					const job = validate({ version: 1, key: bound.key, id: unfinished && !policyChanged ? previous.id : id,
 						revision: (previous?.revision ?? 0) + 1, scope: bound.scope, reviewed, state: 'runnable',
@@ -230,7 +234,7 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 		}),
 		pause: (expected: SyncJob) => change(expected, current =>
 			syncJobCanPause(current) ? { ...current, state: 'paused' } : null),
-		attention: (expected: SyncJob) => change(expected, current =>
-			['runnable', 'scheduled'].includes(current.state) ? { ...current, state: 'attention' } : null)
+		attention: (expected: SyncJob, cause?: unknown) => change(expected, current =>
+			['runnable', 'scheduled'].includes(current.state) ? { ...current, state: 'attention', failureReason: syncJobFailure(cause) } : null)
 	};
 }

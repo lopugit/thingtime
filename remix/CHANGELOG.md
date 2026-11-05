@@ -110,6 +110,29 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Keep Mac folder settings mounted independently of background
+  sync runs, preserve focused unsaved connection drafts while automatic checks
+  run, and retain scoped resource measurements with explicit historical labels
+  until a fresh sample arrives. Background refresh uses one inline indicator;
+  saving still waits for the active run to finish.
+  **Codex (AI)**
+
+- 2026-11-06: Move the Thingtime Node `@main` entry out of Swift's special
+  `main.swift` file so the release workflow's clean `swift test` build compiles
+  the executable as a test dependency. Supply the isolated Rust indexer to
+  photo-original tests and preflight it in the release workflow. The signed app
+  behavior is unchanged.
+  **Codex (AI)**
+
+- 2026-11-06: Return validated native inventory status with each bounded Rust
+  page so large Mac scans avoid a second helper launch per page. The matched
+  10,001-entry/79-page fixture read fell from 21.6 s to 11.4 s; full sync
+  throughput and first-transfer timing remain separate acceptance. Show an
+  allowlisted saved automatic-sync failure reason when available instead of
+  claiming every attention state means settings changed. See
+  [PR 1357](../PRs/1357-codex-optimize-native-scan-page-reduce-native-sync-paging-cost-and-clarify-automatic-attention.md).
+  **Codex (AI)**
+
 - 2026-11-05: Replace the iOS share completion dead end with a prefilled post composer, normal message destination and Things folder saving. Add an editable contextual bottom toolbar, bounded native file reads and durable share recovery; see [implementation and acceptance](../PRs/1355-codex-share-composer-20261105-open-ios-shares-in-post-message-and-save-composers.md). **Codex (AI)**
 
 

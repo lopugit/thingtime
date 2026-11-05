@@ -42,6 +42,12 @@ The device sync screen keeps saved connection editing available offline and
 uses a protected, leased control channel for live device operations. Native
 grants and transfer journals stay on the target device. See
 [browser device sync](../browser-device-sync.md) for code paths and checks.
+Mac paged native inventory reads use `MobileFolderInventory.read` and
+`RustInventoryClient.checkedPage`: each Rust `page` reply includes its checked
+status so the client can validate generation, root version and coverage with
+one helper request per page. The 10,001-entry regression in
+`MobileFolderInventoryTests` asserts 79 bounded pages and no separate status
+request during read. See the Mac paged checklist in `TESTING.md`.
 
 ## Where the code lives
 

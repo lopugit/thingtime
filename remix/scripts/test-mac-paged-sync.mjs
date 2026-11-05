@@ -22,6 +22,8 @@ const indexer = process.env.THINGTIME_MAC_SYNC_INDEXER_BIN;
 if (indexer && !indexer.startsWith('/')) throw Error('The fixture Rust indexer path must be absolute.');
 const symlinksOnly = process.argv.includes('--symlinks-only');
 const early = process.argv.includes('--two-way-early');
+const normalEarlyBudget = process.argv.includes('--normal-early-budget');
+if (normalEarlyBudget && !early) throw Error('--normal-early-budget requires --two-way-early.');
 if (early && (wide || symlinksOnly)) throw Error('The early acceptance requires only --two-way-early.');
 const clean = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR || tmpdir() };
 if (!process.env.TT_MAC_PAGED_WORKER) {
@@ -86,7 +88,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		const policy =
 			accountBackupSandbox(apiPort, true) +
 			`\n(allow network-outbound (remote ip "localhost:${dbPort}"))\n(allow network-inbound (local ip "localhost:${dbPort}"))`;
-		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename, ...(wide ? ['--wide'] : []), ...(wideMixed ? ['--wide-mixed'] : []), ...(wideCountArg ? [wideCountArg] : []), ...(symlinksOnly ? ['--symlinks-only'] : []), ...(early ? ['--two-way-early'] : [])], {
+		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename, ...(wide ? ['--wide'] : []), ...(wideMixed ? ['--wide-mixed'] : []), ...(wideCountArg ? [wideCountArg] : []), ...(symlinksOnly ? ['--symlinks-only'] : []), ...(early ? ['--two-way-early'] : []), ...(normalEarlyBudget ? ['--normal-early-budget'] : [])], {
 			cwd: root,
 			env: { ...clean, TT_MAC_PAGED_WORKER: directory, THINGTIME_MAC_SYNC_FIXTURE_BIN: binary, THINGTIME_MAC_SYNC_INDEXER_BIN: resolvedIndexer },
 			stdio: ['ignore', 'pipe', 'pipe']
@@ -268,7 +270,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		console.log('MAC_PAGED_STAGE native-transfers');
 		const test = start(
 			process.execPath,
-			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', ...(early ? ['--two-way-early'] : symlinksOnly ? ['--symlinks-only'] : ['--large-upload', '--large-download']), ...(wide ? ['--wide'] : []), ...(wideMixed ? ['--wide-mixed'] : []), ...(wideCountArg ? [wideCountArg] : [])],
+			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', ...(early ? ['--two-way-early'] : symlinksOnly ? ['--symlinks-only'] : ['--large-upload', '--large-download']), ...(normalEarlyBudget ? ['--normal-early-budget'] : []), ...(wide ? ['--wide'] : []), ...(wideMixed ? ['--wide-mixed'] : []), ...(wideCountArg ? [wideCountArg] : [])],
 			{ ...clean, THINGTIME_MAC_SYNC_FIXTURE_BIN: process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN, ...(indexer ? { THINGTIME_MAC_SYNC_INDEXER_BIN: indexer } : {}) }
 		);
 		const output = collect(test, true);
