@@ -1377,8 +1377,27 @@ jobs:
               # same pairing the 422 slow-diff case already uses. Record the
               # exhaustion for this step's deferral trap: one shared
               # installation budget is never a defect in any PR.
-              if grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
-                 && grep -Fq 'API rate limit exceeded' "$errors"; then
+              #
+              # Two wordings reach this helper and the first fixed-string
+              # pairing matched neither of them:
+              #   * the REST wrapper also says "API rate limit ALREADY
+              #     exceeded for site ID installation", so `grep -F 'API rate
+              #     limit exceeded'` missed it and job 119869167700 printed
+              #     "no recoverable transient response" over a budget reset;
+              #   * the GraphQL wrapper (`gh pr list`) prints NO status line at
+              #     all — "GraphQL: API rate limit already exceeded for site ID
+              #     installation." — so pairing on a status could never match,
+              #     and job 119869167555 died on it with the sentinel unwritten.
+              # Accept the `GraphQL:` prefix in place of a status: it means gh
+              # decoded a GraphQL error document rather than an HTTP rejection,
+              # and no permission error is spelled that way. This is the same
+              # classification `GH_BUDGET_EXHAUSTED` in
+              # .github/scripts/codeql-open-pr-backfill.mjs already applies.
+              # A secondary limit deliberately stays on the transient path
+              # below: unlike a primary reset, it clears within the backoff.
+              if grep -Eq 'API rate limit (already )?exceeded' "$errors" \
+                 && { grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
+                      || grep -Fq 'GraphQL: ' "$errors"; }; then
                 : >"$RUNNER_TEMP/lopu-gh-budget-exhausted"
                 echo "::notice::GitHub's shared installation API budget is exhausted; deferring this scan to a later detector." >&2
                 sed -n '1,20p' "$errors" >&2
@@ -3145,8 +3164,27 @@ jobs:
               # failure) must still fail fast — hence status AND message.
               # Record it for this step's deferral trap: one shared
               # installation budget is never a defect in any PR.
-              if grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
-                 && grep -Fq 'API rate limit exceeded' "$errors"; then
+              #
+              # Two wordings reach this helper and the first fixed-string
+              # pairing matched neither of them:
+              #   * the REST wrapper also says "API rate limit ALREADY
+              #     exceeded for site ID installation", so `grep -F 'API rate
+              #     limit exceeded'` missed it and job 119869167700 printed
+              #     "no recoverable transient response" over a budget reset;
+              #   * the GraphQL wrapper (`gh pr list`) prints NO status line at
+              #     all — "GraphQL: API rate limit already exceeded for site ID
+              #     installation." — so pairing on a status could never match,
+              #     and job 119869167555 died on it with the sentinel unwritten.
+              # Accept the `GraphQL:` prefix in place of a status: it means gh
+              # decoded a GraphQL error document rather than an HTTP rejection,
+              # and no permission error is spelled that way. This is the same
+              # classification `GH_BUDGET_EXHAUSTED` in
+              # .github/scripts/codeql-open-pr-backfill.mjs already applies.
+              # A secondary limit deliberately stays on the transient path
+              # below: unlike a primary reset, it clears within the backoff.
+              if grep -Eq 'API rate limit (already )?exceeded' "$errors" \
+                 && { grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
+                      || grep -Fq 'GraphQL: ' "$errors"; }; then
                 : >"$RUNNER_TEMP/lopu-gh-budget-exhausted"
                 echo "::notice::GitHub's shared installation API budget is exhausted; deferring this scan to a later detector." >&2
                 sed -n '1,20p' "$errors" >&2
@@ -4266,8 +4304,27 @@ jobs:
               # failure) must still fail fast — hence status AND message.
               # Record it for this step's deferral trap: one shared
               # installation budget is never a defect in any PR.
-              if grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
-                 && grep -Fq 'API rate limit exceeded' "$errors"; then
+              #
+              # Two wordings reach this helper and the first fixed-string
+              # pairing matched neither of them:
+              #   * the REST wrapper also says "API rate limit ALREADY
+              #     exceeded for site ID installation", so `grep -F 'API rate
+              #     limit exceeded'` missed it and job 119869167700 printed
+              #     "no recoverable transient response" over a budget reset;
+              #   * the GraphQL wrapper (`gh pr list`) prints NO status line at
+              #     all — "GraphQL: API rate limit already exceeded for site ID
+              #     installation." — so pairing on a status could never match,
+              #     and job 119869167555 died on it with the sentinel unwritten.
+              # Accept the `GraphQL:` prefix in place of a status: it means gh
+              # decoded a GraphQL error document rather than an HTTP rejection,
+              # and no permission error is spelled that way. This is the same
+              # classification `GH_BUDGET_EXHAUSTED` in
+              # .github/scripts/codeql-open-pr-backfill.mjs already applies.
+              # A secondary limit deliberately stays on the transient path
+              # below: unlike a primary reset, it clears within the backoff.
+              if grep -Eq 'API rate limit (already )?exceeded' "$errors" \
+                 && { grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
+                      || grep -Fq 'GraphQL: ' "$errors"; }; then
                 : >"$RUNNER_TEMP/lopu-gh-budget-exhausted"
                 echo "::notice::GitHub's shared installation API budget is exhausted; deferring this scan to a later detector." >&2
                 sed -n '1,20p' "$errors" >&2
