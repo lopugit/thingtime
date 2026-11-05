@@ -14525,6 +14525,14 @@ the isolated real-API/browser command and the metadata-only session boundary.
   lane; verify out-of-order result/chunk IDs, atomic stage frames, cancellation
   acknowledgements, EOF rejection of active and queued requests exactly once, and
   identity duration accumulation across native restarts and out-of-order samples.
+  Hold a post-receipt proof observer and verify the next transfer claim continues;
+  drain every observation before resume/success and propagate its failure. Keep
+  repeated path observations distinct by immutable operation ID. Verify closed
+  per-request timing fields and one end event across cancellation/EOF. After
+  building the Swift fixture, run its `--self-test-timing` to retain the original
+  request across another TaskLocal context and represent partial clocks honestly.
+  Attribute native admission/HTTP intervals per request/session; never add
+  overlapping poll/global sums or call residual service time CPU time.
   The same command checks canonical host capability negotiation, fresh composite
   authorization, absence of a custom mutation hook, refusal of missing native
   prerequisites, and non-interfering digest observation. The early proof must

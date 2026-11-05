@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MacFixtureTransport, FixtureIdentityTiming, FixturePageObservers, validateFixtureProofKind } from './mac-fixture-transport.mjs';
+import { MacFixtureTransport, FixtureIdentityTiming, FixturePageObservers, validateFixtureProofKind, FixtureReceiptObservations } from './mac-fixture-transport.mjs';
 const turn = () => new Promise(resolve => setImmediate(resolve));
 function fixture() {
   const sent = [];
@@ -114,4 +114,45 @@ test('upload-start diagnostic can never satisfy the original two-way proof mode'
  assert.throws(() => validateFixtureProofKind(diagnostic, 'two-way-before-seal'));
  assert.throws(() => validateFixtureProofKind({ ...diagnostic, twoWayAcceptance: true }, 'upload-start-diagnostic'));
  assert.throws(() => validateFixtureProofKind({ ...diagnostic, proofKind: 'two-way-before-seal', twoWayAcceptance: true }, 'two-way-before-seal'));
+});
+
+test('durable confirmation returns while proof is held; drain owns all observations', async () => {
+  const proof = new FixtureReceiptObservations(); let release, observed = false, claimed = false;
+  const held = new Promise(resolve => { release = resolve; });
+  const confirm = () => proof.confirm('receipt-1', async () => ({ committed: true }), () => held.then(() => { observed = true; }));
+  assert.deepEqual(await confirm(), { committed: true }); claimed = true;
+  let drained = false; const drain = proof.drain().then(() => { drained = true; }); await Promise.resolve();
+  assert.equal(claimed, true); assert.equal(observed, false); assert.equal(drained, false);
+  release(); await drain; assert.equal(observed, true); assert.equal(proof.pending.size, 0);
+});
+test('out-of-order observations retain own receipt and failure is raced then drained once', async () => {
+  const proof = new FixtureReceiptObservations(), completed = []; let first;
+  const held = new Promise(resolve => { first = resolve; });
+  proof.schedule('first', () => held.then(() => completed.push('first')));
+  proof.schedule('second', () => { completed.push('second'); });
+  first(); await proof.drain(); assert.deepEqual(completed, ['second', 'first']);
+  assert.throws(() => proof.schedule('first', () => {}), /Duplicate/);
+  const failed = new FixtureReceiptObservations(), error = Error('controlled proof refusal');
+  failed.schedule('bad', () => { throw error; });
+  await assert.rejects(failed.failed, e => e === error); await assert.rejects(failed.drain(), e => e === error);
+  assert.equal(failed.errors.length, 1); assert.equal(failed.pending.size, 0);
+});
+
+test('failed durable confirmation never registers a proof and barrier time is captured after commit', async () => {
+  let clock = 10, observedAt; const proof = new FixtureReceiptObservations(() => clock);
+  await assert.rejects(proof.confirm('failed', async () => { throw Error('commit refused'); }, () => { throw Error('must not observe'); }), /commit refused/);
+  assert.equal(proof.registered.size, 0);
+  assert.equal(await proof.confirm('saved', async () => { clock = 20; return 'receipt'; }, (receipt, at) => { assert.equal(receipt, 'receipt'); observedAt = at; }), 'receipt');
+  await proof.drain(); assert.equal(observedAt, 20);
+});
+
+test('per-call diagnostics retain closed identity and end once on cancellation/EOF', async () => {
+  const events = [], transport = new MacFixtureTransport({ write: () => {}, createStream: () => {}, observeRequest: event => events.push(event) });
+  const controller = new AbortController(), pending = transport.request({ requestId: 'safe-id', action: 'inspect', path: 'private-name-must-not-leak' }, controller.signal);
+  await turn(); controller.abort(Error('private-reason')); await assert.rejects(pending);
+  transport.close(); transport.close();
+  assert.deepEqual(events.map(e => e.phase), ['enqueue','start','cancel','end']);
+  assert.equal(events.at(-1).outcome, 'cancelled');
+  assert.ok(events.every(e => e.requestId === 'safe-id' && e.path === 'other'));
+  assert.equal(JSON.stringify(events).includes('private'), false);
 });
