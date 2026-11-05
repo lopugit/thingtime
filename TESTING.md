@@ -14311,6 +14311,15 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ### Mac strict inventory job
 
+- [ ] Native upload-batch peers must verify only the submitted receipt subset.
+  Force the first admission window to expire after accepted bodies begin, then
+  complete all 256 files through fresh request identities with the same original
+  descriptor/operation IDs and stored receipts. Assert exactly one PUT per file,
+  both identity checks per window, retryable deadline rows, and no PUT admission
+  after expiry. Run the six `MacUploadBatchOperationTests` and canonical upload
+  batch journal recovery tests; never widen production deadlines to make a
+  host-dependent test pass. These synthetic checks do not establish live server
+  grant acceptance or identify an uninstrumented CI cancellation's cause.
 - [ ] On desktop and narrow mobile, expand a folder, open a connection draft,
   type without saving and keep input focus while an automatic check starts and
   finishes. The same input, expansion, scroll anchor and unsaved text must stay
@@ -14625,3 +14634,20 @@ the isolated real-API/browser command and the metadata-only session boundary.
   A processing page size must never become a total comment limit.
 - Record web fixture, simulator, signed build, TestFlight processing and physical
   device evidence separately. A fake native bridge proves the web adapter only.
+
+### Builder app launch and scope regression
+
+- [ ] Create two independent private apps with identically named pages and data.
+      Set the first app's entry point, save/reload, then activate its card/title
+      on desktop/mobile: the live page opens. Browse and Edit app remain explicit.
+- [ ] Browse into each app; type a query, change every kind/view/display/sort/group
+      chip, then Back/Forward/reload. The folder and query persist; no other app's
+      records appear. All apps is the explicit route back to the global catalogue.
+- [ ] Remove entry metadata: primary activation browses contents. Missing,
+      inaccessible, invalid and cyclic/folder targets show a clear recoverable
+      error; access to the app never grants target access. No navigation runs an
+      Action or changes data, membership, audiences or grants.
+- [ ] Open Edit app, choose a saved page or exact Thing ID, test load-more,
+      unavailable target refusal, keyboard navigation and narrow modal scrolling.
+      Scroll each view top to bottom and verify no overflow/clipping.
+

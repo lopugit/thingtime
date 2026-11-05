@@ -858,3 +858,20 @@ contracts; `componentDefinitions.ts` aligns nested stable identities. The
 compatible write corrections are `api.things` 1.49.2, `api.things-update` 1.18.1
 and `api.timeline` 1.19.1. Run `test:timeline` and the disposable
 `test:timeline:large-pages:acceptance` after a node-server build.
+
+### Builder app entry points and scoped navigation
+
+`components/Builder/builderAppNavigation.ts` resolves
+`crystal.metadata.entryPointThingId` through independent authorized app and target
+reads. `/builder?app=<id>` opens the target's existing live reader. An unset
+entry point browses contents; invalid, missing, inaccessible and folder/cyclic
+targets show an error with Browse/Retry. Navigation never executes an Action,
+changes audiences or assigns Things. `BuilderAppDialog` exposes a paged saved-page
+selector and exact Thing ID input, validating availability before saving.
+
+App cards keep explicit Browse/Edit controls. Kind, view, sort, group, display
+and search changes preserve `folder` and query in the current URL; only explicit
+All apps navigation leaves the container. Scoped search uses the existing
+ACL-checked search conditions, not client-only filtering. Coverage:
+`builderAppEntryPoint.test.ts`, `thingsLocation.test.ts`, and the isolated
+`scripts/builder-entrypoint-acceptance.mjs` real API/browser check.

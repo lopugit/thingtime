@@ -12,6 +12,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-06: Builder app cards open their declared saved Thing entry point through independent read checks; explicit Browse/Edit remains, and kind/search/view changes retain the current app scope.
+
 - 2026-11-04: Add Linux/Windows scoped desktop password delivery with a private agent CLI, OS-encrypted retry state, exact-origin catalog metadata (`api.passwords` 1.7.0), and the existing editable per-entry approval policy. Preserve the macOS Apple provider; system-wide autofill, passkey export and first-sign-in handoff are not advertised. See [implementation and acceptance](../PRs/1328-codex-native-autofill-linux-windows-add-scoped-native-password-delivery.md). **Codex (AI)**
 
 - 2026-11-03: Resolve social OAuth apps from exact-origin/environment encrypted platform-vault entries; isolate encrypted multi-account grants per owner and fence callback replay, client changes and refresh/disconnect races. Preserve existing connection UI and legacy link IDs on reconnect. Real provider/deployed acceptance remains separate.
@@ -111,6 +113,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - 2026-11-06: Remove application JSON body ceilings from authenticated shared-content writes after authorization and rate admission; retain strict UTF-8 decoding, cancellation and unrelated control budgets. Negotiate nine deliberate minor contracts, enumerate upload completion parts server-side, and verify all native share controls above the software keyboard. [Evidence and release boundaries](../PRs/1355-codex-share-composer-20261105-open-ios-shares-in-post-message-and-save-composers.md). **Codex (AI)**
+
+- 2026-11-06: Correct the native upload-batch test peer to verify only requested
+  upload receipts. Exercise admission expiry and completion of all 256 files
+  across fresh bounded requests with retained operation IDs, receipt reuse and
+  no duplicate PUTs. Production expiry, authorization and resource policy are
+  unchanged; this is a test-only release follow-up.
+  **Codex (AI)**
+
 
 - 2026-11-06: Keep Mac folder settings mounted independently of background
   sync runs, preserve focused unsaved connection drafts while automatic checks
