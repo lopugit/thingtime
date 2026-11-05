@@ -7,16 +7,30 @@ private actor BatchOperationPeer {
     let batch: MacUploadBatchDescriptor, root: URL
     let replay: Bool, changeAfterVerify: Bool, mixed: Bool
     var rounds = 0, puts = 0, stored = false
-    var received: [Int: Data] = [:]
-    init(_ batch: MacUploadBatchDescriptor, root: URL, replay: Bool, change: Bool, mixed: Bool = false) { self.batch = batch; self.root = root; self.replay = replay; changeAfterVerify = change; self.mixed = mixed }
+    var received: [Int: Data] = [:], receipts: [Int: JSONValue] = [:]
+    var admissions: [(ordinal: Int, at: TimeInterval)] = []
+    let holdFirstPutsUntil: TimeInterval?, expireFirstWindow: Bool
+    var initialWindowEnd: TimeInterval?
+    init(_ batch: MacUploadBatchDescriptor, root: URL, replay: Bool, change: Bool, mixed: Bool = false, holdFirstPutsUntil: TimeInterval? = nil, expireFirstWindow: Bool = false) {
+        self.batch = batch; self.root = root; self.replay = replay; changeAfterVerify = change; self.mixed = mixed; self.holdFirstPutsUntil = holdFirstPutsUntil; self.expireFirstWindow = expireFirstWindow
+    }
+    private func verified(_ m: MacUploadBatchDescriptor.Member) throws -> JSONValue {
+        .object(["ordinal": .number(Double(m.ordinal)), "status": .string("verified"), "content": .object([
+            "ordinal": .number(Double(m.ordinal)), "uploadId": .string("upload-\(m.ordinal)"), "version": .string(String(repeating: "c", count: 64)),
+            "size": .number(Double(m.source.size)), "fingerprint": try JSONValue.from(m.source.fingerprint!)])])
+    }
     func exchange(_ value: JSONValue, _ timeout: TimeInterval) async throws -> JSONValue {
         XCTAssertGreaterThan(timeout, 0); XCTAssertLessThanOrEqual(timeout, 60)
         guard case .object(let f) = value else { throw CancellationError() }
         switch f["kind"] {
         case .string("prepare-ready"):
             rounds += 1
+            let lookup = try BatchJSON.array(BatchJSON.required(f, "checksums")).isEmpty
+            if lookup { received.removeAll() }
+            if lookup && rounds == 1 && expireFirstWindow { initialWindowEnd = ProcessInfo.processInfo.systemUptime + 30.2 }
             let rows = batch.members.map { m -> JSONValue in
                 if replay { return .object(["ordinal": .number(Double(m.ordinal)), "status": .string("confirmed")]) }
+                if let receipt = receipts[m.ordinal] { return receipt }
                 if mixed {
                     if m.ordinal == 0 { return .object(["ordinal": .number(0), "status": .string("confirmed")]) }
                     if m.ordinal == 1 { return .object(["ordinal": .number(1), "status": .string("verified"), "content": .object([
@@ -24,8 +38,8 @@ private actor BatchOperationPeer {
                         "size": .number(Double(m.source.size)), "fingerprint": try! JSONValue.from(m.source.fingerprint!)])]) }
                     if m.ordinal == 2 { return .object(["ordinal": .number(2), "status": .string("failed"), "statusCode": .number(409), "code": .string("source-changed"), "retryable": .bool(false)]) }
                 }
-                return .object(["ordinal": .number(Double(m.ordinal)), "status": .string(rounds == 1 ? "source-required" : "prepared"),
-                                "uploadId": .string("upload-\(m.ordinal)")].filter { rounds != 1 || $0.key != "uploadId" })
+                return .object(["ordinal": .number(Double(m.ordinal)), "status": .string(lookup ? "source-required" : "prepared"),
+                                "uploadId": .string("upload-\(m.ordinal)")].filter { !lookup || $0.key != "uploadId" })
             }
             return .object(["results": .array(rows)])
         case .string("chunk"):
@@ -35,13 +49,22 @@ private actor BatchOperationPeer {
         case .string("put-ready"):
             guard case .number(let ordinal) = f["ordinal"] else { throw CancellationError() }
             let i = Int(ordinal); XCTAssertEqual(received[i]?.count, Int(batch.members[i].source.size)); puts += 1
+            admissions.append((i, ProcessInfo.processInfo.systemUptime))
+            if let until = initialWindowEnd ?? holdFirstPutsUntil, puts <= 16 {
+                let remaining = until - ProcessInfo.processInfo.systemUptime
+                if remaining > 0 { try await Task.sleep(for: .seconds(remaining)) }
+            }
             return .object(["status": .string("accepted"), "payloadBytes": .number(Double(received[i]!.count))])
         case .string("verify-ready"):
             stored = true
-            let rows = try batch.members.filter { !mixed || $0.ordinal == 3 }.map { m -> JSONValue in
-                .object(["ordinal": .number(Double(m.ordinal)), "status": .string("verified"), "content": .object([
-                    "ordinal": .number(Double(m.ordinal)), "uploadId": .string("upload-\(m.ordinal)"), "version": .string(String(repeating: "c", count: 64)),
-                    "size": .number(Double(m.source.size)), "fingerprint": try JSONValue.from(m.source.fingerprint!)])])
+            let uploads = try BatchJSON.array(BatchJSON.required(f, "uploads"))
+            let rows = try uploads.map { value -> JSONValue in
+                let upload = try BatchJSON.object(value, keys: ["ordinal", "uploadId"])
+                guard case .number(let number) = upload["ordinal"], number.rounded() == number, number >= 0, number < Double(batch.members.count) else { throw CancellationError() }
+                let ordinal = Int(number)
+                XCTAssertEqual(upload["uploadId"], .string("upload-\(ordinal)"))
+                let receipt = try verified(batch.members[ordinal]); receipts[ordinal] = receipt
+                return receipt
             }
             if changeAfterVerify { try Data("changed".utf8).write(to: root.appendingPathComponent(batch.members[0].source.path), options: .atomic) }
             return .object(["results": .array(rows)])
@@ -78,19 +101,63 @@ private actor BatchOperationPeer {
         let value: JSONValue = .object(["descriptor": descriptor, "digest": .string(digest)])
         return (root, store, owner, grant, try MacUploadBatchDescriptor(value), value)
     }
-    func test256RealFilesUseOneBoundedOperationAndTwoFreshIdentityChecks() async throws {
+    func test256RealFilesUseFreshBoundedWindowsWithoutRepeatingPUTs() async throws {
         let (root, store, _, grant, batch, raw) = try fixture(count: 256); var authorizations = 0
         let service = try MacFolderSync(origin: URL(string: "https://sync.test")!, store: store,
             staging: MobileSyncStaging(directory: root.appendingPathComponent("staging")), verify: { _, _ in authorizations += 1 }, choose: { nil }, approve: { _ in false },
             conditions: { .init(network: "wifi", charging: true) })
-        let peer = BatchOperationPeer(batch, root: root, replay: false, change: false)
-        let request: JSONValue = .object(["action": .string("upload-batch"), "requestId": .string(UUID().uuidString), "ownerId": .string("owner"), "deviceId": .string("device"), "origin": .string("https://sync.test"), "rootId": .string(grant.id), "batch": raw])
-        let result = try await service.handle(request, batchCallback: { try await peer.exchange($0, $1) })
-        let data = try result.decode([String: JSONValue].self), body = try data["uploadedBatch"]!.decode([String: JSONValue].self)
-        let rows = try BatchJSON.array(body["results"]!); XCTAssertEqual(rows.count, 256)
-        XCTAssertTrue(rows.allSatisfy { if case .object(let row) = $0 { return row["status"] == .string("verified") }; return false })
-        XCTAssertEqual(authorizations, 2); let puts = await peer.puts; XCTAssertEqual(puts, 256)
-        XCTAssertEqual(try BatchJSON.array(body["payloads"]!).count, 256)
+        let peer = BatchOperationPeer(batch, root: root, replay: false, change: false, expireFirstWindow: true)
+        var verified = 0, windows = 0
+        // Each bounded request reacquires authority while retaining the exact
+        // descriptor, operation IDs and stored upload receipts. The initial
+        // accepted bodies deliberately finish after the admission window.
+        while verified < 256 && windows < 8 {
+            let request: JSONValue = .object(["action": .string("upload-batch"), "requestId": .string(UUID().uuidString), "ownerId": .string("owner"), "deviceId": .string("device"), "origin": .string("https://sync.test"), "rootId": .string(grant.id), "batch": raw])
+            let result = try await service.handle(request, batchCallback: { try await peer.exchange($0, $1) })
+            let data = try result.decode([String: JSONValue].self), body = try data["uploadedBatch"]!.decode([String: JSONValue].self)
+            let rows = try BatchJSON.array(body["results"]!); XCTAssertEqual(rows.count, 256)
+            XCTAssertTrue(rows.enumerated().allSatisfy { ordinal, value in
+                guard case .object(let row) = value, row["ordinal"] == .number(Double(ordinal)) else { return false }
+                return row["status"] == .string("verified") || (row["status"] == .string("failed") && row["code"] == .string("deadline") && row["retryable"] == .bool(true))
+            })
+            let previous = verified
+            verified = rows.filter { if case .object(let row) = $0 { return row["status"] == .string("verified") }; return false }.count
+            windows += 1
+            XCTAssertEqual(authorizations, windows * 2, "Every fresh request needs both identity checks")
+            XCTAssertEqual(try BatchJSON.array(body["payloads"]!).count, 256)
+            XCTAssertGreaterThan(verified, previous, "Stop a non-progressing fixture rather than retrying indefinitely")
+            if verified <= previous { break }
+            print("UPLOAD_BATCH_WINDOW window=\(windows) verified=\(verified) total=256")
+        }
+        XCTAssertGreaterThan(windows, 1, "Expiry must exercise a fresh window")
+        XCTAssertEqual(verified, 256, "All 256 files must complete across fresh bounded windows")
+        let admissions = await peer.admissions
+        XCTAssertEqual(admissions.count, 256)
+        XCTAssertEqual(Set(admissions.map(\.ordinal)).count, 256, "Every original operation sends exactly one PUT")
+    }
+    func testExpiredAdmissionRetainsSubsetAndFreshWindowDoesNotRepeatPUTs() async throws {
+        let (root, _, _, grant, batch, _) = try fixture(count: 32)
+        let started = ProcessInfo.processInfo.systemUptime - 25
+        let peer = BatchOperationPeer(batch, root: root, replay: false, change: false, holdFirstPutsUntil: started + 30.2)
+        let first = try await MacUploadBatchOperation.run(batch, started: started, bookmark: grant.bookmark, check: {}, callback: { try await peer.exchange($0, $1) })
+        let firstBody = try first.decode([String: JSONValue].self)
+        let rows = try BatchJSON.array(firstBody["results"]!).map { try $0.decode([String: JSONValue].self) }
+        XCTAssertEqual(rows.count, 32)
+        XCTAssertEqual(rows.filter { $0["status"] == .string("verified") }.count, 16)
+        XCTAssertEqual(rows.filter { $0["code"] == .string("deadline") && $0["retryable"] == .bool(true) }.count, 16)
+        let initialAdmissions = await peer.admissions
+        XCTAssertEqual(initialAdmissions.count, 16)
+        XCTAssertTrue(initialAdmissions.allSatisfy { $0.at - started < 30 }, "No expired PUT may be admitted")
+        let freshStarted = ProcessInfo.processInfo.systemUptime
+        let resumed = try await MacUploadBatchOperation.run(batch, started: freshStarted, bookmark: grant.bookmark, check: {}, callback: { try await peer.exchange($0, $1) })
+        let body = try resumed.decode([String: JSONValue].self)
+        let resumedRows = try BatchJSON.array(body["results"]!).map { try $0.decode([String: JSONValue].self) }
+        XCTAssertEqual(resumedRows.map { $0["ordinal"] }, (0..<32).map { .number(Double($0)) })
+        XCTAssertTrue(resumedRows.allSatisfy { $0["status"] == .string("verified") })
+        let admissions = await peer.admissions
+        XCTAssertEqual(Set(admissions.map(\.ordinal)).count, 32)
+        XCTAssertEqual(admissions.count, 32, "Stored receipts must not send another PUT in a fresh window")
+        XCTAssertTrue(admissions.dropFirst(16).allSatisfy { $0.at >= freshStarted && $0.at - freshStarted < 30 })
     }
     func testReceiptReplayPrecedesSourceIOAndStrongSourceFenceFollowsStoredLookup() async throws {
         for replay in [true, false] {
