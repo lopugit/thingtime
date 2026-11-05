@@ -121,6 +121,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   credentials or development/stable profile separation.
   **Codex (AI)**
 
+- 2026-11-06: Wait for macOS to reap killed development process groups when a
+  zombie temporarily produces EPERM. Cleanup still requires ESRCH within the
+  existing deadline and preserves permission refusals and failed-test evidence.
+  **Codex (AI)**
+
 - 2026-11-06: Correct the native upload-batch test peer to verify only requested
   upload receipts. Exercise admission expiry and completion of all 256 files
   across fresh bounded requests with retained operation IDs, receipt reuse and

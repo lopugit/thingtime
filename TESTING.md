@@ -14345,6 +14345,12 @@ the isolated real-API/browser command and the metadata-only session boundary.
   even when testing ordinary startup without CLI arguments. Run
   `node --test electron/test/dev-workspace.test.cjs`; parallel development
   must keep its own name/profile, and packaged startup must keep the stable app.
+- [ ] Development process-group cleanup must wait through macOS zombie `EPERM`
+  only after a successful SIGKILL and require eventual ESRCH within the existing
+  deadline. Run `node --test electron/test/local-runtime.test.cjs`; exercise the
+  real owned-child zombie transition, reject nonfinite deadlines before signalling,
+  and reject persistent, initial, SIGTERM and
+  SIGKILL permission failures. Preserve the original assertion if cleanup also fails.
 - [ ] Native upload-batch peers must verify only the submitted receipt subset.
   Force the first admission window to expire after accepted bodies begin, then
   complete all 256 files through fresh request identities with the same original
