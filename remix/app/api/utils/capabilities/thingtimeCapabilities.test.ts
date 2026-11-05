@@ -130,7 +130,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   }
 	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.12.0');
 
-	assert.equal(manifest.features['api.actions-run']?.version, '1.41.0');
+	assert.equal(manifest.features['api.actions-run']?.version, '1.42.0');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.8.1');
 	assert.equal(manifest.features['api.things-import']?.version, '1.13.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.16.0');
@@ -482,7 +482,7 @@ test('functional demo capabilities advertise compatible catalog and install cont
 
 test('native animation programs require compatible playback lifecycle support', () => {
   for (const manifest of [createApiCapabilitiesManifest().features, Object.fromEntries(Object.entries(thingtimeCapabilityManifest('https://animation.test').features).map(([key, value]) => [key, value.version]))]) {
-    assert.equal(manifest['api.actions-run'], '1.41.0');
+    assert.equal(manifest['api.actions-run'], '1.42.0');
 
   }
   for (const version of ['1.32.0', '1.32.1', '1.33.1']) assert.equal(capabilitySatisfies(version, '1.32.0'), true);
@@ -491,7 +491,7 @@ test('native animation programs require compatible playback lifecycle support', 
 
 test('XPath programs require owned synchronous query support', () => {
   const current = createApiCapabilitiesManifest().features['api.actions-run'];
-  assert.equal(current, '1.41.0');
+  assert.equal(current, '1.42.0');
 
   assert.equal(capabilitySatisfies(current, '1.34.0'), true);
   for (const version of ['', '1.33.1', '1.33.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.34.0'), false);
@@ -502,7 +502,7 @@ test('native traversal requires bounded synchronous callback support on both man
     createApiCapabilitiesManifest().features['api.actions-run'],
     thingtimeCapabilityManifest('https://traversal.test').features['api.actions-run'].version
   ]) {
-    assert.equal(current, '1.41.0');
+    assert.equal(current, '1.42.0');
 
     assert.equal(capabilitySatisfies(current, '1.35.1'), true);
     for (const old of ['', '1.34.0', '1.34.1', '2.0.0']) assert.equal(capabilitySatisfies(old, '1.35.1'), false);
@@ -512,9 +512,9 @@ test('native traversal requires bounded synchronous callback support on both man
 
 test('server Action outcomes are discoverable in both capability manifests', () => {
   for (const features of [createApiCapabilitiesManifest().features, Object.fromEntries(Object.entries(thingtimeCapabilityManifest('https://outcomes.test').features).map(([id, feature]) => [id, feature.version]))]) {
-    assert.equal(features['api.actions-run'], '1.41.0');
+    assert.equal(features['api.actions-run'], '1.42.0');
 
-    assert.equal(features['api.timeline'], '1.19.1');
+    assert.equal(features['api.timeline'], '1.19.2');
     assert.equal(capabilitySatisfies('1.36.0', '1.38.0'), false);
     assert.equal(capabilitySatisfies('1.15.0', '1.16.0'), false);
     assert.equal(capabilitySatisfies('1.16.0', '1.17.0'), false);
@@ -612,7 +612,7 @@ test('editable media containers require compatible element storage contracts on 
 
 test('theme focus settings are additive and consistent across both manifests', async () => {
   const { THEME_CAPABILITY_REQUIREMENTS } = await import('../../../theme/capabilities');
-  const requirements = { ...THEME_CAPABILITY_REQUIREMENTS, 'api.themes-shared': '1.1.0', 'api.timeline': '1.19.1' };
+  const requirements = { ...THEME_CAPABILITY_REQUIREMENTS, 'api.themes-shared': '1.1.0', 'api.timeline': '1.19.2' };
   const docs = createApiCapabilitiesManifest().features;
   const discovery = thingtimeCapabilityManifest('https://themes.test');
   assert.equal(discovery.origin, 'https://themes.test');
@@ -676,7 +676,7 @@ test('empty post and message files require the compatible original-byte contract
 
 
 test('long Data text requires compatible write import and schema contracts', () => {
- for (const [feature, minimum, previous] of [['api.things', '1.51.0', '1.49.2'], ['api.things-update', '1.20.0', '1.18.1'], ['api.things-import', '1.13.0', '1.12.0'], ['api.schemas', '1.2.0', '1.1.1'], ['api.things-bulk', '1.7.0', '1.6.0'], ['api.actions-run', '1.41.0', '1.40.1'], ['api.chatgpt-mcp', '2.1.0', '2.0.0'], ['api.builder-workspaces', '1.1.0', '1.0.1']]) {
+ for (const [feature, minimum, previous] of [['api.things', '1.51.0', '1.49.2'], ['api.things-update', '1.20.0', '1.18.1'], ['api.things-import', '1.13.0', '1.12.0'], ['api.schemas', '1.2.0', '1.1.1'], ['api.things-bulk', '1.7.0', '1.6.0'], ['api.actions-run', '1.42.0', '1.40.1'], ['api.chatgpt-mcp', '2.1.0', '2.0.0'], ['api.builder-workspaces', '1.1.0', '1.0.1']]) {
   assert.equal(createApiCapabilitiesManifest().features[feature], minimum);
   assert.equal(thingtimeCapabilityManifest('https://shares.test').features[feature].version, minimum);
   for (const version of [undefined, previous, `${Number(minimum.split('.')[0]) + 1}.0.0`]) assert.equal(capabilitySatisfies(version, minimum), false);
@@ -721,4 +721,24 @@ test('local native range scope publishes its additive contract on both manifests
   for (const version of ['1.1.0', '1.1.1', '1.2.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), true);
   for (const version of [undefined, '1.0.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
 
+});
+
+
+test('combined shared Action values reject authored-control-only origins', () => {
+ const required=SHARED_CONTENT_REQUIREMENTS['api.actions-run'];
+ assert.equal(required,'1.42.0');
+ assert.equal(createApiCapabilitiesManifest().features['api.actions-run'],required);
+ assert.equal(thingtimeCapabilityManifest('https://combined-action.test').features['api.actions-run'].version,required);
+ for(const version of [undefined,'1.41.0','2.0.0']) assert.equal(capabilitySatisfies(version,required),false);
+ for(const version of ['1.42.0','1.42.1','1.43.0']) assert.equal(capabilitySatisfies(version,required),true);
+});
+
+
+test('full content Timeline clients require the corrected broad snapshot reader', () => {
+ const required=SHARED_CONTENT_REQUIREMENTS['api.timeline'];
+ assert.equal(required,'1.19.2');
+ assert.equal(createApiCapabilitiesManifest().features['api.timeline'],required);
+ assert.equal(thingtimeCapabilityManifest('https://broad-snapshot.test').features['api.timeline'].version,required);
+ for(const version of [undefined,'1.19.1','2.0.0']) assert.equal(capabilitySatisfies(version,required),false);
+ for(const version of ['1.19.2','1.19.3','1.20.0']) assert.equal(capabilitySatisfies(version,required),true);
 });

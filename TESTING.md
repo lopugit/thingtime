@@ -14622,6 +14622,16 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ## Incoming sharing: post, message and save
 
+- Create and update broad Data through the real API, read exact values and
+  reconstruct the recorded revision. Snapshot processing must use relational
+  parts without a total node ceiling; check retained-byte equality, stable
+  operation IDs, rollback on failure and canonical depth/envelope guards.
+
+- Create and exact-read a valid broad Data value (for example, 200,000 array
+  entries). Authored-control classification and rich-text presence checks must
+  avoid JavaScript argument-spread ceilings, preserve order/count and handle
+  cycles without replacing complete input with a truncated success.
+
 - Run `npm --prefix remix run test:shared-content`. In an isolated real-API
   fixture, run `remix/scripts/shared-body-acceptance.mjs` above the former
   768/256/64/32/16 KiB body thresholds and compare exact readback for all nine

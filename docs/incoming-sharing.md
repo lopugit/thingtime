@@ -110,3 +110,14 @@ changed route families above their former JSON budgets, exact long-value
 readbacks, uploadId-only zero-byte completion and anonymous/private refusals.
 Both API and UI-origin manifests expose the expected minors. This evidence uses
 only disposable accounts, replica-set storage and local attachment bytes.
+
+Generic Action execution carrying shared Data requires `api.actions-run` 1.42.0.
+This combines the complete-value contract with authored descriptors introduced
+independently in 1.41; a rich-field-only1.41 origin cannot satisfy it. The nine
+shared-content HTTP body contracts above retain their independent versions.
+
+Ordinary Timeline revisions use `api.timeline` 1.19.2 for broad content copy and
+reconstruction. Valid large arrays use existing relational snapshot parts when
+inline processing windows would be exceeded. Canonical depth, per-event/part
+envelopes, wire formats and retained-byte accounting are unchanged. Backup
+envelopes retain their separate existing contract.

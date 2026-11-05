@@ -52,9 +52,9 @@ screenshots capture the transition while the web page loads; loaded-page
 acceptance is recorded separately.
 
 The web adapter has 35 focused tests; Messenger and Save have 18. Capability
-coverage passes 148 tests after the final nine contract minor bumps and schema coverage 300. Attachment tests cover
+coverage passes 150 tests after the final nine contract minor bumps and schema coverage 304. Attachment tests cover
 purpose ownership, duplicate refusal, empty-object bytes, replay and lease-loss
-recovery. Integrated TypeScript and all 300 schema checks pass on the final expanded
+recovery. Integrated TypeScript and all 304 schema checks pass on the final expanded
 source; scoped lint reports zero errors. No warnings occur on changed lines.
 The full feed suite passes 101 tests, Messenger passes 70, and the attachment
 entry passes 337, including the IncomingShare bridge and viewport regressions.
@@ -142,7 +142,7 @@ The scoped semantic refresh completed 74 of 117 required slices before the
 bounded delivery deadline. Its complete cache entries were retained as validated
 immutable variants; no partial graph replaced the active snapshot. The final
 source uses the canonical structural refresh with clustering, report and HTML.
-Current semantic coverage of the ten changed Markdown files remains incomplete;
+Current semantic coverage of the attempted ten Markdown files and later integrations remains incomplete;
 the structural output must not be described as full current documentation
 indexing. This limitation does not change the application acceptance above.
 
@@ -155,5 +155,63 @@ CI exposed three stale discussion-projection assertions for the removed
 25-attachment truncation and former aggregate query. The corrected regression
 requires all 30 authorized attachments in stored order, one batched authorized
 attachment read and no attachment-body aggregation; ACL/moderation and private
-metadata refusals remain covered. The focused31 tests and complete
-`test:things`341+31 checks pass, with clean scoped lint. Runtime is unchanged.
+metadata refusals remain covered. The focused 31 tests and complete
+`test:things` (341 + 31) checks pass, with clean scoped lint. Runtime is unchanged.
+
+The later authored-fields main merge independently used `api.actions-run` 1.41.0
+for descriptor expansion. The combined contract is 1.42.0 and the shared-value
+client requires it; an authored-only origin cannot falsely satisfy full-value
+negotiation. Things 1.51 and update 1.20 remain higher than main's1.50/1.19.
+Both manifest generators and a rejection regression cover the combined version.
+
+The authored-fields merge introduced argument-spread traversal that threw
+RangeError for a valid 200,000-entry (about 400 KB) Data array. Two canonical helpers
+now push iteratively in the same order while preserving cycle handling. The
+focused imported Editor/schema/form-ownership/latest-snapshot batch passes 25
+tests, including both breadth regressions. Final merged runtime smoke and
+exact source typecheck are recorded before publishing the integration.
+
+The first actual broad Data write exposed a separate ordinary Timeline snapshot
+node ceiling. It returned500 and the transaction rolled back (the owner's Data
+list remained empty); no uncertain write was replayed. The server now copies
+complete valid content and routes broad snapshots through existing relational
+parts, preserving canonical depth, per-event/per-part envelopes, wire format,
+idempotency and exact retained-byte accounting. Full Timeline 247 and capability
+150 tests pass; the final source also passes TypeScript. `api.timeline` 1.19.2
+and full-content client minima advertise the compatible correction.
+
+Retained 128 MiB/2,048-part per-side and 4,096-part pair windows are safe envelope
+headroom above canonical JSON from a valid [16MiB BSON document](https://www.mongodb.com/docs/manual/reference/limits/#bson-documents), not an unavoidable 128 MiB protocol limit.
+The read-only extremal NUL-text probe produced 100,662,359 JSON bytes and 1,536
+parts (3,072 for a before/after pair), under those processing envelopes.
+
+## Final merged acceptance
+
+The corrected sanitized build passes. One journaled private Data lifecycle
+creates/updates 200,000 ordered rows plus 5,242,887 UTF-8 bytes of emoji, Chinese
+text and newlines. HTTP bodies of 7,114,482/7,114,438 bytes return 200. Complete
+current reads, both historical exports and read-only restore-preview
+current/incoming/result match exact text and row hashes; the current state stays
+updated. Normal storage admission is unchanged. Both built-origin manifests
+advertise all nine write contracts, Action 1.42.0 and Timeline 1.19.2.
+
+The final no-submit browser check passes all 27 files in Post, Message and Save,
+27 distinct upload identities for each purpose and no duplicates on return.
+Unsent edits survive switching; the saved toolbar label and icon survive exact
+private Thing readback and reload, with no new Post uploads. Actual typing
+followed immediately by submit captures all 22,122 characters and 27 attachment
+IDs, including native pending recovery state. Transport is aborted before the
+API write and the exact result remains 404. A positive 20-pixel caret rectangle
+(139–159) stays above actions at 171; nested Save folder navigation passes.
+All task browser/fixture workers and ports 18430–18433 are cleaned up.
+
+Final source checks include TypeScript, 150 capability/client contracts,
+304 schemas, 250 Timeline cases, the focused 87-case complete reader pipeline,
+43 imported Editor/style/form/snapshot checks, and the repaired Things suite
+(341 + 31). Scoped lint has zero errors; inherited hook/mixed-operator warnings
+remain reported in the logs. No new native Post publication was performed.
+
+Graph retention is temporarily two complete snapshots for this PR's main
+baseline/current output, to avoid generated rename conflicts during CI. Exactly
+one alias is active; the project default and global policy are unchanged. The
+final refresh is structural only, with the semantic coverage limitation above.

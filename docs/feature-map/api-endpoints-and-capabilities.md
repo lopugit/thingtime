@@ -738,3 +738,15 @@ requests retain numeric budgets. Completion accepts only uploadId and enumerates
 parts server-side; presigning pages every part. See [incoming sharing](../incoming-sharing.md);
 run `test:shared-content`, `test:api-capabilities` and the isolated real-API
 `remix/scripts/shared-body-acceptance.mjs` harness.
+
+The merged shared-value Action contract is `api.actions-run` 1.42.0. The
+authored-controls branch independently used 1.41.0, so that origin alone must
+not satisfy clients requiring complete shared Data values. Both generators
+read the canonical version; shared-content Action clients require 1.42.0, while
+older authored-control-only minima remain valid for their narrower contract.
+
+`api.timeline` 1.19.2 corrects ordinary revision copy/reconstruction for valid
+broad content. Existing snapshot parts handle breadth beyond inline processing
+windows; no total-content node cap remains. Full-content checkout, merge,
+export and restore clients require this patch. Metadata reads retain their
+older minima. Run `test:timeline`; the wire/parts formats are unchanged.

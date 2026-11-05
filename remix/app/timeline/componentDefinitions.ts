@@ -1,4 +1,5 @@
-import { copyBoundedJson, type JsonValue } from '../utils/boundedJson.ts';
+import type { JsonValue } from '../utils/boundedJson.ts';
+import { copyTimelineContent } from './contentJson.ts';
 import type { TimelineSnapshot } from './contract.ts';
 import type { VersionChoices, VersionConflict, VersionValue } from './versions.ts';
 import { pageBlockTraversal } from './pageBlockTraversal.ts';
@@ -18,7 +19,7 @@ const equal = (a: VersionValue, b: VersionValue) => JSON.stringify(a) === JSON.s
 export const definitionSnapshot = (value: Record<string, JsonValue>): TimelineSnapshot => ({
 	adapter: 'component-bindings',
 	version: 1,
-	value: copyBoundedJson(value, { maxBytes: 4 * 1024 * 1024, maxDepth: 90, maxNodes: 200_000, sortKeys: true }, 'Component comparison')
+	value: copyTimelineContent(value, 'Component comparison', 1)
 });
 
 /** Shared atomic-definition merge for recorded branches and published pages.

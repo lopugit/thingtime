@@ -54,7 +54,7 @@ test('editable map uploads and numeric summaries require their deployed contract
     ['api.things-update', '1.20.0', '1.15.1'],
     ['api.webpages-resolve', '1.12.0', '1.8.1'],
 
-    ['api.actions-run', '1.41.0', '1.38.0'],
+    ['api.actions-run', '1.42.0', '1.38.0'],
     ['api.things-fork', '1.8.1', '1.7.0']
   ]) {
     assert.equal(route[feature], minimum);
@@ -97,8 +97,8 @@ test('maps runtime and both manifests expose the negotiated owner provider contr
 test('Timeline synchronization is registered and versioned on both capability manifests', () => {
 	assert.equal(createApiCapabilitiesManifest().features['api.mongodb-endpoint'], '1.1.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.mongodb-endpoint'].version, '1.1.0');
-	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.19.1');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.19.1');
+	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.19.2');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.19.2');
 	assert.equal(typeof routeModules['v1/timeline'], 'function');
 	for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
 });
@@ -119,7 +119,7 @@ test('JSON Action inputs and draft-saving suites negotiate both origin manifests
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
 	for (const [feature, minimum, previous] of [
 		['api.things', '1.38.0', '1.32.0'], ['api.things-update', '1.12.0', '1.9.0'],
-		['api.actions-run', '1.41.0', '1.35.0'], ['api.webpages-suites-install', '1.6.0', '1.4.0']
+		['api.actions-run', '1.42.0', '1.35.0'], ['api.webpages-suites-install', '1.6.0', '1.4.0']
 	]) {
 		assert.equal(route[feature], feature === 'api.things' ? '1.51.0' : feature === 'api.things-update' ? '1.20.0' : minimum);
 		assert.equal(wellKnown[feature].version, feature === 'api.things' ? '1.51.0' : feature === 'api.things-update' ? '1.20.0' : minimum);
@@ -215,8 +215,8 @@ test('standalone Thing copying negotiates the additive copy contract on both man
 });
 
 test('Data Thing controls negotiate the shared-content action contract', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.actions-run'], '1.41.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.actions-run'].version, '1.41.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.actions-run'], '1.42.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.actions-run'].version, '1.42.0');
 
 	for (const unsupported of ['', '1.1.0', '1.2.0', '1.2.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.3.0'), false);
 	assert.equal(capabilitySatisfies('1.3.1', '1.3.0'), true);
@@ -955,7 +955,7 @@ test('Builder provenance corrections negotiate every affected shared-content con
 	const wellKnown = thingtimeCapabilityManifest('https://builder-marker.test').features;
 	for (const [feature, required, previous] of [
 		['api.attachment-content', '1.18.0', '1.17.0'], ['api.things', '1.51.0', '1.49.0'],
-		['api.actions-run', '1.41.0', '1.40.0'], ['api.things-fork', '1.8.1', '1.8.0'],
+		['api.actions-run', '1.42.0', '1.40.0'], ['api.things-fork', '1.8.1', '1.8.0'],
 		['api.things-export', '1.16.0', '1.15.0']
 
 	]) {
