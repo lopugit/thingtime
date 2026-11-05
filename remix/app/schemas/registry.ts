@@ -1660,7 +1660,6 @@ export const ACTION_STEP_OPS = [
 export const ACTION_CAPABILITIES = ['http.request', 'lookup', 'things.read', 'things.create', 'things.update', 'things.delete', 'actions.invoke'] as const;
 export const ACTION_INPUT_TYPES = ['string', 'text', 'number', 'boolean', 'enum', 'json'] as const;
 export const MAX_ACTION_STEPS = 40;
-export const MAX_ACTION_INPUTS = 16;
 export const MAX_ACTION_CAPABILITY_ENTRIES = 8;
 export const MAX_ACTION_CAPABILITY_SCOPES = 12;
 export const MAX_ACTION_KEY_CHARS = 80;
@@ -1765,9 +1764,8 @@ const actionSchema: ThingtimeSchema = {
 			name: 'inputs',
 			type: 'record',
 			required: false,
-			max: MAX_ACTION_INPUTS,
 			description:
-				`Typed input descriptor list, max ${MAX_ACTION_INPUTS}: { name, type (${ACTION_INPUT_TYPES.join('/')}), ` +
+				`Typed input descriptor list: { name, type (${ACTION_INPUT_TYPES.join('/')}), ` +
 				'label?, description?, required?, default?, values? (enum), min?/max? (number), maxLength? (string) }. ' +
 				'The /actions run panel renders one input per descriptor.'
 		},
@@ -5620,7 +5618,6 @@ const sanitizeSourceBinding = (input: unknown): { ok: true; source: Record<strin
 		}
 		const inputs: Record<string, unknown> = {};
 		const entries = Object.entries(rawSource.inputs as Record<string, unknown>);
-		if (entries.length > MAX_ACTION_INPUTS) return fail(400, `Component/page source.inputs can hold at most ${MAX_ACTION_INPUTS} entries`);
 		for (const [key, value] of entries) {
 			if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
 				return fail(400, `Component/page source input "${key.slice(0, 40)}" is not a valid input name`);
@@ -5886,7 +5883,7 @@ const sanitizeWebpageBlock = (
 	if (type === 'element' || type === 'collection' || type === 'condition') {
 		if (type === 'element') {
 			const tag = typeof raw.tag === 'string' ? raw.tag.toLowerCase() : 'div';
-			if (!HTML_ALLOWED_TAGS.has(tag) || (tag.startsWith('tt-') && !['tt-media-pipeline', 'tt-mapbox', 'tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-upload'].includes(tag))) return fail(400, 'Element blocks require a safe HTML tag');
+			if (!HTML_ALLOWED_TAGS.has(tag) || (tag.startsWith('tt-') && !['tt-media-pipeline', 'tt-mapbox', 'tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-upload', 'tt-menu', 'tt-rich-text'].includes(tag))) return fail(400, 'Element blocks require a safe HTML tag');
 			if (tag === 'tt-media-pipeline') {
 				try { validateMediaPipeline((raw.props as any)?.pipeline); } catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid media pipeline'); }
 			}
@@ -6319,7 +6316,6 @@ const sanitizeActionSchemaRef = (value: unknown, label: string): Fail | { ok: tr
 
 const sanitizeActionInputs = (input: unknown): Fail | { ok: true; inputs: Record<string, unknown>[] } => {
 	if (!Array.isArray(input)) return fail(400, 'Action inputs must be a list of input descriptors');
-	if (input.length > MAX_ACTION_INPUTS) return fail(400, `Actions can declare at most ${MAX_ACTION_INPUTS} inputs`);
 	const inputs: Record<string, unknown>[] = [];
 	const seen = new Set<string>();
 	for (const entry of input) {
