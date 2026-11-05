@@ -2,6 +2,7 @@ import LocalMediaPipeline from '../../webPlatform/LocalMediaPipeline';
 import { isPngThumbnail } from '../../utils/pngThumbnail';
 import { ComponentChange } from '../Builder/ComponentChange';
 import { ComponentMenu } from '../Builder/ComponentMenu';
+import { ComponentRichText } from '../Builder/ComponentRichText';
 import { ComponentSelect } from '../Builder/ComponentSelect';
 import { ComponentStyle } from '../Builder/ComponentStyle';
 import { ComponentCollection } from '../Builder/ComponentCollection';
@@ -187,6 +188,10 @@ export const ALLOWED_PROPS = new Set([
 	// strings (an action key/id and a JSON inputs blob); no URL or JS sink.
 	'data-tt-action',
 	'data-tt-action-inputs',
+	// Inert composition slots adopted only by the trusted authored menu.
+	'data-tt-menu-slot',
+	'data-tt-menu-trigger',
+	'data-tt-input-type',
 	// Inert editor address, validated against the authored template before editing.
 	'data-tt-label-key'
 ]);
@@ -333,6 +338,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 		);
 	if (tag === 'tt-media') return <ComponentMedia key={key} {...node.props} />;
 	if (tag === 'tt-select') return <ComponentSelect key={key} {...node.props} />;
+	if (tag === 'tt-rich-text') return <ComponentRichText key={key} {...node.props} />;
 	if (tag === 'tt-map') return <ComponentMap key={key} {...node.props} />;
 	if (tag === 'tt-mapbox') return <ComponentMapbox key={key} {...node.props} />;
 	if (tag === 'tt-form')
@@ -439,6 +445,8 @@ export function HtmlBlockElement({ tag, attributes, editorProps, children, marke
  if (tag === 'tt-style') return <div {...editorProps}><ComponentStyle rules={attributes?.rules}>{children}</ComponentStyle></div>;
  if (tag === 'tt-form') return <div {...editorProps}><ComponentForm {...attributes}>{children}</ComponentForm></div>;
  if (tag === 'tt-select') return <div {...editorProps}><ComponentSelect {...attributes} /></div>;
+ if (tag === 'tt-rich-text') return <div {...editorProps}><ComponentRichText {...attributes} /></div>;
+ if (tag === 'tt-menu') return <div {...editorProps}><ComponentMenu {...attributes}>{children}</ComponentMenu></div>;
  if (tag === 'tt-change') return <span {...editorProps}><ComponentChange {...attributes}>{children}</ComponentChange></span>;
  const safeTag = ALLOWED_TAGS.has(tag) && !tag.startsWith('tt-') ? tag : 'div';
  const props = fieldProps(safeTag, sanitizeProps(attributes, safeTag));

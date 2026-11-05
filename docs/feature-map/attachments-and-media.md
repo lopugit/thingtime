@@ -705,3 +705,9 @@ main bundle; `imageAssets.ts` fetches pinned same-origin WASM only;
 frames, alpha and timing inside the network-disabled worker. See README for
 format/animation/SVG limits. Run the media/image tests, template-block tests,
 capability coverage and the isolated Chrome acceptance runner.
+
+Local object storage 1.1.0 implements the shared `signDownloadRange` provider
+contract with a separate 60-second HMAC GET scope bound to the immutable version
+and exact Range. Native target issuance preserves owner/fingerprint gates and
+requires an absolute HTTPS storage origin. Run `localAttachmentStorage.test.ts`
+and `attachments.test.ts` for scope refusal, byte correctness and owner checks.

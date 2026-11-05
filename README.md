@@ -2574,6 +2574,8 @@ for those also set the dev server's origin and restart:
 
 ```sh
 THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://127.0.0.1:10000   # this checkout's Nitro port (npm run web-ports)
+# Native signed range downloads require a trusted HTTPS origin instead.
+# Range targets last at most 60 seconds and require the exact signed Range header.
 ```
 
 Exact object versions are immutable, so the stand-in answers with an `ETag`
@@ -6738,7 +6740,7 @@ subject to GitHub's current plan terms; Vercel hosting/runtime charges remain.
 ### Saved Mapbox map applications
 
 A saved Builder app can use the `tt-mapbox` viewport and the origin-scoped
-`api.maps` 1.1.0 operations (including batched complete-address lookups). Save your own Mapbox token in the private Thingtime
+`api.maps` 1.2.0 operations (including batched complete-address lookups). Save your own Mapbox token in the private Thingtime
 Vault and configure its entry ID (`<owned-vault-entry-id>`) in the saved app.
 The browser map requires a public `pk` token; never put secret tokens in page
 definitions. The map SDK and CSS are staged from the pinned npm package as same-origin app assets; browser
@@ -6749,6 +6751,16 @@ saving selected geocodes additionally requires Mapbox Permanent Geocoding
 entitlement and its storage conditions. No new Vercel provider-key variable is
 needed. Standard Mapbox navigation output cannot be cached. See
 [editable maps and routing](docs/maps.md) for operation contracts and verification.
+
+Saved markers may use generic base/actual-zoom visual scaling and explicit
+association keys while retaining every original member/action and route geometry.
+Reusable `tt-rich-text` fields submit native Editor.js JSON plus optional paired
+plain text after an awaited latest save; `tt-menu` composes editable pointer,
+keyboard and touch menus. Keep these application definitions in private saved
+Things. See the [canonical Builder guide](/docs/builder) and
+[map contracts](docs/maps.md); no new provider credential or Vercel variable is
+needed. Client authoring requires Things1.50/update1.19/resolve1.12, and expanded
+Action input descriptors require actions-run1.41 on the selected origin.
 
 ### Storage recovery and production checks
 
