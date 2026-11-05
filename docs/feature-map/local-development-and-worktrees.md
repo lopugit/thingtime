@@ -176,3 +176,9 @@ iOS toolchains and isolated build outputs. Run workspace Cargo tests, the linked
 Swift/Rust fixture (`apple/FileSync/test-embedded-rust.sh`) and affected native
 host suites before signing and installing. Release listeners include changes in
 this directory for every consuming app.
+
+The early Mac sync fixture uses `scripts/mac-fixture-tls.mjs` and the test-only
+`mac-fixture-worker-trust.cjs` preload for ephemeral HTTPS byte storage on 28313.
+API/native identity remain on 28311; only the exact canonical transfer-worker
+child receives the public test CA. `mac-fixture-tls.test.mjs` covers correct,
+wrong and missing CA trust plus unrelated-child isolation. No OS trust changes.
