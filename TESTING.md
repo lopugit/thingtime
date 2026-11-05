@@ -13888,6 +13888,33 @@ separate from deterministic discovery/lease tests.
 
 ## Editable Mapbox maps and route planning
 
+- [ ] Keep ten collapsed rich fields deferred with zero SDK roots; submit a late
+  untouched default without opening, refuse a required empty value, and verify
+  open/type/collapse/source-refresh retains the same dirty editor. Cover both
+  the page and Builder iframe at desktop/mobile, including an immediate Save.
+  Dismiss the asserted validation toast through its ordinary Close control before
+  tapping the next nearby action; use owner/parent-document hit testing if a
+  native touch never reaches target capture.
+- [ ] Compose `tt-menu` target/content/ordinary trigger children and a named
+  `tt-rich-text` field inside a normal form. Type/format and immediately Save;
+  compare JSON and plainTextName with exact API readback. A menu hiding during
+  submission must retain its DOM and submit once. Cover no-editor menu forms,
+  native-input snapshot timing, failed editor saves, identity/unmount, disabled
+  fields, same-account source refresh before asynchronous editor delivery, literal
+  legacy `<...>`, empty documents and unsafe rich links. Repeat in the actual
+  Builder iframe/owner document with selection, toolbar, Escape and focus checks.
+- [ ] Verify right-click and ContextMenu/Shift+F10 never fire the primary marker
+  action; ordinary touch trigger opens the same menu. Authored grid display must
+  not expose closed popovers. Test viewport corners, desktop/mobile bottom scroll,
+  menu forms, native fields, Editor.js typing/toolbars, dismissal and focus restore.
+- [ ] Change markerScale and actual SDK zoom: all default/authored/grouped visuals
+  update while SDK transforms, marker/portal identity and data requests remain
+  stable. Check inherited inline rich-text color, accessible touch targets and
+  unscaled top-layer popovers. Explicit grouping keys share one visual anchor;
+  unrelated colocated points stay independent. Retain multiple original members'
+  actions, selected state, route geometry and full-itinerary ordinals (including
+  unresolved middle stops and nonconsecutive/fractional rank values).
+
 - [ ] Batch complete-address lookups with stored coordinates, precise matches,
   ambiguous results and absent quality metadata. Preserve every input ID/order,
   do not silently choose an ambiguous pin, and keep temporary coordinates out of
@@ -14647,3 +14674,19 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - [ ] Open Edit app, choose a saved page or exact Thing ID, test load-more,
       unavailable target refusal, keyboard navigation and narrow modal scrolling.
       Scroll each view top to bottom and verify no overflow/clipping.
+- Authored rich/menu integration: run `npm --prefix remix run test:authored-controls:browser`
+  after the client + node-server build. The fixture starts its own disposable
+  replica and API, registers a synthetic account, then checks desktop/mobile
+  outer-page and actual BuilderViewport iframe menus. Type and format text,
+  immediately Save, and independently read the exact persisted Editor.js and
+  plain-text values; verify the ordinary named fields and one write per click.
+  Repeat with no rich fields. Check native menu keyboard/Escape/focus and opened
+  bounds, scroll to the bottom, then ensure all owned test resources close.
+  Set `MONGOD_PATH`, `TT_PLAYWRIGHT_MODULE`, `TT_CHROMIUM_EXECUTABLE`, and optional
+  `AUTHORED_CONTROLS_REPORT_DIR` to local test resources only. No production
+  account, database, private app definition or provider is used by this fixture.
+- Builder iframe editors: select words and use Bold, collapse selection with an
+  arrow key, continue typing, and immediately Save. Toolbar/selection and the
+  parent scroll must stay in the correct document. Reframe/reopen and exercise
+  two fields; failed/slow editor-module loading must allow a fresh open without
+  stale editor initialization or a second app runtime.

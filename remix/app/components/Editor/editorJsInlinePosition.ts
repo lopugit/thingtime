@@ -21,7 +21,7 @@ export const inlineToolbarPosition = (
 
 /** Selection gets the closest available space; secondary chrome works around it. */
 export const layoutEditorJsInlineToolbar = (holder: HTMLElement) => {
-	const selection = window.getSelection();
+	const selection = holder.ownerDocument.defaultView?.getSelection();
 	const releaseSpace = () => holder.style.removeProperty('--tt-editor-selection-space');
 	if (!selection?.rangeCount || selection.isCollapsed || !holder.contains(selection.anchorNode)) {
 		releaseSpace();
@@ -62,13 +62,15 @@ export const layoutEditorJsInlineToolbar = (holder: HTMLElement) => {
 
 /** Follow the selection and visual viewport, including keyboard pans and nested scrolling. */
 export const watchEditorJsInlinePosition = (holder: HTMLElement): (() => void) => {
+	const document = holder.ownerDocument,
+		window = document.defaultView!;
 	let frame = 0;
 	const sync = () => {
 		frame = 0;
 		layoutEditorJsInlineToolbar(holder);
 	};
 	const schedule = () => {
-		if (!frame) frame = requestAnimationFrame(sync);
+		if (!frame) frame = window.requestAnimationFrame(sync);
 	};
 	const observer = new MutationObserver(schedule);
 	observer.observe(holder, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
@@ -80,7 +82,7 @@ export const watchEditorJsInlinePosition = (holder: HTMLElement): (() => void) =
 	return () => {
 		holder.style.removeProperty('--tt-editor-selection-space');
 		observer.disconnect();
-		cancelAnimationFrame(frame);
+		window.cancelAnimationFrame(frame);
 		document.removeEventListener('selectionchange', schedule);
 		window.removeEventListener('scroll', schedule, true);
 		window.removeEventListener('resize', schedule);
