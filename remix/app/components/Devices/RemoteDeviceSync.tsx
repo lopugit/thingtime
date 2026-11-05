@@ -21,7 +21,7 @@ import { type SavedFileSyncConfiguration, readOwnedFileSyncConfiguration } from 
 import { newFileSyncConfiguration, FILE_SYNC_RESOURCE_REQUIREMENTS } from '~/fileSync/configuration';
 import { fileSyncDownloadRequirements } from '~/fileSync/signedDownloadTarget';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
-import { canonicalDraftConfiguration, configurationDraftKey, ConfigurationConflict, persistConfigurationDraft, readConfigurationDraft,
+import { canonicalDraftConfiguration, configurationDraftKey, ConfigurationConflict, persistConfigurationDrafts, readConfigurationDrafts,
 	readOwnedSyncFolder, saveConfigurationDraft, type ConfigurationDraft, type ConfigurationEditorScope } from '~/fileSync/configurationEditor';
 import { assertRemoteDeviceRoot, hasSavedDeviceRoot } from '~/fileSync/remoteConfigurationRoot';
 import { SYNC_INTERVALS } from '~/fileSync/syncJobJournal';
@@ -72,12 +72,12 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 	const options = () => ({ expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.origin, signal: lifetime.current.signal });
 	const [client] = useState(() => createRemoteSyncClient({ ...scope, get signal() { return lifetime.current.signal; }, assertCurrent: check }));
 	const [initial] = useState(() => {
-		try { const raw = window.localStorage.getItem(key); return { raw, draft: readConfigurationDraft(raw, scope.deviceId), error: '' }; }
-		catch (cause) { return { raw: null, draft: null, error: cause instanceof Error ? cause.message : 'The saved draft could not be read.' }; }
+		try { const raw = window.localStorage.getItem(key); return { raw, drafts: readConfigurationDrafts(raw, scope.deviceId), error: '' }; }
+		catch (cause) { return { raw: null, drafts: [] as ConfigurationDraft[], error: cause instanceof Error ? cause.message : 'The saved draft could not be read.' }; }
 	});
 	const raw = useRef(initial.raw);
-	const [draft, setDraft] = useState<ConfigurationDraft | null>(initial.draft);
-	const retainedDrafts = useRef(new Map<string, ConfigurationDraft>(initial.draft ? [[initial.draft.id, initial.draft]] : []));
+	const [draft, setDraft] = useState<ConfigurationDraft | null>(null);
+	const retainedDrafts = useRef(new Map<string, ConfigurationDraft>(initial.drafts.map(draft => [draft.id, draft])));
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const editorPrefix = React.useId();
 	const resourceValidity = useRef(new Map<string, boolean>());
@@ -109,12 +109,15 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 		pruneCacheNamespace('tt-remote-sync-connections:', cacheKey, 32);
 	};
 	const persist = (next: ConfigurationDraft | null) => {
-		if (next) retainedDrafts.current.set(next.id, next);
-		else if (draft) retainedDrafts.current.delete(draft.id);
-		check(); raw.current = persistConfigurationDraft(window.localStorage, key, raw.current, next); setDraft(next); setStorageError('');
+		check();
+		const retained = new Map(retainedDrafts.current);
+		if (next) retained.set(next.id, next);
+		else if (draft) retained.delete(draft.id);
+		raw.current = persistConfigurationDrafts(window.localStorage, key, raw.current, [...retained.values()]);
+		retainedDrafts.current = retained; setDraft(next); if (!next) setSelectedId(null); setStorageError('');
 	};
 	const edit = (next: ConfigurationDraft) => {
-		retainedDrafts.current.set(next.id, next); setSelectedId(next.id);
+		retainedDrafts.current.set(next.id, next); setSelectedId(next.id); setResourceValid(resourceValidity.current.get(next.id) ?? true);
 		setDraft(next); setConflict(null); setError('');
 		try { persist(next); } catch (cause) { setStorageError(cause instanceof Error ? cause.message : 'Draft could not be saved.'); }
 	};
@@ -232,7 +235,7 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 	const display = {
 		remote: {
 			status: online && status ? `Connected to this device · Updated ${new Date(status.observedAt).toLocaleTimeString()}` : deviceError || 'Connecting to this device. Saved settings are available independently.',
-			error: error || (!draft ? storageError : ''), notice, busy, checking, editDisabled: busy || !!draft?.pending || !draftReady, addDisabled: busy || !!draft || !draftReady || !online || !roots.length,
+			error: error || (!draft ? storageError : ''), notice, busy, checking, editDisabled: busy || !!storageError || !draftReady, addDisabled: busy || !!storageError || !draftReady || !online || !roots.length,
 			deviceDisabled: busy || !online, roots: roots.map(root => ({ ...root, path: (sourcePathsReady && supportsNativeSourcePaths(status?.capabilities) ? root.sourcePath : undefined) || 'Folder path unavailable', accessDescription: connections.some(saved => saved.configuration.localRootId === root.id) ? 'Folder access granted · sync configured below' : 'Folder access granted · no sync connection configured' })), rootsEmpty: online ? status?.rootsReady === false ? 'Folder access will refresh after the current device operation.' : 'No folders selected. Choose a device folder to begin.' : 'Connect the device to manage its folder access.',
 			empty: loaded ? 'No saved sync connections for this device.' : 'Reading saved sync connections…', hasMore: !!connectionCursor,
 			connections: connections.map(saved => {
@@ -259,7 +262,7 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 			more: () => run(() => load('connections', connectionCursor)),
 			add: () => { if (display.remote.addDisabled) return; edit({ version: 1, id: crypto.randomUUID(), baseUpdatedAt: null, pending: false, exclusions: '', configuration: { ...newFileSyncConfiguration({ name: roots[0].name, deviceId: scope.deviceId, localRootId: roots[0].id, remoteFolderId: 'unselected', sourceKind: roots[0].sourceKind }), remoteFolderId: '' } }); },
 			edit: ({ inputs }) => { if (selectedId === inputs.id) void run(() => open(selected(inputs.id).id)); },
-			expand: ({ inputs }) => { const id = selected(inputs.id).id; if (selectedId === id) { setSelectedId(null); setDetailsId(null); } else if (!busy && !draft?.pending) { setSelectedId(id); setDetailsId(null); if (retainedDrafts.current.has(id)) void run(() => open(id)); } },
+			expand: ({ inputs }) => { const id = selected(inputs.id).id; if (selectedId === id) { setSelectedId(null); setDetailsId(null); } else if (!busy && draftReady && !storageError) { setSelectedId(id); setDetailsId(null); if (retainedDrafts.current.has(id)) void run(() => open(id)); } },
 			choose: () => run(async () => { if (!online) return; await send({ action: 'folders', request: { action: 'choose' } }); await refreshStatus(); }),
 			remove: ({ inputs }) => run(async () => { if (!online || typeof inputs.rootId !== 'string' || !roots.some(root => root.id === inputs.rootId)) throw Error('Refresh the device folder list.'); await send({ action: 'folders', request: { action: 'remove', rootId: inputs.rootId } }); await refreshStatus(); }),
 			start: ({ inputs }) => start(inputs.id, false), automatic: ({ inputs }) => start(inputs.id, true),
@@ -270,9 +273,9 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 		{active && detailsSaved && online && <SettingsSection eyebrow={`${detailsSaved.configuration.name} · Progress, coverage & priorities`} open onToggle={open => { if (!open) setDetailsId(null); }}>
 			<RemoteSyncDetails speedDraftState={speedDrafts.current.get(detailsSaved.id)} draftState={priorityDrafts.current.get(detailsSaved.id)} saved={detailsSaved} scope={{ ...scope, rootId: detailsSaved.id }} generation={generation} status={status} command={client.send} />
 		</SettingsSection>}
-		{[...retainedDrafts.current.values()].filter(row => !connections.some(saved => saved.id === row.id)).map(row => <SettingsSection key={`draft-${row.id}`} eyebrow={row.configuration.name || 'New folder connection'} description="Unsaved connection settings" summary="Draft · no transfer started" open={selectedId === row.id} onToggle={expanded => { if (expanded) { setSelectedId(row.id); setDraft(row); } else if (selectedId === row.id) setSelectedId(null); }}><Box>Continue editing this draft below.</Box></SettingsSection>)}
+		{[...retainedDrafts.current.values()].filter(row => !connections.some(saved => saved.id === row.id)).map(row => <SettingsSection key={`draft-${row.id}`} eyebrow={row.configuration.name || 'New folder connection'} description="Unsaved connection settings" summary="Draft · no transfer started" open={selectedId === row.id} onToggle={expanded => { if (expanded) { if (!busy && draftReady && !storageError) void run(() => open(row.id)); } else if (selectedId === row.id) setSelectedId(null); }}><Box>Continue editing this draft below.</Box></SettingsSection>)}
 		{[...retainedDrafts.current.values()].map(draft => <SyncEditorPlacement key={draft.id} targetId={connections.some(saved => saved.id === draft.id) ? `${editorPrefix}-${draft.id}` : undefined}><Box hidden={selectedId !== draft.id} marginTop={4} padding={3} border="1px solid var(--tt-border, #ddd)" borderRadius="12px" minWidth={0}>
-			<SyncConfigurationForm sourcePathsAvailable={sourcePathsReady && supportsNativeSourcePaths(status?.capabilities)} draft={draft} roots={formRoots} folders={folders} disabled={busy || draft.pending || !draftReady} scopeKey={`${scopeKey}:${draft.id}`} onChange={edit} onResourceValidityChange={valid => { resourceValidity.current.set(draft.id, valid); if (selectedId === draft.id) setResourceValid(valid); }} />
+			<SyncConfigurationForm sourcePathsAvailable={sourcePathsReady && supportsNativeSourcePaths(status?.capabilities)} draft={draft} roots={formRoots} folders={folders} disabled={busy || draft.pending || !draftReady} scopeKey={`${scopeKey}:${draft.id}`} onChange={edit} onResourceDraftChange={resourceDraft => { const latest = retainedDrafts.current.get(draft.id); if (latest) edit({ ...latest, resourceDraft }); }} onResourceValidityChange={valid => { resourceValidity.current.set(draft.id, valid); if (selectedId === draft.id) setResourceValid(valid); }} />
 			<Controls documentKey="remote-sync-editor" title="Sync connection actions" blocks={remoteSyncEditorBlocks} scopeKey={`${scopeKey}:${draft.id}`} scope={{ editor: {
 				status: draft.pending ? 'This save is not confirmed. Retry checks the same connection without creating a duplicate.' : 'Draft saved in this browser. Saving settings does not grant folder permission or start a transfer.',
 				error: storageError || (conflict ? conflict.message : ''), saveLabel: draft.pending ? 'Retry save' : 'Save connection', saveDisabled: busy || !draftReady || !resourceValid || !!conflict,

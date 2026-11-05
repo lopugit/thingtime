@@ -14372,6 +14372,14 @@ the isolated real-API/browser command and the metadata-only session boundary.
   batch journal recovery tests; never widen production deadlines to make a
   host-dependent test pass. These synthetic checks do not establish live server
   grant acceptance or identify an uninstrumented CI cancellation's cause.
+- [ ] With a legacy saved connection draft, Add connection remains available.
+  Create multiple drafts, switch saved/new folder cards, collapse/reopen and
+  reload. Preserve every draft and incomplete resource input separately; save
+  or discard only the selected draft. Switching account, API origin, storage
+  plane or device must isolate the journal. Run
+  `node remix/scripts/test-sync-drafts-ui.mjs` for desktop/narrow synthetic
+  browser coverage, then verify the installed app without touching existing
+  user drafts or starting a transfer.
 - [ ] On desktop and narrow mobile, expand a folder, open a connection draft,
   type without saving and keep input focus while an automatic check starts and
   finishes. The same input, expansion, scroll anchor and unsaved text must stay
