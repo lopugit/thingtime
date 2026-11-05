@@ -1,5 +1,30 @@
 # TESTING.md — per-area manual test checklists
 
+## Connector confirmation and composed-map regressions
+
+Run `npm --prefix remix run test:chatgpt`, `test:api-capabilities`,
+`test:connector-mutations:acceptance` and `test:connector-settings:acceptance`
+(the API fixtures require a node-server build), plus
+`node remix/scripts/routes-map.browser.mjs <private-evidence-directory>`.
+
+- In Settings → Connections, verify all ten confirmation controls, mixed/all
+  keyboard operation, independent Builder label/input edits with private saved
+  layout readback/reload, persisted partial changes, inline failure/retry, and
+  clearing protected values across account switches. A Things PAT must never
+  change its owner's policy. Recheck a signed preview after policy changes;
+  underlying operation, workflow and undo requirements all apply.
+- Exercise a mutation larger than 48 KiB and a request larger than 64 KiB using
+  real isolated OAuth/API transport. Verify staged fragment retry/conflict,
+  paged before/after review, exact private readback, stale/replayed receipts,
+  account/scope isolation, large undo and honest partial outcomes.
+- Attach an ordinary saved Component under a map element and edit its nested
+  image/icon/text/control blocks separately. Verify selected point and source
+  row bindings, save/reload, missing/revoked component access, and independent
+  per-marker state. The SDK must not replace a button's accessible semantics;
+  focus/drafts survive data updates and vanish with removed or inaccessible
+  points. Scroll the detail container down before selection and verify the
+  authored reveal target becomes visible without navigation or focus theft.
+
 ## Linux and Windows native password bridge
 
 - [ ] Build the intended platform package, install with the existing profile preserved, launch with the normal Chromium sandbox, and negotiate the shipped `native.passwords` 1.0.0 manifest. macOS still reports its existing Apple bridge 1.2.0.

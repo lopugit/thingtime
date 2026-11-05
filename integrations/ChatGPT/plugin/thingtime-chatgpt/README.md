@@ -26,13 +26,21 @@ connection record used by every live credential.
   and ACL-aware changed Things.
 - Validate typed Thing payloads before creation.
 - Preview signed multi-Thing before/after plans, then apply them with exact
-  scope and optimistic-concurrency checks only when the confirmed call carries
-  `confirmed: true`.
+  scope and revision checks. Follow `confirmationRequired` and pass
+  `confirmed: true` only after explicit user approval when required.
 - Inspect encrypted MCP mutation history and generate a fresh undo preview.
 - Discover and run bounded `Thingtime Capability` workflows made only from
   registered create/update/delete primitives.
 - Use MCP prompts, account-scoped resources, and an embedded result/diff/raw UI
-  with an explicit apply gate.
+  that reflects the account's current confirmation requirements.
+
+**Settings → Connections → Thingtime connector confirmations** controls
+which operations require approval for your Thingtime account. Individual
+choices and the all-actions checkbox default on. The read-only
+`get_thingtime_confirmation_requirements` tool reports the selected account's
+effective rules and uses safe defaults if settings cannot be verified. These
+choices do not change AI app approvals, token scopes, sharing permissions, or
+signed-plan and revision checks.
 
 The server has no arbitrary-URL or generic API proxy tool. Capability Things
 also reject raw routes, queries, code, and executable-looking operator keys.
