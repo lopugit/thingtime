@@ -150,3 +150,10 @@ Final main integration includes scoped local-storage native range signing. The
 shared-content body routes, validators and nine client minima are unchanged.
 Both capability generators pass 148 tests, and the merged attachment/local
 storage regression passes 96 tests, including exact range authority and expiry.
+
+CI exposed three stale discussion-projection assertions for the removed
+25-attachment truncation and former aggregate query. The corrected regression
+requires all 30 authorized attachments in stored order, one batched authorized
+attachment read and no attachment-body aggregation; ACL/moderation and private
+metadata refusals remain covered. The focused31 tests and complete
+`test:things`341+31 checks pass, with clean scoped lint. Runtime is unchanged.
