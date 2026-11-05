@@ -1,3 +1,4 @@
+import { openSharePreview } from '~/components/Sharing/sharePreviewLink';
 import React from 'react';
 import { Box, Button, Center, Flex, Text } from '@chakra-ui/react';
 import { Link, useNavigate } from 'react-router';
@@ -595,6 +596,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
         {/* follower/following/friend counts + follow/friend actions (and the
         pending friend-request inbox on your own profile) */}
         {!temporaryProfile && <RelationshipControls username={profile.username} isSelf={isSelf} />}
+        {!temporaryProfile && <Button mt={3} variant="outline" size="sm" onClick={() => openSharePreview(`/profile/${encodeURIComponent(profile.username)}`)}>Share link & customise preview</Button>}
 
         {wornTheme && (
           <Box

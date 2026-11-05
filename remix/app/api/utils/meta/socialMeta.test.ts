@@ -94,7 +94,7 @@ test('image metadata advertises real dimensions and alt text, and HTTPS only whe
 		assert.equal(tags.get('og:image:alt'), tags.get('twitter:image:alt'));
 		assert.equal(tags.has('og:image:secure_url'), origin.startsWith('https:'));
 		assert.ok(tags.get('og:image')!.startsWith(origin));
-		assert.match(tags.get('og:image')!, /\?v=20260917$/);
+		assert.match(tags.get('og:image')!, /\/social-card\?/);
 	}
 });
 

@@ -347,3 +347,17 @@ export default function DocsIndex() {
     </Grid>
   );
 }
+
+
+// Optional shared preview copy. Route discovery works without this override.
+export const socialPreview = {
+  "title": "Thingtime docs",
+  "description": "The product, API and design system behind a world where everything is a thing.",
+  "eyebrow": "THINGTIME · DOCS",
+  "badges": [
+    "Build with Thingtime",
+    "API + SDK"
+  ],
+  "variant": "docs",
+  "pageTitle": "Thingtime docs"
+} as const;

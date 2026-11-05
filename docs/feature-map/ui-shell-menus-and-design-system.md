@@ -49,6 +49,12 @@ The installed app retains direct controls for its own device. Remote controls us
 editable settings blocks and the existing configuration form; see
 [browser device sync](../browser-device-sync.md) and its browser/installed checks.
 
+Lopu’s floating shortcut is opt-in through `settings.lopu.launcher`. The chat
+composer gear and Settings → Lopu share that persisted preference through
+`useLopuChat` / `useLopuSettings`; `LopuHost` honors it even when minimised.
+Navigation can always reopen the chat. Missing preferences default off while
+explicit saved choices survive. See the unified Lopu checklist in `TESTING.md`.
+
 ## Where the code lives
 
 | Concern | Path |
@@ -290,3 +296,53 @@ passkeys link targets `/settings/security#account-passkeys`. Browser approval at
 hosts; passwords and signing keys never enter layout blocks. Check keyboard,
 Back, nested Builder selection, narrow/mobile widths and full-page scroll in the
 real browser. See [password manager](../password-manager.md#browser-passkeys-and-settings).
+
+
+## Automatic page titles and social previews
+
+`app/utils/pageTitle.ts` and the server's shared social resolver use
+`automaticRoutePreview.ts`. `scripts/generate-route-previews.mjs` discovers the
+real eager/lazy/nested/index route tree from `app/routes.tsx` without importing
+pages. Vite watches route/module changes; Vite and Nitro builds regenerate the
+portable `automaticRoutePreviews.generated.json`. New ordinary routes receive
+safe pattern-derived copy and a branded image automatically. Parameter values,
+queries/fragments and wildcard/unknown paths do not supply metadata text.
+
+Optional literal `socialPreview` exports customize display copy/card variant;
+`pageTitle` is the document-title label, independent of the share headline.
+No backend page-metadata registry is maintained. For saved `/p/:id` and `/t/:id`
+pages, supported anonymous public headings/prose/managed images supply defaults;
+existing saved `name`/`description` fields override them. The extractor does not
+execute Actions, sources or client JavaScript, infer private bindings, or expose
+system `siteRoute` layouts. Access/indexability and attachment ACLs remain in
+the canonical server paths. Run `test:social-previews`; see
+[the metadata contract](../seo-social-metadata.md) and TESTING's social-unfurl
+checklist. Live rendered/crawler acceptance remains a separate check.
+
+### Customised link previews
+
+`Sharing/SharePreviewHost.tsx` supplies the shared modal opened by the canonical
+`share-preview` Thing verb, Things library menus, profile links and generated
+invite links. `sharePreviewBlocks.ts` is an individually editable settings
+layout with repeated theme/layout choice templates; `TransientBlockHost` binds
+only public metadata and ephemeral presentation/copy actions. Themes and layout
+travel as `previewTheme`/`previewLayout` on the copied destination. Existing
+navigation/access parameters remain intact; anonymous metadata lookups exclude
+unrelated queries and fragments and require `api.social-previews` 1.2.0.
+The live card loads the server's actual `/social-card` PNG and retains its
+previous image during refresh. Account, data-plane, route and request changes
+fence responses and close obsolete dialogs. Run `test:things` for menu, link and
+editable-document contracts, then browser acceptance for desktop/mobile,
+selection, copy, error/retry, save/reload and nested Builder edits.
+
+## Share preview customisation
+
+`Sharing/SharePreviewHost.tsx` hosts one shared modal from `share-preview`
+context-menu actions. `sharePreviewBlocks.ts` is its individually editable
+Settings document; `TransientBlockHost` supplies only temporary selection and
+copy/share controls. `sharePreviewLink.ts` preserves the exact same-origin
+navigation destination, including fragments, while the anonymous metadata
+lookup omits unrelated values. The server PNG is the displayed preview.
+`sharePreviewLink.test.ts` covers link preservation/refusal;
+`scripts/share-preview-acceptance.mjs` covers disposable real API and browser
+acceptance. See `docs/seo-social-metadata.md` for template/capability contracts.

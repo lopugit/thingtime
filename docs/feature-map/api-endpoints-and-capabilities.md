@@ -616,6 +616,34 @@ the built `test:environment-gateway:acceptance` runner. See
 [the gateway runbook](../environment-api-gateway.md) for server settings,
 environment partitioning and outstanding live rollout acceptance.
 
+## Public social metadata
+
+`GET /api/v1/social-previews?path=` exposes `api.social-previews` 1.2.0.
+`api.social-card` 1.4.0 and `utils/socialPreviewDesign.ts` share five template
+IDs and four layout choices. Only `previewTheme`/`previewLayout` survive into
+share metadata and matching canonical URLs so each chosen card stays identifiable. The anonymous JSON
+projection adds resolved design and choice catalogues.
+`meta/socialMetadata.ts` reuses the anonymous `resolveSocialPreview` projection
+and `socialMetaFromPreview`; the route resets custom data-plane selection and
+never resolves caller identity. Same-origin inputs lose query/fragment before
+lookup, remote URLs are refused, and private/missing content uses generic
+metadata. The JSON response is an explicit title/description/URL/type/image
+allowlist. `social-previews.read` applies fail-closed anonymous rate limiting.
+`meta/socialCardImages.ts` embeds canonical public attachment thumbnails in
+cards, with bounded decoding and a fresh anonymous authorization/version check.
+`api.social-card` 1.3.0 shares automatic route defaults from the actual browser
+router (`scripts/generate-route-previews.mjs` →
+`app/utils/automaticRoutePreviews.generated.json`), with optional literal
+`socialPreview` exports in route modules. New app pages need no parallel backend
+metadata registry. Saved `/p/:id` and `/t/:id` pages use
+`meta/publicWebpageContent.ts` over the anonymous `resolveWebpage` projection:
+visible supported copy/managed images are inferred; saved `name`/`description`
+remain optional overrides. Runtime sources, Actions, private bindings and system
+`siteRoute` layouts are never executed or inferred. Endpoint capability manifests
+and semantic version negotiation still apply. See
+[the automatic metadata contract](../seo-social-metadata.md).
+Run `test:social-previews` and `test:api-capabilities`.
+
 Named Connections management is opt-in at `api.connections`,
 `api.connections-oauth-begin`, `api.connections-oauth-callback` and
 `api.connections-unlink` 2.1. `POST /api/v1/connections/named`
@@ -643,3 +671,40 @@ attachment avatars. `useWebpage` negotiates the upload save minimums.
 through `api/utils/things/numericSummary.ts`, with exact schema/parent filters,
 no item-count cap and no partial success. Run the summary, map overlay/data,
 local UI, Webpage and capability tests plus live saved-page acceptance.
+
+
+`api.things` 1.49.0 advertises exact authenticated counts (`count=true`), shared
+literal archive filtering, and visible ordinal list windows (`offset`) on the
+existing Things endpoint. Both manifests derive this additive contract from
+`apiDocs.ts`; count and list reuse the same canonical scope and exact ACL gates.
+See [Things and folders](things-and-folders.md#exact-authorized-counts-and-visible-offset-windows)
+for query and response semantics, performance limits, and real replica coverage.
+
+
+`api.maps` 1.1.0 adds exact-address `autocomplete:false`, allowlisted geocoding
+confidence/accuracy metadata, and correlated `queries` batches on the existing
+owner/Vault-scoped suggest operation. Batch inputs are validated before key
+access, duplicate addresses share provider calls, processing chunks are not a
+product cap, and failures never return partial results. Permanent results retain
+the exact expected-selection and storage-policy contract. See [Maps](../maps.md).
+
+`api.things` 1.49.0 also adds ordered authenticated `ids` JSON-array exact reads
+on the existing GET endpoint. Missing/denied/protected positions are null;
+canonical ACLs and projections are shared with single reads. This remains a
+registered read-only Action request. URL/response transport limits require
+chunkable clients, never truncation or a maximum dataset size.
+
+
+`api.actions-run` 1.40.0 adds unary `ttExpr:["encodeURIComponent",value]`
+for authored URL components. It accepts string/nullish inputs, refuses other
+types and malformed UTF-16 without leaking the value, and retains the existing
+expression output budget. Programs using it negotiate execution protocol 1.40;
+encoding performs no HTTP operation. Both capability manifests derive this
+version from the canonical registry. Run expression, browser Action protocol
+and capability tests.
+
+Large/deep editable Webpage capture is corrected by `api.things` 1.49.2,
+`api.things-update` 1.18.1 and `api.timeline` 1.19.1. The shared iterative
+Timeline block traversal removes the hidden 1,200-block/24-level write and
+comparison limits; existing Component authorization and capture contracts remain.
+Both manifests derive these PATCH versions from the canonical endpoint registry.
