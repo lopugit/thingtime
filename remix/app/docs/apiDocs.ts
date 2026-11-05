@@ -1320,20 +1320,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'chatgpt-mcp', contractVersion: '1.1.0', featureVersion: '1.1.0',
+    id: 'chatgpt-mcp', contractVersion: '2.0.0', featureVersion: '2.0.0',
     group: 'integrations',
     title: 'ChatGPT MCP gateway',
     endpoint: CHATGPT_MCP_PATH,
     summary: 'A streamable HTTP Model Context Protocol gateway for ChatGPT and Codex.',
     detail:
-      'Implements 32 bounded MCP tools plus prompts, account-scoped resources, and a sandboxed review UI for connected Thingtime accounts. `login_thingtime` is an anonymous bootstrap that maps @Thingtime login to a successful MCP tool response carrying `mcp/www_authenticate`; the invoking ChatGPT or Codex host then owns the OAuth browser, PKCE exchange, registered callback, and credentials for subsequent requests in the same task. `list_thingtime_accounts` maps @Thingtime list accounts to safe multi-account metadata. The read surface includes exact single/batch IDs, target-specific comments, browse/search, schema discovery and validation, relationship/thread traversal, ACL-aware change polling, history, and workflows. Composed writes must produce a signed before/after preview first; apply rechecks token scopes and optimistic updatedAt preconditions, stops after the first failed operation, and persists an honest encrypted receipt with a bounded undo plan. Thingtime Capability data Things compile only the registered create/update/delete grammar with explicit input placeholders — no arbitrary URLs, API paths, database queries, or code. tools/list, prompts/list, resources/list, static UI/contract resources, and the login bootstrap are public metadata/control surfaces and never return account data. Every account/data tool and account-scoped resource requires a revocable MCP-only bridge token; underlying scoped PATs stay AES-256-GCM encrypted in one origin-bound connection record. Discovery begins at /.well-known/oauth-protected-resource and the semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
+      'Implements MCP tools plus prompts, account-scoped resources, and a sandboxed review UI for connected Thingtime accounts. Version 2 adds account-scoped confirmation preferences and removes the connector mutation byte/count/depth admission caps. Large plans may be uploaded as immutable text fragments, then reviewed in pages; compact signed receipts reference encrypted server-side previews and are single-use. Per-request hosting constraints and the underlying Things write contract still apply. `login_thingtime` is an anonymous bootstrap that maps @Thingtime login to a successful MCP tool response carrying `mcp/www_authenticate`; the invoking ChatGPT or Codex host then owns the OAuth browser, PKCE exchange, registered callback, and credentials for subsequent requests in the same task. `list_thingtime_accounts` maps @Thingtime list accounts to safe multi-account metadata. The read surface includes exact single/batch IDs, target-specific comments, browse/search, schema discovery and validation, relationship/thread traversal, ACL-aware change polling, history, and workflows. Composed writes must produce a signed before/after preview first; apply rechecks token scopes and optimistic updatedAt preconditions, stops after the first failed operation, and persists an honest encrypted receipt and separate undo plan. Thingtime Capability data Things compile only the registered create/update/delete grammar with explicit input placeholders — no arbitrary URLs, API paths, database queries, or code. tools/list, prompts/list, resources/list, static UI/contract resources, and the login bootstrap are public metadata/control surfaces and never return account data. Every account/data tool and account-scoped resource requires a revocable MCP-only bridge token; underlying scoped PATs stay AES-256-GCM encrypted in one origin-bound connection record. Discovery begins at /.well-known/oauth-protected-resource and the semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
     auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for account/data tools. tools/list and login_thingtime are public; unauthenticated login returns a tool-level MCP OAuth challenge without failing the HTTP transport.' },
     methods: ['POST'],
     steps: [
       'Discover protected-resource metadata and complete the authorization-code flow with S256 PKCE.',
       'POST JSON-RPC initialize, tools/list, prompts/list, resources/list, resources/read, and tools/call requests to this endpoint.',
       'Use get_thingtime_thing or get_thingtime_things for known IDs and list_thingtime_comments for a known target; reserve list/search for discovery.',
-      'For composed writes, preview the complete plan, review its UI diff, obtain confirmation, then apply the exact signed receipt.'
+      'Read the selected account confirmation preferences. For composed writes, preview the complete plan, review its diff, obtain confirmation when the effective policy requires it, then apply the exact signed receipt. Host approval requirements remain independent.'
     ],
     requestExamples: [
       {
@@ -3338,6 +3338,27 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         }
       },
       { status: 404, description: 'Unknown model id.', body: { ok: false, error: 'Unknown model — id must be a catalog model id' } }
+    ]
+  }),
+  endpoint({
+    id: 'settings-connector-protections', group: 'settings', title: 'Connector confirmation preferences',
+    endpoint: '/api/v1/settings/connector-protections', contractVersion: '1.0.0', featureVersion: '1.0.0',
+    summary: 'Read or change the current account confirmation preferences for connected agents.',
+    detail: 'Ten independent confirmation preferences cover create, update, delete, share, comment, reaction, save, disconnect, workflow and undo. Missing preferences default to enabled. GET returns the current owner preferences for an authenticated account or an authorized live Things PAT. Only the full owning account can POST changes; a connector PAT cannot disable its own safeguards. POST accepts a partial confirmations object with boolean values and requires X-Thingtime-Expected-Actor matching the authenticated account. Cross-site writes are rejected. The All confirmations checkbox sends every preference in the same update. These choices govern Thingtime confirmation prompts, not authentication, authorization, conflict detection, integrity checks, credential verification or host/operating-system requirements. Responses are private and no-store.',
+    auth: { mode: 'bearer', description: 'GET: full owning account or live PAT with things / things.* scope. POST: full owning account with X-Thingtime-Expected-Actor; scoped connector tokens cannot change preferences.' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'Negotiate api.settings-connector-protections 1.0.0 on the selected origin.',
+      'GET the current account preferences. Display enabled defaults while an unavailable policy prevents a confirmed read.',
+      'POST only changed booleans as the owning account, then reconcile the returned complete preferences.'
+    ],
+    requestExamples: [
+      { name: 'Read confirmation preferences', description: 'Get the current account policy.', method: 'GET' },
+      { name: 'Change update confirmation', description: 'Disable update confirmation as the owning account.', method: 'POST', body: { confirmations: { update: false } } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Current complete account preferences.', body: { ok: true, accountId: 'example-account', confirmations: { create: true, update: false, delete: true, share: true, comment: true, reaction: true, save: true, disconnect: true, workflow: true, undo: true } } },
+      { status: 401, description: 'Scoped credentials cannot change owner preferences.', body: { ok: false, error: 'Sign in to access these confirmation settings.' } }
     ]
   }),
   endpoint({
@@ -9493,8 +9514,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.47.0',
-    contractVersion: '1.47.0',
+    featureVersion: '1.48.0',
+    contractVersion: '1.48.0',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -9502,6 +9523,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.48 supports saved map marker child templates, including ordinary Component references bound to each point, and authored detail reveal controls. Normal composition and authorization checks remain. ' +
       'Version 1.47 accepts individually editable tt-upload blocks and adds first-party owner/PAT numeric summaries for exact data schemaId and parentId lists. GET with maxCrystalField=<top-level field> and optional excludeArchived=true returns summary.max (null when no finite numeric value exists), traverses all authorized pages without an item-count cap, and fails without a partial result on cancellation or pagination failure. Summary reads are not atomic order reservations. ' +
       'Version 1.46.3 keeps private external account and named credential metadata behind the dedicated Connections API. Generic Things reads do not expose either record. ' +
       'Version 1.46.2 accepts complete emoji-only reaction combinations without the former 12-emoji / 80-code-point caps, through the shared reaction validator. Existing authorization, storage accounting and request transport validation still apply. ' +
@@ -11523,12 +11545,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'things-update',
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.16.0',
-    contractVersion: '1.16.0',
+    featureVersion: '1.17.0',
+    contractVersion: '1.17.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
+    notes: ['Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
       'Version 1.16 accepts individually editable tt-upload Webpage blocks, preserving the shared uploader, ownership, attachment access and storage validation. ' +
       'Version 1.15.1 accepts complete emoji-only reaction combinations without the former 12-emoji / 80-code-point caps, through the shared reaction validator. Existing authorization, storage accounting and request transport validation still apply. ' +
@@ -13145,14 +13168,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things-fork',
     // 1.4.0: root render media bindings preserve split-fragment template behavior.
-    featureVersion: '1.7.0',
-    contractVersion: '1.7.0',
+    featureVersion: '1.8.0',
+    contractVersion: '1.8.0',
     group: 'things',
     title: 'Copy a shared composition',
     endpoint: '/api/v1/things/fork',
     summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content and bound post-purpose file galleries; independently readable foreign components include their authored same-author children. Bound files keep their copied home target and gallery order, even when also embedded elsewhere. Linked gallery entries become new private quota-accounted records with the same validated external URL and annotations; external bytes are never fetched, stored or redirected by the content endpoint. Flagged linked media cannot be re-minted as unflagged. Non-post purposes are excluded and unavailable or unsupported files fail the copy instead of silently dropping a gallery.',
     detail: 'Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
-      'Revalidates the root audience and traverses stored component, action, schema and data references, including saved component arguments and every persisted page instance. Copies readable relational comments and nested replies in parent-first order (up to 512 Things, files and comments; larger copies fail without truncation), including comments on media and each nested gallery. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Templated controls retain their editable arguments and receive a bounded ttActionRefs array of [original resolved reference, copied id] pairs on the authored control node. The renderer applies the first matching pair once after ttAction interpolation, never to labels or inputs, and strips the marker from rendered output. Unused pairs are not access grants. Deferred tt-collection/Collection itemTemplate controls participate in stored dependency discovery and copying; row runtime values never grant authority. Dialog closeOnAction references follow copied actions without independently granting access. Forks of forks rebind to their own actions. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
+      'Revalidates the root audience and traverses stored component, action, schema and data references, including saved component arguments and every persisted page instance. Copies readable relational comments and nested replies in parent-first order (up to 512 Things, files and comments; larger copies fail without truncation), including comments on media and each nested gallery. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Templated controls retain their editable arguments and receive a bounded ttActionRefs array of [original resolved reference, copied id] pairs on the authored control node. The renderer applies the first matching pair once after ttAction interpolation, never to labels or inputs, and strips the marker from rendered output. Unused pairs are not access grants. Deferred tt-collection/Collection itemTemplate controls participate in stored dependency discovery and copying; row runtime values never grant authority. Version 1.8 also rewrites literal map source Actions to their copied IDs without changing map input data. Dialog closeOnAction references follow copied actions without independently granting access. Forks of forks rebind to their own actions. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
     auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed. File-bearing copies additionally require the recipient to be a user account with normal post-purpose upload approval; that permission is checked before reservation and throughout copying.' },
     methods: ['POST'],
     steps: ['POST { id, key? }. Supported roots are post, data, schema, component, webpage and action content; organizational folders, managed records and target-attached relationship rows retain their dedicated lifecycle.', 'Stored first-party media referenced by pages/components is copied to new caller-owned uploads through quota, exact-version authorization and normal moderation. HTML/CSS, saved URL arguments and exact attachment IDs in persisted argument values/defaults are retargeted, including nested lists and page-instance overrides. Matching ttMap keys and ttIf comparison values follow copied IDs so branch selection is preserved. URL template strings, argument labels and unrelated prose are preserved. External URLs are unchanged. Split-fragment file IDs retain their argument program and use root render ttMediaRefs pairs after interpolation. At most 512 valid first-match ID pairs map only first-party unkeyed media props and parsed CSS; the marker is stripped from output, generated text shares the render budget, and unused pairs never grant access. Re-forks compose targets onto their newly copied files.', 'Post and comment galleries preserve order, use their original attachment purpose, and supply inspected media to post validation. Copied comments inherit the new private parent; source community/flair placement is removed. Reactions and votes are not copied. Files bind transactionally to a copied Thing, with at most 25 files per target. The operation shares a 120-second copy deadline and revalidates the source composition before and after writes. Failure cleans only new Things/uploads; deferred cleanup remains billed and is reported. filesCopied counts newly owned attachments, separately from copied Things.', 'Open the returned id in Builder for a webpage or /thing/:id for other content.'],
@@ -13163,13 +13186,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'actions-run',
     // 1.34.0 adds owned XPath evaluator, compiled expression and result objects.
     // 1.34.1 retains trusted mutation provenance; 1.35.0 adds native traversal and reusable synchronous data callbacks.
-    featureVersion: '1.38.0',
-    contractVersion: '1.38.0',
+    featureVersion: '1.39.0',
+    contractVersion: '1.39.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
+      'Version 1.39 recognizes the literal saved source Actions of a map as stored shared composition dependencies, subject to the same audience and read-only Action checks. Runtime row values and source inputs grant no Action access. ' +
       'Version 1.38 preserves opaque pagination cursor query values up to the shared 16-KiB transport bound in local UI navigation. ' +
       'Version 1.37.1 fixes browser Action requests in the installed desktop shell: same-origin requests use the selected HTTPS account endpoint with actor and database preconditions preserved; incomplete web servers still fail closed. ' +
       'Version 1.37.0 adds history.recovery:{formatVersion:1,event,dataPlane,proof} when completion retries fail and configured signing keys can seal the exact immutable outcome. API clients should retain this bounded bundle and retry it through api.timeline 1.16.0; never rerun the Action to repair delivery. The first-party client durably queues the same event before reporting local retention, then synchronizes normally across reloads. A lost response or process death before sealing cannot supply a known outcome; incomplete without recovery remains explicit. ' +
@@ -13381,12 +13405,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.9.0',
-    featureVersion: '1.9.0',
+    contractVersion: '1.10.0',
+    featureVersion: '1.10.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
+    notes: ['Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
       'Version 1.9 resolves editable tt-upload controls alongside guarded map blocks. The page runtime supports opt-in local query state, marker selection, custom plain-text icons, title/custom labels, icon lists and authorized attachment avatars without page navigation. These presentation bindings grant no data or media access. ' +
       'Version 1.8.1 resolves saved Component dependencies nested in element, collection and condition blocks, including inactive condition branches, through the same visibility and shared-writer checks as top-level references. Version 1.8 resolves saved intrinsic media containers and ordinary editable child controls for browser-local image and video compression. ' +

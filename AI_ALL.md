@@ -41,6 +41,53 @@ Original request (verbatim):
 - When the work is complete, send a report covering the delivered result, verification, material decisions and assumptions, tradeoffs, and any deferred questions. Then invite the user to change or correct those choices. Make corrections when requested without requiring a response to consider the completed work delivered.
 - This preference does not supply missing authorization or override explicit constraints, required confirmations, security or credential boundaries, or genuinely required human presence. If one of those prevents a dependent action, complete all independent authorized work, explain the exact remaining blocker and the smallest necessary intervention, and never claim the blocked action or overall task is complete. Do not invent an approval requirement for ordinary agent decisions.
 
+## Private user applications stay in saved Things
+
+User guidance (verbatim):
+
+> “Yes please do it this way, we want all Thingtime features to be as abstracted and extensible as possible 🙌🙌🙌 please add this example and my exact words as guidance into AI_ALL please 🥰🥰🥰🥰🥰🥰🙌”
+
+- Map-marker example: the Mapbox SDK can mount an element, but a hardcoded
+  marker with icon/photo/label options is not a substitute for Builder
+  composition. Expose a reusable slot for a saved Component or editable block
+  template bound to each map point. Keep the SDK adapter responsible for map
+  positioning and lifecycle, and render the marker through the ordinary
+  Component resolver, data bindings, authorization and individually editable
+  blocks. Author the user's marker appearance as private saved Things. Apply
+  this reasoning to other SDK-backed surfaces and new features instead of
+  growing a separate collection of fixed native presentations.
+
+- Build user-requested applications, pages, dashboards, forms and workflows
+  through Thingtime's existing Builder and supported Things APIs first. Save
+  their Webpage, Component, Schema, Action and data Things in the intended
+  user's account with its intended private audience. A reusable user-authored
+  Component is still a saved Thing; reusability alone does not justify adding
+  its definition to the product source.
+- Do not commit, bundle, seed or register a private user's Builder Things,
+  Component definitions, application layouts, workflows, IDs or content in
+  Thingtime source, app suites, migrations, fixtures or generated artifacts.
+  Never convert a private application into a built-in product feature merely
+  to deliver that application. Synthetic, account-independent test fixtures
+  may exercise framework contracts, but must not reproduce the private app.
+- Before changing framework code, verify the deployed capabilities and trace
+  the existing composition, binding, Action and SDK integration paths. Record
+  the concrete missing reusable primitive and why existing functionality cannot
+  express the required behavior. Prefer extending the canonical composition
+  contract over adding application-specific branches or preset presentations.
+- Only fundamental, generally reusable framework capabilities belong in a
+  source PR: for example, a data binding, local-state operation, authorized
+  adapter or editable composition slot. Keep application-specific composition
+  and presentation in saved Things. For SDK-backed surfaces such as maps,
+  prefer a saved Component/template slot bound to each item's data over
+  hardcoded marker/card layouts; SDK ownership of a DOM element is not a reason
+  to bypass normal Builder rendering, dependency authorization or editing.
+- Verify both layers separately: test the framework independently with
+  synthetic inputs, then author and verify the intended private saved Things
+  through the platform, including nested editing, save and reload. A merged
+  framework PR does not deliver the user's saved application. Report source
+  changes and saved-Thing changes separately, and explicitly identify any
+  remaining composition limitation.
+
 ## Individually editable Thingtime blocks
 
 - Things created for human-facing display (including agent notes, status cards and subspace embeds) must carry an explicit `renderComponent` pointing to an accessible saved Component Thing or containing an embedded Component definition. The renderer comes from that pointer or embedded definition, never from a `type`/`kind` alias or a data-shape guess. Keep the content as editable Thing data, bind it into the Component through the supported composition contract, and keep saved Component/Webpage Things on their canonical editable render/block definitions.

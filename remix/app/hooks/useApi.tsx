@@ -1,3 +1,4 @@
+import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
 import { isBuilderThing } from '~/schemas/builderThing';
 import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
@@ -434,6 +435,19 @@ export function useApi() {
       }
     },
     settings: {
+      connectorProtections: useCallback(async (expectedActor: string, signal?: AbortSignal) => {
+        await requireThingtimeCapability(CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_VERSION);
+        signal?.throwIfAborted();
+        return getJson(CONNECTOR_PROTECTIONS_PATH, { expectedActor, signal, expectedApiOrigin: window.location.origin });
+      }, [getJson]),
+      setConnectorProtections: useCallback(async (expectedActor: string, confirmations: ConnectorConfirmationPatch, signal?: AbortSignal) => {
+        await requireThingtimeCapability(CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_VERSION);
+        signal?.throwIfAborted();
+        return asyncFetcher.submit({ confirmations }, {
+          action: CONNECTOR_PROTECTIONS_PATH, expectedActor, signal, expectedApiOrigin: window.location.origin,
+          characterId: character?.id, errorContext: 'save Thingtime connector confirmations'
+        });
+      }, [asyncFetcher, character?.id]),
       lopuPrompt: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/settings/lopu-prompt', options), []),
       setLopuPrompt: useCallback(async (args: Record<string, unknown>) => {
         await requireThingtimeCapability('api.settings-lopu-prompt', '1.0.0');

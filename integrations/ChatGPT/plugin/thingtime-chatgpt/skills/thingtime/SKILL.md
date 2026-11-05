@@ -55,14 +55,17 @@ resuming. Report only actual progress, verification, blockers, artifacts and
 measured values. Keep secrets and private source content out of summaries. A
 failed capability, membership or saved workspace check means reporting remains
 unavailable; continue independent authorized work and state the precise gap.
-This exception applies only to the bounded private lifecycle tools. Generic
-mutations, composed previews/apply, sharing and security operations retain their
-confirmation rules below.
+This exception applies only to the bounded private lifecycle tools.
 
-Read/search actions may proceed when the user asks. Before any create, update,
-delete, comment, reaction, save, or share action, show the intended account,
-target, and effect and obtain clear confirmation. Treat delete and disconnect
-as irreversible from the current ChatGPT connection.
+Read/search actions may proceed when the user asks. For direct mutations,
+call `get_thingtime_confirmation_requirements` for the selected account and
+follow its current Thingtime settings. If required, state the intended account,
+target, and effect and obtain clear confirmation before passing
+`confirmed: true`. Omit `confirmed` when the account does not require it.
+Treat `confirmation_required` as a request for approval and never fabricate
+it. The user can adjust Thingtime's prompts under Settings → Connections →
+Thingtime connector confirmations; the AI app's own approval, permission, and
+credential rules still apply.
 
 For more than one exact ID, use `get_thingtime_things`; preserve its ordered
 per-ID found/not-found results. Discover and validate schemas before creating
@@ -70,14 +73,14 @@ typed data. Use `list_thingtime_related` for target, parent, folder, backlink,
 or bounded thread traversal, and `list_thingtime_changes` for resumable polling
 (it is not a deletion change stream).
 
-For a composed mutation or Capability workflow, always call the preview/start
-tool first. Explain the selected account and complete before/after plan, then
-stop for clear confirmation. Apply only the returned signed receipt. If a
-precondition is stale, build a new preview; never bypass it. Set `confirmed:
-true` only after that confirmation. Undo also creates
-a fresh preview and requires a second confirmation. Capability Things may only
-compose the published bounded mutation grammar — never invent URLs, API paths,
-database queries, operator objects, or executable code.
+For composed mutations, workflows, and undo, always obtain a fresh signed
+preview first. Inspect the complete plan, following preview pages when needed,
+and apply only its exact receipt. If `confirmationRequired` is true, obtain
+explicit approval for that account and plan and pass `confirmed: true`. If it
+is false, omit `confirmed`. Apply rechecks current settings and preconditions:
+rebuild a stale preview and never skip account, revision, or scope checks.
+Capability Things may only compose the published mutation grammar — never
+invent URLs, API paths, database queries, operator objects, or executable code.
 
 When the user or task supplies an exact Thing ID, always call
 `get_thingtime_thing`. Never rely on `list_thingtime_things`, a recent page, or

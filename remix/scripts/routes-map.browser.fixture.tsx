@@ -2,7 +2,9 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChakraProvider } from '@chakra-ui/react';
 import { createBrowserRouter, RouterProvider, useRevalidator } from 'react-router';
-import { WebpageBlocksRenderer } from '../app/components/Builder/WebpageBlocksRenderer';
+import { buildComponentsByRef, WebpageBlocksRenderer } from '../app/components/Builder/WebpageBlocksRenderer';
+import { BuilderViewport } from '../app/components/Builder/BuilderViewport';
+import { ComponentDataScope } from '../app/components/Builder/ComponentSelect';
 import { PageActionSurface } from '../app/components/Builder/PageActionSurface';
 import { useThingSource } from '../app/components/Builder/liveComponent';
 import { useWebpageRuntime, WebpageRuntimeProvider } from '../app/components/Builder/webpageRuntime';
@@ -56,6 +58,62 @@ const blocks: WebpageBlock[] = [
 	}, text: 'Open a deep link' }
 ];
 
+const markerComponents = buildComponentsByRef({
+	refs: { 'saved-marker': 'resolved-marker', 'other-component': 'resolved-other', 'missing-marker': null },
+	components: [
+		{ id: 'resolved-marker', crystal: { args: [{ name: 'badge', type: 'string', default: '' }], render: {
+			tag: 'div', children: [
+				{ tag: 'button', props: { 'aria-pressed': '{point.selected}', type: 'button', 'data-tt-action': '$ui', 'data-tt-action-inputs': JSON.stringify({ op: 'query', scope: 'page', params: { markerId: '{point.id}' } }) }, children: ['{badge} · {point.label}'] },
+				{ tag: 'p', children: ['Row: {item.crystal.markerLabel}'] },
+				{ tag: 'input', props: { 'aria-label': 'Draft {point.label}' } }
+			]
+		} } },
+		{ id: 'resolved-other', crystal: { render: { tag: 'p', children: ['Unexpected row-selected component'] } } }
+	]
+});
+
+function ComposedFixture() {
+	const parentScope = React.useContext(ComponentDataScope);
+	const [framed, setFramed] = React.useState(false);
+	const [editing, setEditing] = React.useState(false);
+	const [show, setShow] = React.useState(true);
+	const [selected, setSelected] = React.useState<string | null>(null);
+	const [note, setNote] = React.useState('Authored marker note');
+	const [hovered, setHovered] = React.useState<string | null>(null);
+	const authored: WebpageBlock[] = [{
+		id: 'composed-map', type: 'element', tag: 'tt-mapbox', props: {
+			title: 'Composed fixture map', height: 430, vaultId: 'synthetic-vault', favouritesSource: { action: 'fixture-favourites' },
+			showFavourites: show, selectedFavouriteId: '{query.markerId}'
+		}, children: [
+			{ id: 'marker-note', type: 'element', tag: 'p', text: note },
+			{ id: 'marker-content', type: 'component', component: 'saved-marker', args: { badge: '{fixtureBadge}' } },
+			{ id: 'missing-marker-content', type: 'component', component: 'missing-marker' }
+		]
+	}];
+	const detail: WebpageBlock[] = [
+		{ id: 'composed-details', type: 'condition', condition: { arg: 'query.markerId' }, children: [
+			{ id: 'composed-details-text', type: 'element', tag: 'p', text: 'Selected marker: {query.markerId}', props: { 'data-tt-reveal': '{query.markerId}' } }
+		] },
+		{ id: 'details-spacer', type: 'element', tag: 'div', css: { height: '520px' } }
+	];
+	const markerView = <WebpageBlocksRenderer blocks={authored} componentsByRef={markerComponents} interactive={!editing} chrome={editing ? {
+		seamlessMode: 'layout', selectedId: selected, hoverId: hovered, onSelect: setSelected, onHover: setHovered,
+		onInsert: () => {}, onMove: () => {}
+	} : undefined} />;
+	return <>
+		<button type="button" onClick={() => setShow(!show)}>{show ? 'Remove fixture markers' : 'Restore fixture markers'}</button>
+		<button type="button" onClick={() => setFramed(true)}>Render map in viewport iframe</button>
+		<button type="button" onClick={() => setEditing(!editing)}>{editing ? 'View marker composition' : 'Edit marker composition'}</button>
+		{editing ? <><p>Selected block: {selected}</p><input aria-label="Edit selected marker note" disabled={selected !== 'marker-note'} value={note} onChange={event => setNote(event.target.value)} /></> : null}
+		<ComponentDataScope.Provider value={{ ...parentScope, fixtureBadge: 'Saved' }}>
+			{framed ? <BuilderViewport size={{ width: 390, height: 844 }}>{markerView}</BuilderViewport> : markerView}
+			<div aria-label="Fixture detail scroll" style={{ height: 105, overflow: 'auto' }}>
+				<WebpageBlocksRenderer blocks={detail} componentsByRef={{}} interactive />
+			</div>
+		</ComponentDataScope.Provider>
+	</>;
+}
+
 function ManualSourceProbe() {
 	const runtime = useWebpageRuntime();
 	const [group, setGroup] = React.useState('first');
@@ -79,12 +137,13 @@ function ManualSourceProbe() {
 let dataPlane = 'home';
 function Fixture() {
 	const { revalidate } = useRevalidator();
+	const [composed, setComposed] = React.useState(false);
 	return <ChakraProvider>
-		<button type="button" onClick={() => { dataPlane = 'custom-' + 'a'.repeat(64); void revalidate(); }}>Switch fixture database</button>
+		<button type="button" onClick={() => { dataPlane = dataPlane === 'home' ? 'custom-' + 'a'.repeat(64) : 'home'; void revalidate(); }}>Switch fixture database</button>
 		<WebpageRuntimeProvider pageId="fixture-routes" pageKey={null} suiteKey={null} source="user" shared>
 			<PageActionSurface actionEnabled>
-				<WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} interactive />
-				<ManualSourceProbe />
+				<button type="button" onClick={() => setComposed(true)}>Open composed marker fixture</button>
+				{composed ? <ComposedFixture /> : <><WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} interactive /><ManualSourceProbe /></>}
 			</PageActionSurface>
 		</WebpageRuntimeProvider>
 	</ChakraProvider>;

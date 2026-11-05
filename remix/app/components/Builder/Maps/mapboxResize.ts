@@ -11,12 +11,17 @@ type ResizeRuntime = {
 export function observeMapboxContainer(
 	container: HTMLElement,
 	map: ResizeMap,
-	runtime: ResizeRuntime = {
-		Observer: ResizeObserver,
-		requestFrame: window.requestAnimationFrame.bind(window),
-		cancelFrame: window.cancelAnimationFrame.bind(window)
-	}
+	runtime?: ResizeRuntime
 ): () => void {
+	if (!runtime) {
+		const view = container.ownerDocument.defaultView as (Window & typeof globalThis) | null;
+		if (!view) return () => {};
+		runtime = {
+			Observer: view.ResizeObserver,
+			requestFrame: view.requestAnimationFrame.bind(view),
+			cancelFrame: view.cancelAnimationFrame.bind(view)
+		};
+	}
 	let active = true;
 	let frame: number | null = null;
 	let width: number | null = null;
