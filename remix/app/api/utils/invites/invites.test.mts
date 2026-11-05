@@ -163,3 +163,32 @@ test('legacy replacement preserves gift and expiry, is repeatable, and fences a 
 	await things.updateOne({ shareId: invite.id }, { $set: { expiresAt: new Date(0) } });
 	await assert.rejects(() => revealInviteLink('creator', invite.id, true));
 });
+
+test('an invite without profile suggestions leaves recipient identity to signup', async () => {
+	const invite = await createInvite('creator', { credits: 1 });
+	const preview = await previewInvite(invite.token);
+	assert.equal(preview.username, '');
+	assert.equal(preview.displayName, '');
+	assert.equal((await listInvites('creator'))[0].username, '');
+	await assert.rejects(() => prepareInviteSignup(invite.token, {}));
+	await assert.rejects(() => prepareInviteSignup(invite.token, { username: 'recipient', displayName: '' }));
+	assert.equal((await previewInvite(invite.token)).status, 'pending');
+	assert.equal(await balance(), 4_000_000);
+	const prepared = await prepareInviteSignup(invite.token, { username: 'recipient', displayName: 'My chosen name' });
+	assert.equal(prepared.username, 'recipient');
+	assert.equal(prepared.displayName, 'My chosen name');
+	await transaction((session: any) => prepared.onCreated({ _id: 'recipient' }, session));
+	assert.equal(await balance('recipient'), 1_000_000);
+	await assert.rejects(() => previewInvite(invite.token));
+});
+
+test('blank creator fields are optional while recipient overrides beat saved suggestions', async () => {
+	const invite = await createInvite('creator', { username: '  ', displayName: ' Suggested ', credits: 0 });
+	const preview = await previewInvite(invite.token);
+	assert.equal(preview.username, '');
+	assert.equal(preview.displayName, 'Suggested');
+	const prepared = await prepareInviteSignup(invite.token, { username: 'my-username', displayName: 'My name' });
+	assert.equal(prepared.username, 'my-username');
+	assert.equal(prepared.displayName, 'My name');
+	await assert.rejects(() => prepareInviteSignup(invite.token, { username: 'x/write', displayName: 'My name' }));
+});
