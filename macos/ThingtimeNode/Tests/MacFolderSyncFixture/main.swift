@@ -83,6 +83,8 @@ final class StreamWriter: @unchecked Sendable {
             try bytes.write(to: file, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         })
+        let database = config.directory.appendingPathComponent("private-filesystem-index.sqlite3")
+        let transport = config.commanderIndexer.map { RustProcessInventoryTransport(helper: $0, database: database) }
         var identityChecks = 0
         let service = try MacFolderSync(origin: config.base, store: store,
             staging: MobileSyncStaging(directory: config.directory.appendingPathComponent("staging")),
@@ -90,7 +92,7 @@ final class StreamWriter: @unchecked Sendable {
             verify: { owner, device in identityChecks += 1; try await api.verifyFileSyncIdentity(ownerID: owner, deviceID: device) },
             choose: { selected }, approve: { _ in true },
             chooseSource: config.photoFixture == true ? { .photos } : nil,
-            photos: PhotoLibraryReader(provider: FixturePhotoResources(directory: selected)), inventories: MobileFolderInventory(directory: config.directory.appendingPathComponent("inventory"), commanderIndexer: config.commanderIndexer), approveTrash: { _ in true }, approveRestore: { _, _ in true }, conditions: { .init(network: "wifi", charging: true) })
+            photos: PhotoLibraryReader(provider: FixturePhotoResources(directory: selected), transport: transport), inventories: MobileFolderInventory(directory: config.directory.appendingPathComponent("inventory"), transport: transport, database: database), approveTrash: { _ in true }, approveRestore: { _, _ in true }, conditions: { .init(network: "wifi", charging: true) })
         if config.batchFixture == true {
             guard let input = try NodeFolderStreamInput.header(.standardInput, maximumBytes: 600_000) else { throw MobileFolderStore.Failure.invalid }
             let request = try JSONDecoder().decode(JSONValue.self, from: input)

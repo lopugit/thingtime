@@ -391,7 +391,10 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
-				if (requiresEditableIntrinsicContract(blocks)) {
+				if (requiresEditableIntrinsicContract(blocks, ['tt-upload'])) {
+					await requireThingtimeCapability('api.things', '1.47.0');
+					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.16.0');
+				} else if (requiresEditableIntrinsicContract(blocks)) {
 					await requireThingtimeCapability('api.things', '1.44.0');
 					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.14.0');
 				}

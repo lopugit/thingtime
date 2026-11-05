@@ -542,6 +542,16 @@ export const createTemplateResolver = (options: { preserveUnboundTokens?: boolea
 
 export const resolveTemplate = (template: unknown, scope: ComponentScope = {}): unknown => createTemplateResolver()(template, scope);
 
+// Stored map sources are executable references; map rows and source inputs are data.
+export const visitStoredMapSourceActions = (props: unknown, visit: (action: string, source: Record<string, unknown>) => void): void => {
+	if (!isPlainObject(props)) return;
+	for (const source of [props.favouritesSource, props.routeSource]) {
+		if (!isPlainObject(source)) continue;
+		const action = source.action;
+		if (typeof action === 'string' && action && action.length <= 128 && !/[{}$\s]/.test(action)) visit(action, source);
+	}
+};
+
 // Visit executable positions in every authored branch, using the same token,
 // repeat and own-property semantics as rendering. Arguments are data, never
 // new template syntax. The caller supplies persisted scope only. Unknown loop
@@ -622,6 +632,8 @@ export const visitStoredTemplateActions = (
 				});
 			return;
 		}
+		if (node.tag === 'tt-mapbox')
+			visitStoredMapSourceActions(node.props, action => visit(action, { ttAction: action }, action));
 		if ((node.tag === 'tt-collection' || node.chakra === 'Collection') && isPlainObject(node.props)) {
 			// Collection reads declare a literal saved Action, like a block source.
 			// Runtime rows/inputs cannot add authority or change this dependency.

@@ -142,7 +142,7 @@ window. Capped scans preserve the ordinary 90-second deadline at 25–100% CPU a
 minutes, only for deliberately lower CPU limits.
 If process CPU or RSS counters are unavailable, the standalone service fails closed rather than running unbounded.
 
-`crates/commander-indexer` and `packages/filesystem-indexer` are host-independent. Another Thingtime desktop app can
+`../filesystem-indexer/crates/indexer` and `packages/filesystem-indexer` are host-independent. Another Thingtime desktop app can
 use the CLI directly or import the typed Node client. Overlapping scans are serialized, optional entry caps are enforced, and
 SQLite WAL lets queries remain responsive during a write transaction. Successful scans checkpoint and truncate the
 WAL, every SQLite database/sidecar remains owner-only, and FTS tokenizes names rather than every full path to keep

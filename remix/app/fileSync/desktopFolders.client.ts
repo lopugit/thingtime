@@ -116,6 +116,10 @@ export async function createDesktopFolderHost(input: {
 						if (error instanceof Error && (error.message === uploadRetry ||
 							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${uploadRetry}`))
 							throw new SyncConnectionWait('Waiting for upload transport to reconnect. Saved transfer progress will continue automatically.');
+						const downloadRetry = '[folder_download_retry] Folder download is temporarily unavailable. Retry after reconnecting.';
+						if (error instanceof Error && (error.message === downloadRetry ||
+							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${downloadRetry}`))
+							throw new SyncConnectionWait('Waiting for download transport to reconnect. Saved transfer progress will continue automatically.');
 						const transportRetry = '[folder_transport_retry] Folder service is temporarily unavailable. Retry after reconnecting.';
 						if (error instanceof Error && (error.message === transportRetry ||
 							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${transportRetry}`))

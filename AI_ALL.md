@@ -41,6 +41,53 @@ Original request (verbatim):
 - When the work is complete, send a report covering the delivered result, verification, material decisions and assumptions, tradeoffs, and any deferred questions. Then invite the user to change or correct those choices. Make corrections when requested without requiring a response to consider the completed work delivered.
 - This preference does not supply missing authorization or override explicit constraints, required confirmations, security or credential boundaries, or genuinely required human presence. If one of those prevents a dependent action, complete all independent authorized work, explain the exact remaining blocker and the smallest necessary intervention, and never claim the blocked action or overall task is complete. Do not invent an approval requirement for ordinary agent decisions.
 
+## Private user applications stay in saved Things
+
+User guidance (verbatim):
+
+> “Yes please do it this way, we want all Thingtime features to be as abstracted and extensible as possible 🙌🙌🙌 please add this example and my exact words as guidance into AI_ALL please 🥰🥰🥰🥰🥰🥰🙌”
+
+- Map-marker example: the Mapbox SDK can mount an element, but a hardcoded
+  marker with icon/photo/label options is not a substitute for Builder
+  composition. Expose a reusable slot for a saved Component or editable block
+  template bound to each map point. Keep the SDK adapter responsible for map
+  positioning and lifecycle, and render the marker through the ordinary
+  Component resolver, data bindings, authorization and individually editable
+  blocks. Author the user's marker appearance as private saved Things. Apply
+  this reasoning to other SDK-backed surfaces and new features instead of
+  growing a separate collection of fixed native presentations.
+
+- Build user-requested applications, pages, dashboards, forms and workflows
+  through Thingtime's existing Builder and supported Things APIs first. Save
+  their Webpage, Component, Schema, Action and data Things in the intended
+  user's account with its intended private audience. A reusable user-authored
+  Component is still a saved Thing; reusability alone does not justify adding
+  its definition to the product source.
+- Do not commit, bundle, seed or register a private user's Builder Things,
+  Component definitions, application layouts, workflows, IDs or content in
+  Thingtime source, app suites, migrations, fixtures or generated artifacts.
+  Never convert a private application into a built-in product feature merely
+  to deliver that application. Synthetic, account-independent test fixtures
+  may exercise framework contracts, but must not reproduce the private app.
+- Before changing framework code, verify the deployed capabilities and trace
+  the existing composition, binding, Action and SDK integration paths. Record
+  the concrete missing reusable primitive and why existing functionality cannot
+  express the required behavior. Prefer extending the canonical composition
+  contract over adding application-specific branches or preset presentations.
+- Only fundamental, generally reusable framework capabilities belong in a
+  source PR: for example, a data binding, local-state operation, authorized
+  adapter or editable composition slot. Keep application-specific composition
+  and presentation in saved Things. For SDK-backed surfaces such as maps,
+  prefer a saved Component/template slot bound to each item's data over
+  hardcoded marker/card layouts; SDK ownership of a DOM element is not a reason
+  to bypass normal Builder rendering, dependency authorization or editing.
+- Verify both layers separately: test the framework independently with
+  synthetic inputs, then author and verify the intended private saved Things
+  through the platform, including nested editing, save and reload. A merged
+  framework PR does not deliver the user's saved application. Report source
+  changes and saved-Thing changes separately, and explicitly identify any
+  remaining composition limitation.
+
 ## Individually editable Thingtime blocks
 
 - Things created for human-facing display (including agent notes, status cards and subspace embeds) must carry an explicit `renderComponent` pointing to an accessible saved Component Thing or containing an embedded Component definition. The renderer comes from that pointer or embedded definition, never from a `type`/`kind` alias or a data-shape guess. Keep the content as editable Thing data, bind it into the Component through the supported composition contract, and keep saved Component/Webpage Things on their canonical editable render/block definitions.
@@ -692,6 +739,28 @@ points, not the individual files.
 
 - Every new user-facing feature or meaningful product addition must include a reasonably chosen settings surface for the behaviors users are likely to want to customize. Choose safe, useful defaults; avoid exposing implementation-only knobs; preserve existing preferences through migrations; and document what each control changes. If a feature genuinely has no meaningful user choice, no setting is required.
 
+### Seamless inline loading
+
+- Use one subtle inline loading icon, animation, or progress bar beside the
+  affected control or content region. Never stack or repeat visible loading
+  messages for the same operation, or replace a usable screen with loading
+  text, a blocking spinner, or a skeleton.
+- Keep existing content, search results, input, focus, and scroll position
+  usable during same-account background refreshes. On a true cold start,
+  reserve the content's layout and show only the single inline indicator;
+  do not flash empty-result messages before loading finishes. Clear protected
+  content immediately when its account, origin, authorization, or lock state
+  changes.
+- Give the indicator an accessible status label and appropriate busy semantics
+  without duplicate screen-reader announcements. Respect reduced motion, avoid
+  flicker and layout shifts, and replace a failed or stalled load with one
+  clear inline error and a working retry action.
+- Apply this across pages, extensions, popups, dialogs, cards, lists, and
+  controls. Verify cold start, cached refresh, searching while loading, empty,
+  error/retry, and identity changes before declaring the flow complete.
+
+### Rendered interaction verification
+
 - For rendered browser validation in Codex Desktop, prefer the in-app Browser first when it is available. If localhost is blocked there, or the user explicitly asks for Chrome, use the Codex Chrome tab control workflow (`chrome:control-chrome`) before falling back to standalone Playwright. Keep Chrome checks read-only unless the user requested an action, and do not inspect cookies, local storage, passwords, or profile data.
 - Before finishing a PR, run the manual checklists in `TESTING.md` for every
   area the PR touches, and add a line there whenever a new bug class is fixed
@@ -700,11 +769,11 @@ points, not the individual files.
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,
   overflow, and overlap behavior match the request.
-- Optimistic rendering at all times (UI house rule): never flash a loading
-  screen, spinner, or skeleton when prior or cached state exists. Render the
+- Optimistic rendering at all times (UI house rule): never replace prior or
+  cached content with a loading screen, blocking spinner, or skeleton. Render the
   last-known value instantly from cache/local state and refetch in the
   background, reconciling (and reverting on failure) when fresh data lands.
-  Only show a loading state on a true cold start with nothing to show. Use the
+  Use the single inline indicator above for refreshes and true cold starts. Use the
   synchronous `~/hooks/localCache` tier (localStorage, keys `tt-<domain>`) for
   anything that gates first paint; the async localforage `thingtime` blob
   cannot seed the first render. Examples: the account switcher paints its

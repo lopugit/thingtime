@@ -123,6 +123,9 @@ export const ALLOWED_PROPS = new Set([
 	'aria-valuetext',
 	'aria-hidden',
 	'aria-pressed',
+	'aria-checked',
+	'aria-busy',
+	'aria-disabled',
 	'aria-expanded',
 	'aria-selected',
 	'aria-current',
@@ -426,12 +429,13 @@ function HtmlBlockImage({ elementProps, fallback }: { elementProps: Record<strin
 }
 
 /** Individual Builder elements share the exact HTML allowlist and URL policy. */
-export function HtmlBlockElement({ tag, attributes, editorProps, children }: {
- tag: string; attributes?: Record<string, unknown>; editorProps?: Record<string, any>; children?: React.ReactNode;
+export function HtmlBlockElement({ tag, attributes, editorProps, children, markerContent }: {
+ tag: string; attributes?: Record<string, unknown>; editorProps?: Record<string, any>; children?: React.ReactNode; markerContent?: React.ReactNode;
 }) {
  const mediaUrl = useSharedMediaUrl();
  if (tag === 'tt-media-pipeline') return <LocalMediaPipeline pipeline={attributes?.pipeline} editorProps={editorProps}>{children}</LocalMediaPipeline>;
- if (tag === 'tt-mapbox') return <div {...editorProps}><ComponentMapbox {...attributes} /></div>;
+ if (tag === 'tt-mapbox') return <div {...editorProps}><ComponentMapbox {...attributes} markerContent={markerContent} /></div>;
+ if (tag === 'tt-upload') return <div {...editorProps}><ComponentUpload {...attributes} /></div>;
  if (tag === 'tt-style') return <div {...editorProps}><ComponentStyle rules={attributes?.rules}>{children}</ComponentStyle></div>;
  if (tag === 'tt-form') return <div {...editorProps}><ComponentForm {...attributes}>{children}</ComponentForm></div>;
  if (tag === 'tt-select') return <div {...editorProps}><ComponentSelect {...attributes} /></div>;

@@ -30,7 +30,7 @@ enum NativeSymbolicLinks {
     // receipt authorizes interpreting it during an ordinary scan. A copied or
     // user-authored envelope stays an ordinary file until an explicit restore.
     @TaskLocal static var receiptDirectory: URL?
-    private static var registry: URL {
+    static var registry: URL {
         if let receiptDirectory { return receiptDirectory }
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ThingtimeNativeLinkReceipts-v1", isDirectory: true)

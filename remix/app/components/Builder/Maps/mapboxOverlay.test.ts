@@ -79,3 +79,55 @@ test('route fitting keeps favourites visible, numbered buttons select without HT
 		assert.deepEqual(selected, ['fav', 'stop']);
 	} finally { (globalThis as any).document = priorDocument; }
 });
+
+
+test('rich marker keeps its stop number and renders labels, icons and avatar through DOM properties', () => {
+	const priorDocument = (globalThis as any).document;
+	class NodeStub {
+		children: NodeStub[] = [];
+		style: Record<string, string> = {};
+		attributes: Record<string, string> = {};
+		textContent = '';
+		src = '';
+		alt = '';
+		onError?: () => void;
+		parent?: NodeStub;
+		constructor(readonly tag: string) {}
+		set innerHTML(_: string) { assert.fail('marker text must never be parsed as HTML'); }
+		setAttribute(key: string, value: string) { this.attributes[key] = value; }
+		append(node: NodeStub) { this.children.push(node); node.parent = this; }
+		addEventListener(name: string, callback: () => void) { if (name === 'error') this.onError = callback; }
+		remove() { this.parent?.children.splice(this.parent.children.indexOf(this), 1); }
+	}
+	(globalThis as any).document = { createElement: (tag: string) => new NodeStub(tag) };
+	try {
+		const gl = {
+			LngLatBounds: class { extend() {} isEmpty() { return true; } },
+			Marker: class { constructor(readonly options: { element: NodeStub }) {} setLngLat() { return this; } addTo() { return this; } }
+		};
+		const label = '<img src=x onerror=evil>';
+		const avatarSrc = '/api/v1/attachments/content?id=account-photo';
+		const points = [{
+			id: 'stop', coordinates: [144, -37] as [number, number], group: 'route' as const, label: 'Pickup', markerLabel: '2',
+			appearance: { markerLabelMode: 'both' as const, customLabel: label, markerIcon: '★', markerIcons: ['🚲', '♿'], avatarSrc }
+		}];
+		const pins = updateMapboxOverlay({ getSource: () => null }, gl, [], {
+			points, route: null, center: [144, -37], zoom: 10, fitBounds: false
+		});
+		const button = pins[0].options.element as NodeStub;
+		const [row, icons] = button.children;
+		assert.equal(button.attributes['aria-label'], `Stop 2, Pickup, ${label}, 🚲, ♿`);
+		assert.deepEqual(row.children.map((node) => node.textContent), ['2', '', '★', `Pickup · ${label}`]);
+		assert.equal(row.children[1].tag, 'img');
+		assert.equal(row.children[1].src, avatarSrc);
+		assert.equal(row.children[1].alt, '');
+		assert.equal(icons.textContent, '🚲 ♿');
+		row.children[1].onError?.();
+		assert.deepEqual(row.children.map((node) => node.textContent), ['2', '★', `Pickup · ${label}`]);
+		const characterPins = updateMapboxOverlay({ getSource: () => null }, gl, [], {
+			points, route: null, center: [144, -37], zoom: 10, fitBounds: false, characterId: 'trusted-character'
+		});
+		const characterAvatar = characterPins[0].options.element.children[0].children[1] as NodeStub;
+		assert.equal(characterAvatar.src, avatarSrc + '&character=trusted-character');
+	} finally { (globalThis as any).document = priorDocument; }
+});

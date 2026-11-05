@@ -1,6 +1,6 @@
 'use strict';
 const { governorFor } = require('./folder-resource-governor.cjs');
-const { governedFetch, governedHash } = require('./folder-transfer-process.cjs');
+const { TransferWorkerDisconnected, governedFetch, governedHash } = require('./folder-transfer-process.cjs');
 const { createHash } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
 const { uploadRetry, retryableUploadFailure } = require('./folder-upload.cjs');
@@ -161,7 +161,15 @@ async function uploadFolderBatch({ input, context, signal, assertCurrent, reques
             // before its explicitly governed hash and transport work begins. Explicit
             // v3 resource-governed descriptors retain their quota-aware contract.
             if (!descriptor.configuration.configuration.resourceLimits && now() - (s.lastPayloadAt ?? started) >= 30000) { s.bytes.fill(0); s.bytes = null; s.put = 'deadline'; return { status: 'failed', code: 'deadline' }; }
-            if (await governedHash(governor, s.bytes, combined) !== s.checksum) throw invalid();
+            let digest;
+            try { digest = await governedHash(governor, s.bytes, combined); }
+            catch (error) {
+                check(callbackSignal);
+                if (!(error instanceof TransferWorkerDisconnected)) throw error;
+                s.bytes.fill(0); s.bytes = null; s.put = 'failed';
+                return { status: 'failed', code: 'temporarily-unavailable' };
+            }
+            if (digest !== s.checksum) throw invalid();
             check(callbackSignal);
             const freshTarget = async () => {
                 check(callbackSignal);

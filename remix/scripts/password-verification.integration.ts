@@ -38,6 +38,27 @@ export async function runPasswordVerificationIntegration({load,vite,origin,owner
   const fillApproval=await verify(fill);assert.equal(fillApproval.status,200);
   const delivered=await invoke({operation:'fill',id,passkeySession:fillApproval.passkeySession});assert.equal(delivered.status,200);assert.ok(delivered.body.password===syntheticSecret);assert.equal(delivered.body.username,'fixture@example.invalid');
   assert.deepEqual(Object.keys(delivered.body).sort(),['ok','ownerId','password','username']);
+  const {importOnePasswordItem}=await load('passwords/onePassword.ts');
+  const importedId=randomUUID(),importedEmail='root-fixture@example.invalid';
+  const imported=importOnePasswordItem({categoryUuid:'001',overview:{title:'Synthetic AWS account',subtitle:'Imported account description',url:'https://aws.amazon.com/path'},details:{loginFields:[
+    {designation:'username',name:'appAction',fieldType:'H',value:'awsWeb'},
+    {name:'Root user email address',fieldType:'T',value:importedEmail},
+    {designation:'password',fieldType:'P',value:syntheticSecret}
+  ]}});
+  // Simulate a previously saved import whose parser did not conceal H fields.
+  imported.fields[0].concealed=false;
+  assert.equal((await invoke({operation:'save',id:importedId,writeId:randomUUID(),revision:0,entry:imported})).status,200);
+  const importedCatalog=(await invoke({operation:'catalog'})).body.catalog.find((item:any)=>item.id===importedId);
+  assert.deepEqual(importedCatalog,{id:importedId,title:'Synthetic AWS account',username:importedEmail,domains:['aws.amazon.com','signin.aws.amazon.com'],origins:['https://aws.amazon.com','https://signin.aws.amazon.com'],fillEligible:true,hasPassword:true,hasTotp:false});
+  const importedApproval=await verify({purpose:'fill',rp:'signin.aws.amazon.com',origin:'https://signin.aws.amazon.com',entryId:importedId});
+  assert.equal(importedApproval.status,200);
+  const importedFill=await invoke({operation:'fill',id:importedId,passkeySession:importedApproval.passkeySession});
+  assert.equal(importedFill.status,200);assert.equal(importedFill.body.username,importedEmail);
+  for(const target of ['https://signin.aws.amazon.com:8443','https://signin.aws.amazon.com.evil.test','https://other.aws.amazon.com','https://amazon.com']){
+    const context={purpose:'fill',rp:new URL(target).hostname,origin:target,entryId:importedId};
+    assert.equal((await invoke({operation:'verification-status',context})).status,403,'Other origins do not inherit the AWS match');
+    assert.equal((await invoke({operation:'fill',id:importedId,passkeySession:{...importedApproval.passkeySession,context}})).status,403,'Changing destination cannot reuse the approval');
+  }
   assert.equal((await verify({...fill,origin:'https://other.test',rp:'other.test'})).status,403,'No origin fallback');
   await invoke({operation:'verification-settings',id,window:'always'});
   assert.equal((await invoke({operation:'verification-status',context:fill})).body.required,true,'Entry Always wins over global Never');
@@ -81,7 +102,9 @@ export async function runPasswordVerificationIntegration({load,vite,origin,owner
   const forbidden=await things.action({request:new Request(origin+'/api/v1/things',{method:'POST',headers:{Origin:origin,Cookie:cookies(),'Content-Type':'application/json'},body:JSON.stringify({id:randomUUID(),thingtime:['password-verification-device'],crystal:{verified:true}})})});
   assert.ok(forbidden.status>=400,'Generic Things cannot mint device authority');
   const previews=await passwords.loader({request:new Request(origin+'/api/v1/passwords?previews=1',{headers:{Cookie:cookies()}})});assert.equal(previews.status,200);
-  const preview=(await previews.json()).entries.find((value:any)=>value.id===id);assert.equal(preview.username,'fixture@example.invalid');assert.deepEqual(Object.keys(preview).sort(),['id','passwordType','revision','title','updatedAt','username','websiteIcon']);
+  const previewsBody=await previews.json();
+  const preview=previewsBody.entries.find((value:any)=>value.id===id);assert.equal(preview.username,'fixture@example.invalid');assert.deepEqual(Object.keys(preview).sort(),['id','passwordType','revision','title','updatedAt','username','websiteIcon']);
+  assert.equal(previewsBody.entries.find((value:any)=>value.id===importedId).username,importedEmail);
   if(process.env.THINGTIME_EXTENSION_ACCOUNTS_UI==='1')await(await import('./password-extension-accounts.integration')).runExtensionAccountsUI({vite,load,ownerId,username,password,invoke});
   if(process.argv.includes('--verification-ui'))await(await import('./password-verification-ui.integration')).runPasswordVerificationUI({vite,load,ownerId,username,password,invoke});
   console.log('PASS: real disposable API verification; settings alone refuse; explicit Never enrollment; cross-site global reuse; exact-entry/purpose/origin fencing; entry Always; Lock; logout/new login durable trust; Forget/re-enroll; timed approval; protected generic writes; allowlisted usernames.');

@@ -17,7 +17,7 @@ export type SessionDoc = {
   // revocable the same way
   // 'device-pairing'/'watch-pairing'/'device' — native device handshakes and the long-lived
   // credential it upgrades into, revocable the same way
-  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'deployment-link' | 'device-pairing' | 'watch-pairing' | 'device' | 'oauth-code' | 'chatgpt-oauth-code' | 'chatgpt-oauth-relay' | 'chatgpt-mcp' | 'chatgpt-mcp-refresh' | 'chatgpt-mcp-connection';
+  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'deployment-link' | 'device-pairing' | 'watch-pairing' | 'device' | 'oauth-code' | 'chatgpt-oauth-code' | 'chatgpt-oauth-relay' | 'chatgpt-mcp' | 'chatgpt-mcp-refresh' | 'chatgpt-mcp-connection' | 'chatgpt-mcp-mutation' | 'chatgpt-mcp-mutation-chunk';
   secureVaultKey?: Binary;
   meta?: Record<string, any>;
 };

@@ -111,8 +111,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - 2026-11-04: Add Google web OAuth and generic provider file imports, a one-use approved agent handoff with status-only receipts, an editable import/approval UI, and cross-platform Node delivery. Document agent password, OAuth and passkey workflows with distinct live acceptance gates. [PR #1341 notes](../PRs/1341-credential-handoff-approved-provider-imports.md). **Codex (AI)**
-- 2026-11-04: Accept Codex's shared OAuth client with its issuer-bound loopback callback so the Thingtime MCP login reaches consent. **Codex (AI)**
+### 2026-11-05
+- Add account-scoped connector confirmation controls in Settings → Connections,
+  staged large mutation plans, paged signed review and single-use receipts.
+- Let saved map elements compose their markers from ordinary editable child
+  blocks and saved Components; preserve marker focus and expose authored detail
+  reveal behavior. Private application definitions stay in saved Things.
+- Make the private-app/framework boundary explicit in repository AI guidance.
 
+
+- 2026-11-05: Add opt-in page-local query selection, editable upload blocks and map marker icons, labels, icon lists and attachment avatars. Numeric Thing summaries support automatic ordering across complete authorized lists. Private Routes authoring and deployed acceptance are tracked separately. — Codex (AI)
+
+- 2026-11-04: Repair sync resource freshness and local-idle status, accept measured CPU scopes, and retain source-device observations across dashboard closure and app restarts. Add editable Live, recent-window and custom-range views with explicit sample coverage and gaps; remote history negotiates `api.devices-sync-control` 1.4.0. Details: [PR #1340](../PRs/1340-codex-device-sync-history-device-resource-history.md). — Codex (AI)
+- 2026-11-04: Consolidate filesystem indexing and database code into the local `filesystem-indexer/` Rust workspace. Commander, native sync and iOS builds reference the same engine, with scoped inventories, cache reuse, paginated PhotoKit observations and cancellation coverage. Installed acceptance is tracked in the [PR #1327](../PRs/1327-codex-shared-rust-index-sync-share-one-rust-filesystem-engine.md). **Codex (AI)**
+- 2026-11-04: Accept Codex's shared OAuth client with its issuer-bound loopback callback so the Thingtime MCP login reaches consent. **Codex (AI)**
+- 2026-11-04: Keep password catalogs searchable through slow background refreshes with one inline loading indicator, cancellation and retry. Offer saved AWS root, console and portal logins on the verified AWS sign-in origin, bring opened password editors into view, and project only explicit login identifiers. Extension 0.4.3; password capability 1.8.0. Add the seamless loading policy to repository guidance. [PR #1338 notes](../PRs/1338-codex-password-loading-search.md). **Codex (AI)**
 - 2026-11-04: Add an editable two-column device dashboard with CPU, RAM, disk capacity/activity and network gauges in the device page and quick view. Device links open the device page by default; file sync remains a separate section and destination. Native Mac measurements negotiate device contracts 1.14.0; missing data stays unavailable and legacy BSON snapshots retain readable, retry-compatible state. [PR #1330 notes](../PRs/1330-device-dashboard-gauges-device-resource-dashboard.md). **Codex (AI)**
 - Save independently encrypted named auth connections for the same external account, select allowed operations, and use or reconnect an exact connection. **Codex (AI)**
 
