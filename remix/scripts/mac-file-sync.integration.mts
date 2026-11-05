@@ -8,6 +8,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { MacFixtureTransport, FixtureIdentityTiming, FixturePageObservers } from './mac-fixture-transport.mjs';
 import { createRequire } from 'node:module';
 import { generateKeyPairSync, randomBytes, randomUUID, sign, createHash } from 'node:crypto';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
@@ -67,11 +68,13 @@ assert.equal(base.hostname, '127.0.0.1');
 assert.equal(base.origin, fixture.base);
 const directory = await mkdtemp(path.join(tmpdir(), 'thingtime-mac-sync-live-'));
 const cookies = new Map<string, string>();
-let native: ChildProcessWithoutNullStreams | undefined, pending: { resolve(value: any): void; reject(error: unknown): void; stream?: any; requestId?: string } | undefined;
+let native: ChildProcessWithoutNullStreams | undefined;
+let nativeTransport: MacFixtureTransport | undefined;
+const nativeIdentityTiming = new FixtureIdentityTiming();
+const nativeServiceTiming: Record<string, { count: number; totalMs: number; maxMs: number }> = {};
 let nativeExit: Promise<void> | undefined,
 	nativeCalls = 0,
-	verifyCalls = 0,
-	lastVerifyCalls = 0;
+	verifyCalls = 0;
 const counts = { puts: 0, publishes: 0, reads: 0, streams: 0, streamedBytes: 0, stageRanges: 0, stagedBytes: 0 };
 const httpRequests: Record<string, number> = {};
 const httpLatency: Record<string, { count: number; totalMs: number; maxMs: number }> = {};
@@ -83,10 +86,9 @@ const markEarlyRequest = (label: string) => {
 	if (earlyFixture && transferRunStartedAt && earlyFirstRequestMs[label] === undefined)
 		earlyFirstRequestMs[label] = Date.now() - transferRunStartedAt;
 };
+let earlyIdentityStartTotalMs = 0;
 let cooldownCount = 0,
-	cooldownSeconds = 0,
-	priorCooldownCount = 0,
-	priorCooldownSeconds = 0;
+	cooldownSeconds = 0;
 let loseCloud = false,
 	losePublication = false,
     loseStage = false;
@@ -138,47 +140,49 @@ async function api(route: string, body?: unknown, method = body === undefined ? 
 	catch (cause) { throw Error(`Acceptance response ${method} ${new URL(route, base).pathname} failed`, { cause }); }
 }
 async function startNative() {
-	lastVerifyCalls = 0;
-	priorCooldownCount = 0;
-	priorCooldownSeconds = 0;
+    const observeIdentityTiming = nativeIdentityTiming.beginSession();
+    let lastVerifyCalls = 0, priorCooldownCount = 0, priorCooldownSeconds = 0;
 	native = spawn(process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN || path.resolve('../macos/ThingtimeNode/.build/debug/MacFolderSyncFixture'), [path.join(directory, 'native.json')]);
 	const current = native;
-	nativeExit = new Promise((resolve, reject) => {
-		current.on('error', reject);
-		current.on('exit', (code) => {
-			if (code === 0) resolve();
-			else reject(Error('Native fixture exited ' + code));
-			pending?.reject(Error('Native fixture exited'));
-			pending = undefined;
-		});
-	});
-	void nativeExit.catch(() => {});
-	current.stderr.on('data', () => {}); // Do not print credential-bearing diagnostics.
-	const lines = createInterface({ input: current.stdout });
-	lines.on('line', (line) => {
-		try {
-			assert.ok(line.length <= 1_000_000);
-			const value = JSON.parse(line);
-            if (value.type === 'chunk') {
-                assert.ok(pending?.stream); pending.stream.write(Buffer.from(line + '\n')); return;
+    nativeTransport = new MacFixtureTransport({
+        write: (frame: Buffer) => current.stdin.write(frame),
+        createStream: (payload: any) => new FolderStream({ id: payload.requestId, method: 'folder-sync.request', parameters: payload })
+    });
+    const transport = nativeTransport;
+    nativeExit = new Promise((resolve, reject) => {
+        current.on('error', error => { transport.close(error); reject(error); });
+        current.on('exit', code => {
+            transport.close(Error('Native fixture exited'));
+            if (code === 0) resolve(); else reject(Error('Native fixture exited ' + code));
+        });
+    });
+    void nativeExit.catch(() => {});
+    current.stderr.on('data', () => {}); // Never forward credential-bearing diagnostics.
+    current.stdin.on('error', error => transport.close(error));
+    const lines = createInterface({ input: current.stdout });
+    lines.on('close', () => transport.close(Error('Native fixture output closed')));
+    lines.on('line', line => {
+        try {
+            assert.ok(line.length <= 1_000_000);
+            const value = JSON.parse(line);
+            if (value.type !== 'chunk') {
+                const action = transport.pending.get(value.requestId)?.payload.action;
+                if (action && Number.isFinite(value.serviceMs) && value.serviceMs >= 0) {
+                    const metric = nativeServiceTiming[action] ??= { count: 0, totalMs: 0, maxMs: 0 };
+                    metric.count++; metric.totalMs += value.serviceMs; metric.maxMs = Math.max(metric.maxMs, value.serviceMs);
+                }
+                // Concurrent responses may arrive after a later counter sample.
+                const checks = Math.max(lastVerifyCalls, value.identityChecks);
+                verifyCalls += checks - lastVerifyCalls; lastVerifyCalls = checks;
+                const count = Math.max(priorCooldownCount, value.cooldowns.count);
+                const seconds = Math.max(priorCooldownSeconds, value.cooldowns.seconds);
+                cooldownCount += count - priorCooldownCount; cooldownSeconds += seconds - priorCooldownSeconds;
+                priorCooldownCount = count; priorCooldownSeconds = seconds;
+                observeIdentityTiming(value.identityTiming);
             }
-			verifyCalls += value.identityChecks - lastVerifyCalls;
-			lastVerifyCalls = value.identityChecks;
-			cooldownCount += value.cooldowns.count - priorCooldownCount;
-			cooldownSeconds += value.cooldowns.seconds - priorCooldownSeconds;
-			priorCooldownCount = value.cooldowns.count;
-			priorCooldownSeconds = value.cooldowns.seconds;
-			const next = pending;
-			if (value.ok && next?.stream) {
-                next.stream.write(Buffer.from(JSON.stringify({ type: 'result', response: { id: next.requestId, ok: true, result: value.result } }) + '\n'));
-                next.resolve(next.stream.finish().result);
-            } else value.ok ? next?.resolve(value.result) : next?.reject(Error('Native fixture: ' + value.error));
-            pending = undefined;
-		} catch (error) {
-			pending?.reject(error);
-			pending = undefined;
-		}
-	});
+            transport.receive(value);
+        } catch { transport.close(Error('Invalid native fixture frame')); }
+    });
 }
 async function stopNative() {
 	const current = native,
@@ -203,34 +207,10 @@ async function stopNative() {
 		nativeExit = undefined;
 	}
 }
-async function send(payload: any) {
-	assert.ok(native && !pending);
-	nativeCalls++;
-	return new Promise<any>((resolve, reject) => {
-		const timer = setTimeout(() => {
-			pending = undefined;
-			native?.kill('SIGKILL');
-			reject(Error('Native fixture request timeout'));
-		}, 280000);
-		pending = {
-            requestId: payload.requestId,
-            ...(payload.action === 'read-range' ? { stream: new FolderStream({ id: payload.requestId, method: 'folder-sync.request', parameters: payload }) } : {}),
-			resolve: (value) => {
-				clearTimeout(timer);
-				resolve(value);
-			},
-			reject: (error) => {
-				clearTimeout(timer);
-				reject(error);
-			}
-		};
-		const metadata = { ...payload };
-        let bytes: Uint8Array | undefined;
-        if (payload.action === 'stage-range') { bytes = payload.bytes; metadata.length = bytes!.byteLength; delete metadata.bytes; }
-        const encoded = Buffer.from(JSON.stringify(metadata)), header = Buffer.alloc(4);
-        header.writeUInt32BE(encoded.length);
-        native!.stdin.write(Buffer.concat([header, encoded, ...(bytes ? [bytes] : [])]));
-	});
+async function send(payload: any, signal?: AbortSignal) {
+    assert.ok(native && nativeTransport);
+    nativeCalls++;
+    return nativeTransport.request(payload, signal);
 }
 const signal = new AbortController().signal;
 const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.17.0', fileSymbolicLinksVersion: '1.0.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.2.0', fileTrashVersion: '1.2.0' };
@@ -304,7 +284,7 @@ try {
         if (input.action === 'stage-range') { counts.stageRanges++; counts.stagedBytes += input.bytes.length; }
 		const started = Date.now();
 		let payload: any;
-		try { payload = await send({ ...expected, deviceId, ...input, ...(benchmarkDeviceLimits ? { deviceResourceLimits: benchmarkDeviceLimits } : {}) }); }
+		try { payload = await send({ ...expected, deviceId, ...input, ...(benchmarkDeviceLimits ? { deviceResourceLimits: benchmarkDeviceLimits } : {}) }, abort); }
 		finally {
 			const elapsed = Date.now() - started, metric = nativeLatency[input.action] ?? { count: 0, totalMs: 0, maxMs: 0 };
 			metric.count++; metric.totalMs += elapsed; metric.maxMs = Math.max(metric.maxMs, elapsed); nativeLatency[input.action] = metric;
@@ -659,42 +639,38 @@ try {
 		const scanBytesPerSecond = normalEarlyBudget ? 5_000_000 : 400_000;
 		await writeFile(blocker, new Uint8Array()); await truncate(blocker, blockerBytes);
 		const scanStartedAt = Date.now(), proofTimeout = AbortSignal.timeout(90_000);
-		let queue: Promise<unknown> = Promise.resolve();
-		const serialRequest: typeof request = (owner, command, requestSignal) => {
-			const next = queue.then(() => request(owner, {
-				...command, deviceResourceLimits: { scanBytesPerSecond, transferBytesPerSecond: 5_000_000, cpuPercent: 15 },
-				...(command.action === 'scan-changes' ? { waitMilliseconds: 200 } : {})
-			}, requestSignal));
-			queue = next.catch(() => {});
-			return next;
-		};
+		// Pipe transport mirrors the production manager: polling has its own lane.
+		const governedRequest: typeof request = (owner, command, requestSignal) => request(owner, {
+				...command, deviceResourceLimits: { scanBytesPerSecond, transferBytesPerSecond: 5_000_000, cpuPercent: 15 }
+			}, requestSignal);
 		const nativeIndex = () => {
 			const database = new DatabaseSync(path.join(directory, 'private-filesystem-index.sqlite3'), { readOnly: true });
 			try {
 				return database.prepare('SELECT g.mode, g.generation, g.coverage, g.indexed, g.entry_count AS entries FROM inventory_generations g JOIN inventory_scopes s ON s.id=g.scope WHERE s.root_id=? AND g.created_ms>=? ORDER BY g.created_ms DESC LIMIT 1').get(nativeRoot, scanStartedAt);
 			} finally { database.close(); }
 		};
-		const proof = new Map<string, { receipt: import('../app/fileSync/execute').SyncReceipt; at: number; nativeState: string; index: ReturnType<typeof nativeIndex> }>();
+		const proof = new Map<string, { receipt: import('../app/fileSync/execute').SyncReceipt; at: number; nativeState: string; index: ReturnType<typeof nativeIndex>; receiptCommittedAtMonotonic: number; nativePageObservedAtMonotonic: number; nativePageObservationSequence: number }>();
 		let notify!: () => void;
 		const both = new Promise<void>(resolve => { notify = resolve; });
 		let markLocal!: () => void;
 		const localObserved = new Promise<void>(resolve => { markLocal = resolve; });
-		let capture: string | undefined, localSequence = 0;
+		let capture: string | undefined;
+        const nativePagesObserved = new FixturePageObservers();
 		let firstLocalChangeMs: number | null = null, firstAdmittedMs: number | null = null, firstAdmittedPath: string | null = null;
 		const input = async (current: AbortSignal, observe: boolean): Promise<ForegroundSyncInput> => {
-			const localTarget = await approveMobileSyncTarget(saved, scope, current, serialRequest, caps, 'existing');
+			const localTarget = await approveMobileSyncTarget(saved, scope, current, governedRequest, caps, 'existing');
 			return {
 				currentScope: () => scope, localTarget, runtime,
 				readConfiguration: async () => (await api('/api/v1/things?id=' + row.id)).thing,
-				authorizeDevice: async () => { await serialRequest(fixture.userId, { action: 'list' }, current); },
-				conditions: async () => (await serialRequest(fixture.userId, { action: 'conditions' }, current)).conditions!,
-				scanLocal: async () => (await serialRequest(fixture.userId, { action: 'scan', rootId: nativeRoot }, current)).entries!,
-				inspectLocal: async name => (await serialRequest(fixture.userId, { action: 'inspect', rootId: nativeRoot, path: name }, current)).inspectedEntry!,
+				authorizeDevice: async () => { await governedRequest(fixture.userId, { action: 'list' }, current); },
+				conditions: async () => (await governedRequest(fixture.userId, { action: 'conditions' }, current)).conditions!,
+				scanLocal: async () => (await governedRequest(fixture.userId, { action: 'scan', rootId: nativeRoot }, current)).entries!,
+				inspectLocal: async name => (await governedRequest(fixture.userId, { action: 'inspect', rootId: nativeRoot, path: name }, current)).inspectedEntry!,
 				streamLocalChanges: async function* (id, after, streamSignal, readyToFinish) {
 					capture = id;
 					for await (const page of readNativeIndexChanges({ ownerId: fixture.userId, deviceId: deviceId!, rootId: nativeRoot, captureId: id,
-						afterSequence: after, signal: streamSignal ?? current, readyToFinish, request: serialRequest })) {
-						localSequence = page.nextSequence;
+						afterSequence: after, signal: streamSignal ?? current, readyToFinish, request: governedRequest })) {
+                        if (observe) nativePagesObserved.publish(page);
 						if (page.changes.length) {
 							firstLocalChangeMs ??= Date.now() - transferRunStartedAt;
 							markLocal();
@@ -715,7 +691,7 @@ try {
 					yield* readCloudIndexChanges(scope, remoteRoot!, { ...runtime, signal: feedSignal }, id, after, readyToFinish!, resume!);
 				},
 				inventory,
-				source: async entry => mobileFolderSource(fixture.userId, nativeRoot, entry, current, serialRequest, caps),
+				source: async entry => mobileFolderSource(fixture.userId, nativeRoot, entry, current, governedRequest, caps),
 				progress: () => {},
 				journal: observe ? { ...journal, pagedRuns: access => {
 					const runs = journal.pagedRuns(access);
@@ -728,17 +704,21 @@ try {
 						return result;
 					}, confirm: async (spec, receipt) => {
 						const result = await runs.confirm(spec, receipt);
+                        const receiptCommittedAtMonotonic = performance.now();
 						const name = receipt.entry?.path;
 						if (spec.streaming?.source === 'both' && (name === 'local.bin' || name === 'remote.bin')) {
 							assert.ok(capture);
-							const page = (await serialRequest(fixture.userId, { action: 'scan-changes', rootId: nativeRoot,
-								inventoryDeviceId: deviceId!, captureId: capture, capturePolicy: 'one-way-supported', excludedPaths: [],
-								afterSequence: localSequence }, current)).changesPage;
+                            // Observe the next actual feed result after this receipt;
+                            // never enqueue a competing proof-only long poll.
+                            const observation = await nativePagesObserved.next(current, receiptCommittedAtMonotonic);
+                            assert.ok(observation.observedAt >= receiptCommittedAtMonotonic);
+                            const page = observation.page;
 							const index = nativeIndex();
 							if (!index || index.mode !== 'backup' || index.indexed !== 0 || index.coverage !== 'scanning' ||
-								page?.state !== 'running' || page.generation.toLowerCase() !== String(index.generation).toLowerCase())
+								page?.id !== capture || page?.state !== 'running' || page.generation.toLowerCase() !== String(index.generation).toLowerCase())
 								throw Error('The native capture was not live and unsealed at an early receipt: ' + JSON.stringify({ index, state: page?.state }));
-							proof.set(name, { receipt, at: Date.now(), nativeState: page.state, index });
+							proof.set(name, { receipt, at: Date.now(), nativeState: page.state, index, receiptCommittedAtMonotonic,
+                                nativePageObservedAtMonotonic: observation.observedAt, nativePageObservationSequence: observation.sequence });
 							if (proof.size === 2) notify();
 						}
 						return result;
@@ -749,6 +729,7 @@ try {
 		const controller = new AbortController(), current = AbortSignal.any([controller.signal, proofTimeout]),
 			stop = new Error('Stop after the two before-seal confirmations');
 		transferRunStartedAt = Date.now();
+        earlyIdentityStartTotalMs = nativeIdentityTiming.totalMs;
 		console.log('MAC_PAGED_STAGE early-input-start');
 		const firstInput = await input(current, true);
 		console.log('MAC_PAGED_STAGE early-input-ready');
@@ -770,7 +751,7 @@ try {
 			controller.abort(stop);
 			await assert.rejects(running, error => error === stop);
 			assert.ok(originalCapture);
-			const stopped = await serialRequest(fixture.userId, { action: 'scan-cancel', rootId: nativeRoot, inventoryDeviceId: deviceId!,
+			const stopped = await governedRequest(fixture.userId, { action: 'scan-cancel', rootId: nativeRoot, inventoryDeviceId: deviceId!,
 				captureId: originalCapture, capturePolicy: 'one-way-supported', excludedPaths: [] }, AbortSignal.timeout(15000));
 			assert.equal(stopped.changesPage?.state, 'interrupted');
 			assert.ok(cancelledAt >= Math.max(upload.at, download.at));
@@ -790,18 +771,20 @@ try {
 			assert.ok(firstLocalChangeMs !== null && firstAdmittedMs !== null && firstTransferMs !== null);
 			assert.ok(firstLocalChangeMs <= firstAdmittedMs && firstAdmittedMs <= firstTransferMs);
 			console.log(JSON.stringify({ ok: true, scenario: 'Mac two-way transfer before initial index seal',
-				firstLocalChangeMs, firstAdmittedMs, firstAdmittedPath, firstPutMs: firstTransferMs, earlyFirstRequestMs,
+				firstLocalChangeMs, firstAdmittedMs, firstAdmittedPath, firstPutMs: firstTransferMs, earlyFirstRequestMs, nativeTransportTiming: nativeTransport?.timings, nativeServiceTiming, nativeIdentityTiming, earlyIdentityStartTotalMs,
+                nativeLatency, httpLatency, httpRequests, nativeCalls, verifyCalls, cooldownCount, cooldownSeconds,
 				resourceLimits: { scanBytesPerSecond, transferBytesPerSecond: 5_000_000, cpuPercent: 15, effectiveRustScanBytesPerSecond: scanBytesPerSecond / 2 }, blockerBytes,
-				upload: { at: upload.at, nativeState: upload.nativeState, index: upload.index, operationId: upload.receipt.operationId, revision: remote.revision, sha256: hash(localBytes) },
-				download: { at: download.at, nativeState: download.nativeState, index: download.index, operationId: download.receipt.operationId, sha256: hash(remoteBytes) },
+				upload: { at: upload.at, receiptCommittedAtMonotonic: upload.receiptCommittedAtMonotonic, nativePageObservedAtMonotonic: upload.nativePageObservedAtMonotonic, nativePageObservationSequence: upload.nativePageObservationSequence, nativeState: upload.nativeState, index: upload.index, operationId: upload.receipt.operationId, revision: remote.revision, sha256: hash(localBytes) },
+				download: { at: download.at, receiptCommittedAtMonotonic: download.receiptCommittedAtMonotonic, nativePageObservedAtMonotonic: download.nativePageObservedAtMonotonic, nativePageObservationSequence: download.nativePageObservationSequence, nativeState: download.nativeState, index: download.index, operationId: download.receipt.operationId, sha256: hash(remoteBytes) },
 				cancelledAt, sameNativeCaptureAfterResume: true, strictCheckpointAfterResume: true, duplicateTransfers: false, cloudHistoryRevisions: 1 }));
 		} catch (error) {
 			// Keep a bounded, non-secret stage snapshot when the deliberate
 			// before-seal deadline fires; otherwise its only symptom is a timeout.
 			console.log(JSON.stringify({ earlyTimingFailure: true, firstLocalChangeMs, firstAdmittedMs,
-				firstAdmittedPath, firstPutMs: firstTransferMs, earlyFirstRequestMs,
+				firstAdmittedPath, firstPutMs: firstTransferMs, earlyFirstRequestMs, nativeTransportTiming: nativeTransport?.timings, nativeServiceTiming, nativeIdentityTiming, earlyIdentityStartTotalMs,
+                nativeLatency, httpLatency, httpRequests, nativeCalls, verifyCalls, cooldownCount, cooldownSeconds,
 				resourceLimits: { scanBytesPerSecond, effectiveRustScanBytesPerSecond: scanBytesPerSecond / 2 },
-				index: nativeIndex(), counts, nativeLatency, httpLatency }));
+				index: nativeIndex(), counts }));
 			throw error;
 		} finally { controller.abort(stop); await running.catch(() => {}); }
 	} else if (symlinksOnly) {

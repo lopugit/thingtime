@@ -14439,6 +14439,20 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ### Two-way transfers during initial indexing
 
+- Run `pnpm --dir remix run test:files:mac-fixture-transport`. Hold a native
+  `scan-changes` response while inspect/read complete through their independent
+  lane; verify out-of-order result/chunk IDs, atomic stage frames, cancellation
+  acknowledgements, EOF rejection of active and queued requests exactly once, and
+  identity duration accumulation across native restarts and out-of-order samples.
+  Receipt observers must share a fresh production feed result without adding a
+  second native poll. Preserve the production iterator's 25-second indexing /
+  2-second indexed waits; never inject a faster fixture-only polling cadence.
+  Build `MacFolderSyncFixture` and run the normal-budget before-seal proof below.
+  Retain per-action enqueue/start/end and queue/service aggregates separately
+  from summed native identity-verification time (which includes admission and
+  HTTP and can overlap across concurrent requests). Preserve all native
+  authorization, cancellation, session checks and strict hash/resume assertions.
+
 - Run `node --import tsx --test app/fileSync/cloudIndexChanges.client.test.ts`
   from `remix`. A Timeline delta for a canonical zero-byte cloud file must
   pass even though its sync entry has no multipart fingerprint. Nonempty files

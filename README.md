@@ -5907,6 +5907,16 @@ for the isolated browser harness and remaining native acceptance gates.
 
 ### Disposable Mac paged-sync acceptance
 
+The fixture pipe multiplexes request IDs against one production native manager.
+`scan-changes` has an independent polling lane; active requests remain serialized,
+and cancellation keeps a lane occupied until the native manager acknowledges it.
+Early proof receipt checks share the next fresh production feed page, preserving
+its normal long-poll policy and avoiding competing proof-only polling requests.
+Run `pnpm --dir remix run test:files:mac-fixture-transport` for transport regressions.
+The early timing proof records queue and service aggregates plus summed native
+identity verification separately; these measurements do not establish installed
+app performance. Raw native stderr and throwable messages are never forwarded.
+
 Build the current server and non-shipping Swift fixture, then run:
 
 ```sh

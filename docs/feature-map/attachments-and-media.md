@@ -612,6 +612,13 @@ installed/large-production acceptance gaps.
 
 ### Mac paged transfer acceptance
 
+The test-only `scripts/mac-fixture-transport.mjs` multiplexes result/chunk request
+IDs and preserves the native manager's independent polling and active lanes.
+Run `test:files:mac-fixture-transport` for held-poll, out-of-order, binary framing,
+cancellation and EOF regressions before the native/HTTP proof. Early proof
+queue/service and identity-duration aggregates distinguish fixture scheduling
+from native work; they do not weaken identity checks or prove installed latency.
+
 `test:files:mac-paged` uses `scripts/test-mac-paged-sync.mjs` to own an isolated
 HTTP server, replica and synthetic identity. `mac-file-sync.integration.mts
 --paged` connects the real Swift folder adapter to `pagedForegroundSync`,

@@ -110,6 +110,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Make the disposable Mac sync fixture multiplex native request IDs so polling can overlap inspect/read through the existing production lanes. Add cancellation/EOF transport regressions and safe queue/service/identity timing aggregates; retain all identity and exact-byte acceptance checks. **Codex (AI)**
+
+
 - 2026-11-06: Return validated native inventory status with each bounded Rust
   page so large Mac scans avoid a second helper launch per page. The matched
   10,001-entry/79-page fixture read fell from 21.6 s to 11.4 s; full sync

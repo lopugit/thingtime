@@ -45,11 +45,43 @@ actor Cooldowns {
     func snapshot() -> JSONValue { .object(["count": .number(Double(count)), "seconds": .number(Double(seconds))]) }
 }
 final class StreamCursor: @unchecked Sendable { var offset: Int64 = 0 }
+final class FixtureOutput: @unchecked Sendable {
+    private let lock = NSLock()
+    func write(_ value: JSONValue) throws {
+        var bytes = try JSONEncoder().encode(value); bytes.append(10)
+        lock.lock(); defer { lock.unlock() }
+        try FileHandle.standardOutput.write(contentsOf: bytes)
+    }
+}
+struct FixturePacket: Sendable {
+    let request: JSONValue
+    let bytes: Data?
+    static func read() throws -> FixturePacket? {
+        guard let input = try NodeFolderStreamInput.header(.standardInput, maximumBytes: 524_288) else { return nil }
+        let request = try JSONDecoder().decode(JSONValue.self, from: input)
+        var bytes: Data?
+        if case .object(let fields) = request, fields["action"] == .string("stage-range") {
+            guard case .number(let length) = fields["length"], length > 0, length <= 32 * 1024 * 1024,
+                  length.rounded() == length else { throw MobileFolderStore.Failure.invalid }
+            let source = try NodeFolderStreamInput(handle: .standardInput, length: Int(length))
+            var data = Data()
+            while data.count < Int(length) {
+                data.append(try source.next(offset: Int64(data.count), length: min(65_536, Int(length) - data.count)))
+            }
+            bytes = data
+        }
+        return FixturePacket(request: request, bytes: bytes)
+    }
+}
 final class StreamWriter: @unchecked Sendable {
     private var offset = 0
+    private let requestId: String
+    private let output: FixtureOutput
+    init(requestId: String, output: FixtureOutput) { self.requestId = requestId; self.output = output }
     func receive(_ data: Data) throws {
-        var bytes = try JSONSerialization.data(withJSONObject: ["type": "chunk", "offset": offset, "data": data.base64EncodedString()])
-        bytes.append(10); try FileHandle.standardOutput.write(contentsOf: bytes); offset += data.count
+        try output.write(.object(["type": .string("chunk"), "requestId": .string(requestId),
+                                  "offset": .number(Double(offset)), "data": .string(data.base64EncodedString())]))
+        offset += data.count
     }
 }
 @main struct Fixture {
@@ -85,11 +117,19 @@ final class StreamWriter: @unchecked Sendable {
         })
         let database = config.directory.appendingPathComponent("private-filesystem-index.sqlite3")
         let transport = config.commanderIndexer.map { RustProcessInventoryTransport(helper: $0, database: database) }
-        var identityChecks = 0
+        var identityChecks = 0, identityTotalMilliseconds = 0.0, identityMaxMilliseconds = 0.0
         let service = try MacFolderSync(origin: config.base, store: store,
             staging: MobileSyncStaging(directory: config.directory.appendingPathComponent("staging")),
             trash: MobileSyncTrash(directory: config.directory.appendingPathComponent("trash")),
-            verify: { owner, device in identityChecks += 1; try await api.verifyFileSyncIdentity(ownerID: owner, deviceID: device) },
+            verify: { owner, device in
+                identityChecks += 1
+                let started = ProcessInfo.processInfo.systemUptime
+                defer {
+                    let elapsed = (ProcessInfo.processInfo.systemUptime - started) * 1000
+                    identityTotalMilliseconds += elapsed; identityMaxMilliseconds = max(identityMaxMilliseconds, elapsed)
+                }
+                try await api.verifyFileSyncIdentity(ownerID: owner, deviceID: device)
+            },
             choose: { selected }, approve: { _ in true },
             chooseSource: config.photoFixture == true ? { .photos } : nil,
             photos: PhotoLibraryReader(provider: FixturePhotoResources(directory: selected), transport: transport), inventories: MobileFolderInventory(directory: config.directory.appendingPathComponent("inventory"), transport: transport, database: database), approveTrash: { _ in true }, approveRestore: { _, _ in true }, conditions: { .init(network: "wifi", charging: true) })
@@ -111,36 +151,63 @@ final class StreamWriter: @unchecked Sendable {
             } catch { response = ["id": id, "ok": false, "error": ["code": "fixture-refused", "message": "Fixture batch refused"]] }
             duplex.finish(try JSONSerialization.data(withJSONObject: response)); return
         }
-        while let input = try NodeFolderStreamInput.header(.standardInput, maximumBytes: 524_288) {
-            let response: JSONValue
-            do {
-                guard input.count <= 524_288 else { throw MobileFolderStore.Failure.limit }
-                let request = try JSONDecoder().decode(JSONValue.self, from: input)
-                if case .object(let fields) = request, fields["deviceResourceLimits"] != nil,
+        let output = FixtureOutput()
+        var requests: [String: Task<Void, Never>] = [:]
+        do {
+            // Block only the reader task. MainActor must remain free to resume
+            // MacFolderSync's independent streamWaiter and active request lanes.
+            while let packet = try await Task.detached(operation: { try FixturePacket.read() }).value {
+                guard case .object(let fields) = packet.request, case .string(let id) = fields["requestId"] else {
+                    throw MobileFolderStore.Failure.invalid
+                }
+                if fields["action"] == .string("fixture-cancel") { requests[id]?.cancel(); continue }
+                guard requests[id] == nil else { throw MobileFolderStore.Failure.invalid }
+                if fields["deviceResourceLimits"] != nil,
                    case .string(let owner) = fields["ownerId"], case .string(let device) = fields["deviceId"] {
                     let scope = try JSONEncoder().encode([config.base.absoluteString, owner, device]).base64EncodedString()
                     fixturePolicyKeys.insert("thingtime.sync.resources.v1." + scope)
                 }
-                let stream: (@Sendable (Data) throws -> Void)?
-                if case .object(let fields) = request, fields["action"] == .string("read-range") {
-                    let writer = StreamWriter(); stream = { try writer.receive($0) }
-                } else { stream = nil }
-                let receive: (@Sendable (Int) throws -> Data)?
-                if case .object(let fields) = request, fields["action"] == .string("stage-range"),
-                   case .number(let length) = fields["length"], length > 0, length <= 32 * 1024 * 1024, length.rounded() == length {
-                    let source = try NodeFolderStreamInput(handle: .standardInput, length: Int(length))
-                    let cursor = StreamCursor()
-                    receive = { count in
-                        let bytes = try source.next(offset: cursor.offset, length: count)
-                        cursor.offset += Int64(bytes.count); return bytes
+                requests[id] = Task { @MainActor in
+                    defer { requests.removeValue(forKey: id) }
+                    let started = ProcessInfo.processInfo.systemUptime
+                    var response: [String: JSONValue]
+                    do {
+                        let stream: (@Sendable (Data) throws -> Void)?
+                        if fields["action"] == .string("read-range") {
+                            let writer = StreamWriter(requestId: id, output: output)
+                            stream = { try writer.receive($0) }
+                        } else { stream = nil }
+                        let receive: (@Sendable (Int) throws -> Data)?
+                        if let bytes = packet.bytes {
+                            let cursor = StreamCursor()
+                            receive = { count in
+                                guard count > 0, cursor.offset + Int64(count) <= Int64(bytes.count) else { throw MobileFolderStore.Failure.invalid }
+                                let start = Int(cursor.offset); cursor.offset += Int64(count)
+                                return bytes.subdata(in: start..<(start + count))
+                            }
+                        } else { receive = nil }
+                        response = ["ok": .bool(true), "result": try await service.handle(packet.request, stream: stream, receive: receive)]
+                    } catch {
+                        // Never serialize a throwable message or request fields.
+                        response = ["ok": .bool(false), "error": .string(Task.isCancelled ? "fixture-cancelled" : "fixture-refused")]
                     }
-                } else { receive = nil }
-                response = .object(["ok": .bool(true), "result": try await service.handle(request, stream: stream, receive: receive), "identityChecks": .number(Double(identityChecks)), "cooldowns": await cooldowns.snapshot()])
-            } catch {
-                response = .object(["ok": .bool(false), "error": .string(String(describing: error)), "identityChecks": .number(Double(identityChecks)), "cooldowns": await cooldowns.snapshot()])
+                    response["requestId"] = .string(id)
+                    response["identityChecks"] = .number(Double(identityChecks))
+                    response["identityTiming"] = .object(["totalMs": .number(identityTotalMilliseconds), "maxMs": .number(identityMaxMilliseconds)])
+                    response["serviceMs"] = .number((ProcessInfo.processInfo.systemUptime - started) * 1000)
+                    response["cooldowns"] = await cooldowns.snapshot()
+                    do { try output.write(.object(response)) } catch { /* Reader EOF/exit rejects pipe callers. */ }
+                }
             }
-            var bytes = try JSONEncoder().encode(response); bytes.append(10)
-            try FileHandle.standardOutput.write(contentsOf: bytes)
+        } catch {
+            for task in requests.values { task.cancel() }
+            let remaining = Array(requests.values)
+            for task in remaining { await task.value }
+            throw error
         }
+        // EOF closes this test session; no orphan service requests survive it.
+        let remaining = Array(requests.values)
+        for task in remaining { task.cancel() }
+        for task in remaining { await task.value }
     }
 }
