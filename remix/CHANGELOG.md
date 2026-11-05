@@ -111,6 +111,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 ### 2026-11-05
+- Serve verified zero-byte attachment objects through the authenticated byte-cache route even when storage returns no stream (`api.attachment-content` 1.17.1). Extend the disposable Mac paged fixture with nested mixed-size files, explicit synthetic resource limits, and per-phase/native/HTTP timing while keeping installed sync state separate. — Codex (AI)
 - Add account-scoped connector confirmation controls in Settings → Connections,
   staged large mutation plans, paged signed review and single-use receipts.
 - Let saved map elements compose their markers from ordinary editable child

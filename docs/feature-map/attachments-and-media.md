@@ -627,6 +627,16 @@ requires the patched contract, so older clients retain bounded scans. The shared
 runner lifts the combined path ceiling only with all paged/path/review adapters.
 Run `test:files:mac-paged -- --wide` for the API-provisioned 10,003-path Mac proof,
 plus Apple staging/Trash tests and `nativeInventory.test.ts` for version gates.
+Add `--wide-mixed` to that same runner for 10,033 paths with nested folders and
+24 mixed-size native files, exact local/cloud hashes, restart/reply recovery,
+complete checkpoints, phase times and unchanged-run transfer reuse. This
+remains an isolated local API/native fixture, not installed or provider evidence.
+The authenticated attachment-content byte-cache route must also serve a
+verified empty stored object as HTTP 200 with zero bytes when its storage GET
+has no stream. It checks the current exact-version empty checksum, size and
+object existence; missing objects and nonempty null streams remain errors.
+Its semantic contract is `api.attachment-content` 1.17.1. Regression:
+`attachmentsRoutes.test.ts` plus the mixed native/HTTP fixture.
 See [wide native destinations](../mobile-file-sync.md#wide-native-destination-checks--2026-10-19).
 
 

@@ -12554,6 +12554,20 @@ resume unfinished Android gates only when requested.
   created through the Things import API. Require complete 10,003-path local and
   remote checkpoints, full byte hashes, accepted-reply recovery, and no repeated
   transfers on the unchanged rerun. Keep installed/provider acceptance separate.
+- [ ] Run the same fixture with `-- --wide --wide-mixed` under its 35-minute
+  deadline. Confirm 10,033 complete paths, including six nested folders and
+  24 empty/small/medium/multi-range files. Check every local and cloud byte
+  hash, retained operation IDs across lost replies and native restart, strict
+  checkpoint counts, phase timings and native/HTTP operation counts. The
+  unchanged rerun must issue no upload, publish, native read or stage-range.
+  Record process CPU/memory separately and distinguish deliberate scan/transfer
+  limits from overhead. Do not infer production or physical-drive throughput.
+- [ ] Read a synced empty file through the real authenticated
+  `/api/v1/attachments/content?cache=bytes` route: expect HTTP 200, zero bytes,
+  exact empty fingerprint and private cache headers. Remove or corrupt the
+  backing object in a disposable store and require an error, not synthesized
+  empty success. Keep explicit zero-length ranges invalid and nonempty null
+  storage streams rejected.
 - [ ] Verify native publication/lookup and Trash/restore with 10,001 siblings;
   alternate case/Unicode paths must still refuse before a write. Reopen receipts
   and compare the retained/restored bytes, including occupied destinations.

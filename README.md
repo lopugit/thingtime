@@ -5912,6 +5912,9 @@ pnpm --dir remix run test:files:mac-paged
 
 The runner needs local `mongod`, `mongosh` and an installed Apple Development
 signing identity (`THINGTIME_TEST_SIGNING_IDENTITY` can select it explicitly).
+It builds and checks the source-tree Rust `commander-indexer` before provisioning
+any test account or cloud folders; `THINGTIME_MAC_SYNC_INDEXER_BIN` may select an
+exact already-built fixture binary. A missing indexer fails at preflight.
 It signs a temporary test executable with the app-scope bookmark entitlement;
 it never installs or replaces Thingtime. Ports 28311/28312 are reserved only for
 this disposable HTTP server and Mongo replica. A macOS OS network sandbox
@@ -5934,6 +5937,21 @@ directories and verifies two byte transfers and complete 10,003-path checkpoints
 through reply loss and restart. Allow up to 20 minutes. Mac access 1.5.1 or iOS
 access 1.3.1 is required for the paged native path: earlier builds retain the
 10,000-path bound because their publication alias check used a whole listing.
+
+For a nested mixed-file workload, use `-- --wide --wide-mixed` with the same
+runner. It retains the 10,001 API-created sibling folders and adds six nested
+folders with 24 native files spanning empty, small, medium and multi-range
+sizes. The proof checks all 10,033 paths, exact local/cloud byte hashes, lost
+reply and native restart recovery, complete checkpoints, and zero transfer
+operations on an unchanged rerun. The result reports wall time by phase and
+native/HTTP operation counts. These are fixture measurements on an isolated
+local server and disk; they do not predict personal drive or remote-provider
+throughput. The standard wide runner has a 20-minute deadline and cleans up its test state.
+The full 10,033-path mixed run has a 35-minute deadline because API import of
+10,001 ordinary folders and the subsequent native/HTTP recovery are measured
+separately. Diagnostic `--wide-count` runs retain the 20-minute deadline.
+For a quicker diagnosis of the same path, add `--wide-count=1000`; the default
+remains 10,001 siblings and only the default proves the over-10,000 path case.
 
 
 ### Mac file-sync lifecycle checks

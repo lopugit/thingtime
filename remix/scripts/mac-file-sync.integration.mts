@@ -47,8 +47,13 @@ const symlinksOnly = process.argv.includes('--symlinks-only');
 const earlyFixture = process.argv.includes('--two-way-early');
 const pagedFixture = process.argv.includes('--paged');
 const wideFixture = process.argv.includes('--wide');
-const wideFolders = wideFixture ? 10001 : 0;
+const wideMixedFixture = process.argv.includes('--wide-mixed');
+const wideCountArg = process.argv.find(arg => arg.startsWith('--wide-count='));
+const wideFolders = wideFixture ? Number(wideCountArg?.slice(13) || 10001) : 0;
+const benchmarkDeviceLimits = wideMixedFixture ? { transferBytesPerSecond: 5_000_000, scanBytesPerSecond: 5_000_000, cpuPercent: 15 } : null;
 assert.ok(!wideFixture || pagedFixture, 'Wide acceptance requires the paged runner');
+assert.ok(!wideMixedFixture || wideFixture, 'Mixed large-folder acceptance requires the wide paged runner');
+assert.ok(!wideCountArg || (wideFixture && Number.isSafeInteger(wideFolders) && wideFolders > 0 && wideFolders <= 10001), 'Diagnostic wide count must be between 1 and 10,001');
 assert.ok(!pagedFixture || !photoFixture, 'Photos retain their separate bounded acceptance');
 const forcePreflightCooldown = process.argv.includes('--cooldown-before-upload');
 assert.ok(fixturePath);
@@ -66,6 +71,11 @@ let nativeExit: Promise<void> | undefined,
 	verifyCalls = 0,
 	lastVerifyCalls = 0;
 const counts = { puts: 0, publishes: 0, reads: 0, streams: 0, streamedBytes: 0, stageRanges: 0, stagedBytes: 0 };
+const httpRequests: Record<string, number> = {};
+const httpLatency: Record<string, { count: number; totalMs: number; maxMs: number }> = {};
+const nativeLatency: Record<string, { count: number; totalMs: number; maxMs: number }> = {};
+const slowEvents: Record<string, number> = {};
+let transferRunStartedAt = 0, firstTransferMs: number | null = null;
 let cooldownCount = 0,
 	cooldownSeconds = 0,
 	priorCooldownCount = 0,
@@ -76,14 +86,26 @@ let loseCloud = false,
 const sessionFetch: typeof fetch = async (url, init = {}) => {
 	const target = new URL(String(url), base),
 		headers = new Headers(init.headers);
+	const requestClass = (init.method || 'GET') + ' ' + target.pathname;
+	httpRequests[requestClass] = (httpRequests[requestClass] || 0) + 1;
+	if (transferRunStartedAt && firstTransferMs === null && init.method === 'PUT') firstTransferMs = Date.now() - transferRunStartedAt;
 	if (target.origin === base.origin && init.credentials !== 'omit') {
 		headers.set('Cookie', [...cookies].map(([k, v]) => k + '=' + v).join('; '));
 		headers.set('Origin', base.origin);
 	}
 	if (init.method === 'PUT') counts.puts++;
 	let response: Response;
-	try { response = await fetch(target, { ...init, headers, redirect: 'error', signal: init.signal ?? AbortSignal.timeout(30000) }); }
+	const started = Date.now();
+	try { response = await fetch(target, { ...init, headers, redirect: 'error', signal: init.signal ?? AbortSignal.timeout(target.pathname === '/api/v1/things/import' ? 120000 : 30000) }); }
 	catch (cause) { throw Error(`Acceptance HTTP ${init.method ?? 'GET'} ${target.pathname} failed`, { cause }); }
+	finally {
+		const elapsed = Date.now() - started, metric = httpLatency[requestClass] ?? { count: 0, totalMs: 0, maxMs: 0 };
+		metric.count++; metric.totalMs += elapsed; metric.maxMs = Math.max(metric.maxMs, elapsed); httpLatency[requestClass] = metric;
+		if (wideMixedFixture && elapsed > 15_000 && (slowEvents[requestClass] || 0) < 3) {
+			slowEvents[requestClass] = (slowEvents[requestClass] || 0) + 1;
+			console.log('MAC_PAGED_STAGE slow-http-' + (init.method || 'GET').toLowerCase() + '-' + target.pathname.split('/').filter(Boolean).join('-') + '-' + Math.round(elapsed / 1000) + 's');
+		}
+	}
 	if (target.origin === base.origin && init.credentials !== 'omit')
 		for (const value of response.headers.getSetCookie()) {
 			const pair = value.split(';')[0],
@@ -271,7 +293,17 @@ try {
         if (input.action === 'read-range') { counts.streams++; counts.streamedBytes += input.length; }
 		if (input.action === 'publish') counts.publishes++;
         if (input.action === 'stage-range') { counts.stageRanges++; counts.stagedBytes += input.bytes.length; }
-		const payload = await send({ ...expected, deviceId, ...input });
+		const started = Date.now();
+		let payload: any;
+		try { payload = await send({ ...expected, deviceId, ...input, ...(benchmarkDeviceLimits ? { deviceResourceLimits: benchmarkDeviceLimits } : {}) }); }
+		finally {
+			const elapsed = Date.now() - started, metric = nativeLatency[input.action] ?? { count: 0, totalMs: 0, maxMs: 0 };
+			metric.count++; metric.totalMs += elapsed; metric.maxMs = Math.max(metric.maxMs, elapsed); nativeLatency[input.action] = metric;
+			if (wideMixedFixture && elapsed > 15_000 && (slowEvents['native ' + input.action] || 0) < 3) {
+				slowEvents['native ' + input.action] = (slowEvents['native ' + input.action] || 0) + 1;
+				console.log('MAC_PAGED_STAGE slow-native-' + input.action + '-' + Math.round(elapsed / 1000) + 's');
+			}
+		}
 		assert.equal(payload.deviceId, deviceId);
 		const result = parseMobileFolderResult({ type: 'mobile-files-result', payload }, expected, input);
 		assert.ok(result);
@@ -288,6 +320,10 @@ try {
 		return result;
 	};
 	const nativeRoot = (await request(fixture.userId, { action: 'choose' }, signal)).roots[0].id;
+	if (benchmarkDeviceLimits) {
+		const selected = (await request(fixture.userId, { action: 'resources' }, signal)).deviceResourceLimits;
+		assert.deepEqual(selected, benchmarkDeviceLimits, 'Synthetic device policy must match the benchmark limits');
+	}
 	remoteRoot = (await api('/api/v1/things', { thingtime: ['folder'], crystal: { name: deviceName } })).thing.id;
 	const row = (
 		await api('/api/v1/things', {
@@ -434,22 +470,50 @@ try {
 	};
 	const localBytes = new Uint8Array(process.argv.includes('--large-upload') ? 8 * 1024 * 1024 + 17 : 65_537).fill(17),
 		remoteBytes = new Uint8Array(process.argv.includes('--large-download') ? 2 * 1024 * 1024 + 17 : 65_539).fill(29);
+	const mixedFiles: Record<string, Uint8Array> = {}, mixedFolders: string[] = [];
+	const phaseMs: Record<string, number> = {};
+	const measure = async (name: string, action: () => Promise<unknown>) => {
+		const started = Date.now();
+		try { return await action(); }
+		finally { phaseMs[name] = Date.now() - started; }
+	};
 	await writeFile(path.join(directory, 'selected/local.bin'), localBytes);
 	await seed('remote.bin', remoteBytes);
 	if (wideFixture) {
+		const setupStarted = Date.now();
 		assert.equal(base.origin, 'http://127.0.0.1:28311');
 		console.log('MAC_PAGED_STAGE wide-folder-setup');
-		for (let offset = 0; offset < wideFolders; offset += 1000) {
-			const things = Array.from({ length: Math.min(1000, wideFolders - offset) }, (_, i) => ({
+		for (let offset = 0; offset < wideFolders; offset += 250) {
+			const things = Array.from({ length: Math.min(250, wideFolders - offset) }, (_, i) => ({
 				id: 'folder-' + (offset + i), thingtime: ['folder'], crystal: { name: 'wide-' + String(offset + i).padStart(5, '0') }
 			}));
 			const imported = await api('/api/v1/things/import', { folderId: remoteRoot,
 				manifest: { format: 'thingtime.transfer', version: 1, roots: things.map(t => t.id), things, files: [] } });
 			assert.equal(imported.imported, things.length);
+			if ((offset + things.length) % 1000 === 0 || offset + things.length === wideFolders)
+				console.log('MAC_PAGED_STAGE wide-imported-' + (offset + things.length));
 		}
 		for (let offset = 0; offset < wideFolders; offset += 128)
 			await Promise.all(Array.from({ length: Math.min(128, wideFolders - offset) }, (_, i) =>
 				mkdir(path.join(directory, 'selected', 'wide-' + String(offset + i).padStart(5, '0')))));
+		if (wideMixedFixture) {
+			// Keep the 10,001 API-provisioned siblings, then exercise real nested
+			// upload work including empty, small, medium and multi-range files.
+			for (let folder = 0; folder < 6; folder++) {
+				const parent = 'wide-' + String(Math.floor(folder * wideFolders / 6)).padStart(5, '0');
+				const nested = parent + '/nested';
+				mixedFolders.push(nested);
+				await mkdir(path.join(directory, 'selected', nested));
+				for (let index = 0; index < 4; index++) {
+					const name = nested + '/file-' + index + '.bin';
+					const size = [0, 257, 65_537, 2 * 1024 * 1024 + 17][index];
+					const bytes = new Uint8Array(size).fill(31 + folder * 4 + index);
+					mixedFiles[name] = bytes;
+					await writeFile(path.join(directory, 'selected', name), bytes);
+				}
+			}
+		}
+		phaseMs.setup = Date.now() - setupStarted;
 		console.log('MAC_PAGED_STAGE wide-folders-ready');
 	}
 	primeCooldown = forcePreflightCooldown;
@@ -703,18 +767,19 @@ try {
 		await run(); await exerciseSymbolicLinks();
 		console.log(JSON.stringify({ok:true, scenario:'Mac symlink round trip',nativeCalls,verifyCalls,nativePages,cloudPages,counts,checks:['regular-link-regular-kind-transitions','raw-target-bytes-no-follow','dangling-and-non-utf8-links','link-metadata-attachment-integrity','link-timeline-restore-after-restart','stable-convergence'],picker:'fixture',keychain:'not-used'}));
 	} else {
+	transferRunStartedAt = Date.now();
 	loseCloud = true;
 	losePublication = true;
-	await assert.rejects(run(), /Lost accepted cloud commit/);
+	await assert.rejects(measure('lostCloud', run), /Lost accepted cloud commit/);
 	const original = await readRun(),
 		originalIds = original.operations.map((op) => op.id);
 	const afterCloud = counts.puts;
     loseStage = true;
-    await assert.rejects(run(), /Lost accepted native stage/);
+	await assert.rejects(measure('lostStage', run), /Lost accepted native stage/);
     const firstStagedBytes = counts.stagedBytes;
     assert.equal(firstStagedBytes, Math.min(2 * 1024 * 1024, remoteBytes.length));
     await stopNative(); journal.close(); journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange); await startNative();
-	await assert.rejects(run(), /Lost accepted native publication/);
+	await assert.rejects(measure('lostPublication', run), /Lost accepted native publication/);
     assert.equal(counts.stagedBytes, remoteBytes.length, 'Restart must resume after the accepted range without replay');
 	assert.equal(counts.puts, afterCloud);
 	await stopNative();
@@ -722,20 +787,24 @@ try {
 	journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange);
 	await startNative();
 	const beforeRecovery = { ...counts };
-	await run();
-	assert.equal(counts.puts, beforeRecovery.puts);
+	await measure('recovery', run);
+	if (wideMixedFixture) assert.equal(counts.puts - beforeRecovery.puts,
+		Object.values(mixedFiles).filter(bytes => bytes.length > 0).length,
+		'Recovery uploads each remaining nonempty nested file once without replaying acknowledged bytes');
+	else assert.equal(counts.puts, beforeRecovery.puts);
 	assert.equal(counts.publishes, beforeRecovery.publishes);
 	await assertCompletedRun(original.id, originalIds);
 	const verifyBytes = async (expected: Record<string, Uint8Array>) => {
 		const inv = await inventory();
-		assert.equal(inv.nodes.length, Object.keys(expected).length + wideFolders);
+		assert.equal(inv.nodes.length, Object.keys(expected).length + wideFolders + mixedFolders.length);
 		const folders = inv.nodes.filter(n => n.kind === 'folder');
-		assert.equal(folders.length, wideFolders);
-		if (wideFixture) assert.deepEqual(folders.map(n => n.path).sort(), Array.from({ length: wideFolders }, (_, i) => 'wide-' + String(i).padStart(5, '0')));
+		assert.equal(folders.length, wideFolders + mixedFolders.length);
+		if (wideFixture) assert.deepEqual(folders.map(n => n.path).sort(), [...Array.from({ length: wideFolders }, (_, i) => 'wide-' + String(i).padStart(5, '0')), ...mixedFolders].sort());
 		for (const node of inv.nodes) {
 			if (node.kind !== 'file') continue;
+			assert.ok(Object.hasOwn(expected, node.path), 'Unexpected file ' + node.path);
 			const response = await sessionFetch(new URL('/api/v1/attachments/content?id=' + node.file.content.attachmentId + '&cache=bytes', base));
-			assert.equal(response.status, 200);
+			assert.equal(response.status, 200, 'Cloud content for synthetic path ' + node.path);
 			assert.equal(hash(new Uint8Array(await response.arrayBuffer())), hash(expected[node.path]));
 			assert.equal(hash(await readFile(path.join(directory, 'selected', node.path))), hash(expected[node.path]));
 		}
@@ -746,15 +815,23 @@ try {
 		}));
 	};
 	assert.ok(counts.streams > 0 && counts.streamedBytes >= localBytes.length);
-	const first = await verifyBytes({ 'local.bin': localBytes, 'remote.bin': remoteBytes });
-	await run();
-	assert.deepEqual(await verifyBytes({ 'local.bin': localBytes, 'remote.bin': remoteBytes }), first);
+	const expectedFiles = { 'local.bin': localBytes, 'remote.bin': remoteBytes, ...mixedFiles };
+	const first = await measure('verify', () => verifyBytes(expectedFiles));
+	const beforeUnchanged = { puts: counts.puts, publishes: counts.publishes, reads: counts.reads, streams: counts.streams, stageRanges: counts.stageRanges };
+	await measure('unchanged', run);
+	assert.deepEqual({ puts: counts.puts, publishes: counts.publishes, reads: counts.reads, streams: counts.streams, stageRanges: counts.stageRanges }, beforeUnchanged);
+	assert.deepEqual(await verifyBytes(expectedFiles), first);
 	if (wideFixture) {
 		const head = (await journal.pagedCheckpoints(journalAccess).current())!; assert.ok(head);
 		for (const id of [head.baseline.local, head.baseline.remote])
-			assert.equal((await journal.inventory(journalAccess).read(id)).totalEntries, wideFolders + 2);
-		assert.ok(nativePages >= 4 * 79 && cloudPages >= 4 * 79);
-		console.log(JSON.stringify({ ok: true, paged: true, wideFolders, totalPaths: wideFolders + 2, nativePages, cloudPages,
+			assert.equal((await journal.inventory(journalAccess).read(id)).totalEntries, wideFolders + mixedFolders.length + Object.keys(expectedFiles).length);
+		const minimumPages = Math.ceil((wideFolders + mixedFolders.length + Object.keys(expectedFiles).length) / 128);
+		assert.ok(nativePages >= minimumPages && cloudPages >= minimumPages,
+			`Each source must expose a complete paged capture: native=${nativePages}, cloud=${cloudPages}, minimum=${minimumPages}`);
+		const usage = process.resourceUsage();
+		const initialLocalBytes = localBytes.length + Object.values(mixedFiles).reduce((sum, bytes) => sum + bytes.length, 0);
+		assert.ok((await stat(path.join(directory, 'private-filesystem-index.sqlite3'))).isFile(), 'Rust inventory must use the disposable fixture database');
+		console.log(JSON.stringify({ ok: true, paged: true, wideFolders, nestedFolders: mixedFolders.length, mixedFiles: Object.keys(mixedFiles).length, totalPaths: wideFolders + mixedFolders.length + Object.keys(expectedFiles).length, initialLocalBytes, finalFileBytes: initialLocalBytes + remoteBytes.length, actualHashedBytes: null, warmHashedBytes: null, benchmarkDeviceLimits, effectiveRustScanBytesPerSecond: benchmarkDeviceLimits ? benchmarkDeviceLimits.scanBytesPerSecond / 2 : null, privateIndexDatabase: true, firstTransferMs, phaseMs, httpRequests, httpLatency, nativeLatency, integrationProcessOnly: { maxRssKiB: usage.maxRSS, userCpuMs: Math.round(usage.userCPUTime / 1000), systemCpuMs: Math.round(usage.systemCPUTime / 1000) }, nativePages, cloudPages,
 			nativeCalls, verifyCalls, cooldownCount, cooldownSeconds, counts, picker: 'fixture', keychain: 'not-used',
 			checks: ['wide-native-and-cloud-pages', 'complete-checkpoint', 'real-upload-download-byte-hashes', 'lost-accepted-replies',
 				'native-restart', 'original-operation-IDs', 'no-replayed-transfers', 'stable-convergence'],
