@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 import { CONNECTION_ICON_PATH } from '../../app/connections/providerIcons';
+import { CREDENTIAL_IMPORT_API_PATH, CREDENTIAL_IMPORT_HEADERS } from '../../app/credentials/importContract';
 import { apiEndpointDocs } from '../../app/docs/apiDocs';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
 import { gatewayAuthority, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
@@ -28,7 +29,13 @@ export const isGatewayDataPath = (pathname: string) => pathname !== CONNECTION_I
   apiEndpointDocs.some(doc => doc.endpoint === pathname && pathname !== THINGTIME_CAPABILITY_MANIFEST_PATH)
 );
 
-const digestHeaders = (headers: Headers) => createHash('sha256').update(JSON.stringify(BOUND_HEADERS.map(name => [name, headers.get(name)]))).digest('hex');
+const digestHeaders = (headers: Headers, pathname: string) => {
+  // Keep compatibility with older gateways for all existing route families.
+  const names = pathname.startsWith(`${CREDENTIAL_IMPORT_API_PATH}/`)
+    ? [...BOUND_HEADERS, CREDENTIAL_IMPORT_HEADERS.request, CREDENTIAL_IMPORT_HEADERS.verifier, CREDENTIAL_IMPORT_HEADERS.target]
+    : BOUND_HEADERS;
+  return createHash('sha256').update(JSON.stringify(names.map(name => [name, headers.get(name)]))).digest('hex');
+};
 const sign = (payload: string, settings: GatewaySettings) => createHmac('sha256', settings.secret).update(payload).digest('base64url');
 const equal = (a: string, b: string) => {
   const left = Buffer.from(a); const right = Buffer.from(b);
@@ -61,7 +68,7 @@ export const restoreGatewayRequest = (request: Request, settings: GatewaySetting
     const url = new URL(request.url);
     if (relay.version !== 1 || relay.hop !== 1 || relay.environment !== settings.environment || relay.target !== settings.origin ||
       relay.method !== request.method || relay.path !== url.pathname + url.search || !Number.isFinite(relay.at) ||
-      Math.abs(now - relay.at) > MAX_RELAY_AGE_MS || relay.headers !== digestHeaders(request.headers)) return null;
+      Math.abs(now - relay.at) > MAX_RELAY_AGE_MS || relay.headers !== digestHeaders(request.headers, url.pathname)) return null;
     const origin = gatewayOrigin(relay.origin);
     const original = new URL(origin); original.pathname = url.pathname; original.search = url.search;
     const headers = cleanHeaders(request.headers);
@@ -111,7 +118,7 @@ export const proxyEnvironmentRequest = async (request: Request, authority: NonNu
   }
   const headers = cleanHeaders(request.headers);
   const payload = Buffer.from(JSON.stringify({ version: 1, hop: 1, environment: settings.environment, target: settings.origin,
-    origin: url.origin, path: url.pathname + url.search, method: request.method, at: Date.now(), headers: digestHeaders(headers) })).toString('base64url');
+    origin: url.origin, path: url.pathname + url.search, method: request.method, at: Date.now(), headers: digestHeaders(headers, url.pathname) })).toString('base64url');
   headers.set(GATEWAY_RELAY_HEADER, payload);
   headers.set(SIGNATURE_HEADER, sign(payload, settings));
   const init: RequestInit & { duplex?: 'half' } = { method: request.method, headers, redirect: 'manual', signal: request.signal, cache: 'no-store' };

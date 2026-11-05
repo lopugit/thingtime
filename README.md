@@ -6859,3 +6859,23 @@ link while preserving its ID; shared legacy tokens are refused until reconnect.
 Secret rotation keeps compatible grants; changing client, callback or environment
 requires a fresh connection. Disconnect and token refresh serialize through the
 home-plane transactional account path. No provider request API is added here.
+
+### Agent provider-credential import and authentication
+
+Admin → External integrations supports selected credential files and masked
+paste; `npm --prefix remix run credentials:import -- --help` documents the
+write-only Node handoff. Both require the exact receiving origin to advertise
+`api.credentials-import` 1.0.0 (compatible 1.x). Read
+[the end-to-end agent runbook](docs/agent-credential-workflows.md) for Google
+Web application JSON, generic provider text/JSON, safe approvals, password
+AutoFill, OAuth grants, passkeys and platform-specific constraints.
+
+Fork setup uses the existing home Mongo replica set, administrator account,
+`THINGTIME_ADMIN_VAULT_KEY` bootstrap (32 random bytes encoded base64url), and
+explicit `THINGTIME_DATA_ENV`/data authority selection. Keep that irreducible
+vault-unlock key in the deployment's approved bootstrap store. Provider keys
+remain in the encrypted vault, not new Vercel environment variables. Register
+the fork's exact Connections callback with Google, download its web-client
+JSON through the provider, then import the selected file; never commit it.
+The importer does not infer arbitrary provider schemas, configure Google Mail's
+separate bundle, or bootstrap a signed-out native password bridge.

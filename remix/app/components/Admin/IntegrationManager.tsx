@@ -1,5 +1,6 @@
 import { SettingsSection } from '~/components/Settings/SettingsSection';
 import React from 'react';
+import { CredentialImport, useCredentialAuthority } from '~/components/CredentialImport/CredentialImport';
 import { VaultReveal } from '~/components/Settings/VaultReveal';
 import { Box, Button, Checkbox, Flex, Input, Select, Spinner, Text } from '@chakra-ui/react';
 
@@ -7,7 +8,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { CARD_STYLES } from '~/theme/card';
 
-type SecretRow = { id: string; label: string; createdAt: string };
+type SecretRow = { id: string; label: string; createdAt: string; updatedAt: string };
 type EndpointRow = {
 	id: string;
 	label: string;
@@ -59,15 +60,21 @@ const emptyEndpoint = (): Omit<EndpointRow, 'id'> => ({
 
 // Values are intentionally held in this one local input only until the
 // write-only create request resolves. They are never loaded from API state.
-export const IntegrationManager = ({ secretsOnly = false }: { secretsOnly?: boolean }) => {
+export const IntegrationManager = (props: { secretsOnly?: boolean }) => {
+	const authority = useCredentialAuthority();
+	return authority.authorized ? <IntegrationManagerScope key={authority.key} {...props} /> : null;
+};
+
+const IntegrationManagerScope = ({ secretsOnly = false }: { secretsOnly?: boolean }) => {
 	const api = useApi();
 	const lopu = useLopu();
 	const [vaultConfigured, setVaultConfigured] = React.useState<boolean | null>(null);
+	const [refreshing, setRefreshing] = React.useState(true);
+	const [metadataError, setMetadataError] = React.useState(false);
+	const metadataRequest = React.useRef<AbortController | null>(null);
 	const [secrets, setSecrets] = React.useState<SecretRow[]>([]);
 	const [endpoints, setEndpoints] = React.useState<EndpointRow[]>([]);
 	const [audit, setAudit] = React.useState<AuditRow[]>([]);
-	const [secretLabel, setSecretLabel] = React.useState('');
-	const [secretValue, setSecretValue] = React.useState('');
 	const [draft, setDraft] = React.useState<Omit<EndpointRow, 'id'>>(emptyEndpoint);
 	const [editingId, setEditingId] = React.useState<string | null>(null);
 	const [vercelEnvironment, setVercelEnvironment] = React.useState<VercelEnvironmentDraft>({
@@ -83,20 +90,40 @@ export const IntegrationManager = ({ secretsOnly = false }: { secretsOnly?: bool
 	apiRef.current = api;
 
 	const refresh = React.useCallback(async () => {
+		metadataRequest.current?.abort();
+		const controller = new AbortController();
+		metadataRequest.current = controller;
+		setRefreshing(true);
+		setMetadataError(false);
 		try {
-			const response: any = await apiRef.current.v1.admin.integrations();
-			if (!response?.ok) return;
-			setVaultConfigured(response.vaultConfigured === true);
-			setSecrets(response.secrets || []);
-			setEndpoints(response.endpoints || []);
-			setAudit(response.audit || []);
+			const response = await fetch('/api/v1/admin/integrations', {
+				headers: { Accept: 'application/json' }, credentials: 'same-origin', cache: 'no-store',
+				redirect: 'error', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)])
+			});
+			if ([401, 403].includes(response.status) && !controller.signal.aborted) {
+				setVaultConfigured(null);
+				setSecrets([]);
+				setEndpoints([]);
+				setAudit([]);
+			}
+			if (!response.ok) throw new Error('Vault metadata request failed.');
+			const metadata = await response.json();
+			controller.signal.throwIfAborted();
+			if (metadata?.ok !== true) throw new Error('Vault metadata request failed.');
+			setVaultConfigured(metadata.vaultConfigured === true);
+			setSecrets(metadata.secrets || []);
+			setEndpoints(metadata.endpoints || []);
+			setAudit(metadata.audit || []);
 		} catch {
-			// Preserve the last known safe metadata if the admin request fails.
+			if (!controller.signal.aborted) setMetadataError(true);
+		} finally {
+			if (!controller.signal.aborted) setRefreshing(false);
 		}
 	}, []);
 
 	React.useEffect(() => {
-		refresh();
+		void refresh();
+		return () => metadataRequest.current?.abort();
 	}, [refresh]);
 
 	const action = async (key: string, payload: Record<string, unknown>, success: string) => {
@@ -112,14 +139,6 @@ export const IntegrationManager = ({ secretsOnly = false }: { secretsOnly?: bool
 			return null;
 		} finally {
 			setBusy(null);
-		}
-	};
-
-	const createSecret = async () => {
-		const response = await action('secret', { action: 'create-secret', label: secretLabel, value: secretValue }, 'Encrypted secret saved ✨');
-		if (response) {
-			setSecretLabel('');
-			setSecretValue('');
 		}
 	};
 
@@ -179,7 +198,7 @@ export const IntegrationManager = ({ secretsOnly = false }: { secretsOnly?: bool
 			<SettingsSection
 				eyebrow="Integration vault"
 				description="Encrypted credentials and policy-controlled access to external services."
-				summary={vaultConfigured === null ? 'Checking configuration' : vaultConfigured ? 'Vault ready' : 'Vault not configured'}
+				summary={vaultConfigured === null ? undefined : vaultConfigured ? 'Vault ready' : 'Vault not configured'}
 			>
 				<Text sx={eyebrow}>{secretsOnly ? 'Other platform secrets' : 'External integrations'}</Text>
 				<Text fontSize="xs" color="var(--tt-text, #5a5a66)" lineHeight="tall">
@@ -204,41 +223,19 @@ export const IntegrationManager = ({ secretsOnly = false }: { secretsOnly?: bool
 						</Text>
 					</Box>
 				) : null}
-				{vaultConfigured === null ? (
-					<Flex justifyContent="center">
-						<Spinner size="sm" />
-					</Flex>
-				) : null}
+				{refreshing && vaultConfigured === null ? <Spinner size="xs" role="status" aria-label="Loading vault metadata" /> : null}
+				{metadataError ? <Flex alignItems="center" gap={2} flexWrap="wrap">
+					<Text fontSize="xs" role="alert">Vault metadata could not be refreshed.</Text>
+					<Button size="xs" onClick={() => void refresh()}>Retry</Button>
+				</Flex> : null}
 			</SettingsSection>
 
 			<SettingsSection
 				eyebrow="Encrypted secrets"
 				description="Store and rotate platform integration secrets. Revealing a value requires verification."
-				summary={vaultConfigured !== null ? `${secrets.length} secrets` : 'Metadata not yet loaded'}
+				summary={vaultConfigured !== null ? `${secrets.length} secrets` : undefined}
 			>
-				<Flex columnGap={2} rowGap={2} flexWrap="wrap">
-					<Input
-						size="sm"
-						flex="1 1 160px"
-						value={secretLabel}
-						onChange={(event) => setSecretLabel(event.target.value)}
-						placeholder="Label, e.g. Vercel token"
-						aria-label="Secret label"
-					/>
-					<Input
-						size="sm"
-						flex="1 1 180px"
-						type="password"
-						value={secretValue}
-						onChange={(event) => setSecretValue(event.target.value)}
-						placeholder="Secret value (encrypted)"
-						aria-label="Secret value"
-						autoComplete="off"
-					/>
-					<Button size="sm" isLoading={busy === 'secret'} isDisabled={!vaultConfigured || !secretLabel || !secretValue} onClick={createSecret}>
-						Save secret
-					</Button>
-				</Flex>
+				{vaultConfigured !== null ? <CredentialImport vaultConfigured={vaultConfigured} onImported={refresh} /> : null}
 				<Flex flexDirection="column" rowGap={1}>
 					{secrets.length ? (
 						secrets.map((secret) => (
@@ -269,11 +266,11 @@ export const IntegrationManager = ({ secretsOnly = false }: { secretsOnly?: bool
 								<VaultReveal vault="admin" id={secret.id} label={secret.label} />
 							</Flex>
 						))
-					) : (
+					) : vaultConfigured !== null ? (
 						<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
 							No credentials stored yet.
 						</Text>
-					)}
+					) : null}
 				</Flex>
 			</SettingsSection>
 

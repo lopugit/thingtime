@@ -1,4 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { BSON, ObjectId, type ClientSession } from 'mongodb';
+
+import type { CredentialImportReceipt, CredentialImportTarget, CredentialImportVaultMetadata } from '../../../credentials/importContract';
+import { CREDENTIAL_IMPORT_BSON_LIMIT, CredentialImportError, mergeGoogleCredentialImport, parseImportLabel, type PreparedImport } from '../credentials/importCore';
 
 import {
 	ADMIN_INTEGRATION_MAX_REQUEST_BYTES,
@@ -284,6 +288,69 @@ export const createAdminSecret = async (input: { label?: unknown; value?: unknow
 	};
 	await (await getAdminIntegrationSecretsCollection()).insertOne(record);
 	return publicSecret(record);
+};
+
+/** Exact metadata lookup for an already authorized import destination. */
+export const inspectAdminCredentialImport = async (input: unknown): Promise<CredentialImportVaultMetadata | null> => {
+	const label = parseImportLabel(input);
+	if (!label) throw new CredentialImportError('invalid_target');
+	const matches = await (await getAdminIntegrationSecretsCollection())
+		.find({ label }, { projection: { _id: 0, id: 1, label: 1, updatedAt: 1 } }).limit(2).toArray();
+	if (matches.length > 1) throw new CredentialImportError('conflict');
+	const record = matches[0];
+	return record ? { id: record.id, label: record.label, updatedAt: new Date(record.updatedAt).toISOString() } : null;
+};
+
+/** Store in the canonical provider vault using its existing unique label and encryption envelope. */
+export const writeAdminCredentialImport = async (
+	target: CredentialImportTarget,
+	origin: string,
+	actorId: string,
+	prepared: PreparedImport,
+	session: ClientSession,
+	assertCurrentApproval: () => Promise<void>
+): Promise<CredentialImportReceipt> => {
+	if (!vaultConfigured()) throw new CredentialImportError('unavailable');
+	const collection = await getAdminIntegrationSecretsCollection();
+	const matches = await collection.find({ label: target.label }, { session }).limit(2).toArray();
+	const previous = matches[0] as (StoredAdminSecret & { _id: ObjectId }) | undefined;
+	const overwrite = target.overwrite;
+	if (matches.length > 1 || (overwrite.mode === 'create' && previous)
+		|| (overwrite.mode === 'replace' && (!previous || previous.id !== overwrite.expectedId
+			|| new Date(previous.updatedAt).toISOString() !== overwrite.expectedUpdatedAt))) {
+		throw new CredentialImportError('conflict');
+	}
+	const id = previous?.id ?? opaqueId('secret');
+	const value = prepared.type === 'literal' ? prepared.value
+		: mergeGoogleCredentialImport(previous ? decryptSecret(previous) : null, target.environment, origin, prepared.client);
+	const updatedAt = new Date(Math.max(Date.now(), previous ? new Date(previous.updatedAt).getTime() + 1 : 0));
+	const record = {
+		...(previous ?? {}),
+		_id: previous?._id ?? new ObjectId(),
+		id,
+		label: target.label,
+		...encryptSecret(id, value),
+		createdAt: previous?.createdAt ?? updatedAt,
+		updatedAt,
+		createdBy: previous?.createdBy ?? actorId,
+		schemaVersion: ADMIN_INTEGRATION_SCHEMA_VERSION
+	};
+	// MongoDB's single-document wire limit includes the full AES/base64 envelope.
+	if (BSON.calculateObjectSize(record) > CREDENTIAL_IMPORT_BSON_LIMIT) throw new CredentialImportError('too_large');
+	await assertCurrentApproval();
+	try {
+		if (previous) {
+			const { _id, cipherText, iv, tag } = record;
+			const result = await collection.updateOne({ _id, id, label: target.label, updatedAt: previous.updatedAt }, { $set: { cipherText, iv, tag, updatedAt } }, { session });
+			if (!result.matchedCount) throw new CredentialImportError('conflict');
+		} else {
+			await collection.insertOne(record, { session });
+		}
+	} catch (error) {
+		if (error && typeof error === 'object' && 'code' in error && error.code === 11000) throw new CredentialImportError('conflict');
+		throw error;
+	}
+	return { credentialId: id, label: target.label, environment: target.environment, format: target.format, updatedAt: updatedAt.toISOString() };
 };
 
 export const deleteAdminSecret = async (id: unknown) => {

@@ -110,6 +110,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-04: Add Google web OAuth and generic provider file imports, a one-use approved agent handoff with status-only receipts, an editable import/approval UI, and cross-platform Node delivery. Document agent password, OAuth and passkey workflows with distinct live acceptance gates. [PR #1341 notes](../PRs/1341-credential-handoff-approved-provider-imports.md). **Codex (AI)**
 ### 2026-11-05
 - Add account-scoped connector confirmation controls in Settings → Connections,
   staged large mutation plans, paged signed review and single-use receipts.

@@ -492,8 +492,8 @@ test('Characters negotiate management and acting identities on both manifests', 
   const origin = 'https://characters.example.test';
   const manifest = thingtimeCapabilityManifest(origin);
   assert.equal(manifest.origin, origin);
-  assert.equal(manifest.features['api.auth-characters'].version, '1.0.0');
-  assert.equal(createApiCapabilitiesManifest().features['api.auth-characters'], '1.0.0');
+  assert.equal(manifest.features['api.auth-characters'].version, '1.1.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.auth-characters'], '1.1.0');
   assert(apiV1RouteKeys.includes('v1/auth/characters'));
   for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert(capabilitySatisfies(version, '1.0.0'));
   for (const version of ['', '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
@@ -611,4 +611,21 @@ test('preview retention stored-policy failures publish a compatible correction i
   assert.equal(manifest.features['api.integration-ci-preview-retention'].version, '1.0.0');
   assert.equal(capabilitySatisfies('1.0.1', '1.0.0'), true);
   assert.equal(capabilitySatisfies('2.0.0', '1.0.0'), false);
+});
+
+test('both manifests publish credential import and each transport and approval operation', () => {
+  const origin = 'https://credentials.test';
+  const source = createApiCapabilitiesManifest(apiV1RouteKeys);
+  const runtime = thingtimeCapabilityManifest(origin);
+  assert.equal(runtime.origin, origin);
+  assert.equal(source.features['api.credentials-import'], '1.0.0');
+  assert.equal(runtime.features['api.credentials-import'].version, '1.0.0');
+  for (const action of ['start', 'status', 'upload', 'inspect', 'approve', 'revoke', 'direct']) {
+    const path = `/api/v1/credentials/import/${action}`;
+    assert.equal(source.features[`route.v1.credentials.import.${action}`], '1.0.0');
+    assert.equal(runtime.features[`api.credentials-import-${action}`].version, '1.0.0');
+    assert.ok(runtime.operations.some(operation => operation.path === path && operation.methods.includes('POST')));
+  }
+  for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), true);
+  for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
 });
