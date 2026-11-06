@@ -14516,6 +14516,16 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ## Shared Rust filesystem index and sync — 2026-11-04
 
+- Scan pacing regression (2026-11-06): run
+  `cargo test --locked --manifest-path filesystem-indexer/Cargo.toml -p commander-indexer`.
+  Fake-clock checks must show hashing/metadata work and sleep overshoot count
+  toward the next chunk, concurrent reservations share one schedule, idle credit
+  never exceeds 100 ms of aggregate bytes, and cancellation interrupts waiting.
+  Compare identical disposable mixed-file trees with fresh observation databases
+  and the same release binary/policy; separate scan, seal and verification time.
+  Warm captures must read zero unchanged content bytes. Preserve the selected
+  scan/transfer rate and CPU target; no saved policy change is part of this fix.
+
 - iOS embedded inventory regression (2026-11-06): run the real simulator
   `ThingtimeTests/MobileFolderInventoryTests` and the full native suite. Assert
   capabilities report `strictCoverage: false` and every strict entry point

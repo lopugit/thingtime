@@ -28,6 +28,28 @@ const MEMORY_CHECK_STRIDE: usize = 16_384;
 const CPU_WINDOW_MINIMUM: Duration = Duration::from_millis(40);
 const CPU_WINDOW_RESET: Duration = Duration::from_millis(250);
 const MAX_THROTTLE_SLEEP: Duration = Duration::from_millis(250);
+// Idle time may fund at most 100 ms of aggregate scan bytes, shared by all
+// workers. Useful work and timer oversleep count toward the next reservation.
+const SCAN_BURST_WINDOW: Duration = Duration::from_millis(100);
+
+fn scan_deadline(previous: Instant, now: Instant, bytes: usize, rate: f64) -> Instant {
+    let earliest = now.checked_sub(SCAN_BURST_WINDOW).unwrap_or(now);
+    previous.max(earliest) + Duration::from_secs_f64(bytes as f64 / rate)
+}
+
+fn wait_for_scan(
+    deadline: Instant,
+    cancelled: &AtomicBool,
+    now: impl Fn() -> Instant,
+    sleep: impl Fn(Duration),
+) -> bool {
+    loop {
+        if cancelled.load(Ordering::Relaxed) { return false; }
+        let remaining = deadline.saturating_duration_since(now());
+        if remaining.is_zero() { return true; }
+        sleep(remaining.min(Duration::from_millis(25)));
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -170,12 +192,14 @@ impl ResourceGovernor {
             let mut gate = self.scan_budget.lock().unwrap();
             let Some(rate) = gate.0 else { return Ok(()); };
             let part = remaining.min((rate / 10.0).max(1.0) as usize);
-            let deadline = gate.1.max(Instant::now()) + Duration::from_secs_f64(part as f64 / rate);
+            // Reserve under the shared lock before sleeping. Keeping the previous
+            // deadline (rather than restarting at now) credits hashing, metadata
+            // work and scheduling delays without granting unbounded idle credit.
+            let deadline = scan_deadline(gate.1, Instant::now(), part, rate);
             gate.1 = deadline;
             drop(gate);
-            while Instant::now() < deadline {
-                if cancelled.load(Ordering::Relaxed) { return Err(self.failure_error()); }
-                std::thread::sleep(deadline.saturating_duration_since(Instant::now()).min(Duration::from_millis(25)));
+            if !wait_for_scan(deadline, cancelled, Instant::now, std::thread::sleep) {
+                return Err(self.failure_error());
             }
             remaining -= part;
         }
@@ -581,10 +605,87 @@ mod tests {
 mod sync_scan_budget_tests {
     use super::*;
     #[test]
+    fn useful_work_and_oversleep_pay_for_the_next_scan_chunk() {
+        let start = Instant::now();
+        let first = scan_deadline(start, start, 100, 1000.0);
+        assert_eq!(first.duration_since(start), Duration::from_millis(100));
+        // Hashing/metadata took 40 ms after the first reservation completed.
+        let second_now = first + Duration::from_millis(40);
+        let second = scan_deadline(first, second_now, 100, 1000.0);
+        assert_eq!(second.duration_since(second_now), Duration::from_millis(60));
+        // Slow work or an oversleep larger than a chunk needs no further wait.
+        let slow_now = second + Duration::from_millis(150);
+        assert!(scan_deadline(second, slow_now, 100, 1000.0) <= slow_now);
+    }
+
+    #[test]
+    fn concurrent_reservations_share_one_rate_and_bounded_idle_credit() {
+        let start = Instant::now();
+        let now = start + Duration::from_secs(60);
+        let mut deadline = start;
+        // Simultaneous callers serialize their reservations under scan_budget.
+        // A minute idle grants only 100 bytes at 1000 B/s, never a minute's bytes.
+        for caller in 1..=20 {
+            deadline = scan_deadline(deadline, now, 10, 1000.0);
+            let allowed = Duration::from_millis((caller * 10) as u64);
+            assert_eq!(deadline, now - SCAN_BURST_WINDOW + allowed);
+        }
+        assert_eq!(deadline.duration_since(now), SCAN_BURST_WINDOW);
+        // Changing rate cannot discard already-reserved concurrent work.
+        assert_eq!(scan_deadline(deadline, now, 20, 2000.0),
+            deadline + Duration::from_millis(10));
+    }
+
+    #[test]
+    fn tiny_reads_with_processing_obey_the_aggregate_byte_envelope() {
+        let start = Instant::now();
+        let mut now = start + Duration::from_secs(60);
+        let measurement_start = now;
+        let mut deadline = start;
+        for reads in 1..=1000_u128 {
+            deadline = scan_deadline(deadline, now, 4, 1000.0);
+            now = now.max(deadline); // fake sleep until this reservation is due
+            let elapsed = now.duration_since(measurement_start).as_nanos();
+            let budget_time = elapsed + SCAN_BURST_WINDOW.as_nanos();
+            assert!(reads * 4 * 1_000_000_000 <= 1000 * budget_time);
+            // Alternate fast and slower metadata/hash work. Unlike the old
+            // schedule, this elapsed work pays down the next reservation.
+            now += Duration::from_micros(if reads % 7 == 0 { 9000 } else { 1000 });
+        }
+    }
+
+    #[test]
+    fn fake_clock_wait_counts_oversleep_and_checks_cancellation() {
+        use std::cell::Cell;
+        let start = Instant::now();
+        let clock = Cell::new(start);
+        let cancelled = AtomicBool::new(false);
+        let sleeps = Cell::new(0);
+        assert!(wait_for_scan(start + Duration::from_millis(10), &cancelled,
+            || clock.get(), |delay| {
+                assert_eq!(delay, Duration::from_millis(10));
+                sleeps.set(sleeps.get() + 1);
+                clock.set(clock.get() + delay + Duration::from_millis(50));
+            }));
+        assert_eq!(sleeps.get(), 1);
+        assert!(!wait_for_scan(clock.get() + Duration::from_secs(1), &cancelled,
+            || clock.get(), |delay| {
+                assert_eq!(delay, Duration::from_millis(25));
+                clock.set(clock.get() + delay);
+                cancelled.store(true, Ordering::Relaxed);
+            }));
+        // Even an already-due reservation refuses cancellation before reading.
+        assert!(!wait_for_scan(start, &cancelled, || clock.get(), |_| panic!("no sleep")));
+    }
+
+    #[test]
     fn backup_scan_rate_is_shared_between_workers_and_cancellable() {
         let governor = ResourceGovernor::new(&IndexResourceLimits::default()).unwrap();
         governor.set_scan_rate(Some(1000.0));
         let started = Instant::now();
+        // Anchor the initial schedule after setup: constructing the governor
+        // samples memory and may legitimately earn useful-work credit.
+        governor.scan_budget.lock().unwrap().1 = started;
         std::thread::scope(|scope| {
             for _ in 0..2 { let g = &governor; scope.spawn(move || g.pace_scan(100, &AtomicBool::new(false)).unwrap()); }
         });
