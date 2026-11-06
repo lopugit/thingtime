@@ -4,7 +4,7 @@ import { ChakraProvider } from '@chakra-ui/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { ThingsGridView } from '../app/components/Things/ThingsViews';
 import { ThingRenderComponent } from '../app/components/Thingtime/ThingRenderComponent';
-import { ContentExecutionBoundary, useContentExecutionHeld } from '../app/components/Builder/ContentExecutionHold';
+import { ContentExecutionBoundary, ContentExecutionScope, useContentExecutionHeld } from '../app/components/Builder/ContentExecutionHold';
 import { WebpageBlocksRenderer } from '../app/components/Builder/WebpageBlocksRenderer';
 import { PageActionSurface } from '../app/components/Builder/PageActionSurface';
 import { LiveTemplate, useThingSource } from '../app/components/Builder/liveComponent';
@@ -19,6 +19,15 @@ const fixture = (window as any).restoreFixture = {
  runtime: { identity:{key:1}, viewer:{id:'isolated-viewer',signedIn:true}, query:{}, pageId:'synthetic-restored-page', version:0, refreshVersion:0, last:null, installing:false, sharedRun:undefined,
   load: (_key:string, fetcher:()=>Promise<unknown>)=>fetcher(), refresh:()=>fixture.calls.push('$refresh'), install:async()=>{fixture.calls.push('$install'); return true;}, report:()=>{}, setPageQuery:(params:any)=>fixture.queryCalls.push(params.marker) },
 };
+function QuietNativeProbe() {
+ const local=React.useContext(ComponentLocalControl),enabled=React.useContext(NativeControlsEnabled);
+ React.useLayoutEffect(()=>{(fixture as any).quietLocal=local;},[local]);
+ return <span data-testid="quiet-native-enabled">{String(enabled)}</span>;
+}
+function QuietControls() {
+ const [blocked,setBlocked]=React.useState(false);(fixture as any).setQuiet=setBlocked;
+ return <section aria-label="Background verification"><ContentExecutionScope blocked={blocked}><LiveTemplate interactive scope={{}} render={{tag:'div',children:[{tag:'input',props:{'aria-label':'Quiet draft'}},{tag:'button',ttAction:'quiet-action',children:'Quiet action'},{tag:'a',props:{href:'?quiet-escape=1'},children:'Quiet navigation'}]}}><QuietNativeProbe /><form data-quiet-form action="?quiet-submit=1"><button type="submit">Quiet submit</button></form></LiveTemplate></ContentExecutionScope></section>;
+}
 function HookControls() {
  const held = useContentExecutionHeld(false);
  const click = useTtActionClicks({ executionHeld:false, onLocal:()=>fixture.calls.push('$ui'), confirm:async()=>{
@@ -70,7 +79,7 @@ function App() {
  </section>
  <section aria-label="Referenced held renderer" style={{display:'block'}}><h2>Referenced display Component</h2><ThingRenderComponent thing={{id:'unheld-data',renderComponent:{id:'referenced-renderer'},executionHeld:false}} /></section>
  <section aria-label="Held embedded renderer" style={{display:'block'}}><h2>Embedded display Component</h2><ThingRenderComponent thing={{id:'held-embedded-data',executionHeld:held,renderComponent:{render:{tag:'p',children:['Embedded presentation remains readable.']}}}} /></section>
- <div style={{height:700}} aria-hidden="true" /><p>End of restored content</p>
+ <QuietControls /><div style={{height:700}} aria-hidden="true" /><p>End of restored content</p>
  </main>;
 }
 const router=createMemoryRouter([{id:'root',path:'/',loader:()=>({user:{id:'isolated-viewer'}}),element:<App />}]);

@@ -21,7 +21,7 @@ const withFetch = async <T,>(
 	Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin: 'https://test.example' } } });
 	globalThis.fetch = ((url: string) => {
 		if (String(url) === THINGTIME_CAPABILITY_MANIFEST_PATH) {
-			return Promise.resolve({ ok: true, json: async () => ({ schemaVersion: 1, origin: 'https://test.example', features: { 'api.webpages-resolve': { version: '1.13.0' } } }) } as Response);
+			return Promise.resolve(Response.json({ schemaVersion: 1, origin: 'https://test.example', features: { 'api.webpages-resolve': { version: '1.13.0' } } }));
 		}
 		calls.push(String(url));
 		return impl(String(url));
@@ -35,11 +35,7 @@ const withFetch = async <T,>(
 	}
 };
 
-const okResponse = () =>
-	Promise.resolve({
-		ok: true,
-		json: async () => ({ ok: true, page: null, source: null, components: [], refs: {} })
-	} as unknown as Response);
+const okResponse = () => Promise.resolve(Response.json({ ok: true, page: null, source: null, components: [], refs: {} }));
 
 test('temporary resolve failures are retryable, not missing pages', async () => {
 	for (const status of [408, 429, 500, 502, 503]) {

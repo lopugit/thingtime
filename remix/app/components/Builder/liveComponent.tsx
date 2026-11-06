@@ -457,7 +457,7 @@ export const LiveTemplate = ({
 	);
 	if (!resolved) return null;
 	return (
-		<ContentExecutionBoundary held={held}>
+		<ContentExecutionBoundary held={executionHeld}>
 		<NativeControlsEnabled.Provider key={`${runtime.identity.key}:${draftKey}`} value={interactive}>
 			<ComponentDragBoundary>
 			<ComponentLocalControl.Provider value={interactive ? onLocal : null}>
