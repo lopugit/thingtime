@@ -55,12 +55,12 @@ unknown. Healthy startup is independently slow, as the matched baseline shows.
   reads; legacy behavior and zero-effect/checkpoint boundaries are covered.
 - Raw TypeScript passes; focused lint has zero errors and seven existing warnings.
 - Integrated reconnect merge `23015acf06a25c00eacd90abd3ec1f0cfbdddd9d`.
-  Frozen runtime source: `442c898801863646de2182c985c3c97f5101bdd7`.
-- Final same-source healthy and recovery runs both passed. Healthy: 186.995 s,
+  Pre-location tested runtime source: `442c898801863646de2182c985c3c97f5101bdd7`.
+- Pre-location same-source healthy and recovery runs both passed. Healthy: 186.995 s,
   first upload body 42.915 s, first confirmation 34.206 s, 279 native calls and
   586 fresh identity checks. Recovery measurements are retained below.
-- The final pair used freshly rebuilt native fixture, Rust indexer and middleware API.
-  Source certificates pin 383 source hashes and actual native/backend/indexer
+- That pair used freshly rebuilt native fixture, Rust indexer and middleware API.
+  Historical source certificates pin 383 source hashes and actual native/backend/indexer
   binary paths and hashes; Rust reports `commander-indexer 0.1.0`. The temporary
   signed fixture is removed by normal cleanup. Parent independently verified
   all 383 hashes and surviving binary hashes with zero mismatches.
@@ -71,7 +71,7 @@ unknown. Healthy startup is independently slow, as the matched baseline shows.
   before protected point reads. No cached policy or identity result is reused.
 - Signed installed-app acceptance remains with the parent release task.
 
-## Final recovery acceptance
+## Pre-location recovery acceptance
 
 Same 40-path tree and exact bytes/hashes as the healthy run, all three accepted
 reply losses (stage, publication, cloud) and native restarts exercised.
@@ -93,3 +93,25 @@ output is not published as complete coverage. The canonical structural update,
 clustering and portable export cover the final source fingerprint. Semantic
 coverage of this note, TESTING.md, CHANGELOG.md and the two changed sync/map docs
 was not refreshed; that limitation is distinct from passing source acceptance.
+
+## Required peer-base integration
+
+The first normal merge attempt was refused after all four required checks
+passed, because the location PR #1397 advanced `main` to
+`8379dca5dee260ebb477e242cba58b546fe35a22`. This strict-base requirement is
+satisfied through an ordinary feature-branch merge, never an admin bypass.
+
+The required base changed six formerly certified native/Electron files, added
+DeviceAlerts/DeviceLocation sources and device API/schema/registry behavior.
+`ThingtimeAPIClient.requireCredential(deviceID:)` now selects one matching
+credential from `loadAll()`, so the historical 383-file certificate is not
+whole-source acceptance of this new base. The sync engine, guard ordering and
+Rust indexer remain unchanged.
+
+The newly integrated runtime is `91e149c228f75a1e15158865ee9a179e60b5f28d`.
+Fresh Swift/Rust/backend builds and a new same-source healthy/recovery pair
+are required before merge. Their exact source/binary certificates and observed
+outcomes are published in the [PR description](https://github.com/lopugit/thingtime/pull/1400)
+and retained under `/tmp/tt-sync-healthy-startup/integrated-*.json`. The matched
+before/after timing table remains scoped to its original measured inputs.
+No installed app, personal sync or location-release state is modified here.
