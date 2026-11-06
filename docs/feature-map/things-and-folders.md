@@ -93,6 +93,15 @@ The indexed local feed races its live native long poll against a cancellable,
 revisioned durable-consumer wake. Buffered revisions and the native finish/poll
 handshake still drain normally; legacy adapters keep their polling fallback.
 See `streamingIndexRecovery.test.ts` and the idle-wake checklist in `TESTING.md`.
+Mac access 1.21.0 adds the typed `observe-path` boundary used only by two-way
+streaming preparation. `nativePathObservation.ts` is shared by the installed
+adapter and canonical fixture: current saved settings are checked first, then
+one native request observes the candidate and immediate parent under live
+network/charging, expiry, bookmark and CPU guards, with fresh entry/reply
+identity. Older hosts retain separate context/inspection requests. This does
+not reuse identity responses or change transfer, scan, CPU or identity budgets.
+Regressions cover settings changes before IO, exact complete response binding,
+queue expiry, cancellation, account/grant revocation and conditions changes.
 Mac paged native inventory reads use `MobileFolderInventory.read` and
 `RustInventoryClient.checkedPage`: each Rust `page` reply includes its checked
 status so the client can validate generation, root version and coverage with

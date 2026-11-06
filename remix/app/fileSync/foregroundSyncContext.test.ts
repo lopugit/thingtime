@@ -40,3 +40,34 @@ test('custom mutation authorization never receives the compound native approval'
  assert.equal(foregroundSyncContext(saved, scope, input, new AbortController().signal).runtime.nativeUploadApproval, undefined);
  f.journal().close();
 });
+
+
+test('compound observation checks saved settings before IO and fences reply identity and cancellation', async () => {
+ const f = await foregroundFixture(), input: ForegroundSyncInput = f.input(), controller = new AbortController();
+ let observations = 0, wrong = false, cancel = false;
+ input.authorizeContext = async () => { throw Error('separate context'); };
+ input.observeLocal = async path => {
+  observations++; if (cancel) controller.abort();
+  return { conditions: { network: 'wifi', charging: true }, entries: [{ ...f.local[0], path: wrong ? 'other' : path }] };
+ };
+ const context = foregroundSyncContext(saved, scope, input, controller.signal);
+ assert.deepEqual(await context.observeLocal!('Documents', ''), f.local);
+ wrong = true; await assert.rejects(context.observeLocal!('Documents', ''), /observation changed/); wrong = false;
+ f.change(); await assert.rejects(context.observeLocal!('Documents', ''), /configuration|approval/); assert.equal(observations, 2);
+ f.journal().close();
+ const next = await foregroundFixture(), nextInput: ForegroundSyncInput = next.input();
+ nextInput.observeLocal = input.observeLocal; cancel = true;
+ await assert.rejects(foregroundSyncContext(saved, scope, nextInput, controller.signal).observeLocal!('Documents', ''));
+ next.journal().close();
+});
+
+test('compound observations reject parent mismatch, incomplete reply and offline conditions', async () => {
+ const f = await foregroundFixture(), input: ForegroundSyncInput = f.input();
+ input.observeLocal = async () => ({ conditions: { network: 'wifi', charging: true }, entries: [null] });
+ const context = foregroundSyncContext(saved, scope, input, new AbortController().signal);
+ await assert.rejects(context.observeLocal!('Documents/child', 'other'), /Invalid observation/);
+ await assert.rejects(context.observeLocal!('Documents/child', 'Documents'), /observation changed/);
+ input.observeLocal = async () => ({ conditions: { network: 'offline', charging: true }, entries: [null] });
+ await assert.rejects(context.observeLocal!('Documents', ''), /internet|network/);
+ f.journal().close();
+});

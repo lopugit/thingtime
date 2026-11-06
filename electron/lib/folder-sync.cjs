@@ -12,7 +12,7 @@ const { stageRangeMetadata } = require('./folder-stream.cjs');
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
 const { randomUUID } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
-const ACTIONS = new Set(['validate-folder-batch', 'upload-batch', 'upload-single', 'resources', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-download', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
+const ACTIONS = new Set(['validate-folder-batch', 'upload-batch', 'upload-single', 'resources', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'observe-path', 'read', 'read-range', 'stage-begin', 'stage-download', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
 const supportsBatchPages = version => {
     const parts = typeof version === 'string' && version.length <= 32 && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(version);
     return !!parts && parts[1] === '1' && Number.isSafeInteger(Number(parts[2])) && Number.isSafeInteger(Number(parts[3])) && Number(parts[2]) >= 10;
@@ -229,6 +229,7 @@ class DesktopFolderSync {
         if (!input || typeof input !== 'object' || Array.isArray(input) || !UUID.test(input.requestId) ||
             !identifier(input.ownerId) || !identifier(input.deviceId) || !ACTIONS.has(input.action) ||
             (input.action !== 'context' && !(input.action === 'suspend' && input.origin === undefined) && input.origin !== apiOrigin) || Buffer.byteLength(JSON.stringify(stageRangeMetadata(input))) > (input.action === 'validate-folder-batch' ? 524_288 : input.action === 'upload-batch' ? 600_000 : 131_072)) throw unavailable();
+        if (input.action === 'observe-path' && (!Number.isInteger(input.remainingMs) || input.remainingMs < 1 || input.remainingMs > 30_000)) throw unavailable();
         if (input.deviceResourceLimits !== undefined) deviceLimits(input.deviceResourceLimits);
         if (input.resourceLimits !== undefined) {
             if (!input.rootId || typeof input.resourceScope !== 'string' || !input.resourceScope || input.resourceScope.length > 512 || !Object.keys(resourceLimits(input.resourceLimits)).length) throw unavailable();
@@ -328,7 +329,7 @@ class DesktopFolderSync {
         const timing = requestTiming(input.action, this.now, row => this.diagnostic(row));
         let outcome = 'failed', endReply;
         const lane = input.action === 'scan-changes' ? 'streamWaiter' : input.action === 'resources' ? 'resourceRequest' : 'active';
-        const state = { context, folderDeadline: input.action === 'validate-folder-batch' ? this.now() + input.remainingMs : null, input: structuredClone(input), abort: new AbortController(), dispatched: false, lane, phase: 'admission' };
+        const state = { context, folderDeadline: ['validate-folder-batch', 'observe-path'].includes(input.action) ? this.now() + input.remainingMs : null, input: structuredClone(input), abort: new AbortController(), dispatched: false, lane, phase: 'admission' };
         const policy = state.input.resourceLimits ?? { cpuPercent: 15, uploadBytesPerSecond: 625000, downloadBytesPerSecond: 625000 };
         const governedPayload = policy && ((['upload-part', 'upload-batch', 'upload-single'].includes(input.action) && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||
             (input.action === 'stage-download' && (policy.downloadBytesPerSecond || policy.cpuPercent)) ||
@@ -390,6 +391,10 @@ class DesktopFolderSync {
                 }
                 if (!/^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(manifest?.features?.['api.attachment-upload-parts']?.version ?? ''))
                     throw new Error('The selected server does not support this version of folder sync.');
+            }
+            if (state.input.action === 'observe-path') {
+                state.input.remainingMs = Math.floor(state.folderDeadline - this.now());
+                if (!(state.input.remainingMs > 0 && state.input.remainingMs <= 30_000)) throw unavailable();
             }
             if (state.input.action === 'validate-folder-batch') {
                 const capability = this.samePageCapability(context, state.input);

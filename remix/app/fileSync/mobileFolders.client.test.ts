@@ -517,3 +517,19 @@ test('Mac source paths remain exact owner-bound metadata, separate from relative
  assert.throws(() => parseMobileFolderResult(response({ roots: [{ ...root, sourcePath, sourceKind: 'photos', photoAccess: 'full' }] }), expected, { action: 'list' }), /Invalid native/);
  assert.equal(validNativeSourcePath('/'), true);
 });
+
+
+test('compound observation requires exact policy echo and complete ordered candidate/parent observations', () => {
+ const observation = { version: 1 as const, network: 'wifi' as const, chargingOnly: true, configurationId: 'connection', configurationRevision: '2026-11-07T00:00:00.000Z' };
+ const request = { action: 'observe-path' as const, rootId, path: 'nested/file', observation, remainingMs: 30_000 };
+ const entries = [{ ...entry, path: 'nested/file' }, null];
+ const parse = (extra = {}) => parseMobileFolderResult(response({ rootId, path: request.path, observation, complete: true, observedEntries: entries, conditions: { network: 'wifi', charging: true }, ...extra }), expected, request);
+ assert.deepEqual(parse()!.observedEntries, entries);
+ assert.throws(() => parse({ observation: { ...observation, configurationRevision: 'changed' } }));
+ assert.throws(() => parse({ observedEntries: [null] }));
+ assert.throws(() => parse({ observedEntries: [...entries].reverse() }));
+ assert.throws(() => parse({ conditions: { network: 'unknown', charging: true } }));
+ assert.throws(() => parse({ complete: false }));
+ assert.equal(parse({ complete: false, observationUnavailable: true, observedEntries: [] })!.observationUnavailable, true);
+ assert.throws(() => parse({ complete: false, observationUnavailable: true, observedEntries: [null] }));
+});

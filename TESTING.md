@@ -15177,3 +15177,20 @@ the isolated real-API/browser command and the metadata-only session boundary.
   compare native `scan-changes` counts and first-file startup attribution with
   its retained baseline. Unit fixtures do not prove installed startup speed;
   preserve native watcher, uncached admission and current authorization checks.
+
+
+### Two-way startup compound path observation (2026-11-07)
+
+- On a negotiated Mac access 1.21.0 host, prepare an early candidate and its
+  immediate parent through one `observe-path` request. Confirm two fresh native
+  identity calls total, complete ordered observations and unchanged policy.
+- Change saved settings before dispatch; revoke identity/grant, cancel, expire
+  a queued request, or change network/charging during the request. Refuse the
+  observation and retain original operation IDs; no effect may use stale data.
+- On an older host retain strict separate context/inspection. Compare the
+  matched synthetic healthy/recovery fixture's real first upload body,
+  scan-to-first-read, native request count and union admission waits. Keep
+  5,000,000 B/s scan/transfer and 15% CPU unchanged; verify all byte hashes,
+  recovery receipts, no duplicate effects and strict checkpoint convergence.
+  Fixture evidence does not establish personal-folder or installed-GUI transfer
+  acceptance. Never add grants, resume Home or touch personal files for this test.
