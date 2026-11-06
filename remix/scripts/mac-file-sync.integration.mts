@@ -667,9 +667,9 @@ try {
 						}
 					},
                     ...(streamingMixedFixture ? {
-                        streamLocalChanges: async function* (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>) {
+                        streamLocalChanges: async function* (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>, waitForFinish?: (signal: AbortSignal) => Promise<void>) {
                             for await (const page of readNativeIndexChanges({ ownerId: fixture.userId, deviceId: deviceId!, rootId: nativeRoot,
-                                captureId, afterSequence, readyToFinish, signal: streamSignal ?? signal, request,
+                                captureId, afterSequence, readyToFinish, waitForFinish, signal: streamSignal ?? signal, request,
                                 ...(supportsNativeStreamingBatches(caps) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}) })) {
                                 if (page.changes.length) benchmarkTimeline.firstCommittedEntryObservedMs ??= Date.now() - transferRunStartedAt;
                                 if (page.state === 'complete') benchmarkTimeline.firstChangeFeedCompleteMs ??= Date.now() - transferRunStartedAt;
@@ -810,10 +810,10 @@ try {
                     signal: current, request: governedRequest, ...options, strictAsync: true, captureId: randomUUID(), pageSize: NATIVE_INVENTORY_BATCH_ENTRIES }),
                 inventoryPages: () => readCloudFolderInventoryPages(scope, remoteRoot!, { ...runtime, signal: current }),
 				inspectLocal: async name => (await governedRequest(fixture.userId, { action: 'inspect', rootId: nativeRoot, path: name }, current)).inspectedEntry!,
-				streamLocalChanges: async function* (id, after, streamSignal, readyToFinish) {
+				streamLocalChanges: async function* (id, after, streamSignal, readyToFinish, waitForFinish) {
 					capture = id;
 					for await (const page of readNativeIndexChanges({ ownerId: fixture.userId, deviceId: deviceId!, rootId: nativeRoot, captureId: id,
-						afterSequence: after, signal: streamSignal ?? current, readyToFinish, request: governedRequest,
+						afterSequence: after, signal: streamSignal ?? current, readyToFinish, waitForFinish, request: governedRequest,
                             ...(supportsNativeStreamingBatches(caps) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}) })) {
                         if (observe) nativePagesObserved.publish(page);
 						if (page.changes.length) {

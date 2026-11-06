@@ -171,23 +171,27 @@ export async function streamForegroundSync(
 		wakeRevision++;
 		for (const fn of [...waiters]) fn();
 	};
-	const wait = (observed: number) => {
+	const wait = (observed: number, waitSignal = signal) => {
 		check();
+		waitSignal.throwIfAborted();
 		if (wakeRevision !== observed) return Promise.resolve();
 		return new Promise<void>((resolve, reject) => {
 			const done = () => {
 				waiters.delete(done);
 				signal.removeEventListener('abort', abort);
+				waitSignal.removeEventListener('abort', abort);
 				resolve();
 			};
 			const abort = () => {
 				waiters.delete(done);
 				signal.removeEventListener('abort', abort);
-				reject(signal.reason);
+				waitSignal.removeEventListener('abort', abort);
+				reject(signal.aborted ? signal.reason : waitSignal.reason);
 			};
 			waiters.add(done);
 			signal.addEventListener('abort', abort, { once: true });
-			if (signal.aborted) abort();
+			waitSignal.addEventListener('abort', abort, { once: true });
+			if (signal.aborted || waitSignal.aborted) abort();
 		});
 	};
 	let observationSequences = new Map<string, number>();
@@ -591,6 +595,20 @@ export async function streamForegroundSync(
 		}
 	};
 	const readyToFinish = () => runs.streamReadyToFinish(spec);
+	const waitForFinish = async (waitSignal: AbortSignal) => {
+		for (;;) {
+			check();
+			waitSignal.throwIfAborted();
+			// Observe before the asynchronous durable read: completion may wake
+			// us while that read still holds an older result.
+			const observed = wakeRevision;
+			const ready = await readyToFinish();
+			check();
+			waitSignal.throwIfAborted();
+			if (ready) return;
+			await wait(observed, waitSignal);
+		}
+	};
 	const produce = async () => {
 		let remounted = false;
 		let status = await runs.streamState(spec);
@@ -598,7 +616,7 @@ export async function streamForegroundSync(
 		if (status.terminal || status.sourceTerminal) return;
 		const after = status.indexedSequence ?? status.sequence;
 		const source = local
-			? recoverRemountedNativeFeed(input.streamLocalChanges!(spec.streaming!.captureId, after, signal, readyToFinish), async () => {
+			? recoverRemountedNativeFeed(input.streamLocalChanges!(spec.streaming!.captureId, after, signal, readyToFinish, waitForFinish), async () => {
 				await runs.endRemountedLocalFeed(spec); check(); remounted = true; wake();
 			}, signal)
 			: input.streamRemoteChanges
@@ -653,7 +671,7 @@ export async function streamForegroundSync(
 		// Local and cloud watchers have independent upstream watermarks; the
 		// shared journal assigns an ordered input position on each append.
 		const source = replica === 'local'
-			? recoverRemountedNativeFeed(input.streamLocalChanges!(captureId, after, signal, readyToFinish), async () => {
+			? recoverRemountedNativeFeed(input.streamLocalChanges!(captureId, after, signal, readyToFinish, waitForFinish), async () => {
 				await runs.endRemountedLocalFeed(spec); check(); remounted = true; wake();
 			}, signal)
 			: input.streamRemoteChanges
