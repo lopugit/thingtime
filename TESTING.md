@@ -14662,6 +14662,23 @@ the isolated real-API/browser command and the metadata-only session boundary.
   native HTTP fixture must accept compatible additive/patch API releases, while
   refusing a foreign manifest origin and missing, malformed, older or breaking
   required capabilities before creating its disposable account.
+- Run the guarded folder-echo regressions in `twoWayStreaming.test.ts`: only an
+  opposite-feed exact stamp from a freshly checked no-op folder pair may avoid
+  duplicate reads. Changed/missing folders, legacy hosts, eviction and restart
+  must use current checks. Test pause/account change, a stale/deleted parent and
+  its child, and fresh strict capture; no observation may authorize a copy or
+  publish a completion checkpoint. Keep the processing window bounded without
+  limiting accepted feed size. Compare the same real mixed/fault fixture's
+  first confirmed file, first payload, identity/admission counts and total time.
+- For mixed-file current-worker acceptance, add `--canonical-worker` to
+  `test:files:mac-paged -- --wide --wide-mixed`; add `--streaming-two-way`
+  to exercise production-style deletes-off dual feeds and strict async capture. Keep the default mixed mode
+  explicitly as legacy fallback coverage. The modern lane must negotiate native
+  context/compound/batch capabilities through the canonical desktop manager,
+  use scoped fixture TLS, preserve accepted-stage/commit/publication loss and
+  restart assertions, and verify actual HTTP byte/PUT counts plus exact hashes.
+  Retain per-check admission/HTTP and per-operation native timing; do not treat
+  overlapping sums as wall time or legacy fallback timing as installed speed.
 - For an isolated native+HTTP timing diagnostic, run
   `pnpm --dir remix run test:files:mac-paged -- --two-way-early --normal-early-budget`.
   Record first local change, admitted operation, first body byte, durable file

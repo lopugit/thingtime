@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MacFixtureTransport, FixtureIdentityTiming, FixturePageObservers, validateFixtureProofKind, FixtureReceiptObservations } from './mac-fixture-transport.mjs';
+import { MacFixtureTransport, FixtureIdentityTiming, FixturePageObservers, validateFixtureProofKind, FixtureReceiptObservations, validateFixtureWorkerParity } from './mac-fixture-transport.mjs';
 const turn = () => new Promise(resolve => setImmediate(resolve));
 function fixture() {
   const sent = [];
@@ -213,4 +213,24 @@ test('duplex callback authority refusal cancels only its operation and waits for
   assert.equal(f.sent.filter(x => x.action === 'fixture-cancel').length,1);
   assert.equal(f.sent.some(x => x.action === 'fixture-batch-reply' || x.requestId === 'next'),false);
   f.transport.receive({ requestId: 'upload', ok: false }); await turn(); f.reply('next'); await next;
+});
+
+test('requested canonical worker proof refuses legacy or missing transport parity', () => {
+  const legacy = { parity: { nativeOperationGuards: false } };
+  assert.equal(validateFixtureWorkerParity(legacy, false), legacy);
+  assert.throws(() => validateFixtureWorkerParity(legacy, true), /canonical worker/);
+  const current = { parity: { canonicalDesktopManager: true, canonicalRendererHost: true, canonicalTransferWorkerSelected: true, nativeOperationGuards: true } };
+  assert.equal(validateFixtureWorkerParity(current, true), current);
+  for (const key of Object.keys(current.parity)) assert.throws(() => validateFixtureWorkerParity({ parity: { ...current.parity, [key]: false } }, true), /canonical worker/);
+});
+
+test('requested streaming two-way proof requires actual feeds, async capture and deletions off', () => {
+  const parity = { canonicalDesktopManager: true, canonicalRendererHost: true, canonicalTransferWorkerSelected: true, nativeOperationGuards: true };
+  assert.throws(() => validateFixtureWorkerParity({ parity }, true, true), /streaming two-way/);
+  const streaming = { ...parity, streamingTwoWay: true, localFeed: true, remoteFeed: true, strictAsyncCapture: true, propagateDeletes: false };
+  const current = { parity: streaming };
+  assert.equal(validateFixtureWorkerParity(current, true, true), current);
+  for (const key of ['streamingTwoWay', 'localFeed', 'remoteFeed', 'strictAsyncCapture'])
+    assert.throws(() => validateFixtureWorkerParity({ parity: { ...streaming, [key]: false } }, true, true), /streaming two-way/);
+  assert.throws(() => validateFixtureWorkerParity({ parity: { ...streaming, propagateDeletes: true } }, true, true), /streaming two-way/);
 });
