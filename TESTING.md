@@ -6941,6 +6941,13 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       both checks against `~/Applications/Thingtime.app`, and compare the outer
       app/node/bridge team identifiers, designated requirements, and executable
       hashes between build and install.
+- [ ] After standalone signing and final Electron sealing, inspect the embedded
+      Node signed entitlements as XML and require Boolean `true` for
+      `com.apple.security.personal-information.location`; keep the IPC bridge
+      entitlements unchanged. Run `electron/test/node-location-signing.test.cjs`
+      and confirm a valid deep signature with that entitlement stripped fails
+      final verification. Unconsented startup must not request location; use the
+      ordinary device control for OS consent after installing the verified app.
 - [ ] Confirm electron-builder compiled `electron/build/Thingtime.icon` into
       the installed app. Inspect Finder/Dock in light and dark appearance: both
       must keep the exact green canopy/brown trunk artwork legible against the

@@ -60,6 +60,10 @@ async function makeSignedNodeFixture(signingAuthority = 'Apple Development: Test
 			if (process.platform === 'darwin') return require('../lib/thingtime-node-bridge.cjs').runProcess(command, args, options);
 			// The service only runs on macOS; model plutil on other CI hosts.
 			const xml = Buffer.from(options.input).toString('utf8');
+            if (xml.includes('<plist><dict>')) {
+                if (!xml.endsWith('</dict></plist>')) return { status: 1, stdout: '', stderr: 'invalid plist' };
+                return { status: 0, stdout: JSON.stringify(Object.fromEntries([...xml.matchAll(/<key>([^<]+)<\/key>\s*<(true|false)\/>/g)].map(m => [m[1], m[2] === 'true']))), stderr: '' };
+            }
 			const string = (key) => xml.match(new RegExp(`<key>${key}</key>\\s*<string>(.*?)</string>`))?.[1];
 			const helper = xml.match(/<key>ProgramArguments<\/key>\s*<array>\s*<string>(.*?)<\/string>/u)?.[1];
 			return { status: 0, stdout: JSON.stringify({
@@ -82,8 +86,8 @@ async function makeSignedNodeFixture(signingAuthority = 'Apple Development: Test
 				return { status: valid ? 0 : 1, signal: null, stdout: '', stderr: valid ? '' : 'invalid signature' };
 			}
 			if (args.includes('--entitlements')) {
-				const keys = override.entitlements || (target === paths.outerApp ? ['com.apple.security.cs.allow-jit', 'com.apple.security.cs.allow-unsigned-executable-memory'] : []);
-				return { status: 0, signal: null, stdout: `<?xml version="1.0"?><plist><dict>${keys.map(key => `<key>${key}</key><true/>`).join('')}</dict></plist>`, stderr: '' };
+				const keys = override.entitlements || (target === helperApp ? ['com.apple.security.personal-information.location'] : target === paths.outerApp ? ['com.apple.security.cs.allow-jit', 'com.apple.security.cs.allow-unsigned-executable-memory'] : []);
+				return { status: 0, signal: null, stdout: override.entitlementXML ?? `<?xml version="1.0"?><plist><dict>${keys.map(key => `<key>${key}</key><true/>`).join('')}</dict></plist>`, stderr: '' };
 			}
 			const certificateExtractionArgument = args.find((argument) => argument.startsWith('--extract-certificates='));
 			if (certificateExtractionArgument) {
@@ -749,4 +753,26 @@ test('Activity disable cannot change a foreign login item', async () => {
   await assert.rejects(fixture.integration.controlService('disable'), { code: 'login_item_conflict' });
   assert.ok(!fixture.state.launchctlCalls.some(([operation]) => operation === 'disable' || operation === 'bootout'));
  } finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+
+test('final packaging refuses stripped, false and unparseable Node location entitlements', async () => {
+    const f = await makeSignedNodeFixture('Developer ID Application: Test (6DQQ9V7C84)', { outer: true });
+    try {
+        await verifySignedArtifacts(f.paths, f.runner, { mode: 'local' });
+        for (const override of [
+            { entitlements: [] },
+            { entitlementXML: '<?xml version="1.0"?><plist><dict><key>com.apple.security.personal-information.location</key><false/></dict></plist>' },
+            { entitlementXML: '<?xml version="1.0"?><plist><dict><key>com.apple.security.personal-information.location</key><string>true</string></dict></plist>' },
+            { entitlementXML: '[Dict]\n[Key] com.apple.security.personal-information.location\n[Bool] true' }
+        ]) {
+            f.state.signatureOverrides.set(f.paths.helperApp, override);
+            await assert.rejects(verifySignedArtifacts(f.paths, f.runner, { mode: 'local' }), e => e.code === 'invalid_entitlements');
+        }
+        f.state.signatureOverrides.set(f.paths.helperApp, { entitlements: [] });
+        await verifySignedArtifacts(f.paths, f.runner, { mode: 'runtime' }); // preserve historical recovery
+        f.state.signatureOverrides.delete(f.paths.helperApp);
+        await verifySignedArtifacts(f.paths, f.runner, { mode: 'local' });
+        assert.ok(f.state.signatureCalls.filter(args => args.includes('--entitlements')).every(args => args.includes('--xml')));
+    } finally { await rm(f.root, { recursive: true, force: true }); }
 });
