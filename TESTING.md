@@ -14959,6 +14959,17 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ### Account restore admission plans
 
+- Run `node --import tsx --test app/api/utils/backups/backupDestinations.test.ts`
+  from `remix/` for exact-origin/environment vault registration, primary-bucket
+  refusal, safe projections, revoked-session/configuration-change refusal,
+  full-account/home-plane route guards and both manifest contracts. Negotiate
+  `api.backup-destinations` 1.0.0. A configured-unverified destination must never
+  enable execution or be reported as provider/independent-byte acceptance.
+- After building Nitro `node_middleware`, run
+  `node remix/scripts/smoke-built-backup-destinations.mjs --bundle remix/.output`
+  for compiled JSON manifests/docs and the anonymous private/no-store 401.
+  This fixture uses no private vault or reachable DB/provider.
+
 - Run `pnpm --dir remix run test:backups` for independent sealed mixed-graph
   recovery after live-source/first-vault loss, bounded metadata pages, cyclic
   executable references, structural-cycle refusal, alias/dependency admission,
