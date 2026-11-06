@@ -14670,6 +14670,13 @@ the isolated real-API/browser command and the metadata-only session boundary.
   publish a completion checkpoint. Keep the processing window bounded without
   limiting accepted feed size. Compare the same real mixed/fault fixture's
   first confirmed file, first payload, identity/admission counts and total time.
+- For initial-folder startup, queue both replicas' positive folder hints before
+  planning. A guarded host may defer that folder without current point reads,
+  but must not borrow the hint for a child or completion checkpoint. Consumed,
+  foreign-generation and bounded-out peers must fall back; legacy hosts retain
+  current preparation. Verify no cursor changes during peer lookup, fresh strict
+  inventory after a stale pair, and the mixed fixture's actual queued-peer hits
+  before first confirmation. A positive hint is never current-state authority.
 - For mixed-file current-worker acceptance, add `--canonical-worker` to
   `test:files:mac-paged -- --wide --wide-mixed`; add `--streaming-two-way`
   to exercise production-style deletes-off dual feeds and strict async capture. Keep the default mixed mode
@@ -15010,3 +15017,35 @@ the isolated real-API/browser command and the metadata-only session boundary.
   including after an old authorized response arrives. Current authoritative
   success may release controls; 401/403/404 and invalid/incompatible discovery
   may not. Manifest transport/HTTP/deadline failure includes body interruption.
+
+### Reviewed account file bytes, paths and history (6 November 2026)
+
+- Run `pnpm --dir remix run test:backups:file-restore` against its owned synthetic
+  replica and local object store. The runner performs the documented index
+  migration/cache drain. No personal account, files, installed app or sync jobs
+  are used. Capture through real upload/file/Timeline handlers; current normalized
+  links must be reconstructed, never replaced with aggregate-only fixtures.
+- Restore over canonical ordinary-created folder metadata. Require exact mapped
+  revisions and protected completed provenance; refuse unrelated/active folders,
+  stale roots/capabilities, incomplete history, missing/cross-file parents and
+  unsupported snapshots before dependent byte publication.
+- Remove source object bytes and the first vault, revoke the source session and
+  retain an independently copied sealed vault. Compare exact API hierarchy and
+  current/historical content, exact-version ETags/range bytes, renamed/moved
+  metadata, shared/named branch heads and same-file parents. Check empty files
+  and inert symlink target bytes without resolving their targets.
+- Interrupt after a committed retained-version effect and retry the original
+  immutable operation. Audit receipts and imported source events must not
+  duplicate. Completed replay after vault loss preserves later owner edits.
+- Inject a current owner edit after bounded verification and revoke the current
+  destination session before completion. Both must refuse stale release while
+  preserving the owner edit. Do not confuse source-session revocation with
+  destination-session authority.
+- Run `test:backups`, `test:files`, focused cloud transport/content-gate/managed
+  placement tests and `test:api-capabilities`. Cover final-fingerprint failure
+  before upload admission, account switches between staging calls, signed PUT
+  stalls, cancellation and errored response-body cleanup. Include real-shaped
+  moderation Dates/provider diagnostics without exporting them.
+- This internal worker phase is not a complete account restore/jobs/UI workflow.
+  Live object-provider durability, History audit grouping, final signed/installed
+  acceptance and measured large-volume behavior remain independent gates.

@@ -270,6 +270,11 @@ export async function streamForegroundSync(
 			await wait(observed);
 		}
 		if (entry.symbolicLink || ignore.ignored(entry.path, entry.kind)) { await defer(); return; }
+		if (input.nativeOperationGuards && entry.kind === 'folder' && await runs.queuedFolderPeer(spec, event)) {
+			// Two positive folder hints need no early effect. They are not fresh
+			// observations: strict reconciliation still decides their real state.
+			check(); await defer(); return;
+		}
         const echo = input.nativeOperationGuards && entry.kind === 'folder' ? deferredFolderEchoes.get(entry.path) : undefined;
         if (echo && echo.from !== from && sameSyncStamp(entry, echo[from])) {
             deferredFolderEchoes.delete(entry.path);

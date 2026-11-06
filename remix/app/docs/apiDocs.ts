@@ -6245,10 +6245,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Ordered independent results; inspect every status before recording progress.', body: { ok: true, version: 1, batchId: 'original UUID', digest: 'sha256', results: [] } }]
   }),
 	endpoint({
-    id: 'files', contractVersion: '1.12.0', featureVersion: '1.12.0', notes: ['Version 1.12.0 removes the application JSON body-size ceiling for authenticated shared-content writes. Authorization and rate admission precede incremental fatal UTF-8/JSON decoding; storage accounting and protocol constraints remain authoritative.'],
+    id: 'files', contractVersion: '1.12.1', featureVersion: '1.12.1', notes: ['Version 1.12.0 removes the application JSON body-size ceiling for authenticated shared-content writes. Authorization and rate admission precede incremental fatal UTF-8/JSON decoding; storage accounting and protocol constraints remain authoritative.'],
     group: 'attachments', title: 'Inventory folders and recover file versions',
     endpoint: '/api/v1/files', summary: 'Inventory a private folder, read file revisions or conditionally commit a stable file Thing.',
-    detail: 'Version 1.8.1 refuses first publication of a provenance-stamped upload at a different file ID, folder or filename; current moves and retained-version restores keep their existing semantics and do not rewrite original provenance. Complete private folder inventories use a bounded snapshot read and never return partial success. One file identity points at an immutable attachment version. Commits atomically bind owned durable file uploads, update metadata/accounting and append a private Timeline revision. Prior byte versions remain charged and recoverable. No overwrite occurs on revision mismatch. Home data plane only.',
+    detail: 'Version 1.12.1 fences canonical file writes through an active reviewed creation epoch so interrupted account-file restores cannot release stale verified state. Version 1.8.1 refuses first publication of a provenance-stamped upload at a different file ID, folder or filename; current moves and retained-version restores keep their existing semantics and do not rewrite original provenance. Complete private folder inventories use a bounded snapshot read and never return partial success. One file identity points at an immutable attachment version. Commits atomically bind owned durable file uploads, update metadata/accounting and append a private Timeline revision. Prior byte versions remain charged and recoverable. No overwrite occurs on revision mismatch. Home data plane only.',
     auth: { mode: 'session-or-bearer', description: 'Full owning user sessions only; scoped PAT, app, device and service credentials are rejected.' }, methods: ['GET', 'POST'],
     steps: [
       'In 1.10.0, optional syncDestination:{rootId,path} on file-copy commits and folder creates requires a transactional match of the private selected root, exact parent path, filename namespace and expected destination revision or absence. Negotiate this feature before attempting an early two-way upload. Ordinary commits and immutable receipt replays retain their existing contract.',
@@ -10207,8 +10207,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-delete',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.1.1',
+    contractVersion: '1.1.1',
+    // 1.1.1: drained managed placements fence active reviewed restores.
+    notes: ['Version 1.1.1 advances an active reviewed restore epoch when draining managed placements, preventing stale completion after a concurrent delete.'],
     group: 'things',
     title: 'Delete feed post',
     endpoint: '/api/v1/things/delete',
@@ -10245,8 +10247,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-bulk',
-    featureVersion: '1.7.0',
-    contractVersion: '1.7.0',
+    featureVersion: '1.7.1',
+    contractVersion: '1.7.1',
+    // 1.7.1: managed placement participates in active reviewed restore epochs.
     // 1.4.0: first-party owners can move complete private archive roots.
     // Dedicated home-plane moves also accept owned current-schema themes/algorithms.
     group: 'things',
@@ -10325,6 +10328,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     notes: [
+      'Version 1.7.1 advances an active reviewed restore epoch when moving protected library content, preventing stale restore completion.',
       'Throttled on the things.write rate limit (things.write.service for service accounts) — one token per batch.',
       'Folders organise /things: create one via POST /api/v1/things with thingtime ["folder"] and crystal { name, icon?, description? }; move a single thing with PATCH /api/v1/things { id, folderId }.'
     ]

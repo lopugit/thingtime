@@ -793,6 +793,18 @@ and the relevant `test:files:mac-paged` scenario. The closed HTTP observer recor
 first parsed body-byte enqueue and completed payload length without switching
 the request into flowing mode; its real-network regression delays consumption
 and verifies unchanged bytes and diagnostic redaction.
+### Reviewed account-file restore
+
+`backups/accountFileRestoreBytes.ts` privately verifies offline current/history
+ranges before `cloudTransport.stageCloudFileBytes` uses ordinary approved uploads.
+Upload request and target file IDs are independent; runtime scope stays pinned
+across stages. `backups/accountFileRestore.ts` composes `cloudFiles.commit` with
+current actor/session/root fencing and a durable checkpoint. Existing file writes
+negotiate `api.files` 1.12.1 for restore epochs. Attachment inventory reads only
+`moderation.status`, excluding provider diagnostics/Dates, and current file
+snapshots preserve inert symlink metadata. Run `test:backups`, `test:files`,
+`test:api-capabilities` and `test:backups:file-restore`; see the dated contract in
+[portable backups](../portable-backups.md#reviewed-account-file-publication--6-november-2026).
 
 The native mixed fixture retains legacy fallback coverage by default. Add
 `--canonical-worker` to select the canonical desktop manager, negotiated native
@@ -810,3 +822,11 @@ fresh. `twoWayStreaming.test.ts` covers policy, scope, stale ancestors, restart
 and eviction. Use `--canonical-worker --streaming-two-way` in the mixed native
 fixture for the actual deletes-off dual-feed path; scalar deletes-on and legacy
 transport lanes remain separate evidence.
+
+For initial folder prefixes, `pagedRunJournal.queuedFolderPeer` reads only
+already committed opposite-replica folder inputs through the existing path
+index, with a bounded revision scan and fresh-preparation fallback. Guarded
+streaming may defer a paired folder without authorizing any effect, child or
+checkpoint. Consumed source rows are not peer evidence. Strict reconciliation
+still reads both replicas afresh. The canonical mixed fixture reports queued
+peer deferrals before first confirmed file alongside byte/hash/recovery proof.

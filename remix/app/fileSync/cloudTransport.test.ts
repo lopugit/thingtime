@@ -692,3 +692,26 @@ test('absent native approval leaves custom mutation policy on its original per-p
  await createCloudFileTransport(f.runtime, write).apply({ ...source(), uploadSingle: async () => { throw Error('Custom policy bypass'); } });
  assert.ok(authorized > 0); assert.equal(f.counts().puts, 1);
 });
+
+test('composed byte staging keeps imports private without inventing native provenance or publishing content', async () => {
+ const { stageCloudFileBytes } = await import('./cloudTransport');
+ const f = await fixture(), run = f.make(), write = run.cloudWrites[0], targetId = randomUUID();
+ let upload: any;
+ f.hook((path, body) => { if (path === '/api/v1/attachments/uploads') upload = body; return null; });
+ const staged = await stageCloudFileBytes(f.runtime, write, targetId, source());
+ assert.equal(staged.attachmentId, 'att1');
+ assert.equal(upload.requestId, write.operation.id);
+ assert.equal(upload.purpose, 'file-import');
+ assert.equal(upload.fileSyncOrigin, undefined);
+ assert.equal(f.counts().commits, 0);
+ assert.equal(f.counts().puts, 1);
+});
+
+test('ordinary sync preserves file purpose and exact native upload provenance', async () => {
+ const f = await fixture(), run = f.make(), write = run.cloudWrites[0]; let upload: any;
+ f.hook((path, body) => { if (path === '/api/v1/attachments/uploads') upload = body; return null; });
+ await createCloudFileTransport(f.runtime, write).apply(source());
+ assert.equal(upload.purpose, 'file'); assert.equal(upload.fileSyncOrigin.fileId, write.operation.id);
+ assert.equal(upload.fileSyncOrigin.deviceId, scope.deviceId); assert.equal(upload.fileSyncOrigin.localRootId, scope.rootId);
+ assert.equal(upload.fileSyncOrigin.folderId, write.folderId); assert.equal(upload.fileSyncOrigin.path, write.operation.mutation.path);
+});

@@ -1125,6 +1125,25 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 			});
 		},
 
+		/** Positive queued hints can only defer work to strict reconciliation.
+		 * They never prove current metadata or authorize a mutation or child. */
+		queuedFolderPeer: (value: PagedRunSpec, change: StreamInput) => withHeader<boolean>(parsePagedRunSpec(value), 'readonly', (h, tx, done, fail) => {
+			const spec = h.spec, stream = h.stream;
+			if (spec.streaming?.source !== 'both' || !stream || stream.terminal || change.entry.kind !== 'folder' ||
+				change.generation !== stream.generation || !validStreamInput(change, spec)) { done(false); return; }
+			const prefix = [key, spec.id, syncPathKey(change.entry.path)],
+				request = tx.objectStore(REVIEW_STORE).index(INPUT_PATH).openCursor(ranges.bound(prefix, [...prefix, []]));
+			let examined = 0;
+			request.onsuccess = () => { try {
+				check(); const cursor = request.result;
+				if (!cursor || examined++ === INVENTORY_PAGE_ENTRIES) { done(false); return; }
+				const peer = inputRow(cursor.value, spec, stream.generation, cursor.primaryKey);
+				if (peer.sequence > stream.sequence && peer.sequence <= (stream.indexedSequence ?? stream.sequence) &&
+					peer.replica !== change.replica && peer.entry.kind === 'folder' && !peer.entry.symbolicLink) { done(true); return; }
+				cursor.continue();
+			} catch (error) { fail(error); } };
+		}),
+
 		async streamEntries(value: PagedRunSpec, after?: string): Promise<{ entries: SyncEntry[]; next: string | null }> {
 			const spec = parsePagedRunSpec(value);
 			if (!spec.streaming || (after !== undefined && !validSyncPathKey(after))) throw Error('Invalid streaming progress page.');

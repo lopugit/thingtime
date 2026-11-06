@@ -456,7 +456,7 @@ test('a source changed during staging leaves no uncertain publication and strict
 	x.f.journal().close();
 });
 
-async function folderEchoFixture(options: { first?: 'local' | 'remote'; guarded?: boolean; change?: boolean; pause?: boolean; remove?: boolean; removeFirst?: boolean; child?: boolean; interrupt?: boolean; scopeChange?: boolean; fillers?: number; echoFillers?: boolean } = {}) {
+async function folderEchoFixture(options: { first?: 'local' | 'remote'; guarded?: boolean; change?: boolean; pause?: boolean; remove?: boolean; removeFirst?: boolean; child?: boolean; interrupt?: boolean; scopeChange?: boolean; fillers?: number; echoFillers?: boolean; queued?: boolean } = {}) {
     const x = await fixture('Matched/child.bin'), path = 'Matched', first = options.first ?? 'local';
     let left: SyncEntry | null = { path, id: 'native-folder', version: 'local-folder-v1', kind: 'folder', size: 0, sha256: null };
     let right: SyncEntry | null = { ...left, id: 'cloud-folder', version: 'cloud-folder-v1' };
@@ -492,18 +492,33 @@ async function folderEchoFixture(options: { first?: 'local' | 'remote'; guarded?
         }
         return fetch(target, init);
     };
+    const queued = deferred(); let appendedFeeds = 0, firstFolderReads: number | undefined, queuedSelected = false;
     const pagedRuns = x.input.journal.pagedRuns.bind(x.input.journal);
     x.input.journal = { ...x.input.journal, pagedRuns: (...args) => {
         const runs = pagedRuns(...args);
-        return { ...runs, appendStream: async (...args) => {
+        return { ...runs, nextStreamInput: async (...args) => {
+            if (options.queued) await queued.promise;
+            if (options.queued && !queuedSelected) {
+                queuedSelected = true;
+                if (options.pause) paused = true;
+                if (options.scopeChange) activeScope = false;
+                if (options.remove) { left = null; right = null; }
+            }
+            return runs.nextStreamInput(...args);
+        }, appendReplicaStreamInput: async (...args) => {
+            const result = await runs.appendReplicaStreamInput(...args);
+            if (++appendedFeeds === 2) queued.resolve();
+            return result;
+        }, appendStream: async (...args) => {
             const result = await runs.appendStream(...args); preparedHints++;
+            if (args[1].entry.path === path && firstFolderReads === undefined) firstFolderReads = localReads;
             if (args[1].entry.path === path) { if (++appended === 1 && !options.fillers) firstDone.resolve(); if (appended === 2) bothDone.resolve(); }
             if (options.fillers && args[1].entry.path === 'Filler-' + (options.fillers - 1)) firstDone.resolve();
             return result;
         } };
     } };
     const feed = async function* (side: 'local' | 'remote', id: string, after: number, signal?: AbortSignal) {
-        if (side !== first) {
+        if (side !== first && !options.queued) {
             await wait(firstDone.promise, signal);
             if (interrupted) await wait(new Promise<void>(() => {}), signal);
             if (options.pause) paused = true;
@@ -528,8 +543,37 @@ async function folderEchoFixture(options: { first?: 'local' | 'remote'; guarded?
     };
     x.input.streamLocalChanges = (id, after, signal) => feed('local', id, after, signal);
     x.input.streamRemoteChanges = (id, after, signal) => feed('remote', id, after, signal);
-    return { ...x, preparedHints: () => preparedHints, stats: () => ({ contexts, localReads, cloudReads, childReads }), resume: () => { interrupted = false; } };
+    return { ...x, preparedHints: () => preparedHints, firstFolderReads: () => firstFolderReads, stats: () => ({ contexts, localReads, cloudReads, childReads }), resume: () => { interrupted = false; } };
 }
+test('queued opposite folder hints defer the initial folder without network observations or checkpoint authority', { timeout: 10000 }, async () => {
+    const x = await folderEchoFixture({ queued: true, child: true }); await x.stream();
+    assert.equal(x.firstFolderReads(), 0);
+    assert.equal(x.preparedHints(), 3);
+    assert.equal(x.stats().childReads, 0, 'A paired hint cannot supply parent authority');
+    assert.equal(x.f.publications(), 0); assert.equal(x.receipts.size, 0); assert.equal(await x.checkpoints().current(), null);
+    x.input.streamLocalChanges = undefined; x.input.streamRemoteChanges = undefined;
+    x.input.scanLocal = async () => { throw Error('Fresh strict inventory requested'); };
+    await assert.rejects(x.run(), /Fresh strict inventory requested/);
+    assert.equal(await x.checkpoints().current(), null);
+    x.f.journal().close();
+    const legacy = await folderEchoFixture({ queued: true, guarded: false }); await legacy.stream();
+    assert.equal(legacy.firstFolderReads(), 1, 'Legacy preparation retains fresh observations');
+    legacy.f.journal().close();
+});
+test('queued folder deferral cannot hide removal, paused effects or a changed owner', { timeout: 10000 }, async () => {
+    const removed = await folderEchoFixture({ queued: true, remove: true, child: true }); await removed.stream();
+    assert.equal(removed.firstFolderReads(), 0); assert.equal(removed.stats().childReads, 0);
+    assert.equal(removed.f.publications(), 0); assert.equal(removed.receipts.size, 0); assert.equal(await removed.checkpoints().current(), null);
+    removed.input.streamLocalChanges = undefined; removed.input.streamRemoteChanges = undefined;
+    removed.input.scanLocal = async () => { throw Error('Fresh strict inventory after removal'); };
+    await assert.rejects(removed.run(), /Fresh strict inventory after removal/); removed.f.journal().close();
+    for (const options of [{ pause: true }, { scopeChange: true }]) {
+        const x = await folderEchoFixture({ queued: true, ...options });
+        await assert.rejects(x.stream(), /Sync configuration or device approval changed|Sync context changed/);
+        assert.equal(x.f.publications(), 0); assert.equal(x.receipts.size, 0);
+        x.f.journal().close();
+    }
+});
 for (const first of ['local', 'remote'] as const) test(`guarded no-op folder ${first} echo avoids repeated policy and point reads`, { timeout: 10000 }, async () => {
     const x = await folderEchoFixture({ first }); await x.stream();
     assert.deepEqual(x.stats(), { contexts: 2, localReads: 1, cloudReads: 1, childReads: 0 });

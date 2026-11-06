@@ -139,7 +139,7 @@ test('external avatar export requires the bounded-download contract on both mani
 
 test('emoji transfer, library and move capabilities reject pre-support origins', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, version] of [['api.things-export', '1.16.0'], ['api.things-import', '1.13.0'], ['api.things', '1.38.0'], ['api.things-bulk', '1.7.0']]) {
+  for (const [feature, version] of [['api.things-export', '1.16.0'], ['api.things-import', '1.13.0'], ['api.things', '1.38.0'], ['api.things-bulk', '1.7.1']]) {
     assert.equal(manifest.features[feature].version, feature === 'api.things' ? '1.52.0' : version);
 
 
@@ -151,8 +151,8 @@ test('emoji transfer, library and move capabilities reject pre-support origins',
 });
 
 test('archive root moves negotiate the additive bulk contract on both manifests', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.things-bulk'], '1.7.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-bulk'].version, '1.7.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things-bulk'], '1.7.1');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-bulk'].version, '1.7.1');
   for (const version of [undefined, '1.3.0', '1.3.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.4.0'), false);
   for (const version of ['1.5.0', '1.5.1', '1.6.0']) assert.equal(capabilitySatisfies(version, '1.5.0'), true);
 });

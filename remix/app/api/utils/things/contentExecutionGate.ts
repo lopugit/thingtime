@@ -1,7 +1,8 @@
 import { getThingsCollection } from '../mongodb/collections';
 import { readTimelineEntries } from '../timeline/repository';
 import type { TimelineEvent } from '../../../timeline/contract';
-import { StorageMutationError } from '../storage/storageCore';
+import { currentContentStorageSizeBytes, thingStorageSizeBytes, StorageMutationError } from '../storage/storageCore';
+import { applyUserStorageDelta } from '../storage/userStorage';
 
 export const CREATION_COMPLETION_ADAPTER = 'reviewed-creation-graph-result';
 export type ContentExecutionHold = {
@@ -16,6 +17,20 @@ export function contentExecutionHold(input: ContentExecutionHold): ContentExecut
 		![input.operationId, input.completionEventId, input.rootId].every(value => typeof value === 'string' && !!value) ||
 		!/^[a-f0-9]{64}$/.test(input.binding)) throw Error('Invalid content execution hold');
 	return { ...input };
+}
+
+/** Trusted composition may attach a new hold to an already-restored ordinary
+ * folder. Never replace an active hold or change user content/timestamps. The
+ * envelope delta and epoch belong to the same current-owner transaction. */
+export async function attachContentExecutionHold(things: any, before: any, input: ContentExecutionHold, session: any) {
+ const hold = contentExecutionHold(input);
+ if (!session?.inTransaction?.() || !before?.ownerId || currentContentStorageSizeBytes(before) === null) throw new StorageMutationError(409, 'storage_conflict', 'Execution hold requires accounted owned content');
+ if (before.executionHold && JSON.stringify(before.executionHold) !== JSON.stringify(hold) && await contentExecutionHeld(before, things, session)) throw new StorageMutationError(409, 'storage_conflict', 'Another creation still owns this content');
+ const after = { ...before, executionHold: hold }; after.sizeBytes = thingStorageSizeBytes(after);
+ await applyUserStorageDelta(before.ownerId, after.sizeBytes - before.sizeBytes, session);
+ const changed = await things.updateOne({ _id: before._id, shareId: before.shareId, ownerId: before.ownerId, timelineHeadId: before.timelineHeadId, sizeBytes: before.sizeBytes }, { $set: { executionHold: hold, sizeBytes: after.sizeBytes } }, { session });
+ if (changed.matchedCount !== 1) throw new StorageMutationError(409, 'storage_conflict', 'Content changed before attaching execution hold');
+ await recordCreationContentEpoch(things, before, after, session);
 }
 
 /** Every canonical ordinary mutation already records its Timeline revision in

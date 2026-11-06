@@ -783,3 +783,14 @@ Temporary failures may retain a same-scope readable template only while executio
 remains unverified and inert. This is a client lifecycle correction, with no
 endpoint/manifest feature change. Run its focused tests and the full real-route
 Schema refresh/revocation fixture documented in `TESTING.md`.
+
+### Account-file restore writer epoch corrections
+
+`api.files` 1.12.1, `api.things-bulk` 1.7.1 and `api.things-delete` 1.1.1 fence
+writes/moves/drains of held restored content through the root content epoch.
+`ACCOUNT_FILE_RESTORE_REQUIREMENTS` negotiates them with existing Things,
+Timeline and exact attachment content contracts. Both manifest generators derive
+versions from `apiDocs.ts`. Trusted transaction composition and audit labels are
+internal options, never new accepted HTTP fields; public retained-version input
+and upload approval remain unchanged. Run `test:api-capabilities`, the backup
+contract test, canonical build/output smoke and `test:backups:file-restore`.
