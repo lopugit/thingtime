@@ -27,7 +27,7 @@ try {
  server=createServer((req,res)=>{res.writeHead(200,{'Content-Type':req.url==='/fixture.js'?'application/javascript':'text/html','Cache-Control':'no-store'});res.end(req.url==='/fixture.js'?bundle:'<!doctype html><title>Restore execution hold regression</title><meta name="viewport" content="width=device-width,initial-scale=1"><div id="root"></div><script type="module" src="/fixture.js"></script>');});
  server.listen(0,'127.0.0.1');await once(server,'listening');
  const origin=`http://127.0.0.1:${server.address().port}`;
- browser=await createRequire(join(root,'../MCP/package.json'))('playwright').chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH}:process.platform==='linux'?{executablePath:'/usr/bin/chromium'}:{})});
+ browser=await createRequire(join(root,'../MCP/package.json'))('playwright').chromium.launch({headless:true,chromiumSandbox:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH}:process.platform==='linux'?{executablePath:'/usr/bin/chromium'}:{})});
  for(const [label,width,height] of [['desktop',1440,1000],['mobile',390,844]]) {
   const context=await browser.newContext({viewport:{width,height},serviceWorkers:'block'}),page=await context.newPage();page.setDefaultTimeout(10000);page.on('pageerror',error=>errors.push(error.message));
   try {

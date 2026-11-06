@@ -8,7 +8,9 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { createRequire } from 'node:module';
 const root = resolve(import.meta.dirname, '..');
+try { createRequire(join(root,'../MCP/package.json')).resolve('playwright'); } catch { throw Error('Install the declared browser dependency with npm --prefix MCP ci; see TESTING.md.'); }
 const evidence = resolve(process.argv[2] || join(tmpdir(), 'thingtime-restore-route-evidence'));
 const bundle = resolve(process.env.THINGTIME_ROUTE_TEST_SERVER_BUNDLE || join(root, '.output/server/index.mjs'));
 const runtimeFiles = [

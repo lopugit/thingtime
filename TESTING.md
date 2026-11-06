@@ -14947,6 +14947,10 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - Build the client and a compiled middleware API (`pnpm --dir remix run
   build:client`, then `NITRO_PRESET=node_middleware pnpm --dir remix run
   build:server`), then run `pnpm --dir remix run test:content-execution:route`.
+  Prerequisites are `mongod`, `mongosh`, `npm --prefix MCP ci`, and the
+  Playwright Chromium runtime (`npm --prefix MCP exec -- playwright install
+  chromium`), running as a regular OS user with Chromium sandbox support. The
+  fixture owns Mongo 28166 and HTTP 28167 with normal browser networking.
   An explicit `THINGTIME_ROUTE_TEST_SERVER_BUNDLE` may select a verified compiled
   middleware artifact. The harness copies artifacts, owns a fresh replica and
   browser profile, and creates synthetic accounts through the real API. It
