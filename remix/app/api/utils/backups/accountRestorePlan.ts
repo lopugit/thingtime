@@ -110,13 +110,15 @@ export async function prepareAccountRestorePlan(
 			const decoded = await readAccountRestoreRecord(item, ranges, backup.header.scope.ownerId, guard.check);
 			await guard();
 			const family = decoded?.family ?? 'other-managed';
-			const targetId = family === 'account-content' ? destination.scope.ownerId : freshId(planId, item.thingId, destination);
+			// Descriptive source evidence never allocates a destination user Thing.
+			const targetId = (family === 'source-coverage' || family === 'source-exclusion') ? item.thingId : family === 'account-content' ? destination.scope.ownerId : freshId(planId, item.thingId, destination);
 			db.prepare('INSERT INTO entries VALUES (?,?,?,?,?)').run(item.ordinal, item.thingId, targetId, family, json(decoded?.kinds ?? []));
 			observed[family] = (observed[family] ?? 0) + 1;
 			entries++;
 			await append({ kind: 'entry', sourceId: item.thingId, targetId, ordinal: item.ordinal, family, adapter: item.snapshot.adapter, version: item.snapshot.version, itemHash: digest(backupJson(item)) });
 			if (!decoded) { await issue('unsupported-adapter', item.thingId); continue; }
 			const { kinds, crystal, value } = decoded;
+			if (family === 'source-coverage' || family === 'source-exclusion') continue;
 			if (family === 'ordinary') {
 				add(item.thingId, value.folderId, 'folder'); add(item.thingId, value.targetId, 'thing');
 				if (kinds.includes('data')) add(item.thingId, crystal.parentId, 'thing');

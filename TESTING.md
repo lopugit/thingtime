@@ -11907,6 +11907,28 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   100 GB–100 TB export remain required before claiming whole-account backup.
 
 
+### Stored backup reference coverage and notification history — 2026-11-06
+
+- [x] Preserve nested Component/Action/Schema/media references at one source
+  snapshot; compare independent readback after ordinary source and first-vault
+  deletion. Allowed dangling/foreign pointers remain archived with explicit
+  unresolved evidence, never a read grant or whole-account readiness.
+- [x] Traverse 5,001 render nodes, depth 80 and 700 stored contexts beyond preview
+  policies; verify literal HTML/CSS, alias ambiguity, same-context and Action
+  cycles, transformed recursive-context refusal, cancellation and scratch cleanup.
+- [x] Keep evidence pages bounded and manifest-bound. Refuse wrong snapshot,
+  wrong adapter, duplicate/out-of-order evidence pages and source-ID collisions;
+  never allocate user destinations for descriptive coverage/exclusion records.
+- [x] Stream large notification detail intact; exclude secret/delivery/idempotency
+  authority and retain stored actor/time/read state. Never re-emit a notification
+  or restore subscription entitlements from archival descriptors.
+- [x] Run `test:backups:references`: real signup/API capture, actual index-migration
+  drain, concurrent source update, large notification readback, foreign ACL and
+  dangling-pointer behavior, and real direct/shared Action alias comparison.
+- [ ] Capture authorized public/system/foreign dependencies and remaining managed,
+  credential, external-settings and device-local families; implement reviewed
+  writers/native delivery before declaring whole-account backup or restore ready.
+
 ### Recoverable Apple native Trash — 2026-10-17
 
 - [x] Require separate native deletion consent, exact configuration/scope/grant

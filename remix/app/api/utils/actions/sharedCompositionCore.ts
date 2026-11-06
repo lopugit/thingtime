@@ -1,4 +1,4 @@
-import { defaultsFromArgs, sanitizeArgSpecs, visitStoredTemplateActions } from '../../../components/ComponentsLibrary/componentTemplate';
+import { defaultsFromArgs, sanitizeArgSpecs, visitStoredTemplateActions, iterateStoredTemplateActions, StoredReferenceUnsupportedError } from '../../../components/ComponentsLibrary/componentTemplate';
 
 // Only executable, persisted references form composition edges. Runtime input
 // and arbitrary metadata never grant read authority.
@@ -69,3 +69,59 @@ export function visitStoredBlocks(nodes: unknown, visit: (block: Record<string, 
  }
 }
 export const blockActionTemplate = (block: Record<string,any>) => ({tag:block.tag,props:block.props,ttAction:block.props?.['data-tt-action'],ttActionRefs:block.props?.['data-tt-action-refs']});
+
+export function* iterateStoredBlocks(nodes: unknown, signal?: AbortSignal): Generator<{ block: Record<string, any>; scope: Record<string, unknown> } | null> {
+	const stack: { items: Iterator<any>; scope: Record<string, unknown>; owner?: object }[] = [];
+	if (Array.isArray(nodes)) stack.push({ items: nodes.values(), scope: {} });
+	const active = new WeakSet<object>();
+	while (stack.length) {
+		signal?.throwIfAborted();
+		const frame = stack[stack.length - 1], next = frame.items.next();
+		if (next.done) { stack.pop(); if (frame.owner) active.delete(frame.owner); continue; }
+		yield null;
+		const block = next.value;
+		if (!block || typeof block !== 'object') continue;
+		if (active.has(block)) throw new StoredReferenceUnsupportedError('Cyclic stored block tree');
+		const scope = block.source || (block.args && block.type !== 'component') ? storedComponentScope({}, block.args) : frame.scope;
+		yield { block, scope };
+		if (Array.isArray(block.children)) { active.add(block); stack.push({ items: block.children.values(), scope, owner: block }); }
+	}
+}
+
+/** Streaming sibling of compositionReferences for worker capture/recovery.
+ * Same executable positions and lookup vocabulary; no renderer count/depth
+ * policy, whole-graph Map or runtime input. Consumers deduplicate on disk. */
+export function* iterateStoredCompositionReferences(kinds: string[], crystal: Record<string, any>, options: { args?: Record<string, unknown>; signal?: AbortSignal } = {}): Generator<CompositionReference | null> {
+	const ref = function* (kind: CompositionReference['kind'], value: unknown, optional = false): Generator<CompositionReference> {
+		if (value == null) return;
+		if (!literal(value)) throw new StoredReferenceUnsupportedError('Non-literal stored composition reference');
+		yield { kind, ref: value, ...(optional ? { optional: true as const } : {}) };
+	};
+	const render = function* (value: unknown, scope: Record<string, unknown>): Generator<CompositionReference | null> {
+		for (const step of iterateStoredTemplateActions(value, scope, options.signal)) yield step ? { kind: 'action', ref: step.action } : null;
+	};
+	if (kinds.includes('webpage')) for (const step of iterateStoredBlocks(crystal.blocks, options.signal)) {
+		if (!step) { yield null; continue; }
+		const { block, scope } = step;
+		if (block.type === 'component') {
+			for (const reference of ref('component', block.component)) yield { ...reference, ...(block.args && typeof block.args === 'object' && !Array.isArray(block.args) ? { args: block.args } : {}) };
+		}
+		yield* ref('action', block.source?.action);
+		if (block.type === 'collection') yield* ref('action', block.props?.source?.action);
+		if (block.type === 'element') yield* render(blockActionTemplate(block), scope);
+	}
+	if (kinds.includes('component')) { yield* ref('action', crystal.source?.action); yield* render(crystal.render, storedComponentScope(crystal, options.args)); }
+	if (kinds.includes('schema')) yield* render(crystal.render, {});
+	if (kinds.includes('action')) {
+		for (const step of crystal.steps ?? []) {
+			options.signal?.throwIfAborted(); yield null;
+			if (step?.op === 'actions.invoke' || step?.op === 'each') yield* ref('action', step.action);
+			if (['things.get', 'things.update', 'things.delete'].includes(step?.op)) yield* ref('data', step.id);
+			if (typeof step?.op === 'string' && step.op.startsWith('things.')) yield* ref('schema', step.schema);
+		}
+		for (const capability of crystal.capabilities ?? []) {
+			if (Array.isArray(capability?.schemas)) for (const schema of capability.schemas) yield* ref('schema', schema, true);
+		}
+	}
+	if (kinds.includes('data')) yield* ref('schema', crystal.schemaId);
+}

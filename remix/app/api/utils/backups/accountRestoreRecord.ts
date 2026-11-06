@@ -13,6 +13,8 @@ import { BACKUP_TIMELINE_RECORD_BYTES, parseBackupTimelineRecord, timelineBackup
 import { backupAttachmentItemContent, parseBackupAttachment } from './attachmentRecords';
 import { parseCloudFile } from '../../../fileSync/cloudFile';
 import { backupJson } from '../../../backups/manifest';
+import { BACKUP_NOTIFICATION_ADAPTER, readBackupNotification } from './notificationSnapshots';
+import { BACKUP_REFERENCE_COVERAGE_ADAPTER, parseBackupReferenceEvidence, BACKUP_SOURCE_EXCLUSION_ADAPTER, parseBackupSourceExclusion } from './storedReferences';
 
 type Range = { read(): Promise<Uint8Array> };
 export type RestoreSourceRecord = {
@@ -34,6 +36,19 @@ export async function readAccountRestoreRecord(item: BackupItem, ranges: AsyncIt
 		const snapshot = await readBackupThingStream(item, (async function* () { for await (const range of ranges) { check(); yield await range.read(); } })(), check);
 		const value = snapshot.value as any;
 		return { family: 'ordinary', kinds: value.thingtime, crystal: value.crystal, value };
+	}
+	if (adapter === BACKUP_REFERENCE_COVERAGE_ADAPTER) {
+		if (item.content !== null) throw Error('Coverage evidence cannot carry executable content');
+		const value = parseBackupReferenceEvidence(item.snapshot);
+		return { family: 'source-coverage', kinds: [], crystal: {}, value };
+	}
+	if (adapter === BACKUP_SOURCE_EXCLUSION_ADAPTER) {
+		if (item.content !== null) throw Error('Source exclusion cannot carry executable content');
+		return { family: 'source-exclusion', kinds: [], crystal: {}, value: parseBackupSourceExclusion(item.snapshot) };
+	}
+	if (adapter === BACKUP_NOTIFICATION_ADAPTER) {
+		const snapshot = await readBackupNotification(item, (async function* () { for await (const range of ranges) yield await range.read(); })(), ownerId, check);
+		return { family: 'notifications', kinds: ['notification'], crystal: {}, value: snapshot.value };
 	}
 	const maximum = item.snapshot.version === 1 && Object.prototype.hasOwnProperty.call(wrappers, adapter) ? wrappers[adapter] : undefined;
 	const parts: Uint8Array[] = [];
