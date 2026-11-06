@@ -40,6 +40,10 @@
 		{
 			"path": "/api/v1/ai/models/sync",
 			"schedule": "23 3 * * *"
+		},
+		{
+			"path": "/api/v1/backups/run",
+			"schedule": "*/5 * * * *"
 		}
 	]
 }

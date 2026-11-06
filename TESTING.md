@@ -14926,6 +14926,30 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ### Account restore admission plans
 
+- Run `pnpm --dir remix run test:backups:worker` for original-session/lease
+  fencing, encrypted hash/CAS recovery, bounded snapshot engine interoperability
+  with canonical v1 seals, corrupt-byte/revocation refusal and the actual internal
+  transport outer-guard cancellation regression. Collection/transport doubles
+  here are unit evidence only.
+- Run `pnpm --dir remix run test:backups:workflow` on its task-owned replica set.
+  Require generic backup-job/event exact/batch/inherited/export and bulk refusal
+  for owner/other/anonymous, unchanged ordinary CRUD, paused/revoked canonical
+  writes rolled back, accepted encrypted checkpoint reply-loss recovery and
+  killed-process continuation. Do not replace this gate with unit doubles.
+- A transient `snapshot-unavailable` continuation retains its exact BSON timestamp;
+  `snapshot-expired` requires a newly reviewed backup operation. Neither may
+  silently select a newer timestamp. Producer/reference receipts must replay
+  after uncertain replies without widening source scope.
+- Guard calls must freshly reject revoked/scoped/Character/replaced/expired
+  authority without writing a healthy lease on every immutable object read.
+  Near-expiry renewal alone may write, with the unchanged original-session/job
+  transaction fence. Measure census at the same timestamp with the synthetic
+  1,000-item API profile; history expiry remains refusal, never a wider capture.
+- Workflow registration, deployed scheduling, independent destination readiness,
+  real snapshot/selected restore execution and editable desktop/mobile UI remain
+  distinct acceptance gates. A snapshot unit seal or configured destination does
+  not establish the complete product flow or whole-account readiness.
+
 - Run `node --import tsx --test app/api/utils/backups/backupDestinations.test.ts`
   from `remix/` for exact-origin/environment vault registration, primary-bucket
   refusal, safe projections, revoked-session/configuration-change refusal,
@@ -15060,3 +15084,33 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - This internal worker phase is not a complete account restore/jobs/UI workflow.
   Live object-provider durability, History audit grouping, final signed/installed
   acceptance and measured large-volume behavior remain independent gates.
+
+### First-party backup workspace and durable dispatch
+
+- Run the catalog/path and dispatch regressions: duplicate basenames in distinct
+  nested folders, 75-level retained ancestry across fresh units, corrupt sidecars,
+  revocation, stale first-page jobs, transient authority outages across two
+  scheduler drains, and late scheduling receipts with the original attempt ID.
+- Run `node remix/scripts/test-account-profile-backup.mjs backup-workspace` for
+  disposable real HTTP/API/replica/Chrome acceptance at Mongo28175/HTTP28176.
+  It owns its account, independent local store, browser profile and cleanup;
+  networking remains normal. Desktop/mobile use the actual adapter, shared folder
+  picker and account Builder transport. Compare restored current/historical
+  bytes and ordinary content independently, then save/reload nested Builder
+  text and controls. Do not substitute synthetic composition for this gate.
+- Keep source, isolated local provider, deployed Workflow/cron and actual S3
+  acceptance distinct. An SDK scheduling receipt is not an executed first step;
+  an executed first step is not provider recovery proof. An unavailable worker
+  blocks admission, while configured/unverified execution can confirm itself
+  through the first ordinary snapshot, review or reviewed restore admission.
+
+- Embedded `ThingsPage.locationPicker` must ignore the containing URL's device
+  selection/view query while preserving that URL and its sync drafts. Open the
+  picker from a normal device Sync & Backup entry, select an owned folder, confirm
+  exact timeline revision, then cancel/reopen and reload the outer device page.
+  The embedded slot must never recursively render device details.
+
+- Compiled Nitro H3 requests must be reconstructed from public URL/method/headers
+  and body stream when adding a deadline signal; native `new Request(h3Request)`
+  fails Undici private-state branding. Smoke the built workspace GET refusal and
+  normal authenticated POST body path, retaining abort/deadline semantics.

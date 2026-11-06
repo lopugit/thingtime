@@ -924,3 +924,20 @@ can release holds. `api.things-bulk` 1.7.1 and `api.things-delete` 1.1.1 publish
 managed placement/drain fencing. Run the file-restore real-replica proof plus
 Things/Files/Timeline and content-gate regressions. UI/job activation, History
 audit grouping and installed/native acceptance remain separate.
+
+
+## Durable backup authority boundary
+
+`api/utils/backups/backupJobs.ts` owns private home-plane backup-job/event control
+Things, original-session leases and atomic cursor/hash-reference checkpoints.
+`things.ts` refuses their generic exact, inherited, mixed-kind and exported reads;
+ordinary descendants cannot borrow a public ancestor through that private boundary.
+`api.things` 1.52.1, `api.things-export` 1.16.1 and `api.things-bulk` 1.7.2 publish
+that corrected permission boundary. Unit checks are `test:backups:worker`; actual
+API-utils/replica transaction checks are `test:backups:workflow`.
+`backupWorkflow.server.ts` reuses the supported ID-only Vercel Workflow lifecycle;
+`backupEngine.server.ts` composes bounded inventory/capture/verification units.
+No public admission/UI entry is enabled until the full supported execution path
+and deployment readiness are independently accepted. Snapshot/reference sidecars
+and plaintext-bearing encrypted hasher state stay in the independent backup store,
+never ordinary Thing crystal fields. See `docs/portable-backups.md` and TESTING.

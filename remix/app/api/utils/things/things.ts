@@ -2901,15 +2901,20 @@ const isPrivateConnectionThing = (doc: ThingDoc) => {
   return kinds.includes('external-auth-connection') || (kinds.includes('external-account') && doc.ownerId !== 'system');
 };
 
+// Workflow grants/checkpoints are dedicated control state even when a record
+// carries another schema marker. No generic owner, shared, inherited, export
+// or reference read may turn those records into ordinary editable content.
+const isBackupControlThing = (doc: ThingDoc) => thingtimeOf(doc).some(kind => kind === 'backup-job' || kind === 'backup-job-event');
+
 // Single and batched exact reads share the same protected-record exclusion.
-const genericThingReadBlocked = (doc: ThingDoc) => isDeviceControlThing(doc) || isPrivateConnectionThing(doc) ||
+const genericThingReadBlocked = (doc: ThingDoc) => isBackupControlThing(doc) || isDeviceControlThing(doc) || isPrivateConnectionThing(doc) ||
   thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'draft', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind));
 
 export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   // Every `timeline-` kind (events, links, snapshot parts, branches, heads, notes, version names)
   // is protected History metadata reachable only through the Timeline API, never a generic read.
   if (thingtimeOf(doc).some(kind => typeof kind === 'string' && kind.startsWith('timeline-'))) return false;
-  if (isDeviceControlThing(doc) || isPrivateConnectionThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
+  if (isBackupControlThing(doc) || isDeviceControlThing(doc) || isPrivateConnectionThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
 	if ((thingtimeOf(doc).includes(FOUND_POST_KIND) || thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME) || thingtimeOf(doc).includes(MONGODB_CONNECTION_SNAPSHOT_THINGTIME))) return false;
@@ -3008,7 +3013,7 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
-  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
+  if (isBackupControlThing(doc) || isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
 	// terminal — a blocked or born-private comment under a clean post must
 	// vanish for non-owners too
@@ -3023,7 +3028,7 @@ export const canViewInherited = async (
   let ancestorDenied = false;
   const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), async id => {
     const ancestor = await findByShareId(id);
-    if (ancestor && (isDeviceControlThing(ancestor) || attachmentIsBlocked(ancestor as any) ||
+    if (ancestor && (isBackupControlThing(ancestor) || isDeviceControlThing(ancestor) || attachmentIsBlocked(ancestor as any) ||
       (attachmentModerationStatus(ancestor as any) === 'pending' &&
        thingtimeOf(ancestor).some(kind => TEXT_MODERATED_THINGTIMES.has(kind)) && ancestor.ownerId !== viewer?.id))) ancestorDenied = true;
     return ancestor;

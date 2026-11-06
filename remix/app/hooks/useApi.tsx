@@ -1,5 +1,7 @@
 import { requireSharedContentCapability, sharedContentWrite } from '~/utils/sharedContentCapabilities';
 import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
+import { BACKUP_WORKSPACE_PATH, BACKUP_WORKSPACE_REQUIREMENTS, type BackupWorkspaceCatalog, type BackupWorkspaceEntry, type BackupWorkspacePage, type BackupWorkspaceReview, type BackupWorkspaceCommand } from '~/backups/workspace';
+import type { BackupJobView } from '~/backups/workflow';
 import { BACKUP_DESTINATIONS_PATH, BACKUP_DESTINATIONS_REQUIREMENTS, type BackupDestinationsResult } from '~/backups/destinations';
 import { AUTHORED_CONTROL_REQUIREMENTS, usesAuthoredControls } from '~/schemas/authoredControls';
 import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
@@ -1765,9 +1767,37 @@ export function useApi() {
     }
   };
 
-  const ret = {
-    v1
-  };
+  const backupWorkspaceRequest = useCallback(async (query: Record<string, unknown> | null, command: BackupWorkspaceCommand | null, options: ThingRequestOptions) => {
+    const identity = rootIdentity.read();
+    const actor = actionActor.current;
+    const origin = options?.expectedApiOrigin;
+    const check = () => {
+      options?.signal?.throwIfAborted();
+      if (!actor || options?.expectedActor !== actor || options?.expectedDataPlane !== 'home' || planeRef.current !== 'home' ||
+          !origin || new URL(origin).origin !== origin || identity.pending || rootIdentity.read().generation !== identity.generation ||
+          actionActor.current !== actor || character) throw Error('The backup account, origin or authorization changed.');
+    };
+    check();
+    for (const [feature, minimum] of Object.entries(BACKUP_WORKSPACE_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum, origin);
+    check();
+    const payload = command?.action === 'review' ? { ...command, selection: { snapshotId: command.selection.snapshotId, sourceRootId: command.selection.sourceRootId, destination: { id: command.selection.destination.id, revision: command.selection.destination.revision } } } : command;
+    const result = payload ? await asyncFetcher.submit(payload, { ...options, action: BACKUP_WORKSPACE_PATH, errorContext: 'manage this backup operation' }) :
+      await getJson(BACKUP_WORKSPACE_PATH + toQuery(query!), options);
+    check();
+    if (result?.ok !== true) throw Error('The backup response is unavailable or changed.');
+    return result;
+  }, [asyncFetcher, getJson, character]);
+  const getBackupWorkspaceCatalog = useCallback((query: { snapshotCursor?: string; jobCursor?: string }, options: ThingRequestOptions): Promise<BackupWorkspaceCatalog & { ok: true }> =>
+    backupWorkspaceRequest({ ...query, view: 'catalog' }, null, options), [backupWorkspaceRequest]);
+  const getBackupWorkspaceEntries = useCallback((query: { id: string; cursor?: string }, options: ThingRequestOptions): Promise<BackupWorkspacePage<BackupWorkspaceEntry> & { ok: true }> =>
+    backupWorkspaceRequest({ ...query, view: 'snapshot' }, null, options), [backupWorkspaceRequest]);
+  const getBackupWorkspaceJob = useCallback((query: { id: string }, options: ThingRequestOptions): Promise<{ ok: true; job: BackupJobView }> =>
+    backupWorkspaceRequest({ ...query, view: 'job' }, null, options), [backupWorkspaceRequest]);
+  const getBackupWorkspaceReview = useCallback((query: { id: string }, options: ThingRequestOptions): Promise<{ ok: true; review: BackupWorkspaceReview }> =>
+    backupWorkspaceRequest({ ...query, view: 'review' }, null, options), [backupWorkspaceRequest]);
+  const sendBackupWorkspaceCommand = useCallback((command: BackupWorkspaceCommand, options: ThingRequestOptions): Promise<{ ok: true; job: BackupJobView }> =>
+    backupWorkspaceRequest(null, command, options), [backupWorkspaceRequest]);
+  const ret = { v1, getBackupWorkspaceCatalog, getBackupWorkspaceEntries, getBackupWorkspaceJob, getBackupWorkspaceReview, sendBackupWorkspaceCommand };
 
   return ret;
 }
