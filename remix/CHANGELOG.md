@@ -12,6 +12,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-07: Wake indexed native sync feeds when their durable consumer drains,
+  keeping live 25-second change reads during uploads instead of repeated
+  two-second polling. Retain fresh admission, cancellation and native revision
+  finish checks; installed startup timing remains a separate gate. **Codex (AI)**
+
 - 2026-11-06: Defer already queued two-replica folder hints before expensive
   initial point reads. Preserve sequential journal processing, fresh effect
   policy and strict reconciliation; measure first-file startup and queued-peer

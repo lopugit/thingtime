@@ -89,6 +89,10 @@ Guarded streaming preparation defers missing journal ancestry before policy RPCs
 protected point reads and executable bindings retain current policy checks. The
 `--healthy` canonical fixture lane separates startup timing from accepted-loss
 recovery while retaining exact hashes and strict checkpoints.
+The indexed local feed races its live native long poll against a cancellable,
+revisioned durable-consumer wake. Buffered revisions and the native finish/poll
+handshake still drain normally; legacy adapters keep their polling fallback.
+See `streamingIndexRecovery.test.ts` and the idle-wake checklist in `TESTING.md`.
 Mac paged native inventory reads use `MobileFolderInventory.read` and
 `RustInventoryClient.checkedPage`: each Rust `page` reply includes its checked
 status so the client can validate generation, root version and coverage with

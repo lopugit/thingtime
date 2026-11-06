@@ -65,7 +65,7 @@ export type ForegroundSyncInput = {
 	conditions(): Promise<SyncConditions>;
 	scanLocal(): Promise<SyncEntry[]>;
 	/** Native durable revision feed; negotiated separately from sealed captures. */
-	streamLocalChanges?(captureId: string, afterSequence: number, signal?: AbortSignal, readyToFinish?: () => Promise<boolean>): AsyncIterable<import('./streamingIndex').NativeIndexChangesPage>;
+	streamLocalChanges?(captureId: string, afterSequence: number, signal?: AbortSignal, readyToFinish?: () => Promise<boolean>, waitForFinish?: (signal: AbortSignal) => Promise<void>): AsyncIterable<import('./streamingIndex').NativeIndexChangesPage>;
 	/** Origin-negotiated durable remote revisions, using the same run cursor contract. */
 	streamRemoteChanges?(captureId: string, afterSequence: number, signal?: AbortSignal, readyToFinish?: () => Promise<boolean>, resume?: { cursor?: string; snapshotComplete?: boolean; checkpoint(cursor: string, snapshotComplete: boolean): Promise<void> }): AsyncIterable<import('./streamingIndex').NativeIndexChangesPage>;
 	/** Set only by the native adapter with exact path inspection and staging. */
