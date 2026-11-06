@@ -17,7 +17,10 @@ final class MobileDeviceBridge {
     private var cancellationReply: (() -> Void)?
     private var observer: NSObjectProtocol?
     private let session: URLSession
-    init() {
+    private let location: MobileDeviceLocation
+    convenience init() { self.init(location: .shared) }
+    init(location: MobileDeviceLocation) {
+        self.location = location
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil; configuration.urlCredentialStorage = nil; configuration.httpShouldSetCookies = false
         session = URLSession(configuration: configuration, delegate: MobileDeviceRedirectPolicy(), delegateQueue: nil)
@@ -45,6 +48,8 @@ final class MobileDeviceBridge {
             if !enabled {
                 if requestScope == scope { suspend() }
                 MobileDeviceBackgroundPresence.shared.stop(matching: scope)
+                location.suspendAuthorization(matching: scope)
+                MobileDeviceAlerts.shared.stop(matching: scope)
                 reply("mobile-device-result", ["requestId": id, "ownerId": owner,
                     "origin": scope.origin.absoluteString, "state": "paused"])
                 return
@@ -70,10 +75,15 @@ final class MobileDeviceBridge {
                 let result: MobileDevicePairing.Status
                 if action == "pair" {
                     let device = UIDevice.current
-                    result = try await engine.pair(scope, descriptor: ["name": device.name, "model": device.model,
+                    result = try await engine.pair(scope, descriptor: ["name": device.name, "model": MobileDeviceHardware.modelIdentifier,
                         "osVersion": device.systemVersion, "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"])
                 } else { result = try await engine.status(scope) }
                 try check()
+                if result.state == "paired" {
+                    self?.location.verified(scope)
+                    MobileDeviceAlerts.shared.approve(scope)
+                }
+                else if result.state == "revoked" { MobileDeviceAlerts.shared.stop(matching: scope) }
                 if action == "presence" {
                     if result.state == "paired" { MobileDeviceBackgroundPresence.shared.approve(scope) }
                     else { MobileDeviceBackgroundPresence.shared.stop(matching: scope) }

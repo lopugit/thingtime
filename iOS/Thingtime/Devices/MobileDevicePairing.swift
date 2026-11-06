@@ -41,6 +41,7 @@ final class MobileDevicePairing {
     private let save: (Record) throws -> Void
     private let transport: Transport
     private let check: () throws -> Void
+    private var supportsDescriptorUpdate = false
     private let cookie: (URL) async throws -> String
     static let requirements = ["api.auth-me": [1,0,0], "api.devices": [1,13,0], "api.devices-pairing": [1,0,0],
                                "api.devices-pairing-claim": [1,2,0], "api.devices-node-state": [1,9,0]]
@@ -78,6 +79,8 @@ final class MobileDevicePairing {
     private func verify(_ scope: Scope) async throws {
         let manifest = try await request(scope, LopuVoiceContract.manifestPath, authenticated: false)
         guard Self.requirements.allSatisfy({ LopuVoiceContract.accepts(manifest, baseURL: scope.origin, feature: $0.key, minimum: $0.value) }) else { throw Failure.incompatible }
+        supportsDescriptorUpdate = LopuVoiceContract.accepts(manifest, baseURL: scope.origin,
+            feature: "api.devices-node-state", minimum: [1, 15, 0])
         try await verifyIdentity(scope)
     }
     func verifyIdentity(_ scope: Scope) async throws {
@@ -105,7 +108,8 @@ final class MobileDevicePairing {
         try save(value)
         var state: [String: Any] = ["locked": false]
         if !battery.isEmpty { state["battery"] = battery }
-        let snapshot: [String: Any] = ["revision": value.revision, "capabilities": [String](), "connectors": [String](), "state": state]
+        var snapshot: [String: Any] = ["revision": value.revision, "capabilities": MobileDeviceAlerts.shared.capabilities(scope), "connectors": [String](), "state": state]
+        if supportsDescriptorUpdate, let patch = MobileDeviceHardware.descriptorPatch { snapshot["descriptorPatch"] = patch }
         do {
             _ = try await request(scope, "/api/v1/devices/node/state", body: Self.json(snapshot), credential: value.credential)
         } catch Failure.revoked {
@@ -127,8 +131,10 @@ final class MobileDevicePairing {
         try checked()
         value.revision = max(value.revision + 1, Int64(Date().timeIntervalSince1970 * 1000))
         try save(value)
-        let snapshot: [String: Any] = ["revision": value.revision, "capabilities": [String](),
+        var snapshot: [String: Any] = ["revision": value.revision, "capabilities": MobileDeviceAlerts.shared.capabilities(scope),
             "connectors": [String](), "state": ["locked": locked]]
+        if LopuVoiceContract.accepts(manifest, baseURL: scope.origin, feature: "api.devices-node-state", minimum: [1, 15, 0]),
+           let patch = MobileDeviceHardware.descriptorPatch { snapshot["descriptorPatch"] = patch }
         do {
             _ = try await request(scope, "/api/v1/devices/node/state", body: Self.json(snapshot), credential: value.credential)
         } catch Failure.revoked {

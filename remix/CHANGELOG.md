@@ -140,6 +140,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Add opt-in private device location history with Never retention,
+  accounted expiry, native iOS/Mac collection and scoped locate messages/audio.
+  Mapbox, marker artwork, filters and settings compose from private editable
+  Things. Keep background scheduling, provider receipts and physical-device
+  acceptance distinct. See [PR #1397 evidence](../PRs/1397-codex-device-location-history-private-device-location-and-alerts.md). **Codex (AI)**
+
 - 2026-11-06: Reconnect bookmarked external volumes through stable volume/root
   proof, fresh Rust inventory generations and receipt-preserving reconciliation.
   Preserve staged downloads and private publication journals across remounts;

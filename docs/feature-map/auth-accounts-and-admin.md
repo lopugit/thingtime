@@ -40,6 +40,14 @@ data stay on the home data plane.
 | Admin routes | `app/routes/api/v1/admin/*` (users/public-uploads, ci, integrations, error-logs, moderation, migrations) |
 | Client hooks | `app/hooks/useCurrentUser.tsx`, account switcher components in `app/components/Account/*` |
 
+Native mobile background authority is watched by `mobileDeviceIdentity.ts`,
+mounted outside the optional polling activity in `MobileDevicePresenceBootstrap`.
+Identity/unmount withdrawal cancels scoped in-flight native authorizations while
+retaining opt-in; one read-only status can resume the same verified identity.
+Ordinary visibility hiding does not withdraw an authorized location session.
+Run the Devices identity/presence/location bridge tests and the native location
+scope regressions; see `TESTING.md` for activity-disabled logout/relogin checks.
+
 ## Authorization helper
 
 - Every API route: `const user = await getCurrentUser(request)`; treat

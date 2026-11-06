@@ -8,6 +8,7 @@ final class ThingtimeAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
     ) -> Bool {
         NativeUploadBackgroundCoordinator.shared.activate()
         MobileDeviceBackgroundPresence.shared.activate()
+        MobileDeviceLocation.shared.activate(foreground: application.applicationState != .background)
         // Foreground launch must reauthorize current web identity/preferences.
         // A system background-only relaunch retains the verified saved binding.
         if application.applicationState != .background { MobileDeviceBackgroundPresence.shared.stop() }
