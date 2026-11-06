@@ -5,7 +5,7 @@ import { buildUserSecure, packRecentReactions } from '../auth/users';
 import { backupThemeFixtures } from './themeSnapshots.fixtures';
 import { backupThemeSnapshotFromDoc, openBackupThemeSnapshot, BACKUP_THEME_CONTENT_ADAPTER } from './themeSnapshots';
 import { backupDraftFromDoc, openBackupDraft } from './draftRecords';
-import { openBackupThingSnapshot, BACKUP_THING_CONTENT_MAX_NODES } from './thingSnapshots';
+import { openBackupThingSnapshot } from './thingSnapshots';
 import { openAccountBackupFile, openAccountBackupFileVersion } from './accountFileRecovery';
 import { timelineEventThingId } from '../timeline/repository';
 import { backupAttachmentFixture, backupFileHistoryFixture } from './attachmentRecords.fixtures';
@@ -548,7 +548,7 @@ test('unsupported managed family refuses before fetching its private payload and
 	}
 });
 
-for (const mode of ['revoked', 'cancelled', 'scope', 'boundary', 'missing', 'duplicate', 'oversized', 'expired'] as const) {
+for (const mode of ['revoked', 'cancelled', 'scope', 'boundary', 'missing', 'duplicate', 'invalid-value', 'expired'] as const) {
 	test(`${mode} enumeration never publishes a complete plan and closes its cursor/session`, async () => {
 		const f = fixture(2),
 			controller = new AbortController();
@@ -568,7 +568,7 @@ for (const mode of ['revoked', 'cancelled', 'scope', 'boundary', 'missing', 'dup
 			if (mode === 'expired') throw Error('SnapshotTooOld');
 			if (mode === 'missing') return rows.slice(1);
 			if (mode === 'duplicate') return [rows[0], rows[0]];
-			if (mode === 'oversized') rows[0].crystal = Array.from({ length: BACKUP_THING_CONTENT_MAX_NODES + 1 }, () => null);
+			if (mode === 'invalid-value') rows[0].crystal = { invalid: undefined };
 			return rows;
 		};
 		await assert.rejects(f.run());
@@ -988,10 +988,10 @@ for (const mode of ['missing', 'foreign', 'target', 'purpose', 'profile', 'delet
 }
 
 
-test('ordinary account capture retains a valid 90001-node value below its existing record bound', async () => {
+test('ordinary account capture retains valid content beyond the legacy 100000-node codec', async () => {
 	const f = fixture(2);
 	f.state.alterRows = (n, rows) => {
-		if (n === 2) rows[0].crystal = Array.from({ length: 90_001 }, () => null);
+		if (n === 2) rows[0].crystal = Array.from({ length: 150_001 }, () => null);
 		return rows;
 	};
 	const plan = await f.run();
@@ -999,4 +999,7 @@ test('ordinary account capture retains a valid 90001-node value below its existi
 	assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), true);
 	assert.equal(f.state.closed, f.state.queries);
 	assert.equal(f.state.ended, 1);
+	await sealBackup(f.store, f.id, f.access);
+	const restored = await openBackupThingSnapshot(f.store, f.id, 'thing-0000', f.access);
+	assert.equal((restored.value as any).crystal.length, 150_001);
 });

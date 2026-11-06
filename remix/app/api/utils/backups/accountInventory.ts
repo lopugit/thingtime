@@ -65,8 +65,7 @@ function family(doc: Census): Family {
 	if (
 		!Array.isArray(doc.thingtime) ||
 		!doc.thingtime.length ||
-		doc.thingtime.length > 64 ||
-		doc.thingtime.some((kind) => typeof kind !== 'string' || !id(kind))
+		doc.thingtime.some((kind) => typeof kind !== 'string' || !kind || kind.trim() !== kind)
 	)
 		throw Error('Invalid account inventory kind');
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'user') return 'account';

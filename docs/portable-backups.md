@@ -225,17 +225,39 @@ of 128 at the same Mongo timestamp. Each reference must match the exact draft,
 post/comment purpose and a durable binding without profile slots or expiry.
 Linked media retains only its URL; it does not become an independently saved file.
 
-`thingSnapshots.ts` retains small ordinary `thing-content` snapshots inline and
-larger ones as canonical payloads in the existing verified chunk store. It does
-not create a second content schema. The retained record limit is 128 MiB; the
-existing canonical Thing depth/node bounds still apply. Each ordinary payload is
-processed before reading the next row, rather than collecting 128 large records.
-The writer owns a copy of input bytes, writes at most 8 MiB per chunk and checks
-access/readback between chunks. At most 16 ranges describe one retained record.
-These records are bounded, not zero-copy: JSON validation/encoding and offline
-reading can hold multiple record-sized buffers. Size the worker memory and Mongo
-history window for this work. This is separate from streaming arbitrarily large
-file bytes through the existing range transport.
+`thingSnapshots.ts` retains legacy-valid small `thing-content@1` snapshots inline.
+Other ordinary content uses `backup-thing-content@2`, with descriptor
+`{codec:"canonical-json-utf8-v1",sha256}` and the same approved canonical content
+projection. Version 1 bytes, IDs and its bounded reader remain unchanged; unknown
+adapter/codec versions refuse. Version 2 removes the backup-only 100,000-node,
+94-level JSON and 128 MiB serialized-payload ceilings. It does not widen source
+storage or destination-writer contracts or declare complete account coverage.
+
+The general inert JSON encoder walks iteratively, escapes strings in bounded
+fragments and emits at most 64 KiB at a time. Sorted object keys follow the legacy
+JSON integer-property ordering. Accessors, hidden properties, non-JSON values
+and live cycles refuse. Existing local flatted persistence is a different graph
+format: its saved strings/tags remain exact inert content, without guessing Dates
+or evaluating function tags. Native Date/cyclic objects are not valid server
+ordinary-content values and are not silently converted.
+
+Capture measures a pinned Thing's exact canonical size/SHA, then streams it into
+8 MiB immutable chunks and eight-range pages with readback. There is no aggregate
+record buffer or range-count ceiling; the existing safe-integer size/multipart
+protocol remains authoritative. The second pass must match the measured size
+and hash. Interrupted writes never produce an inventory item/plan seal, and
+identical pinned replay safely reuses immutable objects after lost acknowledgement.
+Interrupted account enumeration still requires a new database boundary/ID.
+
+Offline v2 reads reuse the installed `@streamparser/json` parser, check multipart
+and whole-payload hashes, then stream canonical re-encoding before returning one
+materialized Thing. No whole-record bytes/text are collected. The source/result
+Thing, largest scalar and property enumeration/sorting still need their actual
+runtime memory. Strict hidden/extra-property validation reflects a full own-key
+list even for arrays, so temporary reflection memory scales with container width; this is bounded per record, not a guarantee of constant RAM for
+an arbitrarily large individual Thing. Backpressure keeps encoded buffers, range
+pages and whole-backup traversal bounded. MongoDB's BSON limits, available memory,
+disk capacity and snapshot-history window remain concrete runtime constraints.
 
 `openBackupDraft` and `openBackupThingSnapshot` validate canonical payloads from
 a sealed offline vault. Drafts additionally bind owner, ID, mode and revision;
@@ -706,14 +728,18 @@ These are worker/storage tests, not installed restore UI, full account restore,
 live S3 durability, complete history import or measured 100 GB–100 TB acceptance.
 
 
-The coverage also records the existing ordinary-record v1 serializer envelope as
-`sourceFormatLimitations`: 100,000 JSON nodes and 128 MiB of retained JSON payload.
-These are avoidable legacy serializer processing budgets, not a protocol or
-product data-size contract; canonical Thing content is not intrinsically limited
-to that node count. This phase preserves existing v1 bytes and refusal behavior.
-A separately versioned streaming ordinary-record codec, with retained v1 reader
-compatibility, is required before backups can admit arbitrary valid ordinary
-content. Available-disk graph indexing does not remove that source-format gap.
+When a source contains ordinary-record v1 entries, coverage records their legacy
+serializer envelope as `sourceFormatLimitations`: 100,000 JSON nodes and 128 MiB
+of retained JSON payload. Sources containing only v2 ordinary records do not
+advertise those v1 limitations. These are legacy processing budgets, not a
+product data-size contract. The streaming codec retains v1 reader compatibility
+and removes these backup-only limits for new v2 entries. Managed-family coverage,
+reference discovery and destination writers remain independently gated;
+`wholeAccountReady` stays false. Tests cover a scalar beyond 128 MiB, more than
+100,000 nodes, deep content, fixed legacy bytes, independent source loss and
+immutable retry. A fresh-worker regression separately measures reflection/heap/RSS for 500,000
+array elements under a 128 MiB JS heap; bounded chunk writes alone are not total
+RAM evidence. These are not 100 GB/100 TB physical-transfer measurements.
 
 
 Interrupted preparation revalidates the sealed source inventory and bytes before
