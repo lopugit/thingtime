@@ -162,6 +162,7 @@ public struct CommandLeaseRequest: Codable, Equatable, Sendable {
 }
 
 public struct LeasedCommand: Codable, Equatable, Sendable {
+    public let deviceID: String?
     public let commandID: String
     public let leaseID: String
     public let method: String
@@ -175,8 +176,10 @@ public struct LeasedCommand: Codable, Equatable, Sendable {
         method: String,
         parameters: JSONValue,
         leaseExpiresAt: Date,
-        approvedForExecution: Bool = false
+        approvedForExecution: Bool = false,
+        deviceID: String? = nil
     ) {
+        self.deviceID = deviceID
         self.commandID = commandID
         self.leaseID = leaseID
         self.method = method

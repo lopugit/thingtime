@@ -16,6 +16,8 @@ final class MobileDevicePairingTests: XCTestCase {
     private var compatible = true
     private var cancelled = false
     private var stateCalls = 0
+    private var nodeVersion = "1.14.0"
+    private var descriptorPatches: [[String: String]] = []
     private func engine() -> MobileDevicePairing {
         MobileDevicePairing(load: { _ in self.saved }, save: {
             if self.failSave { throw MobileDevicePairing.Failure.storage }
@@ -27,7 +29,9 @@ final class MobileDevicePairingTests: XCTestCase {
             switch path {
             case LopuVoiceContract.manifestPath:
                 XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
-                response = ["schemaVersion": 1, "origin": "https://example.test", "features": self.compatible ? MobileDevicePairing.requirements.mapValues { ["version": $0.map(String.init).joined(separator: ".")] } : [:]]
+                var features = MobileDevicePairing.requirements.mapValues { ["version": $0.map(String.init).joined(separator: ".")] }
+                features["api.devices-node-state"] = ["version": self.nodeVersion]
+                response = ["schemaVersion": 1, "origin": "https://example.test", "features": self.compatible ? features : [:]]
             case "/api/v1/auth/me":
                 XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "synthetic=session")
                 response = ["user": ["id": self.owner, "accountKind": "user"]]
@@ -57,6 +61,7 @@ final class MobileDevicePairingTests: XCTestCase {
             case "/api/v1/devices/node/state":
                 self.stateCalls += 1
                 let snapshot = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
+                if let patch = snapshot["descriptorPatch"] as? [String: String] { self.descriptorPatches.append(patch) }
                 XCTAssertEqual((snapshot["state"] as? [String: Any])?["locked"] as? Bool, false)
                 XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(self.saved!.credential)")
                 XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
@@ -135,6 +140,16 @@ final class MobileDevicePairingTests: XCTestCase {
         saved = nil
         let absent = try await background.backgroundHeartbeat(scope, locked: true)
         XCTAssertEqual(absent.state, "unpaired")
+    }
+
+    func testHardwareDescriptorRefreshIsNegotiatedAndContainsNoSerial() async throws {
+        _ = try await engine().pair(scope, descriptor: descriptor)
+        XCTAssertTrue(descriptorPatches.isEmpty, "Old node-state contract must preserve its original payload")
+        nodeVersion = "1.15.0"
+        _ = try await engine().status(scope)
+        let patch = try XCTUnwrap(descriptorPatches.last)
+        XCTAssertEqual(patch["model"], MobileDeviceHardware.modelIdentifier)
+        XCTAssertEqual(Set(patch.keys), ["model", "osVersion", "appVersion"])
     }
 
     func testCanonicalWireUsesUtf8LengthsAndBoundedDescriptor() throws {

@@ -14909,6 +14909,50 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - Record web fixture, simulator, signed build, TestFlight processing and physical
   device evidence separately. A fake native bridge proves the web adapter only.
 
+### Device location history and locate actions — 2026-11-06
+
+- [ ] Run `test:devices` and `test:api-capabilities`; smoke the built manifest
+      and real owner/node routes. Verify other-owner, revoked and stale
+      collection refusal, duplicate immutable samples and late-arrival ordering.
+- [ ] On desktop and phone, compare current/history timestamps, coordinates,
+      accuracy and age colours with exact API samples. Exercise empty history,
+      pagination, date filters, unknown model fallback, retries and identity
+      changes. Scroll fully and open every changed control without overflow.
+- [ ] Change Never to a duration and back, including custom days. Read policy
+      back, verify expiry and accounted cleanup, and disable collection while
+      preserving retained history. Delay/fail checkbox saves: optimistic state
+      must reconcile or roll back without a second click or lost history.
+- [ ] In Builder, edit nested marker image, label, age colour, input and button
+      individually; save/reload and verify the live device composition still
+      operates. A standalone layout preview is not device-action acceptance.
+- [ ] Exercise explicit native location/notification consent, denial, revocation,
+      approximate/precise readings, background/foreground, offline outbox and
+      relaunch. Compare physical readings independently on each claimed host.
+      Missing optional capabilities must leave pairing/heartbeats operational.
+      StrictMode cleanup or identity suspension must withdraw background
+      authority without forgetting explicit collection consent; only verified
+      same-owner/device/origin activation may resume it. Ordinary backgrounding
+      preserves an already authorized location session. With Mobile device
+      connection activity disabled, explicitly start location collection, then
+      log out/switch origin or account: pending status callbacks must not restore
+      the old authority. Sign back into the same account with activity still off:
+      one read-only verified status must resume retained opt-in without another
+      enable/permission prompt. Hide/show the app without withdrawing authority.
+- [ ] Send a target-device message/default tone and an approved uploaded MP3.
+      Verify original bytes, exact prepared derivative, target isolation,
+      cancellation and lease expiry. Lose replies and retry the same request:
+      no second command/effect. A definite admission refusal may be corrected;
+      conflict/network/unknown outcomes retain the original operation identity.
+- [ ] Check APNs provider acceptance separately from actual displayed/sounded
+      notification. Native crash-after-effect becomes needs-review, never
+      automatic replay. Record simulator, real API, signed installed app,
+      TestFlight and physical-device evidence separately.
+- [ ] Expire the previous latest location, then receive a fresh sample: cleanup
+      must preserve the fresh pointer. Approve an APNs command and retry the
+      same approval after a lost reply: dispatch once, with canonical terminal
+      status and cleanup expiry. Revoke/replace audio during native download:
+      the final authorization check must prevent playback and cache commits.
+
 ### Builder app launch and scope regression
 
 - [ ] Create two independent private apps with identically named pages and data.

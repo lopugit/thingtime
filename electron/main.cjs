@@ -56,7 +56,7 @@ const {
 	validateDeviceRequest
 } = require('./lib/thingtime-node-bridge.cjs');
 
-const { DesktopFolderSync } = require('./lib/folder-sync.cjs');
+const { DesktopFolderSync, readAccount: verifyLocationAccount } = require('./lib/folder-sync.cjs');
 const { DesktopAttachmentUpload } = require('./lib/attachment-upload.cjs');
 const { SyncWindowLease } = require('./lib/sync-window.cjs');
 const { DesktopFileExport } = require('./lib/file-export.cjs');
@@ -1049,6 +1049,26 @@ async function confirmNodeChange({ title, message, detail, confirmLabel }) {
 	return result.response === 0;
 }
 
+async function nodeLocationRequest(event, request) {
+    requireMacNode(event);
+    requireRendererMatchesConfiguredNode(event);
+    if (!request || !['status', 'set-enabled', 'request-permission', 'request-notification-permission', 'open-settings'].includes(request.action)
+        || typeof request.deviceId !== 'string' || !/^[a-f0-9-]{36}$/i.test(request.deviceId)
+        || typeof request.ownerId !== 'string' || !request.ownerId || request.ownerId.length > 512
+        || (request.action === 'set-enabled' && typeof request.enabled !== 'boolean')) {
+        throw new ThingtimeNodeBridgeError('invalid_request', 'Choose a paired device and supported location action.');
+    }
+    const apiOrigin = new URL(configuredNodeRegistration().apiBaseUrl).origin;
+    const context = { window: mainWindow, appOrigin: new URL(appOrigin).origin, apiOrigin, ownerId: request.ownerId };
+    const frame = event.senderFrame;
+    await verifyLocationAccount(context, AbortSignal.timeout(20_000));
+    if (event.senderFrame !== frame || frame.isDestroyed?.()) throw Error('The requesting account view changed.');
+    const parameters = { deviceId: request.deviceId, ownerId: request.ownerId };
+    if (request.action === 'set-enabled') parameters.enabled = request.enabled;
+    return thingtimeNode.request(`location.${request.action}`, parameters,
+        request.action === 'status' ? undefined : `location-${crypto.randomUUID()}`);
+}
+
 async function nodeGetStatus(event) {
 	requireMacNode(event);
 	return thingtimeNode.status();
@@ -1992,6 +2012,7 @@ ipcMain.handle('thingtime-desktop:activity', (event, request) => {
  return desktopActivities.request(request);
 });
 ipcMain.handle('thingtime-desktop:node-control', (event, request) => nodeControlService(event, request));
+ipcMain.handle('thingtime-desktop:node-location', (event, request) => nodeLocationRequest(event, request));
 ipcMain.handle('thingtime-desktop:node-status', (event) => nodeGetStatus(event));
 ipcMain.handle('thingtime-desktop:node-register-service', (event) => nodeRegisterService(event));
 ipcMain.handle('thingtime-desktop:node-unregister-service', (event) => nodeUnregisterService(event));

@@ -335,6 +335,9 @@ test('device-wide commands require the capability from the signed pairing claim'
 
 test('command vocabulary is closed and every input envelope is kind-specific', () => {
 	assert.deepEqual(DEVICE_COMMAND_KINDS, [
+		'notification.show',
+		'media.play',
+		'media.prepare',
  'script.run',
     'filesystem',
 		'connector.start',

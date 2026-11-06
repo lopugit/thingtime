@@ -65,13 +65,14 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> 
 const deviceEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
 		id: 'devices',
-		contractVersion: '1.14.0',
-		featureVersion: '1.14.0',
+		contractVersion: '1.15.0',
+		featureVersion: '1.15.0',
 		group: 'devices',
 		title: 'Paired devices',
 		endpoint: '/api/v1/devices',
 		summary: 'Lists safe paired-device summaries or one detailed device mirror, including iOS and Android.',
 		detail:
+			'Version 1.15 accepts an optional closed descriptorPatch containing required model and optional osVersion/appVersion. It updates only this credential-bound device metadata atomically with a newer complete state revision; omitted fields are preserved. Owner, name, platform and serial fields are forbidden. ' +
 			'Version 1.14 includes optional state.resources with owner-only CPU utilization, physical memory, startup disk capacity, disk read/write rates and network throughput measurements. Missing metrics are omitted. Version 1.13 adds iOS and Android platform summaries; platform labels grant no capabilities. Version 1.12 adds optional iconDataUrl (64px PNG thumbnail) and iconSource (menu-bar or application fallback) on each menu item. Returns protected dedicated projections for the caller’s computers and Apple Watches. Watch summaries include bounded last-sync health, the number of Things created by that Watch, and up to ten recent created Things. Version 1.11 preserves up to 128 device capability identifiers in owner projections. Version 1.10 includes optional owner-only state.menuBar inventory: status, collection time, permission coverage, items, owning app/executable paths, PID, bundle ID, geometry, resident memory bytes and cumulative process CPU seconds. Memory and CPU belong to the whole process, not an individual icon. Generic /things never exposes protected device state or credentials. Responses are private/no-store.',
 		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
 		methods: ['GET'],
@@ -160,6 +161,43 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 		steps: ['Complete direct multipart uploads with the same Watch credential.', 'POST their attachmentIds with a stable shareId.', 'After an ambiguous completion, retry with requestIds so Thingtime resolves the completed upload without duplicating it.'],
 		requestExamples: [{ name: 'Create recording Thing', description: 'Bind one completed Watch recording.', method: 'POST', body: { shareId: 'watch-upload-uuid', attachmentIds: ['attachment-id'], filenames: ['Recording.m4a'] } }],
 		responseExamples: [{ status: 201, description: 'Private Thing created.', body: { ok: true, post: { id: 'thing-id', attachments: [{ id: 'attachment-id', name: 'Recording.m4a' }] } } }]
+	}),
+	endpoint({id:'devices-alerts',featureVersion:'1.0.0',contractVersion:'1.0.0',group:'devices',title:'devices-alerts',endpoint:'/api/v1/devices/alerts',summary:'devices-alerts.',detail:"Owner-only typed notification.show, media.play and media.prepare over registered device commands. POST deviceId,stable requestId,kind,input; GET deviceId/requestId recovers without dispatch. Notification input title,message,sound default|none|prepared opaque id. Media input approved owned durable file attachmentId,optional versionId; server pins exact version before enqueue. Preparation format notification-sound produces soundId and returns preparing until the exact device confirms CAF cache. A notification chooses exactly one channel at creation: targeted visible APNs or native lease queue. Provider acceptance is a delivery receipt, never proof of playback/display. Dispatch is fenced before networking; uncertain delivery is needs-review and never blindly resent. Canonical private notification history commits with the command. Expected-actor and same-origin headers protect mutation.",auth:{mode:'session-or-bearer',description:'Exact authorized owning account or device credential.'},methods:["GET", "POST"],steps:['Negotiate exact origin capability.','Verify owner/device and immutable operation identity.','Retain explicit delivery and execution receipts.'],requestExamples:[],responseExamples:[]}),
+	endpoint({id:'devices-node-push',featureVersion:'1.0.0',contractVersion:'1.0.0',group:'devices',title:'devices-node-push',endpoint:'/api/v1/devices/node/push',summary:'devices-node-push.',detail:"Exact device bearer binds APNs token,environment sandbox|production,topic and cacheGeneration to its canonical device and current live device session. Topic must match server configured bundle. Token rebinding follows the current owner; no user-wide fanout substitutes for this route. POST enabled:false,cacheGeneration removes only the matching registration and preserves pairing. Installation cache changes invalidate all previous prepared sound receipts.",auth:{mode:'bearer',description:'Exact authorized owning account or device credential.'},methods:["POST"],steps:['Negotiate exact origin capability.','Verify owner/device and immutable operation identity.','Retain explicit delivery and execution receipts.'],requestExamples:[],responseExamples:[]}),
+	endpoint({id:'devices-node-media',featureVersion:'1.0.0',contractVersion:'1.0.0',group:'devices',title:'devices-node-media',endpoint:'/api/v1/devices/node/media',summary:'devices-node-media.',detail:"POST commandId,leaseId only. Requires current exact-owner/device command lease for media.play or media.prepare and approved owned audio upload. Returns private short-lived exact-version URL, attachmentId,versionId,size,contentType,expiresAt. No arbitrary URL or filesystem path accepted. Native must never forward device credentials to the signed storage URL. Rechecks lease, revocation, attachment ownership/moderation/version around delivery.",auth:{mode:'bearer',description:'Exact authorized owning account or device credential.'},methods:["POST"],steps:['Negotiate exact origin capability.','Verify owner/device and immutable operation identity.','Retain explicit delivery and execution receipts.'],requestExamples:[],responseExamples:[]}),
+	endpoint({id:'devices-node-alert-sounds',featureVersion:'1.0.0',contractVersion:'1.0.0',group:'devices',title:'devices-node-alert-sounds',endpoint:'/api/v1/devices/node/alert-sounds',summary:'devices-node-alert-sounds.',detail:"POST lease-bound CAF preparation receipt commandId,leaseId,cacheGeneration,soundId,durationSeconds,format caf,status ready|failed. Actual native conversion/cache write must precede ready; durations must be positive and shorter than 30 seconds. Filename is server-derived tt-<64hex soundId>.caf. Receipt binds exact device, installation cache generation and approved attachment version. Native devices without APNs may POST op cache,cacheGeneration to establish only their own installation cache identity.",auth:{mode:'bearer',description:'Exact authorized owning account or device credential.'},methods:["POST"],steps:['Negotiate exact origin capability.','Verify owner/device and immutable operation identity.','Retain explicit delivery and execution receipts.'],requestExamples:[],responseExamples:[]}),
+	endpoint({
+        id: 'devices-observations-cleanup', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'devices',
+        title: 'Accounted device observation expiry', endpoint: '/api/v1/devices/observations/cleanup',
+        summary: 'Resumes bounded private observation retention cleanup.',
+        detail: 'Cron bearer only. Persists a leased cursor across registered device Things, rechecks each device policy in a home-accounting transaction, and deletes expired observation children with canonical accounting. Never retention deletes nothing. Bounded batches are processing details; repeated cron runs continue unfinished work without imposing a history-size limit. Response contains only aggregate cleanup counts. A failed account is retried on the next complete sweep. No raw locations, account ids or cursor are disclosed.',
+        auth: { mode: 'bearer', description: 'Configured cron scheduler only.' }, methods: ['GET'],
+        steps: ['Authenticate the configured scheduler.', 'Resume the durable sweep cursor.', 'Expire account-scoped samples through canonical accounting.'],
+        requestExamples: [], responseExamples: []
+    }),
+	endpoint({
+		id: 'devices-observations', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'devices',
+		title: 'Read private device observations', endpoint: '/api/v1/devices/observations',
+		summary: 'Read private device observations.', detail: "Owner-only paginated registered observations. Query deviceId, type=location, optional from/to ISO timestamps, limit, opaque cursor. Rows include observedAt, receivedAt and measured accuracy. Latest follows measurement time, not arrival order. Retention defaults to Never; expired observations are immediately excluded. Returns observations, latest, settings, nextCursor and bounded cleanup status. Device credentials cannot read owner history.",
+		auth: { mode: 'session-or-bearer', description: 'Exact owning account/device only.' }, methods: ["GET"],
+		steps: ['Negotiate the selected origin capability.', 'Verify the exact account/device.', 'Access only the authorized observation scope.'],
+		requestExamples: [], responseExamples: []
+	}),
+	endpoint({
+		id: 'devices-observation-settings', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'devices',
+		title: 'Configure device observation collection and retention', endpoint: '/api/v1/devices/observation-settings',
+		summary: 'Configure device observation collection and retention.', detail: "Full owner session, same-origin mutation and X-Thingtime-Expected-Actor required. Body deviceId, type=location, optional enabled boolean (default false), retentionMs null for Never or positive safe integer. Enabling does not replace OS consent. Enabled transitions rotate collectionId to fence stale samples. Disabling preserves history. Accounted cleanup removes one processing batch per request; repeat the same patch while cleanup.hasMore is true. Processing batches never limit saved user history. Canonical storage admission refusals preserve private/no-store headers and their stable code; accounting_unavailable HTTP 503 carries retryable:true, while quota refusal HTTP 507 carries retryable:false. This metadata never retries the mutation or bypasses accounting.",
+		auth: { mode: 'session-or-bearer', description: 'Exact owning account/device only.' }, methods: ["POST"],
+		steps: ['Negotiate the selected origin capability.', 'Verify the exact account/device.', 'Access only the authorized observation scope.'],
+		requestExamples: [], responseExamples: []
+	}),
+	endpoint({
+		id: 'devices-node-observations', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'devices',
+		title: 'Publish registered device observations', endpoint: '/api/v1/devices/node/observations',
+		summary: 'Publish registered device observations.', detail: "Scoped device credential fixes owner/device. GET returns collection settings only. POST immutable id, type=location, collectionId, observedAt ISO and value latitude/longitude/accuracyMeters, optional precision precise|approximate, source core-location|geolocation|manual, altitudeMeters/verticalAccuracyMeters. receivedAt is server-owned. Same identity/body returns original receipt; conflicting payload409. Default-disabled collection and changed collectionId409; revoked credential401. Old offline measurements accepted unless policy-expired; future greater than60seconds refused. Samples and current pointers are private quota-accounted Things. No pairing, permission grant or arbitrary URL fetching.",
+		auth: { mode: 'bearer', description: 'Exact owning account/device only.' }, methods: ["GET", "POST"],
+		steps: ['Negotiate the selected origin capability.', 'Verify the exact account/device.', 'Access only the authorized observation scope.'],
+		requestExamples: [], responseExamples: []
 	}),
 	endpoint({
 		id: 'devices-permissions',
@@ -268,13 +306,14 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-node-state',
-		featureVersion: '1.14.0',
-		contractVersion: '1.14.0',
+		featureVersion: '1.15.0',
+		contractVersion: '1.15.0',
 		group: 'devices',
 		title: 'Publish device state',
 		endpoint: '/api/v1/devices/node/state',
 		summary: 'Applies one quota-accounted, monotonic state and connector snapshot.',
 		detail:
+			'Version 1.15 accepts an optional closed descriptorPatch containing required model and optional osVersion/appVersion. It updates only this credential-bound device metadata atomically with a newer complete state revision; omitted fields are preserved. Owner, name, platform and serial fields are forbidden. ' +
 			'Version 1.14 accepts optional state.resources with cpuPercent (0–100), memoryUsedBytes, memoryTotalBytes, diskUsedBytes, diskTotalBytes, diskReadBytesPerSecond, diskWriteBytesPerSecond, networkRxBytesPerSecond and networkTxBytesPerSecond. Optional networkLinkBitsPerSecond is a measured comparable per-direction capacity for the interfaces contributing throughput. Byte totals and link capacity are safe integers, rates are finite non-negative numbers, and unavailable fields are omitted. Interface names, addresses and mount paths are excluded. ' +
 			'Version 1.13 adds optional 64px PNG menu-item thumbnails with explicit menu-bar/application provenance. Remote image URLs and SVG are rejected; old nodes may omit both fields. Optional capabilities replaces the paired device capability list atomically with a newer state revision. Version 1.12 accepts up to 128 identifiers, preserving fully equipped Macs that exceed the former 64-entry limit. Omission preserves older node capabilities; the full snapshot hash includes supplied capabilities. ' +
 			'The credential fixes owner and device; request ids cannot override either. Equal revision/equal hash is a no-op, equal revision/different hash is 409, and older revisions are ignored. Version 1.11 adds optional menuBar telemetry with owning application/executable paths only; arbitrary process arguments and window titles remain forbidden. A locked inventory must be empty. Omission supports older nodes; unsupported origins receive no menuBar field. Version 1.10 accepts optional, bounded read-only battery measurements: charge cycles, design cycles, capacities in mAh, signed battery current in mA, voltage in mV, temperature in Celsius, time estimates in minutes, and attached adapter rated watts, voltage and current. Missing measurements are null; battery serial numbers and raw registry dictionaries are never accepted.',
@@ -336,8 +375,8 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
 		id: 'devices-commands',
-    featureVersion: '1.10.0',
-		contractVersion: '1.10.0',
+    featureVersion: '1.11.0',
+		contractVersion: '1.11.0',
 		group: 'devices',
 		title: 'Device commands',
 		endpoint: '/api/v1/devices/commands',
@@ -396,8 +435,8 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-node-commands',
-    featureVersion: '1.10.0',
-		contractVersion: '1.10.0',
+    featureVersion: '1.11.0',
+		contractVersion: '1.11.0',
 		group: 'devices',
 		title: 'Device command lease channel',
 		endpoint: '/api/v1/devices/node/commands',
@@ -12320,8 +12359,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // subspace family together; additive
     // Includes the 1.6.2 APNs collapse-identifier fix.
     // 1.7.0 adds lopu-message for scheduled conversation updates.
-    featureVersion: '1.7.0',
-    contractVersion: '1.7.0',
+    featureVersion: '1.8.0',
+    contractVersion: '1.8.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
@@ -12503,15 +12542,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-devices',
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
     group: 'notifications',
     title: 'Register notification devices',
     endpoint: '/api/v1/notifications/devices',
     summary: 'Register iPhone and Apple Watch APNs targets for the signed-in Thingtime account.',
     detail:
-      'GET requires a full session and returns ownerId, server configured status, and eligible iOS/watchOS device counts without tokens. POST optionally accepts ownerId to reject stale account registration with HTTP 409. POST accepts one to four variable-length hexadecimal APNs tokens. The server selects the bundle topic, ' +
-      'stores each token in a protected binary secure field, keeps at most twelve recent devices per account, ' +
+      'GET requires a full session and returns ownerId, server configured status, and eligible iOS/watchOS device counts without tokens. POST optionally accepts ownerId to reject stale account registration with HTTP 409. POST accepts nonempty batches of variable-length hexadecimal APNs tokens. The server selects the bundle topic, ' +
+      'stores each token in a protected binary secure field, preserves every registered device without evicting other device bindings, ' +
       'and returns only non-secret registration metadata. DELETE removes one registration by id. Thingtime sends ' +
       'the same notification payload to paired iPhone and watchOS targets so Apple can suppress duplicate alerts.',
     auth: {
@@ -12569,8 +12608,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: six subspace-* switches joined the matrix — additive; 1.2.0:
     // merged with develop's 1.1.0 (action-run switch) — additive
     // 1.7.0 makes action-run delivery opt-in in both channels; saved choices survive.
-    featureVersion: '1.7.0',
-    contractVersion: '1.7.0',
+    featureVersion: '1.8.0',
+    contractVersion: '1.8.0',
     group: 'notifications',
     title: 'Notification settings',
     endpoint: '/api/v1/notifications/settings',

@@ -67,6 +67,8 @@ if (process.argv?.includes('--thingtime-native-password-approval')) {
 	openAppLocations: () => ipcRenderer.invoke('thingtime-desktop:open-app-locations'),
 	restartAfterPermissions: () => ipcRenderer.invoke('thingtime-desktop:permission-restart'),
 	nodeControl: (request) => ipcRenderer.invoke('thingtime-desktop:node-control', request),
+	deviceLocationVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	deviceLocationRequest: (request) => ipcRenderer.invoke('thingtime-desktop:node-location', request),
 	nodeGetStatus: () => ipcRenderer.invoke('thingtime-desktop:node-status'),
 	nodeRegisterService: () => ipcRenderer.invoke('thingtime-desktop:node-register-service'),
 	nodeUnregisterService: () => ipcRenderer.invoke('thingtime-desktop:node-unregister-service'),
