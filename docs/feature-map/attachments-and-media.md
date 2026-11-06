@@ -769,3 +769,14 @@ symbolic links, custom hooks and unsupported capabilities retain their existing
 transport. Run `MacSingleUploadOperationTests`, `folder-upload-single.test.cjs`,
 `nativeUpload.client.test.ts` and `cloudTransport.test.ts`; see the dated
 [transport contract](../mobile-file-sync.md#bounded-compound-mac-upload-transport--2026-11-06).
+
+### Shared native scan pacing
+
+`filesystem-indexer/crates/indexer/src/resources.rs` owns the shared scan-byte
+schedule used by strict and backup hashing in `backup.rs`. Reservations retain
+elapsed hashing/metadata work and timer overshoot, with at most 100 ms of idle
+credit shared across workers. Cancellation checks remain bounded to 25 ms sleeps.
+This is internal resource scheduling; native/HTTP contracts, user-selected scan
+and transfer rates, CPU targets and data-size acceptance are unchanged.
+Tests: `cargo test --locked --manifest-path filesystem-indexer/Cargo.toml -p commander-indexer`
+(fake clock, aggregate small reads, burst bounds and real concurrent cancellation).
