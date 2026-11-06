@@ -1,5 +1,6 @@
 import { BrowserExtensionAccountBridge } from './components/Passwords/BrowserExtensionAccountBridge';
 import { ThingDraftsProvider } from './drafts/ThingDrafts';
+import { MobileDevicePresenceBootstrap } from './components/Devices/MobileDevicePresenceBootstrap';
 import { NativeSyncBootstrap } from './fileSync/NativeSyncBootstrap';
 import { RemoteSyncBootstrap } from './fileSync/RemoteSyncBootstrap';
 import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
@@ -152,7 +153,8 @@ export default function App() {
         {mounted ? <ElectronBridgeHost /> : null}
         {mounted && !identity.pending && rootData.dataPlane === 'home' && rootData.user?.id &&
           rootData.user.accountKind === 'user' && !rootData.user.temporary && !rootData.user.isCharacter ?
-          <><NativeSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} />
+          <><MobileDevicePresenceBootstrap ownerId={rootData.user.id} generation={identity.generation} />
+          <NativeSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} />
           <RemoteSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} /></> : null}
         {mounted ? <NativeBridgeHost /> : null}
         {/* Invite signup and authorization/pairing use a focused auth
