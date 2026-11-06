@@ -12,6 +12,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-06: Avoid repeated point reads for exact opposite-feed folder echoes
+  already proven to need no early copy. Keep fresh policy/effect checks, bounded
+  observation memory and independent strict reconciliation. **Codex (AI)**
+
+- 2026-11-06: Add an explicit canonical desktop-worker lane to mixed-file sync
+  acceptance, preserving legacy fallback coverage, exact real-byte/restart
+  checks and uncached native admission/HTTP timing. **Codex (AI)**
+
 - 2026-11-06: Negotiate compatible minimum API versions in the disposable native
   paged-sync acceptance runner, retaining exact-origin and missing/breaking
   capability refusals before registration; record first body-byte timing, exact

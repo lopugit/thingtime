@@ -250,6 +250,9 @@ export async function streamForegroundSync(
 	// A partial feed supplies only a positive source hint. A complete point
 	// read from each guarded replica must independently prove the exact source
 	// and destination; neither feed's missing rows can authorize anything.
+    // This bounded record can only suppress an already-observed no-op folder
+    // echo. It never supplies authority, ancestry or a future copy binding.
+    const deferredFolderEchoes = new Map<string, { from: 'local' | 'remote'; local: SyncEntry; remote: SyncEntry }>();
 	const prepareTwoWay = async (event: NonNullable<Awaited<ReturnType<typeof runs.nextStreamInput>>>) => {
 		const entry = event.entry, from = event.replica!;
 		const defer = async () => {
@@ -267,6 +270,11 @@ export async function streamForegroundSync(
 			await wait(observed);
 		}
 		if (entry.symbolicLink || ignore.ignored(entry.path, entry.kind)) { await defer(); return; }
+        const echo = input.nativeOperationGuards && entry.kind === 'folder' ? deferredFolderEchoes.get(entry.path) : undefined;
+        if (echo && echo.from !== from && sameSyncStamp(entry, echo[from])) {
+            deferredFolderEchoes.delete(entry.path);
+            await defer(); return;
+        }
 		let beforeLocal: SyncEntry | null = null, beforeRemote: SyncEntry | null = null;
 		if (head) {
 			try {
@@ -327,6 +335,15 @@ export async function streamForegroundSync(
 		const source = from === 'local' ? left : right,
 			target = from === 'local' ? right : left;
 		if (!sameSyncStamp(source, entry) || target?.symbolicLink) { await defer(); return; }
+        if (input.nativeOperationGuards && entry.kind === 'folder' && left?.kind === 'folder' && right?.kind === 'folder') {
+            // Both current point reads proved this folder needs no early copy.
+            // Only its opposite-feed, exact-stamp echo may skip those reads;
+            // all actual preparation/effects keep the fresh policy checks.
+            deferredFolderEchoes.delete(entry.path);
+            deferredFolderEchoes.set(entry.path, { from, local: structuredClone(left), remote: structuredClone(right) });
+            if (deferredFolderEchoes.size > INVENTORY_PAGE_ENTRIES) deferredFolderEchoes.delete(deferredFolderEchoes.keys().next().value!);
+            await defer(); return;
+        }
 		// A missing previously recorded destination and all conflicting
 		// edits wait for strict reconciliation.
 		if (!sameSyncStamp(target, priorTarget) || (entry.kind === 'folder' && target)) { await defer(); return; }

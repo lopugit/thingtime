@@ -227,3 +227,12 @@ export class FixtureReceiptObservations {
     if (this.errors.length) throw this.errors[0];
   }
 }
+
+/** A legacy proof cannot silently satisfy a requested current-worker run. */
+export function validateFixtureWorkerParity(result, required, streaming = false) {
+  if (required && !['canonicalDesktopManager', 'canonicalRendererHost', 'canonicalTransferWorkerSelected', 'nativeOperationGuards'].every(key => result?.parity?.[key] === true))
+    throw Error('Fixture result did not use the requested canonical worker');
+  if (streaming && (result?.parity?.streamingTwoWay !== true || result.parity.propagateDeletes !== false || result.parity.localFeed !== true || result.parity.remoteFeed !== true || result.parity.strictAsyncCapture !== true))
+    throw Error('Fixture result did not use the requested streaming two-way path');
+  return result;
+}
