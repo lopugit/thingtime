@@ -1322,6 +1322,31 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 
 		/** Commit the canonical remote Timeline position only after the adapter's
 		 * snapshot/delta page has reached this exact durable observation cursor. */
+		async endRemountedLocalFeed(value: PagedRunSpec) {
+			const spec = parsePagedRunSpec(value);
+			return withHeader<void>(spec, 'readwrite', (h, tx, done) => {
+				if (!spec.streaming || spec.streaming.source === 'remote' || !h.stream) throw Error('A native local feed is required.');
+				const stream = h.stream;
+				if (stream.terminal) { done(undefined); return; }
+				// Preserve every observation, operation, receipt and watermark.
+				// Only the old native producer ends; the normal planner/consumer
+				// still drains its queue, then sealed reconciliation must run.
+				if (spec.streaming.source === 'both') {
+					const previous = stream.replicaFeeds?.local;
+					stream.replicaFeeds = { ...stream.replicaFeeds, local: {
+						sequence: previous?.sequence ?? 0, generation: previous?.generation ?? spec.streaming.captureId, terminal: true
+					} };
+					stream.indexedSequence ??= 0;
+					stream.generation = spec.streaming.captureId;
+					stream.sourceTerminal = !!stream.replicaFeeds.remote?.terminal;
+				} else {
+					stream.generation ??= spec.streaming.captureId;
+					stream.sourceTerminal = true;
+				}
+				h.revision++; save(h, tx); done(undefined);
+			});
+		},
+
 		async checkpointStreamSource(value: PagedRunSpec, sequence: number, cursor: string, snapshotComplete: boolean) {
 			const spec = parsePagedRunSpec(value);
 			if (!/^(0|[1-9][0-9]{0,15})$/.test(cursor) || !Number.isSafeInteger(Number(cursor)) || typeof snapshotComplete !== 'boolean') throw Error('Invalid remote streaming cursor.');

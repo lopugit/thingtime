@@ -237,6 +237,8 @@ test('desktop excluded scans fail before dispatch on an older native host', asyn
 test('fixed native verification and shutdown waits survive IPC redaction; arbitrary and authority failures remain terminal', async () => {
  const { SyncConnectionWait, isSyncConnectionFailure } = await import('./syncConnectionWait');
  for (const marker of ['[folder_transport_retry] Folder service is temporarily unavailable. Retry after reconnecting.',
+  '[folder_volume_offline] The granted volume is offline. Saved sync will retry.',
+  '[folder_volume_remounted] The granted volume returned. Reconcile its saved transfer before continuing.',
   '[folder_download_retry] Folder download is temporarily unavailable. Retry after reconnecting.',
   '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.',
   '[folder_sync_shutdown] Thingtime is closing. Saved sync work can resume when reopened.']) {

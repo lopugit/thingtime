@@ -13,7 +13,7 @@ pub(super) struct Receipts {
 }
 
 #[cfg(target_vendor = "apple")]
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct Registration {
     identity: String,
@@ -21,10 +21,14 @@ struct Registration {
     hash: String,
     symbolic_link: Option<RegisteredLink>,
     journal: bool,
+    continuity: Option<String>,
 }
 
 #[cfg(target_vendor = "apple")]
-#[derive(Deserialize)]
+use commander_platform::volume_uuid;
+
+#[cfg(target_vendor = "apple")]
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct RegisteredLink {
     format: String,
@@ -62,6 +66,142 @@ fn decode_base64(s: &str) -> Option<Vec<u8>> {
 }
 
 impl Receipts {
+    #[cfg(target_vendor = "apple")]
+    fn ambiguous_legacy_journal(
+        &self,
+        file: &File,
+        inode: u64,
+        birth: &str,
+    ) -> Result<bool, &'static str> {
+        let Some(registry) = &self.registry else {
+            return Ok(false);
+        };
+        let uid = rustix::process::geteuid().as_raw();
+        let Some(marker) = read_private(file, ".thingtime-owned-journal", uid, 72) else {
+            return Ok(false);
+        };
+        if marker.len() != 72 {
+            return Ok(false);
+        }
+        let proof = format!("{:x}", Sha256::digest(marker));
+        let records = rustix::fs::Dir::read_from(registry).map_err(|_| "unreadable")?;
+        for entry in records {
+            let entry = entry.map_err(|_| "unreadable")?;
+            if entry.file_name().to_bytes().len() != 64 {
+                continue;
+            }
+            let Ok(directory) = openat(
+                registry,
+                entry.file_name(),
+                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+                Mode::empty(),
+            ) else {
+                continue;
+            };
+            let info = rustix::fs::fstat(&directory).map_err(|_| "unreadable")?;
+            if info.st_uid != uid || info.st_mode & 0o077 != 0 {
+                continue;
+            }
+            let Some(bytes) = read_private(&directory, "record.json", uid, 65_536) else {
+                continue;
+            };
+            let Ok(row) = serde_json::from_slice::<Registration>(&bytes) else {
+                continue;
+            };
+            if row.journal
+                && row.birth == birth
+                && row.hash == proof
+                && row.identity.rsplit(':').next() == Some(inode.to_string().as_str())
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+    /// Upgrade a validated current-attachment receipt while its original inode
+    /// is still attached. This is the same private receipt cache, never source
+    /// content or a second filesystem index. Publication uses atomic rename.
+    #[cfg(target_vendor = "apple")]
+    fn remember_continuity(
+        &self,
+        receipt: &Registration,
+        continuity: Option<&String>,
+    ) -> Result<(), &'static str> {
+        use rustix::fs::{mkdirat, renameat, unlinkat};
+        let (Some(registry), Some(continuity)) = (&self.registry, continuity) else {
+            return Ok(());
+        };
+        let key = format!(
+            "{:x}",
+            Sha256::digest(format!("persistent:{continuity}").as_bytes())
+        );
+        match mkdirat(registry, key.as_str(), Mode::from_raw_mode(0o700)) {
+            Ok(()) => (),
+            Err(rustix::io::Errno::EXIST) => (),
+            Err(_) => return Err("native_receipts_unavailable"),
+        }
+        let directory = File::from(
+            openat(
+                registry,
+                key.as_str(),
+                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+                Mode::empty(),
+            )
+            .map_err(|_| "native_receipts_unavailable")?,
+        );
+        let info = directory
+            .metadata()
+            .map_err(|_| "native_receipts_unavailable")?;
+        let uid = rustix::process::geteuid().as_raw();
+        if info.uid() != uid || info.mode() & 0o077 != 0 {
+            return Err("native_receipts_unavailable");
+        }
+        let mut canonical = receipt.clone();
+        canonical.continuity = Some(continuity.clone());
+        if let Some(bytes) = read_private(&directory, "record.json", uid, 65_536) {
+            if let Ok(existing) = serde_json::from_slice::<Registration>(&bytes) {
+                // The stable alias may have been refreshed on another
+                // attachment. Its device number is not part of this proof;
+                // UUID/inode/birth plus marker or full envelope hash are.
+                if existing.continuity == canonical.continuity
+                    && existing.birth == canonical.birth
+                    && existing.hash == canonical.hash
+                    && existing.journal == canonical.journal
+                    && existing.symbolic_link == canonical.symbolic_link
+                {
+                    return Ok(());
+                }
+            }
+            return Err("native_receipts_unavailable");
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "native_receipts_unavailable")?
+            .as_nanos();
+        let name = format!("checkpoint-{}-{now}", std::process::id());
+        let data = serde_json::to_vec(&canonical).map_err(|_| "native_receipts_unavailable")?;
+        let mut file = File::from(
+            openat(
+                &directory,
+                name.as_str(),
+                OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+                Mode::from_raw_mode(0o600),
+            )
+            .map_err(|_| "native_receipts_unavailable")?,
+        );
+        let result = (|| {
+            file.write_all(&data)
+                .map_err(|_| "native_receipts_unavailable")?;
+            file.sync_all().map_err(|_| "native_receipts_unavailable")?;
+            renameat(&directory, name.as_str(), &directory, "record.json")
+                .map_err(|_| "native_receipts_unavailable")?;
+            directory
+                .sync_all()
+                .map_err(|_| "native_receipts_unavailable")
+        })();
+        let _ = unlinkat(&directory, name.as_str(), AtFlags::empty());
+        result
+    }
     pub(super) fn new(path: &Path) -> Result<Self, IndexerError> {
         let registry = match inventory::open_root(path) {
             Ok(file) => Some(file),
@@ -109,29 +249,62 @@ impl Receipts {
         }
         let identity = format!("{}:{}", before.st_dev, before.st_ino);
         let birth = format!("{}:{}", before.st_birthtime, before.st_birthtime_nsec);
-        let key = format!("{:x}", Sha256::digest(identity.as_bytes()));
-        let Ok(receipt_dir) = openat(
-            registry,
-            key.as_str(),
-            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
-            Mode::empty(),
-        ) else {
-            return Ok(Projection::Raw);
+        let parent_info = rustix::fs::fstat(&parent).map_err(|_| "unreadable")?;
+        let volume = if parent_info.st_dev == before.st_dev {
+            volume_uuid(&parent)
+        } else {
+            open_path(root, path)
+                .ok()
+                .and_then(|file| volume_uuid(&file))
         };
+        let continuity = volume.map(|uuid| format!("{uuid}:{}:{birth}", before.st_ino));
+        let keys = std::iter::once(identity.clone()).chain(
+            continuity
+                .as_ref()
+                .map(|value| format!("persistent:{value}")),
+        );
         let uid = rustix::process::geteuid().as_raw();
-        let info = rustix::fs::fstat(&receipt_dir).map_err(|_| "unreadable")?;
-        if info.st_uid != uid || info.st_mode & 0o077 != 0 {
-            return Ok(Projection::Raw);
-        }
-        let Some(data) = read_private(&receipt_dir, "record.json", uid, 65_536) else {
+        let receipt = keys
+            .filter_map(|key| {
+                let key = format!("{:x}", Sha256::digest(key.as_bytes()));
+                let receipt_dir = openat(
+                    registry,
+                    key.as_str(),
+                    OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+                    Mode::empty(),
+                )
+                .ok()?;
+                let info = rustix::fs::fstat(&receipt_dir).ok()?;
+                if info.st_uid != uid || info.st_mode & 0o077 != 0 {
+                    return None;
+                }
+                let data = read_private(&receipt_dir, "record.json", uid, 65_536)?;
+                let receipt = serde_json::from_slice::<Registration>(&data).ok()?;
+                (receipt.birth == birth
+                    && ((receipt.continuity.is_none() && receipt.identity == identity)
+                        || (receipt.continuity.is_some()
+                            && continuity.is_some()
+                            && receipt.continuity == continuity)))
+                    .then_some(receipt)
+            })
+            .next();
+        let Some(receipt) = receipt else {
+            if kind == FileType::Directory {
+                let file = open_path(root, path)?;
+                let actual = rustix::fs::fstat(&file).map_err(|_| "unreadable")?;
+                if actual.st_dev != before.st_dev
+                    || actual.st_ino != before.st_ino
+                    || actual.st_birthtime != before.st_birthtime
+                    || actual.st_birthtime_nsec != before.st_birthtime_nsec
+                {
+                    return Err("changed");
+                }
+                if self.ambiguous_legacy_journal(&file, before.st_ino, &birth)? {
+                    return Err("unreadable");
+                }
+            }
             return Ok(Projection::Raw);
         };
-        let Ok(receipt) = serde_json::from_slice::<Registration>(&data) else {
-            return Ok(Projection::Raw);
-        };
-        if receipt.identity != identity || receipt.birth != birth {
-            return Ok(Projection::Raw);
-        }
         let mut file = open_path(root, path)?;
         let opened = rustix::fs::fstat(&file).map_err(|_| "unreadable")?;
         if opened.st_dev != before.st_dev
@@ -144,6 +317,7 @@ impl Receipts {
         if receipt.journal && kind == FileType::Directory {
             if let Some(bytes) = read_private(&file, ".thingtime-owned-journal", uid, 72) {
                 if bytes.len() == 72 && format!("{:x}", Sha256::digest(bytes)) == receipt.hash {
+                    self.remember_continuity(&receipt, continuity.as_ref())?;
                     return Ok(Projection::Skip);
                 }
             }
@@ -151,7 +325,7 @@ impl Receipts {
         if receipt.journal || kind != FileType::RegularFile {
             return Ok(Projection::Raw);
         }
-        let Some(link) = receipt.symbolic_link else {
+        let Some(link) = receipt.symbolic_link.as_ref() else {
             return Ok(Projection::Raw);
         };
         if link.format != "posix-symlink-v1" {
@@ -190,6 +364,7 @@ impl Receipts {
         {
             return Err("changed");
         }
+        self.remember_continuity(&receipt, continuity.as_ref())?;
         Ok(Projection::Link(Entry {
             path: path.to_owned(),
             id: identity,
@@ -205,7 +380,7 @@ impl Receipts {
             }),
             symbolic_link: Some(SymbolicLink {
                 format: "posix-symlink-v1",
-                target_base64: link.target_base64,
+                target_base64: link.target_base64.clone(),
             }),
         }))
     }
