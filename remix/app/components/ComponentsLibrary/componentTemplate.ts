@@ -656,7 +656,13 @@ export const visitStoredTemplateActions = (
 };
 
 export class StoredReferenceUnsupportedError extends Error {
-	constructor(message: string) { super(message); this.name = 'StoredReferenceUnsupportedError'; }
+	declare readonly reference?: string;
+	constructor(message: string, reference?: string) {
+		super(message); this.name = 'StoredReferenceUnsupportedError';
+		// Diagnostic input remains non-enumerable: callers must never log a
+		// potentially enormous/private stored value as an Error property.
+		Object.defineProperty(this, 'reference', { value: reference, enumerable: false });
+	}
 }
 export type StoredTemplateNode = { node: Record<string, any>; scope: ComponentScope; opaque: boolean };
 

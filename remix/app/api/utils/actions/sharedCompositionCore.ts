@@ -94,7 +94,7 @@ export function* iterateStoredBlocks(nodes: unknown, signal?: AbortSignal): Gene
 export function* iterateStoredCompositionReferences(kinds: string[], crystal: Record<string, any>, options: { args?: Record<string, unknown>; signal?: AbortSignal } = {}): Generator<CompositionReference | null> {
 	const ref = function* (kind: CompositionReference['kind'], value: unknown, optional = false): Generator<CompositionReference> {
 		if (value == null) return;
-		if (!literal(value)) throw new StoredReferenceUnsupportedError('Non-literal stored composition reference');
+		if (!literal(value)) throw new StoredReferenceUnsupportedError('Non-literal stored composition reference', typeof value === 'string' ? value : undefined);
 		yield { kind, ref: value, ...(optional ? { optional: true as const } : {}) };
 	};
 	const render = function* (value: unknown, scope: Record<string, unknown>): Generator<CompositionReference | null> {

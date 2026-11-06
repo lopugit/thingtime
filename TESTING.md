@@ -11916,7 +11916,7 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [x] Traverse 5,001 render nodes, depth 80 and 700 stored contexts beyond preview
   policies; verify literal HTML/CSS, alias ambiguity, same-context and Action
   cycles, transformed recursive-context refusal, cancellation and scratch cleanup.
-- [x] Keep evidence pages bounded and manifest-bound. Refuse wrong snapshot,
+- [x] Keep evidence pages bounded by count and encoded bytes, and manifest-bound. An accumulation of escaped references must flush before the item budget; one 2 MiB escaped reference must retain its full owner content while evidence carries only a labelled byte count/hash. Refuse wrong snapshot,
   wrong adapter, duplicate/out-of-order evidence pages and source-ID collisions;
   never allocate user destinations for descriptive coverage/exclusion records.
 - [x] Stream large notification detail intact; exclude secret/delivery/idempotency

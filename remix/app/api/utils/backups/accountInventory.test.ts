@@ -18,7 +18,7 @@ import { copySealedBackup } from './portableBackup';
 import assert from 'node:assert/strict';
 import { BSON } from 'mongodb';
 import test from 'node:test';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { createAccountInventoryProducer } from './accountInventory';
 import { captureBackup, sealBackup, openBackupItem, type BackupObjectStore } from './portableBackup';
 
@@ -1045,4 +1045,20 @@ for (const mode of ['missing', 'foreign', 'wrong-kind', 'active-theme'] as const
 	const evidence = f.json('plan/0.json').items.find((item: any) => item.snapshot.adapter === 'backup-reference-coverage');
 	assert.equal(evidence.snapshot.value.coverage.resolution, 'unresolved');
 	assert.equal(evidence.snapshot.value.coverage.wholeAccountReady, false);
+});
+
+test('one oversized escaped diagnostic cannot prevent exact independent recovery of saved owner content', async () => {
+	const f = fixture(0), reference = '\0'.repeat(2 * 1024 * 1024);
+	f.source.push({ shareId: 'oversized-reference', ownerId: 'owner', thingtime: ['data'], crystal: { renderComponent: { id: reference }, text: 'Keep this exact saved data' } });
+	await f.run();
+	const evidence = f.json('plan/0.json').items.find((item: any) => item.snapshot.adapter === 'backup-reference-coverage').snapshot.value;
+	assert.equal(evidence.coverage.discovery, 'unsupported'); assert.equal(evidence.coverage.wholeAccountReady, false);
+	assert.equal(evidence.issues[0].reference, null);
+	assert.deepEqual(evidence.issues[0].referenceDiagnostic, { encoding: 'utf8', bytes: Buffer.byteLength(reference), sha256: createHash('sha256').update(reference).digest('hex') });
+	await sealBackup(f.store, f.id, f.access);
+	const second = fixture(0); await copySealedBackup(f.store, second.store, f.id, f.access);
+	f.source.length = 0; f.objects.clear();
+	const restored = await openBackupThingSnapshot(second.store, f.id, 'oversized-reference', f.access);
+	assert.equal((restored.value as any).crystal.renderComponent.id, reference);
+	assert.equal((restored.value as any).crystal.text, 'Keep this exact saved data');
 });

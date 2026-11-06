@@ -21,7 +21,7 @@ transformed recursive context is explicitly unsupported. Dynamic outputs,
 render/media merge formats, formatted media and repeated media interpolation
 retain unsupported coverage until exact output adapters exist.
 
-`backup-reference-coverage` v1 pages are part of the sealed manifest. The reserved
+`backup-reference-coverage` v1 pages are part of the sealed manifest. Pages flush by encoded bytes as well as count; a single oversized diagnostic uses labelled UTF-8 byte count and SHA-256 while the full saved value stays in its original source record. Regression checks cover 128 escaped references and one 2 MiB escaped reference through independent source/vault loss. The reserved
 `~.backup-coverage:<snapshot UUID>:<16-digit page>` identity is unavailable to
 canonical generic Thing creation and validated against the current header/page
 sequence. Primitive string validation rejects array/object coercion. Restore

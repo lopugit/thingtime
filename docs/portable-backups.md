@@ -158,7 +158,7 @@ dependency capture remains a required separate authorized path.
 
 Valid dangling or external pointers do **not** prevent preservation of the
 owner's data. The producer appends `backup-reference-coverage` v1 evidence pages
-with at most 128 issues each. Discovery completeness applies specifically to
+with at most 128 issues each and an encoded-byte flush below the manifest item budget. A single oversized diagnostic is represented by UTF-8 byte count and SHA-256, explicitly labelled as diagnostic metadata; the full saved reference stays in its original retained source record. Discovery completeness applies specifically to
 `ordinary-composition-and-account-selections`; resolution, unsupported traversal
 and excluded authority are separate measured fields. `wholeAccountReady` is
 always false. Duplicate owner aliases are unresolved ambiguity: real Action

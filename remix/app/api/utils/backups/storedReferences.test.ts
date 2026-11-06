@@ -5,7 +5,7 @@ import { compositionReferences } from '../actions/sharedCompositionCore';
 import { compositionAttachmentIds } from '../actions/compositionMediaCore';
 import { backupAttachmentFixture } from './attachmentRecords.fixtures';
 import { backupAttachmentFromDoc } from './attachmentRecords';
-import { parseBackupItem, nextBackupCoveragePage } from '../../../backups/manifest';
+import { parseBackupItem, nextBackupCoveragePage, BACKUP_METADATA_BYTES } from '../../../backups/manifest';
 import { sanitizeShareId } from '../things/things';
 import { readAccountRestoreRecord } from './accountRestoreRecord';
 
@@ -36,6 +36,10 @@ test('only executable/render positions create dependencies and dynamic/unsupport
 	assert.throws(() => media(['component'], { render: { tag: 'img', props: { src: { ttArg: 'query.image' } } } }), StoredReferenceUnsupportedError);
 	const cyclic: any = {}; cyclic.children = [cyclic];
 	assert.throws(() => refs(['component'], { render: cyclic }), /Cyclic/);
+	const error = new StoredReferenceUnsupportedError('Bounded message', 'private oversized diagnostic');
+	assert.equal(error.reference, 'private oversized diagnostic');
+	assert.equal(Object.prototype.propertyIsEnumerable.call(error, 'reference'), false);
+	assert.equal(JSON.stringify(error).includes('private oversized diagnostic'), false);
 });
 
 test('HTML, CSS, inactive branches and copied bindings retain stored media past preview budgets', () => {
@@ -126,6 +130,23 @@ test('unresolved evidence stays paged when references exceed one metadata page',
 		let pages = 0, count = 0;
 		for await (const page of index.evidencePages()) { assert.ok(page.issues.length <= 128); pages++; count += page.issues.length; }
 		assert.equal(pages, 4); assert.equal(count, 401);
+	} finally { await index.close(); }
+});
+
+test('escaped reference diagnostics flush by encoded bytes before the manifest item budget', async () => {
+	const index = await openBackupReferenceIndex('owner');
+	try {
+		for (let n = 0; n < 128; n++) {
+			const id = `control-${n}`.padEnd(128, 'x'); index.addIdentity(id, ['data']);
+			index.addContent(doc(id, ['data'], { renderComponent: { id: '\0'.repeat(200) } }));
+		}
+		const coverage = await index.validate(async () => {}); assert.equal(coverage.unresolved, 128);
+		let pages = 0, count = 0;
+		for await (const evidence of index.evidencePages()) {
+			const item = parseBackupItem({ ordinal: pages, thingId: `~.backup-coverage:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa:${String(pages).padStart(16, '0')}`, revision: 'evidence', snapshot: { adapter: 'backup-reference-coverage', version: 1, value: { ...evidence, page: pages } }, content: null });
+			assert.ok(Buffer.byteLength(JSON.stringify(item)) <= BACKUP_METADATA_BYTES); pages++; count += evidence.issues.length;
+		}
+		assert.ok(pages > 1); assert.equal(count, 128);
 	} finally { await index.close(); }
 });
 

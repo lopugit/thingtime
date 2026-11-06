@@ -6,6 +6,9 @@ import { StoredReferenceUnsupportedError } from '../../../components/ComponentsL
 import { openBackupWorkspace, type BackupWorkspaceOptions } from './backupWorkspace';
 import type { BackupAttachment } from './attachmentRecords';
 import type { TimelineSnapshot } from '../../../timeline/contract';
+import { createHash } from 'node:crypto';
+import { canonicalJsonBytes } from '../../../utils/canonicalJsonStream';
+import { BACKUP_METADATA_BYTES } from '../../../backups/manifest';
 
 export { StoredReferenceUnsupportedError };
 
@@ -17,7 +20,7 @@ export function* iterateBackupThingReferences(kinds: string[], crystal: Record<s
 	const declaration = renderComponentDeclaration(crystal);
 	if (declaration?.kind === 'invalid') throw new StoredReferenceUnsupportedError('Invalid explicit render Component declaration');
 	if (declaration?.kind === 'reference') {
-		if (declaration.id.length > 200 || /[{}$\s]/.test(declaration.id)) throw new StoredReferenceUnsupportedError('Render Component identity is outside the supported reference protocol');
+		if (declaration.id.length > 200 || /[{}$\s]/.test(declaration.id)) throw new StoredReferenceUnsupportedError('Render Component identity is outside the supported reference protocol', declaration.id);
 		yield { kind: 'component', ref: declaration.id };
 	}
 	if (declaration?.kind === 'embedded') yield* iterateStoredCompositionReferences(['component'], declaration.component, options);
@@ -35,7 +38,7 @@ export function* iterateBackupThingMedia(kinds: string[], crystal: Record<string
  * Source records and deduped component contexts live on disk; only one record
  * and one iterator ancestry are resident. Available disk, not a product item
  * limit, bounds preparation. Normal exits always remove scratch in close(). */
-export type BackupReferenceIssue = { sourceId: string; code: 'unresolved-owned-or-external' | 'ambiguous-alias' | 'unsupported-traversal' | 'recursive-context' | 'excluded-authority-state'; kind: string; reference: string | null };
+export type BackupReferenceIssue = { sourceId: string; code: 'unresolved-owned-or-external' | 'ambiguous-alias' | 'unsupported-traversal' | 'recursive-context' | 'excluded-authority-state'; kind: string; reference: string | null; referenceDiagnostic?: { encoding: 'utf8'; bytes: number; sha256: string } };
 export type BackupReferenceCoverage = { census: 'owned-home-content'; referenceDomain: 'ordinary-composition-and-account-selections'; discovery: 'complete' | 'unsupported'; resolution: 'closed' | 'unresolved'; unresolved: number; unsupported: number; excluded: number; wholeAccountReady: false };
 export const BACKUP_REFERENCE_COVERAGE_ADAPTER = 'backup-reference-coverage';
 export const BACKUP_SOURCE_EXCLUSION_ADAPTER = 'backup-source-exclusion';
@@ -61,10 +64,11 @@ export function parseBackupReferenceEvidence(snapshot: TimelineSnapshot): Backup
 		(coverage.resolution === 'closed') !== (coverage.unresolved === 0) ||
 		!Array.isArray(value.issues) || value.issues.length > 128) throw Error('Invalid backup reference coverage evidence');
 	for (const issue of value.issues) {
-		if (!keys(issue, 'code,kind,reference,sourceId') || typeof issue.sourceId !== 'string' || !issue.sourceId || issue.sourceId.length > 200 ||
+		if (!(keys(issue, 'code,kind,reference,sourceId') || keys(issue, 'code,kind,reference,referenceDiagnostic,sourceId')) || typeof issue.sourceId !== 'string' || !issue.sourceId || issue.sourceId.length > 200 ||
 			typeof issue.kind !== 'string' || !issue.kind || issue.kind.length > 64 ||
 			!['unresolved-owned-or-external', 'ambiguous-alias', 'unsupported-traversal', 'recursive-context', 'excluded-authority-state'].includes(issue.code) ||
 			(issue.reference !== null && (typeof issue.reference !== 'string' || !issue.reference || issue.reference.length > 200))) throw Error('Invalid backup dependency evidence');
+		if (Object.prototype.hasOwnProperty.call(issue, 'referenceDiagnostic') && (!keys(issue.referenceDiagnostic, 'bytes,encoding,sha256') || issue.reference !== null || issue.referenceDiagnostic.encoding !== 'utf8' || !count(issue.referenceDiagnostic.bytes) || typeof issue.referenceDiagnostic.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(issue.referenceDiagnostic.sha256))) throw Error('Invalid backup reference diagnostic');
 	}
 	return value;
 }
@@ -80,10 +84,23 @@ export async function openBackupReferenceIndex(ownerId: string, options: BackupW
 		CREATE INDEX pending_contexts ON contexts(done);
 		CREATE TABLE selections(sourceId TEXT NOT NULL,kind TEXT NOT NULL,id TEXT NOT NULL,UNIQUE(sourceId,kind,id));
 		CREATE TABLE attachments(id TEXT PRIMARY KEY,value TEXT NOT NULL,durable INTEGER NOT NULL);
-		CREATE TABLE issues(sourceId TEXT NOT NULL,code TEXT NOT NULL,kind TEXT NOT NULL,reference TEXT NOT NULL,UNIQUE(sourceId,code,kind,reference));`);
+		CREATE TABLE issues(sourceId TEXT NOT NULL,code TEXT NOT NULL,kind TEXT NOT NULL,reference TEXT NOT NULL,diagnostic TEXT NOT NULL,UNIQUE(sourceId,code,kind,reference,diagnostic));`);
 	let closed = false, coverage: BackupReferenceCoverage | null = null;
 	const ensure = () => { if (closed) throw Error('Backup reference index is closed'); };
-	const issue = (sourceId: string, code: BackupReferenceIssue['code'], kind: string, reference: string | null) => db.prepare('INSERT OR IGNORE INTO issues VALUES (?,?,?,?)').run(sourceId, code, kind, reference ?? '');
+	const issue = (sourceId: string, code: BackupReferenceIssue['code'], kind: string, reference: string | null) => {
+		let diagnostic = '';
+		if (reference !== null && reference.length > 200) {
+			const hash = createHash('sha256'); let bytes = 0;
+			for (let offset = 0; offset < reference.length;) {
+				let end = Math.min(reference.length, offset + 8192);
+				const last = reference.charCodeAt(end - 1);
+				if (end < reference.length && last >= 0xd800 && last <= 0xdbff) end--;
+				const part = reference.slice(offset, end); hash.update(part, 'utf8'); bytes += Buffer.byteLength(part); offset = end;
+			}
+			diagnostic = JSON.stringify({ encoding: 'utf8', bytes, sha256: hash.digest('hex') }); reference = null;
+		}
+		db.prepare('INSERT OR IGNORE INTO issues VALUES (?,?,?,?,?)').run(sourceId, code, kind, reference ?? '', diagnostic);
+	};
 	const context = db.prepare('INSERT OR IGNORE INTO contexts(id,args,parent) VALUES (?,?,?)');
 	const exact = db.prepare('SELECT kinds FROM identities WHERE id=?');
 	const resolve = (sourceId: string, kind: string, reference: string, optional = false): string | null => {
@@ -152,7 +169,7 @@ export async function openBackupReferenceIndex(ownerId: string, options: BackupW
 					}
 				} catch (error) {
 					if (!(error instanceof StoredReferenceUnsupportedError)) throw error;
-					issue(row.id as string, 'unsupported-traversal', 'stored-composition', null);
+					issue(row.id as string, 'unsupported-traversal', 'stored-composition', error.reference ?? null);
 				}
 				db.prepare('UPDATE contexts SET done=1 WHERE rowid=?').run(row.rowid);
 			}
@@ -165,15 +182,19 @@ export async function openBackupReferenceIndex(ownerId: string, options: BackupW
 		},
 		async *evidencePages() {
 			ensure(); if (!coverage) throw Error('Backup references have not been checked');
-			let cursor = 0;
-			do {
-				const rows = db.prepare('SELECT rowid,sourceId,code,kind,reference FROM issues WHERE rowid>? ORDER BY rowid LIMIT 128').all(cursor);
-				const issues = rows.map(row => ({ sourceId: row.sourceId as string, code: row.code as BackupReferenceIssue['code'], kind: row.kind as string, reference: row.reference === '' ? null : row.reference as string }));
-				yield { coverage, issues };
-				if (!rows.length) break;
-				cursor = Number(rows[rows.length - 1].rowid);
+			let cursor = 0, bytes = 2, emitted = false;
+			let issues: BackupReferenceIssue[] = [];
+			for (;;) {
+				const rows = db.prepare('SELECT rowid,sourceId,code,kind,reference,diagnostic FROM issues WHERE rowid>? ORDER BY rowid LIMIT 128').all(cursor);
+				for (const row of rows) {
+					const entry: BackupReferenceIssue = { sourceId: row.sourceId as string, code: row.code as BackupReferenceIssue['code'], kind: row.kind as string, reference: row.reference === '' ? null : row.reference as string, ...(row.diagnostic ? { referenceDiagnostic: JSON.parse(row.diagnostic as string) } : {}) };
+					let size = 0; for (const chunk of canonicalJsonBytes(entry)) size += chunk.length;
+					if (issues.length && (issues.length === 128 || bytes + size + 1 > BACKUP_METADATA_BYTES - 2048)) { yield { coverage, issues }; emitted = true; issues = []; bytes = 2; }
+					issues.push(entry); bytes += size + 1; cursor = Number(row.rowid);
+				}
 				if (rows.length < 128) break;
-			} while (true);
+			}
+			if (issues.length || !emitted) yield { coverage, issues };
 		},
 		hasIdentity(id: string) { ensure(); return !!exact.get(id); },
 		async close() { if (closed) return; closed = true; await workspace.close(); }
