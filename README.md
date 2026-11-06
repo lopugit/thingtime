@@ -6956,6 +6956,11 @@ home-plane transactional account path. No provider request API is added here.
 
 ### Account-file restore worker proof
 
+Independent portable backup destination registration, administrator-vault setup,
+read-only readiness discovery and remaining execution gates are documented in
+[backup destinations](docs/backup-destinations.md). A configured destination is
+not yet a working snapshot/restore workflow or provider durability proof.
+
 Run `corepack pnpm --dir remix run test:backups:file-restore` with local `mongod`
 and `mongosh` on macOS. It owns replica port **28167**, isolated synthetic
 accounts and private temporary vault/object directories. It uses canonical APIs,
