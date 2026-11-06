@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import { newFileSyncConfiguration } from './configuration';
 import {
 	ConfigurationConflict,
+	canonicalDraftConfiguration,
 	configurationDraftKey,
 	persistConfigurationDraft,
+	persistConfigurationDrafts,
+	readConfigurationDrafts,
 	readConfigurationDraft,
 	readOwnedSyncFolder,
 	saveConfigurationDraft,
@@ -212,4 +215,37 @@ test('drafts reject corruption, cross-device replay and invalid pending payloads
 });
 test('only private owned cloud folders are offered', () => {
 	assert.throws(() => readOwnedSyncFolder({ id: 'cloud', author: { id: 'owner' }, acl: ['tt:all'], thingtime: ['folder'] }, 'owner'));
+});
+
+test('legacy draft migrates without losing pending identity or entered fields when another draft is added', () => {
+ let value: string | null = JSON.stringify(fresh());
+ const store = { getItem: () => value, setItem: (_key: string, next: string) => { value = next; }, removeItem: () => { value = null; } };
+ const legacy = value;
+ const drafts = readConfigurationDrafts(value, 'device');
+ assert.equal(value, legacy, 'read does not rewrite legacy bytes');
+ const second = { ...fresh(), id: 'second', pending: false, configuration: { ...config, name: 'Unfinished', remoteFolderId: '' }, exclusions: '../not valid yet' };
+ let raw = persistConfigurationDrafts(store, 'key', legacy, [...drafts, second]);
+ assert.deepEqual(readConfigurationDrafts(raw, 'device'), [fresh(), second]);
+ const edited = { ...second, configuration: { ...second.configuration, name: 'Edited second' } };
+ raw = persistConfigurationDrafts(store, 'key', raw, [drafts[0], edited]);
+ assert.deepEqual(readConfigurationDrafts(raw, 'device'), [fresh(), edited]);
+ raw = persistConfigurationDrafts(store, 'key', raw, [drafts[0]]);
+ assert.deepEqual(readConfigurationDrafts(raw, 'device'), [fresh()], 'saving/discarding second removes only second');
+ assert.equal(persistConfigurationDrafts(store, 'key', raw, []), null);
+});
+test('draft collection rejects mixed devices, duplicate IDs, damage and concurrent replacement without overwriting', () => {
+ const raw = JSON.stringify({ version: 2, drafts: [fresh()] });
+ assert.throws(() => readConfigurationDrafts(raw, 'another-device'));
+ assert.throws(() => readConfigurationDrafts(JSON.stringify({ version: 2, drafts: [fresh(), fresh()] }), 'device'), /duplicate/);
+ assert.throws(() => readConfigurationDrafts(JSON.stringify({ version: 2, drafts: [fresh(), { invalid: true }] }), 'device'));
+ assert.throws(() => readConfigurationDrafts('{', 'device'));
+ let writes = 0;
+ assert.throws(() => persistConfigurationDrafts({ getItem: () => raw, setItem: () => { writes++; }, removeItem: () => { writes++; } }, 'key', null, [fresh()]), /another tab/);
+ assert.equal(writes, 0);
+});
+test('incomplete resource field spelling survives draft collection reload without becoming a saved limit', () => {
+ const draft = { ...fresh(), pending: false, resourceDraft: { upload: '-', uploadUnit: 'Mbps' as const, download: '1.', downloadUnit: 'Kbps' as const, transferConcurrency: '', indexingConcurrency: '', cpuPercent: '101' } };
+ const restored = readConfigurationDrafts(JSON.stringify({ version: 2, drafts: [draft] }), 'device');
+ assert.deepEqual(restored, [draft]);
+ assert.deepEqual(canonicalDraftConfiguration(restored[0]), config);
 });

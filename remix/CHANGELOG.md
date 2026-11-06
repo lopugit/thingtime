@@ -12,6 +12,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-06: Keep Add connection available while other sync drafts exist;
+  preserve separate new/saved drafts and incomplete resource inputs through
+  switching and reload, with compatible single-draft migration. **Codex (AI)**
+
 - 2026-11-06: Builder app cards open their declared saved Thing entry point through independent read checks; explicit Browse/Edit remains, and kind/search/view changes retain the current app scope.
 
 - 2026-11-04: Add Linux/Windows scoped desktop password delivery with a private agent CLI, OS-encrypted retry state, exact-origin catalog metadata (`api.passwords` 1.7.0), and the existing editable per-entry approval policy. Preserve the macOS Apple provider; system-wide autofill, passkey export and first-sign-in handoff are not advertised. See [implementation and acceptance](../PRs/1328-codex-native-autofill-linux-windows-add-scoped-native-password-delivery.md). **Codex (AI)**
@@ -111,6 +115,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+- 2026-11-06: Preserve confirmed backup stream counters through strict reconciliation and reload; retain repeated live revisions as cumulative activity while checkpointing only the final confirmed effect. Completion evidence migrates in bounded resumable pages and excludes unpublished intents.
+
 
 - 2026-11-06: Exercise iOS inventory regressions through its supported backup mode and explicitly verify strict-watcher refusal; retain macOS strict coverage and all paging, policy, integrity and cancellation assertions. Full iOS runtime: 262 tests, zero failures, 10 existing opt-in skips. **Codex (AI)**
 

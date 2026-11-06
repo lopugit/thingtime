@@ -5,7 +5,7 @@ import { inventoryJournal, inventoryIdentity, newInventoryHeader, INVENTORY_PAGE
 	INVENTORY_STORES, validateInventoryHeader, type InventoryHeader, type InventoryIdentity } from './inventoryJournal';
 import { journalScope, type JournalAccess } from './journalScope';
 import { PLAN_PIN_STORE, PLAN_STORES, pagedPlanJournal, validatePagedPlanHeader, type PagedPlanHeader } from './pagedPlanJournal';
-import { PAGED_RUN_HEADS, PAGED_RUN_STORES, streamReconciliationKey, pagedRunJournal, parsePagedRunSpec, validatePagedRunHeader, type PagedRunHeader, type PagedRunSpec } from './pagedRunJournal';
+import { REVIEW_STORE, countConfirmedSyncEffects, PAGED_RUN_HEADS, PAGED_RUN_STORES, streamReconciliationKey, pagedRunJournal, parsePagedRunSpec, validatePagedRunHeader, type PagedRunHeader, type PagedRunSpec } from './pagedRunJournal';
 import { sameSyncContent, syncPathKey, validSyncPathKey, type SyncEntry } from './reconcile';
 
 export const PAGED_CHECKPOINT_DRAFTS = 'sync-paged-checkpoint-drafts';
@@ -17,7 +17,7 @@ export type PagedCheckpointHeader = PagedCheckpointProgress & { spec: PagedCheck
 	after: Pair; baseline: Pair; instances: string[]; earlyInstance?: string; previous: string | null; positions: Position[]; totals: number[]; revision: number };
 type Header = PagedCheckpointHeader;
 export type PagedCheckpointState = PagedCheckpointProgress & { after: Pair; baseline: Pair };
-const stores = [JOURNAL_RETENTION_STORE, PAGED_CHECKPOINT_DRAFTS, PAGED_CHECKPOINT_HEADS, PAGED_RUN_HEADS, ...PAGED_RUN_STORES, PLAN_STORES[0], PLAN_PIN_STORE, ...INVENTORY_STORES, INVENTORY_PIN_STORE];
+const stores = [REVIEW_STORE, JOURNAL_RETENTION_STORE, PAGED_CHECKPOINT_DRAFTS, PAGED_CHECKPOINT_HEADS, PAGED_RUN_HEADS, ...PAGED_RUN_STORES, PLAN_STORES[0], PLAN_PIN_STORE, ...INVENTORY_STORES, INVENTORY_PIN_STORE];
 const identifier = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(v);
 const nonnegative = (v: number) => Number.isSafeInteger(v) && v >= 0;
 const original = (s: PagedCheckpointSpec) => [s.run.plan.local, s.run.plan.remote, s.run.plan.baseline.local, s.run.plan.baseline.remote];
@@ -63,7 +63,7 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 		const request = tx.objectStore(store).get(id);
 		request.onsuccess = () => { try { check(); done(request.result); } catch (e) { fail(e); } };
 	};
-	const context = (tx: IDBTransaction, spec: PagedCheckpointSpec, done: (run: PagedRunHeader, plan: PagedPlanHeader, captures: InventoryHeader[], early?: PagedRunHeader) => void, fail: (e: unknown) => void) => {
+	const context = (tx: IDBTransaction, spec: PagedCheckpointSpec, done: (run: PagedRunHeader, plan: PagedPlanHeader, captures: InventoryHeader[], early?: PagedRunHeader, earlyEffects?: number) => void, fail: (e: unknown) => void) => {
 		get<string>(tx, PAGED_RUN_HEADS, key, active => {
 			if (active !== spec.run.id) throw Error('Resume the active paged sync run.');
 			get<PagedRunHeader>(tx, PAGED_RUN_STORES[0], [key, spec.run.id], run => {
@@ -85,10 +85,11 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 							get<PagedRunHeader>(tx, PAGED_RUN_STORES[0], [key, early], saved => {
 								const earlySpec = parsePagedRunSpec(saved?.spec);
 								validatePagedRunHeader(saved, earlySpec, scope);
-								if (earlySpec.id !== early || earlySpec.streaming?.source !== 'both' || saved.phase !== 'complete' ||
+								if (earlySpec.id !== early || !earlySpec.streaming || saved.phase !== 'complete' ||
 									earlySpec.configuration?.localRootId !== spec.localRootId || earlySpec.configuration.remoteFolderId !== spec.remoteFolderId)
 									throw Error('Early checkpoint receipts belong to another run or root.');
-								done(run, plan, captures, saved);
+								countConfirmedSyncEffects(tx, key, saved, check,
+                                    count => done(run, plan, captures, saved, count), fail);
 							}, fail);
 						}, fail);
 					}, fail));
@@ -116,7 +117,7 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 		const spec = specification(value);
 		return transaction(stores, 'readwrite', (tx, done, fail) => get<Header | undefined>(tx, PAGED_CHECKPOINT_DRAFTS, [key, spec.run.id], existing => {
 			if (existing) { validate(existing, spec); done(state(existing)); return; }
-			context(tx, spec, (run, _plan, inputs, early) => get<PagedCheckpointHead | undefined>(tx, PAGED_CHECKPOINT_HEADS, key, previous => {
+			context(tx, spec, (run, _plan, inputs, early, earlyEffects) => get<PagedCheckpointHead | undefined>(tx, PAGED_CHECKPOINT_HEADS, key, previous => {
 				if (previous) {
 					validatePagedCheckpointHead(previous, key);
 					if (previous.localRootId !== spec.localRootId || previous.remoteFolderId !== spec.remoteFolderId ||
@@ -127,7 +128,7 @@ export function pagedCheckpointJournal(db: IDBDatabase, access: JournalAccess, k
 				const h: Header = { spec, scope: key, instance: crypto.randomUUID(), runInstance: run.instance, phase: 'collecting', paths: 0, entries: 0, pages: 0,
 					after: pair(0), baseline: pair(2), instances: captures.map(c => c.instance!), previous: previous?.instance ?? null,
 					positions: Array.from({ length: early ? 6 : 5 }, () => ({ after: null, read: 0 })),
-					totals: [0, 0, inputs[2].entries, inputs[3].entries, run.operations, ...(early ? [early.operations] : [])],
+					totals: [0, 0, inputs[2].entries, inputs[3].entries, run.operations, ...(early ? [earlyEffects!] : [])],
 					...(early ? { earlyInstance: early.instance } : {}), revision: 0 };
 				for (const capture of captures) {
 					tx.objectStore(INVENTORY_STORES[0]).add(capture, [key, capture.id]);

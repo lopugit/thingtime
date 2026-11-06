@@ -82,7 +82,11 @@ components; reuse them instead of adding parallel versions.
 
 Device sync management is available to the signed-in device owner in browsers
 through `DeviceSyncPanel` and `RemoteDeviceSync`, independently of local pairing.
-The installed app retains direct controls for its own device. Remote controls use
+The installed app retains direct controls for its own device. Connection editor
+journals preserve multiple drafts per origin/account/storage plane/device,
+including legacy single drafts and incomplete resource input; only explicit
+Save or Discard removes the selected draft. `test-sync-drafts-ui.mjs` covers
+Add, switching, collapse/reopen, reload and account/device isolation. Remote controls use
 editable settings blocks and the existing configuration form; see
 [browser device sync](../browser-device-sync.md) and its browser/installed checks.
 

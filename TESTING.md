@@ -1,3 +1,10 @@
+## Sync and backup completion counters
+
+- [ ] Run a task-only Backup connection through native batch upload. Compare its final operation/file/byte counters with the exact cloud file receipt, then rerender and reload the saved progress tree. A zero-work strict reconciliation must retain the completed early transfer counts for that run.
+- [ ] Change one file A → B → A while indexing remains open. Verify all three transfers occur before the source seals, cumulative activity counts all three, the checkpoint retains only the final confirmed effect, and the reloaded tree agrees with the activity totals.
+- [ ] Interrupt completion-history migration after one bounded page, reopen and resume. Confirm no replay or double count, unpublished superseded intents remain excluded, and the checkpoint uses the final source revision. A new no-work run must report its own zero new transfers rather than recounting the previous run. After a confirmed revision, an unpublished superseding intent and subsequent source/cloud removal, root and parent activity totals must still agree without inventing a current file or a checkpoint effect.
+- [ ] Run `node --import tsx --test app/fileSync/backupCompletionProgress.test.ts` from `remix/` alongside `test:file-sync`.
+
 # TESTING.md — per-area manual test checklists
 
 ## Connector confirmation and composed-map regressions
@@ -14372,6 +14379,14 @@ the isolated real-API/browser command and the metadata-only session boundary.
   batch journal recovery tests; never widen production deadlines to make a
   host-dependent test pass. These synthetic checks do not establish live server
   grant acceptance or identify an uninstrumented CI cancellation's cause.
+- [ ] With a legacy saved connection draft, Add connection remains available.
+  Create multiple drafts, switch saved/new folder cards, collapse/reopen and
+  reload. Preserve every draft and incomplete resource input separately; save
+  or discard only the selected draft. Switching account, API origin, storage
+  plane or device must isolate the journal. Run
+  `node remix/scripts/test-sync-drafts-ui.mjs` for desktop/narrow synthetic
+  browser coverage, then verify the installed app without touching existing
+  user drafts or starting a transfer.
 - [ ] On desktop and narrow mobile, expand a folder, open a connection draft,
   type without saving and keep input focus while an automatic check starts and
   finishes. The same input, expansion, scroll anchor and unsaved text must stay
