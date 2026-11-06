@@ -132,6 +132,7 @@ final class DriveReconnectTests: XCTestCase {
         try remountFixture(legacy: false, abandoned: true)
     }
     private func remountFixture(legacy: Bool, publicationPhase: String? = nil, sameMountpoint: Bool = false, abandoned: Bool = false) throws {
+        #if os(macOS)
         guard ProcessInfo.processInfo.environment["THINGTIME_TEST_DRIVE_REMOUNT"] == "1" else {
             throw XCTSkip("Set THINGTIME_TEST_DRIVE_REMOUNT=1 for disposable APFS remount acceptance")
         }
@@ -344,5 +345,8 @@ final class DriveReconnectTests: XCTestCase {
         print("ACCEPTANCE: cross-volume regular download retained its staged offset and exact publication receipt through remount")
         try detachLast(); try detachLast()
         }
+        #else
+        throw XCTSkip("APFS disk-image remount acceptance requires macOS")
+        #endif
     }
 }
