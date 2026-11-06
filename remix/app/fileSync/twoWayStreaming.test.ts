@@ -11,6 +11,7 @@ import { saved, scope } from './foregroundSync.fixture';
 import { runPagedForegroundCloudSync } from './pagedForegroundSync';
 import { sameSyncStamp, type SyncEntry } from './reconcile';
 import { streamingFileFixture } from './streamingFile.fixture';
+import { INVENTORY_PAGE_ENTRIES } from './inventoryJournal';
 import { streamForegroundSync } from './streamingForegroundSync';
 import type { NativeIndexChangesPage } from './streamingIndex';
 
@@ -455,12 +456,12 @@ test('a source changed during staging leaves no uncertain publication and strict
 	x.f.journal().close();
 });
 
-async function folderEchoFixture(options: { first?: 'local' | 'remote'; guarded?: boolean; change?: boolean; pause?: boolean; remove?: boolean; removeFirst?: boolean; child?: boolean; interrupt?: boolean; scopeChange?: boolean; fillers?: number } = {}) {
+async function folderEchoFixture(options: { first?: 'local' | 'remote'; guarded?: boolean; change?: boolean; pause?: boolean; remove?: boolean; removeFirst?: boolean; child?: boolean; interrupt?: boolean; scopeChange?: boolean; fillers?: number; echoFillers?: boolean } = {}) {
     const x = await fixture('Matched/child.bin'), path = 'Matched', first = options.first ?? 'local';
     let left: SyncEntry | null = { path, id: 'native-folder', version: 'local-folder-v1', kind: 'folder', size: 0, sha256: null };
     let right: SyncEntry | null = { ...left, id: 'cloud-folder', version: 'cloud-folder-v1' };
     const hints = { local: structuredClone(left), remote: structuredClone(right) }, firstDone = deferred(), bothDone = deferred();
-    let appended = 0, contexts = 0, localReads = 0, cloudReads = 0, childReads = 0, paused = false, activeScope = true, interrupted = options.interrupt;
+    let preparedHints = 0, appended = 0, contexts = 0, localReads = 0, cloudReads = 0, childReads = 0, paused = false, activeScope = true, interrupted = options.interrupt;
     const wait = async (promise: Promise<void>, signal?: AbortSignal) => {
         signal?.throwIfAborted();
         await new Promise<void>((resolve, reject) => {
@@ -495,7 +496,7 @@ async function folderEchoFixture(options: { first?: 'local' | 'remote'; guarded?
     x.input.journal = { ...x.input.journal, pagedRuns: (...args) => {
         const runs = pagedRuns(...args);
         return { ...runs, appendStream: async (...args) => {
-            const result = await runs.appendStream(...args);
+            const result = await runs.appendStream(...args); preparedHints++;
             if (args[1].entry.path === path) { if (++appended === 1 && !options.fillers) firstDone.resolve(); if (appended === 2) bothDone.resolve(); }
             if (options.fillers && args[1].entry.path === 'Filler-' + (options.fillers - 1)) firstDone.resolve();
             return result;
@@ -517,17 +518,17 @@ async function folderEchoFixture(options: { first?: 'local' | 'remote'; guarded?
         }
         if (!after) {
             yield frame(id, [hints[side]], 0);
-            if (side === first && options.fillers) yield frame(id, Array.from({ length: options.fillers }, (_, i) => ({ path: 'Filler-' + i, id: side === 'local' ? 'native-Filler-' + i : 'cloud-Filler-' + i, version: side === 'local' ? 'native-folder-v1' : 'cloud-folder-v1', kind: 'folder', size: 0, sha256: null })), 1);
+            if (options.fillers && (side === first || options.echoFillers)) yield frame(id, Array.from({ length: options.fillers }, (_, i) => ({ path: 'Filler-' + i, id: side === 'local' ? 'native-Filler-' + i : 'cloud-Filler-' + i, version: side === 'local' ? 'native-folder-v1' : 'cloud-folder-v1', kind: 'folder', size: 0, sha256: null })), 1);
         }
         if (side === first && interrupted) { await wait(firstDone.promise, signal); throw Error('Interrupted after first folder observation'); }
         await wait(bothDone.promise, signal);
-        let sequence = Math.max(after, 1 + (side === first ? options.fillers ?? 0 : 0));
+        let sequence = Math.max(after, 1 + (side === first || options.echoFillers ? options.fillers ?? 0 : 0));
         if (side === 'local' && options.child) { yield frame(id, [x.f.entry()], sequence++); }
         yield frame(id, [], sequence, true);
     };
     x.input.streamLocalChanges = (id, after, signal) => feed('local', id, after, signal);
     x.input.streamRemoteChanges = (id, after, signal) => feed('remote', id, after, signal);
-    return { ...x, stats: () => ({ contexts, localReads, cloudReads, childReads }), resume: () => { interrupted = false; } };
+    return { ...x, preparedHints: () => preparedHints, stats: () => ({ contexts, localReads, cloudReads, childReads }), resume: () => { interrupted = false; } };
 }
 for (const first of ['local', 'remote'] as const) test(`guarded no-op folder ${first} echo avoids repeated policy and point reads`, { timeout: 10000 }, async () => {
     const x = await folderEchoFixture({ first }); await x.stream();
@@ -574,9 +575,9 @@ test('interruption discards transient folder observations and resume rechecks re
 });
 
 test('folder observation window eviction falls back to fresh reads without limiting the feed', { timeout: 10000 }, async () => {
-    const x = await folderEchoFixture({ fillers: 128 }); await x.stream();
+    const x = await folderEchoFixture({ fillers: INVENTORY_PAGE_ENTRIES }); await x.stream();
     assert.equal(x.stats().localReads, 2); assert.equal(x.stats().cloudReads, 2);
-    assert.equal(x.stats().contexts, 131); assert.equal(x.f.publications(), 0); assert.equal(x.receipts.size, 0);
+    assert.equal(x.stats().contexts, INVENTORY_PAGE_ENTRIES + 3); assert.equal(x.f.publications(), 0); assert.equal(x.receipts.size, 0);
     x.f.journal().close();
 });
 
@@ -584,5 +585,14 @@ test('account scope change cannot consume a prior folder observation', { timeout
     const x = await folderEchoFixture({ scopeChange: true });
     await assert.rejects(x.stream(), /context changed|changed/i);
     assert.equal(x.stats().localReads, 1); assert.equal(x.stats().cloudReads, 1); assert.equal(x.f.publications(), 0);
+    x.f.journal().close();
+});
+
+test('same-order folder feeds larger than the observation window retain complete progress and report effectiveness', { timeout: 10000 }, async context => {
+    const pairs = INVENTORY_PAGE_ENTRIES + 1, x = await folderEchoFixture({ fillers: INVENTORY_PAGE_ENTRIES, echoFillers: true });
+    const streamed = await x.stream(); assert.ok(streamed);
+    assert.equal(x.preparedHints(), pairs * 2);
+    assert.equal(x.f.publications(), 0); assert.equal(x.receipts.size, 0); assert.equal(await x.checkpoints().current(), null);
+    context.diagnostic(JSON.stringify({ folderEchoWindowEffectiveness: { pairs, window: INVENTORY_PAGE_ENTRIES, guardedContexts: x.stats().contexts, scalarContexts: pairs * 2 + 1, scope: 'synthetic no-op orchestration diagnostic; not HTTP or installed throughput; poor effectiveness is reported rather than required' } }));
     x.f.journal().close();
 });
