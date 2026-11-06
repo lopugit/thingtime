@@ -29,13 +29,16 @@ const notifications = await import('../app/routes/api/v1/notifications/settings/
 const chats = await import('../app/routes/api/v1/chats/settings/_settings');
 const prompts = await import('../app/routes/api/v1/settings/lopu-prompt/_lopu-prompt');
 const logout = await import('../app/routes/api/v1/auth/logout/_logout');
+const things = await import('../app/routes/api/v1/things/_things');
 const { getCurrentUser } = await import('../app/api/utils/auth/getCurrentUser');
+const { findViewableThing } = await import('../app/api/utils/things/things');
 const { withHomeMongoSnapshot } = await import('../app/api/utils/mongodb/collections');
 const { readBackupAccountContent, retainBackupAccountContent, openBackupAccountSnapshot } = await import('../app/api/utils/backups/accountSnapshots');
 const { createAccountInventoryProducer } = await import('../app/api/utils/backups/accountInventory');
 const { openLocalBackupStore } = await import('../app/api/utils/backups/localBackupStore');
 const { prepareBackup, sealBackup, copySealedBackup } = await import('../app/api/utils/backups/portableBackup');
 const { BACKUP_FORMAT } = await import('../app/backups/manifest');
+const { retainBackupThingSnapshot, openBackupThingSnapshot } = await import('../app/api/utils/backups/thingSnapshots');
 const { normalizeNotificationPrefs } = await import('../app/schemas/registry');
 
 let cookie = '';
@@ -181,6 +184,37 @@ assert.deepEqual((await call(notifications.loader, '/api/v1/notifications/settin
 assert.equal((await call(chats.loader, '/api/v1/chats/settings')).data.readReceipts, false);
 assert.deepEqual((await call(prompts.loader, '/api/v1/settings/lopu-prompt')).data.personal.instructions, instructions);
 
+// Exercise actual canonical create/read/delete handlers with content that the
+// old backup-only 100,000-node codec refused. This is a selected-record capture
+// interval, not an invented point-in-time/whole-account completeness proof.
+const ordinaryCrystal = { values: Array.from({ length: 150_001 }, (_, n) => n), inert: { ttype: 'function', source: 'NeverExecute()' } };
+const created = (await call(things.action, '/api/v1/things', { thingtime: ['data'], crystal: ordinaryCrystal })).data.thing;
+const live = (await call(things.loader, '/api/v1/things?id=' + created.id)).data.thing;
+assert.deepEqual(live.crystal, ordinaryCrystal);
+assert.equal(typeof live.timelineHeadId, 'string');
+const ordinarySource = await findViewableThing(live.id, { id: ownerId });
+assert.equal(ordinarySource?.ownerId, ownerId);
+assert.equal(ordinarySource?.timelineHeadId, live.timelineHeadId);
+const ordinaryId = randomUUID(), ordinaryStarted = new Date().toISOString();
+const ordinaryFirst = await openLocalBackupStore(join(directory!, 'ordinary-first'));
+const ordinarySecond = await openLocalBackupStore(join(directory!, 'ordinary-second'));
+async function* ordinaryRows() {
+	yield await retainBackupThingSnapshot(ordinaryFirst, ordinaryId, 0, ordinarySource, access);
+}
+await prepareBackup(ordinaryFirst, { format: BACKUP_FORMAT, snapshotId: ordinaryId, scope,
+	boundary: { kind: 'capture-interval', token: 'ordinary-current-handler-fixture', startedAt: ordinaryStarted, completedAt: new Date().toISOString() },
+	coverage: { selectionId: 'ordinary-fixture:' + live.id, description: 'One handler-created ordinary Thing; no full-account claim' }
+}, ordinaryRows(), access);
+await sealBackup(ordinaryFirst, ordinaryId, access);
+await copySealedBackup(ordinaryFirst, ordinarySecond, ordinaryId, access);
+const removed: Response = await things.action({ request: new Request(base + '/api/v1/things', {
+	method: 'DELETE', headers: { Origin: base, 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({ id: live.id })
+}) });
+assert.equal(removed.status, 200);
+assert.equal((await things.loader({ request: request('/api/v1/things?id=' + live.id) })).status, 404);
+await rm(join(directory!, 'ordinary-first'), { recursive: true });
+assert.deepEqual(((await openBackupThingSnapshot(ordinarySecond, ordinaryId, live.id, access)).value as any).crystal, ordinaryCrystal);
+
 // A real signup has other managed records. Do not let a successful profile
 // proof silently imply complete account coverage.
 const incompleteId = randomUUID();
@@ -207,6 +241,7 @@ console.log(
 			'credential-exclusion',
 			'independent-vault',
 			'explicit-current-writer-restore',
+			'ordinary-150001-values-real-handlers-v2-independent-source-loss',
 			'whole-account-incomplete-refusal',
 			'revoked-live-read',
 			'offline-after-logout'

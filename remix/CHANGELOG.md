@@ -12,6 +12,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-06: Retain ordinary backup content with the versioned streaming v2
+  codec while preserving v1 bytes/readers; verify deep/wide content, scalars beyond
+  the legacy 128 MiB processing budget, immutable retries and independent source
+  loss through worker tests and disposable production handlers. Whole-account
+  coverage and destination acceptance remain gated. **Codex (AI)**
+
 - 2026-11-06: Keep Add connection available while other sync drafts exist;
   preserve separate new/saved drafts and incomplete resource inputs through
   switching and reload, with compatible single-draft migration. **Codex (AI)**
