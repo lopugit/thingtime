@@ -96,6 +96,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
             const metadata = { capturedAt: new Date().toISOString(), head: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
                 fixture: { path: binary, sha256: await sha(binary), compiledPath: resolve(root, '../macos/ThingtimeNode/.build/debug/MacFolderSyncFixture'), compiledSha256: await sha(resolve(root, '../macos/ThingtimeNode/.build/debug/MacFolderSyncFixture')) },
                 backend: { path: resolve(root, '.output/server/index.mjs'), sha256: await sha(resolve(root, '.output/server/index.mjs')) },
+                indexer: { path: resolvedIndexer, sha256: await sha(resolvedIndexer) },
                 sourceContentFingerprint: createHash('sha256').update(JSON.stringify(files)).digest('hex'), files };
             await writeFile(target, JSON.stringify(metadata, null, 2), { mode: 0o600, flag: 'wx' });
         }
