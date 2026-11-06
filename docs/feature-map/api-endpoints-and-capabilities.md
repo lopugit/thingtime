@@ -758,3 +758,16 @@ broad content. Existing snapshot parts handle breadth beyond inline processing
 windows; no total-content node cap remains. Full-content checkout, merge,
 export and restore clients require this patch. Metadata reads retain their
 older minima. Run `test:timeline`; the wire/parts formats are unchanged.
+
+## Reviewed creation projections and execution admission
+
+Things 1.52.0 adds derived `executionHeld` and owner-only scalar
+`creationProgress`. Component browse 1.1.0 and Webpage resolve 1.13.0 retain the
+hold; Actions run 1.43.0 refuses held server/browser/shared/child admission.
+Both manifests derive from `apiDocs.ts`; clients negotiate the small maps in
+`backups/contentCreation.ts` and `utils/sharedContentCapabilities.ts`.
+There is no new restore route/import-map entry. Run capability coverage plus
+`backups/creationContract.test.ts`, the real ordinary-restore replica proof and
+the isolated execution-hold browser check. After the canonical Remix build,
+`test:content-execution:built` imports the compiled Vercel fetch handler in a
+clean synthetic runtime and checks both manifests and all four docs routes.

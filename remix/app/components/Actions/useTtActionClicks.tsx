@@ -1,4 +1,5 @@
 import React from 'react';
+import { useContentExecutionHeld } from '../Builder/ContentExecutionHold';
 import { isTransientBlockTarget, TRANSIENT_BLOCK_ACTION } from '../Builder/transientBlockActions';
 import { CATALOG_RECORD_ACTION } from '~/schemas/catalogRecordsSuite';
 import { LOCAL_UI_ACTION, localQueryFormInput } from './localUiAction';
@@ -86,7 +87,8 @@ export const clickTtActionForEnter = (event: React.KeyboardEvent, requireFieldse
 		field.tagName !== 'INPUT' ||
 		['checkbox', 'radio', 'range', 'button', 'file'].includes(field.type)
 	) return;
-	const fieldset = field.closest('fieldset');
+	const candidate = field.closest('fieldset');
+	const fieldset = candidate && ownsAuthoredControl(event.currentTarget as HTMLElement, candidate) ? candidate : null;
 	if (requireFieldset && !fieldset) return;
 	const group = fieldset || event.currentTarget as HTMLElement;
 	const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
@@ -120,7 +122,10 @@ export const toastFromResult = (
 	return { title: title || (status === 'error' ? 'Hmm 🧯' : '⚡ Done ✓'), description: message || fallback.description, status };
 };
 
-export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler; onLocal?: (inputs: Record<string, unknown>) => void; onPending?: (action: string | null) => void; onResult?: (outcome: { action: string; ok: boolean; result: unknown; error: string | null }) => void; fallbackGroup?: (control: HTMLElement, boundary: HTMLElement) => HTMLElement }) => {
+export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler; onLocal?: (inputs: Record<string, unknown>) => void; onPending?: (action: string | null) => void; onResult?: (outcome: { action: string; ok: boolean; result: unknown; error: string | null }) => void; fallbackGroup?: (control: HTMLElement, boundary: HTMLElement) => HTMLElement }) => {
+	const held = useContentExecutionHeld(options?.executionHeld);
+	const heldRef = React.useRef(held);
+	heldRef.current = held;
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
@@ -151,13 +156,14 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 	// A local selection keeps the route generation. Account/access changes
 	// and real navigation retire async confirmations and completions.
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque action generation
-	const actionIdentity = React.useMemo(() => ({}), [user?.id, runtime.identity, location.key]);
+	const actionIdentity = React.useMemo(() => ({}), [user?.id, runtime.identity, location.key, held]);
 	const identityRef = React.useRef(actionIdentity);
 	identityRef.current = actionIdentity;
 	const navigate = useNavigate();
 
 	return React.useCallback(
 		(event: React.MouseEvent) => {
+			if (heldRef.current) { event.preventDefault(); event.stopPropagation(); return; }
 			const origin = event.target as HTMLElement | null;
 			if (isTransientBlockTarget(origin)) return;
 			const control = origin?.closest?.('[data-tt-action]') as HTMLElement | null;
@@ -232,7 +238,8 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			// component root. Fields win over static inputs, including explicit
 			// empty text; excluded or missing fields preserve static inputs.
 			const boundary = event.currentTarget as HTMLElement;
-			const group = (control.closest('fieldset') as HTMLElement | null) || fallbackGroupRef.current?.(control, boundary) || boundary;
+			const fieldset = control.closest('fieldset') as HTMLElement | null;
+			const group = (fieldset && ownsAuthoredControl(boundary, fieldset) ? fieldset : null) || fallbackGroupRef.current?.(control, boundary) || boundary;
 			if (group.querySelector('[data-tt-upload-blocking="true"]')) {
 				lopuRef.current({ title: 'Finish adding your file', description: 'Wait for the upload, then choose Use file before running this form.', status: 'info' });
 				return;
@@ -273,6 +280,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 							if (!mountedRef.current || identity !== identityRef.current) return false;
 							if (key === CATALOG_RECORD_ACTION) {
 								const { installSuiteOnServer } = await import('../Builder/installSuite');
+								if (!mountedRef.current || identity !== identityRef.current) return false;
 								await installSuiteOnServer('catalog-records', { onlyMissing: true });
 								return true;
 							}

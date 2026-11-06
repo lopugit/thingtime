@@ -442,3 +442,14 @@ metadata. Connections renders a local link mark while pending or unavailable.
 The provider catalog uses a separate Settings Builder document with one editable
 repeated card template. Its logo has normal upload and optional URL controls;
 its Connect block calls the same scoped, synchronous OAuth gesture handler.
+
+## Transaction-bound full-account mutation fence
+
+`auth/fenceAccountSession.ts` is an internal home-plane composition helper. It
+reuses canonical JWT/current-user resolution, requires the actual principal's
+own supported full session and performs a fresh random session write inside
+the content transaction. Revocation or selection changes therefore conflict;
+no-op updates and caller-supplied actor IDs are not authority. The selected
+ordinary-restore primitive currently refuses Character delegation and scoped
+credentials; this is an explicit initial capability scope, not impersonation.
+The real replica check covers wrong-account and revoked accepted-receipt retries.

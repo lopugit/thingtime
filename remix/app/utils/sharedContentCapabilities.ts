@@ -3,8 +3,8 @@ import { requireThingtimeCapability } from '../api/utils/capabilities/requireCap
  * Transport batches and storage admission are separate from product content. */
 export const SHARED_CONTENT_REQUIREMENTS = {
  'api.timeline': '1.19.2',
- 'api.actions-run': '1.42.0',
- 'api.things': '1.51.0', 'api.things-update': '1.20.0', 'api.things-comment': '1.11.0',
+ 'api.actions-run': '1.43.0',
+ 'api.things': '1.52.0', 'api.things-update': '1.20.0', 'api.things-comment': '1.11.0',
  'api.things-import': '1.13.0', 'api.things-bulk': '1.7.0', 'api.things-share': '1.4.0',
  'api.things-feed': '1.9.0', 'api.things-user': '1.8.0', 'api.things-search': '1.4.0', 'api.things-export': '1.16.0',
  'api.chats-messages': '1.4.0', 'api.chats-messages-edit': '1.2.0',

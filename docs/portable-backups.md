@@ -807,3 +807,99 @@ Interrupted preparation revalidates the sealed source inventory and bytes before
 resealing the same review. Accepted review pages are reused immutably, but this
 phase does not checkpoint a long full-byte validation pass; durable verification
 checkpoints remain a separate large-volume acceptance requirement.
+
+
+## Selected ordinary graph execution primitives — 2026-11-06
+
+`api/utils/backups/ordinaryRestoreTransaction.ts` provides internal atomic and
+resumable creation primitives for an **explicitly selected, closed ordinary
+content graph** within the explicit `ordinary-composition-v1` reference domain.
+Its separate `thingtime-selected-ordinary-restore-v1` review is
+not a whole-account restore plan. Existing account plans remain non-executable,
+writer readiness remains unavailable for whole-account restoration, and
+`wholeAccountReady` remains false. No public restore endpoint, MCP or installed
+restore workflow is added.
+
+Reviews bind the new operation identity, independent source seal, exact selected
+command hashes/count, destination owner/origin/root/revision and compatible
+semantic contracts. The runtime rechecks its canonical capability registry and
+current authenticated principal. The initial lane supports the principal's own
+full browser/service session on the home data plane; Character delegation,
+scoped credentials and other planes require their own compatible contract.
+Fresh session writes inside each content transaction fence revocation, using
+actual write conflicts rather than snapshot-only reads, consistent with
+[MongoDB transaction guidance](https://www.mongodb.com/docs/manual/core/transactions-production-consideration/). Secrets
+never enter reviews, receipts or checkpoints.
+
+Available-disk scratch indexing verifies every fresh allocation, record pin,
+explicit parent and folder-before-child order before destination content writes.
+Top-level records must name the selected destination; nested parents must be
+reviewed allocated folders. Null/missing parents and other owned folders refuse.
+The reusable strict stored-reference index checks all persisted contexts,
+including optional pointers. Functional commands require exact remapped IDs, so
+an existing destination alias can never shadow the reviewed program. Direct
+Data `parentId` relationships must also point inside the selected graph. It
+refuses unresolved/ambiguous/dynamic references
+or unsupported traversal. This first writer lane supplies no attachment
+identities, so media dependencies and managed families refuse before content
+mutation. Browser HTTP-request bodies/query values and schema-specific/custom
+relationships have no complete remapping contract in this lane; HTTP-request
+programs explicitly refuse, while pure browser compute/return is supported. Executable cycles use preallocated independent IDs; schemas precede
+their data and components precede pages that capture them.
+
+The resumable primitive first accepts a protected, accounted Timeline admission
+containing the small immutable review, recoverable through the owner Timeline
+API. It then accepts the entire immutable command-intent chain
+as accounted protected Timeline effects. A server-only scalar checkpoint on the
+selected folder tracks phase, chain, planned/applied counts and a content epoch.
+It contains no growing list or archived authority. Each canonical Thing write,
+new immutable revision, effect receipt and counter increment commits together.
+Restart revalidates the review/source records, reads accepted intents/effects,
+and never repeats an accepted write or replaces later owner edits. Every retry
+still checks current account/session and destination ownership; pending work and
+completion require the original root revision. No receipt uses server-local
+SQLite. An exact completed replay returns its recorded outcome before reading
+source records or opening scratch; it still requires current owner authorization
+and never rewrites later destination edits. The atomic alternative rolls back the complete selected graph when its
+single Mongo transaction cannot commit; large graphs use the per-record path.
+
+Newly created content carries a protected execution hold, excluded from ordinary
+snapshots and generic write input. Server/browser Action admission checks the
+new operation's exact completion effect through direct IDs, keys, shared roots
+and child invocation. Renderers also suppress source loading, local/pseudo
+controls, native/upload mounts and stale async callbacks while held. Content and
+ordinary editing remain available. Completion streams current owned content
+through containment/closure validation, preserving valid user edits. Canonical
+ordinary mutation recording advances the old/new held root epochs on edits,
+moves, deletion or ownership changes; the final bounded transaction requires an
+unchanged epoch, complete effect set, current authorization and destination CAS.
+Historical imported receipts can never satisfy a new operation's hold.
+
+`api.things` 1.52.0 projects derived `executionHeld` and owner-only
+`creationProgress:{phase,planned,applied,count}`. Component browse 1.1.0 and
+Webpage resolve 1.13.0 preserve the hold; Actions run 1.43.0 enforces admission.
+The checkpoint's phase is durable progress, not a process-liveness assertion.
+Activating restore on a shared database requires compatible execution admission
+and hold-aware clients on every active host; one origin manifest does not prove
+that fleet rollout.
+Folder status badges, job supervision and the restore product workflow are not
+implemented by this phase. Source/managed/account/settings/security/device
+coverage, file bytes/adapters, general credential modes, installed acceptance,
+provider durability and measured 100 GB–100 TB restoration remain required.
+
+Run `test:backups:ordinary-restore` for an isolated real-replica proof using real
+signup/Action Request handlers and canonical Things writers. It captures eight
+synthetic records, copies the sealed vault, removes source content and the first
+vault, revokes the original session, and continues through the pinned private
+local-vault access boundary without source-account access. It checks independent readback, hierarchy/schema provenance, Action
+cycles, intent interruption, actual child-process death after a committed effect,
+resume, later edits, completion races, held browser/server/shared admission and
+unsupported-scope refusal. This is not Nitro HTTP or production/provider proof. An existing same-key
+destination Action, unsupported HTTP-payload references and outside local
+relationships must refuse before any restored content write.
+`test:content-execution:browser` separately checks synthetic API projections at
+desktop/mobile sizes, hold/release, nested native/local controls and delayed
+callbacks. Browser fixture evidence is distinct from the real-replica proof.
+The full generic Thing route's selected-origin refresh/cache behavior remains
+an installed/real-app acceptance gate; the focused synthetic browser fixture
+does not establish that complete route journey.

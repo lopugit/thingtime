@@ -21,7 +21,7 @@ const withFetch = async <T,>(
 	Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin: 'https://test.example' } } });
 	globalThis.fetch = ((url: string) => {
 		if (String(url) === THINGTIME_CAPABILITY_MANIFEST_PATH) {
-			return Promise.resolve({ ok: true, json: async () => ({ schemaVersion: 1, origin: 'https://test.example', features: { 'api.webpages-resolve': { version: '1.8.1' } } }) } as Response);
+			return Promise.resolve({ ok: true, json: async () => ({ schemaVersion: 1, origin: 'https://test.example', features: { 'api.webpages-resolve': { version: '1.13.0' } } }) } as Response);
 		}
 		calls.push(String(url));
 		return impl(String(url));
@@ -133,4 +133,11 @@ test('saved webpages adopt and clear owner-only hidden-link keys with their ACL'
 		acl: ['tt:user', 'tt:all']
 	});
 	assert.equal(publicPage?.page?.linkKey, undefined);
+});
+
+
+test('saved projection carries the server execution hold and releases it only on an explicit false', () => {
+ const before = { page: { id: 'restored-page', crystal: { blocks: [] }, executionHeld: true }, source: 'user', componentsByRef: {} } as ResolvedWebpage;
+ assert.equal(mergeSavedWebpage(before, { id: 'restored-page', crystal: { blocks: [] } })?.page?.executionHeld, true);
+ assert.equal(mergeSavedWebpage(before, { id: 'restored-page', crystal: { blocks: [] }, executionHeld: false })?.page?.executionHeld, false);
 });

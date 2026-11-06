@@ -103,10 +103,10 @@ export async function openBackupReferenceIndex(ownerId: string, options: BackupW
 	};
 	const context = db.prepare('INSERT OR IGNORE INTO contexts(id,args,parent) VALUES (?,?,?)');
 	const exact = db.prepare('SELECT kinds FROM identities WHERE id=?');
-	const resolve = (sourceId: string, kind: string, reference: string, optional = false): string | null => {
+	const resolve = (sourceId: string, kind: string, reference: string, optional = false, exactOnly = false): string | null => {
 		const found = exact.get(reference);
 		if (found && JSON.parse(found.kinds as string).includes(kind)) return reference;
-		if (kind !== 'data') {
+		if (kind !== 'data' && !exactOnly) {
 			// Runtime entry points differ in their tie-break ordering (shared
 			// composition uses updatedAt; direct Action execution uses createdAt).
 			// Preserve every owner row, but never certify an inferred winner.
@@ -133,13 +133,13 @@ export async function openBackupReferenceIndex(ownerId: string, options: BackupW
 		addSelection(sourceId: string, kind: string, id: unknown) { ensure(); if (id != null) { if (typeof id !== 'string') throw Error('Invalid backup selection reference'); db.prepare('INSERT OR IGNORE INTO selections VALUES (?,?,?)').run(sourceId, kind, id); } },
 		addExcludedAuthority(sourceId: string, kind: string) { ensure(); issue(sourceId, 'excluded-authority-state', kind, null); },
 		addAttachment(value: BackupAttachment, durable: boolean) { ensure(); if (value.ownerId !== ownerId) throw Error('Backup attachment owner changed'); db.prepare('INSERT INTO attachments VALUES (?,?,?)').run(value.id, JSON.stringify(value), durable ? 1 : 0); },
-		async validate(check: () => Promise<void>, signal?: AbortSignal, policy: { requireOptionalReferences?: boolean } = {}): Promise<BackupReferenceCoverage> {
+		async validate(check: () => Promise<void>, signal?: AbortSignal, policy: { requireOptionalReferences?: boolean; requireExactReferences?: boolean } = {}): Promise<BackupReferenceCoverage> {
 			ensure(); signal?.throwIfAborted();
 			let ticks = 0;
 			const tick = async () => { signal?.throwIfAborted(); if (++ticks % 128 === 0) { await yieldToEventLoop(); await check(); ensure(); } };
 			await check(); signal?.throwIfAborted();
 			for (const row of db.prepare('SELECT sourceId,kind,id FROM selections ORDER BY sourceId,kind,id').iterate()) {
-				resolve(row.sourceId as string, row.kind as string, row.id as string); await tick();
+				resolve(row.sourceId as string, row.kind as string, row.id as string, false, policy.requireExactReferences); await tick();
 			}
 			for (;;) {
 				await check(); ensure();
@@ -151,7 +151,7 @@ export async function openBackupReferenceIndex(ownerId: string, options: BackupW
 				try {
 					for (const reference of iterateBackupThingReferences(kinds, crystal, { args, signal })) {
 						await tick(); if (!reference) continue;
-						const target = resolve(row.id as string, reference.kind, reference.ref, reference.optional && !policy.requireOptionalReferences);
+						const target = resolve(row.id as string, reference.kind, reference.ref, reference.optional && !policy.requireOptionalReferences, policy.requireExactReferences);
 						if (target && reference.kind === 'component' && reference.args) {
 							const next = contextJson(reference.args);
 							if (db.prepare('SELECT 1 FROM contexts WHERE id=? AND args=?').get(target, next)) continue;
