@@ -1,5 +1,5 @@
 import { syncRequestHasPacing } from './resourceGovernor';
-import { SyncConnectionWait } from './syncConnectionWait';
+import { SyncConnectionWait, SyncVolumeRemounted } from './syncConnectionWait';
 import { createFolderHostFetch } from './folderHostFetch.client';
 import type { ThingtimeDesktopBridge } from '../utils/electronBridge';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
@@ -112,6 +112,14 @@ export async function createDesktopFolderHost(input: {
 						// fields. Only recognize fixed host compatibility/retry messages;
 						// never display arbitrary native errors, paths or transport details.
 						const retry = '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.';
+						const volumeOffline = '[folder_volume_offline] The granted volume is offline. Saved sync will retry.';
+						const volumeRemounted = '[folder_volume_remounted] The granted volume returned. Reconcile its saved transfer before continuing.';
+						if (error instanceof Error && (error.message === volumeOffline ||
+							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${volumeOffline}`))
+							throw new SyncConnectionWait('Waiting for the granted volume to return. Saved sync work is retained.');
+						if (error instanceof Error && (error.message === volumeRemounted ||
+							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${volumeRemounted}`))
+							throw new SyncVolumeRemounted();
 						const uploadRetry = '[folder_upload_retry] Folder upload is temporarily unavailable. Retry after reconnecting.';
 						if (error instanceof Error && (error.message === uploadRetry ||
 							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${uploadRetry}`))
