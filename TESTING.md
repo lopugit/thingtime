@@ -14670,6 +14670,13 @@ the isolated real-API/browser command and the metadata-only session boundary.
   publish a completion checkpoint. Keep the processing window bounded without
   limiting accepted feed size. Compare the same real mixed/fault fixture's
   first confirmed file, first payload, identity/admission counts and total time.
+- For initial-folder startup, queue both replicas' positive folder hints before
+  planning. A guarded host may defer that folder without current point reads,
+  but must not borrow the hint for a child or completion checkpoint. Consumed,
+  foreign-generation and bounded-out peers must fall back; legacy hosts retain
+  current preparation. Verify no cursor changes during peer lookup, fresh strict
+  inventory after a stale pair, and the mixed fixture's actual queued-peer hits
+  before first confirmation. A positive hint is never current-state authority.
 - For mixed-file current-worker acceptance, add `--canonical-worker` to
   `test:files:mac-paged -- --wide --wide-mixed`; add `--streaming-two-way`
   to exercise production-style deletes-off dual feeds and strict async capture. Keep the default mixed mode

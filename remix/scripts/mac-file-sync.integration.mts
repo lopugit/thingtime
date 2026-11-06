@@ -603,6 +603,7 @@ try {
 	primeCooldown = forcePreflightCooldown;
 	let nativePages = 0, cloudPages = 0, reviewInterrupt = false, reviewedChoices = 0;
 	const journalAccess = { scope, currentScope: () => scope };
+	const queuedFolderPeers = { probes: 0, deferred: 0 };
 	const confirmedIds = new Map<string, Set<string>>();
 	const readRun = async () => {
 		if (!pagedFixture) return (await journal.read(scope))!;
@@ -691,7 +692,12 @@ try {
 				inventory,
 				source: async (entry) => mobileFolderSource(fixture.userId, nativeRoot, entry, signal, request, caps),
 				journal: pagedFixture ? { ...journal, pagedRuns: access => {
-					const runs = journal.pagedRuns(access); return { ...runs, confirm: async (spec, receipt) => {
+					const runs = journal.pagedRuns(access); return { ...runs, queuedFolderPeer: async (...args) => {
+                        queuedFolderPeers.probes++;
+                        const paired = await runs.queuedFolderPeer(...args);
+                        if (paired) queuedFolderPeers.deferred++;
+                        return paired;
+                    }, confirm: async (spec, receipt) => {
 						const result = await runs.confirm(spec, receipt), ids = confirmedIds.get(spec.id) ?? new Set<string>();
                         if (receipt.entry?.kind === 'file' && transferRunStartedAt) benchmarkTimeline.firstConfirmedFileMs ??= Date.now() - transferRunStartedAt;
 						ids.add(receipt.operationId); confirmedIds.set(spec.id, ids); return result;
@@ -1077,7 +1083,7 @@ try {
         assert.equal(observedUploadPayloadBytes, initialLocalBytes, 'Observed HTTP uploads include each nonempty source byte exactly once');
 		console.log(JSON.stringify({ ok: true, paged: true,
             parity: { canonicalDesktopManager: !!canonicalHost, canonicalRendererHost: !!canonicalHost, canonicalTransferWorkerSelected: !!canonicalHost, nativeOperationGuards: !!canonicalHost, capabilities: caps, customMutationHook: false, streamingTwoWay: streamingMixedFixture, propagateDeletes: saved.configuration.propagateDeletes, localFeed: streamingMixedFixture, remoteFeed: streamingMixedFixture, strictAsyncCapture: streamingMixedFixture },
-            injectedLossOrder, nativeIdentityCalls, nativeIdentityTiming, nativeServiceCalls, nativeRequestTimings, nativeServiceTiming, nativeTransportTiming: nativeTransport?.timings, observedUploadPayloadBytes,
+            injectedLossOrder, queuedFolderPeers, nativeIdentityCalls, nativeIdentityTiming, nativeServiceCalls, nativeRequestTimings, nativeServiceTiming, nativeTransportTiming: nativeTransport?.timings, observedUploadPayloadBytes,
             wideFolders, nestedFolders: mixedFolders.length, mixedFiles: Object.keys(mixedFiles).length, totalPaths: wideFolders + mixedFolders.length + Object.keys(expectedFiles).length, initialLocalBytes, finalFileBytes: initialLocalBytes + remoteBytes.length, actualHashedBytes: null, warmHashedBytes: null, benchmarkDeviceLimits, effectiveRustScanBytesPerSecond: benchmarkDeviceLimits ? benchmarkDeviceLimits.scanBytesPerSecond / 2 : null, privateIndexDatabase: true, firstTransferMs, firstTransferObservation: 'server first parsed body byte, excluding fixture seed uploads', serverPutEvents: await serverPuts(), benchmarkTimeline, operationIds: originalIds, checkpointRunId: head.runId, countsBeforeRecovery: beforeRecovery, acceptedStagedBytesBeforeRestart: firstStagedBytes,
             verifiedFiles: Object.entries(expectedFiles).map(([path, bytes]) => ({ path, bytes: bytes.length, sha256: hash(bytes) })),
             checkpointEntries: { local: (await journal.inventory(journalAccess).read(head.baseline.local)).totalEntries, remote: (await journal.inventory(journalAccess).read(head.baseline.remote)).totalEntries }, phaseMs, httpRequests, httpLatency, nativeLatency, integrationProcessOnly: { maxRssKiB: usage.maxRSS, userCpuMs: Math.round(usage.userCPUTime / 1000), systemCpuMs: Math.round(usage.systemCPUTime / 1000) }, nativePages, cloudPages,
