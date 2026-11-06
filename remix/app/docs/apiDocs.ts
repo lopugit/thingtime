@@ -315,6 +315,16 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Applied or exactly replayed.', body: { ok: true, revision: 42, applied: true, stale: false } }]
 	}),
 	endpoint({
+    id: 'backup-destinations', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'storage',
+    title: 'Independent backup destinations', endpoint: '/api/v1/backups/destinations',
+    summary: 'Discover registered independent backup destinations for the current full home account.',
+    detail: 'Read-only, private/no-store discovery. A fixed administrator vault label is selected by the deployment data environment and exact public origin. The response contains opaque IDs, labels and configured-unverified status only; it never returns bucket names, regions, roles, endpoints, prefixes, credentials, filesystem paths or vault values. Registrations that reuse the primary attachment bucket are refused. Configured does not prove provider durability, credentials, stored bytes, worker readiness or restore completion. executionAvailable remains false until a separate compatible durable backup execution contract ships. No query selectors or configuration writes are accepted.',
+    auth: { mode: 'session-or-bearer', description: 'Current full user account; no temporary, Character, scoped or delegated identities; home storage only.' }, methods: ['GET'],
+    steps: ['Authenticate the intended full account on the selected origin.', 'Negotiate api.backup-destinations 1.0.0.', 'Read configuration readiness without treating it as verified capture or execution.'],
+    requestExamples: [{ name: 'Discover destinations', description: 'Read owner-only readiness.', method: 'GET' }],
+    responseExamples: [{ status: 200, description: 'No independent destination configured', body: { ok: true, destinations: [], availability: 'unavailable', reason: 'not-configured', executionAvailable: false } }]
+  }),
+  endpoint({
     id: 'devices-sync-control', contractVersion: '1.4.0', featureVersion: '1.4.0', group: 'devices',
     title: 'Device folder sync control', endpoint: '/api/v1/devices/sync-control',
     summary: 'Manage an owned device’s installed folder sync jobs from a logged-in browser.',
