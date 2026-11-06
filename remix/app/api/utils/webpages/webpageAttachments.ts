@@ -1,3 +1,4 @@
+import { collectWebpageAttachmentIds } from '../../../components/Builder/webpageAttachmentRefs';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { bindReadyAttachmentsToTarget, MAX_ATTACHMENTS_PER_TARGET } from '../attachments/attachmentStore';
 
@@ -17,43 +18,7 @@ import { bindReadyAttachmentsToTarget, MAX_ATTACHMENTS_PER_TARGET } from '../att
 // Real attachment ids are 68 chars ("att_" + sha256 hex) — the upper bound
 // must clear that or the capture silently truncates the id and every lookup
 // misses (the round-8 preview E2E caught exactly that with a {8,64} cap).
-const CONTENT_URL_PATTERN = /\/api\/v1\/attachments\/content\?id=([A-Za-z0-9_-]{8,128})/g;
-
-const collectFromString = (value: unknown, into: Set<string>) => {
-	if (typeof value !== 'string' || !value) return;
-	for (const match of value.matchAll(CONTENT_URL_PATTERN)) into.add(match[1]);
-};
-
-// Scalar bags on a block (component `args`, the Figma-style `css` record) hold
-// author-typed strings, and the inspector is exactly where someone pastes the
-// content URL the builder just minted for them — an `imageUrl` arg or a
-// `background-image: url(/api/v1/attachments/content?id=…)` reaps identically
-// to an unbound media src if it is not claimed too.
-const collectFromRecord = (value: unknown, into: Set<string>) => {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) return;
-	for (const entry of Object.values(value as Record<string, unknown>)) collectFromString(entry, into);
-};
-
-// Pure: every attachment id referenced by a webpage crystal's blocks — media
-// srcs, content URLs embedded in rich/raw html, component arg values, and
-// per-block custom css.
-export const extractWebpageAttachmentIds = (crystal: unknown): string[] => {
-	const ids = new Set<string>();
-	const walk = (blocks: unknown) => {
-		if (!Array.isArray(blocks)) return;
-		for (const block of blocks) {
-			if (!block || typeof block !== 'object') continue;
-			const record = block as Record<string, unknown>;
-			collectFromString(record.src, ids);
-			collectFromString(record.html, ids);
-			collectFromRecord(record.args, ids);
-			collectFromRecord(record.css, ids);
-			walk(record.children);
-		}
-	};
-	walk((crystal as Record<string, unknown> | null)?.blocks);
-	return [...ids].slice(0, MAX_ATTACHMENTS_PER_TARGET);
-};
+export const extractWebpageAttachmentIds = (crystal: unknown): string[] => collectWebpageAttachmentIds(crystal).slice(0, MAX_ATTACHMENTS_PER_TARGET);
 
 export type WebpageAttachmentBindResult = { bound: number; skipped: number };
 

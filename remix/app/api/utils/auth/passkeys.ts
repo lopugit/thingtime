@@ -1,4 +1,7 @@
-import { randomUUID } from 'node:crypto';
+import type { VerificationContext } from '~/passwords/verificationPolicy';
+import { passwordVerification } from '../passwords/verification';
+import { getAuthToken } from './authCookie';
+import { createHash, randomUUID } from 'node:crypto';
 
 import {
 	generateAuthenticationOptions,
@@ -10,13 +13,14 @@ import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simp
 import { Binary } from 'mongodb';
 
 import { relationshipUniqueKeys } from '../messenger/shared';
-import { getHomeThingsCollection as getThingsCollection } from '../mongodb/collections';
+import { getHomeThingsCollection as getThingsCollection, getAuthOtpsCollection } from '../mongodb/collections';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
-import { signJwt } from './jwt';
+import { signJwt, signPurposeToken, verifyPurposeToken } from './jwt';
 import { providerNameForAaguid } from './passkeyAaguids';
 import { resolvePublicOrigin } from './publicOrigin';
 import { createSession } from './sessions';
+import { emitLoginNotification } from '../notifications/notifications';
 import { findUserById, toPublicUserWithStorage } from './users';
 import type { PublicUser } from './users';
 import {
@@ -56,7 +60,7 @@ import { PASSKEY_USER_VERIFICATION } from './webauthnPolicy';
 // another origin's ceremony.
 
 const RP_NAME = 'Thingtime';
-const MAX_PASSKEYS_PER_USER = 25;
+
 const MAX_NICKNAME_CHARS = 64;
 const MAX_DESCRIPTION_CHARS = 280;
 
@@ -264,18 +268,82 @@ export const deletePasskey = async (userId: string, passkeyId: string): Promise<
 	return { ok: true };
 };
 
+// Atomic spent markers share the existing authOtps unique challenge index and
+// TTL. Clearing a browser cookie alone does not prevent replaying a saved
+// cookie/assertion, especially with synced passkeys whose counter stays zero.
+const consumePasskeyChallenge = async (kind: 'reg' | 'auth' | 'vault', challenge: string): Promise<boolean> => {
+	const collection = await getAuthOtpsCollection();
+	try {
+		await collection.insertOne({
+			challenge: `webauthn:${kind}:${createHash('sha256').update(challenge).digest('hex')}`,
+			purpose: `webauthn-${kind}-consumed`, expiresAt: new Date(Date.now() + 10 * 60 * 1000)
+		});
+		return true;
+	} catch (error: any) {
+		if (error?.code === 11000) return false;
+		throw error;
+	}
+};
+
 // ── registration ceremony ──────────────────────────────────────────────────
+
+// A separate, single-use ceremony: a login assertion can never reveal a vault
+// value. Bind the signed challenge to the current session, origin and one item.
+export const startVaultPasskeyVerification = async (request: Request, userId: string, binding: string) => {
+	const { rpID, origin } = deriveWebAuthnParams(request);
+	const docs = await findPasskeyDocsForUser(userId);
+	const allowCredentials = docs.filter((doc) => !doc.crystal?.revokedAt).flatMap((doc) => {
+		const secure = unpackPasskeySecure(doc.secure);
+		return secure.credentialId && secure.publicKey ? [{ id: secure.credentialId }] : [];
+	});
+	if (!allowCredentials.length) return fail(409, 'No active passkey for this account. Use your current password.');
+	const options = await generateAuthenticationOptions({ rpID, userVerification: 'required', allowCredentials });
+	const ticket = await signPurposeToken('vault-reveal', { challenge: options.challenge, rpID, origin, userId, binding }, '2m');
+	return { ok: true as const, options, ticket };
+};
+
+const vaultPasskeyDependencies = {
+	find: findPasskeyByCredentialId,
+	verify: verifyAuthenticationResponse,
+	consume: consumePasskeyChallenge,
+	update: async (doc: any, userId: string, counter: number) => (await getThingsCollection()).updateOne(
+		{ shareId: doc.shareId, thingtime: 'passkey', ownerId: userId, 'crystal.revokedAt': null } as any,
+		{ $max: { secureCounter: counter }, $set: { 'crystal.lastUsedAt': new Date().toISOString(), updatedAt: new Date() } } as any
+	)
+};
+export const finishVaultPasskeyVerification = async (
+	request: Request, userId: string, binding: string, ticket: string, response: AuthenticationResponseJSON,
+	deps = vaultPasskeyDependencies
+): Promise<boolean> => {
+	const challenge = await verifyPurposeToken(ticket, 'vault-reveal');
+	const { rpID, origin } = deriveWebAuthnParams(request);
+	if (!challenge || challenge.userId !== userId || challenge.binding !== binding || challenge.origin !== origin || challenge.rpID !== rpID || typeof challenge.challenge !== 'string') return false;
+	const credentialId = response?.id;
+	if (typeof credentialId !== 'string' || credentialId.length > 2048) return false;
+	const doc = await deps.find(credentialId);
+	if (!doc || String(doc.ownerId) !== userId || doc.crystal?.revokedAt) return false;
+	const secure = unpackPasskeySecure(doc.secure);
+	if (!secure.publicKey || secure.credentialId !== credentialId) return false;
+	const handle = response?.response?.userHandle;
+	if (handle && Buffer.from(handle, 'base64url').toString('utf8') !== userId) return false;
+	let verified: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
+	try {
+		verified = await deps.verify({ response, expectedChallenge: challenge.challenge, expectedOrigin: origin, expectedRPID: rpID,
+			credential: { id: credentialId, publicKey: new Uint8Array(Buffer.from(secure.publicKey, 'base64url')), counter: doc.secureCounter || 0 }, requireUserVerification: true });
+	} catch { return false; }
+	if (!verified.verified || !await deps.consume('vault', challenge.challenge)) return false;
+	const result = await deps.update(doc, userId, verified.authenticationInfo.newCounter);
+	return result.matchedCount === 1;
+};
 
 export const startPasskeyRegistration = async (
 	user: PublicUser,
-	request: Request
+	request: Request,
+  verification?: {requestId:string;context:VerificationContext}
 ): Promise<PasskeyFail | { ok: true; options: Awaited<ReturnType<typeof generateRegistrationOptions>>; setCookies: string[] }> => {
 	const existing = await findPasskeyDocsForUser(user.id);
-	if (existing.length >= MAX_PASSKEYS_PER_USER) {
-		return fail(409, `You already have ${MAX_PASSKEYS_PER_USER} passkeys — delete one first`);
-	}
 
-	const { rpID } = deriveWebAuthnParams(request);
+	const { rpID, origin } = deriveWebAuthnParams(request);
 	// Exclude every current credential (revoked included) so the platform sheet
 	// refuses to double-register the same authenticator; deleting a passkey
 	// frees its authenticator for re-registration.
@@ -305,7 +373,7 @@ export const startPasskeyRegistration = async (
 		authenticatorSelection: { residentKey: 'required', userVerification: PASSKEY_USER_VERIFICATION }
 	});
 
-	return { ok: true, options, setCookies: [await serializeRegistrationChallengeCookie({ challenge: options.challenge, userId: String(user.id), rpID })] };
+	return { ok: true, options, setCookies: await serializeRegistrationChallengeCookie({ challenge: options.challenge, userId: String(user.id), rpID, origin, ...(verification ? {passwordVerification:verification} : {}) }, request) };
 };
 
 export type FinishPasskeyRegistrationInput = {
@@ -323,13 +391,13 @@ export const finishPasskeyRegistration = async ({
 	nickname,
 	description
 }: FinishPasskeyRegistrationInput): Promise<PasskeyFail | { ok: true; passkey: PublicPasskey; setCookies: string[] }> => {
-	const challenge = await readRegistrationChallengeCookie(request);
+	const challenge = await readRegistrationChallengeCookie(request, response);
 	if (!challenge || challenge.userId !== String(user.id)) {
 		return fail(400, 'This passkey setup expired — start again');
 	}
 
 	const { rpID, origin } = deriveWebAuthnParams(request);
-	if (challenge.rpID !== rpID) return fail(400, 'This passkey setup expired — start again');
+	if (challenge.rpID !== rpID || (challenge.origin && challenge.origin !== origin)) return fail(400, 'This passkey setup expired — start again');
 
 	let verification: Awaited<ReturnType<typeof verifyRegistrationResponse>>;
 	try {
@@ -346,6 +414,16 @@ export const finishPasskeyRegistration = async ({
 	if (!verification.verified || !verification.registrationInfo) {
 		return fail(400, 'The passkey could not be verified — try again');
 	}
+
+	if (challenge.passwordVerification) {
+    const token = await getAuthToken(request);
+    if (!token) return fail(401, 'Your session ended.');
+    try {
+      const who = await passwordVerification.identity(user.id, origin, token);
+      await passwordVerification.require(request, who, challenge.passwordVerification.context, challenge.passwordVerification.requestId);
+    } catch { return fail(403, 'Your password confirmation ended. Start passkey setup again.'); }
+  }
+	if (!await consumePasskeyChallenge('reg', challenge.challenge)) return fail(400, 'This passkey setup expired — start again');
 
 	const info = verification.registrationInfo;
 	const credential = info.credential;
@@ -385,14 +463,21 @@ export const finishPasskeyRegistration = async ({
 
 	const things = await getThingsCollection();
 	try {
-		await things.insertOne(doc as any);
+		if (challenge.passwordVerification) {
+      const token=await getAuthToken(request);
+      if(!token)return fail(401,'Your session ended.');
+      const who=await passwordVerification.identity(user.id,origin,token);
+      await passwordVerification.commitAccountRegistration(request,who,challenge.passwordVerification.context,challenge.passwordVerification.requestId,session=>things.insertOne(doc as any,{session}));
+    } else await things.insertOne(doc as any);
 	} catch (err: any) {
+		// Approval failures are closed, not raw credential-bearing errors.
+    if(err?.status===401||err?.status===403||err?.status===409)return fail(err.status,'Your password confirmation ended. Start passkey setup again.');
 		// the multikey unique index caught a duplicate credential id
 		if (err?.code === 11000) return fail(409, 'This passkey is already registered');
 		throw err;
 	}
 
-	return { ok: true, passkey: toPublicPasskey(doc), setCookies: [await clearRegistrationChallengeCookie()] };
+	return { ok: true, passkey: toPublicPasskey(doc), setCookies: [await clearRegistrationChallengeCookie(challenge)] };
 };
 
 // ── login ceremony ─────────────────────────────────────────────────────────
@@ -400,12 +485,12 @@ export const finishPasskeyRegistration = async ({
 export const startPasskeyLogin = async (
 	request: Request
 ): Promise<{ ok: true; options: Awaited<ReturnType<typeof generateAuthenticationOptions>>; setCookies: string[] }> => {
-	const { rpID } = deriveWebAuthnParams(request);
+	const { rpID, origin } = deriveWebAuthnParams(request);
 	// Empty allowCredentials: discoverable credentials only. The authenticator
 	// lists whatever passkeys it holds for this rpID — no username needed, no
 	// account enumeration surface.
 	const options = await generateAuthenticationOptions({ rpID, userVerification: PASSKEY_USER_VERIFICATION, allowCredentials: [] });
-	return { ok: true, options, setCookies: [await serializeLoginChallengeCookie({ challenge: options.challenge, rpID })] };
+	return { ok: true, options, setCookies: await serializeLoginChallengeCookie({ challenge: options.challenge, rpID, origin }, request) };
 };
 
 export type PasskeyLoginResult =
@@ -420,22 +505,22 @@ export type FinishPasskeyLoginInput = {
 };
 
 export const finishPasskeyLogin = async ({ request, response, appContext }: FinishPasskeyLoginInput): Promise<PasskeyLoginResult> => {
-	const challenge = await readLoginChallengeCookie(request);
+	const challenge = await readLoginChallengeCookie(request, response);
 	if (!challenge) return fail(400, 'This login attempt expired — try again');
 
 	const { rpID, origin } = deriveWebAuthnParams(request);
-	if (challenge.rpID !== rpID) return fail(400, 'This login attempt expired — try again');
+	if (challenge.rpID !== rpID || (challenge.origin && challenge.origin !== origin)) return fail(400, 'This login attempt expired — try again');
 
 	const credentialId = typeof response?.id === 'string' ? response.id : '';
 	if (!credentialId) return fail(400, 'Malformed passkey response');
 
 	// Generic error for unknown/revoked so credential ids can't be probed.
 	const doc = await findPasskeyByCredentialId(credentialId);
-	if (!doc) return fail(401, 'This passkey is not registered here');
-	if (doc.crystal?.revokedAt) return fail(401, 'This passkey is not registered here');
+	if (!doc) return fail(401, 'This passkey is unavailable in this account environment. Use your password, then check Settings → Security.');
+	if (doc.crystal?.revokedAt) return fail(401, 'This passkey is unavailable in this account environment. Use your password, then check Settings → Security.');
 
 	const secure = unpackPasskeySecure(doc.secure);
-	if (!secure.publicKey || secure.credentialId !== credentialId) return fail(401, 'This passkey is not registered here');
+	if (!secure.publicKey || secure.credentialId !== credentialId) return fail(401, 'This passkey is unavailable in this account environment. Use your password, then check Settings → Security.');
 
 	// Discoverable credentials report the userHandle they were minted with;
 	// when present it must match the doc's owner (defense-in-depth against a
@@ -443,11 +528,11 @@ export const finishPasskeyLogin = async ({ request, response, appContext }: Fini
 	const userHandle = response?.response?.userHandle;
 	if (typeof userHandle === 'string' && userHandle) {
 		const decoded = Buffer.from(userHandle, 'base64url').toString('utf8');
-		if (decoded !== String(doc.ownerId)) return fail(401, 'This passkey is not registered here');
+		if (decoded !== String(doc.ownerId)) return fail(401, 'This passkey is unavailable in this account environment. Use your password, then check Settings → Security.');
 	}
 
 	const user = await findUserById(String(doc.ownerId));
-	if (!user) return fail(401, 'This passkey is not registered here');
+	if (!user) return fail(401, 'This passkey is unavailable in this account environment. Use your password, then check Settings → Security.');
 
 	let verification: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
 	try {
@@ -468,6 +553,7 @@ export const finishPasskeyLogin = async ({ request, response, appContext }: Fini
 		return fail(401, 'The passkey could not be verified — try again');
 	}
 	if (!verification.verified) return fail(401, 'The passkey could not be verified — try again');
+	if (!await consumePasskeyChallenge('auth', challenge.challenge)) return fail(400, 'This login attempt expired — try again');
 
 	const nowIso = new Date().toISOString();
 	const things = await getThingsCollection();
@@ -491,6 +577,7 @@ export const finishPasskeyLogin = async ({ request, response, appContext }: Fini
 	// surface (roster, revocation, resolveSessionUser) treats it identically.
 	const session = await createSession(String(user._id), { meta: { method: 'passkey', passkeyId: doc.shareId } });
 	const jwt = await signJwt({ sub: String(user._id), jti: session.jti });
+	await emitLoginNotification(String(user._id));
 
 	return {
 		ok: true,
@@ -498,7 +585,7 @@ export const finishPasskeyLogin = async ({ request, response, appContext }: Fini
 		jwt,
 		jti: session.jti,
 		passkeyId: doc.shareId,
-		setCookies: [await clearLoginChallengeCookie()]
+		setCookies: [await clearLoginChallengeCookie(challenge)]
 	};
 };
 

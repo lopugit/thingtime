@@ -7,7 +7,7 @@ import { getSharedTheme } from '~/api/utils/themes/themes';
 import { countPublicPosts } from '~/api/utils/things/things';
 
 // GET /api/v1/users/profile?username= — a user's public profile (safe
-// projection: never email/verification/storage) + their public post count +
+// projection: never email, verification, or storage) + their public post count +
 // the theme they're wearing ("wear my theme", claude-todo/10 ✨).
 //
 // Injected like the action below (and the attachment/moderation loaders): the
@@ -68,7 +68,7 @@ export const loader = createProfileLoader();
 const MAX_BODY_BYTES = 256 * 1024;
 
 // POST /api/v1/users/profile — { displayName?, bio?, avatarUrl?, bannerUrl?,
-// avatarAttachmentId?, bannerAttachmentId? }
+// avatarAttachmentId?, bannerAttachmentId?, hideEmailOnProfile? }
 // — update the caller's own profile fields.
 type ProfileActionDependencies = {
 	getUser: typeof getCurrentUser;

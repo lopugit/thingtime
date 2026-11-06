@@ -18,6 +18,24 @@ export const isSafeUrl = (value: string): boolean => {
 export const safeUrl = (value: unknown): string | undefined =>
 	typeof value === 'string' && isSafeUrl(value) ? value : undefined;
 
+// Does an already-protocol-screened url leave this site? Decided on the
+// RESOLVED url rather than a scheme prefix, because the URL parser folds `\`
+// into `/` for http(s): `/\evil.example` reads as site-relative but resolves to
+// another origin, so a prefix test would call it internal and navigate the
+// viewer's own tab off-site with the opener attached. Relative urls keep the
+// sentinel origin and stay internal; mailto:/tel: hand off to another app
+// rather than navigating, so they are not "external" for link-target purposes.
+export const isExternalHref = (value: unknown): boolean => {
+	if (typeof value !== 'string') return false;
+	try {
+		const url = new URL(value.trim(), SAFE_BASE);
+		if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+		return url.origin !== new URL(SAFE_BASE).origin;
+	} catch {
+		return false;
+	}
+};
+
 // Shared untrusted-content screening for BOTH thing renderers (Chakra + HTML),
 // so a new CSS-escape vector or handler-prop bypass is patched in ONE place
 // instead of drifting between two copied deny-lists.

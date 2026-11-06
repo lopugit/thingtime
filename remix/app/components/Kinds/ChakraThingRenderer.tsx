@@ -1,4 +1,17 @@
+import { ComponentChange } from '../Builder/ComponentChange';
+import { ComponentMenu } from '../Builder/ComponentMenu';
+import { ComponentStyle } from '../Builder/ComponentStyle';
+import { ComponentCollection } from '../Builder/ComponentCollection';
+import { ComponentDragSource, ComponentDropTarget } from '../Builder/ComponentDrag';
+import { ComponentSelect } from '../Builder/ComponentSelect';
+import { ComponentAttachments, ComponentMedia } from '../Builder/ComponentAttachments';
+import { ComponentMap } from '../Builder/ComponentMap';
+import { ComponentDialog, ComponentForm, ComponentCountdown } from '../Builder/NativeComponentControls';
+import { ComponentUpload } from '../Builder/ComponentUpload';
+import { ComponentDisplayOnly } from '../Builder/NativeComponentControls';
 import React from 'react';
+import { mapRenderMediaProps } from '../Sharing/renderMediaCore';
+import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import {
 	Alert,
 	AlertDescription,
@@ -68,6 +81,8 @@ import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './s
 // component allowlist below resolves, event handlers / dangerouslySetInnerHTML
 // / element-swapping props never pass through, URL props are checked, and
 // string values are screened for css escape hatches. Safe for untrusted JSON.
+
+const LibraryExample = React.lazy(() => import('../IntegrationLibrary/LibraryDemo'));
 
 const ALLOWED_COMPONENTS: Record<string, React.ElementType> = {
 	Alert,
@@ -231,7 +246,7 @@ export const isChakraThingNode = (value: unknown): value is ChakraThingNode =>
 	!Array.isArray(value) &&
 	(typeof (value as { chakra?: unknown }).chakra === 'string' || (value as { type?: unknown }).type === 'chakra');
 
-type RenderState = { count: number };
+type RenderState = { displayOnly?: boolean; count: number; mediaUrl: (url: string) => string };
 
 const renderNode = (node: ChakraThingNode, key: number, depth: number, state: RenderState): React.ReactNode => {
 	if (state.count >= MAX_NODES || depth > MAX_DEPTH) return null;
@@ -244,6 +259,49 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 	if (!node || typeof node !== 'object' || Array.isArray(node)) return null;
 
 	const name = typeof node.chakra === 'string' ? node.chakra : 'Box';
+	if (name === 'IntegrationExample' && state.displayOnly) return <Text key={key}>Integration examples are available on the interactive page.</Text>;
+	if (name === 'IntegrationExample')
+		return (
+			<React.Suspense key={key} fallback={<Text>Integration example</Text>}>
+				<LibraryExample exampleId={node.props?.exampleId} inputJson={node.props?.inputJson} />
+			</React.Suspense>
+		);
+	if (name === 'Collection') return <ComponentCollection key={key} {...node.props} />;
+	if (name === 'Menu') return <ComponentMenu key={key} {...node.props} triggerContent={node.props?.triggerContent === undefined ? undefined : renderChildren(node.props.triggerContent, depth + 1, state)}>{renderChildren(node.children, depth + 1, state)}</ComponentMenu>;
+	if (name === 'Change') return <ComponentChange key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentChange>;
+	if (name === 'DragSource') return <ComponentDragSource key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentDragSource>;
+	if (name === 'DropTarget') return <ComponentDropTarget key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentDropTarget>;
+	if (name === 'Style')
+		return (
+			<ComponentStyle key={key} rules={node.props?.rules}>
+				{renderChildren(node.children, depth + 1, state)}
+			</ComponentStyle>
+		);
+	if (name === 'SelectRecords') return <ComponentSelect key={key} {...node.props} />;
+	if (name === 'Map') return <ComponentMap key={key} {...node.props} />;
+	if (name === 'Attachments') return <ComponentAttachments key={key} {...node.props} />;
+	if (name === 'Media') return <ComponentMedia key={key} {...node.props} />;
+	if (name === 'Countdown') return <ComponentCountdown key={key} value={node.props?.value} />;
+	if (name === 'Dialog') return <ComponentDialog key={key} {...node.props} triggerContent={node.props?.triggerContent === undefined ? undefined : renderChildren(node.props.triggerContent, depth + 1, state)} closeContent={node.props?.closeContent === undefined ? undefined : renderChildren(node.props.closeContent, depth + 1, state)}>{renderChildren(node.children, depth + 1, state)}</ComponentDialog>;
+	if (name === 'Form') {
+		return (
+			<ComponentForm key={key} {...node.props}>
+				{renderChildren(node.children, depth + 1, state)}
+			</ComponentForm>
+		);
+	}
+	if (name === 'Upload')
+		return (
+			<ComponentUpload
+				key={key}
+				name={node.props?.name}
+				imageOnly={node.props?.imageOnly}
+				disabled={node.props?.disabled}
+				title={node.props?.title}
+				value={node.props?.value}
+				attachmentId={node.props?.attachmentId}
+			/>
+		);
 	const Component = ALLOWED_COMPONENTS[name];
 	if (!Component) {
 		// unknown component: render children in a plain span so content shows
@@ -255,7 +313,9 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 		);
 	}
 
-	const props = sanitizeProps(node.props);
+	const props = mapRenderMediaProps(sanitizeProps(node.props), state.mediaUrl);
+	if (state.displayOnly) { delete props['data-tt-action']; delete props['data-tt-action-inputs']; }
+	for (const field of URL_PROPS) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
 
 	if (CHILDLESS_COMPONENTS.has(name)) {
 		return <Component {...props} key={key} />;
@@ -269,17 +329,13 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 	);
 };
 
-const renderChildren = (
-	children: ChakraThingNode[] | ChakraThingNode | undefined,
-	depth: number,
-	state: RenderState
-): React.ReactNode => {
+const renderChildren = (children: ChakraThingNode[] | ChakraThingNode | undefined, depth: number, state: RenderState): React.ReactNode => {
 	if (children === undefined || children === null) return null;
 	const list = Array.isArray(children) ? children : [children];
 	return list.map((child, idx) => renderNode(child, idx, depth, state));
 };
 
 export const ChakraThingRenderer = ({ node }: { node: ChakraThingNode }) => {
-	const state: RenderState = { count: 0 };
+	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl(), displayOnly: React.useContext(ComponentDisplayOnly) };
 	return <>{renderNode(node, 0, 0, state)}</>;
 };

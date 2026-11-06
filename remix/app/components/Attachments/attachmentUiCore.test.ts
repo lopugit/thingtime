@@ -3,6 +3,7 @@ import test from 'node:test';
 
 // @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
 import {
+	attachmentFilesFromClipboard,
 	attachmentContentUrl,
 	attachmentDisplayName,
 	attachmentPlaybackContentType,
@@ -15,6 +16,7 @@ import {
 	attachmentUploadError,
 	attachmentUploadFailurePhase,
 	canonicalPostTags,
+	canonicalLinkedMediaUrl,
 	formatAttachmentBytes,
 	matchesCommittedPostCreate,
 	MAX_POST_ATTACHMENTS,
@@ -24,6 +26,27 @@ import {
 	safeAttachmentMediaKind,
 	shouldFreezeAmbiguousPostSubmission
 } from './attachmentUiCore.ts';
+
+test('clipboard files prefer the canonical file list without double-queuing item fallbacks', () => {
+	const screenshot = { name: 'Screenshot.png', size: 42 } as File;
+	const duplicatedItem = { kind: 'file', getAsFile: () => screenshot };
+	assert.deepEqual(attachmentFilesFromClipboard({ files: [screenshot], items: [duplicatedItem] }), [screenshot]);
+});
+
+test('clipboard files fall back to file-kind items when the browser file list is empty', () => {
+	const copiedImage = { name: 'pasted-image.png', size: 7 } as File;
+	assert.deepEqual(
+		attachmentFilesFromClipboard({
+			files: [],
+			items: [
+				{ kind: 'string', getAsFile: () => null },
+				{ kind: 'file', getAsFile: () => copiedImage },
+				{ kind: 'file', getAsFile: () => null }
+			]
+		}),
+		[copiedImage]
+	);
+});
 
 test('upload purposes map to exactly one canonical approval scope', () => {
 	for (const purpose of ['post', 'comment', 'custom-emoji'] as const) {
@@ -105,7 +128,7 @@ test('normalises only canonical stable attachment metadata', () => {
 		}),
 		{ id: 'att-4', name: 'blob.bin', size: 1, contentType: 'application/octet-stream', mediaKind: 'file' }
 	);
-	assert.equal(MAX_POST_ATTACHMENTS, 25);
+	assert.equal(MAX_POST_ATTACHMENTS, Number.POSITIVE_INFINITY);
 });
 
 test('audio playback prefers a legacy row’s server-sniffed MIME', () => {
@@ -266,6 +289,10 @@ test('ambiguous post creation reconciles only an exact committed snapshot', () =
 		}
 	};
 	assert.equal(matchesCommittedPostCreate(response, expected), true);
+	// Every normal composer payload included mediaLayout:null, but the real
+	// sanitizer omitted it. A lost response then froze an already-saved post.
+	assert.equal(matchesCommittedPostCreate(response, { ...expected, crystal: { ...expected.crystal, mediaLayout: null } }), true);
+	assert.equal(matchesCommittedPostCreate(response, { ...expected, crystal: { ...expected.crystal, mediaLayout: { mode: 'grid', columns: 2 } } }), false);
 	assert.equal(matchesCommittedPostCreate({ ...response, post: { ...response.post, attachments: [{ id: 'attachment-a' }] } }, expected), false);
 	assert.equal(matchesCommittedPostCreate({ ...response, thing: { ...response.thing, author: { id: 'another-owner' } } }, expected), false);
 	assert.equal(
@@ -274,21 +301,8 @@ test('ambiguous post creation reconciles only an exact committed snapshot', () =
 	);
 });
 
-test('post tag reconciliation uses the server create canonicalizer', () => {
-	assert.deepEqual(canonicalPostTags(['  One ', 'ONE', 'x'.repeat(50), 42, '', ...Array.from({ length: 20 }, (_, index) => `t${index}`)]), [
-		'one',
-		'x'.repeat(40),
-		't0',
-		't1',
-		't2',
-		't3',
-		't4',
-		't5',
-		't6',
-		't7',
-		't8',
-		't9'
-	]);
+test('post tag reconciliation preserves all tags and complete normalized text', () => {
+ assert.deepEqual(canonicalPostTags(['  One ', 'ONE', 'x'.repeat(50), 42, '', ...Array.from({ length: 20 }, (_, index) => `t${index}`)]), ['one', 'x'.repeat(50), ...Array.from({ length: 20 }, (_, index) => `t${index}`)]);
 });
 
 test('only a genuinely unknown post outcome keeps later duplicate conflicts frozen', () => {
@@ -296,4 +310,13 @@ test('only a genuinely unknown post outcome keeps later duplicate conflicts froz
 	assert.equal(shouldFreezeAmbiguousPostSubmission(false, 409, true), true);
 	assert.equal(shouldFreezeAmbiguousPostSubmission(false, 409, false), false);
 	assert.equal(shouldFreezeAmbiguousPostSubmission(false, 422, true), false);
+});
+
+
+test('attachment presentation metadata and linked URLs are not silently truncated', () => {
+ const title = 'Title'.repeat(3000), description = 'Description'.repeat(3000), filenamePreview = 'Preview'.repeat(1000), name = ' original name ';
+ const attachment = normalizePublicAttachment({ id: 'attachment', name, size: 10, contentType: 'application/octet-stream', mediaKind: 'file', title, description, filenamePreview });
+ assert.equal(attachment?.title, title); assert.equal(attachment?.description, description); assert.equal(attachment?.filenamePreview, filenamePreview); assert.equal(attachment?.name, name);
+ const url = 'https://example.com/' + 'a'.repeat(10_000);
+ assert.equal(canonicalLinkedMediaUrl(url), url);
 });

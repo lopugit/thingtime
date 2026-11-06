@@ -6,7 +6,7 @@ import OSLog
 @MainActor
 final class SystemMetricsService {
   private let daemonPID: pid_t
-  private let applicationResponsiveness: ApplicationResponsivenessService
+  let applicationResponsiveness: ApplicationResponsivenessService
   private let logger = Logger(subsystem: "com.thingtime.Commander", category: "Metrics")
   private var previousMachineCPU: (total: UInt64, idle: UInt64)?
   private var previousCommanderCPU: (nanoseconds: UInt64, sampledAt: UInt64)?
@@ -14,8 +14,12 @@ final class SystemMetricsService {
   private var cachedGPU: (sampledAt: Date, utilization: Double?)?
   private var previousProcesses: [pid_t: ProcessCounters] = [:]
   private var loggedFirstSample = false
+  private let processHistory = ProcessUsageHistory()
+  private var cachedSnapshot: (time: Double, value: [String: Any])?
+
 
   private struct ProcessCounters {
+    let startedAtMs: UInt64
     let cpuNanoseconds: UInt64
     let diskReadBytes: UInt64
     let diskWriteBytes: UInt64
@@ -27,7 +31,33 @@ final class SystemMetricsService {
     self.applicationResponsiveness = applicationResponsiveness
   }
 
-  func snapshot() -> [String: Any] {
+  func snapshot(averageSeconds: Int = 0) -> [String: Any] {
+    let now = ProcessInfo.processInfo.systemUptime
+    let current: [String: Any]
+    if let cachedSnapshot, now - cachedSnapshot.time < 1.8 {
+      current = cachedSnapshot.value
+    } else {
+      current = collectSnapshot()
+      let machine = current["machine"] as? [String: Any] ?? [:]
+      processHistory.record(machine["processes"] as? [[String: Any]] ?? [], at: now)
+      cachedSnapshot = (now, current)
+    }
+    guard averageSeconds > 0 else { return current }
+    var result = current
+    var machine = current["machine"] as? [String: Any] ?? [:]
+    machine["processes"] = (machine["processes"] as? [[String: Any]] ?? []).map { process in
+      var row = process
+      if let pid = process["pid"] as? Int,
+         let average = processHistory.average(pid: pid, seconds: averageSeconds, at: now) {
+        row["average"] = average
+      }
+      return row
+    }
+    result["machine"] = machine
+    return result
+  }
+
+  private func collectSnapshot() -> [String: Any] {
     let processMetrics = commanderProcessMetrics()
     let machineCPU = machineCPUPercent()
     let memory = machineMemory()
@@ -222,13 +252,15 @@ final class SystemMetricsService {
     for pid in activePIDs() {
       guard let task = processMetrics(for: pid), let bsd = processBSDInfo(for: pid) else { continue }
       let usage = processResourceUsage(for: pid)
+      let startedAtMs = bsd.pbi_start_tvsec * 1000 + bsd.pbi_start_tvusec / 1000
       let counters = ProcessCounters(
+        startedAtMs: startedAtMs,
         cpuNanoseconds: task.cpuNanoseconds,
         diskReadBytes: usage?.readBytes ?? 0,
         diskWriteBytes: usage?.writeBytes ?? 0,
         sampledAt: now
       )
-      let previous = previousProcesses[pid]
+      let previous = previousProcesses[pid].flatMap { $0.startedAtMs == startedAtMs ? $0 : nil }
       let elapsed = previous.map { now > $0.sampledAt ? now - $0.sampledAt : 0 } ?? 0
       let cpuPercent: Double
       let diskReadPerSecond: Double
@@ -254,6 +286,7 @@ final class SystemMetricsService {
       next[pid] = counters
       rows.append([
         "pid": Int(pid),
+        "startedAtMs": startedAtMs,
         "parentPid": Int(bsd.pbi_ppid),
         "name": processName(for: pid),
         "cpuPercent": cpuPercent,
@@ -264,7 +297,7 @@ final class SystemMetricsService {
     }
     previousProcesses = next
     return rows.sorted {
-      ($0["cpuPercent"] as? Double ?? 0) > ($1["cpuPercent"] as? Double ?? 0)
+      ($0["pid"] as? Int ?? 0) < ($1["pid"] as? Int ?? 0)
     }
   }
 
@@ -355,27 +388,46 @@ final class SystemMetricsService {
 
   private func gpuUtilization() -> Double? {
     if let cachedGPU, Date().timeIntervalSince(cachedGPU.sampledAt) < 2 { return cachedGPU.utilization }
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/sbin/ioreg")
-    process.arguments = ["-r", "-c", "IOAccelerator", "-d", "1"]
-    let output = Pipe()
-    process.standardOutput = output
-    process.standardError = Pipe()
-    let utilization: Double?
-    do {
-      try process.run()
-      process.waitUntilExit()
-      guard process.terminationStatus == 0 else {
-        cachedGPU = (Date(), nil)
-        return nil
-      }
-      let text = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-      utilization = Self.gpuUtilization(fromIORegistry: text)
-    } catch {
-      utilization = nil
-    }
+    let text = Self.processOutput(
+      executable: "/usr/sbin/ioreg", arguments: ["-r", "-c", "IOAccelerator", "-d", "1"]
+    )
+    let utilization = text.flatMap(Self.gpuUtilization(fromIORegistry:))
     cachedGPU = (Date(), utilization)
     return utilization
+  }
+
+  /// Drain stdout while the child runs: IORegistry output can exceed a pipe's
+  /// capacity, so waiting for exit first can deadlock both the app and child.
+  nonisolated static func processOutput(
+    executable: String, arguments: [String], timeout: TimeInterval = 2
+  ) -> String? {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = arguments
+    let output = Pipe()
+    process.standardOutput = output
+    process.standardError = FileHandle.nullDevice
+    do {
+      try process.run()
+      let expired = DispatchSemaphore(value: 0)
+      let deadline = DispatchWorkItem {
+        guard process.isRunning else { return }
+        expired.signal()
+        process.terminate()
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.25) {
+          if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        }
+      }
+      DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: deadline)
+      let data = output.fileHandleForReading.readDataToEndOfFile()
+      process.waitUntilExit()
+      deadline.cancel()
+      try? output.fileHandleForReading.close()
+      guard expired.wait(timeout: .now()) == .timedOut, process.terminationStatus == 0 else { return nil }
+      return String(decoding: data, as: UTF8.self)
+    } catch {
+      return nil
+    }
   }
 
   static func gpuUtilization(fromIORegistry text: String) -> Double? {

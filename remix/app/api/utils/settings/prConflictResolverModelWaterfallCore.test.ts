@@ -6,6 +6,7 @@ import {
   AI_WORKFLOW_BASE_MODELS,
   DEFAULT_PR_CONFLICT_RESOLVER_MODEL_WATERFALL,
   describeAiWorkflowModelChoice,
+  getAiWorkflowBaseModel,
   normalizePrConflictResolverModelWaterfall,
   parseAiWorkflowModelOptionId,
   PR_CONFLICT_RESOLVER_MODEL_WATERFALL_KEY,
@@ -75,21 +76,32 @@ test('composed option ids parse, canonicalize segment order, and reject invalid 
   }
 });
 
+test('Astra exposes only API-supported reasoning levels and preserves provider default', () => {
+  const astra = getAiWorkflowBaseModel('gpt-6-astra');
+  assert.deepEqual(astra?.efforts, ['low', 'medium', 'high', 'xhigh', 'max']);
+  for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
+    assert.equal(parseAiWorkflowModelOptionId(`gpt-6-astra:${effort}`)?.effort, effort);
+  }
+  assert.equal(parseAiWorkflowModelOptionId('gpt-6-astra')?.effort, null);
+  for (const effort of ['none', 'minimal', 'ultra']) {
+    assert.equal(parseAiWorkflowModelOptionId(`gpt-6-astra:${effort}`), null);
+  }
+});
+
 test('missing and corrupt stored values fall back to exactly default', () => {
   for (const value of [undefined, null, {}, 'claude-fable-5', [], ['unknown'], [42, 'nope']]) {
     assert.deepEqual(normalizePrConflictResolverModelWaterfall(value), ['default']);
   }
 });
 
-test('normalization is forgiving per entry: drops unknowns, dedupes, appends the hard fallback', () => {
+test('normalization is forgiving per entry: drops unknowns and dedupes without adding models', () => {
   assert.deepEqual(
     normalizePrConflictResolverModelWaterfall(['claude-opus-5', 'default', 'claude-fable-5']),
     ['claude-opus-5', 'default', 'claude-fable-5']
   );
   assert.deepEqual(normalizePrConflictResolverModelWaterfall(['claude-fable-5', 'claude-opus-5']), [
     'claude-fable-5',
-    'claude-opus-5',
-    'default'
+    'claude-opus-5'
   ]);
   // A newer deploy's unknown id no longer nukes the rest of the order.
   assert.deepEqual(
@@ -166,7 +178,6 @@ test('strict write validation accepts unlimited unique known ids including defau
   for (const value of [
     undefined,
     [],
-    ['claude-fable-5'], // missing default
     ['default', 'default'],
     ['default', 'unknown'],
     ['default', 'claude-fable-5:fast'], // invalid combo
@@ -183,7 +194,14 @@ const describeById = (id: string) => {
 };
 
 test('entry descriptions cover provider, effort, and speed', () => {
-  assert.equal(describeById('default'), 'Provider-selected model · always included');
+  assert.equal(describeById('default'), 'Provider-selected model');
   assert.equal(describeById('claude-opus-5'), 'Anthropic · Default effort');
   assert.equal(describeById('gpt-5.6-sol:ultra:fast'), 'OpenAI · Ultra effort · Fast mode');
+});
+
+test('configured model orders round trip without an implicit default', () => {
+  for (const waterfall of [['claude-opus-5:high'], ['claude-fable-5', 'claude-opus-5:high'], ['default', 'claude-opus-5']]) {
+    assert.deepEqual(validatePrConflictResolverModelWaterfall(waterfall), { ok: true, waterfall });
+    assert.deepEqual(normalizePrConflictResolverModelWaterfall(waterfall), waterfall);
+  }
 });

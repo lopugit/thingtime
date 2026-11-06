@@ -11,6 +11,8 @@ CONTENTS_PATH="${APP_PATH}/Contents"
 VERSION="${THINGTIME_NODE_VERSION:-0.1.0}"
 BUILD_NUMBER="${THINGTIME_NODE_BUILD_NUMBER:-1}"
 SIGNING_MODE="${THINGTIME_NODE_SIGNING_MODE:-signed}"
+INDEXER_MANIFEST="${PACKAGE_ROOT}/../../filesystem-indexer/crates/indexer/Cargo.toml"
+INDEXER_TARGET="${CACHE_ROOT}/commander-indexer-release"
 
 case "${CACHE_ROOT}" in
     "${HOME}/Library/Caches/com.thingtime.desktop.node"*) ;;
@@ -20,22 +22,30 @@ case "${CACHE_ROOT}" in
         ;;
 esac
 
-swift build \
-    --package-path "${PACKAGE_ROOT}" \
-    --scratch-path "${SWIFT_SCRATCH}" \
-    --configuration release
+cargo build --locked --release --manifest-path "${INDEXER_MANIFEST}" --target-dir "${INDEXER_TARGET}"
+
+# Build only shipped products. Test-only executables may use @testable
+# imports and must never make a non-testable Release bundle depend on fixtures.
+SWIFT_PRODUCTS=(ThingtimeNode ThingtimeNodeBridge ThingtimeSpeech)
+for product in "${SWIFT_PRODUCTS[@]}"; do
+    swift build \
+        --package-path "${PACKAGE_ROOT}" \
+        --scratch-path "${SWIFT_SCRATCH}" \
+        --configuration release \
+        --product "${product}"
+done
 
 BIN_PATH="$(swift build \
     --package-path "${PACKAGE_ROOT}" \
     --scratch-path "${SWIFT_SCRATCH}" \
     --configuration release \
     --show-bin-path)/ThingtimeNode"
-BRIDGE_PATH="$(dirname "${BIN_PATH}")/ThingtimeNodeBridge"
 RESOURCE_BUNDLE_PATH="$(dirname "${BIN_PATH}")/ThingtimeNode_ThingtimeNodeCore.bundle"
 ICON_SOURCE_PATH="${PACKAGE_ROOT}/Resources/ThingtimeNodeIcon.png"
 
-test -x "${BIN_PATH}"
-test -x "${BRIDGE_PATH}"
+for product in "${SWIFT_PRODUCTS[@]}"; do
+    test -x "$(dirname "${BIN_PATH}")/${product}"
+done
 test -d "${RESOURCE_BUNDLE_PATH}"
 test -f "${ICON_SOURCE_PATH}"
 mkdir -p "${STAGE_ROOT}"
@@ -44,8 +54,10 @@ if [[ -e "${APP_PATH}" ]]; then
 fi
 mkdir -p "${CONTENTS_PATH}/MacOS"
 mkdir -p "${CONTENTS_PATH}/Resources"
-/usr/bin/ditto "${BIN_PATH}" "${CONTENTS_PATH}/MacOS/ThingtimeNode"
-/usr/bin/ditto "${BRIDGE_PATH}" "${CONTENTS_PATH}/MacOS/ThingtimeNodeBridge"
+for product in "${SWIFT_PRODUCTS[@]}"; do
+    /usr/bin/ditto "$(dirname "${BIN_PATH}")/${product}" "${CONTENTS_PATH}/MacOS/${product}"
+done
+/usr/bin/ditto "${INDEXER_TARGET}/release/commander-indexer" "${CONTENTS_PATH}/MacOS/commander-indexer"
 /usr/bin/ditto "${RESOURCE_BUNDLE_PATH}" "${CONTENTS_PATH}/Resources/ThingtimeNode_ThingtimeNodeCore.bundle"
 /usr/bin/ditto "${PACKAGE_ROOT}/Resources/Info.plist" "${CONTENTS_PATH}/Info.plist"
 ICON_WORK_ROOT="$(mktemp -d "${CACHE_ROOT}/icon-build.XXXXXX")"
@@ -78,6 +90,10 @@ fi
 if [[ "${THINGTIME_NODE_EMBEDDED:-0}" == "1" ]]; then
     /usr/bin/plutil -replace ThingtimeNodeElectronManaged -bool true "${CONTENTS_PATH}/Info.plist"
 fi
+SOURCE_COMMIT="$(git -C "${PACKAGE_ROOT}" rev-parse HEAD 2>/dev/null || true)"
+if [[ "${SOURCE_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+    /usr/bin/plutil -replace ThingtimeNodeSourceCommit -string "${SOURCE_COMMIT}" "${CONTENTS_PATH}/Info.plist"
+fi
 /usr/bin/xattr -cr "${APP_PATH}"
 
 case "${SIGNING_MODE}" in
@@ -93,7 +109,9 @@ case "${SIGNING_MODE}" in
             "") echo "No Apple Development identity is available. Set THINGTIME_NODE_SIGNING_IDENTITY." >&2; exit 3 ;;
             *) echo "THINGTIME_NODE_SIGNING_IDENTITY must be Apple Development or Developer ID Application." >&2; exit 3 ;;
         esac
+        /usr/bin/codesign --force --sign "${SIGNING_IDENTITY}" --identifier com.thingtime.desktop.speech --options runtime "${TIMESTAMP_ARGUMENT}" --entitlements "${PACKAGE_ROOT}/Resources/ThingtimeSpeech.entitlements" "${CONTENTS_PATH}/MacOS/ThingtimeSpeech"
         /usr/bin/codesign --force --sign "${SIGNING_IDENTITY}" --identifier com.thingtime.desktop.node.bridge --options runtime "${TIMESTAMP_ARGUMENT}" "${CONTENTS_PATH}/MacOS/ThingtimeNodeBridge"
+        /usr/bin/codesign --force --sign "${SIGNING_IDENTITY}" --identifier com.thingtime.desktop.node.indexer --options runtime "${TIMESTAMP_ARGUMENT}" "${CONTENTS_PATH}/MacOS/commander-indexer"
         /usr/bin/codesign --force --sign "${SIGNING_IDENTITY}" --options runtime "${TIMESTAMP_ARGUMENT}" --entitlements "${PACKAGE_ROOT}/Resources/ThingtimeNode.entitlements" "${APP_PATH}"
         ;;
     unsigned)
@@ -103,7 +121,9 @@ case "${SIGNING_MODE}" in
         fi
         # This ad-hoc signature has no Apple team identity or Gatekeeper trust;
         # it only keeps nested macOS code executable in an UNSIGNED release.
+        /usr/bin/codesign --force --sign - --identifier com.thingtime.desktop.speech --options runtime --timestamp=none --entitlements "${PACKAGE_ROOT}/Resources/ThingtimeSpeech.entitlements" "${CONTENTS_PATH}/MacOS/ThingtimeSpeech"
         /usr/bin/codesign --force --sign - --identifier com.thingtime.desktop.node.bridge --options runtime --timestamp=none "${CONTENTS_PATH}/MacOS/ThingtimeNodeBridge"
+        /usr/bin/codesign --force --sign - --identifier com.thingtime.desktop.node.indexer --options runtime --timestamp=none "${CONTENTS_PATH}/MacOS/commander-indexer"
         /usr/bin/codesign --force --sign - --options runtime --timestamp=none --entitlements "${PACKAGE_ROOT}/Resources/ThingtimeNode.entitlements" "${APP_PATH}"
         ;;
     *)

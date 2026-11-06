@@ -1,0 +1,21 @@
+name: Production storage runtime monitor
+
+# Schedules execute from the default branch. Keep credential-bearing code in
+# the protected controller, never in the product checkout.
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_run:
+    workflows: [Vercel prebuilt deployments]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/storage-release-monitor.yml@github-actions
+    secrets: inherit

@@ -16,9 +16,19 @@ import { MK, trendVars } from './marketingTheme';
 // sticky sub-nav (home, category chips, search) and a footer CTA. The trend
 // decides the CSS variables; children only ever read --mk-*.
 
-export const useMarketingSeo = (input: { title: string; description: string }) => {
+/**
+ * Publishes the current surface's title/description into the document head.
+ *
+ * `enabled` is the fail-closed switch. While the publish state is unknown (a
+ * visitor's cold start) the caller passes false and NOTHING is written: an
+ * unpublished page never briefly advertises its own title and description,
+ * and a published one is never briefly stamped with the gate's placeholder
+ * either. The head simply keeps its previous values for the one round trip.
+ */
+export const useMarketingSeo = (input: { title: string; description: string; enabled?: boolean }) => {
+	const enabled = input.enabled !== false;
 	React.useEffect(() => {
-		if (typeof document === 'undefined') return;
+		if (typeof document === 'undefined' || !enabled) return;
 		document.title = `${input.title} · Thingtime`;
 		const ensure = (selector: string, create: () => HTMLMetaElement) => {
 			let element = document.head.querySelector<HTMLMetaElement>(selector);
@@ -50,7 +60,7 @@ export const useMarketingSeo = (input: { title: string; description: string }) =
 			if (previousOgTitle) ogTitle.setAttribute('content', previousOgTitle);
 			if (previousOgDescription) ogDescription.setAttribute('content', previousOgDescription);
 		};
-	}, [input.description, input.title]);
+	}, [enabled, input.description, input.title]);
 };
 
 export const formatCount = (value: number) => value.toLocaleString('en-US');

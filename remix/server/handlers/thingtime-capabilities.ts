@@ -16,7 +16,8 @@ export default defineHandler((event) => {
   return new Response(body, {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'public, max-age=300',
+      // Alias ownership is mutable. A CDN/browser must not pin an old owner.
+      'Cache-Control': 'private, no-store',
       'Access-Control-Allow-Origin': '*',
       'X-Thingtime-Capability-Manifest': THINGTIME_CAPABILITY_MANIFEST_PATH
     }

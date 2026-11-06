@@ -438,6 +438,19 @@ final class SafeActionPolicyTests: XCTestCase {
     }
 
     @MainActor
+    func testSessionSnapshotReadsFailClosedStateWithoutHardwareInventory() {
+        let center = NotificationCenter()
+        let monitor = SessionActivityMonitor(center: center)
+        let collector = DeviceTelemetryCollector(sessionActivity: monitor)
+        XCTAssertTrue(collector.sessionSnapshot().isLocked)
+        collector.establishSessionActivityAfterApplicationLaunch()
+        center.post(name: NSWorkspace.sessionDidResignActiveNotification, object: nil)
+        XCTAssertTrue(collector.sessionSnapshot().isLocked)
+        // The real narrow read runs in the unsigned XCTest host. Accidentally
+        // enumerating Bluetooth here reproduces the original TCC abort.
+    }
+
+    @MainActor
     func testCompatibilityLockSignalCanOnlyMakeStateMoreConservative() {
         XCTAssertTrue(DeviceTelemetryCollector.resolvedLockState(publicMonitorLocked: true, compatibilityValue: false))
         XCTAssertTrue(DeviceTelemetryCollector.resolvedLockState(publicMonitorLocked: true, compatibilityValue: nil))

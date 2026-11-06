@@ -1,8 +1,14 @@
+import { CharacterComposer } from '~/components/Characters/CharacterComposer';
+import { useAccountDraft } from '~/drafts/useAccountDraft';
+import { DraftPicker, DraftSaveStatus } from '~/drafts/DraftPicker';
+import { PostThingPicker } from './PostThingPicker';
+import { composePostThing, postThingDraft, postThingReferences, type PostThingReference } from './postThingReferences';
 import React from 'react';
 import { Box, Button, Flex, IconButton, Input, Modal, ModalContent, ModalOverlay, Select, Text } from '@chakra-ui/react';
 import { PictureInPicture2, Plus, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
+import { withPostRequestDeadline } from '~/hooks/postRequest';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
 import {
@@ -15,9 +21,9 @@ import {
 import type { AttachmentComposerSnapshot, PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
 import {
+	attachmentFilesFromClipboard,
 	canonicalPostTags,
 	matchesCommittedPostCreate,
-	MAX_POST_ATTACHMENTS,
 	normalizePublicAttachment,
 	shouldFreezeAmbiguousPostSubmission,
 	type CommittedPostExpectation
@@ -28,15 +34,18 @@ import { capturePostEditorValue } from '~/components/Editor/postEditorSubmission
 import { useLopu } from '~/components/Lopu/useLopu';
 import { isLegacyLinkedSeedId } from '~/components/Attachments/useAttachmentUploads';
 import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
+import { ContextActionDock } from '~/components/IncomingShare/ContextActionDock';
 import { EditorSplit } from '~/components/Thingtime/EditorSplit';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
-import { hasUnknownMutationOutcome } from '~/hooks/apiFailure';
+import { apiErrorMessage, hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 import { RAINBOW } from '~/theme/rainbow';
 import { extractInlineHashtags } from './hashtags';
 import { MentionAutocomplete } from './MentionAutocomplete';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, POST_TYPE_META } from './feedTypes';
+import { CustomAudienceModal } from './CustomAudienceModal';
 import type { MarketplaceCategory, PostType, PostVisibility, PublicPost } from './feedTypes';
+import { composerContextOf, type PublicSubspace, type SubspaceComposerContext } from '~/components/Subspaces/subspaceTypes';
 
 // "What's on your mind?" composer. Collapsed it's a one-line prompt beside
 // the viewer's avatar; expanded it grows type TOGGLES (Text is the always-on
@@ -74,15 +83,12 @@ const EMPTY_ATTACHMENT_SNAPSHOT: AttachmentComposerSnapshot = {
 	hasSelection: false
 };
 
-// The thingtime-tab draft lives under a SESSION-SCOPED branch of the global
-// store: tmp.<sessionId>.New Thing. A fresh session id per composer mount (and
-// pruning prior composer sessions on seed) means drafts never persist across
-// reloads and no stale draft can ever resurface — the editor always opens on
-// one clean "New Thing" root (the key IS the label the editor shows).
+// Each open composer owns a temporary editor branch. Account drafts persist its
+// complete value and restore it into the new branch after navigation.
 const DRAFT_ROOT_KEY = 'New Thing';
 const DRAFT_TMP_KEY = 'tmp';
 
-type PendingPostSubmission = {
+export type PendingPostSubmission = {
 	shareId: string;
 	payload: Record<string, unknown>;
 	expectation: CommittedPostExpectation | null;
@@ -90,12 +96,6 @@ type PendingPostSubmission = {
 	postType: PostType;
 	unknownOutcome: boolean;
 };
-
-// A composer session id is `s` + 10 hex chars (see draftSessionId below). `tmp`
-// is a plain user-writable root key in the Thingtime editor, so seeding must
-// prune only these composer-owned branches and leave any user-authored `tmp`
-// keys untouched.
-const COMPOSER_SESSION_KEY = /^s[0-9a-f]{10}$/;
 
 // the in-post editor's default height; drag the handle for anything else
 const DEFAULT_EDITOR_HEIGHT = 440;
@@ -125,8 +125,7 @@ const COMPOSE_MODE_META: Record<ComposeMode, { label: string; emoji: string }> =
 };
 
 const MIN_POLL_OPTIONS = 2;
-const MAX_POLL_OPTIONS = 6;
-const MAX_POLL_OPTION_CHARS = 80;
+const MAX_POLL_OPTIONS = Number.POSITIVE_INFINITY;
 
 const TEXTAREA_PLACEHOLDERS: Record<ComposeMode, string> = {
   text: "What's on your mind? ✨",
@@ -137,6 +136,11 @@ const TEXTAREA_PLACEHOLDERS: Record<ComposeMode, string> = {
 };
 
 export type PostComposerProps = {
+  incomingShareActive?: boolean;
+  incomingShareToolbarHeight?: number;
+  initialSubmission?: PendingPostSubmission;
+  beforeSubmit?: (submission: PendingPostSubmission) => Promise<void>;
+  initialDraft?: { id: string; text: string; files?: readonly File[] };
   // in comment mode this receives the created comment (post-shaped — comments
   // share the post schema); in edit mode it receives the UPDATED post
   onPosted: (post: PublicPost) => void;
@@ -150,6 +154,11 @@ export type PostComposerProps = {
   // (type tabs, photos, listing, thing, tags, circle all editable — the same
   // suite as a new post) and saves through api.v1.things.update
   editPost?: PublicPost;
+  // post INTO a subspace: the /s/<slug> page passes its context (id, flairs,
+  // rights) so the composer locks the destination, shows the title + flair
+  // row, and stamps crystal.subspaceId. Without it the feed composer offers
+  // the viewer's joined subspaces as an optional destination.
+  subspace?: SubspaceComposerContext | null;
 };
 
 const Eyebrow = ({ children }: { children: React.ReactNode }) => (
@@ -159,7 +168,12 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const PostComposer = (props: PostComposerProps) => {
-  const { onPosted, parentId, onClose, editPost } = props;
+  const user = useCurrentUser();
+  const composer = <AccountPostComposer key={`${user?.id || 'guest'}:${props.editPost?.id || props.parentId || props.initialDraft?.id || 'new'}:${props.subspace?.id || ''}`} {...props} />;
+  return props.editPost || props.initialDraft ? composer : <CharacterComposer key={user?.id || 'guest'}>{composer}</CharacterComposer>;
+};
+const AccountPostComposer = (props: PostComposerProps) => {
+  const { onPosted, parentId, onClose, editPost, subspace } = props;
 
   const isComment = !!parentId;
   const isEdit = !!editPost;
@@ -173,14 +187,17 @@ export const PostComposer = (props: PostComposerProps) => {
   const lopu = useLopu();
   const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
-  const [expanded, setExpanded] = React.useState(isComment || isEdit);
+  const [expanded, setExpanded] = React.useState(isComment || isEdit || !!props.initialDraft);
+  const [draftAttachments, setDraftAttachments] = React.useState<PublicAttachment[]>([]);
+  const [legacyImages, setLegacyImages] = React.useState<string[]>(editPost?.images || []);
 	// Post-type badges are additive TOGGLES, not exclusive tabs: Text is the
 	// always-on base and each toggle switches its field group on top. Edit mode
 	// seeds them from whatever the post already carries.
 	const [photosOn, setPhotosOn] = React.useState(
-		isEdit && (editPost!.type === 'image' || (editPost!.images?.length ?? 0) > 0 || (editPost!.attachments?.length ?? 0) > 0)
+		!!props.initialDraft?.files?.length || (isEdit && (editPost!.type === 'image' || (editPost!.images?.length ?? 0) > 0 || (editPost!.attachments?.length ?? 0) > 0))
   );
   const [marketOn, setMarketOn] = React.useState(isEdit && (editPost!.type === 'marketplace' || !!editPost!.listing));
+  const [pickedThings, setPickedThings] = React.useState<PostThingReference[]>(() => postThingReferences(editPost?.thing));
   const [thingOn, setThingOn] = React.useState(isEdit && editPost!.type === 'thingtime');
   // Poll is the one EXCLUSIVE badge: a poll post's thing IS the poll, so it
   // owns the thing slot the other groups build into. Compose-only — an
@@ -191,7 +208,7 @@ export const PostComposer = (props: PostComposerProps) => {
   const [postEditorValue, setPostEditorValue] = React.useState<EditorJsDoc>(() =>
     isEditorJsDoc(editPost?.richText)
       ? editPost.richText
-      : { kind: 'rich-text', blocks: textToBlocks(editPost?.text || '') }
+      : { kind: 'rich-text', blocks: textToBlocks(editPost?.text || String(props.initialSubmission?.payload.text || props.initialDraft?.text || '')) }
   );
   const text = blocksToText(postEditorValue.blocks);
   const [title, setTitle] = React.useState(editPost?.listing?.title || '');
@@ -202,6 +219,26 @@ export const PostComposer = (props: PostComposerProps) => {
   const [listingLocation, setListingLocation] = React.useState(editPost?.listing?.location || '');
   const [tagsInput, setTagsInput] = React.useState(editPost?.tags?.join(', ') || '');
   const [visibility, setVisibility] = React.useState<PostVisibility>(editPost?.visibility || 'public');
+  // subspace vocabulary: headline + destination + flair. Locked to the page's
+  // subspace when one is passed; otherwise the feed composer offers the
+  // viewer's joined subspaces (lazy-loaded on first expand).
+  const [postTitle, setPostTitle] = React.useState(editPost?.title || '');
+  const [subspaceId, setSubspaceId] = React.useState<string | null>(editPost?.subspace?.id || subspace?.id || null);
+  const [flairId, setFlairId] = React.useState<string | null>(editPost?.flair?.id || null);
+  const [mySubspaces, setMySubspaces] = React.useState<SubspaceComposerContext[] | null>(null);
+  // custom audience 🎭 — the picker composes a full tt:custom acl; while
+  // visibility is 'custom' the payloads carry it (acl wins over the name)
+  const [customAcl, setCustomAcl] = React.useState<string[] | null>(
+    editPost?.visibility === 'custom' && Array.isArray(editPost?.acl) ? editPost.acl : null
+  );
+  const [audienceOpen, setAudienceOpen] = React.useState(false);
+  // onClose fires right after onApply and would read this render's (stale)
+  // customAcl — the ref is the truth for "has an audience ever been composed"
+  const audienceAppliedRef = React.useRef<boolean>(!!(editPost?.visibility === 'custom' && editPost?.acl));
+  // …and the circle to come back to when the picker is abandoned. Seeded like
+  // `visibility` above so a brand-new post still falls back to 🌐 Public,
+  // while an edit falls back to whatever the post actually was.
+  const audiencePreviousVisibilityRef = React.useRef<PostVisibility>(editPost?.visibility || 'public');
 	// gallery layout (crystal.mediaLayout): auto = masonry default, stored null
 	const [layoutMode, setLayoutMode] = React.useState<ComposerLayoutMode>(
 		editPost?.mediaLayout?.mode === 'rows' ? 'rows' : editPost?.mediaLayout?.mode === 'grid' ? 'grid' : 'auto'
@@ -216,7 +253,7 @@ export const PostComposer = (props: PostComposerProps) => {
 		editPost?.mediaLayout?.mode === 'grid' && editPost.mediaLayout.spans ? { ...editPost.mediaLayout.spans } : {}
 	);
   const [posting, setPosting] = React.useState(false);
-	const [submissionUncertain, setSubmissionUncertain] = React.useState(false);
+	const [submissionUncertain, setSubmissionUncertain] = React.useState(!!props.initialSubmission);
 	const [attachmentSnapshot, setAttachmentSnapshot] = React.useState<AttachmentComposerSnapshot>(EMPTY_ATTACHMENT_SNAPSHOT);
 
   // the thing edits in a bottom-sheet modal (nested comment composers can't
@@ -227,14 +264,15 @@ export const PostComposer = (props: PostComposerProps) => {
 	// it and inserts `@username ` at the caret (posts and comments both)
 	const editorBoxRef = React.useRef<HTMLDivElement | null>(null);
 	const attachmentComposerRef = React.useRef<AttachmentComposerHandle | null>(null);
+	const pendingMediaFilesRef = React.useRef<File[]>([]);
 	const postTextEditorRef = React.useRef<LongTextEditorHandle | null>(null);
 	// A stable client id turns a lost POST response into a safely reconcilable
 	// read. It is rotated only after the draft is definitively committed/reset.
-	const pendingPostSubmissionRef = React.useRef<PendingPostSubmission | null>(null);
+	const pendingPostSubmissionRef = React.useRef<PendingPostSubmission | null>(props.initialSubmission || null);
 	React.useEffect(() => {
-		pendingPostSubmissionRef.current = null;
-		setSubmissionUncertain(false);
-	}, [user?.id]);
+		pendingPostSubmissionRef.current = props.initialSubmission || null;
+		setSubmissionUncertain(!!props.initialSubmission);
+	}, [user?.id, props.initialSubmission]);
   const handleEditorApi = React.useCallback((api: { popOutDuplicate: () => void } | null) => {
     editorApiRef.current = api;
   }, []);
@@ -242,10 +280,83 @@ export const PostComposer = (props: PostComposerProps) => {
   // bumping the session remounts the block editor with a clean document
   // (while mounted, the editor owns the text)
   const [composerSession, setComposerSession] = React.useState(0);
+  const composerGeneration = React.useRef(0);
+  const editorGeneration = composerGeneration.current;
+  const advanceComposerSession = () => { composerGeneration.current += 1; setComposerSession(session => session + 1); };
+
+	// File-bearing pastes anywhere inside the expanded composer belong to the
+	// post's one media panel. When Photos is still off, retain the File objects
+	// for the next render, turn the panel on, then queue them through the same
+	// secure uploader used by file-picking and drag/drop. Text-only paste keeps
+	// its native Editor.js/input behavior.
+	const handleComposerPaste = React.useCallback(
+		(event: React.ClipboardEvent<HTMLDivElement>) => {
+			if (event.defaultPrevented || posting || submissionUncertain || !user) return;
+			// React portal events bubble through the component tree. Do not turn a
+			// file pasted into the separate Thing editor modal into post media.
+			if (!event.currentTarget.contains(event.target as Node)) return;
+			const files = attachmentFilesFromClipboard(event.clipboardData);
+			if (!files.length) return;
+			event.preventDefault();
+			event.stopPropagation();
+			setPollOn(false);
+			if (attachmentComposerRef.current) {
+				attachmentComposerRef.current.addFiles(files);
+				return;
+			}
+			pendingMediaFilesRef.current = [...pendingMediaFilesRef.current, ...files];
+			setPhotosOn(true);
+		},
+		[posting, submissionUncertain, user]
+	);
+
+	// Capture external files before the body editor can consume the drop. The
+	// mounted attachment drop zone owns its own events (including drag styling
+	// and tile reordering), so a file is never queued by both handlers.
+	const handleComposerDragOver = React.useCallback((event: React.DragEvent<HTMLDivElement>) => {
+		if (!event.currentTarget.contains(event.target as Node)) return;
+		if (!Array.from(event.dataTransfer.types).includes('Files')) return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = posting || submissionUncertain || !user ? 'none' : 'copy';
+	}, [posting, submissionUncertain, user]);
+
+	const handleComposerDrop = React.useCallback((event: React.DragEvent<HTMLDivElement>) => {
+		if (event.defaultPrevented || !event.currentTarget.contains(event.target as Node)) return;
+		const target = event.target instanceof Element ? event.target : null;
+		if (target?.closest('[data-attachment-drop-zone]')) return;
+		const files = attachmentFilesFromClipboard(event.dataTransfer);
+		if (!files.length) return;
+		event.preventDefault();
+		event.stopPropagation();
+		if (posting || submissionUncertain || !user) return;
+		// Enable only Photos: keep every selected mode and its draft intact,
+		// including Poll, whose question/options can coexist with attachments.
+		setExpanded(true);
+		setPhotosOn(true);
+		if (attachmentComposerRef.current) {
+			attachmentComposerRef.current.addFiles(files);
+			return;
+		}
+		pendingMediaFilesRef.current = [...pendingMediaFilesRef.current, ...files];
+	}, [posting, submissionUncertain, user]);
+
+	React.useEffect(() => {
+		if (!expanded || !photosOn || pendingMediaFilesRef.current.length === 0) return;
+		let cancelled = false;
+		// A newly mounted uploader replays its effects in React StrictMode.
+		// Queue after that replay so its cleanup cannot abort the first drop.
+		queueMicrotask(() => {
+			if (cancelled || !attachmentComposerRef.current) return;
+			const files = pendingMediaFilesRef.current;
+			pendingMediaFilesRef.current = [];
+			attachmentComposerRef.current.addFiles(files);
+		});
+		return () => { cancelled = true; };
+	}, [composerSession, expanded, photosOn, user?.id]);
 
   // edit mode: the thing to seed the draft branch with, captured at mount so
   // the seed effect's deps stay constant
-  const editSeedRef = React.useRef(editPost?.thing || null);
+  const editSeedRef = React.useRef(postThingDraft(editPost?.thing));
 
 	// edit mode: the post's existing attachments, reorderable in place. Saving
 	// sends the full desired id list (this ordered set plus any new uploads)
@@ -294,7 +405,7 @@ export const PostComposer = (props: PostComposerProps) => {
 	const parsedTags = canonicalPostTags([...tagsInput.split(','), ...extractInlineHashtags(text)]);
 
 	// poll mode: trimmed, bounded, non-empty option labels in row order
-	const parsedPollOptions = pollOptions.map((option) => option.trim().slice(0, MAX_POLL_OPTION_CHARS)).filter(Boolean);
+	const parsedPollOptions = pollOptions.map((option) => option.trim()).filter(Boolean);
 
 
   // this composer's session-scoped draft home (fresh per mount — see
@@ -328,36 +439,10 @@ export const PostComposer = (props: PostComposerProps) => {
   React.useEffect(() => {
     if (seededRef.current || thingtimeLoading || !thingOn || !expanded) return;
     seededRef.current = true;
-    const currentTmp = getThingtime(DRAFT_TMP_KEY);
-    const preserved: Record<string, unknown> = {};
-    if (currentTmp && typeof currentTmp === 'object' && !Array.isArray(currentTmp)) {
-      for (const [key, value] of Object.entries(currentTmp as Record<string, unknown>)) {
-        if (!COMPOSER_SESSION_KEY.test(key)) preserved[key] = value;
-      }
-    }
-    // seed the session BRANCH only — the draft value itself starts undefined,
-    // so the editor opens on a truly blank "Imagine.." slate instead of an
-    // empty object rendering as {} chrome. Editing an existing thingtime post
-    // seeds the draft with the post's thing as of mount (editSeedRef).
-    //
-    // tabLocal because this REPLACES the whole `tmp` branch and the pruning
-    // above cannot tell an abandoned persisted session from another tab's live
-    // one — every `s<hex>` key is dropped. Broadcast, that lands on a peer as
-    // "your composer session no longer exists" and destroys a post someone is
-    // part-way through typing there. Pruning stale sessions out of the
-    // persisted blob is this tab's own housekeeping; `preserved` only copies
-    // user-authored `tmp` keys through unchanged, so nothing a peer needs is
-    // withheld by keeping it off the wire.
-    setThingtime(
-      DRAFT_TMP_KEY,
-      {
-        ...preserved,
-        [draftSessionId]: editSeedRef.current ? { [DRAFT_ROOT_KEY]: editSeedRef.current } : {}
-      },
-      // Passing options replaces setThingtime's default object, so restate the
-      // namespace this write has always used rather than silently dropping it.
-      { namespace: 'default', tabLocal: true }
-    );
+    // A composer owns only its session; another open composer may still be
+    // using a sibling branch.
+    setThingtime(`${DRAFT_TMP_KEY}.${draftSessionId}`, editSeedRef.current ? { [DRAFT_ROOT_KEY]: editSeedRef.current } : {},
+      { namespace: 'default', tabLocal: true });
     // `thingOn` (not `type`): this branch's guard above reads `thingOn`, and the
     // derived `type` const is declared further down, so naming it here would be
     // a TDZ ReferenceError during render.
@@ -373,7 +458,7 @@ export const PostComposer = (props: PostComposerProps) => {
 	// every attachment going out with this post: in edit mode the existing
 	// bound set (reorderable) plus any NEW uploads from the live panel — an
 	// attachment-only post must stay saveable while its media is reordered
-	const composerAttachments = isEdit ? [...editAttachments, ...attachmentSnapshot.attachments] : attachmentSnapshot.attachments;
+	const composerAttachments = [...(isEdit ? editAttachments : []), ...draftAttachments, ...attachmentSnapshot.attachments];
 	const hasReadyAttachment = composerAttachments.length > 0;
 	const hasReadyVisualAttachment = composerAttachments.some((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video');
 
@@ -411,23 +496,106 @@ export const PostComposer = (props: PostComposerProps) => {
       : type === 'image'
 			? hasReadyVisualAttachment
         : type === 'thingtime'
-			? draftReady && Object.keys(draftThing).length > 0 && thingHasContent(draftThing) && (!marketOn || listingValid)
+			? (pickedThings.length > 0 || (draftReady && Object.keys(draftThing).length > 0 && thingHasContent(draftThing))) && (!marketOn || listingValid)
 			: type === 'poll'
 				? text.trim().length > 0 && parsedPollOptions.length >= MIN_POLL_OPTIONS
 				: listingValid;
 	const valid = contentValid && !attachmentSnapshot.blocking;
 
+  // the viewer's joined subspaces for the destination picker — loaded once,
+  // only for a top-level composer with no page-provided subspace
+  React.useEffect(() => {
+    if (!expanded || isComment || subspace || mySubspaces || !user) return;
+    let cancelled = false;
+    api.v1.subspaces
+      .list({ mine: true, limit: 50 })
+      .then((resp: any) => {
+        if (cancelled) return;
+        setMySubspaces(((resp?.subspaces || []) as PublicSubspace[]).filter((entry) => entry.viewer?.canPost).map(composerContextOf));
+      })
+      .catch(() => {
+        if (!cancelled) setMySubspaces([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // api.v1.subspaces.list is a stable useCallback
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, isComment, subspace, mySubspaces, user?.id]);
+  const activeSubspace: SubspaceComposerContext | null =
+    subspace || (subspaceId ? mySubspaces?.find((entry) => entry.id === subspaceId) || null : null);
+  const flairOptions = (activeSubspace?.flairs || []).filter((flair) => !flair.modOnly || activeSubspace?.canModerate);
+
+  const latestEditorDraft = React.useRef<EditorJsDoc | null>(null);
+  const [postEditorDraft, setPostEditorDraft] = React.useState<EditorJsDoc | null>(null);
+  const draftSnapshot = JSON.stringify({
+    photosOn, marketOn, thingOn, pickedThings, pollOn, pollOptions, postEditorValue: postEditorDraft || postEditorValue,
+    title, price, currency, category, condition, listingLocation, tagsInput, visibility, customAcl,
+    postTitle, subspaceId, flairId, layoutMode, layoutPattern, layoutColumns, layoutSpans,
+    thing: getThingtime(draftPath) ?? null, attachments: [...draftAttachments, ...attachmentSnapshot.attachments],
+    editAttachments, legacyImages, pendingSubmission: pendingPostSubmissionRef.current
+  });
+  const draftContext = isEdit ? `post:edit:${editPost!.id}` : isComment ? `comment:rich:${parentId}` : props.initialDraft ? `post:incoming:${props.initialDraft.id}` : `post:new:${subspace?.id || ''}`;
+  const accountDraft = useAccountDraft({ actor: user?.id, context: draftContext, surface: isComment ? 'comment' : 'post',
+    onRestore: (saved) => {
+      const value = JSON.parse(saved.snapshot);
+      pendingPostSubmissionRef.current = props.initialSubmission || value.pendingSubmission || null;
+      if (pendingPostSubmissionRef.current) pendingPostSubmissionRef.current.unknownOutcome = true;
+      setSubmissionUncertain(!!pendingPostSubmissionRef.current);
+      advanceComposerSession();
+      setPostEditorDraft(null); latestEditorDraft.current = null;
+      setPhotosOn(!!value.photosOn); setMarketOn(!!value.marketOn); setThingOn(!!value.thingOn);
+      setPickedThings(value.pickedThings || []); setPollOn(!!value.pollOn); setPollOptions(value.pollOptions || ['', '']);
+      if (isEditorJsDoc(value.postEditorValue)) setPostEditorValue(value.postEditorValue);
+      else setPostEditorValue({ kind: 'rich-text', blocks: textToBlocks(value.text || '') });
+      setTitle(value.title || ''); setPrice(value.price || ''); setCurrency(value.currency || 'AUD');
+      setCategory(value.category || 'other'); setCondition(value.condition || ''); setListingLocation(value.listingLocation || '');
+      setTagsInput(value.tagsInput || ''); setVisibility(value.visibility || 'public'); setCustomAcl(value.customAcl || null);
+      audienceAppliedRef.current = !!value.customAcl;
+      setPostTitle(value.postTitle || ''); setSubspaceId(subspace?.id || value.subspaceId || null); setFlairId(value.flairId || null);
+      setLayoutMode(value.layoutMode || 'auto'); setLayoutPattern(value.layoutPattern || [1, 2]); setLayoutColumns(value.layoutColumns || 3); setLayoutSpans(value.layoutSpans || {});
+      setDraftAttachments(value.attachments || []); setLegacyImages(value.legacyImages || []);
+      if (isEdit && value.editAttachments) setEditAttachments(value.editAttachments);
+      setAttachmentSnapshot(EMPTY_ATTACHMENT_SNAPSHOT);
+      seededRef.current = true;
+      setThingtime(draftPath, value.thing ?? undefined, { namespace: 'default', tabLocal: true });
+      setExpanded(true);
+    }
+  });
+  const draftContent = {
+    surface: (isComment ? 'comment' : 'post') as 'comment' | 'post', context: draftContext,
+    name: (postTitle || title || text || (thingOn ? 'Thing draft' : 'Post draft')).slice(0, 160), snapshot: draftSnapshot,
+    attachmentIds: [...draftAttachments.map(file => file.id), ...attachmentSnapshot.attachmentIds].filter(id => !isLegacyLinkedSeedId(id))
+  };
+  React.useEffect(() => {
+    if (!posting && !submissionUncertain) accountDraft.capture(draftContent, !!(text || title || postTitle || thingOn || photosOn || marketOn || pollOn || tagsInput));
+    // Snapshot is the complete editing state; method identities are stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftSnapshot, posting, submissionUncertain]);
+
+  const preserveComposerDraft = async () => {
+    const value = await capturePostEditorValue(postTextEditorRef.current, postEditorValue);
+    const document = latestEditorDraft.current || value;
+    accountDraft.capture({ ...draftContent, snapshot: JSON.stringify({ ...JSON.parse(draftSnapshot), postEditorValue: document }) },
+      !!(blocksToText(document.blocks) || title || postTitle || thingOn || photosOn || marketOn || pollOn || tagsInput), true);
+    await accountDraft.flush();
+  };
+
   const reset = () => {
 		pendingPostSubmissionRef.current = null;
 		setSubmissionUncertain(false);
     setExpanded(isComment);
+    setDraftAttachments([]);
+    setLegacyImages([]);
     setPhotosOn(false);
     setMarketOn(false);
     setThingOn(false);
+    setPickedThings([]);
     setPollOn(false);
     setPollOptions(['', '']);
+    setPostEditorDraft(null); latestEditorDraft.current = null;
     setPostEditorValue({ kind: 'rich-text', blocks: textToBlocks('') });
-    setComposerSession((session) => session + 1);
+    advanceComposerSession();
     setTitle('');
     setPrice('');
     setCurrency('AUD');
@@ -436,11 +604,14 @@ export const PostComposer = (props: PostComposerProps) => {
     setListingLocation('');
     setTagsInput('');
     setVisibility('public');
+    setPostTitle('');
+    setFlairId(null);
+    if (!subspace) setSubspaceId(null);
 		setAttachmentSnapshot(EMPTY_ATTACHMENT_SNAPSHOT);
   };
 
   const handlePost = async () => {
-		if (!valid || posting || attachmentSnapshot.blocking) return;
+		if ((!valid && !pendingPostSubmissionRef.current) || posting || attachmentSnapshot.blocking) return;
 		setPosting(true);
 		setThingModalOpen(false);
 		let submittedEditorValue = postEditorValue;
@@ -454,9 +625,8 @@ export const PostComposer = (props: PostComposerProps) => {
 				return;
 			}
 		}
-
-		const currentAttachmentIds = [...attachmentSnapshot.attachmentIds];
-		const currentPostShareId = crypto.randomUUID();
+		const currentAttachmentIds = [...draftAttachments.map(file => file.id), ...attachmentSnapshot.attachmentIds];
+		const currentPostShareId = props.initialDraft?.id || crypto.randomUUID();
 		// polls publish as thingtime posts; the question lives on the thing (the
 		// poll card renders it), so the post text stays empty — no double render
 		const apiType: PostType = type === 'poll' ? 'thingtime' : type;
@@ -466,12 +636,12 @@ export const PostComposer = (props: PostComposerProps) => {
 		const canonicalText = type === 'poll' ? '' : submittedText;
 		const canonicalListing = showListing
 			? {
-					title: title.trim().slice(0, 120),
+					title: title.trim(),
 					price: Math.round(Number(price) * 100) / 100,
 					currency: currency.trim().toUpperCase(),
 					category,
 					condition: condition === 'new' || condition === 'used' ? condition : null,
-					location: listingLocation.trim().slice(0, 120) || null,
+					location: listingLocation.trim() || null,
 					sold: false
 			  }
 			: null;
@@ -484,7 +654,7 @@ export const PostComposer = (props: PostComposerProps) => {
 		// text stays empty for polls
 		const canonicalThing =
 			type === 'thingtime'
-				? draftThing
+				? composePostThing(draftReady && thingHasContent(draftThing) ? draftThing : null, pickedThings)
 				: type === 'poll'
 					? { kind: 'poll', question: submittedText, options: parsedPollOptions }
 					: null;
@@ -540,6 +710,18 @@ export const PostComposer = (props: PostComposerProps) => {
 		if (currentPostShareId) currentPayload.shareId = currentPostShareId;
       // comments inherit the thread root's audience server-side
 		if (!isComment) currentPayload.visibility = visibility;
+		// subspace vocabulary rides the crystal: a headline, the destination
+		// subspace, and its flair (the server re-validates posting rights)
+		if (!isComment) {
+			if (postTitle.trim()) currentPayload.title = postTitle.trim();
+			if (subspaceId) {
+				currentPayload.subspaceId = subspaceId;
+				if (flairId) currentPayload.flairId = flairId;
+			}
+		}
+		// custom audiences ride the explicit acl (the server prefers acl over the
+		// visibility name)
+		if (!isComment && visibility === 'custom' && customAcl) currentPayload.acl = customAcl;
 		if (currentAttachmentIds.length > 0) currentPayload.attachmentIds = currentAttachmentIds;
 		if (showPhotos) currentPayload.images = canonicalImages;
 		if (apiType === 'thingtime') currentPayload.thing = canonicalThing;
@@ -565,7 +747,8 @@ export const PostComposer = (props: PostComposerProps) => {
 		const attachmentIds = pendingSubmission?.attachmentIds ?? currentAttachmentIds;
 		const submittedPostType = pendingSubmission?.postType ?? type;
 
-		const finishPost = (created: PublicPost) => {
+		const finishPost = async (created: PublicPost) => {
+      void accountDraft.retire().catch(() => lopu({ title: 'Posted successfully; draft cleanup will retry separately', status: 'info' }));
 			if (attachmentIds.length > 0) {
 				// A successful or exactly reconciled save means the server claimed
 				// these drafts (create binds in the insert transaction; an edit binds
@@ -598,6 +781,24 @@ export const PostComposer = (props: PostComposerProps) => {
 		};
 
 		try {
+      if (pendingSubmission) await props.beforeSubmit?.(pendingSubmission);
+      if (!pendingSubmission?.unknownOutcome) {
+        // Capture the immutable publish identity on this device before sending.
+        // Account draft sync runs independently and cannot block the post.
+        try {
+          accountDraft.capture({ ...draftContent, snapshot: JSON.stringify({ ...JSON.parse(draftSnapshot),
+            postEditorValue: submittedEditorValue, pendingSubmission: { ...pendingSubmission, unknownOutcome: true } }) }, true, true);
+          void accountDraft.flush().catch(() => {}); // DraftSaveStatus reports sync errors.
+        } catch {
+          lopu({ title: 'Draft recovery is unavailable', description: 'Posting will continue. Keep this page open until the result is confirmed.', status: 'info' });
+        }
+      }
+			if (pendingSubmission?.unknownOutcome && !isComment && !isEdit && postShareId && committedExpectation) {
+				try {
+					const saved = await withPostRequestDeadline(signal => api.v1.things.get({ id: postShareId }, { signal }), 5_000);
+					if (matchesCommittedPostCreate(saved, committedExpectation)) { await finishPost(saved.post); return; }
+				} catch { /* Retry only the already-frozen identity and payload. */ }
+			}
 			if (isEdit) {
 				// full-crystal replace: the server sanitizer rebuilds { type, text,
 				// images, listing, thing } per type, so switching type clears the
@@ -608,7 +809,7 @@ export const PostComposer = (props: PostComposerProps) => {
 				// mint them into real linked attachments now, in panel order (a
 				// failed PATCH afterwards just leaves 24h-TTL drafts behind).
 				const resolvedPanelIds = await Promise.all(
-					attachmentSnapshot.attachments.map(async (attachment) => {
+					[...draftAttachments, ...attachmentSnapshot.attachments].map(async (attachment) => {
 						if (!isLegacyLinkedSeedId(attachment.id)) return attachment.id;
 						if (!attachment.url) throw new Error('linked media url missing');
 						const minted = await api.v1.attachments.link({
@@ -630,16 +831,22 @@ export const PostComposer = (props: PostComposerProps) => {
 						images: canonicalImages,
 						listing: canonicalListing,
 						thing: canonicalThing,
-						mediaLayout: canonicalMediaLayout
+						mediaLayout: canonicalMediaLayout,
+						// empty/null clear — the sanitizer drops the keys, so a post can
+						// lose its title or leave its subspace from here
+						title: postTitle.trim(),
+						subspaceId: subspaceId || null,
+						flairId: subspaceId ? flairId || null : null
 					},
 					tags: parsedTags,
 					visibility,
+					...(visibility === 'custom' && customAcl ? { acl: customAcl } : {}),
 					...(editAttachmentsChanged ? { attachmentIds: [...editAttachments.map((attachment) => attachment.id), ...resolvedPanelIds] } : {})
 				});
-				finishPost(updated.post);
+				await finishPost(updated.post);
 			} else {
 				const resp = isComment ? await api.v1.things.comment({ id: parentId, ...payload }) : await api.v1.things.create(payload);
-				finishPost(isComment ? resp.comment : resp.post);
+				await finishPost(isComment ? resp.comment : resp.post);
 			}
 		} catch (error) {
 			let reconciled: PublicPost | null = null;
@@ -653,7 +860,7 @@ export const PostComposer = (props: PostComposerProps) => {
 				for (const delay of [0, 150, 400]) {
 					if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
 					try {
-						const readBack = await api.v1.things.get({ id: postShareId });
+						const readBack = await withPostRequestDeadline(signal => api.v1.things.get({ id: postShareId }, { signal }), 5_000);
 						if (matchesCommittedPostCreate(readBack, committedExpectation)) {
 							reconciled = readBack.post as PublicPost;
 						}
@@ -666,7 +873,7 @@ export const PostComposer = (props: PostComposerProps) => {
 			}
 			if (reconciled) {
 				window.dispatchEvent(new Event('thingtime:root-data-refresh'));
-				finishPost(reconciled);
+				await finishPost(reconciled);
 			} else {
 				const unknownNow = hasUnknownMutationOutcome(error);
 				const preserveAmbiguousSubmission = shouldFreezeAmbiguousPostSubmission(unknownNow, status, pendingSubmission?.unknownOutcome === true);
@@ -681,7 +888,11 @@ export const PostComposer = (props: PostComposerProps) => {
 					pendingPostSubmissionRef.current = null;
 					setSubmissionUncertain(false);
 				}
-				lopu({ title: isComment ? 'Comment did not go through 😞' : 'Post did not go through 😞', status: 'error' });
+				lopu({
+					title: preserveAmbiguousSubmission ? 'Still confirming your post' : isComment ? 'Comment did not go through 😞' : 'Post did not go through 😞',
+					description: apiErrorMessage(error, 'Please try again. Your draft is still here.'),
+					status: preserveAmbiguousSubmission ? 'info' : 'error'
+				});
 			}
 		} finally {
     setPosting(false);
@@ -691,6 +902,8 @@ export const PostComposer = (props: PostComposerProps) => {
   if (!expanded) {
     return (
       <Flex
+        onDragOverCapture={handleComposerDragOver}
+        onDropCapture={handleComposerDrop}
         background="var(--tt-card, #ffffff)"
         border={BORDER}
         borderRadius="var(--tt-radius-lg, 16px)"
@@ -722,6 +935,7 @@ export const PostComposer = (props: PostComposerProps) => {
 
   return (
     <Flex
+      data-editor-scope="post-composer"
 			position="relative"
       flexDirection="column"
       rowGap={3}
@@ -730,6 +944,9 @@ export const PostComposer = (props: PostComposerProps) => {
       borderRadius="var(--tt-radius-lg, 16px)"
       boxShadow="var(--tt-shadow-card, 0px 1px 2px rgba(22, 22, 26, 0.05))"
       padding={4}
+			onPasteCapture={handleComposerPaste}
+			onDragOverCapture={handleComposerDragOver}
+			onDropCapture={handleComposerDrop}
     >
 			{(posting || submissionUncertain) && (
 				<Flex
@@ -745,8 +962,7 @@ export const PostComposer = (props: PostComposerProps) => {
 					{submissionUncertain && !posting && (
 						<Flex flexDirection="column" alignItems="center" textAlign="center" rowGap={3} maxWidth="360px">
 							<Text fontSize="sm" color={TEXT}>
-								Thingtime is still checking whether this exact {isComment ? 'comment' : 'post'} went live. The draft is frozen so retrying cannot
-								create a duplicate.
+								Thingtime could not confirm whether this exact {isComment ? 'comment' : 'post'} went live. Your draft is kept safe. Check again to recover the saved post or retry the same submission.
 							</Text>
 							<Button size="sm" borderRadius={RADIUS_MD} onClick={handlePost}>
 								Check and retry safely
@@ -755,7 +971,10 @@ export const PostComposer = (props: PostComposerProps) => {
 					)}
 				</Flex>
 			)}
-			<Box display="contents" {...((posting || submissionUncertain ? { inert: '' } : {}) as any)}>
+			<Box display="contents" inert={posting || submissionUncertain ? true : undefined}>
+      {user && <Flex gap={2} align="center" flexWrap="wrap"><DraftSaveStatus status={accountDraft.status} error={accountDraft.error} retry={accountDraft.retry} />{!isEdit && <DraftPicker actor={user.id} surface={isComment ? 'comment' : 'post'} targetId={isComment ? parentId : undefined} disabled={posting || submissionUncertain} beforeOpen={preserveComposerDraft}
+      onDeleted={async id => { if (accountDraft.current()?.id === id) { await accountDraft.forget(id); reset(); } }}
+      onLoad={accountDraft.load} />}</Flex>}
       {/* type badges — additive toggles that wrap on narrow screens. Text is
       the always-on base; Photos/Marketplace/Things each switch their field
       group on without deselecting the others, and clicking Text switches
@@ -808,7 +1027,7 @@ export const PostComposer = (props: PostComposerProps) => {
 						variant={thingOn ? 'solid' : 'ghost'}
 						borderRadius={RADIUS_SM}
 						aria-pressed={thingOn}
-						title="Build a structured thing into this post"
+						title="Attach existing Things or create a new structured Thing"
 						onClick={() => {
 							setPollOn(false);
 							setThingOn((on) => !on);
@@ -847,15 +1066,32 @@ export const PostComposer = (props: PostComposerProps) => {
           borderRadius="8px"
 						isDisabled={posting}
 						onClick={() => {
+							pendingMediaFilesRef.current = [];
 							if (isComment || isEdit) onClose?.();
 							else {
-								setExpanded(false);
-								setAttachmentSnapshot(EMPTY_ATTACHMENT_SNAPSHOT);
+                setDraftAttachments(files => [...files, ...attachmentSnapshot.attachments]);
+                setExpanded(false);
+                setAttachmentSnapshot(EMPTY_ATTACHMENT_SNAPSHOT);
 							}
 						}}
         />
       </Flex>
 
+      {!isComment && (subspaceId || subspace || postTitle) && (
+        <Input
+          size="md"
+          variant="unstyled"
+          fontFamily="heading"
+          fontSize="lg"
+          fontWeight={700}
+          color={INK}
+          placeholder={activeSubspace ? `Title for s/${activeSubspace.slug}` : 'Title (optional)'}
+          value={postTitle}
+          onChange={(event) => setPostTitle(event.target.value)}
+          aria-label="Post title"
+          data-testid="composer-title"
+        />
+      )}
       <Flex columnGap={3}>
         <UserAvatarCircle size="36px" fontSize="sm" />
         <Box flex="1" minWidth={0} ref={editorBoxRef}>
@@ -866,8 +1102,9 @@ export const PostComposer = (props: PostComposerProps) => {
             // question prompt must actually show for polls
             key={`${composerSession}-${type === 'poll' ? 'poll' : 'post'}`}
 						value={postEditorValue}
+						onDraftValueChange={next => { if (composerGeneration.current === editorGeneration) { latestEditorDraft.current = next; setPostEditorDraft(next); } }}
 						onValueChange={(next) => {
-							if (isEditorJsDoc(next)) setPostEditorValue(next);
+							if (composerGeneration.current === editorGeneration && isEditorJsDoc(next)) setPostEditorValue(next);
 						}}
             placeholder={TEXTAREA_PLACEHOLDERS[type]}
             minHeight="72px"
@@ -880,7 +1117,8 @@ export const PostComposer = (props: PostComposerProps) => {
       (photos and listing field groups toggle on via the type badges above) */}
       {thingOn && (
         <Flex flexDirection="column" rowGap={2}>
-          <Eyebrow>Thing 📦</Eyebrow>
+          <Eyebrow>Things 📦</Eyebrow>
+          <PostThingPicker value={pickedThings} onChange={setPickedThings} />
 
           {/* tappable preview — the real editing happens in the bottom-sheet
           modal (nested comment composers can't host a full editor inline, and
@@ -906,7 +1144,7 @@ export const PostComposer = (props: PostComposerProps) => {
               <ThingView thing={draftThing as Record<string, any>} compact />
             ) : (
               <Text fontSize="md" color={MUTED}>
-                Imagine.. 🌀
+                Create a new Thing (optional)
               </Text>
             )}
             <Text fontSize="10px" color={MUTED} paddingTop={2}>
@@ -977,7 +1215,6 @@ export const PostComposer = (props: PostComposerProps) => {
                 size="sm"
                 borderRadius={RADIUS_SM}
                 placeholder={`Option ${idx + 1}`}
-                maxLength={MAX_POLL_OPTION_CHARS}
                 value={option}
                 onChange={(event) => {
                   const next = [...pollOptions];
@@ -1012,7 +1249,7 @@ export const PostComposer = (props: PostComposerProps) => {
             </Button>
           )}
           <Text fontSize="10px" color={MUTED}>
-            {MIN_POLL_OPTIONS}–{MAX_POLL_OPTIONS} options · voters pick one and can change or remove their vote ✨
+            At least {MIN_POLL_OPTIONS} options · voters pick one and can change or remove their vote ✨
           </Text>
         </Flex>
       )}
@@ -1023,8 +1260,8 @@ export const PostComposer = (props: PostComposerProps) => {
       PATCH attachment sync), the gallery layout controls, and the linked
       image URL adder BELOW the uploader grid (type a URL, hit Add, tile
       lands in the grid, field clears for the next one). */}
-      {showPhotos && (
-        <Flex flexDirection="column" rowGap={2}>
+      {(showPhotos || attachmentSnapshot.attachments.length > 0 || draftAttachments.length > 0) && (
+        <Flex display={showPhotos ? "flex" : "none"} flexDirection="column" rowGap={2}>
           <Eyebrow>Photos {type !== 'image' ? '(optional) ' : ''}🖼️</Eyebrow>
 
 					{user && (
@@ -1032,24 +1269,30 @@ export const PostComposer = (props: PostComposerProps) => {
 							ref={attachmentComposerRef}
 							key={`attachments-${user.id}-${composerSession}`}
 							ownerId={user.id}
+              initialFiles={!accountDraft.resumeComplete || props.initialSubmission || props.incomingShareActive === false || draftAttachments.length ? undefined : props.initialDraft?.files}
 							disabled={posting || submissionUncertain}
+              preserveDrafts
 							purpose={attachmentPurpose}
 							ariaLabel={attachmentPurpose === 'comment' ? 'Comment attachments' : 'Post attachments'}
 							remainingBytes={user.storage.remainingBytes}
 							storageStatus={user.storage.status}
 							onChange={setAttachmentSnapshot}
 							allowLinkedUrls
-							// legacy URL-images seed as linked tiles, capped so bound
-							// attachments + seeds can never exceed the server's per-post
-							// limit (a pathological >25-media legacy post drops overflow
-							// URLs, matching the old composer's silent client-side filter)
+							// Preserve every legacy image when reopening an existing post.
 							initialLinkedSeeds={
-								isEdit ? (editPost?.images || []).slice(0, Math.max(0, MAX_POST_ATTACHMENTS - editAttachmentsSeedRef.current.length)) : undefined
+								legacyImages
 							}
 							tileExtras={layoutMode === 'grid' ? layoutSpanBadge : undefined}
-								existingAttachments={isEdit ? editAttachments : undefined}
-								onExistingChange={isEdit ? setEditAttachments : undefined}
-								onExistingRemove={isEdit ? removeExistingAttachment : undefined}
+								existingAttachments={[...(isEdit ? editAttachments : []), ...draftAttachments]}
+								onExistingChange={(files) => {
+                const oldIds = new Set(editAttachmentsSeedRef.current.map(file => file.id));
+                setEditAttachments(files.filter(file => oldIds.has(file.id)));
+                setDraftAttachments(files.filter(file => !oldIds.has(file.id)));
+              }}
+								onExistingRemove={(file) => {
+                if (editAttachments.some(entry => entry.id === file.id)) removeExistingAttachment(file);
+                else setDraftAttachments(files => files.filter(entry => entry.id !== file.id));
+              }}
 						/>
 					)}
 
@@ -1181,23 +1424,111 @@ export const PostComposer = (props: PostComposerProps) => {
         )}
       </Flex>
 
-      {/* footer: circle + post (comments inherit the thread's circle) */}
-      <Flex alignItems="center" columnGap={2} borderTop={BORDER} paddingTop={3}>
-        {!isComment && (
+      {/* footer: subspace destination + flair + circle + post (comments
+      inherit the thread's circle) */}
+      <ContextActionDock active={!!props.incomingShareActive} bottomOffset={props.incomingShareToolbarHeight}><Flex
+        data-testid="composer-submit-row"
+        alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap" borderTop={BORDER} paddingTop={3}
+        background={props.incomingShareActive ? 'var(--tt-card, #fff)' : undefined}
+        paddingBottom={props.incomingShareActive ? 3 : undefined}
+      >
+        {!isComment && subspace && (
+          <Flex
+            alignItems="center"
+            columnGap={1}
+            fontSize="xs"
+            fontWeight={700}
+            color={INK}
+            border={BORDER}
+            borderRadius="999px"
+            paddingX={2}
+            height="32px"
+            title={`Posting in s/${subspace.slug}`}
+            data-testid="composer-subspace"
+          >
+            <Text as="span">{subspace.icon || '🪐'}</Text>
+            <Text as="span" fontFamily="mono" fontWeight={600}>
+              s/{subspace.slug}
+            </Text>
+          </Flex>
+        )}
+        {!isComment && !subspace && user && (
+          <Select
+            size="sm"
+            width="170px"
+            borderRadius={RADIUS_SM}
+            value={subspaceId || ''}
+            onChange={(event) => {
+              setSubspaceId(event.target.value || null);
+              setFlairId(null);
+            }}
+            aria-label="Post into a subspace"
+            data-testid="composer-subspace-select"
+          >
+            <option value="">🪐 No subspace</option>
+            {subspaceId && mySubspaces && !mySubspaces.some((entry) => entry.id === subspaceId) && editPost?.subspace && (
+              <option value={subspaceId}>s/{editPost.subspace.slug}</option>
+            )}
+            {(mySubspaces || []).map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.icon || '🪐'} s/{entry.slug}
+              </option>
+            ))}
+            {mySubspaces === null && <option disabled>Loading…</option>}
+          </Select>
+        )}
+        {!isComment && activeSubspace && flairOptions.length > 0 && (
           <Select
             size="sm"
             width="150px"
             borderRadius={RADIUS_SM}
-            value={visibility}
-            onChange={(event) => setVisibility(event.target.value as PostVisibility)}
-            aria-label="Who can see this post"
+            value={flairId || ''}
+            onChange={(event) => setFlairId(event.target.value || null)}
+            aria-label="Post flair"
+            data-testid="composer-flair-select"
           >
-            {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
-              <option key={key} value={key}>
-                {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
+            <option value="">No flair</option>
+            {flairOptions.map((flair) => (
+              <option key={flair.id} value={flair.id}>
+                {flair.emoji ? `${flair.emoji} ` : ''}
+                {flair.label}
               </option>
             ))}
           </Select>
+        )}
+        {!isComment && (
+          <>
+            <Select
+              size="sm"
+              width="150px"
+              borderRadius={RADIUS_SM}
+              value={visibility}
+              onChange={(event) => {
+                const next = event.target.value as PostVisibility;
+                // custom opens the picker; re-picking custom re-opens it.
+                // Remember the circle we're LEAVING first: abandoning the
+                // picker has to come back here, and `visibility` still holds
+                // the pre-change value on this render.
+                if (next === 'custom') {
+                  audiencePreviousVisibilityRef.current = visibility;
+                  setAudienceOpen(true);
+                }
+                setVisibility(next);
+              }}
+              aria-label="Who can see this post"
+            >
+              {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
+                <option key={key} value={key}>
+                  {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
+                </option>
+              ))}
+            </Select>
+            {visibility === 'custom' && (
+              <Button size="sm" variant="ghost" onClick={() => setAudienceOpen(true)} title="Edit the custom audience">
+                🎭 Edit
+              </Button>
+            )}
+          </>
         )}
         <Button
           marginLeft="auto"
@@ -1216,8 +1547,31 @@ export const PostComposer = (props: PostComposerProps) => {
         >
           {isEdit ? 'Save ✨' : isComment ? 'Comment 💬' : 'Post ✨'}
         </Button>
-      </Flex>
+      </Flex></ContextActionDock>
 			</Box>
+      {!isComment && (
+        <CustomAudienceModal
+          isOpen={audienceOpen}
+          onClose={() => {
+            setAudienceOpen(false);
+            // Abandoning the picker with nothing EVER composed restores the
+            // circle that was in effect before it opened (a cancel after
+            // applying keeps the composed audience). It must NOT fall through
+            // to a fixed 'public': editing a 🔒/👥/🕵️ post, opening 🎭 out of
+            // curiosity and cancelling would leave the composer set to 🌐, so
+            // the next Save silently published it.
+            if (!audienceAppliedRef.current) {
+              setVisibility((current) => (current === 'custom' ? audiencePreviousVisibilityRef.current : current));
+            }
+          }}
+          initialAcl={customAcl || undefined}
+          onApply={(acl) => {
+            audienceAppliedRef.current = true;
+            setCustomAcl(acl);
+            setVisibility('custom');
+          }}
+        />
+      )}
     </Flex>
   );
 };

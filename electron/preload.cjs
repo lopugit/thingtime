@@ -1,6 +1,40 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('thingtimeDesktop', {
+if (process.argv?.includes('--thingtime-native-password-approval')) {
+	contextBridge.exposeInMainWorld('thingtimeDesktop', {
+		passwordApprovalReady: ownerId => ipcRenderer.invoke('thingtime-desktop:password-approval-ready', ownerId),
+		passwordApprovalRespond: response => ipcRenderer.invoke('thingtime-desktop:password-approval-respond', response),
+	});
+} else contextBridge.exposeInMainWorld('thingtimeDesktop', {
+	activityVersion: '1.0.0',
+	activityRequest: (request) => ipcRenderer.invoke('thingtime-desktop:activity', request),
+	passwordsVersion: process.platform === 'darwin' ? '1.2.0' : ['linux', 'win32'].includes(process.platform) ? '1.3.0' : undefined,
+	passwordsMode: process.platform === 'darwin' ? 'system' : ['linux', 'win32'].includes(process.platform) ? 'scopedDesktop' : undefined,
+	passwordProvider: (request) => ipcRenderer.invoke('thingtime-desktop:password-provider', request),
+	fileExportVersion: process.platform === 'darwin' ? '1.1.0' : undefined,
+	fileExportRequest: (request) => ipcRenderer.invoke('thingtime-desktop:file-export', request),
+	attachmentUploadVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	attachmentUploadRequest: (request) => {
+		if (request?.action === 'chunk' && (!(request.bytes instanceof Uint8Array) || request.bytes.length > 256 * 1024))
+			throw Error('Invalid upload chunk.');
+		return ipcRenderer.invoke('thingtime-desktop:attachment-upload', request);
+	},
+	folderSyncRequest: (request) => ipcRenderer.invoke('thingtime-desktop:folder-sync', request),
+	folderSyncTaskVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	setFolderSyncActive: (request) => ipcRenderer.invoke('thingtime-desktop:folder-sync-active', request),
+	agentBrowserVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	agentBrowsers: request => ipcRenderer.invoke('thingtime-desktop:agent-browsers', request),
+	mailSyncVersion: '1.0.0',
+	syncMail: (request) => ipcRenderer.invoke('thingtime-desktop:mail-sync', request),
+	cancelMailSync: (request) => ipcRenderer.invoke('thingtime-desktop:mail-cancel', request),
+	speechRecognitionVersion: process.platform === 'darwin' ? '1.1.0' : undefined,
+	startSpeechRecognition: (request) => ipcRenderer.invoke('thingtime-desktop:speech-start', request),
+	stopSpeechRecognition: (request) => ipcRenderer.invoke('thingtime-desktop:speech-stop', request),
+	onSpeechRecognition: (callback) => {
+		const listener = (_event, payload) => callback(payload);
+		ipcRenderer.on('thingtime-desktop:speech-event', listener);
+		return () => ipcRenderer.removeListener('thingtime-desktop:speech-event', listener);
+	},
 	discoverAiSources: () => ipcRenderer.invoke('thingtime-desktop:ai-discover'),
 	beginAiSync: (request) => ipcRenderer.invoke('thingtime-desktop:ai-begin-sync', request),
 	readAiSyncBatch: (request) => ipcRenderer.invoke('thingtime-desktop:ai-read-batch', request),
@@ -14,6 +48,13 @@ contextBridge.exposeInMainWorld('thingtimeDesktop', {
 	removeCachedRelease: (request) => ipcRenderer.invoke('thingtime-desktop:remove-cached-release', request),
 	revealUpdateCache: () => ipcRenderer.invoke('thingtime-desktop:reveal-update-cache'),
 	getInfo: () => ipcRenderer.invoke('thingtime-desktop:get-info'),
+	getNodePanelPreference: (request) => ipcRenderer.invoke('thingtime-desktop:get-node-panel-preference', request),
+	setNodePanelPreference: (request) => ipcRenderer.invoke('thingtime-desktop:set-node-panel-preference', request),
+	configureLocalRuntime: (request) => ipcRenderer.invoke('thingtime-desktop:configure-local-runtime', request),
+	chooseLocalMongod: () => ipcRenderer.invoke('thingtime-desktop:choose-local-mongod'),
+	restartRuntime: () => ipcRenderer.invoke('thingtime-desktop:restart-runtime'),
+	recoverDesktopSession: request => ipcRenderer.invoke('thingtime-desktop:recover-session', request),
+	useCurrentDesktopSession: request => ipcRenderer.invoke('thingtime-desktop:use-current-session', request),
 	getDesktopSettings: () => ipcRenderer.invoke('thingtime-desktop:get-settings'),
 	addEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:add-endpoint', request),
 	removeEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:remove-endpoint', request),
@@ -23,6 +64,9 @@ contextBridge.exposeInMainWorld('thingtimeDesktop', {
 	uploadMenuBarIcon: () => ipcRenderer.invoke('thingtime-desktop:upload-menu-bar-icon'),
 	setNodeAutoStart: (request) => ipcRenderer.invoke('thingtime-desktop:set-node-auto-start', request),
 	loadUrl: (url) => ipcRenderer.invoke('thingtime-desktop:load-url', url),
+	openAppLocations: () => ipcRenderer.invoke('thingtime-desktop:open-app-locations'),
+	restartAfterPermissions: () => ipcRenderer.invoke('thingtime-desktop:permission-restart'),
+	nodeControl: (request) => ipcRenderer.invoke('thingtime-desktop:node-control', request),
 	nodeGetStatus: () => ipcRenderer.invoke('thingtime-desktop:node-status'),
 	nodeRegisterService: () => ipcRenderer.invoke('thingtime-desktop:node-register-service'),
 	nodeUnregisterService: () => ipcRenderer.invoke('thingtime-desktop:node-unregister-service'),

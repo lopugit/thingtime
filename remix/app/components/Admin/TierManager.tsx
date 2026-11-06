@@ -126,7 +126,8 @@ const QUOTA_LABELS: Record<keyof TierQuotas, { label: string; unit: 'MiB' | 'ite
   appStorageBytes: { label: 'Whole-app storage', unit: 'MiB' },
 	userStorageBytes: { label: 'Whole-account storage', unit: 'MiB' },
   maxApps: { label: 'Max registered apps', unit: 'items' },
-  maxPats: { label: 'Max access tokens', unit: 'items' }
+  maxPats: { label: 'Max access tokens', unit: 'items' },
+  speedTestsPerHour: { label: 'Account speed tests per hour', unit: 'items' }
 };
 
 const tierInclusionText = (value: unknown): string => {
@@ -204,6 +205,7 @@ const TIER_QUERY_FIELDS: readonly AdminRowField<SubscriptionTierDescriptor>[] = 
   { id: 'quotas.userStorageBytes', label: 'User storage bytes', kind: 'number' },
   { id: 'quotas.maxApps', label: 'Max registered apps', kind: 'number' },
   { id: 'quotas.maxPats', label: 'Max access tokens', kind: 'number' },
+  { id: 'quotas.speedTestsPerHour', label: 'Speed tests per hour', kind: 'number' },
   { id: 'createdAt', label: 'Created time', kind: 'date' },
   { id: 'updatedAt', label: 'Updated time', kind: 'date' },
   { id: 'publishedAt', label: 'Published time', kind: 'date' },

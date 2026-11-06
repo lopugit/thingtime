@@ -1,3 +1,4 @@
+import { authorizeAiWaterfall } from '~/api/utils/ai/waterfallService';
 import { randomUUID } from 'node:crypto';
 
 import { json, readJsonBody } from '~/api/http';
@@ -22,6 +23,7 @@ const privateHeaders = { 'Cache-Control': 'private, no-store, max-age=0' };
 type FeatureStack = Awaited<ReturnType<typeof getFeatureStack>>;
 
 const dispatchSavedFeatureStack = async (stack: FeatureStack, actorId: string) => {
+	if (stack.modelWaterfall) await authorizeAiWaterfall(actorId, stack.modelWaterfall);
 	const requestedAt = new Date();
 	const runId = `feature-stack-run-${randomUUID()}`;
 	const result = await dispatchCiWorkflow({
@@ -37,7 +39,8 @@ const dispatchSavedFeatureStack = async (stack: FeatureStack, actorId: string) =
 			run_id: runId,
 			source_pr_numbers: stack.sourcePrNumbers,
 			targets: stack.targets,
-			auto_decide_branches: stack.autoDecideBranches
+			auto_decide_branches: stack.autoDecideBranches,
+			model_waterfall: stack.modelWaterfall
 		}
 	});
 	await markFeatureStackRun(stack.id, result.dispatchId, runId, requestedAt);

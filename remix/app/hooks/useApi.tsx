@@ -1,13 +1,53 @@
-import { useCallback } from 'react';
+import { requireSharedContentCapability, sharedContentWrite } from '~/utils/sharedContentCapabilities';
+import { requiresCollectionPagingContract } from '~/components/Builder/savedCollectionContract';
+import { AUTHORED_CONTROL_REQUIREMENTS, usesAuthoredControls } from '~/schemas/authoredControls';
+import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
+import { isBuilderThing } from '~/schemas/builderThing';
+import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
+import { hasLiveSourceBinding } from '~/schemas/liveSources';
+import { FILE_SYNC_REQUIREMENTS } from '~/fileSync/configuration';
+import { parseCloudFile, parseCloudFileCommit, type CloudFileCommit } from '~/fileSync/cloudFile';
+import type { TimelineScope } from '~/timeline/contract';
+import { useCharacterScope, CHARACTER_HEADER } from '~/components/Characters/CharacterScope';
+import type { VersionRequest } from '../timeline/publishedVersion';
+import type { BranchCheckoutRequest } from '../timeline/branchCheckout';
+import { timelineRequestScope, type TimelineStorage } from '../timeline/storageScope';
+import { draftRequest } from '~/drafts/draftClient';
+import type { BranchMergeRequest } from '../timeline/branchMerge';
+import { parseTimelineBranchLookup, parseTimelineBranchLookupResult, type TimelineBranchCommand } from '../timeline/branches';
+import type { TimelineNote, TimelineNoteCommand } from '../timeline/notes';
+import { parseTimelineVersionName, type TimelineVersionName, type TimelineVersionNameCommand } from '../timeline/versionNames';
+import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
+import { parseTimelineEntry, type TimelineEvent, type TimelineReceipt, type TimelineSnapshot } from '~/timeline/contract';
+import { retainActionOutcomeRecovery, type ActionOutcomeRecovery } from '~/timeline/actionRecovery';
+import { enqueueActionOutcomeRecovery } from '~/timeline/localBackend.client';
+import type { TimelinePageRequest } from '~/timeline/sync';
+import { announceTimelineScopeChange } from '~/timeline/clientEvents';
+import { ensureFoundPostBrowserIdentity } from './foundPostIdentity.client';
+import { useCallback, useRef } from 'react';
+import { useCurrentUser } from './useCurrentUser';
+import { useDataPlane } from './useDataPlane';
+import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
+import { rootIdentity } from '../utils/rootIdentity';
+import { createBrowserActionHost, finishBrowserAction } from '~/components/Actions/browserActionHost';
+import { withPostRequestDeadline } from './postRequest';
+import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
+import { THEME_CAPABILITY_REQUIREMENTS } from '~/theme/capabilities';
+import { PREVIEW_RETENTION_REQUIREMENTS } from '~/api/utils/ciControl/previewRetentionCore';
+import { requireThingtimeCapability, type CapabilityTransport } from '~/api/utils/capabilities/requireCapability.client';
+import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
 import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
 import type { AttachmentUploadPurpose } from '~/components/Attachments/attachmentTypes';
+import { ATTACHMENT_ARCHIVE_REQUIREMENTS, attachmentArchiveUrl } from '~/components/Attachments/attachmentUiCore';
+import { postLopuReply, type LopuReplyBody } from '~/components/Lopu/lopuChatStream';
 import { recordApiCall } from './apiRequestLog';
 import { useAsyncFetcher } from './useAsyncFetcher';
 import { clearLocalCachePrefix } from './localCache';
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
 import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
+import { withExportDeadline } from '~/utils/thingTransfer/exportDeadline';
 
 const refreshRootData = () => {
   window.dispatchEvent(new Event('thingtime:root-data-refresh'));
@@ -16,11 +56,19 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 // Every call is recorded in the DevKit request log (method/path/status/ms).
-const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
+export type ThingRequestOptions = { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string; expectedApiOrigin?: string; characterId?: string };
+const getJsonRequest = async (url: string, options?: ThingRequestOptions) => {
+  if (url.startsWith('/api/v1/things')) ensureFoundPostBrowserIdentity();
   const started = performance.now();
   let response: Response;
   try {
-    response = await fetch(url, { credentials: 'include', signal: options?.signal });
+    response = await fetch(url, { credentials: 'include', signal: options?.signal,
+      ...(options?.expectedApiOrigin ? { redirect: 'error' as const, cache: 'no-store' as const } : {}),
+      headers: { ...(options?.expectedApiOrigin ? { 'X-Thingtime-Expected-Api-Origin': options.expectedApiOrigin } : {}), ...(options?.expectedDataPlane ? { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } : {}), ...(options?.expectedActor ? { 'X-Thingtime-Expected-Actor': options.expectedActor } : {}), ...(options?.characterId ? { [CHARACTER_HEADER]: options.characterId } : {}) } });
+    if (options?.expectedApiOrigin && (response.redirected || (options.expectedApiOrigin !== window.location.origin && response.headers.get('x-thingtime-api-fallback') !== options.expectedApiOrigin))) {
+      await response.body?.cancel().catch(() => {});
+      throw Error('The selected API server changed.');
+    }
   } catch (error) {
     const aborted = error instanceof Error && error.name === 'AbortError';
     recordApiCall({
@@ -45,6 +93,7 @@ const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
   });
   const data = await readApiResponsePayload(response, { action: 'load Thingtime data', method: 'GET' });
   if (!response.ok) {
+    if (response.status === 409 && data?.code === 'DATA_PLANE_CHANGED') { rootIdentity.changed(); refreshRootData(); }
     throw createApiFailure({
       payload: data,
       status: response.status,
@@ -58,6 +107,23 @@ const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
 
 // Build "?a=1&b=2" from an args object, skipping null/undefined/'' and
 // joining array values with commas (the feed API's csv convention).
+/** One saved version as the server exports it (`export=1`): the raw event and
+ * receipt, its resolved restorable content, notes and 📌 name. Parsed leniently
+ * so a later server may add fields; the entry itself is parsed exactly. */
+export type TimelineVersionExport = {
+  formatVersion: 1; exportedAt: string; event: TimelineEvent; receipt: TimelineReceipt;
+  content: TimelineSnapshot; notes: TimelineNote[]; name: TimelineVersionName | null;
+};
+const parseTimelineVersionExport = (input: unknown, ownerId: string, eventId: string): TimelineVersionExport => {
+  const data = (input as any)?.export;
+  if ((input as any)?.ok !== true || !data || typeof data !== 'object' || Array.isArray(data) || data.formatVersion !== 1) throw new Error('Invalid Timeline export');
+  const entry = parseTimelineEntry({ event: data.event, receipt: data.receipt });
+  if (entry.event.id !== eventId || entry.event.ownerId !== ownerId) throw new Error('Server exported a different version');
+  const name = data.name === undefined || data.name === null ? null : parseTimelineVersionName(data.name);
+  if (name && (name.eventId !== eventId || name.ownerId !== ownerId)) throw new Error('Server exported a different version');
+  return { ...data, event: entry.event, receipt: entry.receipt, notes: Array.isArray(data.notes) ? data.notes : [], name };
+};
+
 const toQuery = (args?: Record<string, unknown>) => {
   const params = new URLSearchParams();
   Object.entries(args || {}).forEach(([key, value]) => {
@@ -70,9 +136,117 @@ const toQuery = (args?: Record<string, unknown>) => {
 };
 
 export function useApi() {
+  const character = useCharacterScope();
+  const getJson = useCallback((url: string, options?: ThingRequestOptions) =>
+    getJsonRequest(url, { ...options, ...(character ? { characterId: character.id } : {}) }), [character]);
+  const dataPlane = useDataPlane();
+  const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
   const asyncFetcher = useAsyncFetcher();
+  const actionUser = useCurrentUser();
+  const actionActor = useRef(actionUser?.id);
+  actionActor.current = actionUser?.id;
 
   const v1 = {
+    files: {
+      read: useCallback(async (scope: TimelineScope, id: string, options?: { signal?: AbortSignal }) => {
+        if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
+        await requireSharedContentCapability('api.files', { expectedApiOrigin: scope.apiOrigin });
+        await requireThingtimeCapability('api.actions-run', '1.7.0', scope.apiOrigin);
+        await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0', scope.apiOrigin);
+        const result = await getJson(`/api/v1/files${toQuery({ id })}`, { ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
+        const file = parseCloudFile(result?.file);
+        if (file.id !== id) throw Error('File identity changed.');
+        return file;
+      }, []),
+      commit: useCallback(async (scope: TimelineScope, input: CloudFileCommit, options?: { signal?: AbortSignal }) => {
+        if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
+        const command = parseCloudFileCommit(input);
+        await requireSharedContentCapability('api.files', { expectedApiOrigin: scope.apiOrigin });
+        await requireThingtimeCapability('api.actions-run', '1.7.0', scope.apiOrigin);
+        return asyncFetcher.submit(command, { action: '/api/v1/files', ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
+      }, [asyncFetcher])
+    },
+    drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
+    webpages: {
+      resolveComponents: useCallback(async (scope: { ownerId: string; dataPlane: string }, blocks: unknown[], options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.webpages-resolve', requiresCollectionPagingContract(blocks) ? '1.11.0' : '1.5.0');
+        return asyncFetcher.submit({ blocks }, { action: `/api/v1/webpages/resolve${toQuery({ ownerId: scope.ownerId, dataPlane: scope.dataPlane })}`, expectedActor: scope.ownerId, expectedDataPlane: scope.dataPlane, signal: options?.signal });
+      }, [asyncFetcher])
+    },
+    timeline: {
+      recoverOutcome: useCallback(async (scope: { ownerId: string; dataPlane: string }, recovery: ActionOutcomeRecovery, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.16.0');
+        return asyncFetcher.submit({ command: 'recover-action-outcome', recovery }, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      componentBindings: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.10.0');
+        return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId, components: 1 })}`, options);
+      }, []),
+      branchHead: useCallback(async (scope: { ownerId: string; dataPlane: string }, branchId: string, thingId: string, options?: { signal?: AbortSignal }) => {
+        const lookup = parseTimelineBranchLookup({ branchId, thingId });
+        await requireThingtimeCapability('api.timeline', '1.9.0');
+        const result = await getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), ...lookup })}`, options);
+        return parseTimelineBranchLookupResult(result, scope.ownerId, lookup);
+      }, []),
+      checkoutBranch: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: BranchCheckoutRequest, options?: { signal?: AbortSignal }) => {
+        await requireSharedContentCapability('api.timeline');
+        return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      branchMerge: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: BranchMergeRequest, options?: { signal?: AbortSignal }) => {
+        await requireSharedContentCapability('api.timeline');
+        return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      entry: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
+        return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId })}`, options);
+      }, []),
+      branches: useCallback(async (scope: { ownerId: string; dataPlane: string }, thingId: string, before?: number, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
+        return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), thingId, branches: 1, before })}`, options);
+      }, []),
+      branch: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineBranchCommand, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
+        return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      note: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineNoteCommand, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.17.0');
+        return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      // Online only: there is no offline name queue, so the editor stays disabled without a verified connection.
+      nameVersion: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineVersionNameCommand, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.18.0');
+        return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      // Strict gate: a 1.17 server answers `export=1&eventId=` with a plain entry read (HTTP 200), so the manifest is the only reliable signal.
+      exportVersion: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
+        await requireSharedContentCapability('api.timeline');
+        const result = await getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId, export: 1 })}`, options);
+        return parseTimelineVersionExport(result, scope.ownerId, eventId);
+      }, []),
+      discover: useCallback(async (ownerId: string, options?: { signal?: AbortSignal; storage?: TimelineStorage }) => {
+        const expectedDataPlane = planeRef.current;
+        if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+        await requireThingtimeCapability('api.timeline', options?.storage === 'home' ? '1.6.0' : '1.0.0');
+        return getJson(`/api/v1/timeline${toQuery({ ownerId, ...(options?.storage === 'home' ? { storage: 'home' } : {}) })}`, { ...options, expectedDataPlane });
+      }, []),
+      page: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: TimelinePageRequest, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', request.related ? '1.13.0' : scope.dataPlane === 'home' ? '1.6.0' : '1.0.0');
+        return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), ...request, ...(request.related ? { related: 1 } : {}), ...(request.thingId === null ? { history: 1 } : {}) })}`, options);
+      }, []),
+      push: useCallback(async (scope: { ownerId: string; dataPlane: string }, event: TimelineEvent, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.0.0');
+        return asyncFetcher.submit(event, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      version: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: VersionRequest) => {
+        // Full content operations require the corrected broad-snapshot reader.
+        await requireSharedContentCapability('api.timeline');
+        return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId });
+      }, [asyncFetcher])
+    },
+    tiers: useCallback(async (options?: { signal?: AbortSignal }) => {
+      await requireThingtimeCapability('api.tiers', '1.1.0');
+      return getJson('/api/v1/tiers', options);
+    }, []),
     login: useCallback(
       async (args) => {
         const { username, password, challenge, code } = args;
@@ -133,6 +307,33 @@ export function useApi() {
           // the Saved library cache can carry private/circle posts the
           // signed-out viewer bookmarked — same shared-browser privacy bar
           clearLocalCachePrefix('tt-saved-');
+          clearLocalCachePrefix('tt-passkeys');
+          // the /notifications history seed quotes private posts and the
+          // viewer's own action runs — same shared-browser privacy bar
+          clearLocalCachePrefix('tt-notif-history-');
+          // builder-page source results are whole action results run AS the
+          // viewer (their orders, their expense rows, their trainer) cached to
+          // paint /p/<page> without a spinner — the same shared-browser rule.
+          // The keys carry the viewer id, so a stale line can no longer be
+          // READ by the next account; dropping them here also stops it
+          // outliving the session that authorized it on disk.
+          clearLocalCachePrefix('tt-page-source:');
+          // /thing/:id caches the whole ACL-gated projection of each thing the
+          // viewer opened (private posts, circle data, their own components) to
+          // paint the permalink without a spinner. Same viewer-id keying and so
+          // the same shared-browser rule as the four caches above.
+          clearLocalCachePrefix('tt-thing-');
+          // /components/:key caches the ACL-gated browse projection of a
+          // component family — including the viewer's own unpublished designs
+          // and their author block. Same viewer-id keying, same rule.
+          clearLocalCachePrefix('tt-component-family-');
+          // /schemas/:key caches "your things with this shape": the viewer's
+          // OWN data things, crystal and all. The most private of the set.
+          clearLocalCachePrefix('tt-schema-things-');
+          // Lopu's caches (conversations, messages, model catalog, the
+          // floating window's last state) are the viewer's private chat
+          // with the assistant — same shared-browser privacy bar.
+          clearLocalCachePrefix('tt-lopu-');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
@@ -191,25 +392,25 @@ export function useApi() {
       passkeys: {
         list: useCallback(async () => getJson('/api/v1/auth/passkeys'), []),
         registerOptions: useCallback(
-          async (args: { password: string }) => asyncFetcher.submit({ password: args?.password }, { action: '/api/v1/auth/passkeys/register-options' }),
+          async (args: { password: string; verificationRequestId?:string; signal?: AbortSignal }) => asyncFetcher.submit({ password: args?.password, ...(args.verificationRequestId ? {verificationRequestId:args.verificationRequestId} : {}) }, { action: '/api/v1/auth/passkeys/register-options', signal: args.signal }),
           [asyncFetcher]
         ),
         register: useCallback(
-          async (args: { response: unknown; nickname?: string; description?: string }) =>
+          async (args: { response: unknown; nickname?: string; description?: string; signal?: AbortSignal }) =>
             asyncFetcher.submit(
               { response: args?.response, nickname: args?.nickname, description: args?.description },
-              { action: '/api/v1/auth/passkeys/register' }
+              { action: '/api/v1/auth/passkeys/register', signal: args.signal }
             ),
           [asyncFetcher]
         ),
-        loginOptions: useCallback(async () => asyncFetcher.submit({}, { action: '/api/v1/auth/passkeys/login-options' }), [asyncFetcher]),
+        loginOptions: useCallback(async (args?: { signal?: AbortSignal }) => asyncFetcher.submit({}, { action: '/api/v1/auth/passkeys/login-options', signal: args?.signal }), [asyncFetcher]),
         // Finishing a passkey login changes the active user — refresh root data
         // exactly like password login does.
         login: useCallback(
-          async (args: { response: unknown; clientId?: string }) => {
+          async (args: { response: unknown; clientId?: string; signal?: AbortSignal }) => {
             const ret = asyncFetcher.submit(
               { response: args?.response, ...(args?.clientId ? { clientId: args.clientId } : {}) },
-              { action: '/api/v1/auth/passkeys/login' }
+              { action: '/api/v1/auth/passkeys/login', signal: args.signal }
             );
             ret.then(refreshRootData).catch(() => {});
             return ret;
@@ -237,11 +438,103 @@ export function useApi() {
       }
     },
     settings: {
+      connectorProtections: useCallback(async (expectedActor: string, signal?: AbortSignal) => {
+        await requireThingtimeCapability(CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_VERSION);
+        signal?.throwIfAborted();
+        return getJson(CONNECTOR_PROTECTIONS_PATH, { expectedActor, signal, expectedApiOrigin: window.location.origin });
+      }, [getJson]),
+      setConnectorProtections: useCallback(async (expectedActor: string, confirmations: ConnectorConfirmationPatch, signal?: AbortSignal) => {
+        await requireThingtimeCapability(CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_VERSION);
+        signal?.throwIfAborted();
+        return asyncFetcher.submit({ confirmations }, {
+          action: CONNECTOR_PROTECTIONS_PATH, expectedActor, signal, expectedApiOrigin: window.location.origin,
+          characterId: character?.id, errorContext: 'save Thingtime connector confirmations'
+        });
+      }, [asyncFetcher, character?.id]),
+      lopuPrompt: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/settings/lopu-prompt', options), []),
+      setLopuPrompt: useCallback(async (args: Record<string, unknown>) => {
+        await requireThingtimeCapability('api.settings-lopu-prompt', '1.0.0');
+        return asyncFetcher.submit(args, { action: '/api/v1/settings/lopu-prompt', errorContext: 'save Lopu instructions' });
+      }, [asyncFetcher]),
       // Public so the GitHub conflict resolver can read the same ordered model
       // waterfall as the admin UI without inheriting an admin browser session.
-			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), [])
+			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), []),
+			// Lopu's stored chat defaults ({ model, effort, speed }); public GET, admin POST (admin.setLopuChatDefaults)
+			lopuChatDefaults: useCallback(async () => getJson('/api/v1/settings/lopu-chat-defaults'), []),
+			// Thingtime.LopuAccess ({ requireVerification, allowByoUnverified, starterCredits,
+			// lowBalanceWarningCredits }); public GET, admin POST (admin.setLopuAccess)
+			lopuAccess: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/settings/lopu-access', options), [])
+    },
+    // the `ai-model` catalog Lopu thinks with (public; { models, defaults, providers }
+    // + for a signed-in viewer their Secure Vault providers as metadata only:
+    // vaultProviders: [{ id, name, kind, model, endpointHost, available, reason? }], vault: { configured })
+    ai: {
+      models: useCallback(async () => {
+        const result = await getJson('/api/v1/ai/models');
+        if (result?.vaultProviders?.some((provider: { planChatEligible?: boolean }) => provider.planChatEligible === true)) {
+          try { await requireThingtimeCapability('api.ai-models', '1.8.0'); }
+          catch { return { ...result, vaultProviders: result.vaultProviders.map(({ planChatEligible: _hint, ...provider }: any) => provider) }; }
+        }
+        return result;
+      }, []),
+      complete: useCallback(async (input: AiCompletionInput) => {
+        for (const [feature, minimum] of Object.entries(AI_COMPLETION_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
+        return asyncFetcher.submit(input, { action: '/api/v1/ai/complete', errorContext: 'complete text with your selected AI connections' });
+      }, [asyncFetcher])
     },
     admin: {
+      aiModels: useCallback(async () => getJson('/api/v1/admin/ai/models'), []),
+      // { id, enabled } toggles one catalog model; { seed: true } re-runs the catalog upsert;
+      // { probe: true } re-checks the provider keys (fresh providers.<p>.verified + the re-projected list)
+      setAiModel: useCallback(
+        async (args: { id?: string; enabled?: boolean; seed?: boolean; probe?: boolean; sync?: boolean; provider?: string; allowAll?: boolean; autoAllowNewModels?: boolean }) => {
+          await requireThingtimeCapability('api.admin-ai-models', '1.4.0');
+          return asyncFetcher.submit(args, { action: '/api/v1/admin/ai/models', errorContext: 'update the Lopu model catalog' });
+        },
+        [asyncFetcher]
+      ),
+      setLopuChatDefaults: useCallback(
+        async (args: { model?: string | null; effort?: string | null; speed?: string | null }) =>
+          asyncFetcher.submit(
+            { model: args?.model ?? null, effort: args?.effort ?? null, speed: args?.speed ?? null },
+            { action: '/api/v1/settings/lopu-chat-defaults', errorContext: 'save the Lopu chat defaults' }
+          ),
+        [asyncFetcher]
+      ),
+      // Thingtime.LopuAccess — who may use Lopu and what a new account starts with
+      setLopuAccess: useCallback(
+        async (args: { requireVerification?: boolean; allowByoUnverified?: boolean; starterCredits?: number; lowBalanceWarningCredits?: number }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/settings/lopu-access', errorContext: 'save the Lopu access settings' }),
+        [asyncFetcher]
+      ),
+      // { userId, verified } — the per-account Lopu verified flag (meta.lopuVerified)
+      setUserLopuAccess: useCallback(
+        async (args: { userId: string; verified: boolean }) =>
+          asyncFetcher.submit(
+            { userId: args?.userId, verified: args?.verified },
+            { action: '/api/v1/admin/users/lopu-access', errorContext: `${args?.verified ? 'verify' : 'unverify'} Lopu access` }
+          ),
+        [asyncFetcher]
+      ),
+      // Admin → Lopu accounts: rows { user, balanceMicros, month, lifetime, pendingRequest }, cursor-paged
+      lopuAccounts: useCallback(
+        async (args?: { q?: string; cursor?: string; limit?: number }, options?: { signal?: AbortSignal }) =>
+          getJson(`/api/v1/admin/lopu/accounts${toQuery(args)}`, options),
+        []
+      ),
+      // grant / adjust credits ({ userId, credits, entry, reason }), approve a
+      // request ({ ...same, requestId }) or decline one ({ requestId, decline: true, reason })
+      lopuCredits: useCallback(
+        async (args: {
+          userId?: string;
+          credits?: number;
+          entry?: 'grant' | 'topup' | 'adjust' | 'refund';
+          reason?: string;
+          requestId?: string;
+          decline?: boolean;
+        }) => asyncFetcher.submit(args, { action: '/api/v1/admin/lopu/credits', errorContext: 'update Lopu credits' }),
+        [asyncFetcher]
+      ),
       integrations: useCallback(async () => getJson('/api/v1/admin/integrations'), []),
       integrationAction: useCallback(
         async (args: Record<string, unknown>) =>
@@ -252,8 +545,24 @@ export function useApi() {
 				async (args?: { limit?: number }, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
         []
       ),
+      mongodbConnections: useCallback(async (args: { cursor?: string; limit?: number }, scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.admin-mongodb-connections', '1.1.0', scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        return getJson(`/api/v1/admin/mongodb/connections${toQuery(args)}`, { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal });
+      }, [getJson]),
+      ciPreviewRetention: useCallback(async (scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.admin-ci-preview-retention', PREVIEW_RETENTION_REQUIREMENTS['api.admin-ci-preview-retention'], scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        const requestScope = { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal };
+        return getJson('/api/v1/admin/ci/preview-retention', requestScope);
+      }, []),
+      setCiPreviewRetention: useCallback(async (args: Record<string, unknown>, scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.admin-ci-preview-retention', PREVIEW_RETENTION_REQUIREMENTS['api.admin-ci-preview-retention'], scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        const requestScope = { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal };
+        return asyncFetcher.submit(args, { ...requestScope, action: '/api/v1/admin/ci/preview-retention', errorContext: 'save preview retention rules' });
+      }, [asyncFetcher]),
       ciCredentials: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/credentials', options), []),
       ciFeatureStacks: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/stacks', options), []),
+      ciStackChat: useCallback(async (runId: string) => getJson(`/api/v1/admin/ci/stacks/chat${toQuery({ runId })}`), []),
+      sendCiStackQuestion: useCallback(async (args: Record<string, unknown>) => asyncFetcher.submit(args, { action: '/api/v1/admin/ci/stacks/chat', errorContext: 'ask Lopu about a stack run' }), [asyncFetcher]),
       mutateCiFeatureStack: useCallback(
         async (args: Record<string, unknown>) =>
           asyncFetcher.submit(args, { action: '/api/v1/admin/ci/stacks', errorContext: 'manage Feature Stacks' }),
@@ -284,7 +593,10 @@ export function useApi() {
         [asyncFetcher]
       ),
       setPrConflictResolverModelWaterfall: useCallback(
-				async (waterfall) => asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }),
+				async (waterfall) => {
+          await requireThingtimeCapability('api.settings-pr-conflict-auto-resolver-model-waterfall', '1.1.0');
+          return asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' });
+        },
         [asyncFetcher]
       ),
       rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), []),
@@ -327,20 +639,25 @@ export function useApi() {
         async (args) => asyncFetcher.submit({ action: 'settings', settings: args?.settings }, { action: '/api/v1/admin/moderation' }),
         [asyncFetcher]
       ),
-      migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
+      migrations: useCallback(async () => {
+        await requireThingtimeCapability('api.admin-migrations', '1.4.1');
+        return getJson('/api/v1/admin/migrations');
+      }, []),
 			migrationDiagnostic: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/migrations/diagnostic${toQuery({ id: args?.id })}`, options),
 				[]
 			),
       migrationsRun: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          await requireThingtimeCapability('api.admin-migrations-run', '1.4.1');
+          return asyncFetcher.submit(
             { migration: args?.migration, dryRun: args?.dryRun, confirm: args?.confirm },
             {
               action: '/api/v1/admin/migrations/run',
               errorContext: args?.dryRun ? `preview migration ${args?.migration}` : `run migration ${args?.migration}`
             }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
       usersOverview: useCallback(
@@ -393,6 +710,76 @@ export function useApi() {
         [asyncFetcher]
       )
     },
+    // Lopu 🦄 conversations (session only) — see /docs/api lopu. The model
+    // catalog is v1.ai.models() above.
+    lopu: {
+      chats: {
+        list: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/lopu/chats', options), []),
+        // providerId = one of the viewer's Secure Vault providers (v1.ai.models()
+        // → vaultProviders[].id); null clears it back to the catalog model
+        create: useCallback(
+          async (args?: { title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; accessMode?: 'ask' | 'full'; management?: 'client' | 'server' }) => {
+            if (typeof args?.providerId === 'string' && args.providerId.startsWith('chatgpt-plan-')) await requireThingtimeCapability('api.lopu-chats', '1.7.0');
+            if (args?.accessMode) await requireThingtimeCapability('api.lopu-chats', '1.6.0');
+            if (args?.management) await requireThingtimeCapability('api.lopu-chats', '1.5.0');
+            return asyncFetcher.submit(args || {}, { action: '/api/v1/lopu/chats', errorContext: 'start a Lopu chat' });
+          },
+          [asyncFetcher]
+        ),
+        update: useCallback(
+          async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; accessMode?: 'ask' | 'full'; management?: 'client' | 'server'; archived?: boolean }) => {
+            if (typeof args.providerId === 'string' && args.providerId.startsWith('chatgpt-plan-')) await requireThingtimeCapability('api.lopu-chats-update', '1.6.1');
+            if (args.accessMode) await requireThingtimeCapability('api.lopu-chats-update', '1.5.0');
+            if (args.management) {
+              await requireThingtimeCapability('api.lopu-chats', '1.5.0');
+              await requireThingtimeCapability('api.lopu-chats-update', '1.4.0');
+            }
+            if (args.archived !== undefined) {
+              await requireThingtimeCapability('api.lopu-chats', '1.4.0');
+              await requireThingtimeCapability('api.lopu-chats-update', '1.3.0');
+            }
+            return asyncFetcher.submit(args, { action: '/api/v1/lopu/chats/update', errorContext: 'update a Lopu chat' });
+          },
+          [asyncFetcher]
+        ),
+        delete: useCallback(
+          async (args: { chatId: string }) =>
+            asyncFetcher.submit({ chatId: args?.chatId }, { action: '/api/v1/lopu/chats/delete', errorContext: 'delete a Lopu chat' }),
+          [asyncFetcher]
+        )
+      },
+      // the streamed turn — returns the RAW Response (NDJSON body); read it
+      // with readNdjson from components/Lopu/lopuChatStream
+      reply: useCallback(async (body: LopuReplyBody, options?: { signal?: AbortSignal }) => postLopuReply(body, options), []),
+      // direct voice (design note §6.1): the provider-minted five-minute
+      // realtime credential for one of the viewer's own Secure Vault
+      // providers (v1.ai.models() → vaultProviders[].realtimeModels); a
+      // refusal throws the route's error shape (400 with the reason)
+      voiceSession: useCallback(
+        async (args: { providerId: string; model?: string | null; effort?: string | null; textResponse?: boolean }, options?: { signal?: AbortSignal }) => {
+          await requireThingtimeCapability('api.lopu-voice-session', '1.2.0');
+          return asyncFetcher.submit(args, { action: '/api/v1/lopu/voice/session', errorContext: 'start direct voice', signal: options?.signal });
+        },
+        [asyncFetcher]
+      ),
+      // the viewer's Lopu account (verified flag, credits, usage — design note
+      // "Lopu verified access, usage accounting and credits" §3); session only
+      account: {
+        get: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/lopu/account', options), []),
+        // ledger rows + the usage rows of the same window, newest first, cursor-paged (limit ≤ 100)
+        history: useCallback(
+          async (args?: { cursor?: string | null; limit?: number }, options?: { signal?: AbortSignal }) =>
+            getJson(`/api/v1/lopu/account/history${toQuery({ cursor: args?.cursor ?? undefined, limit: args?.limit })}`, options),
+          []
+        ),
+        // { credits: 0.5..1000, note? } — one pending request at a time (409)
+        requestTopup: useCallback(
+          async (args: { credits: number; note?: string }) =>
+            asyncFetcher.submit({ credits: args?.credits, ...(args?.note ? { note: args.note } : {}) }, { action: '/api/v1/lopu/account/topup-request', errorContext: 'request Lopu credits' }),
+          [asyncFetcher]
+        )
+      }
+    },
     mongodb: {
       capabilities: useCallback(async () => getJson('/api/v1/mongodb/raw-results'), []),
       rawResults: useCallback(
@@ -407,7 +794,9 @@ export function useApi() {
         set: useCallback(
           async (args?: { url?: string; savedId?: string; reset?: boolean }) => {
             const body = args?.savedId ? { savedId: args.savedId } : args?.reset ? { reset: true } : { url: args?.url };
-            const ret = asyncFetcher.submit(body, { action: '/api/v1/mongodb/endpoint' });
+            // Reset/selection is the recovery path for a stale data source.
+            const ret = asyncFetcher.submit(body, { action: '/api/v1/mongodb/endpoint', expectedDataPlane: null });
+            ret.then(announceTimelineScopeChange).catch(() => {});
             // the data plane just moved — cached feeds/lists are stale, so
             // refresh root data the same way login/logout do
             ret.then(refreshRootData).catch(() => {});
@@ -426,7 +815,8 @@ export function useApi() {
         ),
         remove: useCallback(
           async (args?: { id?: string }) => {
-            const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/mongodb/endpoints', method: 'DELETE' });
+            const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/mongodb/endpoints', method: 'DELETE', expectedDataPlane: null });
+            ret.then(announceTimelineScopeChange).catch(() => {});
             // removing the session's active endpoint clears the override
             ret.then(refreshRootData).catch(() => {});
             return ret;
@@ -477,6 +867,15 @@ export function useApi() {
       )
     },
 		attachments: {
+			// "download all" ZIP manifests: what a post/folder/media archive would
+			// hold (count, bytes, paths) without streaming any bytes. The download
+			// itself is a plain navigation to attachmentArchiveUrl().
+			archive: {
+				manifest: useCallback(async (args: { id: string; key?: string; sharedRoot?: string }, options?: { signal?: AbortSignal }) => {
+					await requireThingtimeCapability('api.attachment-archive', ATTACHMENT_ARCHIVE_REQUIREMENTS['api.attachment-archive']);
+					return getJson(attachmentArchiveUrl(args.id, { key: args.key, sharedRoot: args.sharedRoot, manifest: true }), options);
+				}, [])
+			},
 			uploads: {
 				create: useCallback(
 					async (
@@ -487,8 +886,10 @@ export function useApi() {
 							sizeBytes: number;
 							purpose?: AttachmentUploadPurpose;
 						},
-						options?: { signal?: AbortSignal }
+						options?: ThingRequestOptions
 					) => {
+						await requireSharedContentCapability('api.attachment-uploads', options);
+            await requireSharedContentCapability('api.attachment-upload-complete', options);
 						const ret = asyncFetcher.submit(
 							{
 								requestId: args?.requestId,
@@ -499,7 +900,7 @@ export function useApi() {
 							},
 							{
 								action: '/api/v1/attachments/uploads',
-								signal: options?.signal,
+								...options,
 								errorContext: 'prepare a file upload'
 							}
 						);
@@ -521,12 +922,13 @@ export function useApi() {
 					[asyncFetcher]
 				),
 				complete: useCallback(
-					async (args: { uploadId: string }, options?: { signal?: AbortSignal }) => {
+					async (args: { uploadId: string }, options?: ThingRequestOptions) => {
+            await requireSharedContentCapability('api.attachment-upload-complete', options);
 						const ret = asyncFetcher.submit(
 							{ uploadId: args?.uploadId },
 							{
 								action: '/api/v1/attachments/uploads/complete',
-								signal: options?.signal,
+								...options,
 								errorContext: 'verify a file upload'
 							}
 						);
@@ -536,12 +938,12 @@ export function useApi() {
 					[asyncFetcher]
 				),
 				abort: useCallback(
-					async (args: { uploadId: string }, options?: { signal?: AbortSignal }) => {
+					async (args: { uploadId: string }, options?: ThingRequestOptions) => {
 						const ret = asyncFetcher.submit(
 							{ uploadId: args?.uploadId },
 							{
 								action: '/api/v1/attachments/uploads/abort',
-								signal: options?.signal,
+								...options,
 								errorContext: 'cancel a file upload'
 							}
 						);
@@ -566,14 +968,15 @@ export function useApi() {
 			// binds/orders/deletes like an upload but its bytes stay on the original
 			// site (duplicates allowed; unbound mints expire in 24h)
 			link: useCallback(
-				async (args: { url: string; purpose?: 'post' | 'comment'; mediaKind?: 'image' | 'video' | 'file' }, options?: { signal?: AbortSignal }) => {
+				async (args: { url: string; purpose?: 'post' | 'comment'; mediaKind?: 'image' | 'video' | 'file' }, options?: ThingRequestOptions) => {
+          await requireSharedContentCapability('api.attachment-link', options);
 					const ret = asyncFetcher.submit(
 						{
 							url: args?.url,
 							...(args?.purpose && args.purpose !== 'post' ? { purpose: args.purpose } : {}),
 							...(args?.mediaKind ? { mediaKind: args.mediaKind } : {})
 						},
-						{ action: '/api/v1/attachments/link', errorContext: 'add linked media', signal: options?.signal }
+						{ action: '/api/v1/attachments/link', errorContext: 'add linked media', ...options }
 					);
 					ret.then(refreshRootData).catch(() => {});
 					return ret;
@@ -583,21 +986,159 @@ export function useApi() {
 			// owner display metadata on a ready attachment (media page + lightbox
 			// text) — omit a field to keep it, null/'' clears it
 			annotate: useCallback(
-				async (args: { id: string; filenamePreview?: string | null; title?: string | null; description?: string | null }) =>
-					asyncFetcher.submit(
+				async (args: { id: string; filenamePreview?: string | null; title?: string | null; description?: string | null }, options?: ThingRequestOptions) => {
+          await requireSharedContentCapability('api.attachment-annotate', options);
+					return asyncFetcher.submit(
 						{
 							id: args?.id,
 							...(args && 'filenamePreview' in args ? { filenamePreview: args.filenamePreview } : {}),
 							...(args && 'title' in args ? { title: args.title } : {}),
 							...(args && 'description' in args ? { description: args.description } : {})
 						},
-						{ action: '/api/v1/attachments/annotate', errorContext: 'save media details' }
-					),
+						{ action: '/api/v1/attachments/annotate', errorContext: 'save media details', ...options }
+					);
+        },
 				[asyncFetcher]
 			)
 		},
+    // Subspaces — Reddit-style communities (api/utils/subspaces). Reads are
+    // plain GETs (guest-visible); every mutation goes through the fetcher so
+    // failures surface through the shared API-failure path.
+    subspaces: {
+      embeds: useCallback(async (args: { id: string; region: 'sidebar' | 'feed'; cursor?: string }) => {
+        await requireThingtimeCapability('api.subspaces-embeds', '1.0.0');
+        return getJson(`/api/v1/subspaces/embeds${toQuery(args)}`);
+      }, [getJson]),
+      mutateEmbed: useCallback(async (body: Record<string, unknown>) => {
+        await requireThingtimeCapability('api.subspaces-embeds', '1.0.0');
+        return asyncFetcher.submit(body, { action: '/api/v1/subspaces/embeds', errorContext: 'update subspace embedded Things' });
+      }, [asyncFetcher]),
+      // sort: new (default, cursor-paged) | members | active (ranked over a
+      // bounded window, offset-paged; rows under active carry recentPostCount
+      // — a private subspace's only for its members). `anon: 1` keeps
+      // logged-out requests edge-cacheable, mirroring feed / trending
+      list: useCallback(
+        async (args?: { q?: string; mine?: boolean; sort?: 'new' | 'members' | 'active'; cursor?: string; limit?: number; anon?: 1 }) =>
+          getJson(`/api/v1/subspaces${toQuery({ q: args?.q, mine: args?.mine ? 1 : undefined, sort: args?.sort, cursor: args?.cursor, limit: args?.limit, anon: args?.anon })}`),
+        []
+      ),
+      get: useCallback(async (args: { slug?: string; id?: string }) => getJson(`/api/v1/subspaces/get${toQuery(args)}`), []),
+      create: useCallback(async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces', errorContext: 'create the subspace' }), [asyncFetcher]),
+      update: useCallback(
+        async (body: Record<string, unknown>) => {
+          if (body.newSlug !== undefined) await requireThingtimeCapability('api.subspaces-update', '1.5.0');
+          return asyncFetcher.submit(body, { action: '/api/v1/subspaces/update', errorContext: 'save the subspace settings' });
+        },
+        [asyncFetcher]
+      ),
+      // join answers { joined, pending }: a PRIVATE subspace files a join
+      // request (pending: true) for the mods' Requests queue; leave cancels it
+      join: useCallback(async (args: { slug?: string; id?: string }) => asyncFetcher.submit(args, { action: '/api/v1/subspaces/join', errorContext: 'join the subspace' }), [asyncFetcher]),
+      leave: useCallback(async (args: { slug?: string; id?: string }) => asyncFetcher.submit(args, { action: '/api/v1/subspaces/leave', errorContext: 'leave the subspace' }), [asyncFetcher]),
+      // pending=1 → join requests, approvalRequests=1 → posting-approval
+      // requests (both moderator-only, newest first)
+      members: useCallback(
+        async (args: { slug?: string; id?: string; role?: string; banned?: boolean; pending?: boolean; approvalRequests?: boolean; cursor?: string; limit?: number }) =>
+          getJson(
+            `/api/v1/subspaces/members${toQuery({
+              ...args,
+              banned: args?.banned ? 1 : undefined,
+              pending: args?.pending ? 1 : undefined,
+              approvalRequests: args?.approvalRequests ? 1 : undefined
+            })}`
+          ),
+        []
+      ),
+      // actions: add | remove | approve | unapprove | ban (reason shown to the
+      // user, banDays, and a private mod-log `note`) | unban | role |
+      // accept | deny (the Requests queue) | request-approval (self — an
+      // active member of a restricted subspace asks for posting rights)
+      mutateMember: useCallback(
+        async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces/members', errorContext: 'update the member' }),
+        [asyncFetcher]
+      ),
+      requestApproval: useCallback(
+        async (args: { slug?: string; id?: string }) =>
+          asyncFetcher.submit({ ...args, action: 'request-approval' }, { action: '/api/v1/subspaces/members', errorContext: 'request posting approval' }),
+        [asyncFetcher]
+      ),
+      // user flair beside a member's name: no userId → your own (a template
+      // id, or custom text + optional emoji/color; neither clears); mods may
+      // name anyone
+      setUserFlair: useCallback(
+        async (args: { slug?: string; id?: string; userId?: string; username?: string; flairId?: string | null; text?: string | null; emoji?: string | null; color?: string | null }) =>
+          asyncFetcher.submit({ ...args, action: 'userFlair' }, { action: '/api/v1/subspaces/members', errorContext: 'set the flair' }),
+        [asyncFetcher]
+      ),
+      // remove: reason (free text) and/or reasonId (one of the subspace's
+      // removalReasons — title — message become the stored reason, the free
+      // text rides along as a note) or ruleIndex (cites a rule the same way,
+      // 0-based); the author is notified; a second remove on a removed post
+      // is a no-op
+      moderate: useCallback(
+        async (body: { id: string; action: string; reason?: string; reasonId?: string | null; ruleIndex?: number | null; value?: boolean; flairId?: string | null }) =>
+          asyncFetcher.submit(body, { action: '/api/v1/subspaces/moderate', errorContext: 'moderate the post' }),
+        [asyncFetcher]
+      ),
+      modlog: useCallback(async (args: { slug?: string; id?: string; cursor?: string; limit?: number }) => getJson(`/api/v1/subspaces/modlog${toQuery(args)}`), []),
+      // report a post (or a comment — resolved to its root post) to the
+      // subspace's mods: reason (a rule title / removal-reason id / free
+      // text, ≤120) + optional note (≤500); a repeat by the same reporter
+      // refreshes their row (updated: true)
+      report: useCallback(
+        async (body: { id: string; reason: string; note?: string | null }) => asyncFetcher.submit(body, { action: '/api/v1/subspaces/report', errorContext: 'report the post' }),
+        [asyncFetcher]
+      ),
+      // the mods' Reports queue: reports grouped by post (status open |
+      // resolved, offset cursor); moderator-only
+      reports: useCallback(
+        async (args: { slug?: string; id?: string; status?: 'open' | 'resolved'; cursor?: string; limit?: number }) => getJson(`/api/v1/subspaces/reports${toQuery(args)}`),
+        []
+      ),
+      // dismiss every open report on a post (the post stays); remove /
+      // approve through `moderate` settle them implicitly
+      dismissReports: useCallback(
+        async (body: { postId: string; slug?: string; id?: string }) =>
+          asyncFetcher.submit({ ...body, action: 'dismiss' }, { action: '/api/v1/subspaces/reports', errorContext: 'dismiss the reports' }),
+        [asyncFetcher]
+      ),
+      feed: useCallback(
+        async (args: { slug?: string; id?: string; sort?: string; range?: string; cursor?: string; limit?: number; includeRemoved?: boolean }) =>
+          getJson(`/api/v1/subspaces/feed${toQuery({ ...args, includeRemoved: args?.includeRemoved ? 1 : undefined })}`),
+        []
+      ),
+      // owner-only lifecycle: hand the subspace to an active member / delete
+      // it (posts survive as plain posts) after retyping the slug
+      transfer: useCallback(
+        async (body: { slug?: string; id?: string; userId?: string; username?: string }) =>
+          asyncFetcher.submit(body, { action: '/api/v1/subspaces/transfer', errorContext: 'transfer the subspace' }),
+        [asyncFetcher]
+      ),
+      delete: useCallback(
+        async (body: { slug?: string; id?: string; confirmSlug: string }) =>
+          asyncFetcher.submit(body, { action: '/api/v1/subspaces/delete', errorContext: 'delete the subspace' }),
+        [asyncFetcher]
+      )
+    },
     things: {
-      feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
+      export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
+        return withExportDeadline(async signal => {
+          await requireSharedContentCapability('api.things-export');
+          if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
+          signal.throwIfAborted();
+          return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
+        }, options?.signal);
+      }, [asyncFetcher]),
+      import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
+        await requireSharedContentCapability('api.things-import');
+        return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
+      }, [asyncFetcher]),
+      // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
+      // subspaces (the "🪐 My subspaces" chip); default all
+      feed: useCallback(async (args) => {
+        await requireSharedContentCapability('api.things-feed');
+        return getJson(`/api/v1/things/feed${toQuery(args)}`);
+      }, []),
       // the explore board — public trending posts; `anon: 1` keeps logged-out
       // requests edge-cacheable, mirroring feed
       trending: useCallback(async (args?: { anon?: 1 }) => getJson(`/api/v1/things/trending${toQuery(args)}`), []),
@@ -616,38 +1157,99 @@ export function useApi() {
       // only on the URL). `mode` is meaningless without conditions, so the GET
       // URL drops it to keep cache keys stable.
       search: useCallback(
-        async (args) => {
+        async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+          if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const { conditions, mode, ...rest } = args || {};
-          if (rest.anon && !conditions) {
-            return getJson(`/api/v1/things/search${toQuery(rest)}`);
+          await requireSharedContentCapability('api.things-search', options);
+          if (rest.anon && !conditions && rest.near === undefined) {
+            return getJson(`/api/v1/things/search${toQuery(rest)}`, { ...options, expectedDataPlane });
           }
-          return asyncFetcher.submit(args || {}, { action: '/api/v1/things/search' });
+          return asyncFetcher.submit(args || {}, { action: '/api/v1/things/search', ...options, expectedDataPlane });
         },
         [asyncFetcher]
       ),
-      userPosts: useCallback(async (args) => getJson(`/api/v1/things/user${toQuery(args)}`), []),
-			get: useCallback(async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/things${toQuery({ id: args?.id })}`, options), []),
+      userPosts: useCallback(async (args) => {
+        await requireSharedContentCapability('api.things-user');
+        await requireThingtimeCapability('api.attachment-content', '1.8.0');
+        return getJson(`/api/v1/things/user${toQuery(args)}`);
+      }, []),
+			// commentSort: 'top' | 'new' | 'old' re-orders the shipped comment page
+			// of the post projection (PostCard's Top / New / Old menu); omit for
+			// the default page. key: a hidden thing's secret link key (?key= on
+			// /post pages) — lets anyone holding the link view the unlisted thing.
+			// sharedRoot scopes a dependency read to an authorized composition.
+			get: useCallback(
+				async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+          if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+          await requireSharedContentCapability('api.things', options);
+          await requireSharedContentCapability('api.attachment-content', options);
+          return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
+        },
+				[getJson]
+			),
       list: useCallback(
-        async (args) =>
-          getJson(
+        async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+          if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+          await requireSharedContentCapability('api.things', options);
+          return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
+              commentProjection: args?.commentProjection ? true : undefined,
+              key: args?.key,
               thingtime: args?.thingtime,
               folder: args?.folder,
               cursor: args?.cursor,
               limit: args?.limit,
               // session-auth data browser: narrow own-things to ONE app's namespace
-              appId: args?.appId
-            })}`
-          ),
+              appId: args?.appId,
+              builderApp: args?.builderApp
+            })}`, { ...options, expectedDataPlane }
+          );
+        },
         []
       ),
+      archive: useCallback(async (args: { id: string }, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.things', '1.17.0');
+        return getJson(`/api/v1/things${toQuery({ id: args.id, archive: true })}`, options);
+      }, []),
       update: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (sharedContentWrite(args)) await requireSharedContentCapability('api.things-update', options);
+          if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+
+          if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
+          if (args?.crystal?.configurationVersion !== undefined && args?.crystal?.localRootId !== undefined) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
+          if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
+          if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
+          else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
+          if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
+          if (hasLiveSourceBinding(args?.crystal)) await requireThingtimeCapability('api.things', '1.37.0');
+          else if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
+          if (args?.crystal?.inputs?.some?.((input: { type?: string }) => input?.type === 'json')) await requireThingtimeCapability('api.things-update', '1.10.0');
+          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.40.0') await requireThingtimeCapability('api.things-update', '1.18.0');
+          else if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
+          else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
+          if (expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+          options?.signal?.throwIfAborted();
+          return asyncFetcher.submit(
             {
               id: args?.id,
+              ...(args?.thingtime !== undefined ? { thingtime: args.thingtime } : {}),
+              geo: args?.geo,
               crystal: args?.crystal,
+              ...(args?.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: args.expectedUpdatedAt } : {}),
+              ...(args?.replaceCrystal === true ? { replaceCrystal: true } : {}),
               acl: args?.acl,
               visibility: args?.visibility,
               tags: args?.tags,
@@ -660,14 +1262,20 @@ export function useApi() {
               // ready drafts to bind; removals are rejected server-side)
               ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
-            { action: '/api/v1/things', method: 'PATCH' }
-          ),
+            { action: '/api/v1/things', method: 'PATCH', expectedActor, expectedDataPlane, expectedApiOrigin: options?.expectedApiOrigin, signal: options?.signal }
+          );
+        },
         [asyncFetcher]
       ),
+      renameLibrary: useCallback(async (args: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => {
+        await requireThingtimeCapability('api.things', '1.27.0');
+        return asyncFetcher.submit(args, { action: '/api/v1/things', method: 'PATCH' });
+      }, [asyncFetcher]),
       // multi-select move/copy/delete/share — see /docs/api things-bulk
       bulk: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          await requireSharedContentCapability('api.things-bulk');
+          return asyncFetcher.submit(
             {
               op: args?.op,
               ids: args?.ids,
@@ -677,12 +1285,17 @@ export function useApi() {
               ...(args?.recursive ? { recursive: true } : {})
             },
             { action: '/api/v1/things/bulk' }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
       upsert: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          if (sharedContentWrite(args)) { await requireSharedContentCapability('api.things'); await requireSharedContentCapability('api.things-update'); }
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
+          return asyncFetcher.submit(
             {
               id: args?.id,
               thingtime: args?.thingtime,
@@ -694,15 +1307,36 @@ export function useApi() {
               tokenAcl: args?.tokenAcl
             },
             { action: '/api/v1/things', method: 'PUT' }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
-        async (args) => {
-					const payload = buildThingCreateRequestPayload(args);
+        async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (sharedContentWrite(args)) await requireSharedContentCapability('api.things', options);
+          if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
+          if (args?.thingtime?.includes('file-sync')) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
+          if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
+					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
+          else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
+          if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
+          if (hasLiveSourceBinding(args?.crystal)) await requireThingtimeCapability('api.things', '1.37.0');
+          else if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
+          if (args?.crystal?.inputs?.some?.((input: { type?: string }) => input?.type === 'json')) await requireThingtimeCapability('api.things', '1.33.0');
+          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.40.0') await requireThingtimeCapability('api.things', '1.49.0');
+          else if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
+          else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
+          if (expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+          const payload = buildThingCreateRequestPayload(args);
 					const attachmentIds = args?.attachmentIds;
-					const ret = asyncFetcher.submit(payload, { action: '/api/v1/things' });
+					const ret = withPostRequestDeadline(signal => asyncFetcher.submit(payload, { action: '/api/v1/things', errorContext: 'publish your post', signal, expectedActor, expectedDataPlane, expectedApiOrigin: options?.expectedApiOrigin }), 30_000, options?.signal);
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
 						ret.then(refreshRootData).catch(() => {});
 					}
@@ -711,28 +1345,45 @@ export function useApi() {
         [asyncFetcher]
       ),
       react: useCallback(
-        async (args) =>
-					asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react', errorContext: 'save your reaction' }),
+        async (args) => {
+          await requireThingtimeCapability('api.things-react', '1.2.1');
+          return asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react', errorContext: 'save your reaction' });
+        },
         [asyncFetcher]
       ),
       // toggle a private "add to my library" save on any visible thing
-      save: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' }), [asyncFetcher]),
+      save: useCallback(async (args) => {
+        await requireThingtimeCapability('api.things-save', '1.2.0');
+        return asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' });
+      }, [asyncFetcher]),
       // the viewer's Saved library — posts they bookmarked, newest-saved-first
       saved: useCallback(async (args?: { cursor?: string; limit?: number }) => getJson(`/api/v1/things/saved${toQuery(args)}`), []),
       // cast/move/remove the caller's vote on a visible poll thing
       vote: useCallback(
-        async (args: { id: string; optionIndex: number }) =>
-          asyncFetcher.submit({ id: args?.id, optionIndex: args?.optionIndex }, { action: '/api/v1/things/vote', errorContext: 'save your vote' }),
+        async (args: { id: string; optionIndex: number }) => {
+          await requireThingtimeCapability('api.things-vote', '1.2.0');
+          return asyncFetcher.submit({ id: args?.id, optionIndex: args?.optionIndex }, { action: '/api/v1/things/vote', errorContext: 'save your vote' });
+        },
+        [asyncFetcher]
+      ),
+      // up/down vote (the separate focused reaction kind): 'up' | 'down' casts
+      // or flips, the same direction again clears, null clears
+      updown: useCallback(
+        async (args: { id: string; direction: 'up' | 'down' | null }) => {
+          await requireThingtimeCapability('api.things-updown', '1.2.0');
+          return asyncFetcher.submit({ id: args?.id, direction: args?.direction ?? null }, { action: '/api/v1/things/updown', errorContext: 'save your vote' });
+        },
         [asyncFetcher]
       ),
       comment: useCallback(
         // simple text comments send { id, text }; rich comments add
 				// type/images/listing/thing/mediaLayout/tags/attachments — comments share the post schema
         async (args) => {
+          await requireSharedContentCapability('api.things-comment');
 					const attachmentIds = args?.attachmentIds;
 					const ret = asyncFetcher.submit(
 						buildThingCommentRequestPayload(args),
-						{ action: '/api/v1/things/comment' }
+						{ action: '/api/v1/things/comment', ...(args?.characterId ? { characterId: args.characterId, expectedActor: args.characterId } : {}) }
 					);
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
 						ret.then(refreshRootData).catch(() => {});
@@ -742,18 +1393,21 @@ export function useApi() {
         [asyncFetcher]
       ),
       share: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          await requireSharedContentCapability('api.things-share');
+          return asyncFetcher.submit(
             // tags: the quote caption's harvested inline #hashtags — merged
             // server-side with the tags carried from the original post
             { id: args?.id, text: args?.text, tags: args?.tags, acl: args?.acl, visibility: args?.visibility },
             { action: '/api/v1/things/share' }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
 			remove: useCallback(
 				async (args) => {
-					const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things', method: 'DELETE' });
+					await requireThingtimeCapability('api.things', '1.12.0');
+					const ret = asyncFetcher.submit({ id: args?.id, expectedUpdatedAt: args?.expectedUpdatedAt }, { action: '/api/v1/things', method: 'DELETE' });
 					ret.then(refreshRootData).catch(() => {});
 					return ret;
 				},
@@ -765,6 +1419,80 @@ export function useApi() {
       grants: useCallback(async () => getJson('/api/v1/oauth/grants'), []),
       revokeGrant: useCallback(
         async (args) => asyncFetcher.submit({ clientId: args?.clientId }, { action: '/api/v1/oauth/grants/revoke' }),
+        [asyncFetcher]
+      )
+    },
+    // third-party app connections (Reddit, YouTube, Mastodon, …) — link
+    // external accounts, browse their feeds, manage AI feed filters
+    connections: {
+      providers: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-providers', '2.0.0'); return getJson('/api/v1/connections/providers', options); }, [getJson]),
+      list: useCallback(async (options?: ThingRequestOptions, includeNamed = false) => {
+        await requireThingtimeCapability('api.connections', includeNamed ? '2.1.0' : '2.0.0');
+        return getJson('/api/v1/connections' + (includeNamed ? '?includeNamed=1' : ''), options);
+      }, [getJson]),
+      connect: useCallback(
+        async (args) => { await requireThingtimeCapability('api.connections', args?.named ? '2.1.0' : '2.0.0'); return asyncFetcher.submit({
+          provider: args?.provider, fields: args?.fields, named: args?.named, expectedOwnerId: args?.expectedOwnerId
+        }, { action: '/api/v1/connections', expectedApiOrigin: args?.expectedApiOrigin }); },
+        [asyncFetcher]
+      ),
+      unlink: useCallback(async (args) => {
+        await requireThingtimeCapability('api.connections-unlink', args?.named ? '2.1.0' : '2.0.0');
+        return asyncFetcher.submit({ id: args?.id, expectedOwnerId: args?.expectedOwnerId },
+          { action: '/api/v1/connections/unlink', expectedApiOrigin: args?.expectedApiOrigin });
+      }, [asyncFetcher]),
+      useNamed: useCallback(async (args) => {
+        await requireThingtimeCapability('api.connections-named', '1.0.0');
+        return asyncFetcher.submit({ id: args.id, operation: args.operation, expectedOwnerId: args.expectedOwnerId },
+          { action: '/api/v1/connections/named', expectedActor: args.expectedOwnerId, expectedApiOrigin: args.expectedApiOrigin });
+      }, [asyncFetcher]),
+      // SSO account linking: begin returns the provider's authorize URL — send
+      // the browser there; the callback lands back on /connections
+      oauthBegin: useCallback(
+        async (args) => {
+          await requireThingtimeCapability('api.connections-oauth-begin', args?.named ? '2.1.0' : '2.0.0');
+          if (args?.named) await requireThingtimeCapability('api.connections-oauth-callback', '2.1.0');
+          return asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId, named: args?.named },
+            { action: '/api/v1/connections/oauth/begin', expectedApiOrigin: args?.expectedApiOrigin });
+        },
+        [asyncFetcher]
+      ),
+      // the Thingtime-managed virtual YouTube subscription list
+      youtubeSearch: useCallback(async (args) => getJson(`/api/v1/connections/youtube/search${toQuery({ q: args?.q })}`), []),
+      youtubeChannels: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { ...(args && 'add' in args ? { add: args.add } : {}), ...(args?.remove ? { remove: args.remove } : {}) },
+            { action: '/api/v1/connections/youtube/channels' }
+          ),
+        [asyncFetcher]
+      ),
+      feed: useCallback(
+        async (args) => {
+          await requireThingtimeCapability('api.connections-feed', '2.0.0');
+          return getJson(
+            `/api/v1/connections/feed${toQuery({
+              connection: args?.connection,
+              cursor: args?.cursor,
+              limit: args?.limit,
+              sync: args?.sync,
+              deepen: args?.deepen
+            })}`
+          ); },
+        []
+      ),
+      filters: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-filters', '2.0.0'); return getJson('/api/v1/connections/filters', options); }, [getJson]),
+      saveFilter: useCallback(
+        async (args) => {
+          await requireThingtimeCapability('api.connections-filters', '2.0.0');
+          return asyncFetcher.submit(
+            { id: args?.id, name: args?.name, prompt: args?.prompt, action: args?.action, enabled: args?.enabled },
+            { action: '/api/v1/connections/filters' }
+          ); },
+        [asyncFetcher]
+      ),
+      removeFilter: useCallback(
+        async (args) => { await requireThingtimeCapability('api.connections-filters', '2.0.0'); return asyncFetcher.submit({ id: args?.id, remove: true }, { action: '/api/v1/connections/filters' }); },
         [asyncFetcher]
       )
     },
@@ -801,6 +1529,31 @@ export function useApi() {
         [asyncFetcher]
       )
     },
+    groups: {
+      // audience groups (custom visibility) + the picker's prefill sources
+      list: useCallback(async () => getJson('/api/v1/groups'), []),
+      create: useCallback(
+        async (args) => asyncFetcher.submit({ name: args?.name, memberIds: args?.memberIds }, { action: '/api/v1/groups' }),
+        [asyncFetcher]
+      ),
+      update: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            {
+              id: args?.id,
+              ...(args && 'name' in args ? { name: args.name } : {}),
+              ...(args && 'memberIds' in args ? { memberIds: args.memberIds } : {})
+            },
+            { action: '/api/v1/groups', method: 'PATCH' }
+          ),
+        [asyncFetcher]
+      ),
+      remove: useCallback(
+        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/groups', method: 'DELETE' }),
+        [asyncFetcher]
+      ),
+      audienceSources: useCallback(async () => getJson('/api/v1/groups/audience-sources'), [])
+    },
     tokens: {
       // personal access tokens (Settings → Token minter) — the mint response
       // carries the token string exactly once
@@ -814,7 +1567,8 @@ export function useApi() {
               expiresInMs: args?.expiresInMs ?? null,
               maxUses: args?.maxUses ?? null,
               onlyCreatedThings: args?.onlyCreatedThings === true,
-              visibility: args?.visibility ?? 'all'
+              visibility: args?.visibility ?? 'all',
+              allowGet: args?.allowGet === true
             },
             { action: '/api/v1/tokens' }
           ),
@@ -823,6 +1577,10 @@ export function useApi() {
       revoke: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/tokens/revoke' }), [asyncFetcher])
     },
     algorithms: {
+      search: useCallback(async (args = {}) => {
+        await requireThingtimeCapability('api.algorithms-search', '1.0.0');
+        return getJson(`/api/v1/algorithms/search${toQuery(args)}`);
+      }, []),
       list: useCallback(async () => getJson('/api/v1/algorithms'), []),
       // share-link preview (identity + training size only, never weights)
       getShared: useCallback(
@@ -831,14 +1589,17 @@ export function useApi() {
       ),
       create: useCallback(
         async (args) => {
-          const { name, emoji, branchFrom, events } = args;
-          return asyncFetcher.submit({ name, emoji, branchFrom, events }, { action: '/api/v1/algorithms' });
+          const { name, emoji, branchFrom, events, description } = args;
+          if (description !== undefined) await requireThingtimeCapability('api.algorithms', '1.1.0');
+          return asyncFetcher.submit({ name, emoji, branchFrom, events, description }, { action: '/api/v1/algorithms' });
         },
         [asyncFetcher]
       ),
       update: useCallback(
-        async (args) =>
-          asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared }, { action: '/api/v1/algorithms/update' }),
+        async (args) => {
+          if (args?.listed !== undefined || args?.description !== undefined) await requireThingtimeCapability('api.algorithms-update', '1.1.0');
+          return asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared, listed: args?.listed, description: args?.description }, { action: '/api/v1/algorithms/update' });
+        },
         [asyncFetcher]
       ),
       remove: useCallback(
@@ -853,6 +1614,7 @@ export function useApi() {
       ),
       setActive: useCallback(
         async (args) => {
+          if (isDefaultAlgorithm(args?.algorithmId)) await requireThingtimeCapability('api.algorithms-active', '1.1.0');
           const ret = asyncFetcher.submit({ algorithmId: args?.algorithmId ?? null }, { action: '/api/v1/algorithms/active' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
@@ -883,7 +1645,10 @@ export function useApi() {
       )
     },
     notifications: {
-      list: useCallback(async (args?: Record<string, unknown>) => getJson(`/api/v1/notifications${toQuery(args)}`), []),
+      list: useCallback(async (args?: Record<string, unknown>) => {
+        if (args?.history) await requireThingtimeCapability('api.notifications-list', '1.4.0');
+        return getJson(`/api/v1/notifications${toQuery(args)}`);
+      }, []),
       markRead: useCallback(
 				async (args) => asyncFetcher.submit(args?.all ? { all: true } : { ids: args?.ids }, { action: '/api/v1/notifications/read' }),
         [asyncFetcher]
@@ -909,7 +1674,8 @@ export function useApi() {
 						'bannerUrl',
 						'avatarAttachmentId',
 						'bannerAttachmentId',
-						'birthday'
+						'birthday',
+						'hideEmailOnProfile'
 					] as const) {
 						if (Object.prototype.hasOwnProperty.call(args || {}, key)) body[key] = args?.[key];
 					}
@@ -934,6 +1700,7 @@ export function useApi() {
       save: useCallback(
         async (args) => {
           const { id, name, theme, visibility } = args;
+          await requireThingtimeCapability('api.themes', THEME_CAPABILITY_REQUIREMENTS['api.themes']);
           return asyncFetcher.submit({ id, name, theme, visibility }, { action: '/api/v1/themes' });
         },
         [asyncFetcher]
@@ -966,7 +1733,18 @@ export function useApi() {
       // resolution to actions the viewer owns — execute.ts ownedOnly), and an
       // inline list silently dropped it, disarming the delegated ttAction
       // path in every browser while the API-level battery stayed green.
-      run: useCallback(async (args) => asyncFetcher.submit(buildActionRunBody(args), { action: '/api/v1/actions/run' }), [asyncFetcher]),
+      run: useCallback(async (args) => {
+        const actor = actionActor.current;
+        const expectedPlane = planeRef.current;
+        const origin = window.location.origin;
+        await requireSharedContentCapability('api.actions-run', { expectedApiOrigin: origin });
+        if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
+        const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane });
+        const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery));
+        if (actionActor.current !== actor) throw new Error('The account changed during the Action request. Check History in the original account before running it again.');
+        if (planeRef.current !== expectedPlane) throw new Error('The database changed during the Action request. Check History in the original database before running it again.');
+        return finishBrowserAction(retained, createBrowserActionHost(() => actionActor.current));
+      }, [asyncFetcher]),
       // your own run records — { action, limit }
       runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [])
       // creation rides the unified path: things.create({ thingtime: ['action'], crystal })

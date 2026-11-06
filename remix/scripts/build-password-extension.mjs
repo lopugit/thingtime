@@ -1,0 +1,16 @@
+import { readdir, readFile, mkdir, writeFile } from 'node:fs/promises';
+import { build } from 'vite';
+import { fileURLToPath } from 'node:url';
+import { ZipWriter, Uint8ArrayWriter, Uint8ArrayReader } from '@zip.js/zip.js';
+const source = new URL('../../browser-extension/', import.meta.url);
+const output = new URL('../public/downloads/thingtime-passwords-extension.zip', import.meta.url);
+const archive = new ZipWriter(new Uint8ArrayWriter());
+const files = (await readdir(source)).filter(name => /\.(?:js|mjs|html|css|png)$/.test(name) || name === 'manifest.json' || name === 'README.md').sort();
+for (const name of files) await archive.add(name, new Uint8ArrayReader(await readFile(new URL(name, source))), { lastModDate: new Date('2026-01-01T00:00:00Z') });
+const bundled = await build({ configFile: false, logLevel: 'silent', build: { write: false, lib: { entry: fileURLToPath(new URL('../app/passwords/qr.client.ts', import.meta.url)), formats: ['es'] } } });
+const qr = (Array.isArray(bundled) ? bundled.flatMap(item => item.output) : bundled.output).find(item => item.type === 'chunk');
+if (!qr) throw new Error('Local QR decoder bundle is missing.');
+await archive.add('qr.js', new Uint8ArrayReader(new TextEncoder().encode(qr.code)), { lastModDate: new Date('2026-01-01T00:00:00Z') });
+await mkdir(new URL('.', output), { recursive: true });
+await writeFile(output, await archive.close());
+console.log(`Browser extension packaged (${files.length} files): ${fileURLToPath(output)}`);

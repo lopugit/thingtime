@@ -2,9 +2,38 @@ import Foundation
 
 @objc public protocol ThingtimeNodeXPCProtocol {
     func request(_ data: Data, withReply reply: @escaping (Data) -> Void)
+    func stream(_ data: Data, sink: ThingtimeNodeByteSink, withReply reply: @escaping (Data) -> Void)
+    func stage(_ data: Data, source: ThingtimeNodeByteSource, withReply reply: @escaping (Data) -> Void)
+    func bulk(_ data: Data, callback: ThingtimeNodeBatchCallback, withReply reply: @escaping (Data) -> Void)
+}
+
+@objc public protocol ThingtimeNodeBatchCallback {
+    /// Fixed indexed upload callbacks only. Cookies and signed URLs never cross
+    /// this boundary; each reply is bounded and owned by this one operation.
+    func exchange(_ frame: Data, withReply reply: @escaping (Data) -> Void)
+}
+
+@objc public protocol ThingtimeNodeByteSink {
+    /// At most one 64 KiB frame may be outstanding. A false/missing ack stops
+    /// the read; the normal final response alone establishes success.
+    func receive(_ data: Data, withReply reply: @escaping (Bool) -> Void)
+}
+
+@objc public protocol ThingtimeNodeByteSource {
+    func read(_ offset: Int64, length: Int, withReply reply: @escaping (Data) -> Void)
 }
 
 public enum ThingtimeNodeXPC {
+    public static func interface() -> NSXPCInterface {
+        let interface = NSXPCInterface(with: ThingtimeNodeXPCProtocol.self)
+        interface.setInterface(NSXPCInterface(with: ThingtimeNodeByteSink.self),
+            for: #selector(ThingtimeNodeXPCProtocol.stream(_:sink:withReply:)), argumentIndex: 1, ofReply: false)
+        interface.setInterface(NSXPCInterface(with: ThingtimeNodeByteSource.self),
+            for: #selector(ThingtimeNodeXPCProtocol.stage(_:source:withReply:)), argumentIndex: 1, ofReply: false)
+        interface.setInterface(NSXPCInterface(with: ThingtimeNodeBatchCallback.self),
+            for: #selector(ThingtimeNodeXPCProtocol.bulk(_:callback:withReply:)), argumentIndex: 1, ofReply: false)
+        return interface
+    }
     public static let machServiceName = "com.thingtime.desktop.node.xpc"
     public static let maximumMessageBytes = 1_048_576
 }
@@ -13,6 +42,7 @@ public enum ThingtimeNodeXPCRequestAccess: Equatable, Sendable {
     case onboardingRead
     case pairingMutation
     case permissionMutation
+    case folderSync
     case forbidden
 }
 
@@ -23,6 +53,7 @@ public enum ThingtimeNodeXPCRequestPolicy {
 
     private static let onboardingReads: Set<String> = [
         "node.status",
+        "telemetry.battery",
         "permissions.preflight",
         "pairing.status",
         "pairing.begin"
@@ -35,6 +66,7 @@ public enum ThingtimeNodeXPCRequestPolicy {
     private static let permissionMutations: Set<String> = ["permissions.request"]
 
     public static func access(for method: String) -> ThingtimeNodeXPCRequestAccess {
+        if method == "folder-sync.request" { return .folderSync }
         if onboardingReads.contains(method) { return .onboardingRead }
         if pairingMutations.contains(method) { return .pairingMutation }
         if permissionMutations.contains(method) { return .permissionMutation }
@@ -53,6 +85,7 @@ public enum ThingtimeNodeXPCRequestPolicy {
 	}
 
 	public static func bridgeResponseTimeoutSeconds(for method: String) -> TimeInterval {
+		if method == "folder-sync.request" { return 5 * 60 }
 		let confirmation = confirmationTimeoutSeconds(for: method)
 		if confirmation > 0 { return confirmation + bridgeResponseGraceSeconds }
 		return access(for: method) == .onboardingRead ? 15 : bridgeResponseGraceSeconds

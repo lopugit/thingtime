@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { patVisibilityBlocksAcl, patVisibilityMatchClause, patVisibilityOf, viewerOf } from './things.ts';
+import { canView, profilePostsAudienceQuery, patVisibilityBlocksAcl, patVisibilityMatchClause, patVisibilityOf, viewerOf } from './things.ts';
 
 // The token visibility fence (Settings → Token minter: public-only /
 // private-only personal access tokens) is decided by ONE expression,
@@ -141,4 +141,44 @@ test('the coarse DB clause excludes the out-of-audience half', () => {
       assert.equal(matches(clause, doc), false, `${mode} clause must not count ${name}`);
     }
   }
+});
+
+
+// A small Mongo matcher exercises the real profile candidate query and exact
+// ACL decision together, including mixed grants, revocation and token fences.
+const audienceMatches = (query: any, doc: any): boolean => Object.entries(query).every(([key, value]: [string, any]) => {
+  if (key === '$and') return value.every((part: any) => audienceMatches(part, doc));
+  if (key === '$or') return value.some((part: any) => audienceMatches(part, doc));
+  if (key === '$nor') return !value.some((part: any) => audienceMatches(part, doc));
+  const actual = Array.isArray(doc[key]) ? doc[key] : [doc[key]];
+  if (value && typeof value === 'object') {
+    if ('$in' in value) return actual.some((entry: any) => value.$in.includes(entry));
+    if ('$nin' in value) return !actual.some((entry: any) => value.$nin.includes(entry));
+    if ('$exists' in value) return (doc[key] !== undefined) === value.$exists;
+  }
+  return actual.includes(value);
+});
+
+test('profile candidates include permitted people and groups in mixed audiences without publishing link-only posts', () => {
+  const viewer = { id: 'reader', username: 'reader', friendIds: new Set(['author']), groupIds: new Set(['team']) };
+  const cases: [string[], boolean][] = [
+    [['tt:all'], true], [['tt:user'], false], [['tt:userFriends'], true],
+    [['tt:custom', 'tt:user/reader'], true], [['tt:custom', 'tt:group/team/comment'], true],
+    [['tt:custom', 'tt:hidden', 'tt:user/reader/write'], true],
+    [['tt:custom', 'tt:all', 'tt:group/team'], true],
+    [['tt:hidden'], false], [['tt:custom', 'tt:group/other'], false],
+    [['tt:custom', 'tt:all', '-tt:user/reader'], false]
+  ];
+  for (const [acl, expected] of cases) {
+    const doc = { shareId: 'post', ownerId: 'author', thingtime: ['post'], acl } as any;
+    const admitted = audienceMatches(profilePostsAudienceQuery(viewer, 'author'), doc) && canView(doc, viewer);
+    assert.equal(admitted, expected, acl.join(', '));
+    assert.equal(audienceMatches(profilePostsAudienceQuery(viewer, 'other-author'), doc), false);
+  }
+  const revoked = { ...viewer, groupIds: new Set<string>() };
+  const groupDoc = { ownerId: 'author', thingtime: ['post'], acl: ['tt:custom', 'tt:group/team'] } as any;
+  assert.equal(audienceMatches(profilePostsAudienceQuery(revoked, 'author'), groupDoc), false);
+  const publicToken = { ...viewer, pat: { tokenId: 'token', onlyCreatedThings: false, visibility: 'public' as const } };
+  assert.equal(audienceMatches(profilePostsAudienceQuery(publicToken, 'author'), groupDoc), false);
+  assert.equal(audienceMatches(profilePostsAudienceQuery(null, 'author'), groupDoc), false);
 });

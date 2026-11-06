@@ -1,3 +1,5 @@
+import { PAT_SCOPE_CATALOG } from '../auth/patScopes';
+
 // Permission scopes for "Login with Thingtime" grants — path-based and
 // extensible. A scope is a dot path over the user's data ('profile',
 // 'profile.avatar', 'email', …); granting a path covers every descendant
@@ -34,6 +36,34 @@ export type AppScopeDescriptor = {
 // permission surface = adding an entry here plus (for fields) a gate where
 // the data is served; nothing else needs to change.
 export const APP_SCOPE_CATALOG: AppScopeDescriptor[] = [
+  // Account-wide access is a separate namespace from the legacy `things`
+  // picker. Existing grants never gain it through ancestor matching.
+  ...PAT_SCOPE_CATALOG.map((scope): AppScopeDescriptor => ({
+    id: `account.${scope.id}`,
+    title: scope.id === 'things' ? 'All Things — full access'
+      : scope.id === 'things.create' ? 'Create Things'
+        : `${scope.title} Things`,
+    description: scope.id === 'things'
+      ? 'Read, create, update, delete, comment, react, save, vote, and share Things in your account, including private Things.'
+      : scope.description + ' Applies to your account, beyond individually selected Things.',
+    kind: 'capability'
+  })),
+  {
+    id: 'actions.run', title: 'Run actions', kind: 'capability', exact: true,
+    description: 'Run actions as you, including their declared writes, external calls, and usage costs.'
+  },
+  {
+    id: 'lopu.chat', title: 'Chat with Lopu', kind: 'capability', exact: true,
+    description: 'Read, create, edit, and delete Lopu conversations and send messages using your account’s AI allowance.'
+  },
+  {
+    id: 'lopu.voice', title: 'Lopu voice and transcription', kind: 'capability', exact: true,
+    description: 'Start voice sessions and send speech for transcription or replies using your AI allowance.'
+  },
+  {
+    id: 'lopu.recordings', title: 'Save and process recordings', kind: 'capability', exact: true,
+    description: 'Read recordings, manage recording automation and todos, and request processing. Uploading audio also requires Create Things.'
+  },
   {
     id: 'profile',
     title: 'Full public profile',

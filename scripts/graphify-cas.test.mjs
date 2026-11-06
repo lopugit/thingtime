@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { execFileSync, spawn, spawnSync } from "node:child_process"
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -8,6 +9,7 @@ import {
   readlinkSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
@@ -18,10 +20,12 @@ import test from "node:test"
 import {
   activateSnapshot,
   computeSourceFingerprint,
+  copyPortableFiles,
   finalizeSnapshot,
   hydrateSemanticCache,
   ingestSemanticCache,
   listSnapshots,
+  markSnapshotReadOnly,
   pruneSnapshots,
   selectSnapshot,
   snapshotRetentionLimit,
@@ -123,6 +127,25 @@ test("immutable output variants coexist and richer valid output wins", () => {
   }
 })
 
+test("a Graphify query stamp does not invalidate the immutable baseline", () => {
+  const root = fixture()
+  try {
+    const current = computeSourceFingerprint(root)
+    const snapshot = finalizeSnapshot(root, writeOutput(root, "queried", 3), {
+      ...current,
+      version: "test",
+    })
+    const cache = path.join(snapshot.path, "cache")
+    mkdirSync(cache)
+    writeFileSync(path.join(cache, "last_query_stamp"), "1")
+    assert.equal(selectSnapshot(root, current.sourceFingerprint)?.path, snapshot.path)
+    writeFileSync(path.join(cache, "unexpected"), "unrelated")
+    assert.equal(selectSnapshot(root, current.sourceFingerprint), null)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test("bounded retention keeps the active snapshot and prunes superseded trees", () => {
   const root = fixture()
   try {
@@ -146,6 +169,8 @@ test("bounded retention keeps the active snapshot and prunes superseded trees", 
       version: "graphify test",
     })
 
+    git(root, ["add", "--", path.dirname(first.path), path.dirname(second.path), path.dirname(third.path)])
+    git(root, ["commit", "-qm", "save portable snapshots"])
     const result = pruneSnapshots(root, second, 2)
     assert.equal(result.retention, 2)
     assert.equal(result.retained.length, 2)
@@ -159,6 +184,51 @@ test("bounded retention keeps the active snapshot and prunes superseded trees", 
       false,
       "empty source-fingerprint directories are removed",
     )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("ensure and prune preserve local snapshots outside the committed retention bound", () => {
+  const root = fixture()
+  try {
+    const make = (name, nodes) => finalizeSnapshot(root, writeOutput(root, name, nodes), {
+      ...computeSourceFingerprint(root),
+      version: "graphify test",
+    })
+    const clean = make("clean", 1)
+    const dirty = make("dirty", 2)
+    const stagedEdit = make("staged edit", 3)
+    git(root, ["add", "--", clean.path, dirty.path, stagedEdit.path])
+    git(root, ["commit", "-qm", "commit three snapshots"])
+
+    const editedReport = (snapshot) => path.join(snapshot.path, "GRAPH_REPORT.md")
+    chmodSync(editedReport(dirty), 0o644)
+    writeFileSync(editedReport(dirty), "# local revision\n")
+    const original = readFileSync(editedReport(stagedEdit))
+    chmodSync(editedReport(stagedEdit), 0o644)
+    writeFileSync(editedReport(stagedEdit), "# staged revision\n")
+    git(root, ["add", "--", editedReport(stagedEdit)])
+    writeFileSync(editedReport(stagedEdit), original)
+
+    const untracked = make("untracked", 4)
+    const stagedNew = make("staged new", 5)
+    git(root, ["add", "--", stagedNew.path])
+    writeFileSync(path.join(root, "source.txt"), "active\n")
+    const active = make("active", 6)
+    const local = [dirty, stagedEdit, untracked, stagedNew, active]
+    const invoke = (command) => execFileSync(process.execPath, [
+      new URL("./graphify-cas.mjs", import.meta.url).pathname, command,
+    ], { cwd: root, encoding: "utf8" })
+
+    invoke("ensure")
+    assert.equal(existsSync(clean.path), false)
+    assert.deepEqual(new Set(listSnapshots(root).map(({ path }) => path)), new Set(local.map(({ path }) => path)))
+    assert.equal(readFileSync(editedReport(dirty), "utf8"), "# local revision\n")
+
+    invoke("prune")
+    assert.deepEqual(new Set(listSnapshots(root).map(({ path }) => path)), new Set(local.map(({ path }) => path)))
+    assert.equal(git(root, ["diff", "--cached", "--name-only", "--", stagedEdit.path]), path.relative(root, editedReport(stagedEdit)))
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
@@ -237,6 +307,8 @@ test("an existing artifact path rejects changed portable bytes", () => {
       ...fingerprint,
       version: "graphify test",
     })
+    // snapshot files are read-only on disk; simulate an out-of-band corruption
+    chmodSync(path.join(snapshot.path, "graph.json"), 0o644)
     writeFileSync(
       path.join(snapshot.path, "graph.json"),
       '{"directed":false,"multigraph":false,"graph":{},"nodes":[],"links":[]}\n',
@@ -546,5 +618,286 @@ test("a merge unions branch snapshots and pruning restores the retention bound",
     )
   } finally {
     rmSync(root, { recursive: true, force: true })
+  }
+})
+
+// Exercise the filesystem protocol through independent processes. These are
+// barriers around real syscalls, not mocks of the lock's liveness decisions.
+const lockModuleUrl = new URL("./graphify-cas.mjs", import.meta.url).href
+
+function lockWorker(root, body) {
+  const code = `
+    import fs from "node:fs";
+    import path from "node:path";
+    import { syncBuiltinESMExports } from "node:module";
+    const root = ${JSON.stringify(root)};
+    const lock = path.join(root, "graphify-out", ".locks", "writer");
+    const signal = new Int32Array(new SharedArrayBuffer(4));
+    const mark = name => fs.writeFileSync(path.join(root, name), "1");
+    function wait(name) {
+      const deadline = Date.now() + 10000;
+      while (!fs.existsSync(path.join(root, name))) {
+        if (Date.now() >= deadline) throw new Error("barrier timeout: " + name);
+        Atomics.wait(signal, 0, 0, 5);
+      }
+    }
+    ${body}
+  `
+  const child = spawn(process.execPath, ["--input-type=module", "-e", code], {
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, GRAPHIFY_CAS_LOCK_TIMEOUT_MS: "8000" },
+  })
+  let stderr = ""
+  child.stderr.on("data", (data) => { stderr += data })
+  const done = new Promise((resolve, reject) => {
+    child.once("error", reject)
+    child.once("close", (code, signal) => resolve({ code, signal, stderr }))
+  })
+  return { child, done }
+}
+
+async function waitForLockMarker(root, name) {
+  const deadline = Date.now() + 8000
+  while (!existsSync(path.join(root, name))) {
+    if (Date.now() >= deadline) throw new Error(`Missing lock barrier ${name}`)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+}
+
+async function stopLockWorkers(workers) {
+  for (const { child } of workers) {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL")
+  }
+  await Promise.all(workers.map(({ done }) => done))
+}
+
+for (const staleOwnerFile of ["owner.json", "owner-00000000-0000-4000-8000-000000000000.json"]) {
+test(`a delayed stale-lock reaper preserves a replacement owner (${staleOwnerFile})`, { timeout: 15000 }, async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "graphify-lock-race-"))
+  const lock = path.join(root, "graphify-out", ".locks", "writer")
+  mkdirSync(lock, { recursive: true })
+  writeFileSync(path.join(lock, staleOwnerFile), JSON.stringify({ pid: 2147483647 }))
+  const workers = []
+  try {
+    const reaper = lockWorker(root, `
+      let paused = false, cleaned = false;
+      const remove = fs.rmSync, unlink = fs.unlinkSync;
+      function intercept(fn, target, args) {
+        if (!paused && (target === lock || target === path.join(lock, ${JSON.stringify(staleOwnerFile)}))) {
+          paused = true; mark("stale-observed"); wait("resume-reaper");
+          try { return fn(target, ...args); }
+          finally { cleaned = true; }
+        }
+        return fn(target, ...args);
+      }
+      fs.rmSync = (target, ...args) => intercept(remove, target, args);
+      fs.unlinkSync = (target, ...args) => intercept(unlink, target, args);
+      for (const method of ["mkdirSync", "renameSync"]) {
+        const original = fs[method];
+        fs[method] = (...args) => {
+          if (!cleaned || (method === "mkdirSync" ? args[0] : args[1]) !== lock) return original(...args);
+          let acquired = false;
+          try { const result = original(...args); acquired = true; return result; }
+          finally { fs.writeFileSync(path.join(root, "post-reap-attempt.json"), JSON.stringify({ acquired })); }
+        };
+      }
+      syncBuiltinESMExports();
+      const { withRepositoryLock } = await import(${JSON.stringify(lockModuleUrl)});
+      withRepositoryLock(root, () => mark("reaper-entered"));
+    `)
+    workers.push(reaper)
+    await waitForLockMarker(root, "stale-observed")
+    // A different stale-lock observer retires the old directory first.
+    rmSync(lock, { recursive: true })
+    const owner = lockWorker(root, `
+      const { withRepositoryLock } = await import(${JSON.stringify(lockModuleUrl)});
+      withRepositoryLock(root, () => { mark("owner-entered"); wait("release-owner"); });
+    `)
+    workers.push(owner)
+    await waitForLockMarker(root, "owner-entered")
+    const ownership = readdirSync(lock)
+    writeFileSync(path.join(root, "resume-reaper"), "1")
+    await waitForLockMarker(root, "post-reap-attempt.json")
+    assert.equal(JSON.parse(readFileSync(path.join(root, "post-reap-attempt.json"))).acquired, false)
+    assert.deepEqual(readdirSync(lock), ownership)
+    assert.equal(existsSync(path.join(root, "reaper-entered")), false)
+    writeFileSync(path.join(root, "release-owner"), "1")
+    for (const worker of workers) {
+      const result = await worker.done
+      assert.equal(result.code, 0, result.stderr)
+    }
+    assert.equal(existsSync(lock), false)
+  } finally {
+    await stopLockWorkers(workers)
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+}
+
+test("concurrent contenders never overlap their critical sections", { timeout: 15000 }, async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "graphify-lock-contenders-"))
+  writeFileSync(path.join(root, "count"), "0")
+  const workers = Array.from({ length: 6 }, () => lockWorker(root, `
+    const { withRepositoryLock } = await import(${JSON.stringify(lockModuleUrl)});
+    wait("start");
+    for (let i = 0; i < 5; i++) withRepositoryLock(root, () => {
+      const guard = path.join(root, "critical-section");
+      fs.writeFileSync(guard, String(process.pid), { flag: "wx" });
+      const count = Number(fs.readFileSync(path.join(root, "count"), "utf8"));
+      Atomics.wait(signal, 0, 0, 2);
+      fs.writeFileSync(path.join(root, "count"), String(count + 1));
+      fs.unlinkSync(guard);
+    });
+  `))
+  try {
+    writeFileSync(path.join(root, "start"), "1")
+    for (const worker of workers) {
+      const result = await worker.done
+      assert.equal(result.code, 0, result.stderr)
+    }
+    assert.equal(readFileSync(path.join(root, "count"), "utf8"), "30")
+    assert.deepEqual(readdirSync(path.join(root, "graphify-out", ".locks")), [])
+  } finally {
+    await stopLockWorkers(workers)
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("an exited writer is reclaimed and callback failures release ownership", { timeout: 15000 }, async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "graphify-lock-exit-"))
+  const worker = lockWorker(root, `
+    const { withRepositoryLock } = await import(${JSON.stringify(lockModuleUrl)});
+    withRepositoryLock(root, () => { mark("entered"); wait("never"); });
+  `)
+  try {
+    await waitForLockMarker(root, "entered")
+    worker.child.kill("SIGKILL")
+    await worker.done
+    assert.throws(() => withRepositoryLock(root, () => { throw new Error("callback failure") }), /callback failure/)
+    assert.equal(withRepositoryLock(root, () => "recovered"), "recovered")
+    assert.deepEqual(readdirSync(path.join(root, "graphify-out", ".locks")), [])
+  } finally {
+    await stopLockWorkers([worker])
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("unknown ownership and a live legacy writer fail closed with a bounded timeout", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "graphify-lock-timeout-"))
+  const lock = path.join(root, "graphify-out", ".locks", "writer")
+  const previous = process.env.GRAPHIFY_CAS_LOCK_TIMEOUT_MS
+  process.env.GRAPHIFY_CAS_LOCK_TIMEOUT_MS = "0"
+  try {
+    for (const record of ["invalid json", JSON.stringify({ pid: process.pid })]) {
+      mkdirSync(lock, { recursive: true })
+      writeFileSync(path.join(lock, "owner.json"), record)
+      assert.throws(() => withRepositoryLock(root, () => assert.fail("must not enter")), /Timed out/)
+      assert.equal(readFileSync(path.join(lock, "owner.json"), "utf8"), record)
+      assert.deepEqual(readdirSync(path.dirname(lock)), ["writer"])
+    }
+    for (const value of ["NaN", "Infinity", "-1"]) {
+      process.env.GRAPHIFY_CAS_LOCK_TIMEOUT_MS = value
+      assert.throws(() => withRepositoryLock(root, () => {}), /finite non-negative/)
+    }
+  } finally {
+    if (previous === undefined) delete process.env.GRAPHIFY_CAS_LOCK_TIMEOUT_MS
+    else process.env.GRAPHIFY_CAS_LOCK_TIMEOUT_MS = previous
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("a routed query holds its snapshot lock until the subprocess finishes", { timeout: 15000 }, async () => {
+  const root = fixture()
+  const workers = []
+  try {
+    const bin = path.join(root, "graphify-out", "test-bin")
+    mkdirSync(bin)
+    const executable = path.join(bin, "graphify")
+    writeFileSync(executable, `#!${process.execPath}\n
+      const fs = require("node:fs"), path = require("node:path");
+      const lock = path.join(process.cwd(), "graphify-out", ".locks", "writer");
+      if (!fs.existsSync(lock)) throw new Error("query has no snapshot lock");
+      const snapshot = process.env.GRAPHIFY_OUT;
+      JSON.parse(fs.readFileSync(path.join(snapshot, "graph.json")));
+      fs.writeFileSync(path.join(process.cwd(), "query-entered"), "1");
+      const deadline = Date.now() + 8000;
+      while (!fs.existsSync(path.join(process.cwd(), "release-query"))) {
+        if (Date.now() > deadline) throw new Error("query barrier timeout");
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+      }
+      JSON.parse(fs.readFileSync(path.join(snapshot, "manifest.json")));
+    `, { mode: 0o755 })
+    const older = computeSourceFingerprint(root)
+    const untracked = finalizeSnapshot(root, writeOutput(root, "untracked older", 2), { ...older, version: "test" })
+    writeFileSync(path.join(root, "source.txt"), "reader source\n")
+    const current = computeSourceFingerprint(root)
+    finalizeSnapshot(root, writeOutput(root, "reader", 3), { ...current, version: "test" })
+    const reader = spawn(process.execPath, [new URL("./graphify-cas.mjs", import.meta.url).pathname, "query", "source"], {
+      cwd: root, env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` }, stdio: ["ignore", "pipe", "pipe"],
+    })
+    let stderr = ""
+    reader.stderr.on("data", data => { stderr += data })
+    const done = new Promise(resolve => reader.once("close", code => resolve({ code, stderr })))
+    workers.push({ child: reader, done })
+    await waitForLockMarker(root, "query-entered")
+    assert.equal(existsSync(untracked.path), true, "query must preserve an untracked snapshot")
+    const lock = path.join(root, "graphify-out", ".locks", "writer")
+    assert.equal(existsSync(lock), true)
+    const contender = lockWorker(root, `
+      const { withRepositoryLock } = await import(${JSON.stringify(lockModuleUrl)});
+      process.env.GRAPHIFY_CAS_LOCK_TIMEOUT_MS = "0";
+      try { withRepositoryLock(root, () => { throw new Error("reader lock was released early"); }); }
+      catch (error) { if (!error.message.includes("Timed out")) throw error; }
+    `)
+    workers.push(contender)
+    const result = await contender.done
+    assert.equal(result.code, 0, result.stderr)
+    writeFileSync(path.join(root, "release-query"), "1")
+    const readResult = await done
+    assert.equal(readResult.code, 0, readResult.stderr)
+    assert.equal(existsSync(lock), false)
+  } finally {
+    await stopLockWorkers(workers)
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("snapshot files are marked read-only so alias writes cannot mutate committed content", () => {
+  const snapshot = mkdtempSync(path.join(tmpdir(), "graphify-readonly-"))
+  try {
+    for (const name of ["graph.json", "manifest.json", "GRAPH_REPORT.md", "snapshot.json"]) writeFileSync(path.join(snapshot, name), "{}\n")
+    writeFileSync(path.join(snapshot, "unrelated.txt"), "x")
+    markSnapshotReadOnly(snapshot)
+    for (const name of ["graph.json", "manifest.json", "GRAPH_REPORT.md", "snapshot.json"]) {
+      assert.equal(statSync(path.join(snapshot, name)).mode & 0o222, 0, `${name} must be read-only`)
+    }
+    assert.notEqual(statSync(path.join(snapshot, "unrelated.txt")).mode & 0o222, 0, "only snapshot files are touched")
+    // an in-place write through the path now fails instead of editing the snapshot
+    assert.throws(() => writeFileSync(path.join(snapshot, "GRAPH_REPORT.md"), "rewritten"), /EACCES|EPERM/)
+    assert.equal(readFileSync(path.join(snapshot, "GRAPH_REPORT.md"), "utf8"), "{}\n")
+    // idempotent and safe on an already read-only tree; the directory stays removable
+    markSnapshotReadOnly(snapshot)
+  } finally {
+    rmSync(snapshot, { recursive: true, force: true })
+  }
+  assert.equal(existsSync(snapshot), false, "read-only files never block pruning")
+})
+
+test("working copies of a read-only snapshot are writable again", () => {
+  const snapshot = mkdtempSync(path.join(tmpdir(), "graphify-readonly-source-"))
+  const work = mkdtempSync(path.join(tmpdir(), "graphify-work-"))
+  try {
+    for (const name of ["graph.json", "manifest.json", "GRAPH_REPORT.md", ".graphify_labels.json"]) writeFileSync(path.join(snapshot, name), "{}\n")
+    markSnapshotReadOnly(snapshot)
+    copyPortableFiles(snapshot, work)
+    for (const name of ["graph.json", "manifest.json", "GRAPH_REPORT.md", ".graphify_labels.json"]) {
+      assert.notEqual(statSync(path.join(work, name)).mode & 0o200, 0, `${name} copy must be writable`)
+      writeFileSync(path.join(work, name), "rewritten\n")
+    }
+    assert.equal(statSync(path.join(snapshot, "graph.json")).mode & 0o222, 0, "the source snapshot stays read-only")
+  } finally {
+    rmSync(snapshot, { recursive: true, force: true })
+    rmSync(work, { recursive: true, force: true })
   }
 })

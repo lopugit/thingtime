@@ -1,13 +1,16 @@
 import React from 'react';
-import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
 import { useSearchParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { FeedShortcutsContext, useFeedShortcuts } from '~/hooks/useFeedShortcuts';
+import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
 import { AdvancedFilters, advancedSearchBody, searchResponsePosts, useAdvancedFilters } from './AdvancedFilters';
+import type { GeoLocation } from '~/schemas/geo';
+import { defaultAlgorithm, isDefaultAlgorithm } from './defaultAlgorithms';
 import { AlgorithmMenu } from './AlgorithmMenu';
 import { FeedFilters } from './FeedFilters';
 import { FeedShortcutsHelp } from './FeedShortcutsHelp';
@@ -16,16 +19,25 @@ import { PostComposer } from './PostComposer';
 import { PostList } from './PostList';
 import { useFeedEngagement } from './useFeedEngagement';
 import { mergeReactionOverlays } from './reactionOverlay';
-import { appendPostsDeduped } from './feedTypes';
-import type { FeedFiltersState, PostChange, PublicPost } from './feedTypes';
+import { appendPostsDeduped, FEED_SCOPE_CACHE_KEY, feedScopeOf } from './feedTypes';
+import type { FeedFiltersState, FeedScope, PostChange, PublicPost } from './feedTypes';
 
-// The /feed page: composer + algorithm picker + filters over an infinite
-// post column. Guest-visible (public posts only); engagement telemetry from
-// useFeedEngagement trains whichever algorithm is active as you scroll.
-// Filters ▸ Advanced swaps the pager onto the structured search API while
-// keeping the same PostList rendering and simple-filter narrowing.
+// The /feed page: composer + algorithm picker + the "🪐 My subspaces" scope
+// chip + filters over an infinite post column. Guest-visible (public posts
+// only); engagement telemetry from useFeedEngagement trains whichever
+// algorithm is active as you scroll. Filters ▸ Advanced swaps the pager onto
+// the structured search API while keeping the same PostList rendering and
+// simple-filter narrowing (the scope chip rests while it is applied — search
+// has no subspace scope).
 
 const EMPTY_FILTERS: FeedFiltersState = { types: [], circles: [], from: null, to: null };
+
+const INK = 'var(--tt-ink, #16161a)';
+const MUTED = 'var(--tt-muted, #9a9aa6)';
+const RADIUS_MD = 'var(--tt-radius-md, 12px)';
+
+// the persisted scope choice (sync localCache tier — paints on first render)
+const readCachedScope = (loggedIn: boolean): FeedScope => feedScopeOf(readLocalCache<string>(FEED_SCOPE_CACHE_KEY), loggedIn);
 
 const PAGE_SIZE = 20;
 
@@ -34,8 +46,18 @@ export const FeedPage = () => {
   const user = useCurrentUser();
   const lopu = useLopu();
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [near, setNear] = React.useState<GeoLocation | null>(null);
+  const [locating, setLocating] = React.useState(false);
+  const sortParam = searchParams.get('sort');
+  React.useEffect(() => { if (isDefaultAlgorithm(sortParam)) setAlgorithmId(sortParam); }, [sortParam]);
+  const [localTag, setLocalTag] = React.useState(() => readLocalCache<string>('tt-feed-local-tag') || '');
   const [filters, setFilters] = React.useState<FeedFiltersState>(EMPTY_FILTERS);
-  const [algorithmId, setAlgorithmId] = React.useState<string | null>(user?.activeFeedAlgorithmId ?? null);
+  const [algorithmId, setAlgorithmId] = React.useState<string | null>(isDefaultAlgorithm(searchParams.get('sort')) ? searchParams.get('sort') : user?.activeFeedAlgorithmId ?? null);
+  // "🪐 My subspaces": only posts from the viewer's ACTIVE subspaces (server-
+  // side scope=subspaces). Seeded from the sync cache so the chip and the
+  // first fetch agree on the very first render; guests always read all.
+  const [scope, setScope] = React.useState<FeedScope>(() => readCachedScope(!!user));
 
   // advanced search: the panel edits a draft; Apply snapshots it into
   // `applied` (null = normal feed), which the pager keys off
@@ -48,22 +70,24 @@ export const FeedPage = () => {
   const [ranked, setRanked] = React.useState(false);
 
   // login/logout swaps the viewer — re-seed the algorithm from their profile
+  // and the scope from the cache (a logout drops back to all: a guest has no
+  // subspaces to scope to)
   const lastUserIdRef = React.useRef<string | null>(user?.id ?? null);
   React.useEffect(() => {
     const userId = user?.id ?? null;
     if (lastUserIdRef.current === userId) return;
     lastUserIdRef.current = userId;
-    setAlgorithmId(user?.activeFeedAlgorithmId ?? null);
+    setAlgorithmId(isDefaultAlgorithm(searchParams.get('sort')) ? searchParams.get('sort') : user?.activeFeedAlgorithmId ?? null);
+    setScope(readCachedScope(!!userId));
+    setNear(null);
   }, [user?.id, user?.activeFeedAlgorithmId]);
 
   const { observeCard, recordEvent, sessionEventCount, getSessionEvents } = useFeedEngagement({
-    activeAlgorithmId: algorithmId
+    activeAlgorithmId: isDefaultAlgorithm(algorithmId) ? null : algorithmId
   });
 
   // both URL-param features below — ?algorithm= branch invitations and ?tag=
   // topic feeds — read and clear through this one hook instance
-  const [searchParams, setSearchParams] = useSearchParams();
-
   // "try my feed brain 🧠" (claude-todo/10): /feed?algorithm=<shareId> shows a
   // branch invitation. The preview endpoint only resolves explicitly shared
   // algorithms and never returns weights — branching copies them into the
@@ -274,6 +298,11 @@ export const FeedPage = () => {
           from: filters.from,
           to: filters.to,
           algorithm: algorithmId ?? 'latest',
+          localTag: algorithmId === 'local' ? localTag : undefined,
+          ...(algorithmId === 'local' && near ? { lat: near.lat, lng: near.lng, radiusKm: 50 } : {}),
+          // only a logged-in viewer can be scoped (the server answers a guest
+          // an empty page, and the anon URL must stay the shared cacheable one)
+          scope: scope === 'subspaces' && viewerIdRef.current ? 'subspaces' : undefined,
           cursor: reset ? undefined : cursor || undefined,
           limit: PAGE_SIZE,
           anon: viewerIdRef.current ? undefined : 1
@@ -303,8 +332,28 @@ export const FeedPage = () => {
         }
       }
     },
-    [filters, algorithmId, appliedAdvanced, tagParam, tagApplied]
+    [filters, algorithmId, scope, appliedAdvanced, tagParam, tagApplied, localTag, near]
   );
+
+  // the scope chip: flips instantly (the pager reloads through `load`'s deps)
+  // and persists per browser; a guest is nudged to log in instead
+  const scopeOn = scope === 'subspaces' && !!user && !appliedAdvanced;
+  const toggleScope = React.useCallback(() => {
+    if (!user) {
+      lopuRef.current({
+        title: 'Log in to see your subspaces 🗝️',
+        description: 'Join a few on /s and this chip narrows the feed to just them.',
+        status: 'info',
+        link: { label: 'Log in 🗝️', href: '/login' }
+      });
+      return;
+    }
+    setScope((prev) => {
+      const next: FeedScope = prev === 'subspaces' ? 'all' : 'subspaces';
+      writeLocalCache(FEED_SCOPE_CACHE_KEY, next);
+      return next;
+    });
+  }, [user]);
 
   // initial fetch + reset whenever the filters, algorithm, or advanced search
   // change — or the viewer does (an account switch can keep the same algorithm
@@ -411,11 +460,14 @@ export const FeedPage = () => {
             color="var(--tt-muted, #9a9aa6)"
           >
             Thingtime ·{' '}
+            {scopeOn ? 'Your subspaces 🪐 · ' : ''}
             {appliedAdvanced
               ? ranked
                 ? 'Advanced search · best match first 🔬'
                 : 'Advanced search 🔬'
-              : ranked
+              : defaultAlgorithm(algorithmId)
+                ? defaultAlgorithm(algorithmId)!.description
+                : ranked
                 ? 'Ranked by your algorithm 🧠'
                 : 'Fresh things first ⏱️'}
           </Box>
@@ -499,13 +551,35 @@ export const FeedPage = () => {
         )}
 
         {/* controls */}
-        <Flex alignItems="center" columnGap={2}>
+        <Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap">
           <AlgorithmMenu
             value={algorithmId}
-            onChange={setAlgorithmId}
+            onChange={(id) => {
+              setAlgorithmId(id);
+              setSearchParams((prev) => { const next = new URLSearchParams(prev); if (isDefaultAlgorithm(id)) next.set('sort', id); else next.delete('sort'); return next; }, { replace: true });
+            }}
             sessionEventCount={sessionEventCount}
             getSessionEvents={getSessionEvents}
           />
+          <Button
+            size="sm"
+            variant="outline"
+            fontWeight={600}
+            borderRadius={RADIUS_MD}
+            borderColor="var(--tt-border, #ececef)"
+            background={scopeOn ? 'var(--tt-surface-hover, #ececee)' : 'var(--tt-card, #ffffff)'}
+            color={scopeOn ? INK : MUTED}
+            _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)', color: INK }}
+            _active={{ background: 'var(--tt-surface-hover, #ececee)' }}
+            isDisabled={!!appliedAdvanced}
+            onClick={toggleScope}
+            aria-pressed={scopeOn}
+            title={appliedAdvanced ? 'Advanced search covers every post' : scopeOn ? 'Showing only your subspaces — tap for everything' : 'Only posts from the subspaces you belong to'}
+            data-testid="feed-scope-subspaces"
+            data-scope={scopeOn ? 'subspaces' : 'all'}
+          >
+            🪐 My subspaces
+          </Button>
           <Box marginLeft="auto">
             <FeedFilters
               value={filters}
@@ -516,6 +590,25 @@ export const FeedPage = () => {
           </Box>
         </Flex>
 
+        {algorithmId === 'local' && !appliedAdvanced && (
+          <Box border="1px solid var(--tt-border, #ececef)" borderRadius="12px" p={3}>
+            <Flex gap={2} wrap="wrap" mb={3}>
+              <Button size="sm" isLoading={locating} onClick={() => {
+                if (!navigator.geolocation) { lopu({ title: 'Location is unavailable; choose a tag below', status: 'info' }); return; }
+                setLocating(true);
+                navigator.geolocation.getCurrentPosition((position) => {
+                  setNear({ lat: position.coords.latitude, lng: position.coords.longitude }); setLocating(false);
+                }, () => { setLocating(false); lopu({ title: 'Could not access location; choose a tag below', status: 'info' }); }, { timeout: 10000, maximumAge: 300000 });
+              }}>Use my location</Button>
+              {near && <Button size="sm" variant="ghost" onClick={() => setNear(null)}>Use tag instead</Button>}
+            </Flex>
+            {near && <Text fontSize="sm" mb={2}>Posts within 50 km of your location. Your position is used only for this search.</Text>}
+            <Text as="label" htmlFor="feed-local-tag" fontSize="sm">Location tag</Text>
+            <Input id="feed-local-tag" isDisabled={!!near} placeholder="e.g. melbourne" maxLength={60} value={localTag}
+              onChange={(event) => { setLocalTag(event.target.value); writeLocalCache('tt-feed-local-tag', event.target.value); }} />
+            <Text fontSize="xs" mt={2}>Choose a tag, or use your location to find Things with geographic coordinates. Location is never added to your posts automatically.</Text>
+          </Box>
+        )}
         {advancedFilters.open && (
           <AdvancedFilters
             value={advancedFilters.draft}
@@ -547,11 +640,15 @@ export const FeedPage = () => {
               onEngagement={recordEvent}
               focusedPostId={shortcuts.focusedPostId}
               emptyLabel={
-                appliedAdvanced
+                algorithmId === 'local' && !appliedAdvanced && !near && !localTag.trim()
+                  ? 'Choose a location tag or use your location to see nearby posts 📍'
+                  : appliedAdvanced
                   ? 'Nothing matched — loosen a filter, or try plain words up top ✨'
-                  : ranked
-                    ? 'Your algorithm has nothing to rank yet — try Latest ⏱️'
-                    : 'Nothing here yet — be the first to post ✨'
+                  : scopeOn
+                    ? 'Nothing from your subspaces yet — join a few on /s, or post something there 🪐'
+                    : ranked
+                      ? 'Your algorithm has nothing to rank yet — try Latest ⏱️'
+                      : 'Nothing here yet — be the first to post ✨'
               }
             />
           </FeedShortcutsContext.Provider>

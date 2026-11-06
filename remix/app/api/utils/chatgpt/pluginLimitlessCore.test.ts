@@ -3,14 +3,13 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 import {
-  MAX_LIMITLESS_MUTATION_OPERATIONS,
   buildLimitlessMutationPreview,
   renderThingtimeMcpUi,
   compileThingtimeCapability,
   normalizeLimitlessMutationOperations
 } from './pluginLimitlessCore';
 
-const MCP_LAB_SCRIPT_HASH = 'sha256-InujfRsBJ3VWJN0FJ9O1huZAeiHmJtIQbhm2Q3ZHwxE=';
+const MCP_LAB_SCRIPT_HASH = 'sha256-EIabPPWdF7FAxu5/3Y6fMmhH4wbbHXK51o1HOg8YzA8=';
 
 test('the Limitless Lab CSP hash matches the shipped MCP App module', () => {
   const script = renderThingtimeMcpUi().match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
@@ -18,7 +17,7 @@ test('the Limitless Lab CSP hash matches the shipped MCP App module', () => {
   assert.equal(`sha256-${createHash('sha256').update(script).digest('base64')}`, MCP_LAB_SCRIPT_HASH);
 });
 
-test('mutation plans are bounded, assign stable create ids, and touch each Thing once', () => {
+test('mutation plans assign stable create ids, support more than 25 operations, and touch each Thing once', () => {
   const normalized = normalizeLimitlessMutationOperations([
     { action: 'create', thing: { thingtime: ['data'], crystal: { name: 'One' } } },
     { action: 'update', id: 'existing', patch: { crystal: { done: true } } }
@@ -33,8 +32,8 @@ test('mutation plans are bounded, assign stable create ids, and touch each Thing
     { action: 'delete', id: 'same' }
   ]).ok, false);
   assert.equal(normalizeLimitlessMutationOperations(
-    Array.from({ length: MAX_LIMITLESS_MUTATION_OPERATIONS + 1 }, (_, index) => ({ action: 'delete', id: `thing-${index}` }))
-  ).ok, false);
+    Array.from({ length: 61 }, (_, index) => ({ action: 'delete', id: `thing-${index}` }))
+  ).ok, true);
   assert.equal(normalizeLimitlessMutationOperations([
     { action: 'delete', id: 'one', expectedUpdatedAt: 'not-a-date' }
   ]).ok, false);
@@ -81,7 +80,7 @@ test('previewed updates fail closed when the exact version is missing or already
   assert.deepEqual(stale, { ok: false, error: 'thing_changed:one' });
 });
 
-test('Capability Things compile only registered bounded mutations and exact input placeholders', () => {
+test('Capability Things compile only registered mutations and exact input placeholders', () => {
   const compiled = compileThingtimeCapability({
     thing: {
       id: 'capability-1',
@@ -116,4 +115,24 @@ test('Capability Things compile only registered bounded mutations and exact inpu
   });
   assert.equal(unsafe.ok, false);
   if (!unsafe.ok) assert.match(unsafe.error, /only use the exact/);
+});
+
+
+test('workflow expansion preserves large editable block trees and deep own-property bindings', () => {
+  const leaves = Array.from({ length: 1300 }, (_, n) => ({ id: `leaf-${n}`, type: 'text', text: 'editable ' + 'é'.repeat(60) }));
+  let tree: unknown[] = leaves;
+  for (let depth = 0; depth < 12; depth += 1) tree = [{ id: `container-${depth}`, type: 'container', children: tree }];
+  const blocks = [...tree, { id: 'binding', type: 'text', text: { $input: 'a.b.c.d.e.f.g' } }];
+  const compiled = compileThingtimeCapability({
+    thing: { thingtime: ['data'], crystal: { schema: 'Thingtime Capability', capabilityVersion: 1, operations: [
+      { action: 'create', thing: { shareId: 'large-page', thingtime: ['webpage'], crystal: { blocks } } }
+    ] } },
+    inputs: { a: { b: { c: { d: { e: { f: { g: 'bound' } } } } } } }
+  });
+  assert.equal(compiled.ok, true);
+  if (!compiled.ok) return;
+  const page = compiled.value.operations[0].thing;
+  assert.ok(Buffer.byteLength(JSON.stringify(page)) > 136 * 1024);
+  assert.deepEqual(page?.crystal, { blocks: [...tree, { id: 'binding', type: 'text', text: 'bound' }] });
+  assert.equal(normalizeLimitlessMutationOperations([{ action: 'update', id: 'allowed', patch: { id: 'different' } }]).ok, false);
 });

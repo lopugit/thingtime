@@ -4,6 +4,21 @@ import ApplicationServices
 
 @MainActor
 final class SystemMetricsServiceTests: XCTestCase {
+  func testProcessOutputDrainsMoreThanPipeCapacity() throws {
+    let text = try XCTUnwrap(SystemMetricsService.processOutput(
+      executable: "/usr/bin/head", arguments: ["-c", "131072", "/dev/zero"]
+    ))
+    XCTAssertEqual(text.utf8.count, 131072)
+  }
+
+  func testProcessOutputTerminatesAnUnresponsiveChild() {
+    let start = Date()
+    XCTAssertNil(SystemMetricsService.processOutput(
+      executable: "/bin/sleep", arguments: ["10"], timeout: 0.1
+    ))
+    XCTAssertLessThan(Date().timeIntervalSince(start), 2)
+  }
+
   func testFullDiskAccessProbeReportsTheInjectedPermissionState() {
     XCTAssertTrue(FullDiskAccessService.isGranted { path in
       XCTAssertEqual(path, FullDiskAccessService.protectedProbePath)

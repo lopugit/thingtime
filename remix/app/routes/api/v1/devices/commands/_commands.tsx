@@ -1,6 +1,6 @@
 import { json, readJsonBody } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { createDeviceCommand, listDeviceCommands } from '~/api/utils/devices/deviceCommands';
+import { createDeviceCommand, listDeviceCommands, readDeviceCommand } from '~/api/utils/devices/deviceCommands';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 export const loader = async ({ request }: { request: Request }) => {
@@ -8,9 +8,13 @@ export const loader = async ({ request }: { request: Request }) => {
 	if (!user) return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 	if (user.accountKind !== 'user') return json({ ok: false, error: 'Device commands require a full Thingtime account' }, { status: 403 });
 	const params = new URL(request.url).searchParams;
+	if (params.has('commandId')) {
+		const result = await readDeviceCommand(user.id, params.get('deviceId') || '', params.get('commandId') || '');
+		return json(result, { status: result.ok === true ? 200 : result.status, headers: { 'Cache-Control': 'private, no-store' } });
+	}
 	const result = await listDeviceCommands(user.id, params.get('deviceId'), params.get('status'));
 	if (result.ok === false) return json(result, { status: result.status });
-	return json(result);
+	return json(result, { headers: { 'Cache-Control': 'private, no-store' } });
 };
 
 export const action = async ({ request }: { request: Request }) => {
@@ -20,7 +24,7 @@ export const action = async ({ request }: { request: Request }) => {
 	if (user.accountKind !== 'user') return json({ ok: false, error: 'Device commands require a full Thingtime account' }, { status: 403 });
 	const limit = await enforceRateLimit(request, 'devices.commands', `user:${user.id}`);
 	if (!limit.allowed) return json({ ok: false, error: 'Device commands are moving too quickly' }, rateLimitedResponseInit(limit));
-	const result = await createDeviceCommand(user.id, await readJsonBody(request, 96 * 1024));
+	const result = await createDeviceCommand(user.id, await readJsonBody(request, 128 * 1024));
 	if (result.ok === false) return json(result, { status: result.status });
-	return json(result);
+	return json(result, { headers: { 'Cache-Control': 'private, no-store' } });
 };

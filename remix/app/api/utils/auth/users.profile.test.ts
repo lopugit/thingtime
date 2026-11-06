@@ -28,6 +28,7 @@ const createHarness = (options: { thing?: any; legacy?: any; matchedCount?: numb
 	const session = { id: 'home-session' };
 	const updates: Array<{ store: 'thing' | 'legacy'; filter: any; update: any; options: any }> = [];
 	const reconciliations: any[] = [];
+	const secureMutations: any[] = [];
 	let transactions = 0;
 	const thingCollection = {
 		findOne: async (_filter: any, readOptions: any) => {
@@ -61,9 +62,15 @@ const createHarness = (options: { thing?: any; legacy?: any; matchedCount?: numb
 		},
 		findUser: async (id: string) => ({ _id: id }),
 		projectUser: async (user: any) => ({ id: String(user._id) } as any),
+		mutateSecure: async (_userId: string, mutate: (secure: any) => void) => {
+			const secure = { meta: {} };
+			mutate(secure);
+			secureMutations.push(secure);
+			return 'mutated' as const;
+		},
 		now: () => now
 	});
-	return { update, session, updates, reconciliations, transactions: () => transactions };
+	return { update, session, updates, reconciliations, secureMutations, transactions: () => transactions };
 };
 
 test('new and migrated user Things preserve only nonempty server-owned profile attachment refs at the root', () => {
@@ -146,6 +153,16 @@ test('profile media input rejects ambiguity, unsafe URLs, duplicate slot ids, an
 	}
 });
 
+test('hide-email preference is private, safe by default, and accepts only booleans', async () => {
+	const harness = createHarness();
+	assert.equal((await harness.update('user-1', { hideEmailOnProfile: true })).ok, true);
+	assert.equal(harness.transactions(), 0);
+	assert.deepEqual(harness.secureMutations, [{ meta: { hideEmailOnProfile: true } }]);
+
+	const invalid = await createHarness().update('user-1', { hideEmailOnProfile: 'no' });
+	assert.deepEqual(invalid, { ok: false, status: 400, error: 'Hide email on profile must be true or false' });
+});
+
 test('legacy profile updates use the same home transaction and attachment reconciliation contract', async () => {
 	const legacyId = '664f1c2a9d3e5b0012345678';
 	const harness = createHarness({
@@ -196,9 +213,15 @@ test('self projection exposes managed ids and linked fallbacks separately; publi
 	assert.equal(self.avatarLinkedUrl, 'https://images.example/fallback.jpg');
 	assert.equal(self.bannerAttachmentId, null);
 	assert.equal(self.bannerLinkedUrl, null);
+	assert.equal(self.hideEmailOnProfile, true);
 
 	const publicProfile = toPublicProfile(doc);
 	assert.equal(publicProfile.avatarUrl, '/api/v1/attachments/content?id=avatar-managed');
 	assert.equal(publicProfile.temporary, false);
 	assert.deepEqual(Object.keys(publicProfile).sort(), ['avatarUrl', 'bannerUrl', 'bio', 'createdAt', 'displayName', 'id', 'temporary', 'username']);
+	assert.equal(Object.prototype.hasOwnProperty.call(publicProfile, 'email'), false);
+
+	const shownOnOwnProfile = toPublicUser({ ...doc, meta: { hideEmailOnProfile: false } });
+	assert.equal(shownOnOwnProfile.hideEmailOnProfile, false);
+	assert.equal(Object.prototype.hasOwnProperty.call(toPublicProfile({ ...doc, meta: { hideEmailOnProfile: false } }), 'email'), false);
 });

@@ -73,7 +73,7 @@ final class NodeControllerTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ThingtimeNodeControllerTests-\(UUID().uuidString)", isDirectory: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
-        let telemetry = DeviceTelemetryCollector()
+        let telemetry = TestDeviceTelemetry()
         let controller = ThingtimeNodeController(
             journal: try CommandJournal(fileURL: directory.appendingPathComponent("journal.json")),
             pairing: PairingManager(store: InMemoryDeviceCredentialStore()),
@@ -105,6 +105,8 @@ final class NodeControllerTests: XCTestCase {
         XCTAssertTrue(replay.ok)
         XCTAssertEqual(first.result, replay.result)
         XCTAssertEqual(replay.id, "request-2")
+        XCTAssertEqual(telemetry.snapshotReads, 1, "Replay must reuse the retained telemetry response.")
+        XCTAssertEqual(first.result?.objectValue?["deviceName"], .string("Test Mac"))
 
         let conflict = await controller.handle(NodeRequest(
             id: "request-3",
@@ -114,11 +116,12 @@ final class NodeControllerTests: XCTestCase {
         XCTAssertEqual(conflict.error?.code, ThingtimeNodeError.commandConflict.code)
     }
 
-	func testUnpairedLeasedMachineControlsFailClosedBeforeSideEffects() async throws {
+	func testLockedOrUnapprovedLeasedMachineControlsFailClosedBeforeSideEffects() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ThingtimeNodeLeasedMachineControlTests-\(UUID().uuidString)", isDirectory: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
-        let telemetry = DeviceTelemetryCollector()
+        let telemetry = TestDeviceTelemetry()
+        telemetry.session = SessionTelemetry(isLocked: true, isOnConsole: true)
         let controller = ThingtimeNodeController(
             journal: try CommandJournal(fileURL: directory.appendingPathComponent("journal.json")),
             pairing: PairingManager(store: InMemoryDeviceCredentialStore()),
@@ -151,10 +154,26 @@ final class NodeControllerTests: XCTestCase {
 			LeasedCommand(commandID: "keyboard-shortcut", leaseID: "lease-keyboard-shortcut", method: "input.keyboard.shortcut", parameters: .object(["key": .string("tab"), "modifiers": .array([.string("command")])]), leaseExpiresAt: .distantFuture),
             LeasedCommand(commandID: "restart", leaseID: "lease-restart", method: "system.restart", parameters: .object([:]), leaseExpiresAt: .distantFuture)
         ]
-		for command in commands {
-			let response = await controller.handleLeasedCommand(command)
-			XCTAssertEqual(response.error?.code, ThingtimeNodeError.policyDenied("ignored").code)
-		}
+        for command in commands {
+            let response = await controller.handleLeasedCommand(LeasedCommand(
+                commandID: command.commandID, leaseID: command.leaseID,
+                method: command.method, parameters: command.parameters,
+                leaseExpiresAt: .distantFuture, approvedForExecution: true
+            ))
+            XCTAssertEqual(response.error?.code, ThingtimeNodeError.policyDenied("ignored").code)
+        }
+        telemetry.session = SessionTelemetry(isLocked: false, isOnConsole: true)
+        for command in commands {
+            let response = await controller.handleLeasedCommand(LeasedCommand(
+                commandID: "unapproved-" + command.commandID,
+                leaseID: "unapproved-" + command.leaseID,
+                method: command.method, parameters: command.parameters,
+                leaseExpiresAt: .distantFuture, approvedForExecution: false
+            ))
+            XCTAssertEqual(response.error?.code, ThingtimeNodeError.approvalRequired("ignored").code)
+        }
+        XCTAssertEqual(telemetry.snapshotReads, 0, "Rejected controls must not enumerate hardware.")
+        XCTAssertEqual(telemetry.sessionReads, commands.count * 2)
 
         let passwordAttempt = await controller.handleLeasedCommand(LeasedCommand(
             commandID: "wifi-password",
@@ -172,7 +191,7 @@ final class NodeControllerTests: XCTestCase {
         addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
         let journal = try CommandJournal(fileURL: directory.appendingPathComponent("journal.json"))
         let client = ResponseLossControlPlaneClient(claimOutcomes: [.succeeded])
-        let telemetry = DeviceTelemetryCollector()
+        let telemetry = TestDeviceTelemetry()
         let controller = ThingtimeNodeController(
             journal: journal,
             pairing: PairingManager(store: FailingKeychainCredentialStore()),
@@ -209,7 +228,7 @@ final class NodeControllerTests: XCTestCase {
         let client = ResponseLossControlPlaneClient(claimOutcomes: [
             .ambiguous, .ambiguous, .ambiguous, .succeeded
         ])
-        let telemetry = DeviceTelemetryCollector()
+        let telemetry = TestDeviceTelemetry()
         let journal = try CommandJournal(fileURL: journalURL)
         let controller = ThingtimeNodeController(
             journal: journal,
@@ -240,7 +259,7 @@ final class NodeControllerTests: XCTestCase {
         // state. The renderer no longer has the secret, so recovery must use
         // only the opaque, durable pending record.
         let resumedPairing = PairingManager(store: store)
-        let resumedTelemetry = DeviceTelemetryCollector()
+        let resumedTelemetry = TestDeviceTelemetry()
         let resumedJournal = try CommandJournal(fileURL: journalURL)
         let resumedController = ThingtimeNodeController(
             journal: resumedJournal,
@@ -303,7 +322,7 @@ final class NodeControllerTests: XCTestCase {
         let journal = try CommandJournal(fileURL: directory.appendingPathComponent("journal.json"))
         let store = InMemoryDeviceCredentialStore()
         let client = ResponseLossControlPlaneClient()
-        let telemetry = DeviceTelemetryCollector()
+        let telemetry = TestDeviceTelemetry()
         let controller = ThingtimeNodeController(
             journal: journal,
             pairing: PairingManager(store: store),
@@ -338,7 +357,7 @@ final class NodeControllerTests: XCTestCase {
             .appendingPathComponent("ThingtimeNodePairingResumeEmptyTests-\(UUID().uuidString)", isDirectory: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
         let store = InMemoryDeviceCredentialStore()
-        let telemetry = DeviceTelemetryCollector()
+        let telemetry = TestDeviceTelemetry()
         let client = ResponseLossControlPlaneClient(claimOutcomes: [.succeeded])
         let controller = ThingtimeNodeController(
             journal: try CommandJournal(fileURL: directory.appendingPathComponent("journal.json")),
@@ -384,7 +403,7 @@ final class NodeControllerTests: XCTestCase {
         let client = ResponseLossControlPlaneClient(claimOutcomes: [
             .ambiguous, .ambiguous, .ambiguous, .rejected(410)
         ])
-        let telemetry = DeviceTelemetryCollector()
+        let telemetry = TestDeviceTelemetry()
         let firstController = ThingtimeNodeController(
             journal: try CommandJournal(fileURL: journalURL),
             pairing: PairingManager(store: store),
@@ -404,7 +423,7 @@ final class NodeControllerTests: XCTestCase {
         XCTAssertNotNil(pendingAfterAmbiguous)
 
         let resumedPairing = PairingManager(store: store)
-        let resumedTelemetry = DeviceTelemetryCollector()
+        let resumedTelemetry = TestDeviceTelemetry()
         let resumedController = ThingtimeNodeController(
             journal: try CommandJournal(fileURL: journalURL),
             pairing: resumedPairing,

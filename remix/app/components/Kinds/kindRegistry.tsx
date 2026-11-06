@@ -1,4 +1,10 @@
 import React from 'react';
+import { registerCoreKinds } from './kindRenderers';
+import { registerMediaKinds } from './kindRenderersMedia';
+import { registerSocialKinds } from './kindRenderersSocial';
+import { registerCommerceKinds } from './kindRenderersCommerce';
+import { registerPlanningKinds } from './kindRenderersPlanning';
+import { registerKnowledgeKinds } from './kindRenderersKnowledge';
 
 // The kind renderer registry — the pipeline that turns a plain JSON thing
 // (stored in Mongo via /api/v1/things) into a rendered component.
@@ -76,12 +82,6 @@ const registry: KindRenderer[] = [];
 // registry to Vercel while dev (unbundled) looked fine. The import cycle with
 // the renderer files is safe: they only call registerKindRenderer() inside
 // these deferred functions, after every module has evaluated.
-import { registerCoreKinds } from './kindRenderers';
-import { registerMediaKinds } from './kindRenderersMedia';
-import { registerSocialKinds } from './kindRenderersSocial';
-import { registerCommerceKinds } from './kindRenderersCommerce';
-import { registerPlanningKinds } from './kindRenderersPlanning';
-import { registerKnowledgeKinds } from './kindRenderersKnowledge';
 
 let builtinsEnsured = false;
 const ensureBuiltinKinds = () => {

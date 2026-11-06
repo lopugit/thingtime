@@ -1,10 +1,16 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomUUID } from 'node:crypto';
+import { requireGatewayDatabaseAccess, registerGatewayDrain } from '../deployment/environmentGateway';
+import { INDEX_LIFECYCLE_ID, indexExecutionPolicy, type IndexExecutionOptions, budgetIndexCommands, indexPlanFingerprint, recordIndexPlan, runDurableIndexPlan, invalidateDurableIndexPlan } from './indexLifecycle';
 import { getMongoUri } from './config';
+import { mongoConnectionTracker } from './connectionTracker';
 import { getActiveMongoDbName, getActiveMongoUri, isCustomMongoEndpointActive } from './endpoint';
 import { getMongoDb } from './mongodb';
 import { COLLECTIONS, physicalCollectionName } from './collectionNames';
-import { MIGRATION_DIAGNOSTIC_THINGTIME } from '../../../schemas/registry';
+import { EPHEMERAL_CONTROL_THINGTIMES } from '../../../schemas/registry';
 import { CI_DASHBOARD_UPDATED_INDEX } from '../ciControl/dashboardQueryCore';
 import { thingUniqueKey } from './uniqueKeys';
+import { THINGS_KIND_CREATED_INDEX } from './thingIndexContracts';
 
 export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectionVersion } from './collectionNames';
 
@@ -17,13 +23,16 @@ export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectio
 const clientCache = new Map<string, Promise<any>>();
 const MAX_CUSTOM_CLIENTS = 6;
 
-const getClientCachedFor = (uri: string, isHome: boolean) => {
+const getClientCachedFor = async (uri: string, isHome: boolean) => {
+  await requireGatewayDatabaseAccess();
   const cached = clientCache.get(uri);
   if (cached) {
     // LRU touch — Map iteration order is insertion order
     clientCache.delete(uri);
     clientCache.set(uri, cached);
-    return cached;
+    const client = await cached;
+    mongoConnectionTracker.recordAccess(client);
+    return client;
   }
 
   const entry = (async () => {
@@ -31,7 +40,7 @@ const getClientCachedFor = (uri: string, isHome: boolean) => {
     // Home gets serverless-tuned options: driver defaults are maxPoolSize 100
     // and a 30s serverSelection timeout — on Atlas M0 (hard ~500-connection
     // cap) a burst of instances each opening tens of connections (the
-    // boot-time index ensure is a ~55-command Promise.all) risks the cap, and
+    // old boot-time index ensure fired ~55 concurrent commands) risks the cap, and
     // an unreachable cluster would stall every request 30s instead of failing
     // fast. appName makes this app attributable in Atlas metrics. Custom
     // endpoints get tight timeouts so an unreachable override fails a request
@@ -41,14 +50,20 @@ const getClientCachedFor = (uri: string, isHome: boolean) => {
       isHome
         ? {
             maxPoolSize: 10,
+            minPoolSize: 0,
+            // Driver 6.21 retires idle sockets even with minPoolSize zero.
+            // Warm serverless workers must not retain their peak pool forever.
+            maxIdleTimeMS: 60_000,
             serverSelectionTimeoutMS: 5000,
             connectTimeoutMS: 5000,
             socketTimeoutMS: 30000,
             appName: 'thingtime-api'
           }
-        : { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000 }
+        : { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000, appName: 'thingtime-api-custom' }
     );
-    await client.connect();
+    const observation = mongoConnectionTracker.track(client, isHome ? 'home' : 'custom', isHome ? 'thingtime-api' : 'thingtime-api-custom');
+    try { await client.connect(); observation.ready(); }
+    catch (error) { observation.failed(); throw error; }
     return client;
   })().catch((err) => {
     // don't cache a failed connection — let the next call retry
@@ -72,7 +87,35 @@ const getClientCachedFor = (uri: string, isHome: boolean) => {
     stale?.then((client: any) => client.close()).catch(() => {});
   }
 
-  return entry;
+  const client = await entry;
+  mongoConnectionTracker.recordAccess(client);
+  return client;
+};
+
+// Observability may reuse a home client, but must never create or warm one.
+export const getExistingHomeMongoDb = async () => {
+  let cached: Promise<any> | undefined;
+  try { cached = clientCache.get(getMongoUri()); } catch { return null; }
+  if (!cached) return null;
+  await requireGatewayDatabaseAccess();
+  return (await cached).db('thingtime');
+};
+
+// A read-only snapshot for diagnostics. Do not use getThingtimeDb here: its
+// first-contact adoption/index work is inappropriate for a public health read.
+// Capture the entire request selection before any await so concurrent custom
+// endpoint checks cannot borrow another request's database or authority.
+export const getMongoStatusConnection = () => {
+  const custom = isCustomMongoEndpointActive();
+  try {
+    const uri = getActiveMongoUri();
+    const dbName = getActiveMongoDbName();
+    return { uri, custom, dbName, getDb: async () => (await getClientCachedFor(uri, !custom)).db(dbName) };
+  } catch (error) {
+    // Preserve the selected plane even when its configuration cannot be read.
+    // The error remains internal; status.ts emits only its sanitized summary.
+    return { custom, error };
+  }
 };
 
 // Run one logical mutation against MongoDB's transaction retry contract. The
@@ -122,6 +165,16 @@ export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>
 export const withHomeMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> =>
 	runMongoTransaction(await getClientCachedFor(getMongoUri(), true), work);
 
+/** Read-only worker boundary. Snapshot sessions pin every paged read to the
+ * first server-selected cluster timestamp without holding a write transaction.
+ * An expired snapshot must fail; callers must never continue in a new session. */
+export const withHomeMongoSnapshot = async <T>(work: (session: any) => Promise<T>): Promise<T> => {
+	const client = await getClientCachedFor(getMongoUri(), true);
+	const session = client.startSession({ snapshot: true, causalConsistency: false });
+	try { return await work(session); }
+	finally { await session.endSession(); }
+};
+
 // Issues the last adoption pass could not resolve (rename unsupported /
 // unauthorized). Surfaced through the admin migrations census so a split
 // (legacy collection still holding data beside its versioned successor) is
@@ -170,20 +223,82 @@ const adoptVersionedCollections = async (db: any) => {
 // includes the adoption pass, so no caller can reach a collection handle
 // before legacy names have been (re)checked.
 let homeDbPromise: Promise<any> | null = null;
+let homeDbClient: any = null;
 
-export const getHomeThingtimeDb = async () => {
+const getRawHomeThingtimeDb = async () => {
+  await requireGatewayDatabaseAccess();
   if (!homeDbPromise) {
     homeDbPromise = (async () => {
-      const db = (await getClientCachedFor(getMongoUri(), true)).db('thingtime');
+      const client = await getClientCachedFor(getMongoUri(), true);
+      const db = client.db('thingtime');
+      homeDbClient = client;
       await adoptVersionedCollections(db);
       return db;
     })().catch((err) => {
       // don't cache a failed connection/adoption — let the next call retry
       homeDbPromise = null;
+      homeDbClient = null;
       throw err;
     });
   }
-  return homeDbPromise;
+  const db = await homeDbPromise;
+  // A warm database handle bypasses getClientCachedFor. Attribute its use at
+  // this canonical access boundary too; the request context deduplicates it.
+  if (homeDbClient) mongoConnectionTracker.recordAccess(homeDbClient);
+  return db;
+};
+
+// Keep identity reads available for authenticated repair; gate every normal
+// mutation at actual constraint use. The initializer alone uses raw handles.
+const indexRecovery = new AsyncLocalStorage<boolean>();
+const indexAdmission = new AsyncLocalStorage<{ ready?: Promise<void> }>();
+// One indexed readiness read per mutating HTTP request, independent of how many
+// collection handles/batches it uses. Read-only requests do no marker reads.
+export const withIndexReadinessRequest = <T>(work: () => Promise<T>) => indexAdmission.run({}, work);
+const requireHomeIndexWriteReadiness = () => {
+  const scope = indexAdmission.getStore();
+  if (!scope) return ensureIndexes();
+  if (!scope.ready) {
+    const ready = ensureIndexes().catch(error => { if (scope.ready === ready) delete scope.ready; throw error; });
+    scope.ready = ready;
+  }
+  return scope.ready;
+};
+export const isHomeIndexRecoveryActive = () => indexRecovery.getStore() === true;
+// Only authenticated administrative recovery enters this scope. It preserves
+// raw repair access when a failed unique build cannot admit ordinary writes.
+export const withHomeIndexRecovery = <T>(work: () => Promise<T>) => indexRecovery.run(true, work);
+const GUARDED_MUTATIONS = new Set(['insertOne', 'insertMany', 'updateOne', 'updateMany', 'replaceOne',
+  'findOneAndUpdate', 'findOneAndReplace', 'findOneAndDelete', 'deleteOne', 'deleteMany', 'bulkWrite']);
+export const getHomeThingtimeDb = async () => {
+  const db = await getRawHomeThingtimeDb();
+  if (isHomeIndexRecoveryActive()) return db;
+  return new Proxy(db, { get(target, property) {
+    if (property === 'collection') return (...args: any[]) => {
+      const collection = target.collection(...args);
+      return new Proxy(collection, { get(col, method) {
+        const value = col[method];
+        if (GUARDED_MUTATIONS.has(String(method))) return async (...parameters: any[]) => {
+          await requireHomeIndexWriteReadiness();
+          return value.apply(col, parameters);
+        };
+        return typeof value === 'function' ? value.bind(col) : value;
+      } });
+    };
+    const value = target[property];
+    return typeof value === 'function' ? value.bind(target) : value;
+  } });
+};
+
+// Telemetry resolves the ordinary write-readiness barrier BEFORE the caller
+// checks its deadline. Returning an already admitted raw handle prevents the
+// generic mutation proxy from resuming a telemetry write after its deadline.
+// It can only reuse an existing home client and never borrows a custom plane.
+export const getExistingHomeConnectionSnapshotCollection = async () => {
+  const db = await getExistingHomeMongoDb();
+  if (!db) return null;
+  await requireHomeIndexWriteReadiness();
+  return db.collection(physicalCollectionName('things'));
 };
 
 // Active data-plane database: the home db — unless the request carries a
@@ -199,7 +314,7 @@ export const getThingtimeDb = async () => {
   if (!isCustomMongoEndpointActive()) return getHomeThingtimeDb();
   const uri = getActiveMongoUri();
   const db = (await getClientCachedFor(uri, false)).db(getActiveMongoDbName());
-  ensureCustomDataIndexes(uri, db);
+  await ensureCustomDataIndexes(uri, db);
   return db;
 };
 
@@ -261,6 +376,22 @@ export const getRostersCollection = async () => getHomeCollection('rosters');
 // a custom endpoint can never capture logins or protected-kind writes.
 export const getThingsCollection = async () => getCollection('things');
 export const getHomeThingsCollection = async () => getHomeCollection('things');
+
+let homeRelationshipKeys: { promise: Promise<boolean>; expires: number } | null = null;
+export const ensureHomeRelationshipKeys = async () => {
+	if (!homeRelationshipKeys || homeRelationshipKeys.expires <= Date.now()) {
+		const promise = (async () => {
+			const { relationshipIndexLayoutReady } = await import('./relationshipIndexLayout');
+			return relationshipIndexLayoutReady(await getSettingsCollection());
+		})().catch((error) => {
+			homeRelationshipKeys = null;
+			throw error;
+		});
+		homeRelationshipKeys = { promise, expires: Date.now() + 30_000 };
+	}
+	return homeRelationshipKeys.promise;
+};
+export const invalidateHomeRelationshipKeys = () => { homeRelationshipKeys = null; };
 export const getEmailVerificationsCollection = async () => getHomeCollection('emailVerifications');
 export const getLopuMusingRateLimitsCollection = async () => getHomeCollection('lopuMusingRateLimits');
 export const getThemesCollection = async () => getHomeCollection('themes');
@@ -309,32 +440,18 @@ export const getPostViewsCollection = async () => getHomeCollection('postViews')
 // its two readers (dashboard + per-parent history) and TTL retention.
 export const getCiControlCollection = async () => getHomeCollection('ciControl');
 
-// Idempotently create server-side collections + their indexes. createIndex
-// creates the collection if it doesn't exist yet, so this also bootstraps an
-// empty `thingtime` db on first run. Memoised so it runs at most once per
-// process. The unique indexes are the real source of truth that
-// usernames/emails/tokens can't be duplicated (the app-level findUser checks are
-// racy on their own).
-//
-// WHO CALLS THIS: the boot-time warmup (server/plugins/mongo-warmup) fires it
-// in the background on every fresh instance, and the true bootstrap paths
-// (registerUser, admin migrations) still await it so a brand-new database
-// converges before its first unique-constrained insert. Hot request paths
-// deliberately do NOT call it — indexes only need creating once per database,
-// and re-confirming ~55 of them inside user requests was the dominant
-// cold-start cost (see PR: cold-start index battery).
+// Per-process single flight complements the durable plan fingerprint and
+// renewable cross-process lease. Normal collection access awaits readiness,
+// including a fresh database's first unique-constrained insert. Failed work
+// is not cached; the next caller can retry after recovery.
 let indexesEnsured: Promise<void> | null = null;
-
-// Only in-flight and successful runs stay memoised. A failed boot warmup must
-// not poison awaited bootstrap work for a fixed cooldown: the next explicit
-// caller (registration or an admin migration) retries immediately. Hot request
-// paths no longer call ensureIndexes, so clearing a failed run cannot recreate
-// the old all-request retry storm.
+let ensuredFingerprint: string | null = null;
 
 // MongoDB's hard per-collection index ceiling, `_id_` included. A collection
 // sitting on it fails every createIndex with CannotCreateIndex (67), which is
 // why the swaps below degrade and why the twin prune has a cap escape hatch.
 export const MONGODB_COLLECTION_INDEX_LIMIT = 64;
+export const THINGS_OWNER_IDENTITY_INDEX = { ownerId: 1, shareId: 1 } as const;
 
 // createIndex with different options than an existing same-key index throws
 // IndexOptionsConflict (85) / IndexKeySpecsConflict (86). For indexes whose
@@ -349,10 +466,8 @@ export const MONGODB_COLLECTION_INDEX_LIMIT = 64;
 // lets same-key indexes with distinct names / partial-filter options coexist, so
 // create-then-drop keeps a constraint active throughout the swap.
 
-// dropIndex with a bounded retry: ensureIndexes fires every createIndex in one
-// Promise.all, so on the boot that performs an index swap a legacy-name drop
-// can race a sibling index build and get rejected (observed live: the first
-// swap run left crystal.clientId_1 behind while its replacement built).
+// dropIndex with bounded retry for concurrent explicit migrations or older
+// deployment builds. Current bootstrap serializes each collection's commands.
 // Absent index (IndexNotFound 27) is success, and so is an absent collection
 // (NamespaceNotFound 26): a `things` collection that does not exist yet cannot
 // be holding a stale index, so there is nothing to retry for. Treating 26 as a
@@ -383,6 +498,7 @@ const createIndexReplacing = async (
   try {
     await collection.createIndex(keys, options);
   } catch (err: any) {
+    if (options.unique) throw err; // Never trade a live constraint for bootstrap progress.
     if (err?.code === 67 && legacyNames.length) {
       // CannotCreateIndex: the collection is parked at MongoDB's 64-index cap
       // (observed on a local mongod shared by many worktrees, each ensuring
@@ -527,8 +643,17 @@ export const backfillConsolidatedThingUniqueKeys = async (raw: any) => {
 // rebuild both on EVERY bootstrap, leaving those two aggregations on a
 // collection scan for the length of each rebuild.
 export const RETIRED_THINGS_INDEXES = [
+	// Emoji lookup uses shareId and scope/target, never crystal.emojiKey.
+	// Dedupe is independently held by protected uniqueKeys_1. This name was
+	// always a non-unique lookup; do NOT retire the old unique ancestor here.
+	'things_emoji_key_lookup',
 	'sourceIds_1_createdAt_-1_shareId_1',
 	'thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1',
+	// A pre-release Connections lookup was removed from the shared plan but
+	// remained on databases that ran that build. Its readers now use the
+	// existing thingtime/createdAt index; this was never a unique constraint.
+	// Retire it before bootstrap so the full legacy-compatible plan still fits.
+	'thingtime_1_targetId_1_crystal.accountId_1',
 	// Device event pagination now supplies the deterministic control-scope key,
 	// so the retention index serves the same cursor in either scan direction.
 	'things_device_event_cursor',
@@ -544,8 +669,15 @@ export const RETIRED_THINGS_INDEXES = [
 	'kind_1_deletedAt_1_updatedAt_-1_shareId_1',
 	// CI control-plane rows moved to the ciControl satellite collection; their
 	// two purpose-built things indexes (169 MB + 124 MB live) go with them.
-	// Nothing outside api/utils/ciControl ever paired thingtime with parentId
-	// (legacy comment/reaction cascades ride kind_1_parentId_1_createdAt_1).
+	// The satellite keeps its own copy of this key (ci_control_parent_created
+	// in createCiControlIndexes); only the things_v2 copy retires.
+	// Connections DOES pair thingtime with parentId on things_v2 (the
+	// external-post-source feed read), but deliberately serves it as a
+	// residual over thingtime_1_createdAt_-1_shareId_1 rather than by
+	// reviving this name — see createThingsDataIndexes. Anything that needs
+	// this key as a real prefix must reclaim a budget slot under a NEW name,
+	// because every name in this list is dropped on every bootstrap.
+	// (Legacy comment/reaction cascades ride kind_1_parentId_1_createdAt_1.)
 	'thingtime_1_parentId_1_createdAt_-1_shareId_1',
 	'things_ci_repository_updated'
 	// NOT listed: the unfiltered v1-era `kind_*` and `sandboxExpiresAt_1`
@@ -585,9 +717,8 @@ export const pruneRetiredHomeThingsIndexes = async (db: any) => {
 //     unprotected while rebuild-things-indexes still reports it as twinned
 //     ("protected by a same-key twin throughout"), so leave it to the
 //     rebuild's own reconcileRebuildTwins.
-// The exception is a collection with no free slot at all: there a stuck boot
-// ensure is the worse failure, so orphans are dropped to make room and the
-// plan below recreates the original moments later.
+// A full collection does not justify removing an orphan constraint: preserve
+// it and report the cap so an explicit migration can recover safely.
 export const REBUILD_TWIN_SUFFIX = '__rebuild';
 export const pruneRebuildTwins = async (db: any): Promise<string[]> => {
 	const raw = thingsCollection(db);
@@ -608,13 +739,8 @@ export const pruneRebuildTwins = async (db: any): Promise<string[]> => {
 		await dropIndexRetrying(col, name);
 		dropped.push(name);
 	}
-	const orphans = twins.filter((name) => !present.has(originalOf(name)));
-	if (orphans.length && names.length - dropped.length >= MONGODB_COLLECTION_INDEX_LIMIT) {
-		for (const name of orphans) {
-			await dropIndexRetrying(col, name);
-			dropped.push(name);
-		}
-	}
+	// An orphan may be the only live unique constraint during a rebuild.
+	// Preserve it even at the cap; fail bootstrap rather than admit duplicates.
 	return dropped;
 };
 
@@ -627,6 +753,7 @@ export const pruneRebuildTwins = async (db: any): Promise<string[]> => {
 export const migrateDeviceIndexLayout = async (db: any) => {
 	const raw = thingsCollection(db);
 	const col = taggedCollection(raw, 'things');
+	await col.createIndex({ uniqueKeys: 1 }, { unique: true, sparse: true });
 	const keyFields = [
 		'$crystal.deviceKey',
 		'$crystal.deviceStateKey',
@@ -733,12 +860,13 @@ export const migrateDeviceIndexLayout = async (db: any) => {
 // things_app_data_unique (partial-filter equality on the multikey thingtime
 // array verifiedly includes array-contains matches on MongoDB 8.0).
 
-export const createThingsDataIndexes = (db: any): Promise<any>[] => {
+export const createThingsDataIndexes = (db: any, { relationshipLookups = false, legacyLookups = false } = {}): Promise<any>[] => {
   // Tagged so a createIndex failure names the exact `things.<index>` that
   // broke, whether this runs on the home db or a custom endpoint.
   const col = taggedCollection(thingsCollection(db), 'things');
   return [
     col.createIndex({ shareId: 1 }, { unique: true, sparse: true }),
+    col.createIndex({ geo: '2dsphere' }, { name: 'things_geo' }),
     // generalized uniqueness for system kinds (username:<u>, hashed email
     // keys, schema:<id>, …) AND relationship dedupe (followKey:<a>:<b>,
     // memberKey:, dmKey:, inviteCode:, emojiKey:, friendKey:, voteKey:,
@@ -749,6 +877,15 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // reach this namespace, which is why relationship invariants live here
     // instead of on user-writable crystal paths.
     col.createIndex({ uniqueKeys: 1 }, { unique: true, sparse: true }),
+    // Paged account snapshots: 128 results examined 2,560 shareId-only keys
+    // versus 128 with this prefix in the disposable 6,000-row replica fixture.
+    // Modern shared/home plan: 52/64 including _id. The legacy-compatible
+    // plan already fills 64 slots; snapshots remain unavailable until legacy
+    // migration releases those indexes. The producer explicitly hints this
+    // index, so an older database refuses instead of scanning every owner.
+    ...(!legacyLookups ? [col.createIndex(THINGS_OWNER_IDENTITY_INDEX, { collation: { locale: 'simple' } })] : []),
+    // Service workspace record batches and live membership checks share one bounded owner index.
+    col.createIndex({ ownerId: 1, 'crystal.workspaceId': 1, 'crystal.recordType': 1, 'crystal.values.userId': 1 }, { name: 'service_workspace_records', partialFilterExpression: { 'crystal.workspaceId': { $exists: true } } }),
     // login + people-search lookups on user things (thingtime is the only
     // multikey field here, so the compound is legal)
     col.createIndex({ thingtime: 1, 'crystal.username': 1 }),
@@ -765,26 +902,28 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Custom data-plane endpoints holding unmigrated v1 docs keep exactly the
     // same coverage; the auto-named unfiltered originals are retired
     // (RETIRED_THINGS_INDEXES) or swapped in place here.
-    createIndexReplacing(
+    ...(legacyLookups ? [createIndexReplacing(
       col,
       { kind: 1, visibility: 1, createdAt: -1, shareId: 1 },
       { name: 'things_v1_kind_visibility_created', partialFilterExpression: { kind: { $exists: true } } },
       ['kind_1_visibility_1_createdAt_-1_shareId_1']
-    ),
-    createIndexReplacing(
+    )] : []),
+    ...(legacyLookups ? [createIndexReplacing(
       col,
       { kind: 1, ownerId: 1, createdAt: -1, shareId: 1 },
       { name: 'things_v1_kind_owner_created', partialFilterExpression: { kind: { $exists: true } } },
       ['kind_1_ownerId_1_createdAt_-1_shareId_1']
-    ),
+    )] : []),
     // embed SDK: listEmbeddedThings pages a single owner's `kind: 'embed'`
     // things by most-recently-updated, so that sort needs its own index
-    createIndexReplacing(
+    ...(legacyLookups ? [createIndexReplacing(
       col,
       { kind: 1, ownerId: 1, updatedAt: -1, shareId: 1 },
       { name: 'things_v1_kind_owner_updated', partialFilterExpression: { kind: { $exists: true } } },
       ['kind_1_ownerId_1_updatedAt_-1_shareId_1']
-    ),
+    )] : []),
+    // Shared schema/owner updated-order access, including the embed SDK.
+    col.createIndex({ thingtime: 1, ownerId: 1, updatedAt: -1, shareId: 1 }),
     // The feed and profile matches are $or over BOTH eras
     // ({thingtime:'post'} | {kind:'post'} — see postMatch in things.ts). The
     // thingtime side had its (createdAt desc, shareId asc) index above; the
@@ -800,15 +939,15 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Verified on a local dataset: the plan goes from SORT <- FETCH <- OR
     // (67 docs examined to return 21) to LIMIT <- FETCH <- SORT_MERGE with
     // no blocking sort (38 examined).
-    createIndexReplacing(
+    ...(legacyLookups ? [createIndexReplacing(
       col,
       { kind: 1, createdAt: -1, shareId: 1 },
       { name: 'things_v1_kind_created', partialFilterExpression: { kind: { $exists: true } } },
       ['kind_1_createdAt_-1_shareId_1']
-    ),
+    )] : []),
     // Admin user/app snapshots filter by thingtime without ownerId, then
     // take a small newest-first window with a stable shareId tiebreaker.
-    col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
+    col.createIndex(THINGS_KIND_CREATED_INDEX),
     // Public theme gallery (`GET /api/v1/themes/shared` with no id): public
     // themes, newest-UPDATED first. Every other index here sorts by createdAt,
     // so the gallery's `updatedAt` sort had nothing to ride: the planner
@@ -864,6 +1003,10 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // and 10,000 docs examined to return 3, down to 3 keys and 3 docs.
     col.createIndex({ tags: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+		col.createIndex(
+			{ ownerId: 1, sourceDeviceId: 1, createdAt: -1, shareId: 1 },
+			{ partialFilterExpression: { sourceDeviceId: { $exists: true } } }
+		),
     // /things folder browsing: one owner's direct children of one folder,
     // newest first — fully index-provided including the page sort
     col.createIndex({ ownerId: 1, folderId: 1, createdAt: -1, shareId: 1 }),
@@ -895,6 +1038,10 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { partialFilterExpression: { storageClass: 'content' } }
     ),
     col.createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
+    col.createIndex(
+      { thingtime: 1, nextRunAt: 1, shareId: 1 },
+      { name: 'lopu_recording_due', partialFilterExpression: { thingtime: { $in: ['lopu-recording-settings', 'lopu-recording-job', 'lopu-recording-reminder'] } } }
+    ),
     // Live share counts are an $or of the v2 shape ({thingtime:'share',
     // targetId}) and the v1 shape (a post carrying shareOfId). shareOfId had
     // no index, and one unindexed branch drags the whole $or down: the
@@ -910,7 +1057,7 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // more fragile across server versions. Additive — dropping the v1 branch
     // instead would be faster still but would silently stop counting
     // un-migrated v1 shares (thingtimeOf/targetIdOf still read that shape).
-    col.createIndex({ shareOfId: 1 }, { sparse: true }),
+    ...(legacyLookups ? [col.createIndex({ shareOfId: 1 }, { sparse: true })] : []),
     // Private-S3 attachment lifecycle scans. Deliberately NOT a TTL index:
     // expiry cleanup must delete/abort S3 first and refund the user ledger in
     // one Mongo transaction; TTL deletion would orphan bytes and accounting.
@@ -930,6 +1077,36 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // schema browse page scans the whole data partition
     col.createIndex({ thingtime: 1, 'crystal.schemaId': 1 }),
     col.createIndex({ thingtime: 1, 'crystal.schema': 1 }),
+    // CONNECTIONS ADDS NO INDEX OF ITS OWN — deliberately. It preserves the
+    // shared plan's 47-index steady state after the staged migrations, while
+    // legacy-compatible bootstrap stays within the upgrade reserve. It rides
+    // two existing shapes (measure residual scan cost as traffic grows):
+    //   • the feed read (the viewer's accounts' membership rows, newest first,
+    //     chrono cursor) and the external-account-link reverse lookup ("who
+    //     links this account") ride `thingtime_1_createdAt_-1_shareId_1`
+    //     above. `thingtime` equality bounds the scan to the one kind, and
+    //     (createdAt:-1, shareId:1) IS the page sort, so it is index-provided
+    //     rather than a blocking sort; `parentId` (the account) applies as a
+    //     residual filter on the way through.
+    //   • "does this viewer's account source this exact post?" narrows on
+    //     (targetId, thingtime) above, which is already exactly that post's
+    //     membership rows — one per sourcing account — leaving parentId a
+    //     residual over a handful of docs.
+    // Read the first bullet literally: `parentId` is RESIDUAL there, not part
+    // of the index key, so the feed read walks every external-post-source row
+    // newer than the cursor and keeps the viewer's. That is cheap while the
+    // over-fetch is 2×limit and sync volume is low, and it is the thing to
+    // re-measure first if connections traffic grows — the answer would be a
+    // partial index on this kind, NOT the two names below.
+    // That is also why external-post-source/external-account-link stamp a root
+    // `parentId` (the account's shareId) alongside crystal.accountId: it keeps
+    // the residual a root-field compare. Both of the purpose-built shapes that
+    // would serve it as an index PREFIX —
+    // `thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1` and
+    // `thingtime_1_parentId_1_createdAt_-1_shareId_1` — are listed in
+    // RETIRED_THINGS_INDEXES and dropped from this collection on every
+    // bootstrap, so re-creating either name here would drop and rebuild it
+    // forever. Reclaim a slot and give a new index a NEW name instead.
     // acl and thingtime are both arrays — Mongo forbids two multikey fields
     // in one compound index, so the audience index stands alone
     col.createIndex({ acl: 1, createdAt: -1, shareId: 1 }),
@@ -970,8 +1147,8 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
       ['targetId_1_ownerId_1_crystal.emoji_1']
     ),
     // Retire the superseded follow-marker generation. Current follow writers
-    // use crystal.followKey for lookup and protected root uniqueKeys for
-    // dedupe; no registered schema mints crystal.follow. Leaving this old
+    // use protected root uniqueKeys for lookup and dedupe (custom endpoints
+    // retain crystal lookups); no registered schema mints crystal.follow. Leaving this old
     // kind-blind unique index behind would needlessly constrain ordinary data
     // Things after the crystal namespace reopens in phase 2.
     dropIndexRetrying(col, 'things_follow_unique'),
@@ -979,9 +1156,9 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // crystal.friendKey is '<minId>~<maxId>', written only by the friend
     // endpoint. Uniqueness rides uniqueKeys ('friendKey:<min>~<max>', stamped
     // at insert) so duplicate/crossed requests still die structurally; this
-    // index is now the LOOKUP only. createIndexReplacing keeps a friendKey
-    // index live throughout the swap and retires the old unique name.
-    createIndexReplacing(
+    // index is retained only for custom endpoints / an unready home layout.
+    // The steady-state home reader shares uniqueKeys_1 after awaited repair.
+    ...(relationshipLookups ? [createIndexReplacing(
       col,
       { 'crystal.friendKey': 1 },
       {
@@ -989,20 +1166,20 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
         partialFilterExpression: { 'crystal.friendKey': { $exists: true } }
       },
       ['things_friend_unique']
-    ),
+    )] : []),
     // (Notification list/unread queries are served by the general
     // { thingtime, ownerId, createdAt desc, shareId } index above.)
     // Legacy relational era (kind:'reaction'/'comment' docs written by the
     // pre-unification relational model): aggregation + dedup indexes stay
     // until the things migration converts those docs to thingtime things.
-    createIndexReplacing(
+    ...(legacyLookups ? [createIndexReplacing(
       col,
       { kind: 1, parentId: 1, createdAt: 1 },
       { name: 'things_v1_kind_parent_created', partialFilterExpression: { kind: { $exists: true } } },
       ['kind_1_parentId_1_createdAt_1']
     ),
 		col.createIndex({ parentId: 1, ownerId: 1, token: 1 }, { unique: true, partialFilterExpression: { kind: 'reaction' } }),
-		col.createIndex({ commentId: 1 }, { unique: true, partialFilterExpression: { kind: 'comment' } }),
+		col.createIndex({ commentId: 1 }, { unique: true, partialFilterExpression: { kind: 'comment' } })] : []),
     // Embed apps ("Login with Thingtime", api/utils/apps): one thing per
     // clientId, ever — a second doc claiming an existing clientId (however
     // created) could answer origin lookups with a different allowlist, so
@@ -1102,41 +1279,50 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // one follow edge per pair) ride the server-only uniqueKeys namespace
     // above — stamped in newThingDoc (messenger/shared.ts), backfilled onto
     // legacy docs by the backfill-relationship-unique-keys migration. The
-    // crystal-path indexes here serve the findOne/$in query shapes only;
+    // crystal-path indexes here serve custom / unready-home lookups only;
     // their old kind-blind UNIQUE ancestors were squattable through
     // free-form data crystals (see KIND-BLIND HISTORY above) and are
     // retired by each swap, create-then-drop, so a lookup index stays
-    // live throughout:
-    createIndexReplacing(
+    // live throughout that compatibility path. Home readers now await a
+    // complete key backfill and share uniqueKeys_1 instead:
+    ...(relationshipLookups ? [createIndexReplacing(
       col,
       { 'crystal.memberKey': 1 },
       { name: 'things_member_key_lookup', partialFilterExpression: { 'crystal.memberKey': { $type: 'string' } } },
       ['things_member_key_unique']
+    )] : []),
+    // Subspace post feeds (api/utils/subspaces): every /s/<slug> sort reads the
+    // newest posts of ONE subspace — chronological pages for "new", a bounded
+    // newest-first candidate window for hot/top/rising/controversial (the ranked
+    // home-feed pattern, so vote tallies stay relational and no denormalized
+    // score field is ever needed). Partial on the string ref so posts outside
+    // any subspace never enter it; the match always carries thingtime:'post',
+    // so a free-form data crystal squatting the key can't surface.
+    col.createIndex(
+      { 'crystal.subspaceId': 1, createdAt: -1, shareId: 1 },
+      { name: 'things_subspace_posts', partialFilterExpression: { 'crystal.subspaceId': { $type: 'string' } } }
     ),
-    createIndexReplacing(
+    ...(relationshipLookups ? [createIndexReplacing(
       col,
       { 'crystal.dmKey': 1 },
       { name: 'things_dm_key_lookup', partialFilterExpression: { 'crystal.dmKey': { $type: 'string' } } },
       ['things_dm_key_unique']
-    ),
-    createIndexReplacing(
+    )] : []),
+    ...(relationshipLookups ? [createIndexReplacing(
       col,
       { 'crystal.inviteCode': 1 },
       { name: 'things_invite_code_lookup', partialFilterExpression: { 'crystal.inviteCode': { $type: 'string' } } },
       ['things_invite_code_unique']
-    ),
-    createIndexReplacing(
-      col,
-      { 'crystal.emojiKey': 1 },
-      { name: 'things_emoji_key_lookup', partialFilterExpression: { 'crystal.emojiKey': { $type: 'string' } } },
-      ['things_emoji_key_unique']
-    ),
-    createIndexReplacing(
+    )] : []),
+    // Emoji identity reads use shareId/scope and dedupe uses uniqueKeys_1;
+    // a separate crystal.emojiKey lookup has no runtime reader. Old unique
+    // ancestors are deliberately retained until their keys are verified.
+    ...(relationshipLookups ? [createIndexReplacing(
       col,
       { 'crystal.followKey': 1 },
       { name: 'things_follow_key_lookup', partialFilterExpression: { 'crystal.followKey': { $type: 'string' } } },
       ['things_follow_key_unique']
-    ),
+    )] : []),
     // Poll voting is deliberately outside this release, but its preview
     // branch already installed the old kind-blind index in the shared develop
     // database. Retire it here with the rest of the family so phase 2 can
@@ -1277,31 +1463,51 @@ export const createCiControlIndexes = (db: any): Promise<any>[] => {
 // Home-only `things` indexes that ride beside createThingsDataIndexes in the
 // boot ensure (never on a custom endpoint's database).
 const createHomeOnlyThingsIndexes = (db: any): Promise<any>[] => [
-  // Migration diagnostics exist only on Thingtime's HOME plane. Keep this
-  // live TTL deleter out of createThingsDataIndexes(), which also installs
-  // indexes on user-supplied custom Mongo endpoints.
+  // Invitation expiry must refund before removing private state; this is NOT TTL.
   taggedCollection(thingsCollection(db), 'things').createIndex(
+    { 'crystal.status': 1, expiresAt: 1 },
+    { name: 'account_invite_expiry', partialFilterExpression: { thingtime: 'account-invite' } }
+  ),
+  // Shared root expiry index for disposable control Things. The explicit
+  // eligibility registry protects invitations/refunds and billed attachments.
+  // Retire the former per-kind indexes only after the replacement is ready.
+  createIndexReplacing(
+    taggedCollection(thingsCollection(db), 'things'),
     { expiresAt: 1 },
-    {
-      name: 'migration_diagnostic_expires_at',
-      expireAfterSeconds: 0,
-      partialFilterExpression: { thingtime: MIGRATION_DIAGNOSTIC_THINGTIME }
-    }
+    { name: 'things_ephemeral_expires_at', expireAfterSeconds: 0,
+      partialFilterExpression: { thingtime: { $in: [...EPHEMERAL_CONTROL_THINGTIMES] } } },
+    ['migration_diagnostic_expires_at', 'error_log_expires_at', 'error_log_recent']
   )
 ];
 
 // The complete home `things` plan in one call: what the boot ensure converges
 // to, and what the rebuild-things-indexes migration re-runs after dropping.
-export const ensureHomeThingsIndexPlan = (db: any): Promise<any> =>
-  Promise.all([...createThingsDataIndexes(db), ...createHomeOnlyThingsIndexes(db)]);
+export const ensureHomeThingsIndexPlan = async (db: any, { underLease = false } = {}): Promise<void> => {
+  if (!underLease) {
+    await withHomeIndexMaintenance(async (limited) => ensureHomeThingsIndexPlan(limited, { underLease: true }));
+    return;
+  }
+  await runBudgetedIndexWork(db, async (limited) => {
+    await Promise.all([...createThingsDataIndexes(limited), ...createHomeOnlyThingsIndexes(limited)]);
+  });
+};
 
 // The index NAMES the home `things` plan owns, derived by replaying the plan
 // against an in-memory recorder (the plan is only ever expressed as
 // createIndex calls, so this cannot drift from it). The rebuild migration
 // drops and recreates exactly these, and leaves every other index on the
 // collection alone.
-export const thingsIndexPlanNames = async (): Promise<Set<string>> => {
-  const names = new Set<string>();
+export type ThingsIndexPlanEntry = {
+  name: string;
+  keys: Record<string, unknown>;
+  options: Record<string, unknown>;
+};
+
+// Read-only inventory of the exact executable plan. Keeping keys and options
+// prevents an audit from treating a partial/unique/TTL index as an ordinary
+// prefix duplicate. This recorder never obtains a database connection.
+export const thingsIndexPlanEntries = async (options: { legacyLookups?: boolean } = {}): Promise<ThingsIndexPlanEntry[]> => {
+  const entries = new Map<string, ThingsIndexPlanEntry>();
   const recorder = {
     collection: () => ({
       createIndex: async (keys: Record<string, unknown>, options: Record<string, unknown> = {}) => {
@@ -1311,55 +1517,58 @@ export const thingsIndexPlanNames = async (): Promise<Set<string>> => {
               .map(([field, direction]) => `${field}_${direction}`)
               .join('_')
         );
-        names.add(name);
+        entries.set(name, { name, keys: { ...keys }, options: { ...options } });
         return name;
       },
       dropIndex: async () => undefined
     })
   };
-  await ensureHomeThingsIndexPlan(recorder);
-  return names;
+  // Record the selected plan, not the union of mutually exclusive modern and
+  // legacy plans (the latter would incorrectly include the snapshot index).
+  await Promise.all([...createThingsDataIndexes(recorder, options), ...createHomeOnlyThingsIndexes(recorder)]);
+  return [...entries.values()];
 };
 
-// Lazily ensure the data-plane indexes on a CUSTOM endpoint's database, once
-// per URI per process. Fire-and-forget by design: the first requests against a
-// fresh override DB must not block on (potentially slow, e.g. the wildcard
-// text index over a large foreign collection) index builds — reads simply run
-// unindexed until the builds land, EXCEPT text-mode search: $text errors (it
-// does not degrade) until the text index finishes building, then heals on its
-// own. A failed run clears the memo so a later request retries.
-const customIndexesEnsured = new Map<string, Promise<void>>();
-const ensureCustomDataIndexes = (uri: string, db: any) => {
-  if (customIndexesEnsured.has(uri)) return;
-	const run = Promise.all(createThingsDataIndexes(db)).then(
-    () => undefined,
-    (err) => {
-      customIndexesEnsured.delete(uri);
-      console.error('[mongodb] data-plane index ensure failed for custom endpoint:', err?.message || err);
-    }
-  );
-  customIndexesEnsured.set(uri, run);
+export const thingsIndexPlanNames = async (): Promise<Set<string>> =>
+  new Set((await thingsIndexPlanEntries()).map(({ name }) => name));
+
+// Custom endpoints are foreign data planes: never create home settings or
+// adoption records there. Await constraints and serialize each DB's DDL; only
+// successful/in-flight runs are memoised, keyed by BOTH URI and database.
+const customIndexesEnsured = new Map<string, Map<string, Promise<void>>>();
+const ensureCustomDataIndexes = (uri: string, db: any): Promise<void> => {
+  let databases = customIndexesEnsured.get(uri);
+  if (!databases) customIndexesEnsured.set(uri, databases = new Map());
+  const dbName = db.databaseName;
+  let run = databases.get(dbName);
+  if (!run) {
+    run = runBudgetedIndexWork(db, async limited => {
+      await Promise.all(createThingsDataIndexes(limited, { relationshipLookups: true, legacyLookups: true }));
+    }).catch(error => {
+      databases!.delete(dbName);
+      throw error;
+    });
+    databases.set(dbName, run);
+  }
+  return run;
 };
 
-export const ensureIndexes = async () => {
-  if (!indexesEnsured) {
-    indexesEnsured = (async () => {
-      // HOME db explicitly — ensureIndexes can run inside a request that
-      // carries a custom endpoint override (e.g. via enforceRateLimit), and
-      // the control-plane index set must never land on an override DB.
-      const db = await getHomeThingtimeDb();
-			// Capacity recovery must happen before either the shared device indexes
-			// or the normal parallel ensure. On a full collection, trying to create
-			// first can never reach the later cleanup.
-			await pruneRetiredHomeThingsIndexes(db);
-			await pruneRebuildTwins(db);
-			await migrateDeviceIndexLayout(db);
-      // indexes land on the current-generation physical collections; createIndex
-      // failures are tagged with `<logical>.<index name>` (via taggedCollection)
-      // because Promise.all surfaces only the first rejection and driver
-      // messages don't always name the index being built
-			const col = (logical: string) => taggedCollection(db.collection(physicalCollectionName(logical)), logical);
-      await Promise.all([
+const runBudgetedIndexWork = async (db: any, work: (limited: any) => Promise<void>, assertLease?: () => Promise<void>, commandMaxTimeMS?: number) => {
+  const budget = budgetIndexCommands(db, assertLease, 2, commandMaxTimeMS);
+  try { await work(budget.db); }
+  catch (error) { budget.stop(error); throw error; }
+  finally { await budget.drain(); }
+};
+
+export const createWatchPairingIndexes = (sessions: any) => [
+	sessions.createIndex({ 'meta.userCodeHash': 1, expiresAt: 1 }, { partialFilterExpression: { purpose: 'watch-pairing' } }),
+	sessions.createIndex({ 'meta.userCodeHash': 1 }, { name: 'watch_active_pin_unique', unique: true, partialFilterExpression: { purpose: 'watch-pairing', 'meta.shortCodeActive': true } }),
+	sessions.createIndex({ 'meta.recipientUserId': 1, createdAt: -1 }, { partialFilterExpression: { purpose: 'watch-pairing' } })
+];
+
+const createHomeDatabaseIndexes = (db: any, { relationshipLookups, legacyLookups }: { relationshipLookups: boolean; legacyLookups: boolean }): Promise<any>[] => {
+  const col = (logical: string) => taggedCollection(db.collection(physicalCollectionName(logical)), logical);
+  return [
         col('users').createIndex({ username: 1 }, { unique: true }),
         col('users').createIndex({ email: 1 }, { unique: true }),
         // Admin directory snapshots merge this legacy store with user Things
@@ -1371,6 +1580,7 @@ export const ensureIndexes = async () => {
 				col('users').createIndex({ 'meta.admin': 1, createdAt: -1, _id: 1 }, { partialFilterExpression: { 'meta.admin': true } }),
         col('sessions').createIndex({ jti: 1 }, { unique: true }),
         col('sessions').createIndex({ userId: 1 }),
+				...createWatchPairingIndexes(col('sessions')),
         // TTL: reap sessions once expiresAt passes. getLiveSession already
         // treats past-expiry docs as dead, so deletion removes nothing usable —
         // without it expired/revoked sessions (app grants especially) pile up
@@ -1437,7 +1647,7 @@ export const ensureIndexes = async () => {
         col('themes').createIndex({ ownerId: 1 }),
         col('waitlist').createIndex({ email: 1 }, { unique: true }),
         // the shared data-plane (`things`) index set — see createThingsDataIndexes
-        ...createThingsDataIndexes(db),
+        ...createThingsDataIndexes(db, { relationshipLookups, legacyLookups }),
         // home-only `things` indexes (migration-diagnostic TTL)
         ...createHomeOnlyThingsIndexes(db),
         // the CI control-plane satellite — see createCiControlIndexes
@@ -1482,18 +1692,98 @@ export const ensureIndexes = async () => {
         // under racing writes; its postId prefix serves the per-post stats
         // aggregation on feed reads
         col('postViews').createIndex({ postId: 1, viewerKey: 1 }, { unique: true })
+  ];
+};
+
+export const withHomeIndexMaintenance = async <T>(work: (db: any, assertLease: () => Promise<void>) => Promise<T>, execution: IndexExecutionOptions = {}): Promise<T> => {
+  const policy = indexExecutionPolicy(execution);
+  const db = await getRawHomeThingtimeDb();
+  const settings = db.collection(physicalCollectionName('settings'));
+  let result!: T;
+  await runDurableIndexPlan({ settings, fingerprint: `maintenance:${randomUUID()}`, ...policy,
+    commandSafetyMs: policy.commandMaxTimeMS + 10_000, run: async assertLease => {
+    await runBudgetedIndexWork(db, async limited => { result = await work(limited, assertLease); }, assertLease, policy.commandMaxTimeMS);
+  } });
+  indexesEnsured = null;
+  return result;
+};
+
+// Explicit index migrations and operator recovery revoke readiness before DDL.
+// A generation fence prevents a concurrent older run from publishing ready.
+export const invalidateHomeIndexReadiness = async () => {
+  indexesEnsured = null;
+  const db = await getRawHomeThingtimeDb();
+  await invalidateDurableIndexPlan(db.collection(physicalCollectionName('settings')));
+};
+
+export const ensureIndexes = async ({ force = false, ...execution }: IndexExecutionOptions & { force?: boolean } = {}) => {
+  const policy = indexExecutionPolicy(execution);
+  if (isHomeIndexRecoveryActive() && !force) return;
+  if (force) {
+    // Finish existing work before invalidating, so an older completion cannot
+    // overwrite the explicit rebuild request.
+    await indexesEnsured?.catch(() => {});
+    indexesEnsured = null;
+    const raw = await getRawHomeThingtimeDb();
+    await invalidateDurableIndexPlan(raw.collection(physicalCollectionName('settings')));
+  }
+  if (indexesEnsured) {
+    const previous = indexesEnsured;
+    await previous;
+    const db = await getRawHomeThingtimeDb();
+    const marker = await db.collection(physicalCollectionName('settings')).findOne({ _id: INDEX_LIFECYCLE_ID });
+    if (ensuredFingerprint && marker?.readyFingerprint === ensuredFingerprint && !marker?.owner) return;
+    if (indexesEnsured === previous) indexesEnsured = null;
+  }
+  if (!indexesEnsured) {
+    const run = (async () => {
+      const db = await getRawHomeThingtimeDb();
+      const settings = db.collection(physicalCollectionName('settings'));
+      // Read raw settings: the public home getters now wait on this initializer.
+      const [legacy, relationship] = await Promise.all([
+        settings.findOne({ key: 'Thingtime.IndexLayout.LegacyThings.v1' }, { projection: { ready: 1 } }),
+        settings.findOne({ key: 'Thingtime.IndexLayout.Relationships.v1' }, { projection: { ready: 1 } })
       ]);
+      const options = { legacyLookups: legacy?.ready !== true, relationshipLookups: relationship?.ready !== true };
+      const plan = (target: any) => createHomeDatabaseIndexes(target, options);
+      const fingerprint = indexPlanFingerprint(await recordIndexPlan(plan), {
+        ...options, retired: RETIRED_THINGS_INDEXES,
+        deviceUnique: LEGACY_DEVICE_UNIQUE_INDEXES, deviceTtl: LEGACY_DEVICE_TTL_INDEXES,
+        consolidated: CONSOLIDATED_THING_UNIQUE_INDEXES
+      });
+      await runDurableIndexPlan({ settings, fingerprint, ...policy,
+        commandSafetyMs: policy.commandMaxTimeMS + 10_000, run: async assertLease => {
+        await runBudgetedIndexWork(db, async limited => {
+          await pruneRetiredHomeThingsIndexes(limited);
+          await pruneRebuildTwins(limited);
+          await migrateDeviceIndexLayout(limited);
+          await Promise.all(plan(limited));
+        }, assertLease, policy.commandMaxTimeMS);
+      } });
+      ensuredFingerprint = fingerprint;
     })().catch((err: any) => {
-      // Name the broken index, then clear the failed promise so the next
-      // explicit bootstrap caller can retry as soon as the database/data is
-      // healthy. Ordinary API traffic never calls ensureIndexes.
-      indexesEnsured = null;
+      if (indexesEnsured === run) indexesEnsured = null;
       console.error(
         `[mongodb] ensureIndexes failed${err?.indexBeingBuilt ? ` building ${err.indexBeingBuilt}` : ''} — next bootstrap call will retry:`,
-        err?.message || err
+        /^[A-Za-z0-9_.:-]{1,80}$/.test(String(err?.codeName || err?.code || err?.name || 'Error'))
+          ? String(err?.codeName || err?.code || err?.name || 'Error') : 'Error'
       );
       throw err;
     });
+    indexesEnsured = run;
   }
   return indexesEnsured;
 };
+
+// Ownership can return to this warm worker after a drain. Closed clients and
+// previous readiness must never survive that role change.
+registerGatewayDrain(async () => {
+  clientCache.clear();
+  customIndexesEnsured.clear();
+  homeDbPromise = null;
+  homeDbClient = null;
+  indexesEnsured = null;
+  ensuredFingerprint = null;
+  homeRelationshipKeys = null;
+  transactionSupportProbed = false;
+});

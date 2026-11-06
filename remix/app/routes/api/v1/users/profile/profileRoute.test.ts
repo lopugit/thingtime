@@ -85,6 +85,24 @@ test('a gate-rejected active theme yields null and never leaks the pointer', asy
 	}
 });
 
+test('email remains absent from public profiles regardless of the owner display preference', async () => {
+	const hiddenLoader = createProfileLoader({
+		findUser: async () => userDoc() as any,
+		countPosts: async () => 0,
+		getWornTheme: async () => null
+	});
+	const hidden = await (await hiddenLoader({ request: get() })).json();
+	assert.equal(hidden.profile.email, undefined);
+
+	const shownOnOwnProfileLoader = createProfileLoader({
+		findUser: async () => userDoc({ hideEmailOnProfile: false }) as any,
+		countPosts: async () => 0,
+		getWornTheme: async () => null
+	});
+	const shownOnOwnProfile = await (await shownOnOwnProfileLoader({ request: get() })).json();
+	assert.equal(shownOnOwnProfile.profile.email, undefined);
+});
+
 test('the share gate is only consulted for a real string pointer', async () => {
 	// A never-themed account, a cleared pointer (themes/active writes null) and
 	// a junk value must all resolve locally — no extra query per public profile
@@ -184,6 +202,20 @@ test('profile action forwards managed attachment ids and returns the effective s
 		body: { avatarAttachmentId: 'avatar-1', bannerAttachmentId: null }
 	});
 	assert.deepEqual(await response.json(), { ok: true, user: expected });
+});
+
+test('profile action forwards the email-visibility preference without accepting a cross-origin write', async () => {
+	let received: any;
+	const action = createProfileAction({
+		getUser: async () => ({ id: 'user-1' } as any),
+		updateProfile: async (userId: string, body: any) => {
+			received = { userId, body };
+			return { ok: true, user: { id: userId, hideEmailOnProfile: true } as any };
+		}
+	});
+	const response = await action({ request: request({ hideEmailOnProfile: true }) });
+	assert.equal(response.status, 200);
+	assert.deepEqual(received, { userId: 'user-1', body: { hideEmailOnProfile: true } });
 });
 
 test('profile action preserves authored failures and enforces the streaming body cap', async () => {

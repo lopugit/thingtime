@@ -72,7 +72,7 @@ test('admin POST validates and persists the full ordered waterfall with actor id
     }
   });
 
-  const waterfall = ['claude-opus-5', 'claude-fable-5', 'default'];
+  const waterfall = ['claude-opus-5:high', 'claude-fable-5'];
   const response = await action({ request: postRequest({ waterfall }) });
   const body: any = await response.json();
 

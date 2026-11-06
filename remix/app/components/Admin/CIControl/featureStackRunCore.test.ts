@@ -51,6 +51,6 @@ test('the latest durable heartbeat drives progress and links to the exact run', 
 			{ eventType: 'workflow_run', occurredAt: '2026-09-01T00:30:00Z', data: { message: 'Ignore me.', progressPercent: 99 } },
 			{ eventType: 'feature_stack_progress', occurredAt: '2026-09-01T00:10:00Z', data: { message: 'Resolving main.', progressPercent: 48, expectedFinishAt: '2026-09-01T00:40:00Z', workflowRunUrl: 'https://github.com/lopugit/thingtime/actions/runs/123' } }
 		]),
-		{ at: '2026-09-01T00:10:00Z', message: 'Resolving main.', progressPercent: 48, expectedFinishAt: '2026-09-01T00:40:00Z', workflowRunUrl: 'https://github.com/lopugit/thingtime/actions/runs/123' }
+		{ targets: [], at: '2026-09-01T00:10:00Z', message: 'Resolving main.', progressPercent: 48, expectedFinishAt: '2026-09-01T00:40:00Z', workflowRunUrl: 'https://github.com/lopugit/thingtime/actions/runs/123' }
 	);
 });

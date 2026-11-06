@@ -1,3 +1,5 @@
+import { characterAccountLive } from '../auth/characterSession';
+import { serviceAccountAuthenticationAllowed } from '../auth/getCurrentUser';
 import { signJwt, verifyJwt } from '../auth/jwt';
 import { createSession, getLiveSession } from '../auth/sessions';
 import { findUserById, toPublicUserWithStorage } from '../auth/users';
@@ -139,7 +141,7 @@ export const resolveAppToken = async (request: Request): Promise<AppTokenContext
   if (appIsRevoked(app)) return null;
 
   const user = await findUserById(claims.sub);
-  if (!user) return null;
+  if (!user || (!serviceAccountAuthenticationAllowed(user) || !(await characterAccountLive(user)))) return null;
 
 	const sharedThings = Array.isArray(session.meta?.sharedThings) ? session.meta.sharedThings.filter((id: unknown) => typeof id === 'string') : [];
 

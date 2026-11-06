@@ -1,3 +1,5 @@
+import { ensureViewerSubspaceMessaging } from './subspaceMessages';
+import { activeSubspaceMemberCounts, currentSubspaceChatMembers, filterSubspaceMessagingChats, linkedSubspaceId, subspaceMessagingAccess } from './subspaceAccess';
 // Chats, membership, messages, reactions, read receipts and message requests.
 //
 // Shape rules (FUNDAMENTALS §3): a chat is a thing; every accumulating fact
@@ -8,6 +10,7 @@
 // can ever surface them; membership (checked here on every call) is the only
 // door.
 import { getThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
+import { relationshipLookupFilter } from '../mongodb/relationshipLookup';
 import type { FeedAuthor} from '../things/things';
 import { resolveProfiles, parseChronoCursor, chronoCursorClause } from '../things/things';
 import { orderAttachmentDocsByStoredSort, toAttachmentPublicMetadata, type AttachmentPublicMetadata } from '../attachments/attachmentCore';
@@ -23,14 +26,13 @@ import {
 	MAX_CHAT_NAME_CHARS,
 	MAX_CHAT_TOPIC_CHARS,
 	MAX_CHATS_PER_COMMUNITY,
-	MAX_MESSAGE_CHARS,
 	MAX_NICKNAME_CHARS
 } from '~/schemas/registry';
 import { customReactionEmojiId, isCustomReactionToken, sanitizeChatReactionToken } from '~/utils/reactionTokens';
 import { getUserDisplayName } from '~/utils/userIdentity';
 import { isDuplicateOnlyBulkWriteError } from './bulkWriteError';
 import { matchesCommittedMessageRequest, messageIdForRequest, normalizedMessengerRequestId } from './messengerMediaCore';
-import { publicExternalAiSource, type PublicExternalAiSource } from './externalAi';
+import { publicExternalAiSource, publicLopuMessageMeta, type PublicExternalAiSource, type PublicLopuMessageMeta } from './externalAi';
 import { followersOfSet, followingSet, isFollowing } from './follows';
 import {
 	deleteMessengerThings,
@@ -63,6 +65,13 @@ const MAX_REACTION_TOKENS_PER_MESSAGE = 100;
 // member profiles ship inline on list rows for DMs and small groups; bigger
 // rooms send counts and resolve members on open
 const LIST_MEMBER_PROFILE_CAP = 25;
+
+// Lopu conversations (api/utils/messenger/lopuChats.ts) ride the messenger
+// family with this discriminator. They are first-party — the user's own
+// notebook with the assistant — so unlike imported/live AI mirrors they may
+// be renamed here and their rows deleted; Lopu's replies stay non-editable
+// and membership stays exactly the one user.
+const isLopuSource = (source: any): boolean => !!source && source.access === 'lopu' && source.provider === 'lopu';
 
 // ── public projections ──
 
@@ -134,6 +143,8 @@ export type PublicChatMessage = {
   threadLastAt: string | null;
   createdAt: string;
   externalSource: PublicExternalAiSource | null;
+  // Lopu turn metadata (model, provider, tool calls) — null on ordinary rows
+  lopu?: PublicLopuMessageMeta | null;
 };
 
 export type CustomEmojiMap = Record<string, { name: string; image: string; animated: boolean }>;
@@ -187,7 +198,7 @@ const previewText = (crystal: any): string => {
 
 type ChatMemberFields = { role?: ChatRole; state?: MemberState; requestOrigin?: RequestOrigin | null };
 
-const newChatMemberDoc = (chatId: string, userId: string, fields: ChatMemberFields) =>
+export const newChatMemberDoc = (chatId: string, userId: string, fields: ChatMemberFields) =>
   newThingDoc('chat-member', {
     ownerId: userId,
     targetId: chatId,
@@ -203,7 +214,7 @@ const newChatMemberDoc = (chatId: string, userId: string, fields: ChatMemberFiel
     }
   });
 
-const insertChatMember = async (chatId: string, userId: string, fields: ChatMemberFields, session?: any): Promise<boolean> => {
+export const insertChatMember = async (chatId: string, userId: string, fields: ChatMemberFields, session?: any): Promise<boolean> => {
   const things = await getThingsCollection();
   try {
     await insertMessengerThing(things, newChatMemberDoc(chatId, userId, fields) as any, session ? { session } : {});
@@ -264,7 +275,7 @@ const reviveMembership = async (memberDoc: any, fields: { role?: ChatRole; state
 // sidebar/notification list never has to aggregate message history. This is
 // the replace-on-write flavour FUNDAMENTALS §3 allows; the accumulating data
 // (the messages themselves) stays relational.
-const chatPreviewOf = (message: any, attachmentCount = 0) => ({
+export const chatPreviewOf = (message: any, attachmentCount = 0) => ({
   id: message.shareId,
   authorId: String(message.ownerId),
   text: message.crystal?.deletedAt ? '' : String(message.crystal?.text || '').slice(0, 140),
@@ -274,7 +285,7 @@ const chatPreviewOf = (message: any, attachmentCount = 0) => ({
   createdAt: new Date(message.createdAt).toISOString()
 });
 
-const touchChat = async (chatId: string, lastMessage?: Record<string, unknown>, session?: any) => {
+export const touchChat = async (chatId: string, lastMessage?: Record<string, unknown>, session?: any) => {
   const things = await getThingsCollection();
 	await updateMessengerThing(things, { shareId: chatId, thingtime: 'chat' } as any, {
 		$set: { updatedAt: new Date(), ...(lastMessage ? { 'crystal.lastMessage': lastMessage } : {}) }
@@ -308,12 +319,12 @@ const insertSystemMessage = async (
   await touchChat(chatId, chatPreviewOf(message), session);
 };
 
-type ChatAccess = { chat: any; member: any };
+export type ChatAccess = { chat: any; member: any };
 
 // Membership gate used by every chat read/write. Pending members may READ
 // (message requests show the conversation); anything stronger opts in via
 // requireActive.
-const resolveChatAccess = async (viewerId: string, chatId: unknown, opts: { requireActive?: boolean } = {}): Promise<ChatAccess | Fail> => {
+export const resolveChatAccess = async (viewerId: string, chatId: unknown, opts: { requireActive?: boolean } = {}): Promise<ChatAccess | Fail> => {
   if (typeof chatId !== 'string' || !chatId.trim()) return fail(400, 'Chat id required');
   // The membership lookup does not need the chat document — findThingByKind
   // matches on shareId === id, so chat.shareId is just the trimmed id. Running
@@ -322,8 +333,18 @@ const resolveChatAccess = async (viewerId: string, chatId: unknown, opts: { requ
   // On the 404 path the member query is issued and discarded: one wasted
   // indexed findOne on an error path, no correctness change.
   const id = chatId.trim();
-  const [chat, member] = await Promise.all([findThingByKind('chat', id), getChatMemberDoc(id, viewerId)]);
+  let [chat, member] = await Promise.all([findThingByKind('chat', id), getChatMemberDoc(id, viewerId)]);
+  if (id.startsWith('subspace-general-') && (!chat || !member)) {
+    await ensureViewerSubspaceMessaging(viewerId);
+    [chat, member] = await Promise.all([findThingByKind('chat', id), getChatMemberDoc(id, viewerId)]);
+  }
   if (!chat) return fail(404, 'Chat not found');
+  if (chat.crystal?.communityId) {
+    const role = await communityRoleOf(chat.crystal.communityId, viewerId);
+    if (!role) return fail(403, 'You are not a member of this community');
+    const community = await findThingByKind('community', chat.crystal.communityId);
+    if (linkedSubspaceId(community) && member) member.crystal = { ...member.crystal, role };
+  }
   const state = member?.crystal?.state;
   if (!member || state === 'left' || state === 'declined') return fail(403, 'You are not in this chat');
   if (opts.requireActive && state !== 'active') return fail(403, 'Accept the message request first');
@@ -332,6 +353,13 @@ const resolveChatAccess = async (viewerId: string, chatId: unknown, opts: { requ
 
 // admin = chat admin/owner, or community admin/owner for channels
 const canAdministerChat = async (chat: any, member: any, viewerId: string): Promise<boolean> => {
+  if (chat.crystal?.communityId) {
+    const community = await findThingByKind('community', chat.crystal.communityId);
+    if (linkedSubspaceId(community)) {
+      const role = await communityRoleOf(community.shareId, viewerId);
+      return !!role && ROLE_RANK[role] >= ROLE_RANK.admin;
+    }
+  }
   const role = (member?.crystal?.role as ChatRole) || 'member';
   if (ROLE_RANK[role] >= ROLE_RANK.admin) return true;
   if (chat.crystal?.chatType === 'channel' && chat.crystal?.communityId) {
@@ -380,7 +408,7 @@ export const createChat = async (
     if (memberIds.length !== 1) return fail(400, 'A DM needs exactly one other person');
     const otherId = memberIds[0];
     const dmKey = dmKeyOf(viewerId, otherId);
-    const existing = await things.findOne({ thingtime: 'chat', 'crystal.dmKey': dmKey } as any);
+    const existing = await things.findOne({ thingtime: 'chat', ...await relationshipLookupFilter('dmKey', dmKey) } as any);
     if (existing) {
       // the initiator re-opening a DM is always active (accepting any pending
       // request they had); the OTHER side's state is never touched here
@@ -433,6 +461,7 @@ export const createChat = async (
     if (typeof input.communityId !== 'string' || !input.communityId.trim()) return fail(400, 'Channels need a communityId');
     const community = await findThingByKind('community', input.communityId.trim());
     if (!community) return fail(404, 'Community not found');
+    if (linkedSubspaceId(community)) return fail(409, 'Subspace spaces use their shared general channel');
     const myRole = await communityRoleOf(community.shareId, viewerId);
     if (!myRole) return fail(403, 'Join the community before creating channels');
     if (!name) return fail(400, 'Channels need a name');
@@ -536,7 +565,7 @@ const buildSummaryContext = async (viewerId: string, memberships: any[]): Promis
   // keyed off chatIds alone — none reads another's result — so they issue
   // together. Only the member ROWS below genuinely have to wait, because
   // which chats need them is derived from the chat docs' chatType.
-  const [chatDocs, unreadAgg, countAgg] = await Promise.all([
+  const [candidateChats, unreadAgg, countAgg] = await Promise.all([
     chatIds.length ? things.find({ thingtime: 'chat', shareId: { $in: chatIds } } as any).toArray() : Promise.resolve([]),
     chatIds.length
       ? things
@@ -567,8 +596,11 @@ const buildSummaryContext = async (viewerId: string, memberships: any[]): Promis
           .toArray()
       : Promise.resolve([])
   ]);
+  const chatDocs = await filterSubspaceMessagingChats(things, candidateChats, viewerId);
   const unreadByChat = new Map<string, number>(unreadAgg.map((u: any) => [String(u._id), u.count]));
   const memberCountByChat = new Map<string, number>(countAgg.map((c: any) => [String(c._id), c.count]));
+  const subspaceCounts = await activeSubspaceMemberCounts(things, chatDocs.filter((doc: any) => doc.crystal?.subspaceDefault === true).map((doc: any) => doc.subspaceId));
+  for (const doc of chatDocs) if (doc.crystal?.subspaceDefault === true && doc.subspaceId) memberCountByChat.set(String(doc.shareId), subspaceCounts.get(doc.subspaceId) || 0);
   const lastByChat = new Map<string, any>(
 		chatDocs.filter((c: any) => c.crystal?.lastMessage?.id).map((c: any) => [c.shareId, c.crystal.lastMessage])
   );
@@ -617,7 +649,9 @@ const buildSummaryContext = async (viewerId: string, memberships: any[]): Promis
 
 const summaryEntry = (viewerId: string, chatDoc: any, ctx: SummaryContext): ChatListEntry => {
   const chatId = chatDoc.shareId;
-  const membership = ctx.membershipByChat.get(chatId);
+  const storedMembership = ctx.membershipByChat.get(chatId);
+  const membership = chatDoc.subspaceViewerRole && storedMembership
+    ? { ...storedMembership, crystal: { ...storedMembership.crystal, role: chatDoc.subspaceViewerRole } } : storedMembership;
   const memberDocs = ctx.memberDocsByChat.get(chatId) || null;
   const projectOpts = { viewerId, viewerReceipts: ctx.viewerReceipts, memberReceipts: ctx.memberReceipts };
   const members =
@@ -660,7 +694,7 @@ const summaryEntry = (viewerId: string, chatDoc: any, ctx: SummaryContext): Chat
   };
 };
 
-const chatListEntryFor = async (viewerId: string, chatId: string): Promise<Fail | { ok: true; chat: ChatListEntry }> => {
+export const chatListEntryFor = async (viewerId: string, chatId: string): Promise<Fail | { ok: true; chat: ChatListEntry }> => {
   const membership = await getChatMemberDoc(chatId, viewerId);
   if (!membership) return fail(403, 'You are not in this chat');
   const ctx = await buildSummaryContext(viewerId, [membership]);
@@ -669,12 +703,30 @@ const chatListEntryFor = async (viewerId: string, chatId: string): Promise<Fail 
   return { ok: true, chat: summaryEntry(viewerId, chatDoc, ctx) };
 };
 
+// List entries for a known set of chat ids — the same summary aggregation as
+// listChats (unread, preview, membership), scoped by the viewer's ACTIVE
+// memberships in those chats (one $in over the member keys). Chats the
+// viewer is not an active member of are silently absent. Order is the
+// caller's to decide.
+export const listChatsById = async (viewerId: string, chatIds: readonly string[]): Promise<ChatListEntry[]> => {
+  const ids = Array.from(new Set(chatIds.filter((id) => typeof id === 'string' && !!id.trim()))).slice(0, MAX_LISTED_CHATS);
+  if (!ids.length) return [];
+  const things = await getThingsCollection();
+  const memberships = await things
+    .find({ thingtime: 'chat-member', ...await relationshipLookupFilter('memberKey', ids.map((id) => chatMemberKey(id, viewerId))), 'crystal.state': 'active' } as any)
+    .toArray();
+  if (!memberships.length) return [];
+  const ctx = await buildSummaryContext(viewerId, memberships);
+  return ctx.chatDocs.map((doc: any) => summaryEntry(viewerId, doc, ctx));
+};
+
 export type ListChatsResult = Fail | { ok: true; chats: ChatListEntry[]; totalUnread: number; requestsCount: number; serverTime: string };
 
 // The one list call both modes and the notification poller share. Pending
 // memberships (message requests) are EXCLUDED from `chats` — they surface via
 // listRequests — but their count rides along for the badge.
 export const listChats = async (viewerId: string): Promise<ListChatsResult> => {
+  await ensureViewerSubspaceMessaging(viewerId);
   const things = await getThingsCollection();
   // newest memberships first — fully served by the { thingtime, ownerId,
   // createdAt, shareId } index. (The 300 cap is a wide backstop; ordering of
@@ -702,7 +754,7 @@ export const getChatDetail = async (viewerId: string, chatId: unknown): Promise<
   const access = await resolveChatAccess(viewerId, chatId);
   if ('ok' in access && access.ok === false) return access;
   const { chat, member } = access as ChatAccess;
-  const memberDocs = await listChatMemberDocs(chat.shareId);
+  const memberDocs = await currentSubspaceChatMembers(await getThingsCollection(), chat, await listChatMemberDocs(chat.shareId));
   const profiles = await resolveProfiles(memberDocs.map((m: any) => String(m.ownerId)));
   const [viewerReceipts, memberReceipts] = await Promise.all([
     getUserReadReceiptsEnabled(viewerId),
@@ -713,7 +765,9 @@ export const getChatDetail = async (viewerId: string, chatId: unknown): Promise<
   let communityName: string | null = null;
   if (chat.crystal?.communityId) {
     const community = await findThingByKind('community', chat.crystal.communityId);
-    communityName = community?.crystal?.name || null;
+    const id = linkedSubspaceId(community);
+    const parent = id ? await findThingByKind('subspace', id) : null;
+    communityName = (id ? parent?.crystal?.name : community?.crystal?.name) || null;
   }
   return {
     ok: true,
@@ -735,7 +789,10 @@ export const updateChat = async (
   const access = await resolveChatAccess(viewerId, input.id, { requireActive: true });
   if ('ok' in access && access.ok === false) return access;
   const { chat, member } = access as ChatAccess;
-  if (chat.crystal?.externalSource) return fail(409, 'Imported AI chat details are read-only; resync the source to update them');
+  if (chat.crystal?.subspaceDefault === true && (input.name !== undefined || input.channelVisibility !== undefined)) return fail(409, 'The subspace general channel keeps its name and shared visibility');
+  if (chat.crystal?.externalSource && !isLopuSource(chat.crystal.externalSource)) {
+    return fail(409, 'Imported AI chat details are read-only; resync the source to update them');
+  }
   const chatType: ChatType = chat.crystal?.chatType;
   if (chatType === 'dm') return fail(400, 'DMs have no name — set a nickname instead');
   // FB-style: any member may rename a group; channels need admin
@@ -792,7 +849,8 @@ export const updateChat = async (
 export type ManageMembersResult = Fail | { ok: true; members: PublicChatMember[] };
 
 const membersPayload = async (viewerId: string, chatId: string): Promise<{ ok: true; members: PublicChatMember[] }> => {
-  const memberDocs = await listChatMemberDocs(chatId);
+  const chat = await findThingByKind('chat', chatId);
+  const memberDocs = await currentSubspaceChatMembers(await getThingsCollection(), chat, await listChatMemberDocs(chatId));
   const profiles = await resolveProfiles(memberDocs.map((m: any) => String(m.ownerId)));
   const [viewerReceipts, memberReceipts] = await Promise.all([
     getUserReadReceiptsEnabled(viewerId),
@@ -824,6 +882,10 @@ export const manageChatMembers = async (
     if (chat.crystal?.channelVisibility === 'private') return fail(403, 'This channel is private — an admin has to add you');
     const communityRole = chat.crystal?.communityId ? await communityRoleOf(chat.crystal.communityId, viewerId) : null;
     if (!communityRole) return fail(403, 'Join the community first');
+    if (chat.crystal?.subspaceDefault === true) {
+      await ensureViewerSubspaceMessaging(viewerId);
+      return membersPayload(viewerId, chat.shareId);
+    }
     const existing = await getChatMemberDoc(chat.shareId, viewerId);
     if (existing && existing.crystal?.state === 'active') {
       // already in — a friendly no-op, and no duplicate join event
@@ -846,9 +908,14 @@ export const manageChatMembers = async (
   const { chat, member } = access as ChatAccess;
   const chatType: ChatType = chat.crystal?.chatType;
   const things = await getThingsCollection();
+  const community = chat.crystal?.communityId ? await findThingByKind('community', chat.crystal.communityId) : null;
+  if (linkedSubspaceId(community) && (input.add !== undefined || input.remove !== undefined || input.role !== undefined)) {
+    return fail(409, 'Manage members and roles in the subspace settings');
+  }
 
   if (Array.isArray(input.add) && input.add.length) {
     if (chatType === 'dm') return fail(400, 'DMs stay between two people — start a group instead');
+    if (isLopuSource(chat.crystal?.externalSource)) return fail(400, 'Lopu conversations stay between you and Lopu');
     // groups: any member adds (FB); channels: public → any member, private → admin
     if (chatType === 'channel' && chat.crystal?.channelVisibility === 'private' && !(await canAdministerChat(chat, member, viewerId))) {
       return fail(403, 'Only admins can add people to a private channel');
@@ -877,7 +944,7 @@ export const manageChatMembers = async (
     // update, fresh members in ONE insert, one member-added event naming
     // everyone who actually (re)entered
     const existingDocs = await things
-      .find({ thingtime: 'chat-member', 'crystal.memberKey': { $in: ids.map((id) => chatMemberKey(chat.shareId, id)) } } as any)
+      .find({ thingtime: 'chat-member', ...await relationshipLookupFilter('memberKey', ids.map((id) => chatMemberKey(chat.shareId, id))) } as any)
       .toArray();
     const existingByUser = new Map(existingDocs.map((doc: any) => [String(doc.ownerId), doc]));
     const toRevive = existingDocs.filter((doc: any) => doc.crystal?.state !== 'active');
@@ -952,7 +1019,9 @@ export const leaveChat = async (viewerId: string, chatId: unknown): Promise<Leav
   const access = await resolveChatAccess(viewerId, chatId);
   if ('ok' in access && access.ok === false) return access;
   const { chat, member } = access as ChatAccess;
+  if (chat.crystal?.subspaceDefault === true) return fail(409, 'Leave the subspace to leave its general channel');
   if (chat.crystal?.chatType === 'dm') return fail(400, 'DMs cannot be left — mute or decline instead');
+  if (isLopuSource(chat.crystal?.externalSource)) return fail(400, 'Delete the Lopu conversation instead — it is only you in here');
   const things = await getThingsCollection();
   await updateMessengerThing(things, { shareId: member.shareId } as any, { $set: { 'crystal.state': 'left', updatedAt: new Date() } });
   await insertSystemMessage(chat.shareId, viewerId, 'member-left', { subjectId: viewerId });
@@ -971,7 +1040,7 @@ export const leaveChat = async (viewerId: string, chatId: unknown): Promise<Leav
 
 // ── messages ──
 
-const projectMessages = async (
+export const projectMessages = async (
   viewerId: string,
   chatId: string,
   docs: any[],
@@ -1113,7 +1182,8 @@ const projectMessages = async (
       threadCount: thread?.count || 0,
       threadLastAt: thread?.lastAt ? new Date(thread.lastAt).toISOString() : null,
       createdAt: new Date(doc.createdAt).toISOString(),
-      externalSource: publicExternalAiSource(doc.crystal?.externalSource)
+      externalSource: publicExternalAiSource(doc.crystal?.externalSource),
+      lopu: publicLopuMessageMeta(doc.crystal?.lopu)
     };
   });
 
@@ -1178,7 +1248,7 @@ export const listMessages = async (
     messages = messages.slice(1);
   }
 
-  const memberDocs = await listChatMemberDocs(chat.shareId);
+  const memberDocs = await currentSubspaceChatMembers(things, chat, await listChatMemberDocs(chat.shareId));
   const memberIds = memberDocs.map((m: any) => String(m.ownerId));
   const profiles = await resolveProfiles(memberIds);
 	const [viewerReceipts, memberReceipts] = await Promise.all([getUserReadReceiptsEnabled(viewerId), getUsersReadReceiptsMap(memberIds)]);
@@ -1225,7 +1295,6 @@ export const sendMessage = async (
   if ('ok' in access && access.ok === false) return access;
   const { chat, member } = access as ChatAccess;
   const text = typeof input.text === 'string' ? input.text.trim() : '';
-  if (text.length > MAX_MESSAGE_CHARS) return fail(400, `Messages cap at ${MAX_MESSAGE_CHARS} characters`);
 
 	const requestId = input.requestId === undefined ? null : normalizedMessengerRequestId(input.requestId);
 	if (input.requestId !== undefined && !requestId) return fail(400, 'Invalid message request id');
@@ -1306,6 +1375,16 @@ export const sendMessage = async (
 				things.findOne({ shareId: chat.shareId, thingtime: 'chat' } as any, { session }),
 				things.findOne({ shareId: member.shareId, thingtime: 'chat-member', ownerId: viewerId } as any, { session })
 			]);
+			if ((freshChat as any)?.crystal?.communityId) {
+				const community = await things.findOne({ thingtime: 'community', shareId: (freshChat as any).crystal.communityId } as any, { session });
+				if (!community) throw new Error('message_membership_changed');
+				if (linkedSubspaceId(community)) {
+					const gate = await subspaceMessagingAccess(things, community, viewerId, session);
+					if (!gate?.allowed) throw new Error('message_membership_changed');
+					await things.updateOne({ _id: gate.subspace._id } as any, { $set: { updatedAt: new Date() } }, { session });
+					await things.updateOne({ _id: gate.member._id } as any, { $set: { updatedAt: new Date() } }, { session });
+				}
+			}
 			const memberState = (freshMember as any)?.crystal?.state;
 			if (!freshChat || !freshMember || memberState === 'left' || memberState === 'declined') {
 				throw new Error('message_membership_changed');
@@ -1358,6 +1437,7 @@ export const editMessage = async (viewerId: string, input: { id?: unknown; text?
   const access = await resolveChatAccess(viewerId, String(message.targetId), { requireActive: true });
   if ('ok' in access && access.ok === false) return access;
   if (String(message.ownerId) !== viewerId) return fail(403, 'Only the author can edit a message');
+  if (isLopuSource(message.crystal?.externalSource)) return fail(409, "Lopu's replies cannot be edited — ask again instead");
   if (message.crystal?.externalSource) return fail(409, 'Imported AI messages are read-only; add a Thingtime reply instead');
   if (message.crystal?.deletedAt) return fail(400, 'Deleted messages stay deleted');
   if (message.crystal?.systemType) return fail(400, 'System messages write themselves');
@@ -1368,7 +1448,6 @@ export const editMessage = async (viewerId: string, input: { id?: unknown; text?
 		).countDocuments({ thingtime: 'attachment', targetId: message.shareId, attachmentState: 'ready', attachmentPurpose: 'message' } as any);
 		if (!attachmentCount) return fail(400, 'Add a message or an attachment');
 	}
-  if (text.length > MAX_MESSAGE_CHARS) return fail(400, `Messages cap at ${MAX_MESSAGE_CHARS} characters`);
   const things = await getThingsCollection();
 	await updateMessengerThing(things, { shareId: message.shareId } as any, {
 		$set: { 'crystal.text': text, 'crystal.editedAt': new Date().toISOString(), updatedAt: new Date() }
@@ -1391,7 +1470,9 @@ export const deleteMessage = async (viewerId: string, input: { id?: unknown }): 
   const access = await resolveChatAccess(viewerId, String(message.targetId), { requireActive: true });
   if ('ok' in access && access.ok === false) return access;
   const { chat, member } = access as ChatAccess;
-  if (message.crystal?.externalSource) return fail(409, 'Imported AI messages are read-only; manage them from AI connections');
+  if (message.crystal?.externalSource && !isLopuSource(message.crystal.externalSource)) {
+    return fail(409, 'Imported AI messages are read-only; manage them from AI connections');
+  }
   const mine = String(message.ownerId) === viewerId;
   if (!mine && !(await canAdministerChat(chat, member, viewerId))) {
     return fail(403, 'Only the author or an admin can delete a message');
@@ -1544,6 +1625,8 @@ export const respondToRequest = async (viewerId: string, input: { chatId?: unkno
   if (typeof input.chatId !== 'string' || !input.chatId.trim()) return fail(400, 'Chat id required');
   const member = await getChatMemberDoc(input.chatId.trim(), viewerId);
   if (!member || member.crystal?.state !== 'pending') return fail(404, 'No pending request for this chat');
+  const access = await resolveChatAccess(viewerId, input.chatId);
+  if ('ok' in access && access.ok === false) return access;
   const state: MemberState = input.accept === true ? 'active' : 'declined';
   const things = await getThingsCollection();
   await updateMessengerThing(things, { shareId: member.shareId } as any, { $set: { 'crystal.state': state, updatedAt: new Date() } });

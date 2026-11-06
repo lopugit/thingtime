@@ -1,4 +1,4 @@
-import { json } from '~/api/http';
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT, json } from '~/api/http';
 
 import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
 import { appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
@@ -8,7 +8,7 @@ import { updateThing, viewerOf } from '~/api/utils/things/things';
 // POST /api/v1/things/update — { id, crystal?, extended?, visibility?, tags? }
 // — update your own thing. Crystal patches merge over the existing crystal and
 // are re-validated against the thing's schemas; extended replaces as a whole
-// value (null clears it), so the cap matches the generic /things route.
+// value (null clears it), with the same storage validation as /things.
 // App tokens update only inside their namespace: acl-clamped, byte-delta
 // charged, per-(user, app) rate limited.
 export const action = async ({ request }: { request: Request }) => {
@@ -24,8 +24,8 @@ export const action = async ({ request }: { request: Request }) => {
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
 
-  if (actor.kind === 'app') {
-    const limit = await enforceRateLimit(request, 'appData.write', actor.rateIdentity);
+  {
+    const limit = await enforceRateLimit(request, actor.kind === 'app' ? 'appData.write' : user.accountKind === 'service' ? 'things.write.service' : 'things.write', actor.kind === 'app' ? actor.rateIdentity : `user:${user.id}`);
     if (!limit.allowed) {
       const init = rateLimitedResponseInit(limit);
       return json(
@@ -35,11 +35,12 @@ export const action = async ({ request }: { request: Request }) => {
     }
   }
 
-  const body: any = await readJsonBodyWithCors(request, 768 * 1024, cors);
+  const body: any = await readJsonBodyWithCors(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT, cors);
   const result = await updateThing(
     viewerOf(user, actorPat(actor)),
     body?.id,
     {
+      thingtime: body?.thingtime,
       crystal: body?.crystal,
       extended: body?.extended,
       acl: body?.acl,

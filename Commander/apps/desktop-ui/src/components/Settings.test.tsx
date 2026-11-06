@@ -88,6 +88,7 @@ vi.mock('../lib/api.js', () => ({
 }));
 vi.mock('../lib/nativeBridge.js', () => ({
   beginWindowDrag: vi.fn(),
+  beginTitlebarDrag: vi.fn(),
   nativeBridgeAvailable: vi.fn(() => true),
   nativeRequest: vi.fn(async (method: string) => {
     if (method === 'permission.fullDiskAccess') return { granted: true };

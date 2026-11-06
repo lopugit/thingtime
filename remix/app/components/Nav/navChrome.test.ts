@@ -13,3 +13,14 @@ test('browser navigation shares the drawer trigger control grid and keeps Comman
 	assert.match(source, /aria-label="Open Commander search"/u);
 	assert.match(source, /onClick=\{onElectronSearchClick\}/u);
 });
+
+test('footer links the exact deployment branch and full commit SHA', async () => {
+	const source = await readFile(new URL('./Footer.tsx', import.meta.url), 'utf8');
+
+	assert.match(source, /THINGTIME_BRANCH_NAME/u);
+	assert.match(source, /THINGTIME_VERCEL_GIT_COMMIT_SHA/u);
+	assert.match(source, /thingtime\/tree\/\$\{branchName\}/u);
+	assert.match(source, /thingtime\/commit\/\$\{commitSha\}/u);
+	assert.match(source, /Exact git commit \$\{commitSha\}/u);
+	assert.match(source, /🔖 \{commitSha\}/u);
+});

@@ -1,3 +1,4 @@
+import { registerRenderExport } from './renderExport.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { connectorInfo, importArchive, ingestCurrentConversation } from './importer.js';
@@ -21,11 +22,14 @@ export function createServer(store = new SnapshotStore()): McpServer {
     { instructions: 'Import only data the user explicitly provides or places in an allowlisted root. List summaries before reading conversation content. Never request or expose passwords, cookies, API keys, or session tokens.' }
   );
 
+  registerRenderExport(server);
+
   server.registerTool('thingtime_capabilities', {
     title: 'Thingtime MCP capabilities',
     description: 'Explain supported desktop chat capture paths and current safety boundaries.',
     inputSchema: z.object({})
   }, async () => textResult({
+    renderExport: 'thingtime_render_and_export: no-login offline native draft rendering, canonical JSON and embedded PNG resources. See MCP/README.md.',
     hostHandoff: 'Any MCP host can explicitly send its current conversation using thingtime_ingest_current_chat.',
     archiveImport: 'User-selected JSON exports can be imported from THINGTIME_MCP_ALLOWED_ROOTS.',
     connectors: connectorInfo(),

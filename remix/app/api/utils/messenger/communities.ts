@@ -1,8 +1,12 @@
+import { ensureViewerSubspaceMessaging } from './subspaceMessages';
+import { linkedSubspaceId, messagingRole, subspaceMessagingAccess } from './subspaceAccess';
+import { isActiveMember, membershipOfDoc } from '../subspaces/gate';
 // Communities: Slack-style workspaces. A community thing owns channels (chat
 // things via targetId), sidebar sections, invites and custom emojis — all
 // relational children, aggregated on read, per FUNDAMENTALS §3.
 import { randomBytes } from 'node:crypto';
 import { getThingsCollection } from '../mongodb/collections';
+import { relationshipLookupFilter } from '../mongodb/relationshipLookup';
 import { resolveProfiles } from '../things/things';
 import { MAX_COMMUNITIES_PER_USER, MAX_COMMUNITY_DESCRIPTION_CHARS, MAX_COMMUNITY_NAME_CHARS, MAX_SECTION_NAME_CHARS } from '~/schemas/registry';
 import type { ChatRole, Fail } from './shared';
@@ -25,6 +29,8 @@ export type PublicCommunity = {
   memberCount: number;
   createdAt: string;
   externalSource: PublicExternalAiSource | null;
+  subspaceId: string | null;
+  subspaceSlug: string | null;
 };
 
 export type PublicSection = { id: string; name: string; order: number };
@@ -37,7 +43,9 @@ const toPublicCommunity = (doc: any, myRole: ChatRole | null, memberCount: numbe
   myRole,
   memberCount,
   createdAt: new Date(doc.createdAt).toISOString(),
-  externalSource: publicExternalAiSource(doc.crystal?.externalSource)
+  externalSource: publicExternalAiSource(doc.crystal?.externalSource),
+  subspaceId: linkedSubspaceId(doc),
+  subspaceSlug: doc.crystal?.subspaceSlug ?? null
 });
 
 const toPublicSection = (doc: any): PublicSection => ({
@@ -102,7 +110,7 @@ export const createCommunity = async (ownerId: string, input: { name?: unknown; 
   if (!name) return fail(400, 'Communities need a name');
   const description = boundedTrimmed(input.description, MAX_COMMUNITY_DESCRIPTION_CHARS);
   const things = await getThingsCollection();
-  const owned = await things.countDocuments({ thingtime: 'community-member', ownerId, 'crystal.role': 'owner' } as any);
+  const owned = await things.countDocuments({ thingtime: 'community', ownerId, 'crystal.subspaceId': { $exists: false } } as any);
   if (owned >= MAX_COMMUNITIES_PER_USER) {
     return fail(400, `You already run ${MAX_COMMUNITIES_PER_USER} communities — that is a lot of communities`);
   }
@@ -120,6 +128,7 @@ export const createCommunity = async (ownerId: string, input: { name?: unknown; 
 export const listMyCommunities = async (
   viewerId: string
 ): Promise<{ ok: true; communities: (PublicCommunity & { sections: PublicSection[] })[] }> => {
+  await ensureViewerSubspaceMessaging(viewerId);
   const things = await getThingsCollection();
   const memberships = await things
     .find({ thingtime: 'community-member', ownerId: viewerId } as any)
@@ -148,7 +157,34 @@ export const listMyCommunities = async (
     if (!sectionsById.has(key)) sectionsById.set(key, []);
     sectionsById.get(key)!.push(toPublicSection(doc));
   }
-  const communities = communityDocs
+  const linkedIds = communityDocs.map((doc: any) => linkedSubspaceId(doc)).filter((id): id is string => !!id);
+  const [subspaces, subspaceMembers] = linkedIds.length ? await Promise.all([
+    things.find({ thingtime: 'subspace', shareId: { $in: linkedIds }, subspaceMediaDeleting: { $ne: true } } as any).toArray(),
+    things.find({ thingtime: 'subspace-member', targetId: { $in: linkedIds } } as any).toArray()
+  ]) : [[], []];
+  const subspaceById = new Map<string, any>(subspaces.map((doc: any) => [String(doc.shareId), doc]));
+  const viewerRoleBySubspace = new Map<string, ChatRole>();
+  const activeCounts = new Map<string, number>();
+  for (const doc of subspaceMembers) {
+    if (!isActiveMember(membershipOfDoc(doc))) continue;
+    const id = String(doc.targetId);
+    activeCounts.set(id, (activeCounts.get(id) || 0) + 1);
+    if (String(doc.ownerId) === viewerId) viewerRoleBySubspace.set(id, messagingRole(doc.crystal?.role));
+  }
+  const visibleCommunityDocs: any[] = [];
+  for (const doc of communityDocs) {
+    const id = linkedSubspaceId(doc);
+    if (id) {
+      const subspace = subspaceById.get(id);
+      const role = viewerRoleBySubspace.get(id);
+      if (!subspace || !role) continue;
+      roleById.set(String(doc.shareId), role);
+      doc.crystal = { ...doc.crystal, name: subspace.crystal?.name, description: subspace.crystal?.description ?? null, subspaceSlug: subspace.crystal?.slug };
+      countById.set(String(doc.shareId), activeCounts.get(id) || 0);
+    }
+    visibleCommunityDocs.push(doc);
+  }
+  const communities = visibleCommunityDocs
     .map((doc: any) => ({
       ...toPublicCommunity(doc, (roleById.get(doc.shareId) as ChatRole) || null, countById.get(doc.shareId) || 0),
       sections: sectionsById.get(doc.shareId) || []
@@ -175,6 +211,20 @@ export const getCommunityDetail = async (viewerId: string, communityId: unknown)
   const myRole = await communityRoleOf(community.shareId, viewerId);
   if (!myRole) return fail(403, 'You are not a member of this community');
   const things = await getThingsCollection();
+  if (linkedSubspaceId(community)) {
+    const access = await subspaceMessagingAccess(things, community, viewerId);
+    if (!access?.allowed) return fail(403, 'Join this subspace to open its messages');
+    const [rows, sections] = await Promise.all([
+      things.find({ thingtime: 'subspace-member', targetId: access.subspace.shareId } as any).sort({ createdAt: 1, shareId: 1 }).toArray(),
+      things.find({ thingtime: 'chat-section', targetId: community.shareId } as any).sort({ 'crystal.order': 1, createdAt: 1 }).toArray()
+    ]);
+    const active = rows.filter((doc: any) => isActiveMember(membershipOfDoc(doc)));
+    const page = active.slice(0, COMMUNITY_MEMBER_PAGE);
+    const profiles = await resolveProfiles(page.map((doc: any) => String(doc.ownerId)));
+    const current = { ...community, crystal: { ...community.crystal, name: access.subspace.crystal?.name, description: access.subspace.crystal?.description ?? null, subspaceSlug: access.subspace.crystal?.slug } };
+    return { ok: true, community: { ...toPublicCommunity(current, access.role, active.length), sections: sections.map(toPublicSection) },
+      members: page.map((doc: any) => ({ userId: String(doc.ownerId), profile: profiles.get(String(doc.ownerId)) || null, role: messagingRole(doc.crystal?.role), joinedAt: new Date(doc.createdAt).toISOString() })), memberCount: active.length };
+  }
   const [memberDocs, memberCount, sectionDocs] = await Promise.all([
     things
       .find({ thingtime: 'community-member', targetId: community.shareId } as any)
@@ -211,6 +261,7 @@ export const updateCommunity = async (
   if (typeof input.id !== 'string' || !input.id.trim()) return fail(400, 'Community id required');
   const community = await findThingByKind('community', input.id.trim());
   if (!community) return fail(404, 'Community not found');
+  if (linkedSubspaceId(community)) return fail(409, 'Manage this space through its subspace settings and membership controls');
   if (community.crystal?.externalSource) return fail(409, 'Imported AI space details are read-only; resync the source to update them');
   const gate = await requireCommunityRole(community.shareId, viewerId, 'admin');
   if (gate.ok === false) return gate;
@@ -244,6 +295,7 @@ export const manageCommunityMember = async (
 	const targetUserId = input.userId.trim();
   const community = await findThingByKind('community', input.communityId.trim());
   if (!community) return fail(404, 'Community not found');
+  if (linkedSubspaceId(community)) return fail(409, 'Manage this space through its subspace settings and membership controls');
   const gate = await requireCommunityRole(community.shareId, viewerId, 'admin');
   if (gate.ok === false) return gate;
   const targetDoc = await getCommunityMemberDoc(community.shareId, targetUserId);
@@ -267,6 +319,8 @@ export const manageCommunityMember = async (
 
 export const leaveCommunity = async (viewerId: string, communityId: unknown): Promise<CommunityMembersResult> => {
   if (typeof communityId !== 'string' || !communityId.trim()) return fail(400, 'Community id required');
+  const community = await findThingByKind('community', communityId.trim());
+  if (linkedSubspaceId(community)) return fail(409, 'Leave the subspace to leave its messages space');
   const doc = await getCommunityMemberDoc(communityId.trim(), viewerId);
   if (!doc) return fail(404, 'You are not a member of this community');
   if (doc.crystal?.role === 'owner') return fail(400, 'Owners cannot leave their community (yet) — it would be a ghost ship');
@@ -314,6 +368,7 @@ export const createInvite = async (
   if (typeof input.communityId !== 'string' || !input.communityId.trim()) return fail(400, 'Community id required');
   const community = await findThingByKind('community', input.communityId.trim());
   if (!community) return fail(404, 'Community not found');
+  if (linkedSubspaceId(community)) return fail(409, 'Manage this space through its subspace settings and membership controls');
   const gate = await requireCommunityRole(community.shareId, viewerId, 'admin');
   if (gate.ok === false) return gate;
   const things = await getThingsCollection();
@@ -375,13 +430,14 @@ export const joinCommunityByCode = async (viewerId: string, code: unknown): Prom
   const trimmed = boundedTrimmed(code, 100);
   if (!trimmed) return fail(400, 'Invite code required');
   const things = await getThingsCollection();
-  const invite = await things.findOne({ thingtime: 'community-invite', 'crystal.inviteCode': trimmed } as any);
+  const invite = await things.findOne({ thingtime: 'community-invite', ...await relationshipLookupFilter('inviteCode', trimmed) } as any);
   if (!invite) return fail(404, 'Invalid invite code');
   const crystal = (invite as any).crystal || {};
   if (crystal.revoked) return fail(410, 'This invite was revoked');
   if (crystal.expiresAt && new Date(crystal.expiresAt).getTime() < Date.now()) return fail(410, 'This invite expired');
   const community = await findThingByKind('community', String((invite as any).targetId));
   if (!community) return fail(404, 'That community no longer exists');
+  if (linkedSubspaceId(community)) return fail(409, 'Join this space through its subspace membership controls');
   const existingRole = await communityRoleOf(community.shareId, viewerId);
   if (existingRole) {
     const memberCount = await things.countDocuments({ thingtime: 'community-member', targetId: community.shareId } as any);
@@ -438,6 +494,7 @@ export const manageSections = async (
   if (typeof input.communityId !== 'string' || !input.communityId.trim()) return fail(400, 'Community id required');
   const community = await findThingByKind('community', input.communityId.trim());
   if (!community) return fail(404, 'Community not found');
+  if (linkedSubspaceId(community)) return fail(409, 'Subspace spaces use their shared general channel');
   const gate = await requireCommunityRole(community.shareId, viewerId, 'admin');
   if (gate.ok === false) return gate;
   const things = await getThingsCollection();

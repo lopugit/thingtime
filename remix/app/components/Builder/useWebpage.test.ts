@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { resolveWebpageClient, webpageAclForToggle } from './useWebpage';
+import { loadWebpageClient, mergeSavedWebpage, resolveWebpageClient, type ResolvedWebpage } from './useWebpage';
 import { MAX_WEBPAGE_ROUTE_CHARS } from '~/schemas/registry';
+import { THINGTIME_CAPABILITY_MANIFEST_PATH } from '~/api/utils/capabilities/capabilityContract';
 
 // SiteBlocksHost resolves the site doc for EVERY route a signed-in viewer
 // lands on, so resolveWebpageClient screens the path against the same bounds
@@ -16,7 +17,12 @@ const withFetch = async <T,>(
 ): Promise<{ result: T; calls: string[] }> => {
 	const calls: string[] = [];
 	const original = globalThis.fetch;
+	const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+	Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin: 'https://test.example' } } });
 	globalThis.fetch = ((url: string) => {
+		if (String(url) === THINGTIME_CAPABILITY_MANIFEST_PATH) {
+			return Promise.resolve({ ok: true, json: async () => ({ schemaVersion: 1, origin: 'https://test.example', features: { 'api.webpages-resolve': { version: '1.8.1' } } }) } as Response);
+		}
 		calls.push(String(url));
 		return impl(String(url));
 	}) as typeof globalThis.fetch;
@@ -24,6 +30,8 @@ const withFetch = async <T,>(
 		return { result: await run(), calls };
 	} finally {
 		globalThis.fetch = original;
+		if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+		else Reflect.deleteProperty(globalThis, 'window');
 	}
 };
 
@@ -32,6 +40,28 @@ const okResponse = () =>
 		ok: true,
 		json: async () => ({ ok: true, page: null, source: null, components: [], refs: {} })
 	} as unknown as Response);
+
+test('temporary resolve failures are retryable, not missing pages', async () => {
+	for (const status of [408, 429, 500, 502, 503]) {
+		const { result } = await withFetch(async () => new Response('', { status }), () => loadWebpageClient({ kind: 'id', id: 'shared' }));
+		assert.deepEqual(result, { status: 'error' });
+	}
+	for (const impl of [async () => { throw new Error('offline'); }, async () => new Response('not json'), async () => Response.json({ ok: true }), async () => Response.json({ ok: false })]) {
+		const { result } = await withFetch(impl, () => loadWebpageClient({ kind: 'id', id: 'shared' }));
+		assert.deepEqual(result, { status: 'error' });
+	}
+	const { result } = await withFetch(okResponse, () => loadWebpageClient({ kind: 'id', id: 'shared' }));
+	assert.equal(result.status, 'ready', 'a subsequent retry can recover');
+});
+
+test('missing or refused pages remain indistinguishable and optional site resolves stay nullable', async () => {
+	for (const status of [400, 401, 403, 404]) {
+		const { result } = await withFetch(async () => new Response('', { status }), () => loadWebpageClient({ kind: 'id', id: 'shared' }));
+		assert.deepEqual(result, { status: 'missing' });
+	}
+	const { result } = await withFetch(async () => { throw new Error('offline'); }, () => resolveWebpageClient({ kind: 'path', path: '/status' }));
+	assert.equal(result, null, 'SiteBlocksHost must retain its fallback rather than get an unhandled rejection');
+});
 
 test('paths the server route gate refuses never reach the network', async () => {
 	// /post/<id> and the `*` thing-tree catch-all routinely carry uppercase,
@@ -69,23 +99,38 @@ test('id and global targets are never path-screened', async () => {
 	assert.ok(global.calls[0].includes('global=1'));
 });
 
-// The public toggle owns the tt:all entry and nothing else — hidden links,
-// custom audiences (tt:user/<name>) and app grants (tt:app/<id>) share the
-// list and must survive a publish/unpublish round trip.
-test('the public toggle only adds and removes tt:all', () => {
-	assert.deepEqual(webpageAclForToggle(['tt:user'], true), ['tt:user', 'tt:all']);
-	assert.deepEqual(webpageAclForToggle(['tt:user', 'tt:all'], false), ['tt:user']);
-	assert.deepEqual(webpageAclForToggle(['tt:user', 'tt:hidden', 'tt:user/ada', 'tt:app/x'], true), [
-		'tt:user',
-		'tt:hidden',
-		'tt:user/ada',
-		'tt:app/x',
-		'tt:all'
-	]);
-	assert.deepEqual(webpageAclForToggle(['tt:all', 'tt:hidden', 'tt:app/x'], false), ['tt:user', 'tt:hidden', 'tt:app/x']);
-	// a missing/garbage acl degrades to owner-only rather than throwing
-	assert.deepEqual(webpageAclForToggle(undefined, false), ['tt:user']);
-	assert.deepEqual(webpageAclForToggle('not-a-list', true), ['tt:user', 'tt:all']);
-	// tt:all is never duplicated by a repeated publish
-	assert.deepEqual(webpageAclForToggle(['tt:user', 'tt:all'], true), ['tt:user', 'tt:all']);
+test('a standalone page forwards its hidden-link bearer key', async () => {
+	const { calls } = await withFetch(okResponse, () =>
+		resolveWebpageClient({ kind: 'id', id: 'hidden-page', key: 'secret key' })
+	);
+	assert.equal(calls.length, 1);
+	assert.ok(calls[0].includes('id=hidden-page'));
+	assert.ok(calls[0].includes('key=secret%20key'));
+});
+
+test('saved webpages adopt and clear owner-only hidden-link keys with their ACL', () => {
+	const initial: ResolvedWebpage = {
+		page: {
+			id: 'page-1',
+			crystal: { name: 'Shared page', siteRoute: '/shared', blocks: [] },
+			acl: ['tt:user', 'tt:hidden'],
+			linkKey: 'old-key'
+		},
+		source: 'user' as const,
+		componentsByRef: {}
+	};
+	const refreshed = mergeSavedWebpage(initial, {
+		id: 'page-1',
+		crystal: initial.page?.crystal as unknown as Record<string, unknown>,
+		acl: ['tt:user', 'tt:hidden'],
+		linkKey: 'fresh-key'
+	});
+	assert.equal(refreshed?.page?.linkKey, 'fresh-key');
+
+	const publicPage = mergeSavedWebpage(refreshed, {
+		id: 'page-1',
+		crystal: initial.page?.crystal as unknown as Record<string, unknown>,
+		acl: ['tt:user', 'tt:all']
+	});
+	assert.equal(publicPage?.page?.linkKey, undefined);
 });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router';
+import { Link as RouterLink, useNavigate, useParams, useLocation } from 'react-router';
 import {
   Box,
   Button,
@@ -25,6 +25,9 @@ import {
   Tr
 } from '@chakra-ui/react';
 
+import { MongoConnectionInventory } from './MongoConnectionInventory';
+import { PreviewRetentionSettings } from './PreviewRetentionSettings';
+import { SystemVault } from './SystemVault';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { CIControlDashboard } from '~/components/Admin/CIControl/CIControlDashboard';
 import { IntegrationManager } from '~/components/Admin/IntegrationManager';
@@ -226,12 +229,13 @@ const StorageUsage = ({ storage }: { storage: AdminStorageProjection | null | un
 	);
 };
 
-const QUOTA_FIELDS = ['appStorageBytes', 'userStorageBytes', 'maxApps', 'maxPats'] as const;
+const QUOTA_FIELDS = ['appStorageBytes', 'userStorageBytes', 'maxApps', 'maxPats', 'speedTestsPerHour'] as const;
 const QUOTA_QUERY_LABELS: Record<(typeof QUOTA_FIELDS)[number], string> = {
   appStorageBytes: 'app storage',
   userStorageBytes: 'user storage',
   maxApps: 'max apps',
-  maxPats: 'max access tokens'
+  maxPats: 'max access tokens',
+  speedTestsPerHour: 'speed tests per hour'
 };
 
 const subscriptionQueryFields = <T,>(prefix = 'subscription'): AdminRowField<T>[] => [
@@ -951,11 +955,13 @@ export const AdminDashboard = () => {
   const user = useCurrentUser();
   const navigate = useNavigate();
   const { section } = useParams();
-  const selectedTabIndex = adminTabIndex(section);
+	const { hash } = useLocation();
+	const selectedTabIndex = adminTabIndex(section, hash);
 
   React.useEffect(() => {
     if (selectedTabIndex === null) navigate('/admin', { replace: true });
-  }, [navigate, selectedTabIndex]);
+		else if (section === 'system') navigate(`${adminTabPath(selectedTabIndex)}${hash}`, { replace: true });
+	}, [navigate, selectedTabIndex, section, hash]);
 
   // Same whole-page gate idiom as the MongoDB workbench (Raw.tsx): a card,
   // never a redirect, so the URL is shareable between admins.
@@ -1022,6 +1028,12 @@ export const AdminDashboard = () => {
             <CIControlDashboard cacheIdentity={user.id} />
           </TabPanel>
           <TabPanel px={0}>
+            <MongoConnectionInventory key={user.id} />
+          </TabPanel>
+          <TabPanel px={0}>
+            <PreviewRetentionSettings key={user.id} />
+          </TabPanel>
+          <TabPanel px={0}>
             <IntegrationManager />
           </TabPanel>
           <TabPanel px={0}>
@@ -1031,7 +1043,17 @@ export const AdminDashboard = () => {
             </React.Suspense>
           </TabPanel>
           <TabPanel px={0}>
-            <AdminPanel />
+						<SystemVault key={user.id} cacheIdentity={user.id} category="ai-providers" />
+						<AdminPanel category="ai-providers" />
+					</TabPanel>
+					<TabPanel px={0}>
+						<AdminPanel category="lopu" />
+					</TabPanel>
+					<TabPanel px={0}>
+						<SystemVault key={user.id} cacheIdentity={user.id} category="platform" />
+					</TabPanel>
+					<TabPanel px={0}>
+						<AdminPanel category="access" />
           </TabPanel>
         </TabPanels>
       </Tabs>

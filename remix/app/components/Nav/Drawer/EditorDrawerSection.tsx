@@ -1,4 +1,5 @@
 import React from 'react';
+import { isPlainLinkClick } from '~/utils/linkNavigation';
 import ClickAwayListener from 'react-click-away-listener';
 import { Box, Flex, Input, Text } from '@chakra-ui/react';
 import { useLocation, useNavigate } from 'react-router';
@@ -333,7 +334,8 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 			</Text>
 
 			{!editorMounted && (
-				<Flex {...rowStyles} {...rowA11y('Open editor', openEditor)}>
+				<Flex {...rowStyles} as="a" href={buildThingModeUrl('editor', parseThingPath(pathname))}
+					aria-label="Open editor" onClick={(event) => { if (isPlainLinkClick(event)) { event.preventDefault(); openEditor(); } }}>
 					<Icon name="💻" lucide="monitor" size="12px" chakras={{ flexShrink: 0 }} />
 					<Text fontSize="xs">Open editor</Text>
 				</Flex>

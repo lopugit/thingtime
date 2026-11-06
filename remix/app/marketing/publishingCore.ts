@@ -56,7 +56,11 @@ export const SECTION_LABELS: Record<SectionBlock['type'], string> = {
 	links: 'Links'
 };
 
-const SECTION_ID_PATTERN = /^[a-z]+(?:\/[2-9]\d*)?$/;
+// `<type>` or `<type>/<n>` with n >= 2 and no leading zero — `pageSections`
+// only suffixes repeats, so /1 is never minted. The multi-digit alternative is
+// spelled out: `[2-9]\d*` would reject /10../19 (and /100../199) while
+// accepting /20, so the tenth repeat of a section type would become unhideable.
+const SECTION_ID_PATTERN = /^[a-z]+(?:\/(?:[2-9]|[1-9]\d+))?$/;
 
 /** Syntactic parse only — `resolvePublicationKey` (publishing.ts) checks the catalog. */
 export const parsePublicationKey = (key: unknown): PublicationTarget | null => {

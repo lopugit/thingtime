@@ -1,3 +1,6 @@
+import { authorizeAiWaterfall } from '../ai/waterfallService';
+import { validateFeatureStackModels } from './featureStackModels';
+
 import { createSign } from 'node:crypto';
 
 import type { CiWorkflowKey } from './automationPolicy';
@@ -272,7 +275,9 @@ export const canonicalFeatureStackPlanFromPullRequests = (input: {
 	stackId: string;
 	runId: string;
 	autoDecideBranches: boolean;
+	modelWaterfall?: unknown;
 }) => {
+  const modelWaterfall = validateFeatureStackModels(input.modelWaterfall);
   const headRefs = new Set<string>();
 	const sources = input.pullRequests.flatMap((pr, index) => {
     const number = input.sourcePrNumbers[index];
@@ -320,7 +325,8 @@ export const canonicalFeatureStackPlanFromPullRequests = (input: {
 		sources,
 		stackId: input.stackId,
 		targets,
-		version: 3 as const
+		version: modelWaterfall ? 4 : 3,
+		...(modelWaterfall ? { modelWaterfall } : {})
 	};
 };
 
@@ -369,7 +375,8 @@ export const buildFeatureStackInputs = async (requestedInputs: Record<string, un
 		repository,
 		stackId,
 		runId,
-		autoDecideBranches
+		autoDecideBranches,
+		modelWaterfall: requestedInputs.model_waterfall
   });
   return { feature_stack_plan_b64: Buffer.from(JSON.stringify(plan), 'utf8').toString('base64'), feature_stack_run_id: runId };
 };
@@ -383,6 +390,7 @@ export const dispatchCiWorkflow = async (input: {
 	parentId?: string | null;
   requestedAt?: Date;
 }) => {
+	if (input.workflow === 'feature-stack' && input.inputs?.model_waterfall != null) await authorizeAiWaterfall(input.actorId, input.inputs.model_waterfall);
 	const requestedInputs = input.workflow === 'feature-stack' ? await buildFeatureStackInputs(input.inputs ?? {}) : input.inputs;
   const { workflowFile, inputs } = resolveCiWorkflowDispatch(input.workflow, requestedInputs);
   // workflow_dispatch loads its listener from `ref`. Keep that entrypoint on

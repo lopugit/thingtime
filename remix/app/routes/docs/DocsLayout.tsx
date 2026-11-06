@@ -24,6 +24,7 @@ import { conceptEntries, conceptStatusColors, getConceptEntryBySlug } from './co
 import { DocsSearch } from './DocsSearch';
 
 const docsNav = [
+  { label: 'Builder SDK', to: '/docs/builder', icon: Component, description: 'Forms, uploads, actions and lookups' },
   {
     label: 'Overview',
     to: '/docs',
@@ -495,7 +496,7 @@ function DocsDrawerContent({
   const urlSearchQuery = searchParams.get('q') || '';
   const [searchQuery, setSearchQueryState] = React.useState(urlSearchQuery);
   const pendingUrlQueryRef = React.useRef<string | null>(null);
-  const urlSyncTimerRef = React.useRef<ReturnType<typeof window.setTimeout>>();
+  const urlSyncTimerRef = React.useRef<number | undefined>(undefined);
   const searching = searchQuery.trim().length > 0;
 
   const setSearchQuery = React.useCallback(
@@ -925,3 +926,17 @@ export default function DocsLayout() {
     </Box>
   );
 }
+
+
+// Optional shared preview copy. Route discovery works without this override.
+export const socialPreview = {
+  "title": "Thingtime docs",
+  "description": "The product, API and design system behind a world where everything is a thing.",
+  "eyebrow": "THINGTIME · DOCS",
+  "badges": [
+    "Build with Thingtime",
+    "API + SDK"
+  ],
+  "variant": "docs",
+  "pageTitle": "Thingtime docs"
+} as const;

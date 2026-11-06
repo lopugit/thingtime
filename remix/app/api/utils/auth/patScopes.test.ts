@@ -16,10 +16,10 @@ import {
 // validator here silently widens every token minted afterwards. These are the
 // pure guards; the acl-level fence they feed lives in things.ts.
 
-test('the visibility catalog is exactly the three known modes, in selector order', () => {
+test('the visibility catalog is exactly the four known modes, in selector order', () => {
   assert.deepEqual(
     PAT_VISIBILITY_CATALOG.map((mode) => mode.id),
-    ['all', 'public', 'private']
+    ['all', 'public', 'private', 'hidden']
   );
   // every descriptor is renderable by the selector
   for (const mode of PAT_VISIBILITY_CATALOG) {

@@ -53,7 +53,8 @@ export const action = async ({ request }: { request: Request }) => {
     expiresInMs: body?.expiresInMs,
     maxUses: body?.maxUses,
     onlyCreatedThings: body?.onlyCreatedThings,
-    visibility: body?.visibility
+    visibility: body?.visibility,
+    allowGet: body?.allowGet
   });
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });

@@ -70,6 +70,7 @@ try {
             '--mac',
             '--publish', 'never',
             '--config.forceCodeSigning=true',
+            ...(process.env.THINGTIME_ELECTRON_BUILD_NUMBER ? [`--config.buildVersion=${process.env.THINGTIME_ELECTRON_BUILD_NUMBER}`] : []),
             '--config.mac.identity=-',
             '--config.mac.notarize=false',
 			'--config.mac.entitlements=build/entitlements.unsigned.mac.plist',
@@ -84,7 +85,7 @@ try {
 
 const appPath = await findBuiltApp();
 if (!appPath) throw new Error('electron-builder did not retain an unpacked unsigned Thingtime.app for verification.');
-run(process.execPath, [path.join(electronDir, 'scripts', 'verify-unsigned-app.mjs'), appPath], { env: unsignedEnvironment });
+run(process.execPath, [path.join(electronDir, 'scripts', 'verify-unsigned-app.mjs'), '--require-bundled-mongo', appPath], { env: unsignedEnvironment });
 const archives = await findReleaseArchives();
 if (!archives.length) throw new Error('electron-builder did not produce an unsigned Thingtime ZIP for publication.');
 for (const archive of archives) {

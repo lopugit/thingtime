@@ -2,6 +2,43 @@
 
 ## Launcher
 
+- [ ] Upgrade a schema-3 fixture while a writer migration/first refresh is pending. Valid old files must remain
+      searchable under current roots/ignore/hidden/Git policy, removed/stale-root paths stay absent, and unknown
+      eligible totals display Not measured rather than zero or a global legacy count. Compare contradictory .ignore,
+      .gitignore and info/exclude whitelists against a fresh real scan; source precedence and ignored-parent pruning
+      must agree. A known mismatched fingerprint
+      must never enable legacy adoption. After full reconciliation, verify normal counts and index age resume.
+
+- [ ] Leave background indexing active and search repeatedly: prior committed apps/files stay searchable, typing
+      never starts or awaits a scan, and the footer retains its last measured unique index count plus relative index age.
+      Resize the native launcher below 720px: keep the summary visible, with no overlap at the minimum window width.
+      Detailed processed/total progress appears only in Search Settings. Check the footer in a narrow launcher.
+- [ ] Under an isolated root, create/rename/delete files, folders and app bundles, including an inner bundle change;
+      verify event-driven changes without Index Now. Exercise continuous events during a scan, inherited/custom ignores,
+      root disable/removal, overlapping roots, mounted-volume removal while running and while stopped, and relaunch
+      after a saved settings change. Counts must exclude removed/disabled sources and duplicate public/Data-volume paths.
+- [ ] Keep a deliberately long full scan active, then create/rename/delete disposable files, folders and app bundles.
+      Verify changed exact-path metadata becomes searchable before the full writer commits; missing/ineligible paths
+      become tombstones, ignored descendants stay absent, and temporary observations never claim a measured committed
+      total. Keep a valid measured baseline visible through repeated pending notifications without returning to
+      Ready/Not measured; live results may precede its committed count. A root or ignore/hidden policy change must
+      immediately make the total unmeasured until a matching full replacement commits. After reconciliation, verify
+      the measured unique count and current results converge.
+- [ ] Pause a broad background metadata traversal, then add a file to an already visited folder. Exact new events
+      must remain prompt while older descendant work is pending. Change enabled roots during a pending search and
+      make that old read fail: neither its fallback nor yielded older work may restore the previous root's results.
+      A denied/failed directory enumeration must not by itself mark previously usable children as deleted.
+      Repeat a notification for a directory whose earlier walk is paused: known live children must stay visible.
+      With filesystem indexing disabled, delete/recreate a parent containing an app and verify its old tombstone
+      neither hides the recreated app nor prevents verified overlay retirement.
+- [ ] Exercise notification bursts and the installed app with all real enabled roots, including public/Data-volume
+      aliases of its database directory. Verify health/search and the native launcher remain responsive, database/WAL
+      writes do not feed another scan, and covered repeated events still trigger a bounded notification deadline.
+      A small-root fixture or synthetic event burst alone cannot pass installed whole-root acceptance.
+- [ ] Run `node script/verify-background-index.mjs '<development app path>'` after `script/dev-parallel.sh build`;
+      retain its measured search latency and inventory assertions. Run `script/dev-parallel.sh clean` before the final
+      signed install. Verify the installed app retains its original account/settings/profile and runs the new source.
+
 - [ ] Type a misspelling in the root launcher and confirm macOS does not show a correction/replacement popover.
 - [ ] Search for an application or path-backed file/folder and confirm its real Finder icon replaces the generic Commander glyph.
 - [ ] Run a broad query with at least 30 path-backed results, then move selection rapidly through the rows. Generic or
@@ -59,7 +96,18 @@
 - [ ] Type a unique query and launch a command from its results. Hide and reopen with the global shortcut; verify the input is blank while the launched command appears first under History and its search term appears next as a separate full-width top-level result. Return reruns the command from its row and restores the query from the search-term row. Quit/relaunch Commander and verify both persist.
 - [ ] Create at least nine distinct search sessions. Verify only the newest eight appear initially, Show More expands the retained history, Show Less collapses it again, and arrow navigation keeps every revealed row visible.
 - [ ] With text in the search field, Command-A selects the complete query and typing replaces it; on Windows/Linux shells, repeat with Control-A.
-- [ ] Up/Down selection stays visible through the complete result list. Return runs the selected primary action.
+- [ ] Tap Up/Down rapidly: each press moves exactly one row immediately. Hold an arrow: repeat begins after 180ms,
+      ramps smoothly to 40 rows/second, and stops on release without jumps, overscroll or wrapping at either end.
+      Repeat with slow and fast macOS keyboard-repeat settings; system repeats must not add extra selection steps.
+      Verify History, Calculator and grouped results stay visible with instant nearest scrolling, including the last row.
+      Select a lower result in a tall launcher, then shrink it to its minimum size without pressing another arrow:
+      the same selected row must stay visible immediately, with no smooth-scroll delay or scroll/resize loop.
+      Press Return immediately after rapid arrows and verify the current highlighted primary action executes once.
+- [ ] During a held arrow, reverse direction, type a new query, replace/shrink results, move focus to Settings,
+      open Actions or a context/pin menu, open a bundled view, hide/reopen Commander and switch applications.
+      Selection must stop when ownership changes and must not resume from stray native repeat events.
+      Command/Control/Option/Shift arrows and IME composition retain their input editing/menu behavior.
+      Keep a native icon request unresolved while navigating: unrelated rows must not cancel/requeue their icons.
 - [ ] Hover a lower result, stop moving the pointer, then keep typing. The refreshed list resets to its first result; the stationary pointer must not steal selection until it moves again.
 - [ ] Type a new query and press Return immediately, before the search debounce settles. Commander must never execute an item left over from the previous query.
 - [ ] Command-K opens Actions for the selected item; Escape closes Actions before closing Commander.
@@ -74,7 +122,17 @@
 - [ ] Drag the launcher by its icon/header chrome; the window follows the pointer without moving focus into the search field.
 - [ ] Drag each launcher corner and edge inward and outward in default and compact modes. Verify native resize cursors
       appear, the panel follows the pointer down to its mode-specific minimum, and content remains usable without an
-      opaque outer rectangle.
+      opaque outer rectangle. Keep the mouse held after the first small movement, cross cursor/tracking boundaries,
+      change Shift, and reverse direction: resizing must continue beyond the first pixel until release. Run the native
+      passive-event dispatch regression to cover cursor, enter/exit, framework and modifier notifications between drag
+      steps; endpoint-only automated drags do not establish that interleaved-event behavior.
+- [ ] Hover without clicking along both sides of each visible launcher border and all four corners. Pause, move along
+      the border, and cross a corner: the resize cursor must remain stable and match the direction available on drag.
+      Repeat after default/compact changes and at minimum and wide/tall window sizes. Center links, text fields,
+      header/footer controls and file dragging must retain normal input and cursors. Disable custom resize handling:
+      its native handle views must stop intercepting hits and cursors. Run the loaded-WebKit native cursor regression
+      for sibling hit ownership, system cursor selection and relayout/invalidation; dispatched cursor updates and
+      endpoint drags do not substitute for this physical-hover check when automation lacks pointer movement.
 - [ ] While resizing, trigger an emoji insertion or press Return to paste from Commander’s Emoji & Symbols picker,
       release the mouse, press Escape, change focus, hide, or close the launcher. The resize session must cancel
       immediately, so later pointer movement cannot resize the panel. In
@@ -85,17 +143,23 @@
       the icon and choose Open New Window; verify the newly created window starts pinned even when the global default
       is off, and both windows retain independent queries. Exercise the configured pin/unpin shortcut and confirm the
       icon's active opacity follows native pinned state.
-- [ ] Run an index while the launcher is visible. Verify the idle footer is replaced by the active source label and
-      processed/indexed counts, advances without reopening the launcher, then returns to ready when complete.
+- [ ] Run an index while the launcher is visible. Keep scan labels and processed/indexed progress in Search Settings;
+      the launcher footer retains its measured searchable-total/age summary, or explicitly unmeasured state when
+      current eligibility has not been counted. Indexing must not interrupt typing or replace the search view.
 - [ ] Search `emoji` or `symbols`, run Search Emoji & Symbols, and verify the launcher changes into the eight-column picker without opening Settings or an external app.
+- [ ] With execution HTTP deliberately stalled, invoke the enabled Emoji & Symbols command's native shortcut.
+      The local picker must open immediately; a disabled extension/command must remain disabled. Navigate away
+      before completing the old request and verify its late view response cannot reopen or replace the current view.
 - [ ] In the emoji picker, search `heart`; verify semantic matches, category and skin-tone selectors, Left/Right/Up/Down navigation, selected-cell scrolling, and Command-K actions. Command-Return copies and Shift-Command-C copies Unicode code points.
 - [ ] Type `ear` and verify macOS does not show a spelling/correction pill over the picker; while the search field remains focused, arrow keys must move the selected emoji instead of entering correction UI. Search misspellings such as `haert` and `hert` and verify relevant heart emoji still appear.
 - [ ] Search `heart`, arrow to a non-leading heart, and choose it twice. Reopen the picker and search `heart` again; verify that emoji is promoted. Quit/relaunch Commander and repeat the query to verify the bounded device-local query/emoji counts persist.
 - [ ] Bind Search Emoji & Symbols to Command-E. With another app active, press Command-E and immediately type `heart`; the picker must remain visible and focused. Dismiss it, then press Command-Space once and verify the normal launcher reappears. Repeat after hiding Commander with Command-H to confirm the global shortcut restores the app in one press.
-- [ ] Open Commander over a disposable TextEdit document, choose an emoji, and press Return. With Commander trusted in Accessibility, verify the launcher closes and the emoji is pasted into that original app; without trust, verify the picker stays open and clearly reports the clipboard-only fallback without prompting on launch.
+- [ ] Open Commander over a disposable TextEdit document, choose an emoji, and press Return. With Commander trusted in Accessibility, verify the launcher closes and the emoji is pasted into that original app; without trust, verify the picker stays open, explains how to recover access, and preserves the clipboard unless Copy Emoji was explicitly chosen. Never prompt on launch.
 - [ ] In Extensions → Bundled, change Emoji & Symbols' Return action among Paste to Current App, Paste and Keep a
       Copy, Copy Emoji, and Copy Unicode. Verify each persists across relaunch. For Paste to Current App, seed the
       clipboard with unique text, paste an emoji into TextEdit, then verify the unique clipboard content is restored.
+- [ ] With Accessibility denied (or a stale enabled grant), select a non-leading emoji and repeatedly press Return or double-click it. The native window, font size, eight-column grid width, selected emoji, recents and learned ranking must remain stable. The complete explanation, Open Accessibility Settings and Copy Emoji controls must fit at standard, minimum, compact and large-text sizes; scroll to the final emoji and open Actions without clipping. The keep-clipboard action must not change the pasteboard change count even transiently. Only an explicit Copy Emoji action may replace it.
+- [ ] For a signing-identity migration, compare the installed app's designated requirement with its prior build. If macOS still shows the old grant enabled but rejects paste, refresh only Commander's Accessibility toggle after explicit user approval, relaunch the same installed bundle, and verify Return and double-click paste into a disposable TextEdit document while retaining the previous clipboard.
 - [ ] Reopen Commander after leaving the emoji picker and verify the normal launcher returns with an empty query. Reopen the picker and verify its Recently Used ordering and selected skin tone persist locally.
 
 ## Settings
@@ -106,6 +170,7 @@
       with Commander host/daemon CPU, memory, storage, and process count plus local Mac CPU, best-effort GPU,
       memory, thermal state, and filesystem values. Disconnect the native bridge only in a test shell and verify the
       unavailable state appears without sending machine metrics to the daemon or Thingtime.
+- [ ] Open Activity repeatedly with real IORegistry GPU output larger than a pipe buffer; metrics must finish, and an unavailable or stalled GPU probe must stop within its deadline instead of freezing the app.
 - [ ] In Activity, verify System memory shows used/total plus Active, Wired, Cached, Compressed, and Purgeable values;
       verify Filesystem includes the macOS purgeable-capacity estimate. Sort the full-width process table by every
       available header, enable Group by parent, and confirm CPU, memory, and disk rows update without crashing the
@@ -138,6 +203,11 @@
 - [ ] With an index above one million records, leave Search Settings open for at least four status polls. Counts and
       database size must stay populated, each poll must complete within five seconds, and no timeout may replace the
       last-known values with zeroes. Search a long nonexistent term afterward and verify status polling recovers.
+- [ ] Under the existing saved 512 MiB memory ceiling, reconcile a wide/deep enabled whole-volume root
+      in the signed installed app without raising or resetting the policy. Verify the writer commits, the launcher
+      leaves Not measured for an independently checked unique total/freshness, and health/search remain responsive.
+      Cover directory-handle limits 1, 2 and 16, cross-chunk ignore rules, disappearing boundary directories and
+      exclusion of the index database, WAL/SHM and temporary frontier; failure must preserve the previous snapshot.
 - [ ] Change Scanner threads, Parallel tasks, Open folders, Max CPU, and Max memory; close/reopen Settings and verify
       every value persists. Run a scan and verify the last-run line reports effective workers, average CPU, peak RAM,
       and throttle time. Set the three concurrency ceilings to different values and verify effective workers use the
@@ -210,3 +280,20 @@
 - [ ] Inspect every settings tab and the open Actions state at native window sizes.
 - [ ] Resize Settings to its minimum and a large desktop size; no clipping, overlap, or horizontal overflow.
 - [ ] Verify keyboard focus, VoiceOver labels, reduced motion, and high-contrast/dark appearance.
+
+## Signed releases
+
+- [ ] Follow the root TESTING.md Commander release checklist. Verify the downloaded
+      archive with `script/verify-production-bundle.sh`, then check the installed
+      copy's signature, bundled executable, daemon health, and launcher search.
+- [ ] Confirm Recovery lists the GitHub build and commit in Commander and Recovery
+      caches, preserves the previous app, and leaves Electron's cache unchanged.
+
+## Thingtime callback registration recovery
+
+- Verify the built daemon manifest reports its exact origin and every runtime operation; the UI must reject a missing, older or breaking login capability before posting a login request.
+
+- [ ] With a native callback registered, sign in from installed Commander and verify native handoff, the correct account, and Keychain persistence after relaunch.
+- [ ] With only Commander's exact loopback origin registered, sign in and verify browser consent succeeds, the loopback callback completes, and the same account persists after relaunch.
+- [ ] With neither callback registered, or with a suspended app, incompatible capability manifest, or unreachable server, verify Commander shows an actionable failure without opening a broken consent page or accepting another callback.
+- [ ] Change the selected environment during an outstanding login and send a mismatched callback; verify no code reaches another origin and the original state cannot be replayed.

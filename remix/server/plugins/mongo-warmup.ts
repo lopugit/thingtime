@@ -1,26 +1,28 @@
 import { definePlugin } from 'nitro';
+import { agentTestEnvironment } from '../../app/api/utils/agentTesting';
+import { hasSelfHostedApiEnv } from '../utils/apiFallback';
+import { getGatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
 
 import { ensureIndexes, warnIfTransactionsUnsupported } from '../../app/api/utils/mongodb/collections';
 
-// Cold-start warmup: start the Mongo client connect + adoption pass + index
-// ensure the moment a fresh instance boots, instead of awaiting them inside
-// the first user's request (the old inline `await ensureIndexes()` on hot
-// paths cost every new serverless instance a ~55-command createIndex battery
-// mid-request). ensureIndexes shares in-flight/successful work per process;
-// hot request paths do not await it, while the true bootstrap calls that remain
-// in registerUser and the admin migrations await it before constrained writes.
+// Unconfigured self-hosted mode can prepare indexes in the background.
+// Mutations still await durable readiness, while authentication reads remain
+// available if required DDL fails. Explicit gateways initialize lazily below.
 //
-// Fire-and-forget by design: an env-less deployment (api-fallback proxy mode,
-// where getMongoUri throws synchronously) or a transient Atlas outage must
-// not take the instance down. A failed run logs its broken index and clears its
-// memoized promise so the next awaited bootstrap call can retry immediately.
+// An incomplete server must not connect or create indexes before the request
+// guard can reject it. Explicit desktop bridges also skip local DB warmup.
 export default definePlugin(() => {
+  // A malformed isolated test must never connect or adopt remote storage.
+  agentTestEnvironment();
+  if (!hasSelfHostedApiEnv()) return;
   try {
+    // Discovery can itself cold-start the alias target. Never recursively
+    // discover/warm a configured gateway from its startup plugin. First
+    // admitted DB access opens the pool; first mutation ensures its plan.
+    if (getGatewaySettings()) return;
     void ensureIndexes().catch(() => {});
-    // One boot-time probe that names the standalone-mongod trap (transactions
-    // unsupported) with its exact fix — see warnIfTransactionsUnsupported.
     void warnIfTransactionsUnsupported().catch(() => {});
   } catch {
-    // no MONGODB env: fallback-proxy deployments boot without a database
+    // A configured but unavailable database must not crash static serving.
   }
 });

@@ -237,3 +237,35 @@ test('invalid local JSON is repaired to safe defaults instead of blocking app st
 		await rm(root, { force: true, recursive: true });
 	}
 });
+
+test('node panel preference survives Desktop restarts and is fenced by endpoint and account', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'thingtime-panel-settings-'));
+	const filePath = path.join(root, 'desktop-settings.json');
+	try {
+		const store = new DesktopSettingsStore({ filePath });
+		await store.initialize();
+		const original = store.nodePanelPreference('alice');
+		await store.setNodePanelPreference({ accountId: 'alice', scope: original.scope, dismissed: true });
+		const reopened = new DesktopSettingsStore({ filePath });
+		await reopened.initialize();
+		assert.equal(reopened.nodePanelPreference('alice').dismissed, true);
+		assert.equal(reopened.nodePanelPreference('bob').dismissed, false);
+		await reopened.selectEndpoint('development');
+		assert.equal(reopened.nodePanelPreference('alice').dismissed, false);
+		await assert.rejects(reopened.setNodePanelPreference({ accountId: 'alice', scope: original.scope, dismissed: true }), /endpoint changed/);
+		await reopened.selectEndpoint('production');
+		assert.equal(reopened.nodePanelPreference('alice').dismissed, true);
+		const persisted = await readFile(filePath, 'utf8');
+		assert.equal(persisted.includes('alice'), false);
+		assert.equal((await stat(filePath)).mode & 0o777, 0o600);
+		await assert.rejects(reopened.setNodePanelPreference({ accountId: 'alice', scope: original.scope, dismissed: 'yes' }), /whether/);
+		assert.throws(() => reopened.nodePanelPreference(''), /valid account/);
+		reopened.persist = async () => {
+			throw new Error('disk unavailable');
+		};
+		await assert.rejects(reopened.setNodePanelPreference({ accountId: 'alice', scope: original.scope, dismissed: false }), /disk unavailable/);
+		assert.equal(reopened.nodePanelPreference('alice').dismissed, true);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});

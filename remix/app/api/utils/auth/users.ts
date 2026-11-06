@@ -1,3 +1,9 @@
+import { effectiveConnectorConfirmations, type ConnectorConfirmationPatch, type ConnectorConfirmations } from '../chatgpt/connectorProtections';
+import type { VerificationWindow } from '~/passwords/verificationPolicy';
+import { characterIdentity, type CharacterIdentity } from './characterCore';
+import type { UserVaultKeyRegistry } from './vaultKeys';
+import { randomUUID as lopuSettingsRevision } from 'node:crypto';
+import { LopuPromptConflictError, validateLopuInstructions, type LopuInstructionSettings } from '../lopu/promptSettingsCore';
 import { createHash } from 'node:crypto';
 import { Binary, ObjectId } from 'mongodb';
 
@@ -28,6 +34,8 @@ import { isAdminDoc, isEnvAdmin } from './admin';
 import { getSubscription, type SubscriptionInfo } from '../subscriptions/subscriptions';
 import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 import { sanitizeBirthday } from './birthday';
+import { toBin, fromBin } from './binary';
+export { toBin, fromBin } from './binary';
 
 // Users are THINGS now (thingtime ["user"], see
 // TODO/claude-todo/22-everything-is-a-thing-collections.md): public
@@ -72,6 +80,7 @@ export const profileAttachmentRefsForUserRoot = (
 
 // Safe shape returned to clients — never includes passwordHash.
 export type PublicUser = {
+  isCharacter?: boolean;
 	id: string;
 	ttid: string;
 	username: string;
@@ -107,6 +116,9 @@ export type PublicUser = {
 	};
 	activeThemeId: string | null;
 	activeFeedAlgorithmId: string | null;
+	// Private, owner-facing profile preference. It is safe by default: only an
+	// explicit false permits the public profile projection to include email.
+	hideEmailOnProfile?: boolean;
 	// Upload permissions are OFF for every account created after the
 	// signup-permissions hotfix; an admin turns them on per user from /admin
 	// (see setUserUploadPermissions), per scope or all at once. Accounts
@@ -115,13 +127,17 @@ export type PublicUser = {
 	// = message attachments + own profile avatar/banner.
 	publicUploadsEnabled: boolean;
 	privateUploadsEnabled: boolean;
+	// Lopu is invite-only (meta.lopuVerified, absent = false; admins always
+	// verified) — the client renders the locked state from this, the server
+	// gates every turn (api/utils/lopu/access.ts). Self projection only.
+	lopuVerified: boolean;
 	// true when meta.admin OR the ADMIN_USERNAMES env allowlist — the client uses
 	// it to reveal the admin panel; the server always re-checks server-side.
 	isAdmin: boolean;
 };
 
 // Minimal projection safe to show OTHER users (public profiles, post authors).
-// Never includes email, verification state, storage, or meta.
+// Email, verification state, storage, and meta are never public.
 export type PublicProfile = {
 	id: string;
 	username: string;
@@ -147,6 +163,14 @@ export type PublicProfile = {
 export const userPublicUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.publicUploads !== false;
 export const userPrivateUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.privateUploads !== false;
 
+// Lopu verified access (design note "Lopu verified access, usage accounting
+// and credits" §1): meta.lopuVerified is a plain opt-in — absent or anything
+// but an exact true reads as NOT verified (new accounts start locked, exactly
+// like meta.publicUploads after the signup-permissions hotfix). Admins are
+// always verified, so a locked-out admin can never be unable to fix the
+// account that verifies them.
+export const userLopuVerified = (user: any): boolean => isAdminDoc(user) || user?.meta?.lopuVerified === true;
+
 export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null): PublicUser => {
 	const source = subscription?.subjectType === 'user' ? subscription.storage : null;
 	const status = source?.status ?? ('unavailable' as const);
@@ -162,6 +186,7 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		reconciledAt: source?.reconciledAt ? source.reconciledAt.toISOString() : null
 	};
 	return {
+		isCharacter: !!characterIdentity(user),
 		id: String(user._id),
 		ttid: user.ttid,
 		username: user.username,
@@ -189,8 +214,10 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		storage,
 		activeThemeId: typeof user.meta?.activeThemeId === 'string' ? user.meta.activeThemeId : null,
 		activeFeedAlgorithmId: typeof user.meta?.activeFeedAlgorithmId === 'string' ? user.meta.activeFeedAlgorithmId : null,
+		hideEmailOnProfile: user.meta?.hideEmailOnProfile !== false,
 		publicUploadsEnabled: userPublicUploadsEnabled(user),
 		privateUploadsEnabled: userPrivateUploadsEnabled(user),
+		lopuVerified: userLopuVerified(user),
 		isAdmin: isAdminDoc(user)
 	};
 };
@@ -216,16 +243,6 @@ export const toPublicProfile = (user: any): PublicProfile => ({
 
 // BinData wrappers: the wildcard text index tokenizes every STRING field, so
 // secrets travel as binary — invisible to $text, still exact-queryable.
-export const toBin = (value: string) => new Binary(Buffer.from(value, 'utf8'));
-export const fromBin = (value: any): string => {
-	// Buffer.isBuffer FIRST: a real Node Buffer also has a `.buffer` (the whole
-	// ArrayBuffer slab), so the buffer branch would decode the entire pool
-	if (Buffer.isBuffer(value)) return value.toString('utf8');
-	if (typeof value === 'string') return value;
-	if (value?.buffer) return Buffer.from(value.buffer, value.byteOffset || 0, value.length ?? value.byteLength).toString('utf8');
-	return '';
-};
-
 // A user thing's private state is the opaque BinData blob (`secure`). The $**
 // wildcard text index tokenizes string FIELDS only — binary is invisible to it
 // — so blobbing the whole subdocument means no field inside it (email,
@@ -249,6 +266,7 @@ export const fromBin = (value: any): string => {
 // Legacy-era user docs keep their plaintext subdocument shape (the `users`
 // collection has no text index, so nothing there is searchable).
 type SecurePayload = {
+	vaultKey?: UserVaultKeyRegistry;
 	email?: string;
 	passwordHash?: string;
 	emailVerified?: boolean;
@@ -332,6 +350,7 @@ export const buildUserSecure = (
 	doc: Pick<UserDoc, 'email' | 'passwordHash' | 'emailVerified' | 'accountKind' | 'emailVerificationRequiredBy' | 'meta'> & {
 		storageAllowanceBytes?: number;
 		storageUsedBytes?: number;
+		vaultKey?: UserVaultKeyRegistry;
 	}
 ): { secure: Binary; admin: boolean; recentReactions: string[] } => {
 	const meta = { ...(doc.meta || {}) };
@@ -345,6 +364,7 @@ export const buildUserSecure = (
 		: [];
 	delete meta.recentReactions;
 	const payload: SecurePayload = {
+		...(doc.vaultKey ? { vaultKey: doc.vaultKey } : {}),
 		email: doc.email,
 		passwordHash: doc.passwordHash,
 		emailVerified: !!doc.emailVerified,
@@ -582,7 +602,7 @@ export const insertUser = async (
 		targetId: null,
 		tags: [],
 		...profileAttachmentRefsForUserRoot(doc),
-		uniqueKeys: [userUsernameKey(doc.username), userEmailKey(doc.email)],
+		uniqueKeys: [userUsernameKey(doc.username), ...(doc.email ? [userEmailKey(doc.email)] : [])],
 		secure,
 		secureVersion: 0, // optimistic-concurrency token for blob mutations
 		// Durable signup fallback: if the relational subscription insert is ever
@@ -623,16 +643,16 @@ export const insertUser = async (
 // exceed realistic burst width
 const SECURE_CAS_ATTEMPTS = 20;
 type SecureMutateResult = 'mutated' | 'missing' | 'contended';
-const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayload) => void): Promise<SecureMutateResult> => {
+const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayload) => void | Promise<void>, strict = false): Promise<SecureMutateResult> => {
 	const things = await getThingsCollection();
 	const base = { shareId: String(userId), thingtime: 'user' } as any;
 	for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
 		const thing = await things.findOne(base, { projection: { secure: 1, secureVersion: 1 } });
 		if (!thing) return 'missing';
 		const version = (thing as any).secureVersion; // number | undefined (pre-versioned docs)
-		const secure = unpackSecure((thing as any).secure);
+		const secure = strict ? strictVaultPayload((thing as any).secure) : unpackSecure((thing as any).secure);
 		if (!secure.meta) secure.meta = {};
-		mutate(secure);
+		await mutate(secure);
 		// guard on the exact version we read — a missing field guards on its absence
 		const guard = version === undefined ? { secureVersion: { $exists: false } } : { secureVersion: version };
 		const res = await things.updateOne(
@@ -645,6 +665,54 @@ const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayl
 		if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 3 * attempt + Math.floor(Math.random() * 5)));
 	}
 	return 'contended';
+};
+
+const strictVaultPayload = (value: unknown): SecurePayload => {
+ try {
+  const payload = JSON.parse(fromBin(value));
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
+   ('vaultKey' in payload && (!payload.vaultKey || typeof payload.vaultKey !== 'object' || Array.isArray(payload.vaultKey)))) throw new Error();
+  return payload;
+ } catch { throw new Error('The account vault could not be unlocked.'); }
+};
+
+// Key material never enters UserDoc/public projections. This bounded registry
+// lives in the home user secure blob; session wrappers live on session rows.
+export const readUserVaultKey = async (userId: string): Promise<UserVaultKeyRegistry | null> => {
+ const thing = await (await getThingsCollection()).findOne({ shareId: userId, thingtime: 'user' } as any, { projection: { secure: 1 } });
+ if (thing) return strictVaultPayload(thing.secure).vaultKey ?? null;
+ if (!ObjectId.isValid(userId)) throw new Error('Vault owner was not found.');
+ const legacy = await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { vaultKey: 1 } });
+ if (!legacy) throw new Error('Vault owner was not found.');
+ return strictVaultPayload(toBin(JSON.stringify(legacy))).vaultKey ?? null;
+};
+
+export const mutateUserVaultKey = async (
+ userId: string,
+ mutate: (current: UserVaultKeyRegistry | null, passwordHash: string) => Promise<{ registry: UserVaultKeyRegistry; passwordHash?: string }>
+): Promise<UserVaultKeyRegistry> => {
+ let saved!: UserVaultKeyRegistry;
+ const apply = async (secure: SecurePayload) => {
+  const next = await mutate(secure.vaultKey ?? null, secure.passwordHash || '');
+  secure.vaultKey = saved = next.registry;
+  if (next.passwordHash !== undefined) secure.passwordHash = next.passwordHash;
+ };
+ const result = await mutateUserThingSecure(userId, apply, true);
+ if (result === 'mutated') return saved;
+ if (result === 'contended') throw new SecureWriteContendedError(userId);
+ if (!ObjectId.isValid(userId)) throw new Error('Vault owner was not found.');
+ const users = await getUsersCollection();
+ for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
+  const doc: any = await users.findOne({ _id: new ObjectId(userId) });
+  if (!doc) throw new Error('Vault owner was not found.');
+  const current = strictVaultPayload(toBin(JSON.stringify(doc))).vaultKey;
+  const next = await mutate(current ?? null, doc.passwordHash || '');
+  const updated = await users.updateOne({ _id: doc._id, passwordHash: doc.passwordHash,
+   vaultKey: doc.vaultKey ?? { $exists: false } } as any,
+   { $set: { vaultKey: next.registry, ...(next.passwordHash !== undefined ? { passwordHash: next.passwordHash } : {}), updatedAt: new Date() } } as any);
+  if (updated.matchedCount) return next.registry;
+ }
+ throw new SecureWriteContendedError(userId);
 };
 
 // Finalize the storage-field handoff after the canonical subscription
@@ -1326,6 +1394,9 @@ export type AdminUserRow = {
 	// signup), so the UI can tell "awaiting approval" from "grandfathered".
 	publicUploadsPending: boolean;
 	privateUploadsPending: boolean;
+	// Lopu access (meta.lopuVerified; admins always true) — toggled from
+	// Admin → Lopu accounts through POST /api/v1/admin/users/lopu-access
+	lopuVerified: boolean;
 };
 
 // Escape user-supplied text before embedding it in a Mongo $regex — shared with
@@ -1350,8 +1421,13 @@ const toAdminRow = (doc: any): AdminUserRow => ({
 	publicUploadsEnabled: userPublicUploadsEnabled(doc),
 	privateUploadsEnabled: userPrivateUploadsEnabled(doc),
 	publicUploadsPending: doc?.meta?.publicUploads === false && !isAdminDoc(doc),
-	privateUploadsPending: doc?.meta?.privateUploads === false && !isAdminDoc(doc)
+	privateUploadsPending: doc?.meta?.privateUploads === false && !isAdminDoc(doc),
+	lopuVerified: userLopuVerified(doc)
 });
+
+// The admin row for a user doc already in hand (the Lopu accounts directory
+// joins accounts to users this way) — the same projection the searches use.
+export const adminUserRowOf = (doc: any): AdminUserRow => toAdminRow(doc);
 
 // Set (or clear) a user's stored admin flag. Env-allowlist admins remain admin
 // regardless (isAdminDoc ORs the env check), so demoting one only clears the
@@ -1407,6 +1483,37 @@ export const setUserUploadPermissions = async (userId: string, updates: UploadPe
 		const $set: Record<string, unknown> = { updatedAt: new Date() };
 		for (const key of keys) $set[`meta.${key}`] = updates[key] === true;
 		const legacy = await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId) }, { $set });
+		if (legacy.matchedCount) applied = true;
+	}
+
+	if (!applied) return null;
+	const updated = await findUserById(userId);
+	return updated ? toAdminRow(updated) : null;
+};
+
+// Verify (or un-verify) a user's Lopu access — meta.lopuVerified plus the
+// audit pair meta.lopuVerifiedAt / meta.lopuVerifiedBy — with exactly the
+// dual-store, CAS-guarded write setUserUploadPermissions uses (the flag rides
+// the secure blob's meta: no new index, no collection generation, and a
+// dual-era twin can never resurrect a stale value). Returns the admin row,
+// or null when no store holds the user.
+export const setUserLopuVerified = async (userId: string, verified: boolean, actorId: string): Promise<AdminUserRow | null> => {
+	const now = new Date();
+	const stamp = { lopuVerified: verified === true, lopuVerifiedAt: now.toISOString(), lopuVerifiedBy: String(actorId || '').slice(0, 128) || 'system' };
+	let applied = false;
+	const result = await mutateUserThingSecure(userId, (secure) => {
+		secure.meta = { ...(secure.meta || {}), ...stamp };
+	});
+	if (result === 'contended') throw new SecureWriteContendedError(userId);
+	if (result === 'mutated') applied = true;
+
+	if (ObjectId.isValid(userId)) {
+		const legacy = await (
+			await getUsersCollection()
+		).updateOne(
+			{ _id: new ObjectId(userId) },
+			{ $set: { 'meta.lopuVerified': stamp.lopuVerified, 'meta.lopuVerifiedAt': stamp.lopuVerifiedAt, 'meta.lopuVerifiedBy': stamp.lopuVerifiedBy, updatedAt: now } }
+		);
 		if (legacy.matchedCount) applied = true;
 	}
 
@@ -1777,6 +1884,7 @@ export type UpdateProfileInput = {
 	avatarAttachmentId?: unknown;
 	bannerAttachmentId?: unknown;
 	birthday?: unknown;
+	hideEmailOnProfile?: unknown;
 };
 
 type UpdateProfileResult = { ok: false; status: number; error: string } | { ok: true; user: PublicUser };
@@ -1788,6 +1896,7 @@ type ProfileUserMutationDependencies = {
 	reconcileAttachments: typeof reconcileReadyProfileAttachmentsToUser;
 	findUser: typeof findUserById;
 	projectUser: typeof toPublicUserWithStorage;
+	mutateSecure: typeof mutateUserThingSecure;
 	now: () => Date;
 };
 
@@ -1809,6 +1918,7 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 		reconcileAttachments: reconcileReadyProfileAttachmentsToUser,
 		findUser: findUserById,
 		projectUser: toPublicUserWithStorage,
+		mutateSecure: mutateUserThingSecure,
 		now: () => new Date(),
 		...overrides
 	};
@@ -1877,9 +1987,8 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 			return { ok: false, status: 400, error: 'Avatar and banner must use different attachments' };
 		}
 
-		// Birthday is PRIVATE state — it lives in the secure blob (meta.birthday),
-		// never in the public crystal, so it takes the secure write path below
-		// rather than the crystal/attachment transaction.
+		// Birthday and email visibility are PRIVATE state — both live in the secure
+		// blob, never in the public crystal, so they take the secure write path.
 		let birthday: string | null | undefined;
 		if (input.birthday !== undefined) {
 			birthday = sanitizeBirthday(input.birthday);
@@ -1887,33 +1996,47 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 				return { ok: false, status: 400, error: 'Birthday must be a real YYYY-MM-DD date (1900 → today)' };
 			}
 		}
+		let hideEmailOnProfile: boolean | undefined;
+		if (input.hideEmailOnProfile !== undefined) {
+			if (typeof input.hideEmailOnProfile !== 'boolean') {
+				return { ok: false, status: 400, error: 'Hide email on profile must be true or false' };
+			}
+			hideEmailOnProfile = input.hideEmailOnProfile;
+		}
 
-		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched && birthday === undefined) {
+		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched && birthday === undefined && hideEmailOnProfile === undefined) {
 			return { ok: false, status: 400, error: 'Nothing to update' };
 		}
 
 		// Secure-blob write first: it is a separate store from the crystal, so it
 		// runs outside the profile/attachment transaction below.
-		if (birthday !== undefined) {
-			const cleared = birthday === null;
-			const result = await mutateUserThingSecure(userId, (s) => {
-				if (cleared) delete s.meta!.birthday;
-				else s.meta!.birthday = birthday;
+		if (birthday !== undefined || hideEmailOnProfile !== undefined) {
+			const clearedBirthday = birthday === null;
+			const result = await dependencies.mutateSecure(userId, (s) => {
+				if (birthday !== undefined) {
+					if (clearedBirthday) delete s.meta!.birthday;
+					else s.meta!.birthday = birthday;
+				}
+				if (hideEmailOnProfile !== undefined) s.meta!.hideEmailOnProfile = hideEmailOnProfile;
 			});
 			if (result === 'contended') throw new SecureWriteContendedError(userId);
 			if (result === 'missing') {
 				if (!ObjectId.isValid(userId)) return { ok: false, status: 400, error: 'Invalid user id' };
+				const legacySet: Record<string, unknown> = { updatedAt: dependencies.now() };
+				if (birthday !== undefined && !clearedBirthday) legacySet['meta.birthday'] = birthday;
+				if (hideEmailOnProfile !== undefined) legacySet['meta.hideEmailOnProfile'] = hideEmailOnProfile;
 				await (await dependencies.getUsers()).updateOne(
 					{ _id: new ObjectId(userId) },
-					cleared
-						? { $unset: { 'meta.birthday': '' }, $set: { updatedAt: dependencies.now() } }
-						: { $set: { 'meta.birthday': birthday, updatedAt: dependencies.now() } }
+					{
+						$set: legacySet,
+						...(birthday !== undefined && clearedBirthday ? { $unset: { 'meta.birthday': '' } } : {})
+					}
 				);
 			}
 		}
 
-		// A birthday-only update never touches the crystal or attachments, so the
-		// transactional write below is skipped entirely for it.
+		// Private-only updates never touch the crystal or attachments, so the
+		// transactional write below is skipped entirely for them.
 		if (Object.keys(set).length || media.avatar.touched || media.banner.touched) {
 			try {
 				const mutated = await dependencies.withTransaction(async (session) => {
@@ -2021,3 +2144,94 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 };
 
 export const updateUserProfile = createUpdateUserProfile();
+
+// Connector protections are private account metadata. Updating a subset
+// merges it in the same CAS path as other secure account preferences.
+export const getUserConnectorConfirmations = async (userId: string): Promise<ConnectorConfirmations> => {
+  const thing = await (await getThingsCollection()).findOne({ shareId: userId, thingtime: 'user' } as any, { projection: { secure: 1 } });
+  if (thing) return effectiveConnectorConfirmations(unpackSecure((thing as any).secure).meta?.connectorConfirmations);
+  const legacy = ObjectId.isValid(userId)
+    ? await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.connectorConfirmations': 1 } }) : null;
+  return effectiveConnectorConfirmations(legacy?.meta?.connectorConfirmations);
+};
+
+export const setUserConnectorConfirmations = async (
+  userId: string, patch: ConnectorConfirmationPatch
+): Promise<ConnectorConfirmations> => {
+  let next = effectiveConnectorConfirmations();
+  const result = await mutateUserThingSecure(userId, secure => {
+    next = { ...effectiveConnectorConfirmations(secure.meta!.connectorConfirmations), ...patch };
+    secure.meta!.connectorConfirmations = next;
+  });
+  if (result === 'mutated') return next;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) throw new Error('Account not found.');
+  const legacy = await (await getUsersCollection()).findOneAndUpdate(
+    { _id: new ObjectId(userId) },
+    { $set: { ...Object.fromEntries(Object.entries(patch).map(([key, value]) => [`meta.connectorConfirmations.${key}`, value])), updatedAt: new Date() } },
+    { projection: { 'meta.connectorConfirmations': 1 }, returnDocument: 'after' }
+  );
+  if (!legacy) throw new Error('Account not found.');
+  return effectiveConnectorConfirmations(legacy.meta?.connectorConfirmations);
+};
+
+// Personal instructions are private secure metadata: never part of a profile,
+// Thing crystal, search index, admin roster, or another viewer's prompt.
+export const getUserLopuInstructions = async (userId: string): Promise<LopuInstructionSettings> => {
+  const thing = await (await getThingsCollection()).findOne({ shareId: String(userId), thingtime: 'user' } as any, { projection: { secure: 1 } });
+  const legacy = !thing && ObjectId.isValid(userId)
+    ? await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.lopuInstructions': 1 } }) : null;
+  const stored = (thing ? unpackSecure((thing as any).secure).meta : legacy?.meta)?.lopuInstructions;
+  if (!stored) return { revision: null, instructions: [] };
+  return { revision: stored.revision, instructions: validateLopuInstructions(stored.instructions) };
+};
+export const setUserLopuInstructions = async (userId: string, instructions: unknown, expectedRevision: string | null): Promise<LopuInstructionSettings> => {
+  const settings = { revision: lopuSettingsRevision(), instructions: validateLopuInstructions(instructions) };
+  const result = await mutateUserThingSecure(userId, secure => {
+    if ((secure.meta!.lopuInstructions?.revision ?? null) !== expectedRevision) throw new LopuPromptConflictError();
+    secure.meta!.lopuInstructions = settings;
+  });
+  if (result === 'mutated') return settings;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) throw new Error('Account not found.');
+  const legacy = await (await getUsersCollection()).updateOne(
+    { _id: new ObjectId(userId), 'meta.lopuInstructions.revision': expectedRevision } as any,
+    { $set: { 'meta.lopuInstructions': settings, updatedAt: new Date() } }
+  );
+  if (!legacy.matchedCount) throw new LopuPromptConflictError();
+  return settings;
+};
+
+// Character policy is private, home-plane state; only the owner management
+// service calls this CAS writer. Generic profile edits never accept it.
+export const setCharacterIdentity = async (userId: string, expectedOwner: string, next: CharacterIdentity) => {
+  const result = await mutateUserThingSecure(userId, secure => {
+    if (secure.meta?.character?.ownerId !== expectedOwner || next.ownerId !== expectedOwner) throw new Error('Character not found');
+    secure.meta!.character = next;
+  });
+  if (result !== 'mutated') throw new Error('Character update did not complete');
+};
+
+// Private password-confirmation preference; omitted from every public user projection.
+export const getUserPasswordVerification = async (userId: string): Promise<{window: VerificationWindow; revision:string|null;changedAt?:number;reuseRecentDeviceVerification:boolean;epoch:string|null}> => {
+  const thing=await(await getThingsCollection()).findOne({shareId:userId,thingtime:'user'} as any,{projection:{secure:1,passwordVerificationEpoch:1}});
+  const legacy=!thing&&ObjectId.isValid(userId)?await(await getUsersCollection()).findOne({_id:new ObjectId(userId)},{projection:{'meta.passwordVerification':1,passwordVerificationEpoch:1}}):null;
+  const stored=(thing?unpackSecure((thing as any).secure).meta:legacy?.meta)?.passwordVerification;
+  const {verificationWindow}=await import('~/passwords/verificationPolicy');
+  return {window:verificationWindow(stored?.window??'5m'),revision:stored?.revision??null,changedAt:stored?.changedAt??0,reuseRecentDeviceVerification:stored?.reuseRecentDeviceVerification===undefined?true:stored.reuseRecentDeviceVerification===true,epoch:(thing as any)?.passwordVerificationEpoch??legacy?.passwordVerificationEpoch??null};
+};
+
+export const setUserPasswordVerification = async (userId: string, window: VerificationWindow, expectedRevision: string | null, reuseRecentDeviceVerification=true) => {
+  const { verificationWindow } = await import('~/passwords/verificationPolicy');
+  const settings = { window: verificationWindow(window), revision: crypto.randomUUID(), changedAt: Date.now(),reuseRecentDeviceVerification };
+  const result = await mutateUserThingSecure(userId, secure => {
+    if ((secure.meta?.passwordVerification?.revision ?? null) !== expectedRevision) throw new Error('Password confirmation settings changed. Reload before saving.');
+    secure.meta ??= {}; secure.meta.passwordVerification = settings;
+  });
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (result === 'mutated') return settings;
+  if (!ObjectId.isValid(userId)) throw new Error('Password confirmation settings could not be saved.');
+  const legacy = await (await getUsersCollection()).updateOne({_id:new ObjectId(userId),'meta.passwordVerification.revision':expectedRevision} as any,{$set:{'meta.passwordVerification':settings,updatedAt:new Date()}});
+  if (!legacy.matchedCount) throw new Error('Password confirmation settings changed. Reload before saving.');
+  return settings;
+};

@@ -749,20 +749,21 @@ function statusCards(status: IndexingStatus | null) {
       id: 'files',
       title: 'Files',
       Icon: File,
-      count: byKind.get('file')?.count ?? 0,
+      count: status?.countsCurrent === false ? undefined : (byKind.get('file')?.count ?? 0),
       indexed: formatIndexedAt(byKind.get('file')?.lastIndexedAtMs),
     },
     {
       id: 'directories',
       title: 'Folders',
       Icon: Folder,
-      count: byKind.get('directory')?.count ?? 0,
+      count: status?.countsCurrent === false ? undefined : (byKind.get('directory')?.count ?? 0),
       indexed: formatIndexedAt(byKind.get('directory')?.lastIndexedAtMs),
     },
   ];
 }
 
-function formatCount(value: number): string {
+function formatCount(value: number | undefined): string {
+  if (value === undefined) return 'Not measured yet';
   return `${new Intl.NumberFormat().format(value)} indexed`;
 }
 

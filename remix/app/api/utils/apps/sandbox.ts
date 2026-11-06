@@ -106,6 +106,8 @@ export const sandboxPublicUser = (ownerId: string, mintedAt: Date, username = 's
 	},
   activeThemeId: null,
   activeFeedAlgorithmId: null,
+  // a pretend account never runs Lopu turns (invite-only, never verified)
+  lopuVerified: false,
   isAdmin: false
 });
 

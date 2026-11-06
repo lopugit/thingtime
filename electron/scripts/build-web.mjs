@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -12,6 +12,7 @@ const repoRoot = path.resolve(electronDir, '..');
 const remixDir = path.join(repoRoot, 'remix');
 const stagedWebDir = path.join(electronDir, 'dist', 'web');
 const stagedAiDir = path.join(electronDir, 'dist', 'ai');
+const stagedAgentRuntimeDir = path.join(electronDir, 'dist', 'agent-browser-runtime');
 const mcpDir = path.join(repoRoot, 'MCP');
 const aiBundle = path.join(mcpDir, 'dist-desktop', 'desktop.mjs');
 const nodeRuntimeBundle = path.join(mcpDir, 'dist-desktop', 'nodeRuntime.mjs');
@@ -63,6 +64,11 @@ const pnpmRunner = pnpmExecPath
     ? { command: process.execPath, args: [pnpmExecPath] }
     : { command: pnpmExecPath, args: [] }
   : { command: corepackCommand, args: ['pnpm'] };
+// Node cannot spawn a .cmd shim without a shell. Use npm's actual JS entry on
+// Windows so paths/arguments never pass through command interpolation.
+const npmRunner = process.platform === 'win32'
+  ? { command: process.execPath, args: [path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js')] }
+  : { command: 'npm', args: [] };
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -93,19 +99,45 @@ function runRemixScript(script, options = {}) {
   run(pnpmRunner.command, [...pnpmRunner.args, '--dir', remixDir, 'run', script], options);
 }
 
+// Mail and database staging resolve packages from Remix before its build runs.
+// Repair fresh-worktree dependency links through the shared preflight first.
+run(process.execPath, [path.join(remixDir, 'scripts/ensure-dependencies.js')]);
+
+// MCP has its own npm lockfile and is not part of the Remix pnpm workspace.
+// Install it from that lockfile before the expensive web build, including in a
+// fresh worktree where MCP/node_modules is intentionally absent.
+run(npmRunner.command, [...npmRunner.args, 'ci', '--prefix', mcpDir, '--no-audit', '--no-fund']);
+run(process.execPath, [path.join(electronDir, 'scripts/build-mail.mjs')]);
+run(process.execPath, [path.join(electronDir, 'scripts/build-database.mjs')]);
+
 await rm(stagedWebDir, { force: true, recursive: true });
 await rm(stagedAiDir, { force: true, recursive: true });
 await rm(remixOutputDir, { force: true, recursive: true });
 
 runRemixScript('ensure-bcrypt');
-runRemixScript('pre-dev');
+// The desktop build needs pinned Mapbox assets and branch metadata, not the
+// local-development .env writer (a Bash script unavailable on native Windows).
+run(process.execPath, [path.join(remixDir, 'scripts/ensure-mapbox-assets.mjs')]);
+process.env.THINGTIME_BRANCH_NAME ||= readGitValue(['branch', '--show-current']) || 'unknown';
 runRemixScript('build:client');
 runRemixScript('sync:nitro-template');
 runRemixScript('build:server', {
   env: {
-    NITRO_PRESET: 'node_server'
+    NITRO_PRESET: 'node_middleware'
   }
 });
+
+if (process.platform === 'win32') {
+  const fromRemix = createRequire(path.join(remixDir, 'package.json'));
+  const resvgManifest = fromRemix.resolve('@resvg/resvg-js/package.json');
+  const fromResvg = createRequire(resvgManifest);
+  const binding = `@resvg/resvg-js-win32-${process.arch}-msvc`;
+  const modules = path.join(remixOutputDir, 'server', 'node_modules');
+  const packages = [['@resvg/resvg-js', resvgManifest], [binding, fromResvg.resolve(`${binding}/package.json`)]];
+  for (const [name, manifest] of packages) {
+    await cp(path.dirname(manifest), path.join(modules, name), { dereference: true, recursive: true });
+  }
+}
 
 run(pnpmRunner.command, [...pnpmRunner.args, '--dir', mcpDir, 'run', 'build:desktop']);
 
@@ -118,6 +150,17 @@ await mkdir(stagedAiDir, { recursive: true });
 await cp(aiBundle, path.join(stagedAiDir, 'ai-connectors.mjs'));
 await cp(nodeRuntimeBundle, path.join(stagedAiDir, 'thingtime-node-runtime.mjs'));
 
+// extraResources excludes its source from app.asar. Stage a separate copy so
+// the native adapter keeps its shared driver and resolves Puppeteer in asar.
+await rm(stagedAgentRuntimeDir, { force: true, recursive: true });
+await mkdir(stagedAgentRuntimeDir, { recursive: true });
+const agentRuntimeSource = path.join(electronDir, 'lib', 'agent-browsers', 'runtime');
+for (const entry of await readdir(agentRuntimeSource, { withFileTypes: true })) {
+  if (entry.isFile() && /^(?:Dockerfile|\.dockerignore|[^/]+\.(?:json|mjs|cjs))$/.test(entry.name)) {
+    await cp(path.join(agentRuntimeSource, entry.name), path.join(stagedAgentRuntimeDir, entry.name));
+  }
+}
+
 await writeFile(
   path.join(stagedWebDir, 'metadata.json'),
   `${JSON.stringify(
@@ -126,8 +169,8 @@ await writeFile(
 			desktopEndpoints: desktopEndpointMetadata(),
       desktopRelease: desktopReleaseMetadata.version ? desktopReleaseMetadata : null,
       gitBranch: readGitValue(['rev-parse', '--abbrev-ref', 'HEAD']),
-      gitCommit: readGitValue(['rev-parse', '--short', 'HEAD']),
-      nitroPreset: 'node_server'
+      gitCommit: readGitValue(['rev-parse', 'HEAD']),
+      nitroPreset: 'node_middleware'
     },
     null,
     2

@@ -5,7 +5,7 @@ import { Bluetooth, Camera, ChevronDown, Keyboard, Monitor, Moon, MousePointer2,
 
 import { DRAWER_POPUP_Z } from '~/components/Nav/Drawer/useDrawer';
 
-import type { DeviceAppleMusic, DeviceBluetoothDevice, DeviceCamera, DeviceChromeYouTube, DeviceDisplay, DevicePowerTimers, DevicePrinter, DeviceSpotify, DeviceVPNService } from './deviceTypes';
+import type { DeviceAppleMusic, DeviceBattery, DeviceBluetoothDevice, DeviceCamera, DeviceChromeYouTube, DeviceDisplay, DevicePowerTimers, DevicePrinter, DeviceSpotify, DeviceVPNService } from './deviceTypes';
 import type { DeviceActionHandler, DeviceControlResolver } from './DeviceStateGrid';
 import { DevicePolicyButton, DevicePolicyMenuItem } from './DeviceStateGrid';
 
@@ -18,6 +18,43 @@ const Card = ({ icon, label, children }: { icon: React.ReactNode; label: string;
 		{children}
 	</Box>
 );
+
+const BatteryStatus = ({ battery }: { battery: DeviceBattery | null }) => {
+	const capacityHealth = battery?.fullChargeCapacityMAh && battery.designCapacityMAh
+		? Math.round(battery.fullChargeCapacityMAh / battery.designCapacityMAh * 100) : null;
+	const batteryWatts = battery?.currentMA != null && battery.voltageMV != null
+		? battery.currentMA * battery.voltageMV / 1_000_000 : null;
+	const duration = (minutes: number | null | undefined) => minutes == null ? 'Unavailable' : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+	const reading = (value: number | null | undefined, unit: string) => value == null ? 'Unavailable' : `${value.toLocaleString()} ${unit}`;
+	const rows = [
+		['Charge cycles', reading(battery?.cycleCount, 'cycles')],
+		['Rated cycle life', reading(battery?.designCycleCount, 'cycles')],
+		['Capacity vs design', capacityHealth == null ? 'Unavailable' : `${capacityHealth}%`],
+		['Full charge', reading(battery?.fullChargeCapacityMAh, 'mAh')],
+		['Design capacity', reading(battery?.designCapacityMAh, 'mAh')],
+		['Remaining', reading(battery?.remainingCapacityMAh, 'mAh')],
+		['Battery current', battery?.currentMA == null ? 'Unavailable' : `${battery.currentMA > 0 ? '+' : ''}${battery.currentMA.toLocaleString()} mA`],
+		['Battery power', batteryWatts == null ? 'Unavailable' : `${batteryWatts > 0 ? '+' : ''}${batteryWatts.toFixed(1)} W`],
+		['Battery voltage', battery?.voltageMV == null ? 'Unavailable' : `${(battery.voltageMV / 1000).toFixed(2)} V`],
+		['Temperature', battery?.temperatureC == null ? 'Unavailable' : `${battery.temperatureC.toFixed(1)} °C`],
+		['Time to empty', duration(battery?.timeToEmptyMinutes)],
+		['Time to full', duration(battery?.timeToFullMinutes)],
+		['Adapter rating', reading(battery?.adapterWatts, 'W')],
+		['Adapter voltage', battery?.adapterVoltageMV == null ? 'Unavailable' : `${(battery.adapterVoltageMV / 1000).toFixed(1)} V`],
+		['Adapter current', reading(battery?.adapterCurrentMA, 'mA')]
+	];
+	return <Card icon={<Moon aria-hidden size={14} />} label="Battery details">
+		<Text fontSize="14px" fontWeight={700}>{battery?.level == null ? 'Battery level unavailable' : `${Math.round(battery.level * 100)}%`}</Text>
+		<Text color="var(--tt-muted, #71717a)" fontSize="11px" marginBottom={2}>
+			{battery?.fullyCharged ? 'Fully charged' : battery?.charging ? 'Charging' : battery?.isExternalPower ? 'Connected to power' : battery?.isExternalPower === false ? 'On battery' : 'Power source unavailable'}
+			{battery?.isLowPowerModeEnabled ? ' · Low Power Mode' : ''}
+		</Text>
+		<Grid gap={2} templateColumns="repeat(auto-fit, minmax(120px, 1fr))">
+			{rows.map(([label, value]) => <Box key={label} minWidth={0}><Text color="var(--tt-muted, #71717a)" fontSize="10px">{label}</Text><Text fontSize="11px" fontWeight={600} overflowWrap="anywhere">{value}</Text></Box>)}
+		</Grid>
+		<Text color="var(--tt-muted, #71717a)" fontSize="10px" marginTop={2}>Battery current and power are signed estimates: positive charges, negative discharges. Adapter rating is the negotiated maximum, not live wall draw. Capacity vs design is an estimate, not macOS Battery Health.</Text>
+	</Card>;
+};
 
 const DisplayCard = ({ deviceId, display, allDisplays, controlFor, onAction }: { deviceId: string; display: DeviceDisplay; allDisplays: DeviceDisplay[]; controlFor?: DeviceControlResolver; onAction?: DeviceActionHandler }) => {
 	const [origin, setOrigin] = React.useState({ x: String(display.originX), y: String(display.originY) });
@@ -108,7 +145,7 @@ export type DeviceSystemControlsProps = {
 	cameras: DeviceCamera[];
 	bluetoothDevices: DeviceBluetoothDevice[];
 	vpnServices: DeviceVPNService[];
-	battery: { level: number | null; charging: boolean | null; isExternalPower: boolean | null; isPreventingIdleSleep: boolean; isLowPowerModeEnabled?: boolean } | null;
+	battery: DeviceBattery | null;
 	powerTimers?: DevicePowerTimers;
 	appleMusic?: DeviceAppleMusic;
 	spotify?: DeviceSpotify;
@@ -126,7 +163,8 @@ export const DeviceSystemControls = memo(({ deviceId, displays, printers, camera
 			<Card icon={<Camera aria-hidden size={14} />} label="Preferred camera"><Menu><MenuButton as={Button} rightIcon={<ChevronDown size={13} />} size="xs" variant="outline">{cameras.find((camera) => camera.isPreferred)?.name || 'Choose camera'}</MenuButton><Portal><MenuList fontSize="12px" zIndex={DRAWER_POPUP_Z}>{cameras.map((camera) => <DevicePolicyMenuItem action="set-preferred-camera" controlFor={controlFor} controlKey={`camera:${camera.id}`} deviceId={deviceId} input={{ id: camera.id }} key={camera.id} label={`${camera.isPreferred ? '✓ ' : ''}${camera.name}${camera.authorization === 'denied' ? ' · access not granted' : ''}`} onAction={onAction} targetId={camera.id} />)}</MenuList></Portal></Menu></Card>
 			<Card icon={<Bluetooth aria-hidden size={14} />} label="Paired Bluetooth">{bluetoothDevices.length ? <Flex gap={1} wrap="wrap">{bluetoothDevices.map((device) => <DevicePolicyButton action="set-bluetooth-device-connected" controlFor={controlFor} controlKey={`bluetooth:${device.id}:${device.isConnected ? 'off' : 'on'}`} deviceId={deviceId} input={{ id: device.id, connected: !device.isConnected }} key={device.id} label={`${device.isConnected ? 'Disconnect' : 'Connect'} ${device.name}`} onAction={onAction} targetId={device.id} />)}</Flex> : <Text fontSize="11px">No paired devices reported.</Text>}</Card>
 			<Card icon={<Wifi aria-hidden size={14} />} label="VPN services">{vpnServices.length ? <Flex gap={1} wrap="wrap">{vpnServices.map((service) => <DevicePolicyButton action="set-vpn-connected" controlFor={controlFor} controlKey={`vpn:${service.id}:${service.isConnected ? 'off' : 'on'}`} deviceId={deviceId} input={{ id: service.id, connected: !service.isConnected }} key={service.id} label={`${service.isConnected ? 'Disconnect' : 'Connect'} ${service.name}`} onAction={onAction} targetId={service.id} />)}</Flex> : <Text fontSize="11px">No controllable service reported.</Text>}</Card>
-			<Card icon={<Moon aria-hidden size={14} />} label="Battery & sleep"><Text fontSize="11px">{battery?.level === null || !battery ? 'Battery status unavailable' : `${Math.round(battery.level * 100)}%${battery.charging ? ' · charging' : ''}${battery.isLowPowerModeEnabled ? ' · Low Power Mode' : ''}`}</Text><Box marginTop={2}><DevicePolicyButton action="set-prevent-idle-sleep" controlFor={controlFor} controlKey={`idle-sleep:${battery?.isPreventingIdleSleep ? 'allow' : 'prevent'}`} deviceId={deviceId} input={{ enabled: !battery?.isPreventingIdleSleep }} label={battery?.isPreventingIdleSleep ? 'Allow idle sleep' : 'Keep awake'} onAction={onAction} targetId="idle-sleep" /></Box><Flex gap={1} marginTop={2} wrap="wrap">{([{ scope: 'display', label: 'Display idle', minutes: powerTimers?.displayIdleMinutes }, { scope: 'system', label: 'System sleep', minutes: powerTimers?.systemSleepMinutes }, { scope: 'disk', label: 'Disk idle', minutes: powerTimers?.diskIdleMinutes }] as const).map((timer) => <Menu key={timer.scope} placement="bottom-start"><MenuButton as={Button} rightIcon={<ChevronDown size={13} />} size="xs" variant="outline">{`${timer.label}: ${timer.minutes === null || timer.minutes === undefined ? 'Unavailable' : timer.minutes === 0 ? 'Never' : `${timer.minutes}m`}`}</MenuButton><Portal><MenuList fontSize="12px" zIndex={DRAWER_POPUP_Z}>{[0, 1, 2, 5, 10, 15, 30, 60, 120, 180].map((minutes) => <DevicePolicyMenuItem action="set-power-idle-timer" controlFor={controlFor} controlKey={`power-idle:${timer.scope}:${minutes}`} deviceId={deviceId} input={{ scope: timer.scope, minutes }} key={minutes} label={`${timer.minutes === minutes ? '✓ ' : ''}${minutes === 0 ? 'Never' : `${minutes} minutes`}`} onAction={onAction} targetId={timer.scope} />)}</MenuList></Portal></Menu>)}</Flex></Card>
+			<BatteryStatus battery={battery} />
+			<Card icon={<Moon aria-hidden size={14} />} label="Sleep controls"><Box><DevicePolicyButton action="set-prevent-idle-sleep" controlFor={controlFor} controlKey={`idle-sleep:${battery?.isPreventingIdleSleep ? 'allow' : 'prevent'}`} deviceId={deviceId} input={{ enabled: !battery?.isPreventingIdleSleep }} label={battery?.isPreventingIdleSleep ? 'Allow idle sleep' : 'Keep awake'} onAction={onAction} targetId="idle-sleep" /></Box><Flex gap={1} marginTop={2} wrap="wrap">{([{ scope: 'display', label: 'Display idle', minutes: powerTimers?.displayIdleMinutes }, { scope: 'system', label: 'System sleep', minutes: powerTimers?.systemSleepMinutes }, { scope: 'disk', label: 'Disk idle', minutes: powerTimers?.diskIdleMinutes }] as const).map((timer) => <Menu key={timer.scope} placement="bottom-start"><MenuButton as={Button} rightIcon={<ChevronDown size={13} />} size="xs" variant="outline">{`${timer.label}: ${timer.minutes === null || timer.minutes === undefined ? 'Unavailable' : timer.minutes === 0 ? 'Never' : `${timer.minutes}m`}`}</MenuButton><Portal><MenuList fontSize="12px" zIndex={DRAWER_POPUP_Z}>{[0, 1, 2, 5, 10, 15, 30, 60, 120, 180].map((minutes) => <DevicePolicyMenuItem action="set-power-idle-timer" controlFor={controlFor} controlKey={`power-idle:${timer.scope}:${minutes}`} deviceId={deviceId} input={{ scope: timer.scope, minutes }} key={minutes} label={`${timer.minutes === minutes ? '✓ ' : ''}${minutes === 0 ? 'Never' : `${minutes} minutes`}`} onAction={onAction} targetId={timer.scope} />)}</MenuList></Portal></Menu>)}</Flex></Card>
 			<Card icon={<Shield aria-hidden size={14} />} label="Global availability policy"><Text fontSize="11px">Creates a fixed profile proposal and opens macOS review. Installation is required; this is global availability, not a per-app privacy grant.</Text><Flex gap={1} marginTop={2} wrap="wrap"><DevicePolicyButton action="propose-airdrop-policy-profile" controlFor={controlFor} controlKey="airdrop:restrict" deviceId={deviceId} input={{ enabled: false }} label="Restrict AirDrop" onAction={onAction} targetId="airdrop" /><DevicePolicyButton action="propose-airdrop-policy-profile" controlFor={controlFor} controlKey="airdrop:allow" deviceId={deviceId} input={{ enabled: true }} label="Allow AirDrop" onAction={onAction} targetId="airdrop" /><DevicePolicyButton action="propose-camera-policy-profile" controlFor={controlFor} controlKey="camera:restrict" deviceId={deviceId} input={{ enabled: false }} label="Restrict camera" onAction={onAction} targetId="camera" /><DevicePolicyButton action="propose-camera-policy-profile" controlFor={controlFor} controlKey="camera:allow" deviceId={deviceId} input={{ enabled: true }} label="Allow camera" onAction={onAction} targetId="camera" /></Flex></Card>
 			<Card icon={<Music aria-hidden size={14} />} label="Apple Music"><Text fontSize="11px">{appleMusic?.isInstalled ? appleMusic.isRunning ? 'Running · controls need Automation approval' : 'Installed · playback opens it; volume needs it running' : 'Not installed'}</Text>{appleMusic?.isInstalled ? <><Flex gap={1} marginTop={2} wrap="wrap">{(['play', 'pause', 'previous', 'next'] as const).map((operation) => <DevicePolicyButton action="set-apple-music-playback" controlFor={controlFor} controlKey={`apple-music:${operation}`} deviceId={deviceId} input={{ operation }} key={operation} label={operation === 'previous' ? 'Previous' : operation[0].toUpperCase() + operation.slice(1)} onAction={onAction} targetId="apple-music" />)}</Flex><MediaVolumeControl action="set-apple-music-volume" controlFor={controlFor} deviceId={deviceId} disabledReason={appleMusic.isRunning ? null : 'Open Apple Music before changing its app volume.'} label="Apple Music" onAction={onAction} targetId="apple-music" /></> : null}</Card>
 			<Card icon={<Music aria-hidden size={14} />} label="Spotify"><Text fontSize="11px">{spotify?.isInstalled ? spotify.isRunning ? 'Running · controls need Automation approval' : 'Installed · playback opens it; volume needs it running' : 'Not installed'}</Text>{spotify?.isInstalled ? <><Flex gap={1} marginTop={2} wrap="wrap">{(['play', 'pause', 'previous', 'next'] as const).map((operation) => <DevicePolicyButton action="set-spotify-playback" controlFor={controlFor} controlKey={`spotify:${operation}`} deviceId={deviceId} input={{ operation }} key={operation} label={operation === 'previous' ? 'Previous' : operation[0].toUpperCase() + operation.slice(1)} onAction={onAction} targetId="spotify" />)}</Flex><MediaVolumeControl action="set-spotify-volume" controlFor={controlFor} deviceId={deviceId} disabledReason={spotify.isRunning ? null : 'Open Spotify before changing its app volume.'} label="Spotify" onAction={onAction} targetId="spotify" /></> : null}</Card>

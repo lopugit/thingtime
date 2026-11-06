@@ -1,4 +1,4 @@
-import { json } from '~/api/http';
+import { json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { createAlgorithm, listAlgorithmsForUser } from '~/api/utils/algorithms/algorithms';
@@ -33,7 +33,7 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Payload too large' }, { status: 413 });
   }
 
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonBody(request, MAX_BODY_BYTES);
   const result = await createAlgorithm(user.id, body);
 
   if (result.ok === false) {

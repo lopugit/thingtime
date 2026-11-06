@@ -30,9 +30,10 @@ export const MONGO_SENSITIVE_QUERY_COLLECTIONS = [
 ] as const satisfies readonly MongoQueryCollection[];
 
 // things-era system kinds (user/theme/waitlist/…) live in `things` and carry
-// credentials + PII ciphertext under root `secure`/`uniqueKeys`. `things` stays
-// aggregable (the runner strips those two fields at every ingress — primary
-// collection, $lookup, $unionWith — before any user stage runs), but
+// credentials + PII ciphertext under root `secure`/`uniqueKeys`, and unlisted
+// things carry their hidden-link bearer secret under root `linkKey`. `things`
+// stays aggregable (the runner strips every protected field at every ingress —
+// primary collection, $lookup, $unionWith — before any user stage runs), but
 // filter/sort/projection probe checks treat it like the sensitive collections
 // above.
 export const MONGO_PROTECTED_FIELD_QUERY_COLLECTIONS = [
@@ -43,7 +44,11 @@ export const MONGO_PROTECTED_FIELD_QUERY_COLLECTIONS = [
 // The single source of truth for the things-era protected root fields — the
 // probe checks (querySafety), the ingress strip stages (queryRunner), and the
 // response redactor all derive from this list.
-export const MONGO_PROTECTED_THING_FIELDS = ['secure', 'uniqueKeys'] as const;
+// `linkKey` is the hidden-link bearer secret (things.ts): whoever holds it may
+// read that unlisted thing, logged out. Same category as the credential fields
+// beside it, so it gets the same hard strip rather than the best-effort
+// crystal redaction.
+export const MONGO_PROTECTED_THING_FIELDS = ['secure', 'uniqueKeys', 'linkKey'] as const;
 
 export const MONGO_QUERY_OPERATIONS = [
   { value: 'find', label: 'Find many', description: 'Return matching documents.' },

@@ -65,7 +65,7 @@ test('settings store round-trips, rejects invalid writes, and degrades to defaul
 });
 
 test('admin media provider choice overrides env resolution; default delegates', async () => {
-	const env = { THINGTIME_MODERATION_PROVIDER: 'claude', ANTHROPIC_API_KEY: 'a', OPENAI_API_KEY: 'o' } as any;
+	const env = { THINGTIME_MODERATION_PROVIDER: 'claude', CLAUDE_CODE_OAUTH_TOKEN: 'a', OPENAI_API_KEY: 'o' } as any;
 	const forcedOff = await resolveModerationProvider(env, 'off');
 	assert.equal(forcedOff.kind, 'off');
 	const forcedOpenai = await resolveModerationProvider(env, 'openai');

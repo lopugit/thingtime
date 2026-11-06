@@ -9,10 +9,37 @@ import {
 	HeadObjectCommand,
 	PutObjectTaggingCommand,
 	S3Client,
-	UploadPartCommand
+	UploadPartCommand,
+	UploadPartCopyCommand
 } from '@aws-sdk/client-s3';
 
 import { createPrivateS3 } from './privateS3';
+
+test('stored copies pin same-bucket source version, bucket owners and exact byte range', async () => {
+	const commands: any[] = [];
+	const config = { roleArn: 'test', bucket: 'private-test', region: 'ap-southeast-2', expectedBucketOwner: '123456789012' };
+	const version = 'version/with+reserved?characters';
+	const s3 = createPrivateS3(config, { send: async (command: any) => {
+		commands.push(command);
+		return { CopySourceVersionId: version, CopyPartResult: { ETag: 'etag', ChecksumSHA256: Buffer.alloc(32).toString('base64') } };
+	} } as any);
+	const input = { objectKey: 'objects/destination', uploadId: 'mpu', partNumber: 1, sourceObjectKey: 'objects/source', sourceVersionId: version };
+	await s3.copyUploadPart(input);
+	await s3.copyUploadPart({ ...input, range: { start: 8388608, end: 9437183 } });
+	assert.ok(commands[0] instanceof UploadPartCopyCommand);
+	assert.deepEqual(commands[0].input, {
+		Bucket: 'private-test', ExpectedBucketOwner: '123456789012', ExpectedSourceBucketOwner: '123456789012',
+		Key: 'objects/destination', UploadId: 'mpu', PartNumber: 1,
+		CopySource: `private-test/objects/source?versionId=${encodeURIComponent(version)}`
+	});
+	assert.equal(commands[1].input.CopySourceRange, 'bytes=8388608-9437183');
+	for (const invalid of [{ sourceObjectKey: 'https://attacker.invalid/source' }, { objectKey: 'other/key' }, { sourceVersionId: 'null' }, { partNumber: 0 }, { range: { start: 10, end: 9 } }]) {
+		await assert.rejects(s3.copyUploadPart({ ...input, ...invalid }));
+	}
+	assert.equal(commands.length, 2);
+	const bad = createPrivateS3(config, { send: async () => ({ CopySourceVersionId: 'other', CopyPartResult: { ETag: 'etag', ChecksumSHA256: 'digest' } }) } as any);
+	await assert.rejects(bad.copyUploadPart(input), /integrity/);
+});
 
 test('multipart creation omits ACLs and fixes encryption, checksum, metadata, and pending tag', async () => {
 	const commands: any[] = [];
@@ -174,4 +201,41 @@ test('every post-completion S3 operation targets the exact verified object versi
 	}
 	assert.ok(presignedCommand instanceof GetObjectCommand);
 	assert.equal(presignedCommand.input.VersionId, 'opaque-version-1');
+});
+
+test('empty objects use a conditional encrypted single PutObject with exact checksum and owner-bound key', async () => {
+    const commands: any[] = [];
+    const s3 = createPrivateS3({ roleArn: 'test', bucket: 'private-test', region: 'ap-southeast-2', expectedBucketOwner: '123456789012' },
+        { send: async (command: any) => { commands.push(command); return { VersionId: 'empty-version' }; } } as any);
+    assert.deepEqual(await s3.putEmptyObject({ objectKey: 'objects/empty', attachmentId: 'empty' }), { versionId: 'empty-version' });
+    assert.equal(commands[0].constructor.name, 'PutObjectCommand');
+    assert.deepEqual(commands[0].input, { Bucket: 'private-test', ExpectedBucketOwner: '123456789012', Key: 'objects/empty',
+        Body: new Uint8Array(0), ContentLength: 0, ContentType: 'application/octet-stream', ServerSideEncryption: 'AES256',
+        ChecksumAlgorithm: 'SHA256', ChecksumSHA256: '47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=',
+        Metadata: { 'attachment-id': 'empty' }, Tagging: 'thingtime-state=pending', IfNoneMatch: '*' });
+    await assert.rejects(s3.putEmptyObject({ objectKey: 'objects/other', attachmentId: 'empty' }));
+    assert.equal(commands.length, 1);
+});
+
+test('signed download range binds exact stored version and Range with sixty-second expiry', async () => {
+ let command: any, options: any;
+ const s3 = createPrivateS3({ roleArn: 'test', bucket: 'private-test', region: 'ap-southeast-2', expectedBucketOwner: '123456789012' }, {} as any,
+ async (_client, cmd, opts) => { command = cmd; options = opts; return 'https://s3.example/range'; });
+ const before = Date.now(); const target = await s3.signDownloadRange!({ objectKey: 'objects/test', versionId: 'stored-version', offset: 12, length: 34 });
+ assert.equal(command.input.VersionId, 'stored-version'); assert.equal(command.input.Range, 'bytes=12-45');
+ assert.equal(options.expiresIn, 60); assert.equal(options.signableHeaders.has('range'), true);
+ assert.ok(Date.parse(target.expiresAt) >= before + 59000); assert.ok(Date.parse(target.expiresAt) <= Date.now() + 60000);
+ await assert.rejects(s3.signDownloadRange!({ objectKey: 'objects/test', versionId: 'stored-version', offset: 0, length: 2097153 }));
+});
+
+test('real offline S3 presigner cryptographically includes Range and exact object version', async () => {
+ const { S3Client } = await import('@aws-sdk/client-s3');
+ const client = new S3Client({ region: 'us-east-1', credentials: { accessKeyId: 'SYNTHETIC_FIXTURE_KEY', secretAccessKey: 'synthetic-fixture-secret' } });
+ try {
+  const s3 = createPrivateS3({ roleArn: 'unused-fixture', bucket: 'private-test', region: 'us-east-1', expectedBucketOwner: '123456789012' }, client);
+  const signed = await s3.signDownloadRange!({ objectKey: 'objects/test', versionId: 'exact-fixture-version', offset: 4, length: 8 });
+  const query = new URL(signed.url).searchParams;
+  assert.ok(query.get('X-Amz-SignedHeaders')?.split(';').includes('range'));
+  assert.equal(query.get('X-Amz-Expires'), '60'); assert.equal(query.get('versionId'), 'exact-fixture-version');
+ } finally { client.destroy(); }
 });

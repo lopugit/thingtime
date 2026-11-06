@@ -2,7 +2,6 @@ import AppKit
 import ApplicationServices
 
 private final class CommanderPanel: NSPanel {
-  var resizeSurfaceInset = CommanderWebView.launcherSurfaceInset
   var usesCustomWindowResizeHandling = true {
     didSet {
       if !usesCustomWindowResizeHandling { cancelResizeSession() }
@@ -29,28 +28,32 @@ private final class CommanderPanel: NSPanel {
   }
 
   override func sendEvent(_ event: NSEvent) {
-    // A resize gesture is valid only while Commander is receiving its drag
-    // stream. Keyboard actions such as selecting an emoji with Return can
-    // arrive after a matching mouse-up was missed, so never let a stale resize
-    // session survive any non-drag input.
-    if resizeSession != nil, event.type != .leftMouseDragged {
-      let consumedMouseUp = event.type == .leftMouseUp
-      cancelResizeSession()
-      if consumedMouseUp { return }
+    if resizeSession != nil {
+      switch event.type {
+      case .leftMouseDragged, .cursorUpdate, .mouseEntered, .mouseExited,
+           .appKitDefined, .systemDefined, .applicationDefined, .periodic, .flagsChanged:
+        // Tracking and framework notifications can arrive between drag steps,
+        // including after setFrame moves a tracking boundary. A modifier change
+        // also leaves the held mouse gesture intact. Forward these normally.
+        break
+      default:
+        // A release or new input ends the gesture. Keep this stale-session
+        // guard for missed mouse-ups (for example, before Return selects an
+        // emoji), alongside the explicit window lifecycle cancellation hooks.
+        let consumedMouseUp = event.type == .leftMouseUp
+        cancelResizeSession()
+        if consumedMouseUp { return }
+      }
     }
 
     switch event.type {
     case .leftMouseDown:
       cancelResizeSession()
-      guard usesCustomWindowResizeHandling, styleMask.contains(.resizable) else { break }
+      guard usesCustomWindowResizeHandling, styleMask.contains(.resizable),
+            let contentView = contentView as? CommanderLauncherContentView else { break }
       let mouseLocation = convertPoint(toScreen: event.locationInWindow)
-      let edges = CommanderWebView.resizeEdges(
-        at: mouseLocation,
-        frame: frame.insetBy(
-          dx: resizeSurfaceInset,
-          dy: resizeSurfaceInset
-        ),
-        handleWidth: CommanderWebView.resizeHandleWidth
+      let edges = contentView.resizeEdges(
+        at: contentView.convert(event.locationInWindow, from: nil)
       )
       if !edges.isEmpty {
         resizeSession = (edges, frame, mouseLocation)
@@ -130,6 +133,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     "window.dispatchEvent(new CustomEvent('commander:launcher-opened'))"
   private let panel: CommanderPanel
   private let webView: CommanderWebView
+  private let launcherContentView: CommanderLauncherContentView
   let id: UUID
   var didBecomeKey: ((UUID) -> Void)?
   private var contentReady = false
@@ -139,6 +143,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   private var showRequestID: UInt = 0
   private var windowMode = LauncherWindowMode.standard
   private var pasteTarget: NSRunningApplication?
+  private let isAccessibilityTrusted: () -> Bool
   private var fileDragInProgress = false
   private var isPresented = false
   private var commandPresentationItemID: String?
@@ -152,7 +157,8 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     ready: DaemonReady,
     bridge: CommanderNativeBridge,
     pinned: Bool = false,
-    pinningEnabled: Bool = true
+    pinningEnabled: Bool = true,
+    isAccessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() }
   ) {
     let panel = CommanderPanel(
       contentRect: NSRect(origin: .zero, size: LauncherWindowMode.standard.size),
@@ -162,9 +168,14 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     )
     self.id = id
     self.panel = panel
-    self.webView = CommanderWebView(ready: ready, surface: "launcher", bridge: bridge)
+    let webView = CommanderWebView(ready: ready, surface: "launcher", bridge: bridge)
+    self.webView = webView
+    self.launcherContentView = CommanderLauncherContentView(
+      webView: webView, frame: NSRect(origin: .zero, size: LauncherWindowMode.standard.size)
+    )
     self.isPinned = pinningEnabled && pinned
     self.pinningEnabled = pinningEnabled
+    self.isAccessibilityTrusted = isAccessibilityTrusted
     super.init()
     panel.delegate = self
     panel.level = .statusBar
@@ -178,7 +189,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     panel.hidesOnDeactivate = false
     panel.animationBehavior = .utilityWindow
     panel.minSize = LauncherWindowMode.standard.minimumSize
-    panel.contentView = webView
+    panel.contentView = launcherContentView
     panel.contentView?.wantsLayer = true
     panel.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
     panel.contentView?.superview?.wantsLayer = true
@@ -207,6 +218,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   }
 
   func focus() {
+    rememberPasteTarget()
     guard contentReady else {
       show()
       return
@@ -258,7 +270,12 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     focusCurrentInput()
   }
 
-  func hide() {
+  func hide(restoringPreviousApplication: Bool = false) {
+    let restoreTarget = restoringPreviousApplication && Self.shouldRestorePreviousApplication(
+      isPresented: isPresented,
+      applicationIsActive: NSApp.isActive,
+      hasOtherKeyWindow: NSApp.keyWindow.map { $0 !== panel } ?? false
+    )
     pendingShow = false
     pendingCommandItemID = nil
     showPending = false
@@ -267,6 +284,19 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     cancelCommandHotKeyPresentation()
     panel.cancelResizeSession()
     panel.orderOut(nil)
+    if restoreTarget, let pasteTarget, !pasteTarget.isTerminated {
+      _ = pasteTarget.activate(options: [.activateAllWindows])
+    }
+  }
+
+  static func shouldRestorePreviousApplication(
+    isPresented: Bool,
+    applicationIsActive: Bool,
+    hasOtherKeyWindow: Bool
+  ) -> Bool {
+    // Explicit dismissal returns focus, but a late hide after opening a result
+    // or moving to Settings must not steal it from the user's new destination.
+    isPresented && applicationIsActive && !hasOtherKeyWindow
   }
 
   var pasteTargetName: String? {
@@ -275,48 +305,57 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
   }
 
   func paste(_ text: String, preserveClipboard: Bool) async -> [String: Any] {
-    let previousClipboard = preserveClipboard ? PasteboardSnapshot.capture() : nil
-    NSPasteboard.general.clearContents()
-    let wrotePasteValue = NSPasteboard.general.setString(text, forType: .string)
+    let trusted = isAccessibilityTrusted()
     var result: [String: Any] = [
-      "copied": wrotePasteValue && !preserveClipboard,
+      "copied": false,
       "pasted": false,
-      "requiresAccessibility": false,
+      "requiresAccessibility": !trusted,
     ]
     if let pasteTargetName { result["targetApplication"] = pasteTargetName }
-    guard wrotePasteValue else {
-      previousClipboard?.restore()
+    // A denied keep-clipboard action must not write even transiently: clipboard
+    // observers can retain a failed emoji paste despite a later restoration.
+    if preserveClipboard, !trusted || pasteTarget == nil || pasteTarget?.isTerminated == true {
       return result
     }
-    guard AXIsProcessTrusted() else {
-      result["requiresAccessibility"] = true
-      previousClipboard?.restore()
-      return result
-    }
-    guard let pasteTarget, !pasteTarget.isTerminated else {
-      previousClipboard?.restore()
-      return result
-    }
-
-    hide()
-    _ = pasteTarget.activate(options: [.activateAllWindows])
-    try? await Task.sleep(for: .milliseconds(120))
-
-    guard let source = CGEventSource(stateID: .hidSystemState),
-          let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
-          let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
-      previousClipboard?.restore()
-      return result
-    }
-    keyDown.flags = .maskCommand
-    keyUp.flags = .maskCommand
-    keyDown.post(tap: .cghidEventTap)
-    keyUp.post(tap: .cghidEventTap)
-    result["pasted"] = true
-    if let previousClipboard {
-      try? await Task.sleep(for: .milliseconds(180))
-      previousClipboard.restore()
-    }
+    let target = pasteTarget
+    let pasteResult = await ClipboardPasteCoordinator.shared.paste(
+      text,
+      preserveClipboard: preserveClipboard,
+      prepareTarget: { [self] in
+        guard trusted, let target, !target.isTerminated, !Task.isCancelled else { return false }
+        hide()
+        guard target.activate(options: [.activateAllWindows]) else { return false }
+        // A fixed 120ms delay can send Cmd-V before the target becomes active.
+        // Wait for activation, then allow the window focus handoff to settle.
+        for _ in 0..<50 {
+          do { try await Task.sleep(for: .milliseconds(20)) }
+          catch { return false }
+          guard !target.isTerminated else { return false }
+          if NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier {
+            do { try await Task.sleep(for: .milliseconds(100)) }
+            catch { return false }
+            return NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier
+          }
+        }
+        return false
+      },
+      sendPaste: {
+        guard let target, !target.isTerminated,
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier,
+              let source = CGEventSource(stateID: .hidSystemState),
+              let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
+          return false
+        }
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+        return true
+      }
+    )
+    result["copied"] = pasteResult.copied
+    result["pasted"] = pasteResult.pasted
     return result
   }
   func toggle() {
@@ -325,7 +364,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     } else if isPinned && isPresented && panel.isVisible {
       focus()
     } else if (isPresented && panel.isVisible) || pendingShow || showPending {
-      hide()
+      hide(restoringPreviousApplication: true)
     } else {
       show()
     }
@@ -369,7 +408,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     windowMode = mode
     panel.minSize = mode.minimumSize
     let surfaceInset: CGFloat = mode == .compact ? 12 : CommanderWebView.launcherSurfaceInset
-    panel.resizeSurfaceInset = surfaceInset
+    launcherContentView.surfaceInset = surfaceInset
     webView.maskToSurface(inset: surfaceInset, cornerRadius: 19)
     let size = mode.size
     guard panel.isVisible else {
@@ -390,7 +429,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
 
   func setCustomWindowResizeHandling(_ enabled: Bool) {
     panel.usesCustomWindowResizeHandling = enabled
-    webView.usesCustomWindowResizeHandling = enabled
+    launcherContentView.usesCustomWindowResizeHandling = enabled
   }
 
   func shutdown() {
@@ -403,6 +442,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
 
   func windowDidResignKey(_ notification: Notification) {
     panel.cancelResizeSession()
+    guard isPresented else { return }
     guard !fileDragInProgress else { return }
     guard !isPinned else { return }
     let commandPresentationWasActive = commandPresentationItemID != nil
@@ -470,7 +510,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
 
   var panelForTesting: NSPanel { panel }
   var customWindowResizeHandlingEnabledForTesting: Bool {
-    panel.usesCustomWindowResizeHandling && webView.usesCustomWindowResizeHandling
+    panel.usesCustomWindowResizeHandling && launcherContentView.usesCustomWindowResizeHandling
   }
   var resizeSessionActiveForTesting: Bool { panel.hasResizeSession }
   static var launcherOpenedScriptForTesting: String { launcherOpenedScript }
@@ -546,29 +586,5 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     var behavior: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     if !pinned { behavior.insert(.transient) }
     return behavior
-  }
-}
-
-private struct PasteboardSnapshot {
-  let items: [[NSPasteboard.PasteboardType: Data]]
-
-  static func capture() -> PasteboardSnapshot {
-    let items = NSPasteboard.general.pasteboardItems?.map { item in
-      Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
-        item.data(forType: type).map { (type, $0) }
-      })
-    } ?? []
-    return PasteboardSnapshot(items: items)
-  }
-
-  func restore() {
-    let pasteboard = NSPasteboard.general
-    pasteboard.clearContents()
-    let restored = items.map { values in
-      let item = NSPasteboardItem()
-      for (type, data) in values { item.setData(data, forType: type) }
-      return item
-    }
-    if !restored.isEmpty { pasteboard.writeObjects(restored) }
   }
 }

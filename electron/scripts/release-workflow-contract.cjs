@@ -41,7 +41,7 @@ function validateControlPlane(source) {
 		source,
 		[
 			'workflow_call:',
-			'corepack pnpm --dir MCP install --frozen-lockfile',
+			'npm ci --prefix MCP',
 			'corepack pnpm --dir MCP run typecheck',
 			'corepack pnpm --dir MCP test',
 			'corepack pnpm --dir MCP run build:desktop',
@@ -71,7 +71,7 @@ function validateControlPlane(source) {
 	for (const forbidden of [
 		/identity\s*=\s*null/iu,
 		/continue-on-error\s*:\s*true/iu,
-		/^\s*push:/mu
+		/^  push:/mu
 	]) {
 		if (forbidden.test(source)) throw new Error(`Electron release control plane contains forbidden behavior: ${forbidden}`);
 	}

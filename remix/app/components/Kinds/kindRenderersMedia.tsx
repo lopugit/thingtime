@@ -639,7 +639,7 @@ export const RichTextBlocks = ({ blocks, bodyFontSize = 'sm' }: { blocks: RichTe
 							sx={inlineMarkupSx}
 							dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.text, limits) }}
 						/>
-						{block.data.caption ? <MutedMono>— {inlineText(block.data.caption, limits)}</MutedMono> : null}
+						{block.data.caption ? <Text fontSize="sm" style={tuneStyle} sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.caption, limits) }} /> : null}
 					</Box>
 				);
 			}
@@ -664,6 +664,7 @@ export const RichTextBlocks = ({ blocks, bodyFontSize = 'sm' }: { blocks: RichTe
 						overflowX="auto"
 						padding={3}
 						whiteSpace="pre"
+						style={tuneStyle}
 					>
 						{toStringOr(boundedRenderValue(block.data.code, limits))}
 					</Box>
@@ -691,6 +692,7 @@ export const RichTextBlocks = ({ blocks, bodyFontSize = 'sm' }: { blocks: RichTe
 													color={withHeadings && rowIdx === 0 ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
 													fontSize={bodyFontSize}
 													fontWeight={withHeadings && rowIdx === 0 ? 750 : 500}
+													style={tuneStyle}
 													sx={inlineMarkupSx}
 													dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(cell, limits) }}
 												/>
@@ -710,9 +712,9 @@ export const RichTextBlocks = ({ blocks, bodyFontSize = 'sm' }: { blocks: RichTe
 							⚠️
 						</Text>
 						<Box minWidth={0}>
-							<Text color="#78350f" fontSize={bodyFontSize} fontWeight={800} sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.title, limits) }} />
+							<Text color="#78350f" fontSize={bodyFontSize} fontWeight={800} style={tuneStyle} sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.title, limits) }} />
 							{block.data.message ? (
-								<Text color="#8a6d3b" fontSize={bodyFontSize} lineHeight="1.5" sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.message, limits) }} />
+								<Text color="#8a6d3b" fontSize={bodyFontSize} lineHeight="1.5" style={tuneStyle} sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.message, limits) }} />
 							) : null}
 						</Box>
 					</Flex>
@@ -727,7 +729,7 @@ export const RichTextBlocks = ({ blocks, bodyFontSize = 'sm' }: { blocks: RichTe
 				return (
 					<Box key={idx}>
 						<Box as="img" src={url} alt={caption || 'image'} borderRadius="var(--tt-radius-md, 12px)" maxWidth="100%" />
-						{caption ? <MutedMono>{caption}</MutedMono> : null}
+						{caption ? <Text fontSize="sm" style={tuneStyle} sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.caption, limits) }} /> : null}
 					</Box>
 				);
 			}
@@ -748,7 +750,7 @@ export const RichTextBlocks = ({ blocks, bodyFontSize = 'sm' }: { blocks: RichTe
 									{toStringOr(boundedRenderValue(toStringOr(block.data.service, 'Embedded media'), limits))} ↗
 								</Text>
 								<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" noOfLines={1}>
-									{caption || source}
+									{caption ? <span style={tuneStyle} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.caption, limits).replace(/<\/?a\b[^>]*>/g, '') }} /> : source}
 								</Text>
 							</Box>
 						</Flex>

@@ -1,0 +1,452 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { IDBKeyRange } from 'fake-indexeddb';
+import { openSyncJournal } from './journal.client';
+import { projectSyncProgress, type SyncProgressDescriptor } from './progressProjection';
+import { createJournalSyncProgressSource } from './progressProjection.client';
+import { cloudFileSyncEntry, type CloudFile } from './cloudFile';
+import { fingerprintSource } from './contentFingerprint';
+import type { SyncReceipt } from './execute';
+import { saved, scope } from './foregroundSync.fixture';
+import { runPagedForegroundCloudSync } from './pagedForegroundSync';
+import { sameSyncStamp, type SyncEntry } from './reconcile';
+import { streamingFileFixture } from './streamingFile.fixture';
+import { streamForegroundSync } from './streamingForegroundSync';
+import type { NativeIndexChangesPage } from './streamingIndex';
+
+const twoWay = { ...saved, configuration: { ...saved.configuration, mode: 'two-way' as const } };
+const deferred = () => {
+	let resolve!: () => void;
+	const promise = new Promise<void>(done => { resolve = done; });
+	return { promise, resolve };
+};
+const frame = (id: string, entries: SyncEntry[], after: number, done = false): NativeIndexChangesPage => ({
+	id, generation: id, state: done ? 'complete' : 'running', revision: after + entries.length, nextSequence: after + entries.length, hasMore: false,
+	changes: entries.map((entry, i) => ({ entry, sequence: after + i + 1, revision: entry.version }))
+});
+async function fixture(path?: string) {
+	const f = await streamingFileFixture(path), input = f.input;
+	const read = input.readConfiguration, inspect = input.inspectLocal!;
+	const native = new Map<string, SyncEntry>(), downloads = new Map<string, Uint8Array>();
+	const receipts = new Map<string, SyncReceipt>();
+	let removeSource = false;
+	input.readConfiguration = async () => ({ ...((await read()) as object), crystal: twoWay.configuration });
+	input.inspectLocal = async path => native.get(path) ?? (removeSource ? null : await inspect(path));
+	input.scanLocal = async () => [...(removeSource ? [] : [f.entry()]), ...native.values()];
+	input.inventory = async () => ({
+		version: 1, complete: true, rootId: 'cloud-root', rootRevision: 'root',
+		nodes: [...f.files.values()].map(file => ({ kind: 'file', path: file.name, file }))
+	});
+	input.localTarget = {
+		lookup: async op => receipts.has(op.id) ? { status: 'complete', receipt: receipts.get(op.id)! } : { status: 'missing' },
+		stage: async (op, binding, source) => {
+			assert.equal(op.mutation.kind, 'copy');
+			if (op.mutation.source.kind === 'file') assert.ok(source);
+			const data = source ? await source.read(0, source.size) : new Uint8Array();
+			const entry = { ...op.mutation.source, id: 'local-' + op.mutation.source.id, version: op.id };
+			downloads.set(op.id, data);
+			return { operationId: op.id, scope: binding, token: op.id, entry };
+		},
+		publish: async (op, binding, stage) => {
+			assert.equal(op.mutation.kind, 'copy');
+			assert.ok(sameSyncStamp(await input.inspectLocal!(op.mutation.path), op.mutation.expectedTarget));
+			const receipt = { operationId: op.id, scope: binding, entry: stage.entry };
+			native.set(stage.entry.path, stage.entry); receipts.set(op.id, receipt); return receipt;
+		}
+	};
+	const putCloud = async (name: string, bytes: number[], version = 'remote-1', id: string = crypto.randomUUID()) => {
+		const data = new Uint8Array(bytes), attachmentId = 'remote-' + version;
+		const fingerprint = await fingerprintSource({ size: data.length, check() {}, read: async (offset, size) => data.slice(offset, offset + size) });
+		const file: CloudFile = { id, revision: version, name, folderId: 'cloud-root', trashed: false, content: { attachmentId, version: 'a'.repeat(64), size: data.length, fingerprint } };
+		f.files.set(id, file); f.objects.set(attachmentId, data);
+		return cloudFileSyncEntry(file, name);
+	};
+	const run = (signal = new AbortController().signal) => runPagedForegroundCloudSync(twoWay, scope, input, signal);
+	const stream = (signal = new AbortController().signal) => streamForegroundSync(twoWay, scope, input, signal);
+	const feeds = (local: SyncEntry[], remote: SyncEntry[], fence: Promise<void> = Promise.resolve()) => {
+		input.streamLocalChanges = async function* (id, after) {
+			assert.equal(after, 0);
+			yield frame(id, local, 0); await fence;
+			yield frame(id, [], local.length, true);
+		};
+		input.streamRemoteChanges = async function* (id, after, _signal, _ready, resume) {
+			assert.equal(after, 0);
+			await resume!.checkpoint('1', false);
+			yield frame(id, remote, 0); await fence;
+			await resume!.checkpoint('2', true);
+			yield frame(id, [], remote.length, true);
+		};
+	};
+	const access = { scope, currentScope: input.currentScope };
+	return { f, input, native, downloads, receipts, putCloud, feeds, run, stream, removeSource: () => { removeSource = true; },
+		runs: () => input.journal.pagedRuns(access), checkpoints: () => input.journal.pagedCheckpoints(access) };
+}
+
+test('new files and one-sided file edits in both directions confirm while both initial feeds remain open; strict seal publishes agreement', { timeout: 10000 }, async () => {
+	const x = await fixture();
+	let remote = await x.putCloud('download.bin', [5, 6, 7]);
+	let previousEarly: SyncProgressDescriptor['run'] | null = null;
+	for (let phase = 0; phase < 2; phase++) {
+		if (phase) {
+			await x.f.revise([11, 12]);
+			remote = await x.putCloud(remote.path, [21, 22, 23, 24], 'remote-2', remote.id);
+		}
+		const firstUpload = deferred(), firstDownload = deferred(), both = Promise.all([firstUpload.promise, firstDownload.promise]).then(() => {});
+		let directions = new Set<string>();
+		x.feeds([x.f.entry()], [remote], both);
+		x.input.transfer = activity => {
+			if (!('kind' in activity) || activity.kind !== 'file') return;
+			directions.add(activity.direction);
+			(activity.direction === 'upload' ? firstUpload : firstDownload).resolve();
+		};
+		let completed: Parameters<typeof x.input.progress>[0] | undefined;
+		let descriptor: SyncProgressDescriptor | undefined;
+		x.input.progressSession = value => { descriptor = value; };
+		const progress: Parameters<typeof x.input.progress>[0][] = [];
+		x.input.progress = value => { progress.push(value); if (value.stage === 'complete') completed = value; };
+		const oldHead = await x.checkpoints().current();
+		const run = x.run();
+		await both;
+		assert.deepEqual(directions, new Set(['upload', 'download']));
+		assert.equal(x.f.publications(), phase + 1); assert.equal(x.receipts.size, phase + 1);
+		assert.deepEqual(await x.checkpoints().current(), oldHead);
+		const file = [...x.f.files.values()].find(file => file.name === x.f.entry().path)!;
+		assert.deepEqual(x.f.objects.get(file.content.attachmentId), new Uint8Array(phase ? [11, 12] : [1, 2, 3]));
+		assert.deepEqual([...x.downloads.values()].at(-1), new Uint8Array(phase ? [21, 22, 23, 24] : [5, 6, 7]));
+		const final = await run;
+		assert.ok('progress' in final); assert.equal(final.progress.operations, 0);
+		assert.equal(completed?.confirmed, 2);
+		assert.equal(completed?.total, 2);
+		assert.equal(completed?.directions?.upload.confirmed, 1);
+		assert.equal(completed?.directions?.download.confirmed, 1);
+		assert.ok(progress.some(value => value.stage === 'scanning' && value.confirmed === 2 && value.totalFinal === false));
+		const provisional = progress.filter(value => value.indexState === 'complete');
+		assert.ok(provisional.length > 0 && provisional.every(value => value.totalFinal === false));
+		assert.equal(completed?.totalFinal, true);
+		assert.ok(descriptor && !descriptor.run.streaming);
+		const open: typeof openSyncJournal = () => openSyncJournal(x.f.factory, 'thingtime-file-sync-v1', IDBKeyRange);
+		const tree = await projectSyncProgress(createJournalSyncProgressSource(descriptor, () => scope, open));
+		assert.deepEqual([tree.parent.files, tree.parent.operations, tree.parent.confirmed, tree.parent.unchanged], [2, 2, 2, 0]);
+		assert.deepEqual(tree.rows.map(row => [row.files, row.operations, row.confirmed]), [[1, 1, 1], [1, 1, 1]]);
+		if (previousEarly) await assert.rejects(x.runs().readConfirmed(previousEarly), /changed or is unavailable/);
+		previousEarly = await x.runs().earlyProgressSource(descriptor.run);
+		assert.ok(previousEarly);
+		assert.notDeepEqual(await x.checkpoints().current(), oldHead);
+		assert.equal(await x.runs().streamAwaitingReconciliation(), null);
+	}
+	x.f.journal().close();
+});
+
+test('lost strict handoff retains the early receipt and a later deletion is reviewed, not copied back', { timeout: 10000 }, async () => {
+	const x = await fixture();
+	x.feeds([x.f.entry()], []);
+	const scan = x.input.scanLocal;
+	x.input.scanLocal = async () => { throw Error('Interrupted before strict capture'); };
+	await assert.rejects(x.run(), /Interrupted before strict capture/);
+	assert.equal(x.f.publications(), 1);
+	assert.equal(await x.checkpoints().current(), null);
+	const early = await x.runs().streamAwaitingReconciliation(); assert.ok(early);
+	x.removeSource(); x.input.scanLocal = scan;
+	x.input.streamLocalChanges = async function* () { throw Error('A pending handoff must not start another early scan'); };
+	x.input.reviewPagedConflicts = async session => {
+		const conflicts = (await session.read()).rows.map(row => row.conflict);
+		assert.deepEqual(conflicts.map(c => [c.path, c.reason]), [[x.f.entry().path, 'deletion-disabled']]);
+		return { action: 'cancel' };
+	};
+	await assert.rejects(x.run(), /Conflict review cancelled/);
+	assert.equal(x.receipts.size, 0);
+	assert.deepEqual(await x.runs().streamAwaitingReconciliation(), early);
+	x.f.journal().close();
+});
+
+test('both-changed and stale hint paths have no early effects; revoked authority leaves their source cursors durable', { timeout: 10000 }, async () => {
+	const x = await fixture();
+	x.feeds([x.f.entry()], []);
+	await x.run();
+	const before = [...x.f.files.values()].find(file => file.name === x.f.entry().path)!;
+	await x.f.revise([14, 15]);
+	const remote = await x.putCloud(before.name, [71, 72], 'remote-new', before.id);
+	const valid = x.f.entry(), stale = { ...valid, version: 'older' };
+	x.feeds([stale, valid], [remote]);
+	await x.stream();
+	assert.equal(x.f.publications(), 1);
+	assert.equal(x.receipts.size, 0);
+	const controller = new AbortController(), ready = deferred(), revoke = deferred();
+	const read = x.input.readConfiguration;
+	x.input.readConfiguration = async () => {
+		const value = await read();
+		return { ...(value as object), updatedAt: '2026-11-05T00:00:00.000Z' };
+	};
+	x.input.streamLocalChanges = async function* (id, after, signal) {
+		yield frame(id, [valid], after);
+		await Promise.race([revoke.promise, new Promise<void>(resolve => signal!.addEventListener('abort', () => resolve(), { once: true }))]);
+	};
+	// The separate cancellation check below exercises the abort path even if no
+	// entry survives validation; revoked settings are checked before feeds open.
+	await assert.rejects(x.stream(controller.signal), /approved|changed|revision/i);
+	x.input.readConfiguration = read;
+	x.input.progress = value => { if (value.indexed === 1) ready.resolve(); };
+	x.input.streamRemoteChanges = async function* (id, after) { yield frame(id, [], after, true); };
+	const running = x.stream(controller.signal);
+	await ready.promise; controller.abort(new Error('Stopped by fixture')); revoke.resolve();
+	await assert.rejects(running, /Stopped by fixture/);
+	const active = await x.runs().active(); assert.ok(active);
+	assert.equal((await x.runs().streamState(active.spec)).replicaFeeds?.local?.sequence, 1);
+	x.f.journal().close();
+});
+
+test('a deletion during post-run verification retains the confirmed early baseline instead of restoring the deleted item next run', { timeout: 10000 }, async () => {
+	const x = await fixture();
+	x.feeds([x.f.entry()], []);
+	let scans = 0;
+	const scan = x.input.scanLocal;
+	x.input.scanLocal = async () => {
+		if (++scans === 2) x.removeSource();
+		return scan();
+	};
+	await x.run();
+	const head = await x.checkpoints().current(); assert.ok(head);
+	const inventory = x.input.journal.inventory({ scope, currentScope: x.input.currentScope });
+	assert.deepEqual(await inventory.entriesForPaths(head.baseline.local, [x.f.entry().path]), [x.f.entry()]);
+	assert.equal(await x.runs().streamAwaitingReconciliation(), null);
+	const remote = [...x.f.files.values()][0];
+	x.feeds([], [cloudFileSyncEntry(remote, remote.name)]);
+	x.input.reviewPagedConflicts = async session => {
+		assert.deepEqual((await session.read()).rows.map(r => r.conflict.reason), ['deletion-disabled']);
+		return { action: 'cancel' };
+	};
+	await assert.rejects(x.run(), /Conflict review cancelled/);
+	assert.equal(x.receipts.size, 0);
+	x.f.journal().close();
+});
+
+test('an accepted upload with a lost reply resumes the original ID and both independent source cursors', { timeout: 10000 }, async () => {
+	const x = await fixture(), remote = await x.putCloud('download.bin', [8, 9]);
+	const controller = new AbortController();
+	const stop = () => new Promise<void>(resolve => controller.signal.addEventListener('abort', () => resolve(), { once: true }));
+	x.feeds([x.f.entry()], [remote], stop());
+	const fetch = x.input.runtime.fetch;
+	let lostId: string | undefined;
+	x.input.runtime.fetch = async (url, init) => {
+		const result = await fetch(url, init);
+		if (!lostId && new URL(String(url)).pathname === '/api/v1/files' && init?.method === 'POST') {
+			lostId = JSON.parse(String(init.body)).operationId;
+			// Simulate request cancellation after the canonical server effect.
+			controller.abort(new Error('Accepted upload response lost'));
+			throw controller.signal.reason;
+		}
+		return result;
+	};
+	await assert.rejects(x.stream(controller.signal), /Accepted upload response lost/);
+	const active = await x.runs().active(); assert.ok(active && lostId);
+	const prior = await x.runs().streamState(active.spec);
+	assert.equal(prior.replicaFeeds?.local?.sequence, 1);
+	assert.equal(x.f.publications(), 1);
+	const queued = await x.runs().find(active.spec, x.f.entry().path);
+	assert.equal(queued?.id, lostId); assert.equal(queued?.confirmed, false);
+	x.input.runtime.fetch = fetch;
+	x.input.streamLocalChanges = async function* (id, after) {
+		assert.equal(after, prior.replicaFeeds?.local?.sequence);
+		yield frame(id, [], after, true);
+	};
+	x.input.streamRemoteChanges = async function* (id, after, _signal, _ready, resume) {
+		assert.equal(after, prior.replicaFeeds?.remote?.sequence ?? 0);
+		assert.equal(resume?.cursor, prior.sourceCursor);
+		yield frame(id, after ? [] : [remote], after, true);
+	};
+	await x.run();
+	assert.equal(x.f.publications(), 1);
+	assert.equal(x.f.puts(), 1);
+	assert.equal(x.receipts.size, 1);
+	assert.equal(await x.runs().streamAwaitingReconciliation(), null);
+	x.f.journal().close();
+});
+
+test('a confirmed early folder creation unlocks its nested file before either source seals', { timeout: 10000 }, async () => {
+	const x = await fixture('Local parent/child.bin'), first = deferred();
+	const parent: SyncEntry = { path: 'Local parent', id: 'native-parent', version: 'parent-version', kind: 'folder', size: 0, sha256: null };
+	x.native.set(parent.path, parent);
+	const fetch = x.input.runtime.fetch;
+	let cloudParent: { id: string; name: string; folderId: string; revision: string } | undefined;
+	x.input.runtime.fetch = async (value, init) => {
+		const url = new URL(String(value)), params = url.searchParams, body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+		const json = (v: object) => Response.json({ ok: true, ...v });
+		if (url.pathname === '/api/v1/files') {
+			if (body?.kind === 'folder') {
+				if (cloudParent) return json({ folder: cloudParent, replayed: true });
+				assert.equal(body.name, parent.path); assert.equal(body.folderId, 'cloud-root');
+				cloudParent = { id: body.id, folderId: body.folderId, name: body.name, revision: 'parent-created' };
+				return json({ folder: cloudParent, replayed: false });
+			}
+			if (params.has('folderId')) {
+				if (params.has('operationId')) return json({ receipt: cloudParent ?? null });
+				return cloudParent ? json({ folder: cloudParent }) : Response.json({ ok: false }, { status: 404 });
+			}
+			const path = params.get('path');
+			if (path === parent.path || path === x.f.entry().path) {
+				const child = [...x.f.files.values()].find(file => file.folderId === cloudParent?.id);
+				const entry = path === parent.path
+					? cloudParent ? { ...parent, id: cloudParent.id, version: cloudParent.revision } : null
+					: child ? cloudFileSyncEntry(child, path) : null;
+				return json({ observation: { version: 1, complete: true, rootId: 'cloud-root', rootRevision: 'root', path, entry } });
+			}
+		}
+		return fetch(value, init);
+	};
+	x.feeds([parent, x.f.entry()], [], first.promise);
+	x.input.transfer = activity => {
+		if ('kind' in activity && activity.kind === 'file') {
+			assert.ok(cloudParent);
+			assert.equal([...x.f.files.values()][0].folderId, cloudParent.id);
+			first.resolve();
+		}
+	};
+	await x.stream();
+	assert.ok(cloudParent);
+	assert.equal(x.f.publications(), 1);
+	assert.deepEqual([...x.f.objects.values()].at(-1), new Uint8Array([1, 2, 3]));
+	x.f.journal().close();
+});
+
+test('a cloud folder is published locally before its nested file while both feeds are open', { timeout: 10000 }, async () => {
+	const x = await fixture(), first = deferred();
+	const parent: SyncEntry = { path: 'Cloud parent', id: 'cloud-parent', version: 'parent-version', kind: 'folder', size: 0, sha256: null };
+	const original = await x.putCloud('child.bin', [81, 82, 83]);
+	const file = x.f.files.get(original.id)!;
+	file.folderId = parent.id;
+	const child = { ...original, path: parent.path + '/' + file.name };
+	const fetch = x.input.runtime.fetch;
+	x.input.runtime.fetch = async (value, init) => {
+		const url = new URL(String(value)), path = url.searchParams.get('path');
+		if (url.pathname === '/api/v1/files' && (path === parent.path || path === child.path)) {
+			return Response.json({ ok: true, observation: {
+				version: 1, complete: true, rootId: 'cloud-root', rootRevision: 'root', path, entry: path === parent.path ? parent : child
+			} });
+		}
+		return fetch(value, init);
+	};
+	x.feeds([], [parent, child], first.promise);
+	x.input.transfer = activity => {
+		if ('kind' in activity && activity.kind === 'file') {
+			assert.equal(x.native.get(parent.path)?.kind, 'folder');
+			assert.equal(x.native.get(child.path)?.kind, 'file');
+			first.resolve();
+		}
+	};
+	await x.stream();
+	assert.equal(x.receipts.size, 2);
+	assert.deepEqual([...x.downloads.values()].at(-1), new Uint8Array([81, 82, 83]));
+	x.f.journal().close();
+});
+
+test('a first guarded publication rejected after staging yields to strict reconciliation without a second write', { timeout: 10000 }, async () => {
+	const x = await fixture(), fetch = x.input.runtime.fetch;
+	x.feeds([x.f.entry()], []);
+	let attempts = 0;
+	x.input.runtime.fetch = async (url, init) => {
+		if (new URL(String(url)).pathname === '/api/v1/files' && init?.method === 'POST') {
+			attempts++;
+			const body = JSON.parse(String(init.body));
+			assert.deepEqual(body.syncDestination, { rootId: 'cloud-root', path: x.f.entry().path });
+			await x.putCloud(x.f.entry().path, [71, 77], 'other-client');
+			return Response.json({ ok: false, code: 'sync_destination_changed' }, { status: 409 });
+		}
+		return fetch(url, init);
+	};
+	x.input.reviewPagedConflicts = async session => {
+		assert.deepEqual((await session.read()).rows.map(r => r.conflict.reason), ['both-changed']);
+		return { action: 'cancel' };
+	};
+	await assert.rejects(x.run(), /Conflict review cancelled/);
+	assert.equal(attempts, 1);
+	assert.equal(x.f.publications(), 0);
+	assert.equal(x.receipts.size, 0);
+	x.f.journal().close();
+});
+
+test('a changed root cannot release receipts needed by an interrupted strict run', { timeout: 10000 }, async () => {
+	const x = await fixture();
+	x.feeds([x.f.entry()], []);
+	let scans = 0;
+	const scan = x.input.scanLocal;
+	x.input.scanLocal = async () => {
+		if (++scans === 2) throw Error('Interrupted checkpoint');
+		return scan();
+	};
+	await assert.rejects(x.run(), /Interrupted checkpoint/);
+	const early = await x.runs().streamAwaitingReconciliation();
+	const strict = await x.runs().active();
+	assert.equal(strict?.spec.plan.earlyRunId, early?.id); assert.ok(early && strict);
+	const original = x.input.readConfiguration;
+	const changed = { ...twoWay, configuration: { ...twoWay.configuration, localRootId: 'other-native-root' } };
+	x.input.readConfiguration = async () => ({ ...((await original()) as object), crystal: changed.configuration });
+	await assert.rejects(runPagedForegroundCloudSync(changed, scope, x.input, new AbortController().signal), /unfinished transfer belongs to different settings/);
+	assert.deepEqual(await x.runs().streamAwaitingReconciliation(), early);
+	x.input.readConfiguration = original; x.input.scanLocal = scan;
+	await x.run();
+	assert.equal(x.f.publications(), 1);
+	assert.equal(await x.runs().streamAwaitingReconciliation(), null);
+	x.f.journal().close();
+});
+
+test('ignoring a newly confirmed path before strict handoff does not erase its confirmed agreement', { timeout: 10000 }, async () => {
+	const x = await fixture();
+	x.feeds([x.f.entry()], []);
+	await x.stream();
+	x.removeSource();
+	const read = x.input.readConfiguration;
+	const ignored = { ...twoWay, configuration: { ...twoWay.configuration, excludedPaths: [x.f.entry().path] } };
+	x.input.readConfiguration = async () => ({ ...((await read()) as object), crystal: ignored.configuration });
+	await runPagedForegroundCloudSync(ignored, scope, x.input, new AbortController().signal);
+	const head = await x.checkpoints().current(); assert.ok(head);
+	const inventory = x.input.journal.inventory({ scope, currentScope: x.input.currentScope });
+	assert.deepEqual(await inventory.entriesForPaths(head.baseline.local, [x.f.entry().path]), [x.f.entry()]);
+	assert.equal(x.receipts.size, 0);
+	x.f.journal().close();
+});
+
+test('a destination renamed after preparation is deferred using the exact path before another upload starts', { timeout: 10000 }, async () => {
+	const x = await fixture();
+	x.feeds([x.f.entry()], []); await x.run();
+	await x.f.revise([31, 32]);
+	x.feeds([x.f.entry()], []);
+	const fetch = x.input.runtime.fetch;
+	let renamed = false;
+	x.input.runtime.fetch = async (url, init) => {
+		const parsed = new URL(String(url));
+		if (!renamed && parsed.pathname === '/api/v1/files' && parsed.searchParams.has('operationId')) {
+			renamed = true;
+			[...x.f.files.values()][0].name = 'Moved.bin';
+		}
+		return fetch(url, init);
+	};
+	await x.stream();
+	assert.ok(renamed);
+	assert.equal(x.f.puts(), 1);
+	assert.equal(x.f.publications(), 1);
+	x.f.journal().close();
+});
+
+test('a source changed during staging leaves no uncertain publication and strict reconciliation copies the new bytes', { timeout: 10000 }, async () => {
+	const x = await fixture(), source = x.input.source;
+	x.feeds([x.f.entry()], []);
+	let stageChanged = false;
+	x.input.source = async entry => {
+		const opened = await source(entry);
+		return { ...opened, verify: async () => {
+			if (!stageChanged) {
+				stageChanged = true;
+				await x.f.revise([44, 45, 46]);
+				throw Error('Source changed after staging');
+			}
+		} };
+	};
+	await x.run();
+	assert.ok(stageChanged);
+	assert.equal(x.f.puts(), 2);
+	assert.equal(x.f.publications(), 1);
+	const file = [...x.f.files.values()][0];
+	assert.deepEqual(x.f.objects.get(file.content.attachmentId), new Uint8Array([44, 45, 46]));
+	assert.ok(await x.checkpoints().current());
+	x.f.journal().close();
+});

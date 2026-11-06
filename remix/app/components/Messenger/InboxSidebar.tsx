@@ -2,12 +2,14 @@ import React from 'react';
 import { Box, Button, Flex, Image, Input } from '@chakra-ui/react';
 
 import { timeAgo } from '../Feed/feedTypes';
-import { chatDisplayName, memberDisplayName, type ChatSummary, type MessengerProfile } from './messengerTypes';
+import { chatDisplayName, externalSourceAvatar, memberDisplayName, type ChatSummary, type MessengerProfile } from './messengerTypes';
 import type { MessengerApi } from './useMessengerApi';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
 const StackedAvatars = ({ chat, viewerId }: { chat: ChatSummary; viewerId: string | null }) => {
   if (chat.externalSource) {
+    // ChatGPT/Claude keep their brand discs; Lopu is the unicorn on a rainbow disc
+    const look = externalSourceAvatar(chat.externalSource);
     return (
       <Flex
         width="42px"
@@ -15,14 +17,14 @@ const StackedAvatars = ({ chat, viewerId }: { chat: ChatSummary; viewerId: strin
         borderRadius="full"
         align="center"
         justify="center"
-        background={chat.externalSource.provider === 'chatgpt' ? '#17171c' : '#d97757'}
-        color="white"
+        background={look.background}
+        color={look.color}
         fontSize="20px"
         fontWeight={700}
         flexShrink={0}
         title={chat.externalSource.label}
       >
-        {chat.externalSource.provider === 'chatgpt' ? '◎' : '✦'}
+        {look.glyph}
       </Flex>
     );
   }

@@ -9,6 +9,7 @@ import localforage from 'localforage';
 import { safeJoin } from '~/utils';
 import { createLatestRevisionAutosave } from './latestRevisionAutosave';
 import type { LatestRevisionAutosaveCoordinator } from './latestRevisionAutosave';
+import { flushThingtimeSnapshot } from './flushThingtimeSnapshot';
 import { drainThingtimeMutationQueue } from './thingtimeMutationQueue';
 import {
 	hasPersistedThingtimeRuntimeMethods,
@@ -23,6 +24,8 @@ export interface ThingtimeTypes {
 	thingtime: any;
 	set: any;
 	setThingtime: any;
+	flushThingtimePersistence?: (signal?: AbortSignal) => Promise<void>;
+	canPersistThingtime?: boolean;
 	getThingtime: any;
 	thingtimeRef: any;
 	loading: boolean;
@@ -72,6 +75,8 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	const thingtimeRef = React.useRef(thingtimeState);
 	const hydrationResolvedRef = React.useRef(false);
 	const persistenceReadyRef = React.useRef(false);
+	const providerActiveRef = React.useRef(true);
+	React.useEffect(() => { providerActiveRef.current = true; return () => { providerActiveRef.current = false; }; }, []);
 	const persistenceRevisionRef = React.useRef(0);
 	// The autosave coordinator is created once, so it reads the storage key
 	// through a ref instead of closing over the first render's prop value.
@@ -312,13 +317,18 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 					}
 				}
 
+        if (nextThingtime.options?.namespace === 'user' && !nextThingtime.options?.fromRemote) {
+          const parts = Array.isArray(nextThingtime.path) ? [...nextThingtime.path] : smarts.parsePropertyPath(nextThingtime.path);
+          while (parts[0] === 'tt' || parts[0] === 'thingtime') parts.shift();
+          if (parts.length) events.next({ type: 'draft-edit', path: [parts[0]], value: nextState[parts[0]] });
+        }
 				return nextState;
 			},
 			(error) => console.error('[tt] There was an error applying a queued Thingtime update', error)
 		);
 		setThingtimeFlushScheduledRef.current = false;
 		if (result.applied) setThingtimeObjectWrapper(result.state);
-	}, [setThingtimeObjectWrapper]);
+	}, [setThingtimeObjectWrapper, events]);
 
 	const setThingtime = React.useCallback<SetThingtimeProps>(
 		(
@@ -336,6 +346,23 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		},
 		[flushSetThingtimeQueue]
 	);
+
+ const flushThingtimePersistence = React.useCallback(async (signal?: AbortSignal) => {
+  const expectedStorageKey = storageKey;
+  const assertCurrent = () => {
+   signal?.throwIfAborted();
+   if (!providerActiveRef.current || storageKeyRef.current !== expectedStorageKey) throw new Error('The active account changed before preferences finished saving.');
+   if (!persistLocal || loading || !persistenceReadyRef.current) throw new Error('Local preferences are not ready to save.');
+  };
+  await flushThingtimeSnapshot({
+   assertCurrent, drain: flushSetThingtimeQueue, read: () => thingtimeRef.current,
+   schedule: value => {
+    const revision = ++persistenceRevisionRef.current;
+    if (!persistenceRef.current?.schedule(value, revision)) throw new Error('Local preferences could not be scheduled for saving.');
+   },
+   flush: async () => { await persistenceRef.current?.flush(); }
+  });
+ }, [storageKey, persistLocal, loading, flushSetThingtimeQueue]);
 
 	const getThingtime = React.useCallback(
 		(...args) => {
@@ -392,7 +419,20 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 
 		const hydrate = async () => {
 			try {
-				const localStorageThingtime = persistLocal ? await localforage.getItem(storageKey) : null;
+				let localStorageThingtime = persistLocal ? await localforage.getItem(storageKey) : null;
+        // Preserve the pre-account device workspace once, without ever uploading
+        // it on hydration or handing it to a later account on this device.
+        if (persistLocal && !localStorageThingtime && props.accountId) {
+          let claim: string | null = null;
+          try {
+            claim = localStorage.getItem('tt-legacy-workspace-account');
+            if (!claim) { claim = props.accountId; localStorage.setItem('tt-legacy-workspace-account', claim); }
+          } catch { /* Account isolation takes precedence when storage is unavailable. */ }
+          if (claim === props.accountId) {
+            localStorageThingtime = await localforage.getItem('thingtime');
+            if (localStorageThingtime) await localforage.setItem(storageKey, localStorageThingtime);
+          }
+        }
 				if (cancelled) return;
 
 				if (localStorageThingtime) {
@@ -470,7 +510,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 			cancelled = true;
 			clearTimeout(retryTimer);
 		};
-	}, [flushSetThingtimeQueue, persistLocal, restoreThingtime, storageKey]);
+	}, [flushSetThingtimeQueue, persistLocal, restoreThingtime, storageKey, props.accountId]);
 
 	// thingtime change listener
 	React.useEffect(() => {
@@ -509,7 +549,9 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	};
 
 	React.useEffect(() => {
+		if (!persistLocal) return;
 		const channel = createThingtimeSyncChannel({
+			channelName: storageKey,
 			tabId: syncTabIdRef.current as string,
 			onRemoteWrite: (path, value) => setThingtimeSyncRef.current?.(path, value)
 		});
@@ -518,7 +560,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 			syncChannelRef.current = null;
 			channel?.close();
 		};
-	}, []);
+	}, [storageKey, persistLocal]);
 
 	React.useEffect(() => {
 		const persistence = persistenceRef.current;
@@ -553,6 +595,8 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		const newEverything = {
 			thingtime: thingtimeState,
 			setThingtime: setThingtime,
+			flushThingtimePersistence,
+			canPersistThingtime: persistLocal && !loading && persistenceReadyRef.current,
 			getThingtime: getThingtime,
 			thingtimeRef: thingtimeRef,
 			paths: paths,
@@ -567,11 +611,13 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		// ⚠️ ORDER OF THESE OPERATIONS IS IMPORTANT ⚠️
 		// 2
 		setEverything(EverythingRef.current); // 2
-	}, [thingtimeState, setThingtime, getThingtime, thingtimeRef, paths, loading, events]);
+	}, [thingtimeState, setThingtime, flushThingtimePersistence, getThingtime, thingtimeRef, paths, loading, events, persistLocal]);
 
 	Object.assign(Everything, {
 		thingtime: thingtimeState,
 		setThingtime: setThingtime,
+			flushThingtimePersistence,
+			canPersistThingtime: persistLocal && !loading && persistenceReadyRef.current,
 		getThingtime: getThingtime,
 		thingtimeRef: thingtimeRef,
 		paths: paths,

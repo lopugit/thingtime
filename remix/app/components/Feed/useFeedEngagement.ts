@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import React from 'react';
 
 import { useApi } from '~/hooks/useApi';
@@ -120,7 +121,7 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
       }
     }
 
-    apiRef.current.v1.algorithms
+    return apiRef.current.v1.algorithms
       .track({ algorithmId: algorithmIdRef.current, events: batch })
       .then((resp: any) => {
         // growth milestones (🥚→🐣→🐥→🧠): the server returns the
@@ -182,7 +183,7 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
   }, [recordEvent, closeDwell]);
 
   React.useEffect(() => {
-    const interval = window.setInterval(() => flush(), FLUSH_INTERVAL_MS);
+    const interval = activityInterval('timer:components/Feed/useFeedEngagement:1', 'use Feed Engagement', () => flush(), FLUSH_INTERVAL_MS);
 
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'hidden') return;
@@ -195,13 +196,13 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
       flush({ beacon: true });
     };
 
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('pagehide', onPageHide);
+    activityEvents(document, 'events:components/Feed/useFeedEngagement', 'useFeedEngagement').addEventListener('visibilitychange', onVisibilityChange);
+    activityEvents(window, 'events:components/Feed/useFeedEngagement', 'useFeedEngagement').addEventListener('pagehide', onPageHide);
 
     return () => {
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('pagehide', onPageHide);
+      clearActivityInterval(interval);
+      activityEvents(document, 'events:components/Feed/useFeedEngagement', 'useFeedEngagement').removeEventListener('visibilitychange', onVisibilityChange);
+      activityEvents(window, 'events:components/Feed/useFeedEngagement', 'useFeedEngagement').removeEventListener('pagehide', onPageHide);
       closeAllDwells();
       flush();
     };

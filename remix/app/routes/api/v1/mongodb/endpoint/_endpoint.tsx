@@ -118,7 +118,7 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const probe = await probeMongoUrl(selection.url);
-  if (!probe.ok) {
+    if (probe.ok === false) {
     return json({ ok: false, error: probe.error }, { status: 422 });
   }
 

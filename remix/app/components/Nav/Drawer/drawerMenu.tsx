@@ -21,6 +21,7 @@ export interface DrawerSubItem extends DrawerItemVisibility {
 	// mode items switch the thing mode for the current thing path instead of
 	// navigating to `to` (`to` stays as the selection-sync/highlight fallback)
 	mode?: ThingMode;
+	children?: DrawerSubItem[];
 	// optional group name; grouped items render under an expand/collapse header
 	group?: string;
 }
@@ -53,9 +54,54 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		children: [
 			{ id: 'feed-home', label: 'Feed', icon: '📰', to: '/feed' },
 			{ id: 'feed-explore', label: 'Explore', icon: '🔥', to: '/explore' },
+			{ id: 'feed-subspaces', label: 'Subspaces', icon: '🪐', to: '/s' },
 			{ id: 'feed-saved', label: 'Saved', icon: '🔖', to: '/saved', authOnly: true },
+			{ id: 'feed-connections', label: 'Connected feed', icon: '📡', to: '/connections/feed', authOnly: true },
 			{ id: 'feed-profile', label: 'Profile', icon: '👤', to: '/profile', authOnly: true },
 			{ id: 'feed-settings', label: 'Settings', icon: '⚙️', to: '/settings' }
+		]
+	},
+	{
+		id: 'mail',
+		label: 'Mail',
+		icon: '✉️',
+		to: '/mail',
+		authOnly: true,
+		children: [
+			{ id: 'mail-inboxes', label: 'All inboxes', to: '/mail', authOnly: true },
+			{ id: 'mail-settings', label: 'Email settings', to: '/settings/email', authOnly: true }
+		]
+	},
+	{
+		id: 'passwords',
+		label: 'Password manager',
+		icon: '🔑',
+		to: '/passwords',
+		authOnly: true,
+		children: [
+			{ id: 'passwords-vault', label: 'Passwords and passkeys', to: '/passwords', authOnly: true },
+			{ id: 'passwords-settings', label: 'Password manager settings', to: '/settings/passwords', authOnly: true }
+		]
+	},
+	{
+		id: 'connections',
+		label: 'Connections',
+		icon: '🔗',
+		to: '/connections',
+		children: [
+			{ id: 'connections-manage', label: 'Connections', icon: '🔗', to: '/connections' },
+			{ id: 'connections-feed', label: 'Connected feed', icon: '📡', to: '/connections/feed' }
+		]
+	},
+	{
+		id: 'subspaces',
+		label: 'Subspaces',
+		icon: '🪐',
+		to: '/s',
+		children: [
+			{ id: 'subspaces-browse', label: 'Browse', icon: '🪐', to: '/s' },
+			{ id: 'subspaces-mine', label: 'My subspaces', icon: '⭐', to: '/s?mine=1', authOnly: true },
+			{ id: 'subspaces-create', label: 'Create', icon: '➕', to: '/s?create=1', authOnly: true }
 		]
 	},
 	{
@@ -66,6 +112,23 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		children: [
 			{ id: 'messages-home', label: 'Messages', icon: '💬', to: '/messages', authOnly: true },
 			{ id: 'messages-requests', label: 'Requests', icon: '💌', to: '/messages?view=requests', authOnly: true }
+		]
+	},
+	{
+		// 🦄 Lopu, the Thingtime assistant: the chat page, its conversations
+		// (they live in Messenger) and its preferences
+		id: 'lopu',
+		label: 'Lopu',
+		icon: '🦄',
+		to: '/lopu',
+		children: [
+			{ id: 'lopu-chat', label: 'Chat', icon: '💬', to: '/lopu' },
+			{ id: 'lopu-voice', label: 'Voice', icon: '🎙️', to: '/lopu/voice', authOnly: true },
+			{ id: 'lopu-tasks', label: 'Background tasks', icon: '🕒', to: '/lopu/tasks', authOnly: true },
+			{ id: 'lopu-agent-browsers', label: 'Agent browsers and tasks', icon: '🧭', to: '/agent-browsers', authOnly: true },
+			{ id: 'lopu-conversations', label: 'Conversations', icon: '🗂️', to: '/messages', authOnly: true },
+			{ id: 'lopu-vault', label: 'Secure Vault', icon: '🔐', to: '/settings#secure-vault', authOnly: true },
+			{ id: 'lopu-settings', label: 'Settings', icon: '⚙️', to: '/settings#lopu' }
 		]
 	},
 	{
@@ -111,7 +174,9 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		icon: '🧱',
 		to: '/builder',
 		children: [
+			{ id: 'legal-pages', label: 'Legal policies & terms', icon: '⚖️', to: '/legal' },
 			{ id: 'builder-pages', label: 'My pages', icon: '📄', to: '/builder' },
+			{ id: 'builder-library', label: 'Integration library', icon: '🔌', to: '/library' },
 			{ id: 'builder-components', label: 'Components', icon: '🧩', to: '/components' },
 			{ id: 'builder-actions', label: 'Actions', icon: '⚡', to: '/actions' },
 			{ id: 'builder-design-system', label: 'Design system', icon: '🎨', to: '/docs/design-system' }
@@ -124,6 +189,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		to: '/things',
 		children: [
 			{ id: 'things-browse', label: 'Browse', icon: '📦', to: '/things' },
+			{ id: 'things-history', label: 'History', icon: '🕰️', to: '/history', authOnly: true },
 			{ id: 'things-view', label: 'View', icon: '👀', to: '/things', mode: 'view', group: 'Modes' },
 			{ id: 'things-edit', label: 'Edit', icon: '🎨', to: '/edit', mode: 'edit', group: 'Modes' },
 			{ id: 'things-editor', label: 'Editor', icon: '💻', to: '/editor', mode: 'editor', group: 'Modes' },
@@ -138,6 +204,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		to: '/profile',
 		children: [
 			{ id: 'account-profile', label: 'Profile', icon: '👤', to: '/profile', authOnly: true },
+			{ id: 'account-notifications', label: 'Notifications', icon: '🔔', to: '/notifications', authOnly: true },
 			{ id: 'account-settings', label: 'Settings', icon: '⚙️', to: '/settings' },
 			{ id: 'account-manage-apps', label: 'My apps', icon: '🧩', to: '/apps/manage', authOnly: true },
 			{ id: 'account-apps', label: 'App data', icon: '📦', to: '/apps', authOnly: true },
@@ -164,12 +231,19 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		icon: '💻',
 		to: '/tests',
 		children: [
-			{ id: 'dev-admin', label: 'Admin', icon: '🛠️', to: '/admin', adminOnly: true },
 			{ id: 'dev-peers', label: 'Deployment peers', icon: '🕸️', to: '/peers', adminOnly: true },
 			{ id: 'dev-tests', label: 'API tests', icon: '✅', to: '/tests' },
 			{ id: 'dev-crypto', label: 'Crypto', icon: '🔒', to: '/crypto' },
 			{ id: 'dev-migrations', label: 'Migrations', icon: '🛠️', to: '/migrations' }
 		]
+	},
+	{
+		id: 'admin',
+		label: 'Admin',
+		icon: '🛠️',
+		to: '/admin',
+		adminOnly: true,
+		children: [{ id: 'admin-home', label: 'Admin', icon: '🛠️', to: '/admin', adminOnly: true }]
 	},
 	{
 		id: 'branding',
@@ -272,13 +346,19 @@ export const filterDrawerItemsByAuth = <T extends DrawerItemVisibility>(
 // A publication-gated top-level section stays listed for admins, and for
 // visitors as soon as ANY of its children is visible (a published category
 // index is reachable even while the hub itself is still unpublished).
+//
+// A section's OWN authOnly/guestOnly/adminOnly rules still decide first — this
+// is the only filter both DrawerContent and the DrawerItemSettings mirror run
+// over the top level, so dropping them here would silently list an admin-only
+// section for everyone. Only the publication gate is answered by the children.
 export const filterDrawerTopItems = (
 	items: DrawerTopItem[],
 	loggedIn: boolean,
 	isAdmin = false,
 	isPublished?: (key: string) => boolean
 ): DrawerTopItem[] => {
-	return items.filter((item) => {
+	const allowed = filterDrawerItemsByAuth(items, loggedIn, isAdmin, () => true);
+	return allowed.filter((item) => {
 		if (!item.publication || isAdmin) {
 			return true;
 		}
@@ -313,3 +393,15 @@ export const buildDrawerSubSections = (items: DrawerSubItem[]): DrawerSubSection
 
 	return sections;
 };
+
+/** Iterative traversal supports built-in branches at arbitrary depth as well as custom ones. */
+export function drawerBuiltinNodes(items: DrawerTopItem[] = drawerMenuItems): { item: DrawerTopItem | DrawerSubItem; parentId?: string }[] {
+ const pending: { item: DrawerTopItem | DrawerSubItem; parentId?: string }[] = items.map(item => ({ item }));
+ const result: typeof pending = []; const seen = new Set<string>();
+ while (pending.length) {
+  const next = pending.shift()!; if (seen.has(next.item.id)) continue;
+  seen.add(next.item.id); result.push(next);
+  pending.unshift(...(next.item.children || []).map(item => ({ item, parentId: next.item.id })));
+ }
+ return result;
+}

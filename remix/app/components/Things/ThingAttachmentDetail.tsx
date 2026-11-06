@@ -1,4 +1,7 @@
+import { PostAttachments } from '../Attachments/PostAttachments';
+import { ProgressiveImage } from '~/components/Attachments/ProgressiveImage';
 import React from 'react';
+import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { Box, Button, Flex, Heading, Stack, Text } from '@chakra-ui/react';
 import { ChevronDown, ChevronUp, Download, ExternalLink, EyeOff, Image as ImageIcon } from 'lucide-react';
 import { Link } from 'react-router';
@@ -68,6 +71,7 @@ const ReferenceRow = ({ reference }: { reference: PublicPost }) => {
 };
 
 export const ThingAttachmentDetail = ({ attachment, references }: { attachment: PublicAttachment; references: PublicPost[] }) => {
+	const mediaUrl = useSharedMediaUrl();
 	const [referencesOpen, setReferencesOpen] = React.useState(false);
 	const [showSensitiveImage, setShowSensitiveImage] = React.useState(false);
 	const [imageFailed, setImageFailed] = React.useState(false);
@@ -102,7 +106,7 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 					</Box>
 					<Button
 						as="a"
-						href={attachment.url || attachmentContentUrl(attachment.id, true)}
+						href={mediaUrl(attachment.url || attachmentContentUrl(attachment.id, true))}
 						{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}
 						size="sm"
 						variant="outline"
@@ -115,9 +119,8 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 				{isImage ? (
 					<Box mt={5} borderRadius="var(--tt-radius-lg, 14px)" overflow="hidden" background="var(--tt-surface-alt, #f5f5f7)">
 						{imageVisible ? (
-							<Box
-								as="img"
-								src={attachmentMediaSrc(attachment)}
+							<ProgressiveImage
+								src={mediaUrl(attachmentMediaSrc(attachment))}
 								alt={attachment.description || title}
 								display="block"
 								maxH={{ base: '62vh', md: '72vh' }}
@@ -141,6 +144,7 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 						)}
 					</Box>
 				) : null}
+				{attachment.mediaKind === 'video' ? <Box mt={5}><PostAttachments attachments={[attachment]} /></Box> : null}
 				{isAudio ? (
 					<Box mt={5}>
 						<AudioAttachmentPlayer attachments={[attachment]} />
@@ -152,7 +156,7 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 				<Flex align="center" justify="space-between" gap={3} wrap="wrap">
 					<Box>
 						<Heading as="h2" fontSize="md">
-							Referenced by {references.length}
+							Direct post references · {references.length}
 						</Heading>
 						<Text color={MUTED} fontSize="sm" mt={1}>
 							{references.length

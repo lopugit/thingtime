@@ -1,11 +1,45 @@
 import assert from 'node:assert/strict';
+import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, effectiveConnectorConfirmations } from './connectorProtections';
 import test from 'node:test';
 
-import { beginChatGptAuthorization, callThingtimeTool, handleChatGptMcp, registerChatGptOAuthClient } from './plugin';
+import { beginChatGptAuthorization, callThingtimeTool, consumedSessionPipeline, handleChatGptMcp, registerChatGptOAuthClient } from './plugin';
 import { CHATGPT_MCP_INSTRUCTIONS, CHATGPT_MCP_TOOL_FEATURES, normalizeRegisteredClientRedirectUri, renderConnectionPage } from './pluginCore';
+import { signPurposeToken } from '~/api/utils/auth/jwt';
+import { THINGTIME_MUTATION_RECEIPT_PURPOSE } from './pluginLimitlessCore';
+import { mutationDigest, type MutationStore } from './mutationStore';
+import { REVOKED_SESSION_REAP_MS, revokedSessionPipeline } from '~/api/utils/auth/sessions';
+
+const memoryMutationStore = (): MutationStore => {
+  const entries = new Map<string, { value: unknown; digest: string }>();
+  const claims = new Set<string>();
+  const key = (scope: unknown, kind: string, id: string) => JSON.stringify([scope, kind, id]);
+  return {
+    async put(scope, kind, id, value) {
+      const identity = key(scope, kind, id);
+      const stored = entries.get(identity);
+      const digest = mutationDigest(value);
+      if (stored) return stored.digest === digest ? 'same' : 'conflict';
+      entries.set(identity, { value: JSON.parse(JSON.stringify(value)), digest });
+      return 'saved';
+    },
+    async get(scope, kind, id) { return entries.get(key(scope, kind, id)) || null; },
+    async claim(scope, id, digest) {
+      const identity = key(scope, 'preview', id);
+      if (claims.has(identity) || entries.get(identity)?.digest !== digest) return false;
+      claims.add(identity);
+      return true;
+    },
+    async historyIds(scope, before, limit) {
+      return [...entries.keys()].map((entry) => JSON.parse(entry)).filter(([candidate, kind, id]) =>
+        JSON.stringify(candidate) === JSON.stringify(scope) && kind === 'history' && (!before || id < before))
+        .map(([, , id]) => id).sort().reverse().slice(0, limit);
+    }
+  };
+};
 
 const connectedContext = {
-  session: {},
+  session: { jti: 'test-session', userId: 'user-1', meta: { resource: 'https://thingtime.com/api/v1/integrations/chatgpt/mcp' } },
+  mutationStore: memoryMutationStore(),
   connection: null,
   bundle: {
     version: 1,
@@ -57,7 +91,7 @@ test('MCP tools/list publishes a host-native login bootstrap before a user links
   });
   const payload: any = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(payload.result.tools.length, 32);
+  assert.equal(payload.result.tools.length, Object.keys(CHATGPT_MCP_TOOL_FEATURES).length);
   assert.deepEqual(payload.result.tools[0].securitySchemes, [{ type: 'noauth' }, { type: 'oauth2', scopes: ['thingtime'] }]);
   assert.deepEqual(payload.result.tools[0]._meta.securitySchemes, [{ type: 'noauth' }, { type: 'oauth2', scopes: ['thingtime'] }]);
   const annotations = Object.fromEntries(payload.result.tools.map((tool: any) => [tool.name, tool.annotations]));
@@ -90,7 +124,12 @@ test('MCP tool discovery preserves the complete multi-account Thingtime contract
       'list_thingtime_accounts',
       'select_thingtime_account',
       'remove_thingtime_account',
+      'get_thingtime_confirmation_requirements',
       'get_thingtime_profile',
+      'prepare_thingtime_agent_task',
+      'get_thingtime_agent_task',
+      'report_thingtime_agent_task',
+      'coordinate_thingtime_agent_task',
       'get_thingtime_thing',
       'get_thingtime_things',
       'list_thingtime_comments',
@@ -101,6 +140,8 @@ test('MCP tool discovery preserves the complete multi-account Thingtime contract
       'validate_thingtime_thing',
       'list_thingtime_related',
       'list_thingtime_changes',
+      'stage_thingtime_mutation_plan',
+      'get_thingtime_mutation_preview',
       'preview_thingtime_mutation',
       'apply_thingtime_mutation',
       'list_thingtime_history',
@@ -228,15 +269,18 @@ test('an unknown workflow run is rejected before a signed preview can mutate any
     operations: [{ action: 'update', id: 'todo-1', patch: { crystal: { done: true } } }]
   }, context);
   assert.equal(typeof previewed.receipt, 'string');
-  assert.equal(fetches, 1);
+  assert.equal(fetches, 2); // Exact Thing + an incompatible settings manifest.
+  assert.equal(previewed.confirmationRequired, true);
 
-  const notConfirmed = await callThingtimeTool('apply_thingtime_mutation', { receipt: previewed.receipt }, context);
-  assert.deepEqual(notConfirmed, { error: 'confirmed must be true after the user explicitly confirms the reviewed plan', status: 400 });
-  assert.equal(fetches, 1);
+  const notConfirmed: any = await callThingtimeTool('apply_thingtime_mutation', { receipt: previewed.receipt }, context);
+  assert.equal(notConfirmed.code, 'confirmation_required');
+  assert.deepEqual(notConfirmed.confirmationActions, ['update']);
+  assert.equal(notConfirmed.confirmationSource, 'safe-default');
+  assert.equal(fetches, 3);
 
   const applied = await callThingtimeTool('apply_thingtime_mutation', { receipt: previewed.receipt, confirmed: true, runId: 'unknown-run' }, context);
   assert.deepEqual(applied, { error: 'Unknown Thingtime workflow run', status: 404 });
-  assert.equal(fetches, 1);
+  assert.equal(fetches, 3);
 });
 
 test('targeted comment reads bind the exact target id and comment kind upstream', async (t) => {
@@ -451,4 +495,357 @@ test('OAuth dynamic client registration signs only exact local, ChatGPT, or firs
     })
   });
   assert.equal(invalid.status, 400);
+});
+
+test('revoking a never-expiring bridge session leaves a reap date for the sessions TTL index', () => {
+  const revokedAt = new Date('2026-01-01T00:00:00.000Z');
+  const pipeline = revokedSessionPipeline(revokedAt);
+  const stage = pipeline.find((entry) => entry.$set)?.$set;
+  assert.ok(stage);
+
+  // Already a pipeline, so no caller has to remember to wrap it — passed to a
+  // plain update the $ifNull would be STORED as a literal sub-document, which
+  // is not a Date, which the TTL index skips: the exact leak this fixes,
+  // silently back.
+  assert.ok(Array.isArray(pipeline));
+  assert.ok(pipeline.some((entry) => entry.$unset === 'secureVaultKey'));
+  // TTL skips expiresAt: null, so a disconnect must fill one in or the revoked
+  // bridge sessions accumulate in Mongo forever.
+  assert.equal(stage.revokedAt, revokedAt);
+  assert.deepEqual(stage.expiresAt, {
+    $ifNull: ['$expiresAt', new Date(revokedAt.getTime() + REVOKED_SESSION_REAP_MS)]
+  });
+  // A session that already carries a real expiry keeps it.
+  assert.equal(stage.expiresAt.$ifNull[0], '$expiresAt');
+});
+
+test('consuming a rotated refresh grant also leaves a reap date, not just revokedAt', () => {
+  const now = new Date('2026-01-01T00:00:00.000Z');
+  const pipeline = consumedSessionPipeline(now);
+
+  // Refresh rotation burns one never-expiring session per refresh. Stamping
+  // only revokedAt would strand every consumed row: the TTL index skips
+  // expiresAt: null, so the sessions collection would grow without bound.
+  assert.deepEqual(pipeline, [
+    ...revokedSessionPipeline(now),
+    { $set: { 'meta.consumedAt': now } }
+  ]);
+  // It must be an aggregation pipeline — $ifNull only resolves in one. Stage
+  // order is NOT what makes this safe: aggregation $set never drops fields, so
+  // reap-then-consumedAt and consumedAt-then-reap are equivalent. What is
+  // load-bearing is the dotted path — 'meta.consumedAt' merges into meta,
+  // where a nested { meta: { consumedAt } } would replace the whole record and
+  // strip clientId/resource/connectionId off every rotated grant.
+  assert.ok(Array.isArray(pipeline));
+  assert.deepEqual(Object.keys(pipeline.at(-1)!.$set!), ['meta.consumedAt']);
+});
+
+const reportingContext = () => ({ ...connectedContext, bundle: { ...connectedContext.bundle, connections: [{ ...connectedContext.bundle.connections[0], scopes: ['agents.report'] }] } });
+const reportingManifest = () => ({ schemaVersion: 1, origin: 'https://thingtime.com', features: {
+  'api.agent-reporting': { version: '1.0.0' }, 'api.auth-characters': { version: '1.0.0' }, 'api.agent-overview': { version: '2.0.0' }
+} });
+
+test('agent reporting needs independent authorization and never upgrades existing things tokens', async (t) => {
+  let fetched = false;
+  t.mock.method(globalThis, 'fetch', async () => { fetched = true; throw new Error('must not fetch'); });
+  const context = { ...connectedContext, bundle: { ...connectedContext.bundle, connections: [{ ...connectedContext.bundle.connections[0], scopes: ['things'] }] } };
+  const result: any = await callThingtimeTool('get_thingtime_agent_task', { externalTaskId: 'chat-1' }, context);
+  assert.equal(result.status, 403);
+  assert.match(result.error, /independent agents.report/);
+  assert.equal(fetched, false);
+  assert.deepEqual(context.bundle.connections[0].scopes, ['things']);
+});
+
+test('agent reporting rejects wrong-origin and breaking manifests and retries with fresh discovery', async (t) => {
+  let manifest: any = { ...reportingManifest(), origin: 'https://other.example' };
+  let writes = 0;
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    const url = new URL(String(input));
+    assert.equal(url.origin, 'https://thingtime.com');
+    if (url.pathname.includes('.well-known')) return Response.json(manifest);
+    writes += 1;
+    assert.equal(init?.method, 'POST');
+    assert.deepEqual(JSON.parse(String(init?.body)), { operation: 'get', origin: 'https://thingtime.com', externalTaskId: 'chat-1' });
+    return Response.json({ ok: true, binding: { id: 'binding-1', externalTaskId: 'chat-1', characterId: 'character-1', records: {} } });
+  });
+  const context = reportingContext();
+  assert.equal((await callThingtimeTool('get_thingtime_agent_task', { externalTaskId: 'chat-1', origin: 'https://evil.example' }, context) as any).status, 409);
+  manifest = reportingManifest();
+  manifest.features['api.agent-reporting'].version = '2.0.0';
+  assert.equal((await callThingtimeTool('get_thingtime_agent_task', { externalTaskId: 'chat-1' }, context) as any).status, 409);
+  assert.equal(writes, 0);
+  manifest = reportingManifest();
+  const result: any = await callThingtimeTool('get_thingtime_agent_task', { externalTaskId: 'chat-1' }, context);
+  assert.equal(writes, 1);
+  assert.equal(result.result.binding.characterId, 'character-1');
+  assert.equal(JSON.stringify(result).includes('test-token'), false);
+  assert.equal(JSON.stringify(result).includes('Authorization'), false);
+});
+
+test('agent report dispatch is restricted to saved reporting action names and immutable request identity', async (t) => {
+  const bodies: any[] = [];
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    if (String(input).includes('.well-known')) return Response.json(reportingManifest());
+    bodies.push(JSON.parse(String(init?.body)));
+    return Response.json({ ok: true, receipt: { requestId: bodies.at(-1).requestId, status: 'completed' } });
+  });
+  const context = reportingContext();
+  const invalid: any = await callThingtimeTool('report_thingtime_agent_task', { externalTaskId: 'chat-1', requestId: 'bad', actionName: 'arbitrary', inputs: {} }, context);
+  assert.equal(invalid.status, 400);
+  assert.equal(bodies.length, 0);
+  const args = { externalTaskId: 'chat-1', requestId: '7f985f40-f219-48f0-8ea0-8d54b71570cf', actionName: 'addProgress', inputs: { summary: 'Verified focused tests' }, path: '/api/v1/evil', actionId: 'injected' };
+  await callThingtimeTool('report_thingtime_agent_task', args, context);
+  await callThingtimeTool('report_thingtime_agent_task', args, context);
+  assert.deepEqual(bodies[0], { operation: 'report', origin: 'https://thingtime.com', externalTaskId: args.externalTaskId, requestId: args.requestId, actionName: 'addProgress', inputs: args.inputs });
+  assert.deepEqual(bodies[0], bodies[1]);
+});
+
+test('agent reporting can recover after invalid JSON or a missing required feature', async (t) => {
+  let state = 0;
+  let writes = 0;
+  t.mock.method(globalThis, 'fetch', async (input) => {
+    if (!String(input).includes('.well-known')) { writes += 1; return Response.json({ ok: true }); }
+    if (state === 0) return new Response('<html>not a manifest</html>');
+    const manifest = reportingManifest();
+    if (state === 1) delete (manifest.features as any)['api.agent-overview'];
+    return Response.json(manifest);
+  });
+  const context = reportingContext();
+  const args = { externalTaskId: 'chat-1' };
+  assert.equal((await callThingtimeTool('get_thingtime_agent_task', args, context) as any).status, 502);
+  state = 1;
+  assert.equal((await callThingtimeTool('get_thingtime_agent_task', args, context) as any).status, 409);
+  assert.equal(writes, 0);
+  state = 2;
+  await callThingtimeTool('get_thingtime_agent_task', args, context);
+  assert.equal(writes, 1);
+});
+
+
+test('agent prepare binds only the selected account origin and explicit saved workspace', async (t) => {
+  let submitted: any;
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    if (String(input).includes('.well-known')) return Response.json(reportingManifest());
+    submitted = JSON.parse(String(init?.body));
+    return Response.json({ ok: true, binding: { characterId: 'task-character', records: {} } });
+  });
+  const workspace = { subspaceSlug: 'thingtime-agents', pages: { overview: 'overview', taskDetail: 'detail' }, schemas: { project: 'p', task: 't', agent: 'a', todo: 'd', progress: 'g', question: 'q' }, actions: { addProgress: 'saved-progress-action' } };
+  await callThingtimeTool('prepare_thingtime_agent_task', { externalTaskId: 'stable-chat', displayName: 'Task auditor', workspace, endpoint: 'https://evil.example', token: 'never-forward' }, reportingContext());
+  assert.deepEqual(submitted, { operation: 'prepare', origin: 'https://thingtime.com', externalTaskId: 'stable-chat', displayName: 'Task auditor', workspace });
+});
+
+test('agent capability connection failure is retryable and does not dispatch reports', async (t) => {
+  let failed = true;
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async (input) => {
+    if (String(input).includes('.well-known')) {
+      if (failed) throw new Error('network unavailable');
+      return Response.json(reportingManifest());
+    }
+    calls += 1;
+    return Response.json({ ok: true });
+  });
+  const args = { externalTaskId: 'retry-chat' };
+  assert.equal((await callThingtimeTool('get_thingtime_agent_task', args, reportingContext()) as any).status, 502);
+  assert.equal(calls, 0);
+  failed = false;
+  await callThingtimeTool('get_thingtime_agent_task', args, reportingContext());
+  assert.equal(calls, 1);
+});
+
+test('agent task exact record readback and updateWorkItem use the registered reporting contract', async (t) => {
+  const submitted: any[] = [];
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    if (String(input).includes('.well-known')) return Response.json(reportingManifest());
+    submitted.push(JSON.parse(String(init?.body)));
+    return Response.json({ ok: true });
+  });
+  const context = reportingContext();
+  await callThingtimeTool('get_thingtime_agent_task', { externalTaskId: 'read-chat', recordIds: ['task-row', 'progress-row'] }, context);
+  assert.deepEqual(submitted[0], { operation: 'get', origin: 'https://thingtime.com', externalTaskId: 'read-chat', recordIds: ['task-row', 'progress-row'] });
+  await callThingtimeTool('report_thingtime_agent_task', { externalTaskId: 'read-chat', requestId: '7f985f40-f219-48f0-8ea0-8d54b71570cf', actionName: 'updateWorkItem', inputs: { id: 'task-row', status: 'active' } }, context);
+  assert.equal(submitted[1].actionName, 'updateWorkItem');
+  const invalid: any = await callThingtimeTool('get_thingtime_agent_task', { externalTaskId: 'read-chat', recordIds: [''] }, context);
+  assert.equal(invalid.status, 400);
+  assert.equal(submitted.length, 2);
+});
+
+test('private coordination uses a fixed origin and body with an explicit render component', async (t) => {
+  const bodies: any[] = [];
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    if (String(input).includes('.well-known')) return Response.json(reportingManifest());
+    bodies.push(JSON.parse(String(init?.body)));
+    return Response.json({ ok: false, error: 'Private coordination membership was revoked' }, { status: 409 });
+  });
+  const args = { externalTaskId: 'coordinate-chat', requestId: '7f985f40-f219-48f0-8ea0-8d54b71570cf', title: 'Task claim', text: 'Focused implementation status', renderComponent: { id: 'saved-component' } };
+  const result: any = await callThingtimeTool('coordinate_thingtime_agent_task', { ...args, subspaceId: 'unbound-subspace' }, reportingContext());
+  assert.equal(result.status, 409);
+  assert.deepEqual(bodies[0], { operation: 'coordinate', origin: 'https://thingtime.com', ...args });
+  const invalid: any = await callThingtimeTool('coordinate_thingtime_agent_task', { ...args, renderComponent: undefined }, reportingContext());
+  assert.equal(invalid.status, 400);
+  assert.equal(bodies.length, 1);
+});
+
+
+test('private coordination returns a verified stable post receipt and keeps the request identity', async (t) => {
+  const bodies: any[] = [];
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    if (String(input).includes('.well-known')) return Response.json(reportingManifest());
+    const body = JSON.parse(String(init?.body));
+    bodies.push(body);
+    return Response.json({ ok: true, binding: { characterId: 'task-character', coordinationPostId: 'stable-private-post' }, receipt: { requestId: body.requestId, status: 'complete', result: { ids: ['stable-private-post'] } } });
+  });
+  const args = { externalTaskId: 'coordinate-chat', requestId: '7f985f40-f219-48f0-8ea0-8d54b71570cf', title: 'Task claim', text: 'Implementation and verification status', renderComponent: { id: 'saved-component' } };
+  const result: any = await callThingtimeTool('coordinate_thingtime_agent_task', args, reportingContext());
+  assert.equal(result.result.binding.coordinationPostId, 'stable-private-post');
+  assert.equal(result.result.receipt.status, 'complete');
+  await callThingtimeTool('coordinate_thingtime_agent_task', args, reportingContext());
+  assert.deepEqual(bodies[0], bodies[1]);
+  assert.equal(JSON.stringify(result).includes('test-token'), false);
+});
+
+
+test('child task preparation forwards only a stable parent binding identity', async (t) => {
+  let submitted: any;
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    if (String(input).includes('.well-known')) return Response.json(reportingManifest());
+    submitted = JSON.parse(String(init?.body));
+    return Response.json({ ok: true, binding: { parentTaskId: 'actual-parent-task', sharedTaskId: 'shared-root-task', records: { projectId: 'inherited-project' } } });
+  });
+  const workspace = { pages: { overview: 'overview', taskDetail: 'detail' }, schemas: { project: 'p', task: 't', agent: 'a', todo: 'd', progress: 'g', question: 'q' }, actions: { createTask: 'saved-create-task' } };
+  const result: any = await callThingtimeTool('prepare_thingtime_agent_task', { externalTaskId: 'child-chat', parentExternalTaskId: 'parent-chat', displayName: 'Child auditor', workspace, parentId: 'untrusted-parent-id', projectId: 'untrusted-project' }, reportingContext());
+  assert.deepEqual(submitted, { operation: 'prepare', origin: 'https://thingtime.com', externalTaskId: 'child-chat', parentExternalTaskId: 'parent-chat', displayName: 'Child auditor', workspace });
+  assert.equal(result.result.binding.sharedTaskId, 'shared-root-task');
+  assert.equal(result.result.binding.parentTaskId, 'actual-parent-task');
+  assert.equal((await callThingtimeTool('prepare_thingtime_agent_task', { externalTaskId: 'child-chat', parentExternalTaskId: '', displayName: 'Child auditor', workspace }, reportingContext()) as any).status, 400);
+});
+
+
+test('authenticated HTTP accepts a large editable mutation while an anonymous request keeps its ingress boundary', async (t) => {
+  const context = {
+    ...connectedContext,
+    mutationStore: memoryMutationStore(),
+    bundle: { ...connectedContext.bundle, connections: [{ ...connectedContext.bundle.connections[0], scopes: ['things'] }] }
+  };
+  const updates: any[] = [];
+  const pageId = 'private-page';
+  const originalDate = '2026-09-01T00:00:00.000Z';
+  const appliedDate = '2026-09-02T00:00:00.000Z';
+  const leafBlocks = Array.from({ length: 600 }, (_, index) => ({ id: `text-${index}`, type: 'text', text: 'é'.repeat(110) }));
+  let blocks = leafBlocks as unknown[];
+  for (let depth = 0; depth < 10; depth += 1) blocks = [{ id: `group-${depth}`, type: 'container', children: blocks }];
+  let current = { id: pageId, thingtime: ['webpage'], crystal: { name: 'Original', blocks: [] as unknown[] }, updatedAt: originalDate };
+  t.mock.method(globalThis, 'fetch', async (_url, init) => {
+    if (init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      updates.push(body);
+      current = { ...current, crystal: body.crystal, updatedAt: appliedDate };
+    }
+    return Response.json({ ok: true, thing: current });
+  });
+  const send = async (name: string, args: unknown, authenticated = true) => {
+    const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } });
+    const request = new Request('https://thingtime.com/api/v1/integrations/chatgpt/mcp', { method: 'POST', body });
+    const response = await handleChatGptMcp({ request }, async () => authenticated
+      ? { ok: true, value: context }
+      : { ok: false, status: 401, error: 'Authentication required' });
+    return { bytes: Buffer.byteLength(body), status: response.status, result: (await response.json() as any).result?.structuredContent };
+  };
+  const operations = [{ action: 'update', id: pageId, patch: { crystal: { name: 'Updated', blocks } } }];
+  assert.equal((await send('preview_thingtime_mutation', { operations }, false)).status, 413);
+  const preview = await send('preview_thingtime_mutation', { operations });
+  assert.ok(preview.bytes > 136 * 1024);
+  assert.ok(preview.result.receipt.length < 1024);
+  assert.deepEqual(preview.result.preview.operations[0].after.crystal.blocks, blocks);
+  const otherContext = { ...context, session: { ...context.session, jti: 'different-connection' } };
+  const denied: any = await callThingtimeTool('get_thingtime_mutation_preview', { receipt: preview.result.receipt, cursor: 0 }, otherContext);
+  assert.equal(denied.status, 400);
+  assert.equal(updates.length, 0);
+  const changed = await send('preview_thingtime_mutation', { operations });
+  const applied = await send('apply_thingtime_mutation', { receipt: preview.result.receipt, confirmed: true });
+  assert.equal(applied.result.applied, 1);
+  assert.equal(applied.result.undoAvailable, true);
+  assert.equal(updates[0].id, pageId);
+  assert.equal(updates[0].expectedUpdatedAt, originalDate);
+  assert.deepEqual(updates[0].crystal.blocks, blocks);
+  assert.equal((await send('apply_thingtime_mutation', { receipt: changed.result.receipt, confirmed: true })).result.status, 409);
+  assert.equal((await send('apply_thingtime_mutation', { receipt: preview.result.receipt, confirmed: true })).result.status, 409);
+  assert.equal(updates.length, 1);
+  const undo = await send('undo_thingtime_mutation', { historyId: applied.result.history.id });
+  assert.equal(undo.result.preview.operations[0].expectedUpdatedAt, appliedDate);
+  assert.deepEqual(undo.result.preview.operations[0].after.crystal.blocks, []);
+});
+
+test('connector reads selected account rules and rechecks a signed plan at apply time', async (t) => {
+  const context = {
+    ...connectedContext,
+    mutationStore: memoryMutationStore(),
+    bundle: {
+      ...connectedContext.bundle,
+      connections: [{ ...connectedContext.bundle.connections[0], scopes: ['things'] }]
+    }
+  };
+  const now = '2026-08-29T00:00:00.000Z';
+  let updatedAt = now;
+  let writes = 0;
+  let replyAccountId = 'user-1';
+  let settings = { ...effectiveConnectorConfirmations(), update: false, comment: false };
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/.well-known/thingtime-capabilities.json') {
+      assert.equal(new Headers(init?.headers).get('Authorization'), null);
+      return Response.json({ schemaVersion: 1, origin: url.origin, features: { [CONNECTOR_PROTECTIONS_FEATURE]: { version: '1.0.0' } } });
+    }
+    if (url.pathname === CONNECTOR_PROTECTIONS_PATH) return Response.json({ ok: true, accountId: replyAccountId, confirmations: settings });
+    if (init?.method === 'POST') {
+      writes++;
+      return Response.json({ ok: true, thing: { updatedAt } });
+    }
+    return Response.json({ ok: true, thing: { id: 'todo-1', thingtime: ['data'], crystal: { done: false }, updatedAt } });
+  });
+  const call = (name: string, args: Record<string, unknown> = {}) => callThingtimeTool(name, args, context) as Promise<any>;
+  const rules = await call('get_thingtime_confirmation_requirements');
+  assert.equal(rules.source, 'account-settings');
+  assert.equal(rules.confirmations.update, false);
+  assert.doesNotMatch(JSON.stringify(rules), /test-token/);
+  const staged = await call('preview_thingtime_mutation', { operations: [{ action: 'update', id: 'todo-1', patch: { crystal: { done: true } } }] });
+  assert.equal(staged.confirmationRequired, false);
+  settings.update = true;
+  assert.equal((await call('apply_thingtime_mutation', { receipt: staged.receipt })).code, 'confirmation_required');
+  assert.equal(writes, 0);
+  settings.update = false;
+  updatedAt = '2026-08-30T00:00:00.000Z';
+  assert.equal((await call('apply_thingtime_mutation', { receipt: staged.receipt })).status, 409);
+  assert.equal(writes, 0);
+  updatedAt = now;
+  assert.equal((await call('apply_thingtime_mutation', { receipt: staged.receipt })).applied, 1);
+  assert.equal(writes, 1);
+  const undo = await call('undo_thingtime_mutation', { historyId: (await call('list_thingtime_history')).history[0].id });
+  assert.deepEqual(undo.confirmationActions, ['undo']);
+  assert.equal((await call('apply_thingtime_mutation', { receipt: undo.receipt })).code, 'confirmation_required');
+  assert.equal(writes, 1);
+
+  await call('comment_on_thingtime_thing', { comment: { targetId: 'todo-1', text: 'Test' } });
+  assert.equal(writes, 2);
+  replyAccountId = 'different-user';
+  assert.equal((await call('comment_on_thingtime_thing', { comment: { targetId: 'todo-1', text: 'Test' } })).code, 'confirmation_required');
+  assert.equal(writes, 2);
+  assert.equal((await call('get_thingtime_confirmation_requirements')).source, 'safe-default');
+});
+
+
+test('an expired signed mutation receipt does not load or apply stored data', async () => {
+  const receipt = await signPurposeToken(THINGTIME_MUTATION_RECEIPT_PURPOSE, {
+    previewId: 'expiry-test', accountId: 'personal', digest: '0'.repeat(64)
+  }, '1 second ago');
+  const context = {
+    ...connectedContext,
+    mutationStore: {
+      ...memoryMutationStore(),
+      async get() { assert.fail('Expired receipts must not read mutation storage'); }
+    }
+  };
+  const result: any = await callThingtimeTool('apply_thingtime_mutation', { receipt, confirmed: true }, context);
+  assert.equal(result.status, 400);
+  assert.match(result.error, /invalid or expired/);
 });

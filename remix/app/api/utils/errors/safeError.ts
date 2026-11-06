@@ -6,6 +6,8 @@
 //   response gets a summary built from the error's class name + error code
 //   (e.g. "MongoServerSelectionError (ECONNREFUSED)"), never err.message.
 
+import { recordErrorLog } from './errorLogs';
+
 export class PublicError extends Error {
   readonly publicMessage: string;
 
@@ -43,7 +45,7 @@ const errorCode = (err: Error): string | null => {
 export const safeErrorText = (err: unknown, context: string, fallback = 'Unexpected error'): string => {
   if (err instanceof PublicError) return err.publicMessage;
 
-  console.error(`[${context}]`, err);
+  void recordErrorLog(err, { source: context });
 
   if (err instanceof Error) {
     const code = errorCode(err);

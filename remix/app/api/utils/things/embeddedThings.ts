@@ -2,6 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 import { COLLECTION_SCHEMA_VERSIONS, EMBEDDED_THINGTIME } from '../../../schemas/registry';
 import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
+import { legacyThingReadsRequired } from '../mongodb/legacyThingLayout';
+
+const embeddedKindMatch = async () => await legacyThingReadsRequired()
+	? { $or: [{ thingtime: EMBEDDED_THINGTIME }, { kind: 'embed' }] }
+	: { thingtime: EMBEDDED_THINGTIME };
+export const embeddedThingListFilter = async (ownerId: string) => ({ ...await embeddedKindMatch(), ownerId });
 
 // Embedded things share the one `things` collection with posts and every other
 // kind, so they MUST carry the era fields the generic readers key off. Without
@@ -30,7 +36,7 @@ export type EmbeddedThingSummary = Omit<EmbeddedThing, 'value'>;
 
 type EmbeddedThingDoc = {
 	shareId: string;
-	kind: 'embed';
+	kind?: 'embed';
 	schemaVersion: number;
 	thingtime: string[];
 	ownerId: string;
@@ -145,7 +151,7 @@ export const getEmbeddedThing = async (viewerId: string | null, rawId: unknown) 
 	await ensureIndexes();
 	const things = await getThingsCollection();
 	const visibility = viewerId ? { $or: [{ visibility: 'public' }, { ownerId: viewerId }] } : { visibility: 'public' };
-	const doc = await things.findOne({ shareId: id, kind: 'embed', ...visibility });
+	const doc = await things.findOne({ $and: [{ shareId: id, ...visibility }, await embeddedKindMatch()] });
 
 	if (!doc) return fail(404, 'Thing not found');
 	return { ok: true, thing: toEmbeddedThing(doc as EmbeddedThingDoc) } as const;
@@ -155,8 +161,8 @@ export const listEmbeddedThings = async (ownerId: string) => {
 	await ensureIndexes();
 	const things = await getThingsCollection();
 	const docs = await things
-		.find({ kind: 'embed', ownerId }, { projection: { value: 0 } })
-		.sort({ updatedAt: -1 })
+		.find(await embeddedThingListFilter(ownerId), { projection: { value: 0 } })
+		.sort({ updatedAt: -1, shareId: 1 })
 		.limit(100)
 		.toArray();
 
@@ -179,7 +185,7 @@ export const saveEmbeddedThing = async (ownerId: string, rawInput: unknown) => {
 	const now = new Date();
 
 	if (!id) {
-		const existingCount = await things.countDocuments({ kind: 'embed', ownerId }, { limit: MAX_THINGS_PER_OWNER });
+		const existingCount = await things.countDocuments({ ...await embeddedKindMatch(), ownerId }, { limit: MAX_THINGS_PER_OWNER });
 		if (existingCount >= MAX_THINGS_PER_OWNER) {
 			return fail(429, `An account can have at most ${MAX_THINGS_PER_OWNER} embedded things`);
 		}
@@ -191,7 +197,7 @@ export const saveEmbeddedThing = async (ownerId: string, rawInput: unknown) => {
 
 		const doc: EmbeddedThingDoc = {
 			shareId: randomUUID(),
-			kind: 'embed',
+			...await legacyThingReadsRequired() ? { kind: 'embed' as const } : {},
 			schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
 			thingtime: [EMBEDDED_THINGTIME],
 			ownerId,
@@ -206,7 +212,7 @@ export const saveEmbeddedThing = async (ownerId: string, rawInput: unknown) => {
 		return { ok: true, thing: toEmbeddedThing(doc) } as const;
 	}
 
-	const current = (await things.findOne({ shareId: id, kind: 'embed', ownerId })) as EmbeddedThingDoc | null;
+	const current = (await things.findOne({ shareId: id, ...await embeddedKindMatch(), ownerId })) as EmbeddedThingDoc | null;
 	if (!current) return fail(404, 'Thing not found');
 
 	const expectedVersion = Number(input.version);
@@ -224,7 +230,7 @@ export const saveEmbeddedThing = async (ownerId: string, rawInput: unknown) => {
 
 	const nextVersion = current.version + 1;
 	const update = await things.updateOne(
-		{ shareId: id, kind: 'embed', ownerId, version: current.version },
+		{ shareId: id, ...await embeddedKindMatch(), ownerId, version: current.version },
 		{
 			$set: {
 				name,
@@ -232,12 +238,13 @@ export const saveEmbeddedThing = async (ownerId: string, rawInput: unknown) => {
 				visibility,
 				updatedAt: now
 			},
-			$inc: { version: 1 }
+			$inc: { version: 1 },
+			...await legacyThingReadsRequired() ? {} : { $unset: { kind: '' } }
 		}
 	);
 
 	if (update.modifiedCount !== 1) {
-		const latest = (await things.findOne({ shareId: id, kind: 'embed', ownerId })) as EmbeddedThingDoc | null;
+		const latest = (await things.findOne({ shareId: id, ...await embeddedKindMatch(), ownerId })) as EmbeddedThingDoc | null;
 		return fail(409, 'Thing changed somewhere else. Load it before saving again.', latest ? toEmbeddedThing(latest) : undefined);
 	}
 

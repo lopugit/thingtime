@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { BootstrapResponse, SearchHit } from '@commander/protocol';
+import { useState } from 'react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { BootstrapResponse, SearchHit, IndexingStatus } from '@commander/protocol';
 import { DEFAULT_SETTINGS } from '@commander/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommanderState } from '../hooks/useCommander.js';
+import * as nativeFileIcons from '../lib/nativeFileIcons.js';
 import { resetNativeFileIconSchedulerForTests } from '../lib/nativeFileIcons.js';
-import { beginWindowDrag, nativeRequest } from '../lib/nativeBridge.js';
-import { Launcher } from './Launcher.js';
+import { beginWindowDrag, hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
+import { Launcher, indexSummary } from './Launcher.js';
 
 vi.mock('../lib/nativeBridge.js', () => ({
   beginWindowDrag: vi.fn(),
@@ -95,6 +97,44 @@ describe('Launcher keyboard navigation', () => {
   afterEach(() => {
     cleanup();
     resetNativeFileIconSchedulerForTests();
+  });
+
+  it('opens Settings without changing the query or running the selected result from keyboard focus', async () => {
+    const commander = state({ query: 'notes', selectedIndex: 1 });
+    render(<Launcher state={commander} />);
+    const button = screen.getByRole('button', { name: 'Open Commander Settings' });
+    button.focus();
+    fireEvent.keyDown(button, { key: 'Enter' });
+    expect(commander.executeCommand).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(commander.executeCommand).toHaveBeenCalledWith('builtin:settings', 'open-settings', ''),
+    );
+    expect(commander.setQuery).not.toHaveBeenCalled();
+    expect(commander.rememberRecentSearch).not.toHaveBeenCalled();
+  });
+
+  it('reports Settings failures through the existing error surface', async () => {
+    const commander = state({ executeCommand: vi.fn().mockRejectedValue(new Error('Settings unavailable')) });
+    render(<Launcher state={commander} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open Commander Settings' }));
+    await waitFor(() => expect(commander.reportError).toHaveBeenCalledWith('Settings unavailable'));
+  });
+
+  it('returns focus to the previous app when Escape dismisses the launcher', async () => {
+    const commander = state();
+    render(<Launcher state={commander} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(hideLauncher).toHaveBeenCalledWith(true));
+    expect(commander.rememberRecentSearch).toHaveBeenCalledWith(commander.query);
+  });
+
+  it('keeps focus in Commander when Escape only closes the actions panel', () => {
+    const commander = state({ actionsOpen: true });
+    render(<Launcher state={commander} />);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(commander.setActionsOpen).toHaveBeenCalledWith(false);
+    expect(hideLauncher).not.toHaveBeenCalled();
   });
 
   it('moves selection down and opens the actions panel with Command-K', () => {
@@ -601,7 +641,7 @@ describe('Launcher keyboard navigation', () => {
     expect(view.container.querySelectorAll('.search-spinner')).toHaveLength(1);
   });
 
-  it('shows live index progress in the footer', () => {
+  it('shows searchable total and index age while indexing stays in the background', () => {
     render(
       <Launcher
         state={state({
@@ -609,6 +649,8 @@ describe('Launcher keyboard navigation', () => {
             available: true,
             running: ['files'],
             totalRecords: 4_000,
+            searchableRecords: 4_020,
+            lastIndexedAtMs: Date.now() - 120_000,
             databaseSizeBytes: 1_024,
             kinds: [],
             commands: { count: 20 },
@@ -629,7 +671,8 @@ describe('Launcher keyboard navigation', () => {
       />,
     );
 
-    expect(screen.getByText('Indexing Files · 1,250 / 4,000')).toBeVisible();
+    expect(screen.getByText('4,020 searchable items · indexed 2m ago')).toBeVisible();
+    expect(screen.queryByText(/Indexing Files/)).toBeNull();
   });
 
   it('pins the current window and offers a right-click Open New Window action', async () => {
@@ -648,5 +691,354 @@ describe('Launcher keyboard navigation', () => {
     fireEvent.contextMenu(screen.getByRole('button', { name: 'Unpin Commander window' }));
     fireEvent.click(screen.getByRole('button', { name: 'Open New Window' }));
     await waitFor(() => expect(nativeRequest).toHaveBeenCalledWith('launcher.openNewWindow'));
+  });
+
+  it.each([false, true])(
+    'toggles the shared new-window pin default from %s without pinning this window',
+    async (defaultPinned) => {
+      const settings = {
+        ...DEFAULT_SETTINGS,
+        windowPinning: { ...DEFAULT_SETTINGS.windowPinning, defaultPinned },
+      };
+      vi.mocked(nativeRequest).mockImplementation(async (method) =>
+        method === 'launcher.state'
+          ? { windowId: 'window-1', pinned: false, pinningEnabled: true }
+          : undefined,
+      );
+      const commander = state({ bootstrap: { ...bootstrap, settings } });
+      const view = render(<Launcher state={commander} />);
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Pin Commander window' })).toHaveAttribute(
+          'aria-pressed',
+          'false',
+        ),
+      );
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Pin Commander window' }));
+      const toggle = screen.getByRole('switch', { name: 'Open New Windows Pinned' });
+      expect(toggle).toHaveAttribute('aria-checked', String(defaultPinned));
+      fireEvent.click(toggle);
+      const nextSettings = {
+        ...settings,
+        windowPinning: { ...settings.windowPinning, defaultPinned: !defaultPinned },
+      };
+      expect(commander.saveSettings).toHaveBeenCalledExactlyOnceWith(nextSettings);
+      expect(nativeRequest).not.toHaveBeenCalledWith('launcher.pin', expect.anything());
+      expect(screen.queryByRole('switch', { name: 'Open New Windows Pinned' })).not.toBeInTheDocument();
+
+      view.rerender(
+        <Launcher state={{ ...commander, bootstrap: { ...bootstrap, settings: nextSettings } }} />,
+      );
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Pin Commander window' }));
+      expect(screen.getByRole('switch', { name: 'Open New Windows Pinned' })).toHaveAttribute(
+        'aria-checked',
+        String(!defaultPinned),
+      );
+      expect(screen.getByRole('button', { name: 'Pin Commander window' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+
+      // A failed save/refetch (or a change from General settings) must update the
+      // checkmark from the shared settings, not leave a separate local toggle.
+      view.rerender(<Launcher state={commander} />);
+      expect(screen.getByRole('switch', { name: 'Open New Windows Pinned' })).toHaveAttribute(
+        'aria-checked',
+        String(defaultPinned),
+      );
+    },
+  );
+});
+
+describe('launcher index summary', () => {
+  const status: IndexingStatus = {
+    available: true,
+    running: ['all'],
+    totalRecords: 0,
+    databaseSizeBytes: 0,
+    kinds: [],
+    commands: { count: 0 },
+    automaticRefresh: { applicationsMinutes: 360, filesystemMinutes: 360 },
+    customTimeoutMs: null,
+    resourceLimits: DEFAULT_SETTINGS.indexing.resourceLimits,
+    timing: { samples: 0 },
+    timeoutAttempts: [],
+  };
+  it('stays ready to search when eligible counts are unknown', () => {
+    expect(indexSummary(null)).toBe('Ready to search');
+    expect(indexSummary({ ...status, countsCurrent: false })).toBe('Ready to search');
+  });
+  it('shows a known count without implying a wait when its timestamp is unavailable', () => {
+    expect(indexSummary({ ...status, searchableRecords: 42 })).toBe('42 searchable items');
+  });
+});
+
+describe('Launcher held-arrow navigation', () => {
+  const manyHits = Array.from({ length: 200 }, (_, index): SearchHit => ({
+    ...hits[0]!,
+    id: `command:${index}`,
+    title: `Result ${index}`,
+    score: 200 - index,
+  }));
+  function interactive(overrides: Partial<CommanderState> = {}) {
+    const commander = state({ hits: manyHits, ...overrides });
+    function Interactive({ changes = {} }: { changes?: Partial<CommanderState> }) {
+      const [selectedIndex, setSelectedIndex] = useState(commander.selectedIndex);
+      return <Launcher state={{ ...commander, selectedIndex, setSelectedIndex, ...changes }} />;
+    }
+    const view = render(<Interactive />);
+    return {
+      commander,
+      ...view,
+      update: (changes: Partial<CommanderState>) => view.rerender(<Interactive changes={changes} />),
+    };
+  }
+  const selected = () =>
+    screen.getAllByRole('option').findIndex((row) => row.getAttribute('aria-selected') === 'true');
+  const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms));
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    cleanup();
+    resetNativeFileIconSchedulerForTests();
+    vi.useRealTimers();
+  });
+
+  it('moves on the first event, preserves burst taps before a render, and Enter runs the newest cursor', async () => {
+    const { commander } = interactive();
+    act(() => {
+      for (let tap = 0; tap < 3; tap += 1) {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', cancelable: true }));
+        window.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown' }));
+      }
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
+    });
+    expect(selected()).toBe(3);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(commander.executeCommand).toHaveBeenCalledWith('command:3', 'open-settings', 'settings');
+    advance(2_000);
+    expect(selected()).toBe(3);
+  });
+
+  it('accelerates from elapsed hold time without OS repeat events and stops exactly on release', () => {
+    interactive();
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    expect(selected()).toBe(1);
+    advance(179);
+    expect(selected()).toBe(1);
+    advance(1);
+    expect(selected()).toBe(2);
+    advance(420);
+    const early = selected();
+    advance(600);
+    const middle = selected();
+    advance(600);
+    const late = selected();
+    expect(middle - early).toBeGreaterThan(early - 1);
+    expect(late - middle).toBeGreaterThan(middle - early);
+    fireEvent.keyUp(window, { key: 'ArrowDown' });
+    advance(5_000);
+    expect(selected()).toBe(late);
+  });
+
+  it('ignores OS repeat events and reverses immediately without the old key release ending the new hold', () => {
+    interactive({ selectedIndex: 30 });
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    for (let repeat = 0; repeat < 10; repeat += 1)
+      fireEvent.keyDown(window, { key: 'ArrowDown', repeat: true });
+    expect(selected()).toBe(31);
+    advance(180);
+    expect(selected()).toBe(32);
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(selected()).toBe(31);
+    fireEvent.keyUp(window, { key: 'ArrowDown' });
+    advance(180);
+    expect(selected()).toBe(30);
+    fireEvent.keyUp(window, { key: 'ArrowUp' });
+    advance(2_000);
+    expect(selected()).toBe(30);
+  });
+
+  it.each(['blur', 'compositionstart', 'commander:launcher-opened', 'pointerdown'])(
+    'cancels a held arrow on %s and does not restart from a stray native repeat',
+    (event) => {
+      interactive();
+      fireEvent.keyDown(window, { key: 'ArrowDown' });
+      advance(300);
+      fireEvent(window, new Event(event));
+      const stopped = selected();
+      fireEvent.keyDown(window, { key: 'ArrowDown', repeat: true });
+      advance(2_000);
+      expect(selected()).toBe(stopped);
+    },
+  );
+
+  it('cancels when hidden, when focus enters toolbar controls, and on unmount', () => {
+    const view = interactive();
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    fireEvent(document, new Event('visibilitychange'));
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    advance(1_000);
+    expect(selected()).toBe(1);
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    screen.getByRole('button', { name: 'Open Commander Settings' }).focus();
+    advance(1_000);
+    expect(selected()).toBe(2);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Open Commander Settings' }), { key: 'ArrowDown' });
+    expect(selected()).toBe(2);
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    view.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    { query: 'different query' },
+    { hits: [manyHits[0]!, manyHits[1]!, manyHits[2]!, manyHits[3]!] },
+    { actionsOpen: true },
+    { activeView: 'emoji-symbols' as const },
+    { resultsStale: true },
+  ])('cancels when navigation scope changes: %#', (changes) => {
+    const view = interactive();
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    advance(300);
+    const stopped = selected();
+    view.update(changes);
+    advance(2_000);
+    expect(selected()).toBe(stopped);
+  });
+
+  it.each([
+    { metaKey: true },
+    { ctrlKey: true },
+    { altKey: true },
+    { shiftKey: true },
+    { isComposing: true },
+    { keyCode: 229 },
+  ])('preserves modified arrow and input composition ownership: %j', (event) => {
+    interactive();
+    const input = screen.getByRole('textbox');
+    expect(fireEvent.keyDown(input, { key: 'ArrowDown', ...event })).toBe(true);
+    advance(2_000);
+    expect(selected()).toBe(0);
+  });
+
+  it.each(['pin', 'context'])('stops mid-hold when the %s menu takes ownership', (menu) => {
+    const view = interactive({
+      hits: manyHits.map((hit) => ({ ...hit, path: `/tmp/${hit.id}`, kind: 'file' })),
+    });
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    advance(300);
+    const stopped = selected();
+    if (menu === 'pin') {
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Pin Commander window' }));
+    } else {
+      fireEvent.contextMenu(screen.getAllByRole('option')[stopped]!);
+    }
+    fireEvent.keyDown(window, { key: 'ArrowDown', repeat: true });
+    advance(2_000);
+    expect(selected()).toBe(stopped);
+    view.unmount();
+  });
+
+  it('keeps unrelated rows and their unresolved native icon requests mounted while selection moves', () => {
+    const cancels = new Map<string, ReturnType<typeof vi.fn>>();
+    const request = vi.spyOn(nativeFileIcons, 'requestNativeFileIcon').mockImplementation((path) => {
+      const cancel = vi.fn();
+      cancels.set(path, cancel);
+      return { promise: new Promise(() => undefined), cancel };
+    });
+    try {
+      interactive({
+        hits: manyHits.slice(0, 20).map((hit) => ({ ...hit, path: `/tmp/${hit.id}`, kind: 'file' })),
+      });
+      const untouched = cancels.get('/tmp/command:19')!;
+      for (let tap = 0; tap < 3; tap += 1) {
+        fireEvent.keyDown(window, { key: 'ArrowDown' });
+        fireEvent.keyUp(window, { key: 'ArrowDown' });
+      }
+      expect(selected()).toBe(3);
+      expect(request.mock.calls.filter(([path]) => path === '/tmp/command:19')).toHaveLength(1);
+      expect(untouched).not.toHaveBeenCalled();
+    } finally {
+      request.mockRestore();
+    }
+  });
+
+  it('clamps at both terminal rows, cancels removed results and never wraps or queues catch-up', () => {
+    const view = interactive({ hits: manyHits.slice(0, 3) });
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    advance(2_000);
+    expect(selected()).toBe(0);
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    advance(2_000);
+    expect(selected()).toBe(2);
+    expect(vi.getTimerCount()).toBe(0);
+    view.update({ hits: [manyHits[0]!] });
+    expect(selected()).toBe(0);
+    advance(2_000);
+    expect(selected()).toBe(0);
+    view.update({ hits: [] });
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    advance(2_000);
+    expect(screen.queryByRole('option')).toBeNull();
+  });
+
+  it('reveals an unchanged selection after its list viewport resizes and coalesces resize notifications', () => {
+    let notifyResize!: () => void;
+    const observer = { observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() };
+    vi.stubGlobal(
+      'ResizeObserver',
+      vi.fn(function (callback: ResizeObserverCallback) {
+        notifyResize = () => callback([], observer);
+        return observer;
+      }),
+    );
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      const view = interactive({ selectedIndex: 29 });
+      const list = screen.getByRole('listbox');
+      const selectedRow = screen.getAllByRole('option')[29]!;
+      expect(observer.observe).toHaveBeenCalledExactlyOnceWith(list);
+      scroll.mockClear();
+      // The selected row and index stay unchanged while the native viewport
+      // shrinks beneath it. Multiple layout notifications need only one reveal.
+      act(() => {
+        notifyResize();
+        notifyResize();
+        notifyResize();
+      });
+      expect(scroll).not.toHaveBeenCalled();
+      advance(16);
+      expect(selected()).toBe(29);
+      expect(scroll).toHaveBeenCalledExactlyOnceWith({ behavior: 'instant', block: 'nearest' });
+      expect(scroll.mock.contexts[0]).toBe(selectedRow);
+      act(() => notifyResize());
+      view.unmount();
+      advance(16);
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(observer.disconnect).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    }
+  });
+
+  it('scrolls the current row before paint with instant nearest positioning, including replaced rows', () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const view = interactive();
+    scroll.mockClear();
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    expect(scroll).toHaveBeenLastCalledWith({ behavior: 'instant', block: 'nearest' });
+    scroll.mockClear();
+    view.update({ hits: manyHits.slice(0, 10) });
+    expect(scroll).toHaveBeenCalledExactlyOnceWith({ behavior: 'instant', block: 'nearest' });
+    delete (Element.prototype as Partial<Element>).scrollIntoView;
   });
 });

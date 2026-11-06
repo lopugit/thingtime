@@ -1,0 +1,457 @@
+[
+  {
+    "rules": "node_modules/\n*.log\n!keep.log",
+    "paths": [
+      {
+        "path": "node_modules",
+        "kind": "folder",
+        "ignored": true
+      },
+      {
+        "path": "node_modules",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "project/node_modules/a.js",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "a.log",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "keep.log",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "src/keep.log",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "NODE_MODULES/a",
+        "kind": "file",
+        "ignored": false
+      }
+    ]
+  },
+  {
+    "rules": "/root.txt\ncache/file?.[ch]",
+    "paths": [
+      {
+        "path": "root.txt",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "src/root.txt",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "cache/file1.c",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "src/cache/file1.c",
+        "kind": "file",
+        "ignored": false
+      }
+    ]
+  },
+  {
+    "rules": "foo/**/bar\na/***/b\n**/cache/\nx/**",
+    "paths": [
+      {
+        "path": "foo/bar",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "foo/a/b/bar",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "a/b",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "a/x/y/b",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "x",
+        "kind": "folder",
+        "ignored": false
+      },
+      {
+        "path": "x/a",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "deep/cache/a",
+        "kind": "file",
+        "ignored": true
+      }
+    ]
+  },
+  {
+    "rules": "dir/\n!dir/keep.txt",
+    "paths": [
+      {
+        "path": "dir",
+        "kind": "folder",
+        "ignored": true
+      },
+      {
+        "path": "dir/keep.txt",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "dir-other/keep.txt",
+        "kind": "file",
+        "ignored": false
+      }
+    ]
+  },
+  {
+    "rules": "dir/*\n!dir/keep.txt\n!dir/sub/\ndir/sub/*\n!dir/sub/yes",
+    "paths": [
+      {
+        "path": "dir/keep.txt",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "dir/no",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "dir/sub/yes",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "dir/sub/no",
+        "kind": "file",
+        "ignored": true
+      }
+    ]
+  },
+  {
+    "rules": "#comment\n\\#literal\n\\!literal\nspace\\ \ntrailing   \nfile\\?.txt",
+    "paths": [
+      {
+        "path": "#literal",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "!literal",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "space ",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "space",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "trailing",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "file?.txt",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "file1.txt",
+        "kind": "file",
+        "ignored": false
+      }
+    ]
+  },
+  {
+    "rules": "caf?.txt\nλ??\n[[:alpha:]][[:digit:]].txt\n[a/b]\nunterminated[\ntrailing\\",
+    "paths": [
+      {
+        "path": "café.txt",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "λab",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "a1.txt",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "é1.txt",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "a",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "b",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "a/b",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "unterminated[",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "trailing",
+        "kind": "file",
+        "ignored": false
+      }
+    ]
+  },
+  {
+    "rules": "caf??.txt\n[!a-c]file\n[]a]file\n[\\-a]dash\n[A-Z]case",
+    "paths": [
+      {
+        "path": "café.txt",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "dfile",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "afile",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "]file",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "-dash",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "acase",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "Zcase",
+        "kind": "file",
+        "ignored": true
+      }
+    ]
+  },
+  {
+    "rules": "/café.txt",
+    "paths": [
+      {
+        "path": "café.txt",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "café.txt",
+        "kind": "file",
+        "ignored": false
+      }
+    ]
+  },
+  {
+    "rules": "/café.txt",
+    "paths": [
+      {
+        "path": "café.txt",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "café.txt",
+        "kind": "file",
+        "ignored": true
+      }
+    ]
+  },
+  {
+    "rules": "a/**\\/b",
+    "paths": [
+      {
+        "path": "a/b",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "a/x/b",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "a/x/y/b",
+        "kind": "file",
+        "ignored": true
+      }
+    ]
+  },
+  {
+    "rules": "a\\/**/b",
+    "paths": [
+      {
+        "path": "a/b",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "a/x/b",
+        "kind": "file",
+        "ignored": true
+      }
+    ]
+  },
+  {
+    "rules": "﻿#comment\r\ncache/\r\n!keep\r\n",
+    "paths": [
+      {
+        "path": "cache",
+        "kind": "folder",
+        "ignored": true
+      },
+      {
+        "path": "cache/a",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "keep",
+        "kind": "file",
+        "ignored": false
+      }
+    ]
+  },
+  {
+    "rules": "[a\\-c]file\n[z-a]reverse\n[!]]name\n[[:unknown:]]bad",
+    "paths": [
+      {
+        "path": "-file",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "bfile",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "cfile",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "areverse",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "zreverse",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "aname",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "]name",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "xbad",
+        "kind": "file",
+        "ignored": false
+      }
+    ]
+  },
+  {
+    "rules": "[é][é]",
+    "paths": [
+      {
+        "path": "é",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "éé",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "aa",
+        "kind": "file",
+        "ignored": false
+      }
+    ]
+  },
+  {
+    "rules": "name\t\nspace\\ \n**\\/keep",
+    "paths": [
+      {
+        "path": "name",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "space ",
+        "kind": "file",
+        "ignored": true
+      },
+      {
+        "path": "keep",
+        "kind": "file",
+        "ignored": false
+      },
+      {
+        "path": "a/keep",
+        "kind": "file",
+        "ignored": true
+      }
+    ]
+  }
+]

@@ -1,3 +1,4 @@
+import { ThingFields } from './ThingFields';
 import React from 'react';
 import ContentEditable from 'react-contenteditable';
 import * as Chakras from '@chakra-ui/react';
@@ -7,7 +8,7 @@ import { CommanderV1 } from '../Commander/CommanderV1Deprecated';
 import { CommanderV2 } from '../Commander/CommanderV2';
 // import { Magic } from "../Commander/Magic"
 import { blocksToText, getEditorJsDoc, LongTextEditor, textToBlocks } from '../Editor/LongTextEditor';
-import { EDITOR_JS_AUTO_DETECT_LIMITS, isEditorJsDocSafeToEdit } from '../Editor/editorJsValue';
+import { isExplicitEditorJsDocSafeToEdit, parseExplicitEditorJsDocString } from '../Editor/editorJsValue';
 import { Icon } from '../Icon/Icon';
 import { RichTextBlocks } from '../Kinds/kindRenderersMedia';
 import { useLopu } from '../Lopu/useLopu';
@@ -155,7 +156,12 @@ export const NumberValueInput = (props: { value: number; onValueChange: (value: 
 
 // join any with ThingtimeProps
 type ThingtimeComponentProps = ThingtimeProps & any;
-export const Thingtime = (args: ThingtimeComponentProps = {}) => {
+// Controlled fields mods keep sensitive editors out of the global Thing store,
+// context-menu exports, window.meta, undo history and persistent caches.
+export const Thingtime = (args: ThingtimeComponentProps = {}) => args.mods?.layout === 'fields'
+  ? <ThingFields thing={args.thing ?? args.value ?? {}} mods={args.mods} onChange={args.onChange} onModsChange={args.onModsChange} />
+  : <ThingtimeTree {...args} />;
+const ThingtimeTree = (args: ThingtimeComponentProps = {}) => {
 	const props = {
 		...args
 	};
@@ -186,7 +192,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 	const [circular, setCircular] = React.useState(props?.circular);
 
-	const thingtimeRef = React.useRef();
+	const thingtimeRef = React.useRef<HTMLDivElement | null>(null);
 
 	const [showFullPathContext, setShowFullPathContext] = React.useState(false);
 	// hover context on the key/property name itself (claude-todo 08 §5): shown
@@ -479,10 +485,6 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [thing, thingDep, validKeyTypes, editorJsDoc]);
 
 	const type = React.useMemo(() => {
-		if (thing === null) {
-			return 'undefined';
-		}
-
 		return typeof thing;
 	}, [thing]);
 
@@ -529,7 +531,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 
 		if (type === 'string') {
-			return <MagicInput value={thing} readonly></MagicInput>;
+			return thing === '' ? <Box as="span" color="var(--tt-muted)">""</Box> : <MagicInput value={thing} readonly></MagicInput>;
 		} else if (type === 'number') {
 			return thing;
 		} else if (type === 'boolean') {
@@ -558,7 +560,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			}
 
 			if (!keys?.length) {
-				return 'Something!';
+				return Array.isArray(thing) ? '[]' : '{}';
 			}
 
 			try {
@@ -578,11 +580,11 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		} else if (props?.children) {
 			return;
 		} else if (type === 'undefined') {
-			return 'Imagine..';
+			return editMode ? 'Imagine..' : 'undefined';
 		} else {
 			return 'Something..';
 		}
-	}, [thing, thingDep, type, chakraChild, keys, codeView]);
+	}, [thing, thingDep, type, chakraChild, keys, codeView, editMode]);
 
 	const renderChakra = React.useMemo(() => {
 		if (!editMode && chakra && render) {
@@ -702,7 +704,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [keysToUse, thingtime?.settings?.keyGateLength, visibleKeyCount, loadTargetCount, mountedChildrenCount]);
 
 	const inner = React.useMemo(() => {
-		let content = <AtomicWrapper paddingLeft={pl}>Imagine..</AtomicWrapper>;
+		let content = <AtomicWrapper paddingLeft={pl}>{Array.isArray(thing) ? '[]' : thing === null ? 'null' : '{}'}</AtomicWrapper>;
 
 		if (keysToUse?.length && !circular) {
 			const keyGateLength = thingtime?.settings?.keyGateLength || 5;
@@ -818,7 +820,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			return;
 		}
 
-		if (type === 'object' && !circular) {
+		if (type === 'object' && thing !== null && !circular) {
 			if (chakra) {
 				const ChakraComponent = Chakras[chakra];
 
@@ -980,22 +982,15 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 						source = String(thing);
 					}
 				}
-				if (source.length > EDITOR_JS_AUTO_DETECT_LIMITS.sourceLength) {
-					lopu({
-						title: 'Kept the value as-is',
-						description: 'This value is too large to convert into an Editor.js document safely.',
-						status: 'error'
-					});
-					return;
-				}
 
-				const next = editorJsDoc
-					? { ...editorJsDoc, kind: 'rich-text' }
+				const explicit = editorJsDoc || parseExplicitEditorJsDocString(source);
+				const next = explicit
+					? { ...explicit, kind: 'rich-text' }
 					: { kind: 'rich-text', blocks: textToBlocks(source) };
-				if (!isEditorJsDocSafeToEdit(next)) {
+				if (!isExplicitEditorJsDocSafeToEdit(next)) {
 					lopu({
 						title: 'Kept the value as-is',
-						description: 'This value would create an Editor.js document that is too large or deeply nested to edit safely.',
+						description: 'This value contains unsupported rich-text data or exceeds the stored document nesting format.',
 						status: 'error'
 					});
 					return;
@@ -1005,10 +1000,10 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			}
 
 			if (typeKey === 'string' && editorJsDoc) {
-				if (!isEditorJsDocSafeToEdit(editorJsDoc)) {
+				if (!isExplicitEditorJsDocSafeToEdit(editorJsDoc)) {
 					lopu({
 						title: 'Kept the Editor.js document intact',
-						description: 'This document is too large or deeply nested to flatten safely. Nothing was changed.',
+						description: 'This document contains unsupported values or exceeds the stored document nesting format. Nothing was changed.',
 						status: 'error'
 					});
 					return;
@@ -1046,13 +1041,17 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	);
 
 	const deleteValue = React.useCallback(() => {
+		// The provider's empty-path setter is a no-op. A top-level value has
+		// an empty parent path, so use its explicit root-replacement boundary.
+		const destination = Array.isArray(parentPath) && parentPath.length === 0 ? 'thingtime' : parentPath;
+		const leaf = fullPath[fullPath.length - 1];
 		// array parents stay arrays — spreading them into an object would
 		// corrupt the parent shape
 		if (parent instanceof Array) {
-			const index = Number(path);
+			const index = Number(leaf);
 			const clone = parent.filter((item, idx) => idx !== index);
 
-			setThingtime(parentPath, clone, {
+			setThingtime(destination, clone, {
 				namespace: 'user'
 			});
 			return;
@@ -1061,12 +1060,12 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		// use parent path to clone parent object but without this key
 		const clone = { ...parent };
 
-		delete clone[path];
+		delete clone[leaf];
 
-		setThingtime(parentPath, clone, {
+		setThingtime(destination, clone, {
 			namespace: 'user'
 		});
-	}, [path, parent, parentPath, setThingtime]);
+	}, [fullPath, parent, parentPath, setThingtime]);
 
 	const atomicValue = React.useMemo(() => {
 		const debug: any = {};

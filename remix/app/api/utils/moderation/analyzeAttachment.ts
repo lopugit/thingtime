@@ -11,6 +11,7 @@
 import { getHomeThingsCollection } from '../mongodb/collections';
 import { attachmentContentDisposition } from '../attachments/attachmentPresentation';
 import { getPrivateS3, type AttachmentS3 } from '../attachments/privateS3';
+import { fetchStoredObject } from '../attachments/localAttachmentStorage';
 import {
 	moderationFromVerdict,
 	type AttachmentModeration,
@@ -35,7 +36,7 @@ export type AnalyzeAttachmentDependencies = {
 };
 
 const defaultFetchBytes = async (url: string): Promise<Uint8Array> => {
-	const response = await fetch(url);
+	const response = await fetchStoredObject(url);
 	if (!response.ok) throw new Error(`moderation: object fetch failed (${response.status})`);
 	return new Uint8Array(await response.arrayBuffer());
 };

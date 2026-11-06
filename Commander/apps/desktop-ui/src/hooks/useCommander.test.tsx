@@ -226,6 +226,36 @@ describe('useCommander launcher sessions', () => {
     expect(hideLauncher).toHaveBeenCalledOnce();
   });
 
+  it('opens an enabled local emoji shortcut while HTTP is stalled and ignores its late view reply', async () => {
+    const itemId = 'extension:builtin:emoji-symbols:search-emoji-symbols';
+    vi.mocked(api.bootstrap).mockResolvedValueOnce({
+      ...bootstrap,
+      extensions: [{ id: 'builtin:emoji-symbols', name: 'emoji-symbols', title: 'Emoji & Symbols', description: '', version: '1.0.0', source: 'builtin', enabled: true, compatibility: 'native', commands: [{ name: 'search-emoji-symbols', title: 'Search Emoji & Symbols', mode: 'view', disabled: false, keywords: [] }] }],
+    });
+    let complete!: (value: { ok: true; view: { id: 'emoji-symbols' } }) => void;
+    vi.mocked(api.execute).mockImplementationOnce(() => new Promise((resolve) => { complete = resolve; }));
+    const { result } = renderHook(() => useCommander());
+    await waitFor(() => expect(result.current.bootstrap).not.toBeNull());
+    act(() => window.dispatchEvent(new CustomEvent('commander:command-hotkey', { detail: itemId })));
+    expect(result.current.activeView).toBe('emoji-symbols');
+    act(() => result.current.setActiveView(null));
+    await act(async () => complete({ ok: true, view: { id: 'emoji-symbols' } }));
+    expect(result.current.activeView).toBeNull();
+    expect(hideLauncher).not.toHaveBeenCalled();
+  });
+
+  it('does not locally open a disabled emoji extension while HTTP is stalled', async () => {
+    vi.mocked(api.bootstrap).mockResolvedValueOnce({
+      ...bootstrap,
+      extensions: [{ id: 'builtin:emoji-symbols', name: 'emoji-symbols', title: 'Emoji & Symbols', description: '', version: '1.0.0', source: 'builtin', enabled: false, compatibility: 'native', commands: [{ name: 'search-emoji-symbols', title: 'Search Emoji & Symbols', mode: 'view', disabled: false, keywords: [] }] }],
+    });
+    vi.mocked(api.execute).mockImplementationOnce(() => new Promise(() => undefined));
+    const { result } = renderHook(() => useCommander());
+    await waitFor(() => expect(result.current.bootstrap).not.toBeNull());
+    act(() => window.dispatchEvent(new CustomEvent('commander:command-hotkey', { detail: 'extension:builtin:emoji-symbols:search-emoji-symbols' })));
+    expect(result.current.activeView).toBeNull();
+  });
+
   it('executes a registered command hotkey event and opens its Commander view', async () => {
     const itemId = 'extension:builtin:emoji-symbols:search-emoji-symbols';
     vi.mocked(api.execute).mockResolvedValueOnce({

@@ -1,24 +1,42 @@
+import { validateRunInputs } from './actionInputs';
+import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
+import { capabilitySatisfies } from '../capabilities/capabilityContract';
+import type { PreparedBrowserAction } from '~/schemas/browserActions';
+import { runLookup } from './lookup';
+import { revealUserVaultValue } from '../lopu/userVault';
 import { randomUUID } from 'node:crypto';
+import { withTimelineMutationContext } from '../timeline/mutationContext';
+import { actionTimelineRecorder } from '../timeline/actionOutcome';
+import type { ActionTimelineReport } from '../../../timeline/actionOutcome';
+import { StorageMutationError } from '../storage/storageCore';
 
 import {
+	ACL_ALL,
 	ACL_OWNER,
 	ACTION_LIMIT_CEILINGS,
 	ACTION_LIMIT_DEFAULTS,
+	MAX_ACTION_EACH_ITEMS,
 	MAX_ACTION_RUN_ERROR_CHARS,
 	MAX_ACTION_RUN_HISTORY,
 	MAX_ACTION_RUNS_RETAINED,
 	MAX_ACTION_SEARCH_LIMIT,
+	MAX_ACTION_SEARCH_MATCH_CHARS,
 	MAX_ACTION_TRACE_ENTRIES,
+	deriveActionEffects,
 	parseActionRef,
 	sanitizeActionCrystal,
 	type ActionCapabilityEntry,
+	type ActionEffects,
 	type ActionStep
 } from '~/schemas/registry';
+import { MAX_EXPRESSION_NODES_PER_RUN, evaluateExpression, type ExpressionContext, type ExpressionLambdaScope } from '~/schemas/actionExpressions';
 import { getThingsCollection } from '../mongodb/collections';
 import { newThingDoc } from '../messenger/shared';
 import {
 	ACTION_RESERVED_ID_PREFIX,
 	createThing,
+	canViewInherited,
+	deleteThing,
 	fail,
 	getThing,
 	isFail,
@@ -26,6 +44,10 @@ import {
 	type Fail,
 	type Viewer
 } from '../things/things';
+import { emitSystemNotification } from '../notifications/notifications';
+import { bindPacks } from './packs/index';
+import type { SharedComposition } from './sharedComposition';
+import { sharedOperationAllowed } from './sharedCompositionCore';
 
 // The Action Thing executor — the run-time half of the bounded-execution
 // contract (save-time lives in registry.ts sanitizeActionCrystal).
@@ -36,13 +58,20 @@ import {
 //   storage accounting always apply. An action can never do something its
 //   invoker couldn't do by hand.
 // - Closed vocabulary: an op that isn't in the sanitized program cannot run,
-//   and the executor has no fetch, no env access, and no raw Mongo writes on
-//   behalf of the program (its only direct collection reads are the
-//   owner-scoped searches below and the run-record insert).
+//   and authored programs have no arbitrary fetch, env access or raw Mongo
+//   writes. Registered lookup adapters alone can use owner-scoped Vault
+//   credentials for a fixed provider destination.
 // - One shared budget per root invocation: deadline, operation count, depth,
-//   child-action count. actions.invoke recurses with the SAME budget object,
-//   so A→B→A terminates by construction (and direct cycles are refused with
-//   a clear error before the budget even drains).
+//   child-action count, and (v2) expression evaluations. actions.invoke and
+//   each recurse with the SAME budget object, so A→B→A terminates by
+//   construction (and direct cycles are refused with a clear error before the
+//   budget even drains).
+// - v2 compute: step values may hold `{ ttExpr: [fn, ...args] }` expressions
+//   over the closed catalogue in schemas/actionExpressions.ts (math, logic,
+//   text, list, object, date, random, and the domain packs bound in
+//   ./packs). Expressions are pure: they read refs and return values, never
+//   touch the database, and are bounded by a per-run node budget. Pack calls
+//   count as operations because they are the only non-trivial CPU.
 // - Every run lands one protected action-run thing (targetId = the action),
 //   owner-private, storageClass 'control' like the CI event family —
 //   operational telemetry with hard size caps, not billable content. Because
@@ -65,7 +94,19 @@ export type ActionRunTraceEntry = {
 	note?: string;
 };
 
+// Trusted server-side policy only. No HTTP request can supply these hooks.
+export type ActionOperationPolicy = {
+  step: (operation: string) => Promise<void>;
+  create: (schemaId: string, values: Record<string, unknown>, step: string) => Promise<{ acl: string[]; shareId?: string; crystal?: Record<string, unknown> }>;
+  access: (id: string, operation: 'read' | 'update') => Promise<void>;
+  update: (id: string, values: Record<string, unknown>) => Promise<void>;
+  search: (schema: unknown, scope: unknown) => Promise<void>;
+};
+
 type ActionBudget = {
+	operationPolicy?: ActionOperationPolicy;
+	assertAuthorized?: () => Promise<void>;
+	usedLookup?: boolean;
 	deadline: number;
 	opsRemaining: number;
 	maxDepth: number;
@@ -80,10 +121,14 @@ type ActionBudget = {
 	// delegated run (a ttAction click): every action resolved anywhere in this
 	// invocation tree must be one the invoker owns
 	ownedOnly: boolean;
+	shared?: SharedComposition;
+	// expression evaluations left for the whole run (shared like the rest)
+	expressionNodes: { nodes: number };
 };
 
 type ActionProgram = {
 	id: string;
+	ownerId?: string;
 	name: string;
 	crystal: Record<string, unknown>;
 	steps: ActionStep[];
@@ -92,6 +137,7 @@ type ActionProgram = {
 };
 
 export type RunActionResult =
+	| PreparedBrowserAction
 	| Fail
 	| {
 			ok: true;
@@ -99,6 +145,8 @@ export type RunActionResult =
 			status: 'ok' | 'error';
 			actionId: string;
 			result: unknown;
+			cache?: 'no-store';
+			history?: ActionTimelineReport;
 			error?: string;
 			durationMs: number;
 			opsUsed: number;
@@ -144,21 +192,27 @@ const capabilityOf = (capabilities: ActionCapabilityEntry[], capability: string)
 const resolveActionProgram = async (
 	viewer: Viewer,
 	reference: string,
-	options?: { ownedOnly?: boolean }
+	options?: { ownedOnly?: boolean; shared?: SharedComposition; parentId?: string }
 ): Promise<Fail | ActionProgram> => {
 	if (!viewer) return fail(401, 'Running actions requires signing in');
 	const trimmed = typeof reference === 'string' ? reference.trim() : '';
 	if (!trimmed) return fail(400, 'Which action? Pass its id or actionKey');
 
-	let doc: { id: string; crystal: Record<string, unknown> } | null = null;
-	if (options?.ownedOnly) {
+	let doc: { id: string; ownerId?: string; crystal: Record<string, unknown> } | null = null;
+	if (options?.shared) {
+		const included = options.parentId
+			? options.shared.children.get(`${options.parentId}:${trimmed}`)
+			: options.shared.actions.get(trimmed);
+		if (!included) return fail(404, 'This action is not included in the shared app');
+		doc = { id: included.shareId, crystal: included.crystal || {} };
+	} else if (options?.ownedOnly) {
 		const things = await getThingsCollection();
 		const own = await things.findOne({ shareId: trimmed, ownerId: viewer.id, thingtime: 'action' } as any);
-		if (own) doc = { id: own.shareId, crystal: (own.crystal || {}) as Record<string, unknown> };
+		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown> };
 	} else {
 		const byId = await getThing(viewer, trimmed);
 		if (byId.ok !== false && byId.thing && Array.isArray(byId.thing.thingtime) && byId.thing.thingtime.includes('action')) {
-			doc = { id: byId.thing.id, crystal: (byId.thing.crystal || {}) as Record<string, unknown> };
+			doc = { id: byId.thing.id, ownerId: byId.thing.author?.id, crystal: (byId.thing.crystal || {}) as Record<string, unknown> };
 		}
 	}
 	if (!doc) {
@@ -177,7 +231,7 @@ const resolveActionProgram = async (
 			.sort({ 'crystal.version': -1, createdAt: -1 })
 			.limit(1)
 			.toArray();
-		if (own) doc = { id: own.shareId, crystal: (own.crystal || {}) as Record<string, unknown> };
+		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown> };
 	}
 	if (!doc) {
 		return fail(
@@ -195,6 +249,7 @@ const resolveActionProgram = async (
 	const crystal = sanitized.crystal;
 	return {
 		id: doc.id,
+		ownerId: doc.ownerId,
 		name: typeof crystal.name === 'string' ? crystal.name : 'Action',
 		crystal,
 		steps: (crystal.steps || []) as ActionStep[],
@@ -205,66 +260,14 @@ const resolveActionProgram = async (
 
 // ── input validation ────────────────────────────────────────────────────────
 
-const validateRunInputs = (
-	descriptors: Record<string, unknown>[],
-	provided: unknown
-): Fail | { ok: true; inputs: Record<string, unknown> } => {
-	if (provided !== undefined && provided !== null && (typeof provided !== 'object' || Array.isArray(provided))) {
-		return fail(400, 'inputs must be an object of input values');
-	}
-	const raw = (provided || {}) as Record<string, unknown>;
-	const inputs: Record<string, unknown> = {};
-	for (const descriptor of descriptors) {
-		const name = String(descriptor.name);
-		const type = String(descriptor.type);
-		// Own-property gate, same posture as resolvePath above. Input NAMES are
-		// only pattern-checked (COMPONENT_ARG_NAME_PATTERN), so an action may
-		// declare one that collides with an Object.prototype member. A bare
-		// `raw[name]` then reads through the prototype chain of the caller's JSON
-		// object: an omitted `constructor` arrives as the native Object function
-		// rather than undefined, so the descriptor's default never applies, the
-		// "is required" refusal never fires (the type check rejects it first with
-		// a misleading message), and `$input.<name>` hands a native function to a
-		// step value. $step paths are already gated both ways (banned segments in
-		// parseActionRef + hasOwnProperty in resolvePath); $input is now too.
-		let value = Object.prototype.hasOwnProperty.call(raw, name) ? raw[name] : undefined;
-		if (value === undefined || value === null || value === '') {
-			if (descriptor.default !== undefined) value = descriptor.default;
-			else if (descriptor.required === true) return fail(400, `Input ${name} is required`);
-			else continue;
-		}
-		if (type === 'number') {
-			const num = typeof value === 'number' ? value : Number(value);
-			if (!Number.isFinite(num)) return fail(400, `Input ${name} must be a number`);
-			if (typeof descriptor.min === 'number' && num < descriptor.min) return fail(400, `Input ${name} min is ${descriptor.min}`);
-			if (typeof descriptor.max === 'number' && num > descriptor.max) return fail(400, `Input ${name} max is ${descriptor.max}`);
-			inputs[name] = num;
-		} else if (type === 'boolean') {
-			inputs[name] = value === true || value === 'true';
-		} else if (type === 'enum') {
-			const values = Array.isArray(descriptor.values) ? descriptor.values.map(String) : [];
-			const candidate = String(value);
-			if (!values.includes(candidate)) return fail(400, `Input ${name} must be one of ${values.join(', ')}`);
-			inputs[name] = candidate;
-		} else {
-			if (typeof value !== 'string') return fail(400, `Input ${name} must be text`);
-			const maxLength = typeof descriptor.maxLength === 'number' ? descriptor.maxLength : 2000;
-			if (value.length > maxLength) return fail(400, `Input ${name} caps at ${maxLength} characters`);
-			inputs[name] = value;
-		}
-	}
-	const declared = new Set(descriptors.map((descriptor) => String(descriptor.name)));
-	const unknown = Object.keys(raw).find((key) => !declared.has(key));
-	if (unknown) return fail(400, `Unknown input "${unknown.slice(0, 40)}"`);
-	return { ok: true, inputs };
-};
-
 // ── reference resolution ────────────────────────────────────────────────────
 
 type StepScope = {
 	inputs: Record<string, unknown>;
 	// index n-1 = the (JSON-safe) result of step n
 	steps: unknown[];
+	viewer: { id: string; username: string | null };
+	expressions: ExpressionContext;
 };
 
 const resolvePath = (root: unknown, path: string[]): unknown => {
@@ -277,7 +280,7 @@ const resolvePath = (root: unknown, path: string[]): unknown => {
 	return current;
 };
 
-const resolveValue = (value: unknown, scope: StepScope): unknown => {
+const resolveValue = (value: unknown, scope: StepScope, lambda?: ExpressionLambdaScope): unknown => {
 	if (typeof value === 'string') {
 		if (value.startsWith('$$')) return value.slice(1);
 		const ref = parseActionRef(value);
@@ -292,30 +295,50 @@ const resolveValue = (value: unknown, scope: StepScope): unknown => {
 		if (ref.kind === 'input') {
 			return Object.prototype.hasOwnProperty.call(scope.inputs, ref.name) ? scope.inputs[ref.name] : undefined;
 		}
+		if (ref.kind === 'viewer') return scope.viewer[ref.field];
+		if (ref.kind === 'item') {
+			if (!lambda) return runError(`${value.slice(0, 40)} is only bound inside an each step or a list lambda`);
+			return ref.path.length ? resolvePath(lambda.item, ref.path) : lambda.item;
+		}
+		if (ref.kind === 'index') {
+			if (!lambda) return runError('$index is only bound inside an each step or a list lambda');
+			return lambda.index;
+		}
 		const stepResult = scope.steps[ref.step - 1];
 		if (stepResult === undefined) return runError(`$step.${ref.step} has no result yet`);
 		return ref.path.length ? resolvePath(stepResult, ref.path) : stepResult;
 	}
-	if (Array.isArray(value)) return value.map((entry) => resolveValue(entry, scope));
+	if (Array.isArray(value)) return value.map((entry) => resolveValue(entry, scope, lambda));
 	if (value && typeof value === 'object') {
 		const record = value as Record<string, unknown>;
 		const keys = Object.keys(record);
 		if (keys.length === 1 && keys[0] === 'ttConcat' && Array.isArray(record.ttConcat)) {
 			return record.ttConcat
 				.map((part) => {
-					const resolved = resolveValue(part, scope);
+					const resolved = resolveValue(part, scope, lambda);
 					return resolved === undefined || resolved === null ? '' : String(resolved);
 				})
 				.join('');
 		}
+		if (keys.length === 1 && keys[0] === 'ttExpr' && Array.isArray(record.ttExpr)) {
+			return evaluateExpression(record.ttExpr, scope.expressions, lambda);
+		}
 		const resolved: Record<string, unknown> = {};
 		for (const key of keys) {
-			const entry = resolveValue(record[key], scope);
+			const entry = resolveValue(record[key], scope, lambda);
 			if (entry !== undefined) resolved[key] = entry;
 		}
 		return resolved;
 	}
 	return value;
+};
+
+const truthy = (value: unknown): boolean => {
+	if (value === null || value === undefined) return false;
+	if (typeof value === 'string') return value.trim() !== '' && value !== 'false' && value !== '0';
+	if (Array.isArray(value)) return value.length > 0;
+	if (typeof value === 'object') return Object.keys(value as object).length > 0;
+	return !!value;
 };
 
 // ── schema + capability helpers ─────────────────────────────────────────────
@@ -337,17 +360,26 @@ const resolveSchemaRef = async (viewer: Viewer, ref: string): Promise<ResolvedSc
 		const crystal = (own.crystal || {}) as Record<string, unknown>;
 		return { id: own.shareId, name: typeof crystal.name === 'string' ? crystal.name : ref };
 	}
+	// A seeded system schema is addressable by its NAME too (its shareId is
+	// `schema-<slug>` and its crystal.name the slug), so an installed program
+	// that names a public shape still resolves when the viewer owns no copy.
+	const seeded = await things.findOne({ ownerId: 'system', thingtime: 'schema', 'crystal.name': ref } as any);
+	if (seeded) {
+		const crystal = (seeded.crystal || {}) as Record<string, unknown>;
+		return { id: seeded.shareId, name: typeof crystal.name === 'string' ? crystal.name : ref };
+	}
 	return runError(`Schema "${ref.slice(0, 80)}" was not found (pass a schema thing id or one of your schema names)`) as never;
 };
 
 // Actions read and write Data Things only — the same kind boundary that
 // things.create (`thingtime: ['data']`) and things.search (`thingtime:
-// 'data'`) already enforce. things.get/things.update resolve a target by
-// dynamic id, and a schema scope only constrains BY schema; non-data kinds
-// (action, schema, post, component, folder) carry no schema, so a schema
-// check alone can't hold this line. Requiring the resolved target to be a
-// data thing keeps every data-op inside one kind and out of the program's
-// own definition and other kinds. Data things carry 'data' in `thingtime`.
+// 'data'`) already enforce. things.get/things.update/things.delete resolve a
+// target by dynamic id, and a schema scope only constrains BY schema;
+// non-data kinds (action, schema, post, component, folder) carry no schema,
+// so a schema check alone can't hold this line. Requiring the resolved target
+// to be a data thing keeps every data-op inside one kind and out of the
+// program's own definition and other kinds. Data things carry 'data' in
+// `thingtime`.
 const isDataThing = (thingtime: unknown): boolean => Array.isArray(thingtime) && thingtime.includes('data');
 
 // Run-time defense-in-depth on top of the save-time coverage check: when a
@@ -367,6 +399,14 @@ const schemaIdentityOf = (crystal: unknown): (string | null)[] => {
 	];
 };
 
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const scalarFilterValue = (value: unknown, label: string): string | number | boolean | null => {
+	if (value === null || value === undefined) return null;
+	if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+	return runError(`${label} resolved to a non-scalar filter value`);
+};
+
 // ── the engine ──────────────────────────────────────────────────────────────
 
 const consumeOp = (budget: ActionBudget): void => {
@@ -378,6 +418,15 @@ const consumeOp = (budget: ActionBudget): void => {
 
 const pushTrace = (budget: ActionBudget, entry: ActionRunTraceEntry): void => {
 	if (budget.trace.length < MAX_ACTION_TRACE_ENTRIES) budget.trace.push(entry);
+};
+
+const stepValueLabel = (value: unknown): string => {
+	if (typeof value === 'string') return value.slice(0, 200);
+	try {
+		return JSON.stringify(value).slice(0, 200);
+	} catch {
+		return 'a value';
+	}
 };
 
 const executeProgram = async (
@@ -395,6 +444,7 @@ const executeProgram = async (
 	// What the parent must NOT do is assert absolute negatives it cannot know
 	// ("Cannot create things") while invoking a child that does — that half is
 	// enforced in actionInspect.actionCannotAccess.
+	if (program.crystal.runtime === 'browser') runError('Browser actions must run in the browser, not inside a server program');
 	const effective = program.capabilities;
 	if (budget.stack.includes(program.id)) {
 		runError(`Recursive invocation refused: ${program.id} is already running (stack: ${budget.stack.join(' → ')})`);
@@ -403,14 +453,69 @@ const executeProgram = async (
 	const depth = budget.stack.length - 1;
 	if (depth > budget.depthUsed) budget.depthUsed = depth;
 	try {
-		const scope: StepScope = { inputs, steps: [] };
+		const scope: StepScope = {
+			inputs,
+			steps: [],
+			viewer: { id: viewer!.id, username: viewer!.username ?? null },
+			expressions: {
+				resolve: (value, lambda) => resolveValue(value, scope, lambda),
+				budget: budget.expressionNodes,
+				packs: bindPacks({ random: Math.random, now: () => new Date() }),
+				onPackCall: () => consumeOp(budget),
+				random: Math.random,
+				fail: runError
+			}
+		};
 		let returned: unknown = null;
+
+		// The one composition primitive shared by actions.invoke and each.
+		const invokeChild = async (label: string, actionRef: string, rawInputs: unknown, childProgram?: ActionProgram): Promise<{ program: ActionProgram; result: unknown }> => {
+			if (budget.stack.length > budget.maxDepth) runError(`Depth budget exhausted (max ${budget.maxDepth})`);
+			if (budget.childActionsRemaining <= 0) runError('Child-action budget exhausted');
+			budget.childActionsRemaining -= 1;
+			budget.childActionsUsed += 1;
+			const invokeScope = capabilityOf(effective, 'actions.invoke');
+			if (!invokeScope) runError(`Step ${label} invokes without an actions.invoke capability in the inherited envelope`);
+			if (invokeScope!.actions?.length && !invokeScope!.actions.includes(actionRef)) {
+				runError(`Step ${label} invokes "${actionRef}" outside the declared actions.invoke allowlist`);
+			}
+			// A child named by the PARENT's program text is a deliberate
+			// composition, so it resolves the same way the parent did.
+			let child = childProgram;
+			if (!child) {
+				const resolved = await resolveActionProgram(viewer, actionRef, { ownedOnly: budget.ownedOnly, shared: budget.shared, parentId: program.id });
+				if (isFail(resolved)) runError(`Step ${label} invoke failed: ${resolved.error}`);
+				child = resolved as ActionProgram;
+			}
+			const declaredInputCap = (child.crystal.limits as Record<string, unknown> | undefined)?.maxInputBytes;
+			const childInputCap = Math.min(budget.maxInputBytes, typeof declaredInputCap === 'number' && Number.isFinite(declaredInputCap) ? declaredInputCap : ACTION_LIMIT_DEFAULTS.maxInputBytes);
+			if (jsonBytes(rawInputs ?? {}) > childInputCap) runError(`Step ${label} invoke inputs exceed the ${childInputCap}-byte cap`);
+			const childInputs = validateRunInputs(child.inputs, rawInputs);
+			if (isFail(childInputs)) runError(`Step ${label} invoke inputs invalid: ${childInputs.error}`);
+			if (childInputs.ok && jsonBytes(childInputs.inputs) > childInputCap) runError(`Step ${label} resolved inputs exceed the ${childInputCap}-byte cap`);
+			const result = await executeProgram(viewer, child, (childInputs as { ok: true; inputs: Record<string, unknown> }).inputs, budget, label);
+			return { program: child, result };
+		};
+
 		for (let index = 0; index < program.steps.length; index += 1) {
+			await budget.assertAuthorized?.();
 			const step = program.steps[index];
+			await budget.operationPolicy?.step(step.op);
 			const label = stepPrefix ? `${stepPrefix}.${index + 1}` : String(index + 1);
 			const startedAt = Date.now();
 			let target: string | undefined;
 			let note: string | undefined;
+
+			// `when` — branching by omission: a falsy guard skips the step and
+			// its result reads null. Guards resolve before the op is charged.
+			if (step.when !== undefined && !truthy(resolveValue(step.when, scope))) {
+				scope.steps[index] = null;
+				pushTrace(budget, { step: label, op: step.op, ms: Date.now() - startedAt, note: 'skipped' });
+				continue;
+			}
+			if (budget.shared && !sharedOperationAllowed(step.op)) {
+				runError('This control changes saved data. Fork the app to make your own editable copy.');
+			}
 
 			if (step.op === 'return') {
 				returned = resolveValue(step.value, scope);
@@ -421,7 +526,19 @@ const executeProgram = async (
 
 			consumeOp(budget);
 
-			if (step.op === 'things.create') {
+			if (step.op === 'lookup') {
+				budget.usedLookup = true;
+				if (budget.shared || program.ownerId !== viewer?.id) runError('Lookups require an action you own and your own Vault credential');
+				if (!capabilityOf(effective, 'lookup')?.providers?.includes(String(step.provider))) runError('Lookup provider is outside the declared capability');
+				const credential = await revealUserVaultValue(viewer!.id, String(step.credentialId));
+				if (!credential) runError('Lookup credential is unavailable in your Vault');
+				scope.steps[index] = await runLookup({ provider: step.provider, query: resolveValue(step.query, scope), credential: credential!, deadline: budget.deadline });
+			} else if (step.op === 'compute') {
+				scope.steps[index] = resolveValue(step.value, scope) ?? null;
+			} else if (step.op === 'fail') {
+				const message = resolveValue(step.message, scope);
+				runError(typeof message === 'string' && message.trim() ? message.slice(0, MAX_ACTION_RUN_ERROR_CHARS) : `Step ${label} refused the run`);
+			} else if (step.op === 'things.create') {
 				const schema = await resolveSchemaRef(viewer, String(step.schema));
 				// Save-time coverage proves the program's OWN declaration; this
 				// re-check is what binds a child frame to the inherited envelope.
@@ -432,6 +549,7 @@ const executeProgram = async (
 				}
 				const values = resolveValue(step.values, scope);
 				if (!values || typeof values !== 'object' || Array.isArray(values)) runError(`Step ${label} values resolved to non-object data`);
+				const policyCreate = await budget.operationPolicy?.create(schema.id, values as Record<string, unknown>, label);
 				const created = await createThing(
 					viewer!.id,
 					{
@@ -445,10 +563,11 @@ const executeProgram = async (
 						// thing would otherwise republish it to the world. An explicit
 						// audience is a v2 grammar question (declared + derived as an
 						// effect), never an implicit default.
-						acl: [ACL_OWNER],
+						acl: policyCreate?.acl ?? [ACL_OWNER],
+						...(policyCreate?.shareId ? { shareId: policyCreate.shareId } : {}),
 						// scope/provenance stamps spread LAST so no resolved value
 						// can clobber them (SchemaThingForm posture)
-						crystal: { ...(values as Record<string, unknown>), schema: schema.name, schemaId: schema.id }
+						crystal: { ...(values as Record<string, unknown>), ...policyCreate?.crystal, schema: schema.name, schemaId: schema.id }
 					},
 					viewer
 				);
@@ -459,7 +578,11 @@ const executeProgram = async (
 			} else if (step.op === 'things.get') {
 				const id = resolveValue(step.id, scope);
 				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
-				const got = await getThing(viewer, String(id));
+				await budget.operationPolicy?.access(String(id), 'read');
+				const included = budget.shared?.data.get(String(id));
+				const got = included
+					? { ok: true as const, thing: { id: included.shareId, thingtime: included.thingtime, crystal: included.crystal } }
+					: await getThing(viewer, String(id));
 				if (got.ok === false) runError(`Step ${label} get failed: ${got.error}`);
 				const thing = (got as { ok: true; thing: { id: string; thingtime: string[]; crystal: unknown } }).thing;
 				if (!isDataThing(thing.thingtime)) {
@@ -472,13 +595,33 @@ const executeProgram = async (
 				target = thing.id;
 				scope.steps[index] = { id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal };
 			} else if (step.op === 'things.search') {
-				// v1 search = YOUR OWN data things of one schema, newest first.
-				// Own-docs-only keeps ACL trivially correct without dragging the
-				// full search pipeline into the executor.
+				await budget.operationPolicy?.search(step.schema, step.scope);
+				// Scope 'own' (default) = YOUR OWN data things; 'public' = tt:all
+				// data things of ONE schema from ANYONE; 'system' = tt:all data
+				// things of ONE schema that the SEED owns (the sanitizer requires
+				// the schema for both cross-owner scopes). All three keep ACL
+				// trivially correct without dragging the full search pipeline into
+				// the executor: own docs are yours, public and system docs are
+				// already world-readable.
+				//
+				// 'system' is not a convenience alias for 'public'. `crystal.schema`
+				// is a free-form field on the open `data` crystal and a seeded
+				// schema is world-readable, so ANY signed-in account can publish a
+				// public data thing wearing a platform schema's stamp. A platform
+				// program that reads its own seeded corpus in 'public' scope reads
+				// a corpus strangers can write into — and with the default
+				// newest-first sort, a forged row sorts ABOVE the seeded one.
 				const limit = typeof step.limit === 'number' ? step.limit : Math.min(20, MAX_ACTION_SEARCH_LIMIT);
+				const offset = typeof step.offset === 'number' ? step.offset : 0;
+				const scopeKind = step.scope === 'public' || step.scope === 'system' ? step.scope : 'own';
 				const clauses: Record<string, unknown>[] = [];
 				if (typeof step.schema === 'string') {
-					const schema = await resolveSchemaRef(viewer, step.schema);
+					// Resolve the schema through this program's freshly authorized
+					// stored edge, without changing the search's account/ACL scope.
+					const included = budget.shared?.references.get(`${program.id}:schema:${step.schema}`);
+					const schema = included
+						? { id: included.shareId, name: typeof included.crystal?.name === 'string' ? included.crystal.name : step.schema }
+						: await resolveSchemaRef(viewer, step.schema);
 					clauses.push({ $or: [{ 'crystal.schemaId': schema.id }, { 'crystal.schema': schema.name }] });
 				}
 				// A scoped things.read capability constrains the QUERY too — a bare
@@ -491,20 +634,51 @@ const executeProgram = async (
 						$or: readScope.schemas.flatMap((ref) => [{ 'crystal.schemaId': ref }, { 'crystal.schema': ref }])
 					});
 				}
-				const filter: Record<string, unknown> = { ownerId: viewer!.id, thingtime: 'data', ...(clauses.length ? { $and: clauses } : {}) };
+				// where: equality on crystal fields; match: case-insensitive
+				// substring. Field names were pattern-checked at save time.
+				if (step.where && typeof step.where === 'object') {
+					for (const [field, raw] of Object.entries(step.where as Record<string, unknown>)) {
+						clauses.push({ [`crystal.${field}`]: scalarFilterValue(resolveValue(raw, scope), `Step ${label} where.${field}`) });
+					}
+				}
+				if (step.match && typeof step.match === 'object') {
+					for (const [field, raw] of Object.entries(step.match as Record<string, unknown>)) {
+						const needle = String(scalarFilterValue(resolveValue(raw, scope), `Step ${label} match.${field}`) ?? '').slice(0, MAX_ACTION_SEARCH_MATCH_CHARS);
+						if (needle.trim()) clauses.push({ [`crystal.${field}`]: { $regex: escapeRegExp(needle), $options: 'i' } });
+					}
+				}
+				const filter: Record<string, unknown> = {
+					thingtime: 'data',
+					...(scopeKind === 'public'
+						? { acl: ACL_ALL }
+						: scopeKind === 'system'
+							? { acl: ACL_ALL, ownerId: 'system' }
+							: { ownerId: viewer!.id }),
+					...(clauses.length ? { $and: clauses } : {})
+				};
+				const sortSpec = step.sort as { field: string; dir: string } | undefined;
+				const sortField = sortSpec ? (sortSpec.field === 'createdAt' || sortSpec.field === 'updatedAt' ? sortSpec.field : `crystal.${sortSpec.field}`) : 'createdAt';
+				const sortDir = sortSpec?.dir === 'asc' ? 1 : -1;
 				const things = await getThingsCollection();
-				const docs = (
+				let docs = (
 					await things
 						.find(filter as any)
-						.sort({ createdAt: -1, shareId: 1 })
+						.sort({ [sortField]: sortDir, shareId: 1 })
+						.skip(offset)
 						.limit(limit)
 						.toArray()
 				).filter((doc: any) => schemaScopeAllows(readScope, schemaIdentityOf(doc.crystal)));
-				note = `${docs.length} match${docs.length === 1 ? '' : 'es'}`;
-				scope.steps[index] = docs.map((doc: any) => ({ id: doc.shareId, crystal: doc.crystal || {}, createdAt: doc.createdAt }));
+				if (budget.shared) {
+					const permissions = await Promise.all(docs.map((doc: any) => canViewInherited(doc, null)));
+					docs = docs.filter((_doc: any, index: number) => permissions[index]);
+				}
+				if (budget.operationPolicy) for (const doc of docs) await budget.operationPolicy.access(String(doc.shareId), 'read');
+				note = `${docs.length} match${docs.length === 1 ? '' : 'es'}${scopeKind === 'own' ? '' : ` (${scopeKind})`}`;
+				scope.steps[index] = docs.map((doc: any) => ({ id: doc.shareId, crystal: doc.crystal || {}, createdAt: doc.createdAt, ownerId: doc.ownerId }));
 			} else if (step.op === 'things.update') {
 				const id = resolveValue(step.id, scope);
 				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
+				await budget.operationPolicy?.access(String(id), 'update');
 				const current = await getThing(viewer, String(id));
 				if (current.ok === false) runError(`Step ${label} update target unreadable: ${current.error}`);
 				const currentThing = (current as { ok: true; thing: { id: string; thingtime?: string[]; crystal: unknown } }).thing;
@@ -522,7 +696,17 @@ const executeProgram = async (
 				// the thing into a different schema and out of the scope check on
 				// every later step and run (things.create guards this by spreading
 				// its stamps last — this is the update-path equivalent).
-				const patch = values as Record<string, unknown>;
+				//
+				// COPY first. `values` is only a fresh object when the program wrote
+				// an object literal; a whole-value ref (`values: "$step.2.crystal"`)
+				// or an expression that returns a reference (`{ ttExpr: ['get', …] }`)
+				// hands back the LIVE object held in scope.steps, and stamping it in
+				// place would rewrite an earlier step's recorded result — a later
+				// `$step.2.crystal` read, or a returned `$step.2`, would silently
+				// carry (or lose) schema/schemaId. Spreading keeps the stamp local
+				// to this update, exactly like the things.create path above.
+				await budget.operationPolicy?.update(String(id), values as Record<string, unknown>);
+				const patch: Record<string, unknown> = { ...(values as Record<string, unknown>) };
 				const currentCrystal = (currentThing.crystal || {}) as Record<string, unknown>;
 				if (typeof currentCrystal.schema === 'string') patch.schema = currentCrystal.schema;
 				else delete patch.schema;
@@ -533,32 +717,56 @@ const executeProgram = async (
 				const thing = (updated as { ok: true; thing: { id: string; crystal: unknown } }).thing;
 				target = thing.id;
 				scope.steps[index] = { id: thing.id, crystal: thing.crystal };
-			} else if (step.op === 'actions.invoke') {
-				if (budget.stack.length > budget.maxDepth) runError(`Depth budget exhausted (max ${budget.maxDepth})`);
-				if (budget.childActionsRemaining <= 0) runError('Child-action budget exhausted');
-				budget.childActionsRemaining -= 1;
-				budget.childActionsUsed += 1;
-				const invokeScope = capabilityOf(effective, 'actions.invoke');
-				if (!invokeScope) runError(`Step ${label} invokes without an actions.invoke capability in the inherited envelope`);
-				if (invokeScope!.actions?.length && !invokeScope!.actions.includes(String(step.action))) {
-					runError(`Step ${label} invokes "${String(step.action)}" outside the declared actions.invoke allowlist`);
+			} else if (step.op === 'things.delete') {
+				const id = resolveValue(step.id, scope);
+				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
+				await budget.operationPolicy?.access(String(id), 'update');
+				const current = await getThing(viewer, String(id));
+				if (current.ok === false) runError(`Step ${label} delete target unreadable: ${current.error}`);
+				const currentThing = (current as { ok: true; thing: { id: string; thingtime?: string[]; crystal: unknown; author?: { id?: string } } }).thing;
+				if (!isDataThing(currentThing.thingtime)) {
+					runError(`Step ${label} delete target "${currentThing.id}" is not a data thing — actions read and write Data Things only`);
 				}
-				// A child named by the PARENT's program text is a deliberate
-				// composition, so it resolves the same way the parent did.
-				const child = await resolveActionProgram(viewer, String(step.action), { ownedOnly: budget.ownedOnly });
-				if (isFail(child)) runError(`Step ${label} invoke failed: ${child.error}`);
-				const childProgram = child as ActionProgram;
+				// Deletes are OWN data only: the delete util enforces ownership
+				// itself, but refusing early keeps the message honest and the
+				// scope check meaningful.
+				if (currentThing.author?.id && currentThing.author.id !== viewer!.id) {
+					runError(`Step ${label} cannot delete "${currentThing.id}" — actions delete only your own data things`);
+				}
+				const deleteScope = capabilityOf(effective, 'things.delete');
+				if (!deleteScope) runError(`Step ${label} deletes without a things.delete capability in the inherited envelope`);
+				if (!schemaScopeAllows(deleteScope, schemaIdentityOf(currentThing.crystal))) {
+					runError(`Step ${label} deletes "${currentThing.id}" outside the declared things.delete schema scope`);
+				}
+				const deleted = await deleteThing(viewer, String(id));
+				if (isFail(deleted)) runError(`Step ${label} delete failed: ${deleted.error}`);
+				target = currentThing.id;
+				scope.steps[index] = { id: currentThing.id, deleted: true };
+			} else if (step.op === 'actions.invoke') {
 				const rawInputs = step.inputs === undefined ? {} : resolveValue(step.inputs, scope);
-				const childInputs = validateRunInputs(childProgram.inputs, rawInputs);
-				if (isFail(childInputs)) runError(`Step ${label} invoke inputs invalid: ${childInputs.error}`);
-				target = childProgram.id;
-				scope.steps[index] = await executeProgram(
-					viewer,
-					childProgram,
-					(childInputs as { ok: true; inputs: Record<string, unknown> }).inputs,
-					budget,
-					label
-				);
+				const invoked = await invokeChild(label, String(step.action), rawInputs);
+				target = invoked.program.id;
+				scope.steps[index] = invoked.result;
+			} else if (step.op === 'each') {
+				const list = resolveValue(step.list, scope);
+				if (!Array.isArray(list)) runError(`Step ${label} list resolved to ${stepValueLabel(list)} — each needs a list`);
+				const max = typeof step.max === 'number' ? step.max : MAX_ACTION_EACH_ITEMS;
+				const items = (list as unknown[]).slice(0, max);
+				// resolve the child ONCE; every element still consumes a child
+				// budget slot and runs on the shared envelope
+				const resolved = await resolveActionProgram(viewer, String(step.action), { ownedOnly: budget.ownedOnly, shared: budget.shared, parentId: program.id });
+				if (isFail(resolved)) runError(`Step ${label} invoke failed: ${resolved.error}`);
+				const child = resolved as ActionProgram;
+				const results: unknown[] = [];
+				for (let position = 0; position < items.length; position += 1) {
+					const lambda: ExpressionLambdaScope = { item: items[position], index: position };
+					const rawInputs = step.inputs === undefined ? {} : resolveValue(step.inputs, scope, lambda);
+					const invoked = await invokeChild(`${label}[${position}]`, String(step.action), rawInputs, child);
+					results.push(invoked.result ?? null);
+				}
+				target = child.id;
+				note = `${items.length} item${items.length === 1 ? '' : 's'}${(list as unknown[]).length > items.length ? ` (of ${(list as unknown[]).length})` : ''}`;
+				scope.steps[index] = results;
 			}
 
 			pushTrace(budget, { step: label, op: step.op, ms: Date.now() - startedAt, ...(target ? { target } : {}), ...(note ? { note } : {}) });
@@ -582,9 +790,9 @@ const capBytes = (value: unknown, maxBytes: number): unknown => {
 const writeRunRecord = async (
 	viewer: Viewer,
 	actionId: string,
-	crystal: Record<string, unknown>
+	crystal: Record<string, unknown>,
+	runId: string
 ): Promise<string> => {
-	const runId = `${ACTION_RESERVED_ID_PREFIX}run-${randomUUID()}`;
 	const things = await getThingsCollection();
 	// Direct insert (newThingDoc posture): action-run is PROTECTED, so
 	// createThing refuses it by design. storageClass control = operational
@@ -664,17 +872,44 @@ const writeRunRecord = async (
 
 // ── entry point ─────────────────────────────────────────────────────────────
 
-export const runAction = async (
+// The program's identity + derived effects WITHOUT running it — what Lopu's
+// confirmation gate reads before run_action (a deleting program needs the
+// user's approval first). Same deliberate-path resolution as runAction.
+export type InspectActionProgramResult = Fail | {
+	ok: true; id: string; name: string; actionKey: string | null; effects: ActionEffects;
+	runtime: 'browser' | 'server'; inputs: Record<string, unknown>[];
+};
+
+export const inspectActionProgram = async (viewer: Viewer, reference: string): Promise<InspectActionProgramResult> => {
+	const program = await resolveActionProgram(viewer, reference);
+	if (isFail(program)) return program;
+	return {
+		ok: true,
+		id: program.id,
+		name: program.name,
+		actionKey: typeof program.crystal.actionKey === 'string' ? program.crystal.actionKey : null,
+		runtime: program.crystal.runtime === 'browser' ? 'browser' : 'server',
+		inputs: program.inputs,
+		effects: deriveActionEffects(program.steps)
+	};
+};
+
+const executeActionRun = async (
 	viewer: Viewer,
-	request: { action?: unknown; inputs?: unknown; source?: unknown }
+	request: { action?: unknown; inputs?: unknown; source?: unknown; execution?: unknown; executionVersion?: unknown },
+	shared?: SharedComposition,
+	context?: { firstPartyActorId?: string; browserOnly?: boolean; assertAuthorized?: () => Promise<void>; operationPolicy?: ActionOperationPolicy }
 ): Promise<RunActionResult> => {
+	// Shared programs receive neither the author's nor the visitor's private
+	// account authority. Only stored composition reads are added below.
+	if (shared) viewer = { id: '' };
 	if (!viewer) return fail(401, 'Running actions requires signing in');
 	// 'component' = the delegated path (a click inside rendered markup). The
 	// flag only ever NARROWS resolution, so honouring a client-supplied value
 	// is safe: the viewer's own client always sends it, and a caller who omits
 	// it is acting as themselves on their own behalf.
 	const ownedOnly = request.source === 'component';
-	const program = await resolveActionProgram(viewer, typeof request.action === 'string' ? request.action : '', { ownedOnly });
+	const program = await resolveActionProgram(viewer, typeof request.action === 'string' ? request.action : '', { ownedOnly, shared });
 	if (isFail(program)) return program;
 
 	const declaredLimits = (program.crystal.limits || {}) as Record<string, number>;
@@ -695,9 +930,30 @@ export const runAction = async (
 	}
 	const validated = validateRunInputs(program.inputs, request.inputs);
 	if (isFail(validated)) return validated;
+	if (jsonBytes(validated.inputs) > limits.maxInputBytes) return fail(413, `Resolved inputs exceed this action's ${limits.maxInputBytes}-byte cap`);
+	if (context?.browserOnly && program.crystal.runtime !== 'browser') return fail(409, 'Use a browser Action when composing browser flows');
+	if (program.crystal.runtime === 'browser') {
+		if (shared || program.ownerId !== viewer.id || viewer.pat || context?.firstPartyActorId !== viewer.id) return fail(403, 'Browser flows require your own Action and a first-party session');
+		if (request.execution !== 'browser') return fail(409, 'This Action runs in the browser. Use a client supporting api.actions-run 1.7.0');
+		if (browserActionMinimumVersion(program.crystal) !== '1.7.0' && !capabilitySatisfies(typeof request.executionVersion === 'string' ? request.executionVersion : undefined, browserActionMinimumVersion(program.crystal)))
+			return fail(409, `This Action needs a client supporting api.actions-run ${browserActionMinimumVersion(program.crystal)} for its configured limits`);
+		// This is preparation, not execution. Do not record a successful run.
+		return { ok: true, status: 'prepared', execution: 'browser', actionId: program.id, viewer: { id: viewer.id, username: viewer.username }, program: program.crystal, inputs: validated.inputs };
+	}
 
+	const runId = shared ? `shared-run-${randomUUID()}` : `${ACTION_RESERVED_ID_PREFIX}run-${randomUUID()}`;
+	let admission: Awaited<ReturnType<typeof actionTimelineRecorder.begin>> | null = null;
+	if (!shared) {
+		try { admission = await actionTimelineRecorder.begin(viewer.id, program.id, runId, program.name); }
+		catch (error) {
+			return fail(error instanceof StorageMutationError ? error.status : 503,
+				'Action did not run because its History could not be saved. Check account storage and try again.');
+		}
+	}
 	const startedAt = new Date();
 	const budget: ActionBudget = {
+		assertAuthorized: context?.assertAuthorized,
+		operationPolicy: context?.operationPolicy,
 		deadline: Date.now() + limits.timeoutMs,
 		opsRemaining: limits.maxOperations,
 		maxDepth: limits.maxDepth,
@@ -709,7 +965,9 @@ export const runAction = async (
 		childActionsUsed: 0,
 		trace: [],
 		stack: [],
-		ownedOnly
+		ownedOnly,
+		shared,
+		expressionNodes: { nodes: MAX_EXPRESSION_NODES_PER_RUN }
 	};
 
 	let status: 'ok' | 'error' = 'ok';
@@ -727,9 +985,14 @@ export const runAction = async (
 		errorMessage = (error instanceof Error ? error.message : String(error)).slice(0, MAX_ACTION_RUN_ERROR_CHARS);
 		result = null;
 	}
-	const durationMs = Date.now() - startedAt.getTime();
+	const durationMs = Math.max(0, Date.now() - startedAt.getTime());
+	const history = admission ? await actionTimelineRecorder.finish(admission, {
+		status, durationMs, opsUsed: budget.opsUsed, depthUsed: budget.depthUsed, childActionsUsed: budget.childActionsUsed
+	}) : undefined;
 
-	const runId = await writeRunRecord(viewer, program.id, {
+	// The bounded debug cache is supplementary. Canonical Timeline outcomes
+	// survive pruning/deleting this cache and omit its sensitive runtime data.
+	if (!shared) await writeRunRecord(viewer, program.id, {
 		status,
 		startedAt: startedAt.toISOString(),
 		durationMs,
@@ -738,15 +1001,37 @@ export const runAction = async (
 		childActionsUsed: budget.childActionsUsed,
 		...(errorMessage ? { error: errorMessage } : {}),
 		inputs: capBytes(validated.inputs, budget.maxInputBytes),
-		result: capBytes(result, budget.maxResultBytes),
+		result: budget.usedLookup ? { omitted: 'External lookup results are transient' } : capBytes(result, budget.maxResultBytes),
 		trace: budget.trace
-	});
+	}, runId).catch(() => runId);
+
+	// Save every ordinary run, including successful component refreshes.
+	// Quiet delivery never means missing history. Await the non-throwing writer
+	// so a serverless response cannot cut off the history write. Shared runs
+	// are anonymous, ephemeral interactions and never write account history.
+	if (!shared) {
+		const actionKey =
+			typeof program.crystal.actionKey === 'string' && program.crystal.actionKey.trim() ? program.crystal.actionKey.trim() : program.id;
+		const opsLabel = `${budget.opsUsed} op${budget.opsUsed === 1 ? '' : 's'}`;
+		await emitSystemNotification({
+			historyOnly: ownedOnly && status === 'ok',
+			recipientId: viewer.id,
+			type: 'action-run',
+			title: status === 'ok' ? `Action “${program.name}” finished ✅` : `Action “${program.name}” failed 🌧️`,
+			preview: status === 'ok' ? `${durationMs} ms · ${opsLabel}` : errorMessage || 'The run stopped with an error.',
+			href: `/actions/${encodeURIComponent(actionKey)}`,
+			targetId: runId,
+			outcome: status
+		}).catch(() => {});
+	}
 
 	return {
 		ok: true,
 		runId,
+		...(history ? { history } : {}),
 		status,
 		actionId: program.id,
+		...(budget.usedLookup ? { cache: 'no-store' as const } : {}),
 		result,
 		...(errorMessage ? { error: errorMessage } : {}),
 		durationMs,
@@ -756,6 +1041,9 @@ export const runAction = async (
 		trace: budget.trace
 	};
 };
+
+export const runAction = (...args: Parameters<typeof executeActionRun>): Promise<RunActionResult> =>
+	withTimelineMutationContext(args[2] ? null : args[0]?.id ?? null, 'action', () => executeActionRun(...args));
 
 // ── run history ─────────────────────────────────────────────────────────────
 

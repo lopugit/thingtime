@@ -193,7 +193,7 @@ export const ReorderableList = (props: ReorderableListProps) => {
 			}
 
 			// primary button / touch only
-			if (event.pointerType === 'mouse' && event.button !== 0) {
+			if ((event.pointerType === 'mouse' && event.button !== 0) || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
 				return;
 			}
 
@@ -296,6 +296,15 @@ export const ReorderableList = (props: ReorderableListProps) => {
 		}
 	}, []);
 
+	const onItemDragStartCapture = React.useCallback((event: React.DragEvent) => {
+		// Anchors and images can start a native HTML drag, which sends
+		// pointercancel and tears down our held-row reorder. Keep the pointer
+		// stream while reordering; ordinary/modified link drags stay native.
+		if (sessionRef.current?.armed) {
+			event.preventDefault();
+		}
+	}, []);
+
 	const session = sessionRef.current;
 
 	const renderItems = React.useMemo(() => {
@@ -353,6 +362,7 @@ export const ReorderableList = (props: ReorderableListProps) => {
 						background={isActive ? 'var(--tt-card, #ffffff)' : undefined}
 						cursor={isActive ? 'grabbing' : undefined}
 						onClickCapture={onItemClickCapture}
+						onDragStartCapture={onItemDragStartCapture}
 						onPointerDown={(e) => onItemPointerDown(e, item.id)}
 					>
 						{item.node}

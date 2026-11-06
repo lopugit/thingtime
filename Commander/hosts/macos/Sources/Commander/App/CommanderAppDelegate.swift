@@ -12,6 +12,8 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   private var launcherRecency: [UUID: UInt64] = [:]
   private var recencyCounter: UInt64 = 0
   private var settings: SettingsWindowController?
+  private var processes: SettingsWindowController?
+  private var sharedMetrics: SystemMetricsService?
   private var statusItem: CommanderStatusItem?
   private var hotKeyRegistry: GlobalHotKeyRegistry?
   private var hotKeyShortcut: String?
@@ -67,6 +69,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
 
   private func buildWindows(ready: DaemonReady) {
     daemonReady = ready
+    sharedMetrics = SystemMetricsService(daemonPID: ready.pid)
     settings = SettingsWindowController(ready: ready, bridge: makeBridge(ready: ready, launcherID: nil))
     _ = try? createLauncher(show: false)
     let callbacks = pendingOAuthCallbacks
@@ -97,6 +100,9 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
       loginItem: loginItem,
       showLauncher: { [weak self] in self?.showLauncher(id: launcherID) },
       hideLauncher: { [weak self] in self?.launcher(id: launcherID)?.hide() },
+      dismissLauncher: { [weak self] in
+        self?.launcher(id: launcherID)?.hide(restoringPreviousApplication: true)
+      },
       launcherState: { [weak self] in
         guard let self, let launcher = self.launcher(id: launcherID) else {
           throw CommanderHostError.launcherUnavailable
@@ -140,8 +146,18 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
           defaultPinned: pinned,
           focusRecentOnCurrentDisplay: focusCurrentDisplay
         )
-      }
+      },
+      sharedMetrics: sharedMetrics,
+      showProcesses: { [weak self] in self?.showProcessesWindow() }
     )
+  }
+
+  private func showProcessesWindow() {
+    guard let ready = daemonReady else { return }
+    if processes == nil {
+      processes = SettingsWindowController(ready: ready, bridge: makeBridge(ready: ready, launcherID: nil), surface: "processes", title: "Commander Processes")
+    }
+    processes?.show()
   }
 
   private func createLauncher(
@@ -318,6 +334,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
     launcherShortcut: String?,
     commandShortcuts: [String: String]
   ) throws -> GlobalHotKeyRegistry? {
+    guard !CommanderDevelopmentEnvironment.enabled else { return nil }
     var shortcuts = commandShortcuts
     if let launcherShortcut { shortcuts[Self.launcherHotKeyIdentifier] = launcherShortcut }
     guard !shortcuts.isEmpty else { return nil }
@@ -353,9 +370,12 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   private func tearDownRuntime(stopDaemon: Bool) {
     for launcher in launchers.values { launcher.shutdown() }
     settings?.shutdown()
+    processes?.shutdown()
     launchers.removeAll()
     launcherRecency.removeAll()
     settings = nil
+    processes = nil
+    sharedMetrics = nil
     daemonReady = nil
     statusItem?.remove()
     statusItem = nil

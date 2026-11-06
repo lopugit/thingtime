@@ -130,4 +130,58 @@ describe('FileSystemIndexerClient', () => {
       await client.close();
     }
   });
+
+  it('does not cancel an unlimited catalogue read when interactive queries change', async () => {
+    const fixture = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      'test-fixtures/slow-query-indexer.mjs',
+    );
+    const client = new FileSystemIndexerClient({
+      binaryPath: process.execPath,
+      databasePath: '/tmp/test-index-catalogue.sqlite3',
+      prefixArguments: [fixture],
+    });
+    try {
+      const active = client.query({ query: 'active' });
+      const catalogue = client.catalogue(['application']);
+      const superseded = client.query({ query: 'superseded' });
+      const latest = client.query({ query: 'latest' });
+      await expect(superseded).resolves.toEqual({ records: [] });
+      await expect(catalogue).resolves.toMatchObject({
+        request: { query: '', kinds: ['application'], limit: null },
+        records: [{ name: '.txt' }],
+      });
+      await expect(active).resolves.toMatchObject({ records: [{ name: 'active.txt' }] });
+      await expect(latest).resolves.toMatchObject({ records: [{ name: 'latest.txt' }] });
+    } finally {
+      await client.close();
+    }
+  });
+});
+
+describe('reader policy lifecycle', () => {
+  it('restores the scoped policy before serving a query after a timed-out reader restarts', async () => {
+    const fixture = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      'test-fixtures/policy-indexer.mjs',
+    );
+    const client = new FileSystemIndexerClient({
+      binaryPath: process.execPath,
+      databasePath: '/tmp/scoped-reader.sqlite3',
+      prefixArguments: [fixture],
+      requestTimeoutMs: 250,
+    });
+    try {
+      await client.readPolicy({ sources: [{ id: 'filesystem:/tmp', root: '/tmp', kinds: ['file'] }] });
+      await expect(client.query({ query: 'eligible' })).resolves.toMatchObject({
+        records: [{ name: 'eligible.txt' }],
+      });
+      await expect(client.query({ query: 'force-timeout' })).rejects.toThrow('timed out');
+      await expect(client.query({ query: 'eligible' })).resolves.toMatchObject({
+        records: [{ name: 'eligible.txt' }],
+      });
+    } finally {
+      await client.close();
+    }
+  });
 });

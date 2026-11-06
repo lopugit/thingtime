@@ -35,13 +35,15 @@ public actor CommandJournal {
     public static let defaultMaxEntries = 4_096
 
     private let fileURL: URL
+    private let maxFileResultBytes: Int
     private let maxEntries: Int
     private var entries: [String: CommandJournalEntry]
 
-    public init(fileURL: URL, maxEntries: Int = CommandJournal.defaultMaxEntries) throws {
+    public init(fileURL: URL, maxEntries: Int = CommandJournal.defaultMaxEntries, maxFileResultBytes: Int = 524_288) throws {
         guard maxEntries > 0 else { throw ThingtimeNodeError.invalidRequest("Command journal capacity must be positive.") }
         self.fileURL = fileURL
         self.maxEntries = maxEntries
+        self.maxFileResultBytes = max(0, maxFileResultBytes)
 
         if FileManager.default.fileExists(atPath: fileURL.path) {
             let data = try Data(contentsOf: fileURL)
@@ -137,7 +139,23 @@ public actor CommandJournal {
         entry.outcome = outcome
         entry.updatedAt = now
         entries[commandId] = entry
+        trimFileReadResults()
         try persist()
+    }
+
+    // Keep bounded recent chunk replies, retaining every payload hash and
+    // mutation receipt. Old read bytes expire without permitting re-execution.
+    private func trimFileReadResults() {
+        var bytes = 0
+        for var entry in entries.values.sorted(by: { $0.updatedAt > $1.updatedAt }) {
+            guard let data = entry.outcome?.result?.objectValue?["filesystem"]?.objectValue?["data"]?.stringValue else { continue }
+            bytes += data.utf8.count
+            if bytes > maxFileResultBytes {
+                entry.state = .failed
+                entry.outcome = JournaledOutcome(response: .failure(id: entry.commandId, code: "file_result_expired", message: "This file read result expired. Refresh and issue a new read."))
+                entries[entry.commandId] = entry
+            }
+        }
     }
 
     public func markUncertain(

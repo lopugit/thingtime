@@ -6,19 +6,23 @@ import { useAttachmentUploads } from '../Attachments/useAttachmentUploads';
 import { BlockInsertMenu, type InsertPick } from './BlockInsertMenu';
 import { BlockContextMenu } from './BlockContextMenu';
 import { RichTextModal } from './RichTextModal';
+import { BlockStructureModal } from './BlockStructureModal';
+import type { BlockStructureScope } from './blockStructure';
 import {
 	collectBlockIds,
 	duplicateBlock,
 	findBlock,
 	findParentId,
 	insertBlock,
+	insertBlockRelative,
 	moveBlock,
 	moveBlockRelative,
 	newBlockId,
 	removeBlock,
 	updateBlock,
 	wrapBlock,
-	type WebpageBlock
+	type WebpageBlock,
+	type BlockInsertDirection
 } from './webpageBlocks';
 import type { BuilderChrome } from './WebpageBlocksRenderer';
 import type { UseWebpageDraft } from './useWebpage';
@@ -46,15 +50,22 @@ type UploadTarget =
 	| { kind: 'insert'; containerId: string | null; index: number }
 	| { kind: 'replace'; blockId: string };
 
-export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
+export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: boolean; allowedBlockTypes?: readonly WebpageBlock['type'][]; onInspect?: (id: string) => void }): UseBuilderChrome => {
 	const [hoverId, setHoverId] = React.useState<string | null>(null);
 	const [selectedId, setSelectedId] = React.useState<string | null>(null);
-	const [insertAt, setInsertAt] = React.useState<{ containerId: string | null; index: number; anchor: HTMLElement } | null>(null);
+	const [insertAt, setInsertAt] = React.useState<{ containerId: string | null; index: number; anchor: HTMLElement; anchorPoint?: { x: number; y: number }; relative?: { blockId: string; direction: BlockInsertDirection } } | null>(null);
 	const [contextMenu, setContextMenu] = React.useState<{ blockId: string; x: number; y: number; wrapOnly?: boolean } | null>(null);
 	const [richEditorBlockId, setRichEditorBlockId] = React.useState<string | null>(null);
+	const [structure, setStructure] = React.useState<{ blockId: string; scope: BlockStructureScope } | null>(null);
 
 	const draftRef = React.useRef(draft);
 	draftRef.current = draft;
+	const enabledRef = React.useRef(options?.enabled !== false);
+	enabledRef.current = options?.enabled !== false;
+	React.useEffect(() => {
+		if (options?.enabled !== false) return;
+		setInsertAt(null); setContextMenu(null); setRichEditorBlockId(null); setStructure(null);
+	}, [options?.enabled]);
 
 	const user = useCurrentUser();
 	const lopu = useLopu();
@@ -74,7 +85,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 
 	const queueFiles = React.useCallback(
 		(files: File[], targetOf: (offset: number) => UploadTarget) => {
-			if (!files.length) return;
+			if (!enabledRef.current || !files.length) return;
 			// clone with a fresh lastModified: the uploader dedupes selections by
 			// (name, size, lastModified) against the whole session, which would
 			// silently swallow a re-drop of the same OS file
@@ -105,7 +116,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 				uploadToPosition(files, null, blocks.length);
 				return;
 			}
-			if (block.type === 'media') {
+			if (block.type === 'media' || (block.type === 'element' && ['img', 'video', 'audio'].includes(block.tag || ''))) {
 				// first file replaces the media block's source, extras land after it
 				const parentId = findParentId(blocks, blockId);
 				const siblings = parentId === null ? blocks : findBlock(blocks, parentId as string)?.children || [];
@@ -141,8 +152,9 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 			// entries whose upload errored out never get consumed — drop them
 			// before matching so they can't capture a later same-name upload
 			pendingDropsRef.current = pendingDropsRef.current.filter((entry) => Date.now() - entry.queuedAt < 15 * 60_000);
+			const sourceFile = upload.sourceFile || upload.file;
 			const pendingIndex = pendingDropsRef.current.findIndex(
-				(entry) => entry.name === upload.file.name && entry.size === upload.file.size
+				(entry) => entry.name === sourceFile.name && entry.size === sourceFile.size
 			);
 			const target = pendingIndex >= 0 ? pendingDropsRef.current.splice(pendingIndex, 1)[0].target : null;
 			const attachment = upload.attachment;
@@ -151,7 +163,11 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 			const media: WebpageBlock['media'] =
 				attachment.contentType.startsWith('video/') ? 'video' : attachment.contentType.startsWith('audio/') ? 'audio' : 'image';
 			const src = `/api/v1/attachments/content?id=${encodeURIComponent(attachment.id)}`;
-			if (target?.kind === 'replace' && findBlock(current.blocks, target.blockId)?.type === 'media') {
+   const replacement = target?.kind === 'replace' ? findBlock(current.blocks, target.blockId) : null;
+   if (target?.kind === 'replace' && replacement?.type === 'element') {
+    current.setBlocks(updateBlock(current.blocks, target.blockId, { tag: media === 'image' ? 'img' : media, props: { ...replacement.props, src, alt: attachment.name || '' } }));
+    setSelectedId(target.blockId);
+   } else if (target?.kind === 'replace' && replacement?.type === 'media') {
 				current.setBlocks(
 					updateBlock(current.blocks, target.blockId, {
 						media,
@@ -200,7 +216,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 	// the uploader (a blob <img> pasted into contentEditable would die at the
 	// allowlist render anyway — uploading is strictly better).
 	React.useEffect(() => {
-		if (!selectedId) return;
+		if (!selectedId || options?.enabled === false) return;
 		const onPaste = (event: ClipboardEvent) => {
 			if (event.defaultPrevented) return;
 			const files = Array.from(event.clipboardData?.files || []);
@@ -218,7 +234,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 		};
 		window.addEventListener('paste', onPaste);
 		return () => window.removeEventListener('paste', onPaste);
-	}, [selectedId, uploadToBlock]);
+	}, [selectedId, uploadToBlock, options?.enabled]);
 
 	const chrome = React.useMemo<BuilderChrome>(
 		() => ({
@@ -229,16 +245,18 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 			// text to edit must never toggle the selection away) — deselect lives
 			// on Escape and the drawer
 			onSelect: (id) => setSelectedId(id),
-			onInsert: (containerId, index, anchor) => setInsertAt({ containerId, index, anchor }),
+			onInsert: (containerId, index, anchor) => { if (enabledRef.current) setInsertAt({ containerId, index, anchor }); },
 			onMove: (id, containerId, index) => {
+				if (!enabledRef.current) return;
 				draftRef.current.setBlocks(moveBlock(draftRef.current.blocks, id, containerId, index));
 			},
 			onUpdate: (id, patch) => {
+				if (!enabledRef.current) return;
 				draftRef.current.setBlocks(updateBlock(draftRef.current.blocks, id, patch));
 			},
 			onDropFiles: uploadToPosition ? (files, containerId, index) => uploadToPosition(files, containerId, index) : undefined,
 			onMediaToBlock: (blockId, files) => uploadToBlock(blockId, files),
-			onContextMenu: (blockId, x, y, wrapOnly) => setContextMenu({ blockId, x, y, wrapOnly })
+			onContextMenu: (blockId, x, y, wrapOnly) => { if (enabledRef.current) setContextMenu({ blockId, x, y, wrapOnly }); }
 		}),
 		[hoverId, selectedId, uploadToPosition, uploadToBlock]
 	);
@@ -246,29 +264,36 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 	// Escape deselects from anywhere in the canvas (the inline editor commits
 	// first via its own Escape handler, then the event bubbles here)
 	React.useEffect(() => {
-		if (!selectedId) return;
+		if (!selectedId || options?.enabled === false) return;
 		const onKey = (event: KeyboardEvent) => {
 			// an overlay (context menu, Editor.js popover) that consumed this
 			// Escape marked it defaultPrevented — the selection stays
-			if (event.code === 'Escape' && !event.defaultPrevented) setSelectedId(null);
+			if (event.code === 'Escape' && !event.defaultPrevented && !structure) setSelectedId(null);
 		};
 		window.addEventListener('keydown', onKey);
 		return () => window.removeEventListener('keydown', onKey);
-	}, [selectedId]);
+	}, [selectedId, options?.enabled, structure]);
 
 	const handlePick = React.useCallback((pick: InsertPick) => {
 		const target = insertAt;
 		setInsertAt(null);
-		if (!target) return;
+		if (!enabledRef.current || !target || (options?.allowedBlockTypes && !options.allowedBlockTypes.includes(pick.block.type))) return;
 		const current = draftRef.current;
-		current.setBlocks(insertBlock(current.blocks, target.containerId, target.index, pick.block));
+		const next = target.relative
+			? insertBlockRelative(current.blocks, target.relative.blockId, target.relative.direction, pick.block)
+			: insertBlock(current.blocks, target.containerId, target.index, pick.block);
+		if (next === current.blocks) {
+			lopu({ title: 'This insertion point is no longer available. Choose a block and try again.', status: 'info' });
+			return;
+		}
+		current.setBlocks(next);
 		if (pick.block.type === 'component' && pick.block.component) {
 			if (pick.component) current.addComponent(pick.block.component, pick.component);
 			else current.ensureComponent(pick.block.component);
 		}
 		setSelectedId(pick.block.id);
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- insertAt is read via closure at call time
-	}, [insertAt]);
+	}, [insertAt, options?.allowedBlockTypes, lopu]);
 
 	const contextBlock = contextMenu ? findBlock(draft.blocks, contextMenu.blockId) : null;
 	const richEditorBlock = richEditorBlockId ? findBlock(draft.blocks, richEditorBlockId) : null;
@@ -280,7 +305,9 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 		<>
 			{insertAt ? (
 				<BlockInsertMenu
+     allowedBlockTypes={options?.allowedBlockTypes}
 					anchor={insertAt.anchor}
+					anchorPoint={insertAt.anchorPoint}
 					existingIds={collectBlockIds(draft.blocks)}
 					onPick={handlePick}
 					onClose={() => setInsertAt(null)}
@@ -293,24 +320,35 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 					y={contextMenu.y}
 					wrapOnly={contextMenu.wrapOnly}
 					onClose={() => setContextMenu(null)}
+					onInsert={(direction, anchor) => {
+						// The row unmounts and the selected block can span many screens.
+						// Keep the original host-space point, already corrected for iframes.
+						setInsertAt({ containerId: null, index: 0, anchor, anchorPoint: { x: contextMenu.x, y: contextMenu.y }, relative: { blockId: contextBlock.id, direction } });
+						setContextMenu(null);
+					}}
+					onShowStructure={(scope) => { setStructure({ blockId: contextBlock.id, scope }); setContextMenu(null); }}
 					onWrap={(direction) => {
+						if (!enabledRef.current) return;
 						const next = wrapBlock(draftRef.current.blocks, contextBlock.id, direction);
-						if (next === draftRef.current.blocks) lopu({ title: 'Too deep to wrap here — pages nest 8 levels max 🪆', status: 'error' });
+						if (next === draftRef.current.blocks) lopu({ title: 'This block is no longer available to wrap.', status: 'info' });
 						else draftRef.current.setBlocks(next);
 						setContextMenu(null);
 					}}
 					onDuplicate={() => {
+						if (!enabledRef.current) return;
 						const next = duplicateBlock(draftRef.current.blocks, contextBlock.id);
-						if (next === draftRef.current.blocks) lopu({ title: 'Duplicating would pass the 120-block page cap 📦', status: 'error' });
+						if (next === draftRef.current.blocks) lopu({ title: 'This block is no longer available to duplicate.', status: 'info' });
 						else draftRef.current.setBlocks(next);
 						setContextMenu(null);
 					}}
 					onDelete={() => {
+						if (!enabledRef.current) return;
 						draftRef.current.setBlocks(removeBlock(draftRef.current.blocks, contextBlock.id));
 						setContextMenu(null);
 						setSelectedId(null);
 					}}
 					onMove={(delta) => {
+						if (!enabledRef.current) return;
 						draftRef.current.setBlocks(moveBlockRelative(draftRef.current.blocks, contextBlock.id, delta));
 					}}
 					onOpenRichEditor={
@@ -323,12 +361,17 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 					}
 				/>
 			) : null}
+			{structure ? <BlockStructureModal blocks={draft.blocks} anchorId={structure.blockId} initialScope={structure.scope} selectedId={selectedId}
+				pageId={draft.resolved?.page?.id || 'unsaved-page'} onClose={() => setStructure(null)} onSelect={(id) => {
+					setSelectedId(id); options?.onInspect?.(id); setStructure(null);
+				}} /> : null}
 			{richEditorBlock ? (
 				<RichTextModal
 					block={richEditorBlock}
 					isOpen
 					onClose={() => setRichEditorBlockId(null)}
 					onApply={(patch) => {
+						if (!enabledRef.current) return;
 						draftRef.current.setBlocks(updateBlock(draftRef.current.blocks, richEditorBlock.id, patch));
 					}}
 				/>

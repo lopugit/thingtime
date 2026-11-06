@@ -7,18 +7,19 @@ public enum ProcessExecution {
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
         let output = Pipe()
-        let errors = Pipe()
         process.standardOutput = output
-        process.standardError = errors
+        process.standardError = output
         try process.run()
+        // Drain while the child runs: ditto/codesign can fill a pipe and block
+        // forever if the parent waits for exit before reading either stream.
+        let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        let standardOutput = String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let standardError = String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let standardOutput = String(data: data, encoding: .utf8) ?? ""
         guard process.terminationStatus == 0 else {
-            let detail = (standardError.isEmpty ? standardOutput : standardError).trimmingCharacters(in: .whitespacesAndNewlines)
+            let detail = standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
             throw RecoveryError.operationFailed("\(label) failed\(detail.isEmpty ? "." : ": \(detail)")")
         }
-        return "\(standardOutput)\n\(standardError)"
+        return standardOutput
     }
 
     public static func launchApplication(_ appURL: URL) throws {

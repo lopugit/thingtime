@@ -339,3 +339,27 @@ test('repository maintenance dispatches through the one Lopu manager', () => {
     inputs: { maintenance_operation: 'sync-main-develop' }
   });
 });
+
+
+test('Feature Stack freezes an ordered endpoint waterfall only in version 4', () => {
+  const input = {
+    name: 'Mixed endpoints', sourcePrNumbers: [12], targets: ['develop'],
+    repository: 'lopugit/thingtime', stackId: 'ci-feature-stack-11111111-1111-4111-8111-111111111111',
+    runId: 'feature-stack-run-11111111-1111-4111-8111-111111111111', autoDecideBranches: true,
+    pullRequests: [{ number: 12, title: 'Search', state: 'open', draft: false, base: { ref: 'develop' }, head: { ref: 'feature/search', sha: 'a'.repeat(40), repo: { full_name: 'lopugit/thingtime' } } }]
+  };
+  const inherited = canonicalFeatureStackPlanFromPullRequests(input);
+  assert.equal(inherited.version, 3);
+  assert.equal(Object.prototype.hasOwnProperty.call(inherited, 'modelWaterfall'), false);
+  const modelWaterfall = { version: 1, entries: [
+    { endpointId: 'vault:custom', modelId: 'vendor/model', effort: null, speed: 'normal' },
+    { endpointId: 'server:anthropic', modelId: 'claude-opus-5', effort: 'high', speed: 'fast' }
+  ] };
+  const custom = canonicalFeatureStackPlanFromPullRequests({ ...input, modelWaterfall });
+  assert.equal(custom.version, 4);
+  assert.deepEqual(custom.modelWaterfall, modelWaterfall);
+  assert.equal(Object.keys(custom).at(-1), 'modelWaterfall');
+  modelWaterfall.entries.reverse();
+  assert.equal(custom.modelWaterfall?.entries[0].endpointId, 'vault:custom');
+  assert.throws(() => canonicalFeatureStackPlanFromPullRequests({ ...input, modelWaterfall: { ...modelWaterfall, token: 'not-permitted' } }));
+});
