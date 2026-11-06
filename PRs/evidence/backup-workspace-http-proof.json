@@ -7,60 +7,62 @@
   "independentLocalStore": true,
   "deployedWorkflow": false,
   "providerAcceptance": false,
+  "builtAuthenticatedBodyProof": true,
+  "compiledEntrySha256": "6e4d1e1713966eddc015624c66ccbc85b4a4d02ef15e7be23b762308dd130941",
   "httpMetrics": {
-    "requests": 229,
-    "elapsedMs": 5143.098791999932,
-    "maxRequestMs": 266.481667
+    "requests": 243,
+    "elapsedMs": 6315.3825060003,
+    "maxRequestMs": 298.73354200000176
   },
   "jobMetrics": [
     {
-      "jobId": "63ad12c5-c0ee-4b88-8490-b9aa56b35811",
+      "jobId": "e7173104-5e95-413e-8cf4-33ed6991e001",
       "kind": "snapshot",
       "units": 0,
       "maxUnitMs": 0,
-      "elapsedMs": 38.83116700001119
+      "elapsedMs": 44.83091699999932
     },
     {
-      "jobId": "63ad12c5-c0ee-4b88-8490-b9aa56b35811",
+      "jobId": "e7173104-5e95-413e-8cf4-33ed6991e001",
       "kind": "snapshot",
-      "units": 67,
-      "maxUnitMs": 605.4185829999915,
-      "elapsedMs": 7982.308416999993
+      "units": 71,
+      "maxUnitMs": 615.3788749999949,
+      "elapsedMs": 7884.880707999997
     },
     {
-      "jobId": "bd225f68-3a78-44bd-8d5e-deb8895b6db4",
+      "jobId": "300e2b54-6e94-4e25-8e76-7d4eac0cc9e4",
       "kind": "review",
-      "units": 102,
-      "maxUnitMs": 816.8621249999997,
-      "elapsedMs": 14383.303958999997
+      "units": 106,
+      "maxUnitMs": 612.2757500000007,
+      "elapsedMs": 13122.155249999996
     },
     {
-      "jobId": "22c6d5bf-9e92-4bbd-8e8a-e066bb4f9fc2",
+      "jobId": "08cf9c37-54d5-417f-86e3-ce8e5c49b05e",
       "kind": "restore",
       "units": 42,
-      "maxUnitMs": 328.4233329999988,
-      "elapsedMs": 5952.640542000008
+      "maxUnitMs": 346.963665999996,
+      "elapsedMs": 5800.322249999997
     },
     {
-      "jobId": "c1b16408-4afd-4ecc-81bf-58a10b64c461",
+      "jobId": "2a408820-2f8b-41f5-8d4f-380bef8c0a42",
       "kind": "snapshot",
-      "units": 105,
-      "maxUnitMs": 1080.6035829999892,
-      "elapsedMs": 16174.001040999996
+      "units": 107,
+      "maxUnitMs": 1062.9186250000057,
+      "elapsedMs": 16353.627624999994
     },
     {
-      "jobId": "7a3725c9-d2c3-43a4-8718-9eeda7d7beff",
+      "jobId": "8ee439ae-fb1d-4d13-8248-c0d9d3d5c379",
       "kind": "review",
-      "units": 223,
-      "maxUnitMs": 406.9482909999788,
-      "elapsedMs": 31423.795667
+      "units": 227,
+      "maxUnitMs": 609.3790000000008,
+      "elapsedMs": 32133.807874999984
     },
     {
-      "jobId": "6c86dc5d-d5e3-484b-8d82-c5322caf83cc",
+      "jobId": "bad5749d-fda3-4588-8cfa-000f5f9c5b35",
       "kind": "restore",
       "units": 42,
-      "maxUnitMs": 360.5758329999808,
-      "elapsedMs": 5600.626499999984
+      "maxUnitMs": 1155.2919159999874,
+      "elapsedMs": 11658.241582999995
     }
   ],
   "result": {
@@ -71,11 +73,11 @@
         "realHttp": true,
         "realAdapter": true,
         "syntheticAccountOnly": true,
-        "snapshotId": "63ad12c5-c0ee-4b88-8490-b9aa56b35811",
-        "reviewId": "bd225f68-3a78-44bd-8d5e-deb8895b6db4",
-        "restoreJobId": "22c6d5bf-9e92-4bbd-8e8a-e066bb4f9fc2",
-        "destinationId": "721a51a6-eb2b-4b91-8257-9a39e95f809d",
-        "sourceRootId": "daee62c5-d69b-4054-b96f-daa9911fc381",
+        "snapshotId": "e7173104-5e95-413e-8cf4-33ed6991e001",
+        "reviewId": "300e2b54-6e94-4e25-8e76-7d4eac0cc9e4",
+        "restoreJobId": "08cf9c37-54d5-417f-86e3-ce8e5c49b05e",
+        "destinationId": "d13716dc-a1bf-4d6c-be7c-5c370e170348",
+        "sourceRootId": "e67f715a-8639-4bad-a3ca-d9a6bb9f71a6",
         "normalRemoteDeviceEntry": true,
         "collapsedDefault": true,
         "pageIndependentSnapshotProgress": true,
@@ -91,11 +93,11 @@
         "realHttp": true,
         "realAdapter": true,
         "syntheticAccountOnly": true,
-        "snapshotId": "c1b16408-4afd-4ecc-81bf-58a10b64c461",
-        "reviewId": "7a3725c9-d2c3-43a4-8718-9eeda7d7beff",
-        "restoreJobId": "6c86dc5d-d5e3-484b-8d82-c5322caf83cc",
-        "destinationId": "8d8a3394-fa85-44bb-a66f-8b90d5c36477",
-        "sourceRootId": "daee62c5-d69b-4054-b96f-daa9911fc381",
+        "snapshotId": "2a408820-2f8b-41f5-8d4f-380bef8c0a42",
+        "reviewId": "8ee439ae-fb1d-4d13-8248-c0d9d3d5c379",
+        "restoreJobId": "bad5749d-fda3-4588-8cfa-000f5f9c5b35",
+        "destinationId": "fe0efdf3-97c1-4f66-906b-cac9f9090f06",
+        "sourceRootId": "e67f715a-8639-4bad-a3ca-d9a6bb9f71a6",
         "normalRemoteDeviceEntry": true,
         "collapsedDefault": true,
         "pageIndependentSnapshotProgress": false,
@@ -110,7 +112,7 @@
     "errors": []
   },
   "command": "node remix/scripts/test-account-profile-backup.mjs backup-workspace",
-  "testedGitBase": "d0699759b17ce6bcc71a340042d0bbd08d6d084a",
+  "testedGitBase": "d36e9ce17ef745ba1b97e8d70645177aaec12711",
   "sourceFiles": {
     "app/api/utils/auth/fenceAccountSession.ts": "7f7e6541b392434b9604c9a52dcc6c322ed630bd967d54b0d0abdd3fe6551e45",
     "app/api/utils/auth/internalAccountSession.ts": "02754375083e078261c1fd23accc8b8e6f94f0879cd41e9d1e46eb13e84ea6b6",
@@ -140,11 +142,11 @@
     "app/api/utils/backups/portableBackup.ts": "9dc9a4513012575f8ba90c09dcba82006a7c69e5f555114b86c5a948b2250f64",
     "app/api/utils/backups/resumableHash.ts": "8e25ec5e6b081690ae5fc88058c1c17b59d8172c7df68e41d3f39be3fcc2eb51",
     "app/api/utils/backups/backupWorkflow.server.ts": "db2620fb2b1ccf85f336ce0592966e2ba1e028a3cb55ef638738c000ecb77ca6",
-    "app/api/utils/backups/backupWorkflowSteps.server.ts": "33d48bde4ad64e0f6da5e548555e8de86a75aee74c15c6b119089ecb8da41859",
+    "app/api/utils/backups/backupWorkflowSteps.server.ts": "9071f2acda7c2f14c3400501e477a6b743df5026fbc8c8adf86b3bd68d43da80",
     "app/api/utils/storage/storageCore.ts": "010e988863416d0411ad3725dc7af8e7536765c7f4b18f6b778219f7436178cb",
     "app/api/utils/things/things.ts": "3407bc20ce0ea0a7a9ae29e87ebeeacde29469224e5a100f3a3266301bd92665",
-    "app/schemas/registry.ts": "934b077c49735837e0d9bdb3ce4e259c06f36824e2144d869c493f644b71dbe7",
-    "scripts/test-account-profile-backup.mjs": "6307e82a6f0a6a0444ad6b3db940ae2bb8ad6dcf1130833c75d000caf88f37ce",
+    "app/schemas/registry.ts": "db06928145d89b9f9dbd5d29f4d25b46d63024d3636e8299e30e91daa1edf50c",
+    "scripts/test-account-profile-backup.mjs": "7b4374396c33b671eb64ddff8f9d8a9fce6da641d974128c7a6f2d7891221fc7",
     "app/api/utils/backups/accountRestoreSteps.ts": "72a84655e4773042cc97f962bb34370943435bcdb743abbd38088e7edfd0b32b",
     "app/api/utils/backups/ordinaryRestoreTransaction.ts": "f0d982e0ef5076ce0088c5a7f472890823f8a49b9ed3a4096399c3c0c9bd97fe",
     "app/api/utils/backups/accountFileRestore.ts": "a872ce19c1ff27de982c045254094aa0c53d5b1e4f24f554cf2335458c07e540",
@@ -165,8 +167,9 @@
     "app/api/utils/backups/backupCatalog.ts": "2c3e92a9899771b6cc9aa8f31ad2ab17558f79ba406e96d000a1c1dc22d94b2b",
     "app/api/utils/backups/backupCatalogPaths.ts": "8839b73775504cd96e4b1bef2c889d589c1fd653f1964181a43feea200ca09ce",
     "app/backups/workspace.ts": "04311b50dff251cbeefc3b02580d35fe2b827cd3848b5e4644bc17bcbd42add6",
-    "app/routes/api/v1/backups/workspace/_workspace.tsx": "e28ffe97b2dfc381bcef39c496daf5c2519bc9d4fb759454190ad2aed9292d7c",
-    "scripts/backup-workspace.integration.mts": "75837f67aa38f26351c5e01f16ab86a57900b4ca074cc403bc6c9d5e49f4a3b1",
+    "app/api/http.ts": "ae3721caf49fc5b3fb8957b38156c1190b83f14963345c4a321d079bed03b545",
+    "app/routes/api/v1/backups/workspace/_workspace.tsx": "56e2b81e7b14cc7fe0052b80ddc04a9f4bf6fab7180a26aef24af3f68adb0533",
+    "scripts/backup-workspace.integration.mts": "9e9e80bb0997ccbea9dec3ce5eec0cce3806ee18c6d2fefa4ff24cd3056ba50b",
     "scripts/test-backup-workspace-ui.mjs": "82310c0a717ddd8d8b712454826c1d8a4df36795bfd587cba5ae0b90bafe9022",
     "scripts/backup-workspace.browser.tsx": "5a10aae4f3364d193c30d76f007ae87f437384cc7bc35f3fcd27dd4b6d80a3bc",
     "app/components/Devices/BackupWorkspace.tsx": "6ce9e48d3426308776339656ffb44f9cb0d51b289adcb44e42708f7222ff5ca6",
@@ -177,8 +180,8 @@
     "app/components/Devices/backupWorkspaceBlocks.ts": "876e93c01404bc77d51244cd5b3bd1274a8859b206f2cf15b3cff90d7d0c68fc",
     "app/components/Devices/backupWorkspaceModel.ts": "49fdf397bc26db9ab1044baea62ea52e0b09c2a26ea1c93398ded4eb5603c56e",
     "app/hooks/useApi.tsx": "b2656480422e02ba2d30daabd4eedbedd73d800ab5586c6dedbcd8c9833e0bc2",
-    "server/routes/api/[...].ts": "301b0dea1c0144e074ecef942ab07d44d7e44559301ffab21dad30b714d3910b",
+    "server/routes/api/[...].ts": "6a8ccca1dc5011c4e11b5142eba90716633b163b20b3d9ef401fda8aac887591",
     "scripts/account-backup-isolation.mjs": "73be82b1180ade882f49046f7ec03837064553fe5e712ba64877cdadce72ed41"
   },
-  "recordedAt": "2026-11-06T15:17:23.478Z"
+  "recordedAt": "2026-11-06T15:53:44.819Z"
 }

@@ -213,7 +213,7 @@
     "test:passwords:record-storage": "node --import tsx scripts/storage-recovery.integration.mts --password-records",
     "test:backups:engine": "node scripts/test-account-profile-backup.mjs backup-engine",
     "test:backups:restore-steps": "node scripts/test-account-profile-backup.mjs restore-steps",
-    "test:backups:workspace": "node scripts/test-account-profile-backup.mjs backup-workspace"
+    "test:backups:workspace": "NITRO_PRESET=node_middleware npm run build:server && node scripts/test-account-profile-backup.mjs backup-workspace"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "2.1.272",

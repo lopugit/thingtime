@@ -15190,7 +15190,8 @@ the isolated real-API/browser command and the metadata-only session boundary.
   nested folders, 75-level retained ancestry across fresh units, corrupt sidecars,
   revocation, stale first-page jobs, transient authority outages across two
   scheduler drains, and late scheduling receipts with the original attempt ID.
-- Run `node remix/scripts/test-account-profile-backup.mjs backup-workspace` for
+- Run `corepack pnpm --dir remix run test:backups:workspace` (builds the compiled
+  middleware first) for
   disposable real HTTP/API/replica/Chrome acceptance at Mongo28175/HTTP28176.
   It owns its account, independent local store, browser profile and cleanup;
   networking remains normal. Desktop/mobile use the actual adapter, shared folder

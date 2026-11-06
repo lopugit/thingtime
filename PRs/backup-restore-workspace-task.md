@@ -162,3 +162,11 @@ is used for publication; changed Markdown semantic coverage is not claimed.
 The compiled middleware smoke now passes all three registered backup contracts,
 JSON docs and anonymous 401 refusals after canonical Request facade adaptation.
 The facade's streamed body and cancellation regressions pass 10 focused tests.
+
+
+Final current-main compiled/authenticated/body/normal-entry receipt: `1793980424820-50fb69d4dd89380fa31822f320fefdcb27bdba7f39bd84b1ceddfc92c7bdb092.json`.
+Canonical Vercel build/output verification, current-main raw TypeScript and
+153 capability tests pass. The fixture uses the actual compiled handler for
+authenticated JSON control parsing, media-type refusal and control-body budget
+refusal before the independent local-provider UI flow. No provider/hosted/native
+completion is implied. Publication details are in [PR #1405](1405-codex-backup-resumable-verification-editable-snapshot-review-and-restore.md).

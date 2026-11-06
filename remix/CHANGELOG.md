@@ -151,7 +151,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Verify real isolated HTTP/Chrome desktop/mobile, shared destination picker,
   Builder persistence and interruption recovery. Deployed Workflow/S3 and
   whole-account acceptance remain open. See
-  [the scoped implementation note](../PRs/backup-restore-workspace-task.md).
+  [the scoped implementation note](../PRs/1405-codex-backup-resumable-verification-editable-snapshot-review-and-restore.md).
   **Codex (AI)**
 
 - 2026-11-07: Preserve the Node location entitlement through canonical signing
