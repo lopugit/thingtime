@@ -17,6 +17,7 @@ test('final nested signature requires the enabled canonical Node location entitl
     const runtimePath = path.join(outerApp, 'Contents/Resources/ai/runtime.mjs');
     const outerExecutable = path.join(outerApp, 'Contents/MacOS/Fixture');
     const location = path.resolve(__dirname, '../../macos/ThingtimeNode/Resources/ThingtimeNode.entitlements');
+    const standaloneVerifier = path.resolve(__dirname, '../../macos/ThingtimeNode/scripts/verify-location-entitlement.sh');
     const electronEntitlements = path.resolve(__dirname, '../build/entitlements.unsigned.mac.plist');
     const run = (tool, args) => execFileSync(tool, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     const sign = (target, identifier, entitlements) => run('/usr/bin/codesign', ['--force', '--sign', '-', '--timestamp=none', '--identifier', identifier,
@@ -37,16 +38,21 @@ test('final nested signature requires the enabled canonical Node location entitl
         sign(outerApp, 'com.thingtime.desktop', electronEntitlements);
         const paths = { outerApp, helperApp, helperExecutable, bridgeExecutable, runtimePath };
         await verifyUnsignedArtifacts(paths, undefined, { requireNodeLocationEntitlement: true });
+        run('/bin/bash', [standaloneVerifier, helperApp]);
         const xml = run('/usr/bin/codesign', ['--display', '--entitlements', '-', '--xml', helperApp]);
         const parsed = JSON.parse(execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', '-'], { input: xml, encoding: 'utf8' }));
         assert.equal(parsed['com.apple.security.personal-information.location'], true);
         // Simulate the final packager stripping the helper entitlement, then correctly resealing the outer app.
-        const empty = path.join(root, 'empty.plist');
-        await writeFile(empty, '<?xml version="1.0"?><plist version="1.0"><dict/></plist>');
-        sign(helperApp, 'com.thingtime.desktop.node', empty);
-        sign(outerApp, 'com.thingtime.desktop', electronEntitlements);
-        run('/usr/bin/codesign', ['--verify', '--deep', '--strict', outerApp]);
-        await assert.rejects(verifyUnsignedArtifacts(paths, undefined, { requireNodeLocationEntitlement: true }), error => error.code === 'invalid_entitlements');
+        for (const [name, entry] of [['missing', ''], ['false', '<key>com.apple.security.personal-information.location</key><false/>'],
+            ['string', '<key>com.apple.security.personal-information.location</key><string>true</string>']]) {
+            const invalid = path.join(root, `${name}.plist`);
+            await writeFile(invalid, `<?xml version="1.0"?><plist version="1.0"><dict>${entry}</dict></plist>`);
+            sign(helperApp, 'com.thingtime.desktop.node', invalid);
+            sign(outerApp, 'com.thingtime.desktop', electronEntitlements);
+            run('/usr/bin/codesign', ['--verify', '--deep', '--strict', outerApp]);
+            await assert.rejects(verifyUnsignedArtifacts(paths, undefined, { requireNodeLocationEntitlement: true }), error => error.code === 'invalid_entitlements');
+            assert.throws(() => run('/bin/bash', [standaloneVerifier, helperApp]), `${name} entitlement cannot pass the standalone build`);
+        }
         const packageDefinition = JSON.parse(await readFile(path.resolve(__dirname, '../package.json'), 'utf8'));
         assert.ok(packageDefinition.build.mac.signIgnore.some(pattern => new RegExp(pattern).test(helperApp)), 'outer packager must preserve the separately signed Node bundle');
     } finally { await rm(root, { recursive: true, force: true }); }

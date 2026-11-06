@@ -133,11 +133,6 @@ case "${SIGNING_MODE}" in
 esac
 /usr/bin/codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
 # Check the actual signed payload, including unsigned fixtures, not only the source plist.
-LOCATION_ENTITLEMENT="$(/usr/bin/codesign --display --entitlements - --xml "${APP_PATH}" \
-    | /usr/bin/plutil -extract 'com\.apple\.security\.personal-information\.location' json -o - -)"
-if [[ "${LOCATION_ENTITLEMENT}" != "true" ]]; then
-    echo "Thingtime Node is missing its enabled location entitlement." >&2
-    exit 3
-fi
+"${SCRIPT_DIR}/verify-location-entitlement.sh" "${APP_PATH}"
 /usr/bin/codesign -dr - "${APP_PATH}" 2>&1
 echo "${APP_PATH}"
