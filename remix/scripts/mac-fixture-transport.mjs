@@ -229,10 +229,12 @@ export class FixtureReceiptObservations {
 }
 
 /** A legacy proof cannot silently satisfy a requested current-worker run. */
-export function validateFixtureWorkerParity(result, required, streaming = false) {
+export function validateFixtureWorkerParity(result, required, streaming = false, healthy = false) {
   if (required && !['canonicalDesktopManager', 'canonicalRendererHost', 'canonicalTransferWorkerSelected', 'nativeOperationGuards'].every(key => result?.parity?.[key] === true))
     throw Error('Fixture result did not use the requested canonical worker');
   if (streaming && (result?.parity?.streamingTwoWay !== true || result.parity.propagateDeletes !== false || result.parity.localFeed !== true || result.parity.remoteFeed !== true || result.parity.strictAsyncCapture !== true))
     throw Error('Fixture result did not use the requested streaming two-way path');
+  if (healthy && (result?.healthyFixture !== true || !Array.isArray(result.injectedLossOrder) || result.injectedLossOrder.length !== 0 || !Number.isFinite(result.phaseMs?.healthy) || JSON.stringify(result.checks) !== JSON.stringify(['wide-native-and-cloud-pages', 'complete-checkpoint', 'real-upload-download-byte-hashes', 'healthy-no-fault-injections', 'no-replayed-transfers', 'stable-convergence'])))
+    throw Error('Fixture result did not use the requested healthy baseline');
   return result;
 }

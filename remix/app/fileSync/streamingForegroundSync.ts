@@ -297,7 +297,7 @@ export async function streamForegroundSync(
 		// Save their cursor without hashing or point-reading either replica.
 		if (sameSyncStamp(entry, priorSource) || priorSource?.kind === 'folder' || priorTarget?.kind === 'folder' ||
 			(entry.kind === 'folder' && (priorSource || priorTarget))) { await defer(); return; }
-		await authorize();
+		if (!input.nativeOperationGuards) await authorize();
 		let node: CloudInventoryNode | null, left: SyncEntry | null, right: SyncEntry | null;
 		let cloudParent: CloudInventoryNode | null = null;
 		const parent = entry.path.split('/').slice(0, -1).join('/');
@@ -320,6 +320,10 @@ export async function streamForegroundSync(
 				break;
 			}
 		}
+		// Missing journal ancestry already proves no early operation is possible.
+		// Guarded transports defer it without opening any protected observation;
+		// every surviving hint still checks current connection policy before reads.
+		if (input.nativeOperationGuards) await authorize();
 		let parentsReady = !parent;
 		try {
 			left = await readLocal(entry.path);

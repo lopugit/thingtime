@@ -42,6 +42,10 @@ The device sync screen keeps saved connection editing available offline and
 uses a protected, leased control channel for live device operations. Native
 grants and transfer journals stay on the target device. See
 [browser device sync](../browser-device-sync.md) for code paths and checks.
+Guarded streaming preparation defers missing journal ancestry before policy RPCs;
+protected point reads and executable bindings retain current policy checks. The
+`--healthy` canonical fixture lane separates startup timing from accepted-loss
+recovery while retaining exact hashes and strict checkpoints.
 Mac paged native inventory reads use `MobileFolderInventory.read` and
 `RustInventoryClient.checkedPage`: each Rust `page` reply includes its checked
 status so the client can validate generation, root version and coverage with

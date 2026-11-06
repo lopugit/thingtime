@@ -147,6 +147,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   bucket reuse. Durable capture/restore and installed acceptance remain open.
   See [destination setup](../docs/backup-destinations.md). **Codex (AI)**
 
+- 2026-11-06: Defer guarded streaming hints with missing journal ancestry before
+  policy RPCs, retaining current connection checks before all protected reads.
+  Add an explicit healthy canonical timing lane alongside fault/restart coverage.
+  **Codex (AI)**
+
 - 2026-11-06: Replace inactive device health warnings with muted last-seen labels
   across cards, lists and device controls. Negotiate native iOS background presence
   through pairing contract 1.1.0, retaining foreground support on older shells and
