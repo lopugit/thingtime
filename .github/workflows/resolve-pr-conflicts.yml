@@ -967,7 +967,9 @@ jobs:
           ref: github-actions
           fetch-depth: 1
           persist-credentials: false
-          sparse-checkout: .github/scripts/codeql-open-pr-backfill.mjs
+          sparse-checkout: |
+            .github/scripts/codeql-open-pr-backfill.mjs
+            .github/scripts/codeql-source-languages.mjs
           sparse-checkout-cone-mode: false
 
       - name: Dispatch a bounded exact-snapshot backfill

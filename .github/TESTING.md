@@ -408,3 +408,34 @@ pre-queued with no jobs, logs, or cancellable run graph.
   privileged identity drop. Verify failure diagnostics reject arbitrary output,
   command arguments/messages, environment values and unregistered labels;
   malformed prefixed JSON and non-string stage/error-type fields are ignored.
+
+
+## Source-specific CodeQL Actions coverage
+
+- Run `node --test .github/scripts/codeql-source-languages.test.mjs`,
+  `node .github/scripts/codeql-open-pr-backfill.mjs --self-test`, both workflow
+  contracts, and every required controller verify-lane check. Parse workflow
+  YAML and syntax-check embedded scripts. No production probes are needed.
+- Prove the immutable commit/tree binding and complete enumeration. Empty
+  Actions input sets may skip Actions initialization and upload. Workflow
+  paths, action metadata, ambiguous paths, unresolved symlinks, submodules, truncated
+  trees, mismatched identities and failed reads retain Actions scanning. Only
+  verified same-directory symlinks to ordinary files may establish absence.
+- Keep both matrix job names and JavaScript/TypeScript coverage. Verify the
+  exact checkout before recording `No Actions inputs at <SHA>`. A successful
+  Actions job and exact successful receipt are required before backfill treats
+  existing JS/TS analysis as complete; old failed jobs, wrong ref/SHA, skipped
+  receipts and failed/partial inventories never satisfy this condition.
+- The trusted inline workflow policy must behave identically to the shared
+  pure helper. Backfill’s sparse checkout must include the helper. No PR code
+  executes with the scope token, and no write permissions or rules change.
+- After normal rollout to `github-actions`, observe a permitted exact-source
+  run with no Actions inputs and one with real workflows. Record source SHA,
+  controller SHA, both job results, receipt, JS/TS analysis and the next
+  backfill decision. The bounded receipt history can conservatively rescan an
+  old snapshot; it cannot invent completion outside its observed history.
+- Inspect GitHub’s security aggregate separately. The affected historical
+  PRs inherit an Actions configuration expectation from `develop`; one also
+  has security alerts. Local tests or a not-applicable Actions job do not
+  prove those findings cleared. Retain aggregate/alert acceptance gates and
+  report unavailable category metadata or required-context coverage honestly.

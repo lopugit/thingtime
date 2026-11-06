@@ -1,5 +1,17 @@
 # Control-plane changelog
 
+## 2026-11-06 — Scope CodeQL Actions to the immutable source
+
+- Avoid Actions extraction exit 32 only when an exact commit and complete Git
+  tree prove there are no workflow or action inputs. Retain both job names,
+  JavaScript/TypeScript analysis, and Actions scanning for uncertain inputs.
+- Pin checkout to the selected SHA. Require a successful SHA-bound no-input
+  receipt before backfill accepts source-specific analysis completion; prior
+  failed jobs cannot become complete merely because the policy changed.
+- Preserve security aggregate/alert gates, permissions and ownership barriers.
+  No-input completion is not a clean security verdict or a replacement for
+  GitHub’s base-branch configuration expectations.
+
 ## 2026-11-02 — Pass the existing team slug into prebuilt prepare
 
 - Map the protected environment’s `VERCEL_TEAM_SLUG` into authorization before

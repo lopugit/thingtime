@@ -3,6 +3,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+import { actionsRequiredForSource, symlinkBlobShasForSource, symlinkTargetForBlob } from "./codeql-source-languages.mjs";
 
 const REQUIRED_CATEGORIES = [
   "/language:actions",
@@ -149,10 +151,11 @@ function prHeadKey(number, sha) {
   return `${Number(number)}:${sha}`;
 }
 
-export function completeAnalysisKeys(analyses) {
+function analysisCategoriesBySnapshot(analyses) {
   const categoriesBySnapshot = new Map();
   for (const analysis of analyses) {
     if (analysis?.tool?.name !== "CodeQL") continue;
+    if (analysis.error !== undefined && analysis.error !== "") continue;
     const ref = String(analysis.ref || "");
     const sha = String(analysis.commit_sha || "");
     const category = String(analysis.category || "");
@@ -162,12 +165,133 @@ export function completeAnalysisKeys(analyses) {
     categories.add(category);
     categoriesBySnapshot.set(key, categories);
   }
+  return categoriesBySnapshot;
+}
 
+export function completeAnalysisKeys(analyses, actionsRequiredBySha = new Map(), noActionsReceipts = new Set()) {
+  const categoriesBySnapshot = analysisCategoriesBySnapshot(analyses);
   return new Set(
     [...categoriesBySnapshot.entries()]
-      .filter(([, categories]) => REQUIRED_CATEGORIES.every((category) => categories.has(category)))
+      .filter(([key, categories]) => REQUIRED_CATEGORIES.every((category) => categories.has(category))
+        || (categories.has("/language:javascript-typescript")
+          && actionsRequiredBySha.get(key.slice(key.indexOf("\u0000") + 1)) === false
+          && noActionsReceipts.has(key)))
       .map(([key]) => key),
   );
+}
+
+// Probe only a live snapshot that already has JavaScript analysis but lacks
+// Actions. Most snapshots therefore cost no additional API reads. Uncertain
+// evidence retains the existing two-language requirement; budget exhaustion
+// still defers the entire pass through main's existing handler.
+export function resolveActionsRequirementsForSnapshots(repository, analysisSnapshots, analyses, readJson = ghJson) {
+  const categories = analysisCategoriesBySnapshot(analyses);
+  const requiredBySha = new Map();
+  const symlinkTargets = new Map();
+  for (const snapshot of analysisSnapshots.values()) {
+    const ref = snapshot?.analysisRef;
+    const sha = snapshot?.analysisSha;
+    if (typeof ref !== "string" || !/^refs\/pull\/[1-9][0-9]*\/(?:head|merge)$/u.test(ref)
+        || typeof sha !== "string" || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(sha)
+        || requiredBySha.has(sha)) continue;
+    const present = categories.get(analysisKey(ref, sha));
+    if (!present?.has("/language:javascript-typescript") || present.has("/language:actions")) continue;
+    requiredBySha.set(sha, true);
+    try {
+      const commit = readJson(["api", `repos/${repository}/git/commits/${sha}`]);
+      const rootSha = commit?.tree?.sha;
+      if (commit?.sha !== sha || typeof rootSha !== "string"
+          || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(rootSha)) continue;
+      const tree = readJson(["api", `repos/${repository}/git/trees/${rootSha}?recursive=1`]);
+      for (const blobSha of symlinkBlobShasForSource(commit, tree, sha)) {
+        if (symlinkTargets.has(blobSha)) continue;
+        if (symlinkTargets.size >= 32) continue;
+        symlinkTargets.set(blobSha, undefined);
+        try {
+          const blob = readJson(["api", `repos/${repository}/git/blobs/${blobSha}`]);
+          symlinkTargets.set(blobSha, symlinkTargetForBlob(blob, blobSha));
+        } catch (error) {
+          if (error?.budgetExhausted) throw error;
+        }
+      }
+      requiredBySha.set(sha, actionsRequiredForSource(commit, tree, sha, symlinkTargets));
+    } catch (error) {
+      if (error?.budgetExhausted) throw error;
+    }
+  }
+  return requiredBySha;
+}
+
+// A successful explicit no-input job is needed in addition to source absence:
+// otherwise an old failed Actions leg could be considered complete forever.
+// Only the canonical central workflow and this exact run attempt can provide
+// that receipt. It says nothing about GHAS alerts or aggregate acceptance.
+export function resolveNoActionsReceipts(repository, pullRequests, analysisSnapshots, actionsRequiredBySha, readJson = ghJson) {
+  const receipts = new Set();
+  const candidates = new Map();
+  for (const pullRequest of pullRequests) {
+    const number = Number(pullRequest?.number);
+    const headSha = pullRequest?.head?.sha;
+    const snapshot = analysisSnapshots.get(number);
+    if (!Number.isSafeInteger(number) || number < 1
+        || typeof headSha !== "string" || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(headSha)
+        || !snapshot || typeof snapshot.analysisSha !== "string"
+        || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(snapshot.analysisSha)
+        || actionsRequiredBySha.get(snapshot.analysisSha) !== false
+        || (snapshot.analysisRef === `refs/pull/${number}/head` && snapshot.analysisSha !== headSha)
+        || ![`refs/pull/${number}/head`, `refs/pull/${number}/merge`].includes(snapshot.analysisRef)) continue;
+    candidates.set(`Lopu CodeQL PR #${number} @ ${headSha}`, snapshot);
+  }
+  if (candidates.size === 0) return receipts;
+
+  let runs;
+  try {
+    const response = readJson([
+      "api",
+      `repos/${repository}/actions/workflows/codeql-analysis.yml/runs?event=workflow_dispatch&status=completed&per_page=100`,
+    ]);
+    if (!Array.isArray(response?.workflow_runs) || response.workflow_runs.length > 100) return receipts;
+    runs = response.workflow_runs;
+  } catch (error) {
+    if (error?.budgetExhausted) throw error;
+    return receipts;
+  }
+
+  const inspected = new Set();
+  for (const run of runs) {
+    const snapshot = candidates.get(run?.display_title);
+    if (!snapshot || run.event !== "workflow_dispatch" || run.head_branch !== "github-actions"
+        || run.path !== ".github/workflows/codeql-analysis.yml"
+        || run.repository?.full_name !== repository
+        || run.status !== "completed" || run.conclusion !== "success"
+        || !Number.isSafeInteger(run.id) || run.id < 1
+        || !Number.isSafeInteger(run.run_attempt) || run.run_attempt < 1
+        || typeof run.head_sha !== "string" || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(run.head_sha)
+        || inspected.has(run.id)) continue;
+    inspected.add(run.id);
+    const key = analysisKey(snapshot.analysisRef, snapshot.analysisSha);
+    if (receipts.has(key)) continue;
+    try {
+      const response = readJson([
+        "api",
+        `repos/${repository}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,
+      ]);
+      if (!Array.isArray(response?.jobs) || !Number.isSafeInteger(response.total_count)
+          || response.total_count !== response.jobs.length || response.jobs.length > 100) continue;
+      const actionsJobs = response.jobs.filter((job) => job?.name === "Analyze (actions)");
+      if (actionsJobs.length !== 1) continue;
+      const job = actionsJobs[0];
+      if (job.run_id !== run.id || job.run_attempt !== run.run_attempt || job.head_sha !== run.head_sha
+          || job.status !== "completed" || job.conclusion !== "success" || !Array.isArray(job.steps)) continue;
+      const steps = job.steps.filter((step) => step?.name === `No Actions inputs at ${snapshot.analysisSha}`);
+      if (steps.length === 1 && steps[0].status === "completed" && steps[0].conclusion === "success") {
+        receipts.add(key);
+      }
+    } catch (error) {
+      if (error?.budgetExhausted) throw error;
+    }
+  }
+  return receipts;
 }
 
 export function activePrHeadKeys(runs) {
@@ -671,12 +795,16 @@ async function main() {
     `repos/${repository}/code-scanning/analyses?tool_name=CodeQL&per_page=100`,
   ]));
   const activeRuns = listActiveCodeqlRuns(repository);
-  const completeSnapshots = completeAnalysisKeys(analyses);
   // The pull-list `merge_commit_sha` field can lag the live synthetic merge
   // ref. Resolve and parent-check the same current ref used by the analyzer;
   // otherwise a completed snapshot is selected forever as a safe no-op and
   // starves older PRs from the bounded backfill window.
   const analysisSnapshots = resolveLiveAnalysisSnapshots(repository, pullRequests);
+  const actionsRequiredBySha = resolveActionsRequirementsForSnapshots(repository, analysisSnapshots, analyses);
+  const noActionsReceipts = resolveNoActionsReceipts(
+    repository, pullRequests, analysisSnapshots, actionsRequiredBySha,
+  );
+  const completeSnapshots = completeAnalysisKeys(analyses, actionsRequiredBySha, noActionsReceipts);
   const selected = planBackfill({
     pullRequests,
     completeSnapshots,
@@ -698,7 +826,7 @@ async function main() {
   ].filter(Boolean));
 }
 
-main().catch((error) => {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch((error) => {
   // Deferral is not failure. Every read this job performs is idempotent and
   // every dispatch it issues is re-derived from live state on the next run, so
   // an exhausted account-wide budget has cost nothing but this pass. Exiting 0

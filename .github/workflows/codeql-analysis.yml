@@ -74,6 +74,7 @@ jobs:
       analysis_ref: ${{ steps.scope.outputs.analysis_ref }}
       analysis_sha: ${{ steps.scope.outputs.analysis_sha }}
       checkout_ref: ${{ steps.scope.outputs.checkout_ref }}
+      actions_required: ${{ steps.languages.outputs.actions_required }}
     steps:
       - name: Prefer the PR analysis for an open branch head
         id: scope
@@ -321,6 +322,137 @@ jobs:
             echo "checkout_ref=$checkout_ref"
           } >>"$GITHUB_OUTPUT"
 
+
+      # Inspect an immutable Git tree through trusted workflow code. Never run
+      # a helper from the analyzed PR with the scope job's read token. Unknown
+      # or incomplete source evidence retains the existing Actions scan.
+      - name: Determine Actions inputs for the exact source
+        id: languages
+        if: steps.scope.outputs.analyze == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ steps.scope.outputs.analysis_sha || github.sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { appendFileSync } from 'node:fs';
+          // BEGIN shared actionsRequiredForSource policy
+          function actionsRequiredForSource(commit, tree, expectedSha, symlinkTargets = new Map()) {
+            const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+            const sha = (value) => typeof value === "string" && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(value);
+            if (!sha(expectedSha) || !object(commit) || commit.sha !== expectedSha
+                || !object(commit.tree) || !sha(commit.tree.sha)
+                || commit.tree.sha.length !== expectedSha.length
+                || !object(tree) || tree.sha !== commit.tree.sha
+                || tree.truncated !== false || !Array.isArray(tree.tree)) return true;
+
+            const entries = new Map();
+            for (const entry of tree.tree) {
+              if (!object(entry) || typeof entry.path !== "string" || !entry.path
+                  || /[\\\u0000-\u001f\u007f]/u.test(entry.path)
+                  || entry.path.split("/").some((part) => !part || part === "." || part === "..")
+                  || entries.has(entry.path) || !sha(entry.sha)
+                  || entry.sha.length !== expectedSha.length) return true;
+              const regular = entry.type === "blob" && ["100644", "100755"].includes(entry.mode);
+              const directory = entry.type === "tree" && entry.mode === "040000";
+              const symlink = entry.type === "blob" && entry.mode === "120000";
+              // Submodules and unfamiliar entry shapes cannot prove absence. Symlink
+              // targets are checked only after the complete tree passes these guards.
+              if (!regular && !directory && !symlink) return true;
+              if (entry.size !== undefined && (!Number.isSafeInteger(entry.size) || entry.size < 0)) return true;
+              entries.set(entry.path, entry);
+              const path = entry.path.toLowerCase();
+              if (path === ".github/workflows" || path.startsWith(".github/workflows/")
+                  || /(?:^|\/)action\.ya?ml$/u.test(path)) return true;
+            }
+
+            // A non-truncated recursive response includes its parent directory entries.
+            // Missing parents or a blob used as a directory make the evidence ambiguous.
+            for (const path of entries.keys()) {
+              let slash = path.lastIndexOf("/");
+              while (slash !== -1) {
+                const parent = entries.get(path.slice(0, slash));
+                if (!parent || parent.type !== "tree" || parent.mode !== "040000") return true;
+                slash = path.lastIndexOf("/", slash - 1);
+              }
+            }
+
+            let unresolved = false;
+            for (const entry of entries.values()) {
+              if (entry.mode !== "120000") continue;
+              if (!symlinkTargets || typeof symlinkTargets.get !== "function") return true;
+              const target = symlinkTargets.get(entry.sha);
+              // Prove only the same-directory regular-file links present in the
+              // affected snapshots. Paths, chains and unfamiliar targets stay required.
+              if (typeof target !== "string" || !target || target.length > 4096
+                  || /[\/\\\u0000-\u001f\u007f]/u.test(target)
+                  || target === "." || target === ".." || /^[A-Za-z]:/u.test(target)) {
+                unresolved = true;
+                continue;
+              }
+              const slash = entry.path.lastIndexOf("/");
+              const targetPath = `${slash === -1 ? "" : entry.path.slice(0, slash + 1)}${target}`;
+              const resolved = entries.get(targetPath);
+              if (!resolved || resolved.type !== "blob"
+                  || !["100644", "100755"].includes(resolved.mode)) unresolved = true;
+            }
+            if (unresolved) return true;
+            return false;
+          }
+
+          // Recording missing lookups lets the policy itself validate every other
+          // condition before a caller spends API reads on symlink contents. No invented
+          // target is supplied, and an unresolved link can never become an absence proof.
+          function symlinkBlobShasForSource(commit, tree, expectedSha) {
+            const needed = new Set();
+            const missingTargets = new Map();
+            missingTargets.get = (sha) => { needed.add(sha); return undefined; };
+            actionsRequiredForSource(commit, tree, expectedSha, missingTargets);
+            return needed.size <= 32 ? [...needed] : [];
+          }
+
+          function symlinkTargetForBlob(blob, expectedSha) {
+            if (!blob || typeof blob !== "object" || Array.isArray(blob)
+                || typeof expectedSha !== "string" || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(expectedSha)
+                || blob.sha !== expectedSha || blob.encoding !== "base64"
+                || typeof blob.content !== "string" || blob.content.length > 8192 || !Number.isSafeInteger(blob.size)
+                || blob.size < 1 || blob.size > 4096) return undefined;
+            const encoded = blob.content.replace(/\r?\n/gu, "");
+            if (encoded.length > 5464 || encoded.length % 4 !== 0
+                || !/^[A-Za-z0-9+/]*={0,2}$/u.test(encoded)) return undefined;
+            const bytes = Buffer.from(encoded, "base64");
+            if (bytes.length !== blob.size || bytes.toString("base64") !== encoded) return undefined;
+            const target = bytes.toString("utf8");
+            return Buffer.from(target, "utf8").equals(bytes) ? target : undefined;
+          }
+          // END shared actionsRequiredForSource policy
+          const sha = process.env.SOURCE_SHA;
+          let required = true;
+          try {
+            if (!/^[0-9a-f]{40,64}$/.test(sha || '')) throw new Error('invalid source');
+            const read = (path) => JSON.parse(execFileSync('gh', ['api', path], {
+              encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+              maxBuffer: 64 * 1024 * 1024,
+            }));
+            const commit = read(`repos/${process.env.REPO}/git/commits/${sha}`);
+            if (commit.sha !== sha || !/^[0-9a-f]{40,64}$/.test(commit.tree?.sha || '')) {
+              throw new Error('unbound tree');
+            }
+            const tree = read(`repos/${process.env.REPO}/git/trees/${commit.tree.sha}?recursive=1`);
+            const symlinkTargets = new Map();
+            for (const blobSha of symlinkBlobShasForSource(commit, tree, sha)) {
+              const blob = read(`repos/${process.env.REPO}/git/blobs/${blobSha}`);
+              symlinkTargets.set(blobSha, symlinkTargetForBlob(blob, blobSha));
+            }
+            required = actionsRequiredForSource(commit, tree, sha, symlinkTargets);
+          } catch {
+            console.error('::warning::Could not prove the exact source has no Actions inputs; retaining Actions analysis.');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `actions_required=${required}\n`);
+          console.log(`Actions analysis required for ${sha}: ${required}`);
+          NODE
+
   analyze:
     name: Analyze (${{ matrix.language }})
     needs: scope
@@ -375,9 +507,23 @@ jobs:
       - name: Check out the analyzed revision without credentials
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: ${{ needs.scope.outputs.checkout_ref || github.sha }}
+          ref: ${{ needs.scope.outputs.analysis_sha || github.sha }}
           fetch-depth: 2
           persist-credentials: false
+
+      - name: Verify the immutable analyzed checkout
+        env:
+          EXPECTED_SOURCE_SHA: ${{ needs.scope.outputs.analysis_sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+
+      # This successful, SHA-bound step is the backfill receipt. It reports
+      # non-applicability, never a fabricated clean SARIF or security verdict.
+      - name: No Actions inputs at ${{ needs.scope.outputs.analysis_sha || github.sha }}
+        if: matrix.language == 'actions' && needs.scope.outputs.actions_required == 'false'
+        env:
+          SOURCE_SHA: ${{ needs.scope.outputs.analysis_sha || github.sha }}
+        run: |
+          echo "No GitHub Actions inputs in the complete immutable source tree at $SOURCE_SHA; Actions analysis is not applicable." >> "$GITHUB_STEP_SUMMARY"
 
       # Last harmless moment to disown a push. `codeql-action/init` is the
       # point of no return: it registers this leg as a CodeQL configuration
@@ -448,7 +594,7 @@ jobs:
       # wait proceeds with a warning, exactly like the push-ownership
       # re-check below.
       - name: Wait for every sibling language leg to start
-        if: strategy.job-total > 1 && steps.preinit.outputs.own != 'false'
+        if: strategy.job-total > 1 && steps.preinit.outputs.own != 'false' && (matrix.language != 'actions' || needs.scope.outputs.actions_required != 'false')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -490,7 +636,7 @@ jobs:
           done
 
       - name: Initialize CodeQL
-        if: steps.preinit.outputs.own != 'false'
+        if: steps.preinit.outputs.own != 'false' && (matrix.language != 'actions' || needs.scope.outputs.actions_required != 'false')
         uses: github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
         with:
           languages: ${{ matrix.language }}
@@ -574,7 +720,7 @@ jobs:
       # its sibling still uploads, because an unscanned commit is a worse
       # outcome than a late one.
       - name: Hold the faster analysis until the slowest language lands
-        if: matrix.language != 'javascript-typescript' && steps.preinit.outputs.own != 'false'
+        if: matrix.language != 'javascript-typescript' && steps.preinit.outputs.own != 'false' && (matrix.language != 'actions' || needs.scope.outputs.actions_required != 'false')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -737,7 +883,7 @@ jobs:
       # analyses land. Re-check ownership at the last moment before upload.
       - name: Confirm this push still owns the analysis
         id: ownership
-        if: github.event_name == 'push' && needs.scope.outputs.analysis_ref == '' && steps.preinit.outputs.own != 'false'
+        if: github.event_name == 'push' && needs.scope.outputs.analysis_ref == '' && steps.preinit.outputs.own != 'false' && (matrix.language != 'actions' || needs.scope.outputs.actions_required != 'false')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -772,13 +918,13 @@ jobs:
       # disowned push would sail past its own guard and upload the branch
       # snapshot it just declined to register.
       - name: Analyze the triggering revision
-        if: needs.scope.outputs.analysis_ref == '' && steps.preinit.outputs.own != 'false' && steps.ownership.outputs.upload != 'false'
+        if: needs.scope.outputs.analysis_ref == '' && steps.preinit.outputs.own != 'false' && steps.ownership.outputs.upload != 'false' && (matrix.language != 'actions' || needs.scope.outputs.actions_required != 'false')
         uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
         with:
           category: /language:${{ matrix.language }}
 
       - name: Analyze the exact centrally dispatched PR head
-        if: needs.scope.outputs.analysis_ref != ''
+        if: needs.scope.outputs.analysis_ref != '' && (matrix.language != 'actions' || needs.scope.outputs.actions_required != 'false')
         uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
         with:
           category: /language:${{ matrix.language }}
