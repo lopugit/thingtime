@@ -124,6 +124,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-11-06: Revalidate detail-page Schema execution holds after normal refresh, preserve same-scope drafts during verification, clear revoked templates, and distinguish temporary capability-discovery failures from invalid authority. Add full real-backend route and quiet-control regressions. [PR 1390 evidence](../PRs/PR-1390-codex-schema-hold-refresh-refresh-schema-execution-holds-without-discarding-detail-page-drafts.md). **Codex (AI)**
 
+- 2026-11-06: Keep saved mobile device connections alive across app routes and
+  retry on foreground/network recovery, independently of file-sync jobs. Preserve
+  account boundaries, explicit revoked-device repair and connection preferences.
+  Physical iPhone acceptance remains separate from lifecycle regression checks.
+  **Codex (AI)**
+
 - 2026-11-06: Add reviewed atomic/resumable ordinary-graph creation primitives with canonical transaction receipts, private execution holds, containment/closure checks and edit-safe completion fencing. Held previews suppress source, pseudo/native and delayed callbacks across desktop/mobile surfaces. This is not whole-account restore delivery; see [PR 1387 scope and verification](../PRs/PR-1387-codex-account-restore-execution-resumable-ordinary-graph-creation.md). **Codex (AI)**
 
 - 2026-11-06: Preserve owned backup content with paged source-reference evidence, explicit unresolved/unsupported/excluded-authority coverage, and streamed notification history. Verify pinned API capture, independent recovery, runtime alias differences and private dependency boundaries; whole-account readiness remains false. [PR1386 verification](../PRs/1386-codex-backup-reference-closure-preserve-backup-content-with-explicit-source-reference-coverage.md). **Codex (AI)**

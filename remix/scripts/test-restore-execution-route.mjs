@@ -32,6 +32,7 @@ const hashes = async () =>
 	);
 const source = {
 	head: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
+	sourceTree: JSON.parse(execFileSync(process.execPath, ['../scripts/graphify-cas.mjs', 'fingerprint'], {cwd:root,encoding:'utf8'})),
 	runtime: await hashes(),
 	clientIndex: createHash('sha256')
 		.update(await readFile(join(root, 'dist/index.html')))

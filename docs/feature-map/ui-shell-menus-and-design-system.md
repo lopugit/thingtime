@@ -96,6 +96,8 @@ composer gear and Settings → Lopu share that persisted preference through
 Navigation can always reopen the chat. Missing preferences default off while
 explicit saved choices survive. See the unified Lopu checklist in `TESTING.md`.
 
+Mobile native presence is owned by `Devices/MobileDevicePresenceBootstrap` in the authenticated root shell, separately from sync admissions and page lifetime. `mobileDevicePresence.ts` refreshes saved native pairing status while visible, on resume/online/bridge readiness, with bounded retry backoff and immediate identity cancellation. Settings/setup retains explicit pairing; it does not own a second polling loop. Run its deterministic lifecycle tests and the mobile-presence checklist in `TESTING.md`.
+
 ## Where the code lives
 
 | Concern | Path |

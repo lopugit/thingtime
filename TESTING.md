@@ -875,6 +875,7 @@ persisted; every check is client-side.
   names wrap and action groups fit without horizontal overflow. This fixture
   proves UI behavior only; signed-in native picker acceptance is separate.
 
+- [ ] Mobile presence: with a saved pairing and no sync jobs, stay on Home, Things overview and device detail for over 45 seconds; verify last-seen remains fresh. Background/foreground, reconnect networking and navigate routes; verify automatic recovery without a second pairing. Switch account/origin during a pending check and verify cancellation; revoke the credential and verify only explicit pairing can restore it. Run `node --import tsx --test app/components/Devices/mobileDevicePresence.test.ts` from `remix/`.
 - [ ] Native iOS pairing: select a compatible local origin, sign in, add this
       device from Things and Settings, reload/relaunch and verify exactly one
       iOS device. Interrupt prepare/complete and retry; change accounts/origins
