@@ -19,3 +19,9 @@ Final focused suites: backups 149/149; Files 110/110; Timeline 250/250; capabili
 No new endpoint or public body option. `api.files`1.12.1, `api.things-bulk`1.7.1 and `api.things-delete`1.1.1 deliberately PATCH epoch-fencing side effects. Public retained-version behavior and ordinary native-sync provenance remain covered. Moderation inventory intentionally retains safe policy status and excludes provider diagnostic timestamps. All writers sharing a database must deploy epoch-aware code together.
 
 This is backend-phase delivery, not public restore UI/jobs, complete account/security adapters, live S3/provider durability, installed/native acceptance or measured large-scale throughput. `wholeAccountReady` remains false. Private scratch can survive process crashes; normal cancellation/close cleans it. Final combined signed native installation belongs to parent release coordination.
+
+## Graph and integration coverage
+
+PR: https://github.com/lopugit/thingtime/pull/1395. Main integrations through PR1394 changed native scheduling/presentation and fixture/docs, with no delta in the 11 source-hashed restore files or their server dependencies. The immutable real proof remains applicable; later source changes are the erased fixture assertion and additional compiled-smoke assertions only.
+
+Structural refresh preserves portable graph/report/HTML output. Existing extractor warnings: six syntax-limited files, 435 files without modeled symbols and four legacy semantic nodes without source_file. The scoped semantic attempt failed on a 60-second writer-lock timeout before backend work, so changed Markdown semantic coverage (including the large README/TESTING/CHANGELOG) is explicitly incomplete. Source publication is not held indefinitely for that tool limitation. Final snapshot cleanup uses the wrapper's recoverability-aware prune, preserving immutable outputs until Git contains them.
