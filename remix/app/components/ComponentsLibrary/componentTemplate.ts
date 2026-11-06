@@ -655,6 +655,120 @@ export const visitStoredTemplateActions = (
 	walk(template, scope);
 };
 
+export class StoredReferenceUnsupportedError extends Error {
+	declare readonly reference?: string;
+	constructor(message: string, reference?: string) {
+		super(message); this.name = 'StoredReferenceUnsupportedError';
+		// Diagnostic input remains non-enumerable: callers must never log a
+		// potentially enormous/private stored value as an Error property.
+		Object.defineProperty(this, 'reference', { value: reference, enumerable: false });
+	}
+}
+export type StoredTemplateNode = { node: Record<string, any>; scope: ComponentScope; opaque: boolean };
+
+/** Worker traversal of the stored program, not a render/preview expansion.
+ * Iterator frames retain ancestry, not an array of expanded output. Null steps
+ * let a disk-backed consumer yield/check authority even in reference-free trees.
+ * Renderer limits above remain unchanged. Runtime values are never invented. */
+export function* iterateStoredTemplateNodes(template: unknown, scope: ComponentScope = {}, signal?: AbortSignal): Generator<StoredTemplateNode | null> {
+	type Frame = { values: Iterator<{ value: any; scope: ComponentScope; opaque: boolean }>; owner?: object };
+	const active = new WeakSet<object>();
+	const one = function* (value: unknown, scope: ComponentScope, opaque = false) { yield { value, scope, opaque }; };
+	const stack: Frame[] = [{ values: one(template, scope) }];
+	while (stack.length) {
+		signal?.throwIfAborted();
+		const frame = stack[stack.length - 1], next = frame.values.next();
+		if (next.done) { stack.pop(); if (frame.owner) active.delete(frame.owner); continue; }
+		const { value, scope: current, opaque } = next.value;
+		yield null;
+		if (!value || typeof value !== 'object') continue;
+		if (active.has(value)) throw new StoredReferenceUnsupportedError('Cyclic stored template value');
+		active.add(value);
+		const children = function* (): Generator<{ value: any; scope: ComponentScope; opaque: boolean }> {
+			if (Array.isArray(value)) { for (const child of value) yield* one(child, current, opaque); return; }
+			if (!opaque) {
+				if ('ttArg' in value) {
+					const selected = argValue(current, String(value.ttArg));
+					if (selected === undefined) throw new StoredReferenceUnsupportedError('Runtime-dependent stored render output');
+					yield* one(selected, current, true); return;
+				}
+				if ('ttMap' in value) {
+					yield* one(value.ttMap?.default, current);
+					if (isPlainObject(value.ttMap?.values)) for (const key of Object.keys(value.ttMap.values)) yield* one(value.ttMap.values[key], current);
+					return;
+				}
+				if ('ttIf' in value) { yield* one(value.ttIf?.then, current); yield* one(value.ttIf?.else, current); return; }
+				if ('ttFormat' in value) return;
+				if ('ttMerge' in value) throw new StoredReferenceUnsupportedError('Stored render merge needs an exact output adapter');
+				if ('ttRepeat' in value) {
+					const spec = value.ttRepeat ?? {}, raw = spec.arg !== undefined ? argValue(current, String(spec.arg)) : spec.count;
+					let count = Math.max(0, Math.round(Number(raw) || 0));
+					if (Number(spec.max) > 0) count = Math.min(count, Number(spec.max));
+					if (!Number.isSafeInteger(count)) throw new StoredReferenceUnsupportedError('Non-finite stored repeat');
+					if (!count) yield* one(spec.node, { ...current, index: undefined, n: undefined });
+					for (let index = 0; index < count; index++) yield* one(spec.node, { ...current, index, n: index + 1 });
+					return;
+				}
+				if ('ttEach' in value) {
+					const spec = value.ttEach ?? {}, raw = argValue(current, String(spec.arg));
+					const keys = isPlainObject(raw) ? Object.keys(raw) : null;
+					let count = Array.isArray(raw) ? raw.length : keys?.length ?? 0;
+					if (Number(spec.max) > 0) count = Math.min(count, Math.trunc(Number(spec.max)));
+					yield* one(spec.empty, current);
+					if (!count) yield* one(spec.node, { ...current, item: undefined, index: undefined, collection: undefined, n: undefined, count: undefined, first: undefined, last: undefined });
+					for (let index = 0; index < count; index++) yield* one(spec.node, { ...current, item: keys ? { key: keys[index], value: raw[keys[index]] } : raw[index], index, n: index + 1, count, first: index === 0, last: index === count - 1 });
+					return;
+				}
+			}
+			if ((value.tag === 'tt-collection' || value.chakra === 'Collection') && isPlainObject(value.props)) {
+				const row = value.props.itemTemplate;
+				yield* one(isPlainObject(row) && 'ttTemplate' in row ? row.ttTemplate : row, { ...current, item: undefined, index: undefined, collection: undefined }, opaque);
+			}
+			yield* one(value.children, current, opaque); yield* one(value.rawChildren, current, opaque);
+		};
+		if (!Array.isArray(value)) yield { node: value, scope: current, opaque };
+		stack.push({ values: children(), owner: value });
+	}
+}
+
+/** Same own-property token rules as rendering. A reference is short; stop
+ * before building amplified text that cannot be a valid executable identity. */
+export function storedReferenceText(template: string, scope: ComponentScope, maximum = 128): string {
+	let text = '', offset = 0;
+	for (const match of template.matchAll(TOKEN_PATTERN)) {
+		text += template.slice(offset, match.index);
+		const value = argValue(scope, match[1]);
+		text += value == null ? match[0] : scalarText(value);
+		if (text.length > maximum) throw new StoredReferenceUnsupportedError('Stored reference text exceeds its protocol identity size');
+		offset = match.index! + match[0].length;
+	}
+	text += template.slice(offset);
+	if (text.length > maximum) throw new StoredReferenceUnsupportedError('Stored reference text exceeds its protocol identity size');
+	return text;
+}
+
+export function* iterateStoredTemplateActions(template: unknown, scope: ComponentScope, signal?: AbortSignal): Generator<{ action: string; node: Record<string, any>; raw: string } | null> {
+	for (const step of iterateStoredTemplateNodes(template, scope, signal)) {
+		if (!step) { yield null; continue; }
+		const { node, scope: current, opaque } = step;
+		if (opaque || ['ttArg', 'ttMap', 'ttIf', 'ttFormat', 'ttMerge', 'ttRepeat', 'ttEach'].some(key => key in node)) continue;
+		const actions: { action: string; node: Record<string, any>; raw: string }[] = [];
+		if (node.tag === 'tt-mapbox') visitStoredMapSourceActions(node.props, action => actions.push({ action, node: { ttAction: action }, raw: action }));
+		if ((node.tag === 'tt-collection' || node.chakra === 'Collection') && typeof node.props?.source?.action === 'string') {
+			const action = node.props.source.action;
+			if (!/[{}$\s]/.test(action) && action.length <= 128) actions.push({ action, node: { ttAction: action }, raw: action });
+		}
+		for (const action of actions) yield action;
+		if (typeof node.ttAction !== 'string') continue;
+		const raw = storedReferenceText(node.ttAction, current).trim();
+		if (!raw || /[{}$\s]/.test(raw)) throw new StoredReferenceUnsupportedError('Runtime-dependent executable Action reference');
+		// Same first-match mapping semantics, without the renderer's 512-pair cap.
+		const mapped = Array.isArray(node.ttActionRefs) ? node.ttActionRefs.find((pair: any) => Array.isArray(pair) && pair[0] === raw)?.[1] : undefined;
+		const action = typeof mapped === 'string' && mapped && mapped.length <= 128 && !/[{}$\s]/.test(mapped) ? mapped : raw;
+		yield { action, node, raw };
+	}
+}
+
 // ---------------------------------------------------------------------------
 
 export const sanitizeArgSpecs = (raw: unknown): ComponentArgSpec[] => {

@@ -66,8 +66,8 @@ import {
 	canonicalDraftConfiguration,
 	configurationDraftKey,
 	ConfigurationConflict,
-	persistConfigurationDraft,
-	readConfigurationDraft,
+	persistConfigurationDrafts,
+	readConfigurationDrafts,
 	readOwnedSyncFolder,
 	saveConfigurationDraft,
 	type ConfigurationDraft,
@@ -127,9 +127,9 @@ function Connections({
 	const [initial] = useState(() => {
 		try {
 			const raw = window.localStorage.getItem(key);
-			return { raw, draft: readConfigurationDraft(raw, scope.deviceId), error: '' };
+			return { raw, drafts: readConfigurationDrafts(raw, scope.deviceId), error: '' };
 		} catch (cause) {
-			return { raw: null, draft: null, error: cause instanceof Error ? cause.message : 'Device draft storage is unavailable.' };
+			return { raw: null, drafts: [] as ConfigurationDraft[], error: cause instanceof Error ? cause.message : 'Device draft storage is unavailable.' };
 		}
 	});
 	const raw = useRef<string | null>(initial.raw);
@@ -144,8 +144,8 @@ function Connections({
 		? nativeTask : null;
 	const appOwned = supportsNativeSyncTasks();
 	const busy = viewBusy || (appOwned && !!nativeTask?.active);
-	const [draft, setDraft] = useState<ConfigurationDraft | null>(initial.draft);
-	const retainedDrafts = useRef(new Map<string, ConfigurationDraft>(initial.draft ? [[initial.draft.id, initial.draft]] : []));
+	const [draft, setDraft] = useState<ConfigurationDraft | null>(null);
+	const retainedDrafts = useRef(new Map<string, ConfigurationDraft>(initial.drafts.map(draft => [draft.id, draft])));
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const editorPrefix = useId();
 	const resourceValidity = useRef(new Map<string, boolean>());
@@ -210,11 +210,14 @@ function Connections({
 		signal: controller.current?.signal
 	});
 	const persist = (next: ConfigurationDraft | null) => {
-		if (next) retainedDrafts.current.set(next.id, next);
-		else if (draft) retainedDrafts.current.delete(draft.id);
 		assertCurrent();
-		raw.current = persistConfigurationDraft(window.localStorage, key, raw.current, next);
+		const retained = new Map(retainedDrafts.current);
+		if (next) retained.set(next.id, next);
+		else if (draft) retained.delete(draft.id);
+		raw.current = persistConfigurationDrafts(window.localStorage, key, raw.current, [...retained.values()]);
+		retainedDrafts.current = retained;
 		setDraft(next);
+		if (!next) setSelectedId(null);
 		setStorageError('');
 	};
 	const cache = (next: SavedFileSyncConfiguration[]) => {
@@ -309,6 +312,7 @@ function Connections({
 	}, []);
 	const edit = (next: ConfigurationDraft) => {
 		retainedDrafts.current.set(next.id, next); setSelectedId(next.id);
+		setResourceDraftValid(resourceValidity.current.get(next.id) ?? true);
 		setDraft(next);
 		setError('');
 		setConflict(null);
@@ -631,7 +635,7 @@ function Connections({
 					>
 						Refresh
 					</Button>
-					<Button size="sm" minHeight="40px" variant="outline" isDisabled={!ready || busy || !!draft || !roots.length} onClick={start}>
+					<Button size="sm" minHeight="40px" variant="outline" isDisabled={!ready || busy || !!storageError || !roots.length} onClick={start}>
 						Add connection
 					</Button>
 				</Flex>
@@ -701,7 +705,7 @@ function Connections({
 						description={saved.configuration.mode === 'backup' ? 'Backup to cloud · keep deleted files' : twoWay ? 'Two-way sync' : downloading ? 'Cloud to device' : 'Device to cloud'}
 						glance={syncConnectionGlance({ deviceLabel: capabilities?.platform === 'ios' ? 'iPhone' : capabilities?.platform === 'android' ? 'Device' : 'Mac', progress, online: rootsReady, active: running, paused: saved.configuration.paused || (task?.status === 'paused' && !task.waiting), waiting: task?.waiting, ...(task?.transferSeries ? { rates: { upload: task.transferSeries.read({ direction: 'upload', unit: 'Mbps', windowMs: 5000 }), download: task.transferSeries.read({ direction: 'download', unit: 'Mbps', windowMs: 5000 }) } } : {}) })}
                         stats={`${syncFolderActivityLabel({ paused: saved.configuration.paused, rootsReady, hasRoot: !!nativeRoot, taskPaused: task?.status === 'paused' && !task.waiting, running })}${progress ? ` · ${progress.confirmed} of ${progress.total} operations confirmed` : ' · No transfer statistics yet'}`}
-						expanded={selectedId === saved.id} onToggle={expanded => { if (expanded) { if (!draft?.pending) { setSelectedId(saved.id); if (retainedDrafts.current.has(saved.id)) open(saved.id); } } else if (selectedId === saved.id) setSelectedId(null); }}>
+						expanded={selectedId === saved.id} onToggle={expanded => { if (expanded) { if (!viewBusy && ready && !storageError) { setSelectedId(saved.id); if (retainedDrafts.current.has(saved.id)) open(saved.id); } } else if (selectedId === saved.id) setSelectedId(null); }}>
 					<Flex align="center" gap={2} wrap="wrap">
 						<Box flex={{ base: '1 1 100%', sm: 1 }} minWidth={0} overflowWrap="anywhere">
 							<Text fontSize="13px" fontWeight={600}>
@@ -770,7 +774,7 @@ function Connections({
 								</Button>
 							)}
 						</Box>
-						<Button size="sm" minHeight="40px" variant="outline" isDisabled={busy || !!draft?.pending || !ready} onClick={() => open(saved.id)}>
+						<Button size="sm" minHeight="40px" variant="outline" isDisabled={viewBusy || !!storageError || !ready} onClick={() => open(saved.id)}>
 							Edit
 						</Button>
 						{running ? (
@@ -835,11 +839,11 @@ function Connections({
 			)}
 			{[...retainedDrafts.current.values()].filter(row => !connections.some(saved => saved.id === row.id)).map(row => (
                 <SettingsSection key={`draft-${row.id}`} eyebrow={row.configuration.name || 'New folder connection'} description="Unsaved connection settings"
-                    summary="Draft · no transfer started" open={selectedId === row.id} onToggle={expanded => { if (expanded) { setSelectedId(row.id); setDraft(row); } else if (selectedId === row.id) setSelectedId(null); }}><Text fontSize="13px">Continue editing this draft below.</Text></SettingsSection>
+                    summary="Draft · no transfer started" open={selectedId === row.id} onToggle={expanded => { if (expanded) { if (!viewBusy && ready && !storageError) open(row.id); } else if (selectedId === row.id) setSelectedId(null); }}><Text fontSize="13px">Continue editing this draft below.</Text></SettingsSection>
             ))}
 			{[...retainedDrafts.current.values()].map(draft => (
 				<SyncEditorPlacement key={draft.id} targetId={connections.some(saved => saved.id === draft.id) ? `${editorPrefix}-${draft.id}` : undefined}><Box hidden={selectedId !== draft.id} marginTop={4} border="1px solid var(--tt-border, #ececef)" borderRadius="12px" padding={3}>
-					<SyncConfigurationForm sourcePathsAvailable={supportsNativeSourcePaths(capabilities)} draft={draft} roots={roots} folders={folders} disabled={busy || draft.pending || !ready} scopeKey={`${key}:${generation}:${draft.id}`} accountTransport={reviewTransport} onChange={edit} onResourceValidityChange={valid => { resourceValidity.current.set(draft.id, valid); if (selectedId === draft.id) setResourceDraftValid(valid); }} />
+					<SyncConfigurationForm sourcePathsAvailable={supportsNativeSourcePaths(capabilities)} draft={draft} roots={roots} folders={folders} disabled={viewBusy || draft.pending || !ready} scopeKey={`${key}:${generation}:${draft.id}`} accountTransport={reviewTransport} onChange={edit} onResourceDraftChange={resourceDraft => { const latest = retainedDrafts.current.get(draft.id); if (latest) edit({ ...latest, resourceDraft }); }} onResourceValidityChange={valid => { resourceValidity.current.set(draft.id, valid); if (selectedId === draft.id) setResourceDraftValid(valid); }} />
 					{folderCursor && (
 						<Button size="sm" minHeight="40px" marginTop={2} isDisabled={busy} onClick={() => void run(() => load('folders', folderCursor))}>
 							More cloud folders
@@ -931,6 +935,7 @@ export function SyncConfigurationForm({
 	accountTransport,
 	onChange,
 	onResourceValidityChange,
+	onResourceDraftChange,
 	sourcePathsAvailable = false
 }: {
 	sourcePathsAvailable?: boolean;
@@ -942,6 +947,7 @@ export function SyncConfigurationForm({
 	accountTransport?: Parameters<typeof SyncIgnoreRulesEditor>[0]['accountTransport'];
 	onChange(draft: ConfigurationDraft): void;
 	onResourceValidityChange?(valid: boolean): void;
+	onResourceDraftChange?(draft: NonNullable<ConfigurationDraft['resourceDraft']>): void;
 }) {
 	const prefix = useId(),
 		c = draft.configuration;
@@ -1068,7 +1074,7 @@ export function SyncConfigurationForm({
 				onChange={ignoreRules => change({ configurationVersion: c.resourceLimits ? 3 : ignoreRules ? 2 : 1, ignoreRules })} />
 			</Stack></Box>
 			<Box as="details"><Box as="summary" cursor="pointer" paddingY={2}>Resource limits</Box>
-			<SyncResourceControls onValidityChange={onResourceValidityChange} resourceLimits={c.resourceLimits} disabled={disabled || photos} scopeKey={scopeKey ?? `${draft.id}:${c.deviceId}`} accountTransport={accountTransport}
+			<SyncResourceControls key={draft.baseUpdatedAt ?? 'new'} initialDraft={draft.resourceDraft} onDraftChange={onResourceDraftChange} onValidityChange={onResourceValidityChange} resourceLimits={c.resourceLimits} disabled={disabled || photos} scopeKey={scopeKey ?? `${draft.id}:${c.deviceId}`} accountTransport={accountTransport}
 				onChange={resourceLimits => change({ resourceLimits, configurationVersion: resourceLimits ? 3 : c.ignoreRules ? 2 : 1 })} />
 			</Box>
 		</Stack>

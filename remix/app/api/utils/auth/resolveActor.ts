@@ -64,9 +64,10 @@ export const actorPat = (actor: Actor): PatContext | null => (actor.kind === 'pa
 // Things-family routes pass thingsScope (the PAT permission the request
 // needs): that opts the route into resolving personal access tokens too —
 // missing-scope 403s and exhausted-use 401s come back as ready Responses.
-export const resolveActor = async (
+const resolveActorInternal = async (
   request: Request,
-  opts: { requiredAppScope?: string; thingsScope?: string | string[] } = {}
+  opts: { requiredAppScope?: string; thingsScope?: string | string[] } = {},
+  inspectOnly = false
 ): Promise<Actor | Response> => {
   // App tokens are Bearer-only (never a cookie), so this probe is free for
   // cookie sessions; a user's own Bearer JWT fails the purpose check inside
@@ -99,7 +100,7 @@ export const resolveActor = async (
         (!scopeCovers(ctx.scopes, requiredScope) &&
           ctx.scopes.some((scope) => scope === 'account.things' || scope.startsWith('account.things.'))));
     if (!ctx.sandbox && accountThings) {
-      const resolved = await resolvePatOrSessionActor(request, opts.thingsScope);
+      const resolved = await (inspectOnly ? thingsActors.inspectThingsActor : resolvePatOrSessionActor)(request, opts.thingsScope);
       if (resolved.ok === false) return json({ ok: false, error: resolved.error }, { status: resolved.status, headers: cors });
       const { user, pat } = resolved.actor;
       if (user && pat) return { kind: 'pat', user, pat, cors };
@@ -128,7 +129,7 @@ export const resolveActor = async (
   // getCurrentUser. PAT-specific failures (missing scope, no uses left)
   // become ready error Responses.
   if (opts.thingsScope !== undefined) {
-    const resolved = await resolvePatOrSessionActor(request, opts.thingsScope);
+    const resolved = await (inspectOnly ? thingsActors.inspectThingsActor : resolvePatOrSessionActor)(request, opts.thingsScope);
     if (resolved.ok === false) {
       return json({ ok: false, error: resolved.error }, { status: resolved.status });
     }
@@ -142,6 +143,22 @@ export const resolveActor = async (
   if (user) return { kind: 'user', user };
   if (request.headers.has('X-Thingtime-Character')) return json({ ok: false, error: 'Session or Character unavailable' }, { status: 401 });
   return { kind: 'anonymous' };
+};
+
+export const resolveActor = (request: Request, opts: { requiredAppScope?: string; thingsScope?: string | string[] } = {}) =>
+  resolveActorInternal(request, opts);
+
+/** Alternatives for pre-body ingress only. The route must still resolveActor
+ * with the exact parsed operation before effects, consuming one token use. */
+export const inspectActorForBody = async (request: Request, candidates: (string | string[])[]): Promise<Actor | Response> => {
+  let refusal: Response | undefined;
+  for (const thingsScope of candidates) {
+    const actor = await resolveActorInternal(request, { thingsScope }, true);
+    if (!(actor instanceof Response)) return actor;
+    refusal = actor;
+    if (actor.status !== 403) return actor;
+  }
+  return refusal ?? json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 };
 
 /** Reauthorize one already-admitted long-lived read. The token layer binds its

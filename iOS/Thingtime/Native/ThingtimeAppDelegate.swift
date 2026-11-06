@@ -7,9 +7,19 @@ final class ThingtimeAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         NativeUploadBackgroundCoordinator.shared.activate()
+        MobileDeviceBackgroundPresence.shared.activate()
+        MobileDeviceLocation.shared.activate(foreground: application.applicationState != .background)
+        // Foreground launch must reauthorize current web identity/preferences.
+        // A system background-only relaunch retains the verified saved binding.
+        if application.applicationState != .background { MobileDeviceBackgroundPresence.shared.stop() }
         UNUserNotificationCenter.current().delegate = self
         ThingtimeNativeNotifications.shared.activate()
         return true
+    }
+
+    func applicationWillEnterForeground(_ application: UIApplication) {
+        // Clear before active WebKit callbacks can authorize a new binding.
+        MobileDeviceBackgroundPresence.shared.stop()
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {

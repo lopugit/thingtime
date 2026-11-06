@@ -4,10 +4,26 @@ import { mkdtemp, rm, mkdir, chmod, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createServer } from 'node:net';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import assert from 'node:assert/strict';
 
-const port = 28142;
+const mode = process.argv[2] || 'account-profile';
+const fixtures = {
+  'account-profile': { marker: 'accountProfileBackupProof', script: 'scripts/account-profile-backup.integration.mts', port: 28142 },
+  'file-restore': { marker: 'accountFileRestoreProof', script: 'scripts/account-file-restore.integration.mts', port: 28167 },
+  'ordinary-restore': { marker: 'ordinaryRestoreProof', script: 'scripts/ordinary-restore.integration.mts', port: 28143 },
+  'reference-closure': { marker: 'accountReferenceBackupProof', script: 'scripts/account-reference-backup.integration.mts', port: 28162 }
+};
+if (!Object.hasOwn(fixtures, mode) || process.argv.length > 3) throw Error('Unsupported account backup proof');
+const proofFiles = ['app/api/utils/backups/accountFileRestore.ts','app/api/utils/backups/accountFileRestoreBytes.ts','app/api/utils/backups/accountFileRecovery.ts','app/api/utils/backups/accountInventory.ts','app/api/utils/backups/attachmentRecords.ts','app/api/utils/backups/portableBackup.ts','app/api/utils/files/files.ts','app/api/utils/things/contentExecutionGate.ts','app/api/utils/timeline/recordMutation.ts','app/fileSync/cloudTransport.ts','app/docs/apiDocs.ts','scripts/account-file-restore.integration.mts'];
+const sourceHashes = async () => Object.fromEntries(await Promise.all(proofFiles.map(async path => [path, createHash('sha256').update(await readFile(resolve(import.meta.dirname, '..', path))).digest('hex')])));
+const initialSourceHashes = mode === 'file-restore' ? await sourceHashes() : null;
+const testedGitBase = mode === 'file-restore' ? execFileSync('git',['rev-parse','HEAD'],{cwd:resolve(import.meta.dirname,'../..'),encoding:'utf8'}).trim() : null;
+const fixture = fixtures[mode];
+const proofMarker = fixture.marker;
+const port = fixture.port;
 const probe = createServer();
 await new Promise((resolve, reject) => {
 	probe.once('error', reject);
@@ -94,7 +110,7 @@ try {
 	assert.equal(cancelled, false, 'Fixture was cancelled');
 	child = isolatedAccountBackupProcess(
 		process.execPath,
-		['--import', 'tsx', 'scripts/account-profile-backup.integration.mts'],
+		['--import', 'tsx', fixture.script],
 		{
 			cwd: resolve(import.meta.dirname, '..'),
 			stdio: ['ignore', 'pipe', 'pipe'],
@@ -115,14 +131,23 @@ try {
 	const [code] = await once(child, 'exit');
 	clearTimeout(timer);
 	// Console email output can include one-use fixture links. Never forward it.
-	const result = output.split('\n').find((line) => line.startsWith('{"accountProfileBackupProof":'));
+	const result = output.split('\n').find((line) => line.startsWith('{"' + proofMarker + '":'));
 	if (code !== 0 || !result) {
 		const { writeFile } = await import('node:fs/promises');
-		const failureLog = join(tmpdir(), 'thingtime-account-profile-backup-failure.log');
+		const failureLog = join(tmpdir(), `thingtime-${mode}-backup-failure.log`);
 		await writeFile(failureLog, output.replace(/https?:\/\/[^\s"<>]+/g, '[url withheld]'), { mode: 0o600 });
 		throw Error('Account profile API proof failed; private diagnostic log: ' + failureLog);
 	}
-	console.log(JSON.stringify({ ...JSON.parse(result), isolation: 'OS-enforced loopback-only; redirects, hostname and direct-IP denial verified' }));
+	let evidence;
+ if (mode === 'file-restore') {
+  assert.deepEqual(await sourceHashes(), initialSourceHashes, 'Runtime source changed during the proof; preserve stdout but do not publish it as final-source acceptance');
+  const { writeFile, mkdir, chmod } = await import('node:fs/promises');
+  const evidenceRoot = join(tmpdir(),'thingtime-account-file-restore-evidence'); await mkdir(evidenceRoot,{recursive:true,mode:0o700}); await chmod(evidenceRoot,0o700);
+  const receipt = { ...JSON.parse(result), command: 'corepack pnpm --dir remix run test:backups:file-restore', testedGitBase, sourceFiles: initialSourceHashes, recordedAt: new Date().toISOString() };
+  const bytes = JSON.stringify(receipt), digest = createHash('sha256').update(bytes).digest('hex');
+  evidence = join(evidenceRoot,`${Date.now()}-${digest}.json`); await writeFile(evidence,bytes+'\n',{mode:0o600,flag:'wx'});
+ }
+ console.log(JSON.stringify({ ...JSON.parse(result), ...(evidence ? { evidence } : {}), isolation: 'OS-enforced loopback-only; redirects, hostname and direct-IP denial verified' }));
 } finally {
 	terminate();
 	await stopped;

@@ -1,5 +1,63 @@
 # Things and folders
 
+Device pages expose Location history through `DeviceLocationWorkspace`, a
+scoped data/action adapter that resolves private saved `/devices/location` and
+`settings-device-location-settings` layouts. Map markers, filters, retention,
+message controls and uploads remain separately editable blocks. Protected
+`device-observation` history is read through its owner-only device API, not
+ordinary Things discovery. See the [API map](api-endpoints-and-capabilities.md)
+and the Device location history checklist in `TESTING.md`.
+
+## Native external-volume reconnect
+
+`FolderBookmark` distinguishes a detached original volume from deletion on an
+online volume without prompting or mounting it. `NativeFilesystemContinuity`
+and `RustInventoryClient.Root` retain volume UUID, root inode and birth as an
+additional recovery fence; exact live descriptor checks remain mandatory.
+`MobileFolderInventory` retires old device/path snapshots and creates fresh
+generations rather than rewriting their identities. Legacy captures require
+the original nonstale bookmark's saved UUID and original root inode.
+
+`NativeSymbolicLinks` and Rust `backup/native_receipts.rs` resolve matching
+persistent receipt aliases for journals and portable links, including current
+attachment migration of older receipts. A legacy journal with insufficient
+volume proof is unreadable, never ordinary upload content. The small
+`commander-platform` descriptor metadata adapter isolates Darwin UUID FFI from
+the indexer's `forbid(unsafe_code)` policy.
+
+`MobileSyncStaging` uses an on-volume verified candidate for different-device
+regular downloads. Root/candidate/displaced/journal anchors and the private
+marker/content hash gate uncertain-publication recovery. Historical receipts
+remain historical; missing legacy anchors never authorize another swap.
+
+The Electron host recognizes only fixed typed availability markers. Existing
+job backoff resumes offline work. `nativeFeedRecovery` ends the old local hint
+prefix through `pagedRunJournal.endRemountedLocalFeed`, retaining every cursor,
+operation and receipt; the ordinary guarded consumer drains it before fresh
+sealed reconciliation can publish agreement. Native contracts are Mac file
+access 1.20.0 and publication 1.3.0.
+
+Regressions: `DriveReconnectTests` (opt-in real APFS), `nativeFeedRecovery`,
+`twoWayStreaming`, `desktopFolders.client`, Electron `folder-sync`, Rust native
+receipt tests and `commander-platform`. Runbooks: `TESTING.md` external-drive
+reconnect checklist. APFS images prove native remount behavior; physical USB
+hardware and the final signed installation are separate acceptance gates.
+
+## Incoming-share location selection
+
+`ThingsPage` accepts an optional `locationPicker` adapter. It keeps the existing
+list/grid/columns, breadcrumbs and folder creation while staying inside `/share`.
+`ShareSaveDestination.tsx` saves through the ordinary home-plane Things and Files
+APIs, reads results back, and retains immutable retry commands. Shared relative
+paths recreate their folder hierarchy, including empty directories. The sticky
+**Save here** controls are individual Builder blocks. See
+[incoming sharing](../incoming-sharing.md).
+Shared text uses the canonical Data sanitizer without a product string-length
+ceiling (`api.things` 1.50.0). It preserves explicit embedded Component defaults
+through exact readback and retry, rather than reporting a normalization change
+as a failed save. Types, cycles, storage admission and access checks still apply.
+
+
 `validateThingtimeCrystal` preserves explicit `renderComponent` metadata across
 typed and data Thing writes. See [the presentation contract](api-endpoints-and-capabilities.md)
 for saved/embedded definitions, PATCH/replacement semantics and tests.
@@ -27,6 +85,29 @@ The device sync screen keeps saved connection editing available offline and
 uses a protected, leased control channel for live device operations. Native
 grants and transfer journals stay on the target device. See
 [browser device sync](../browser-device-sync.md) for code paths and checks.
+Guarded streaming preparation defers missing journal ancestry before policy RPCs;
+protected point reads and executable bindings retain current policy checks. The
+`--healthy` canonical fixture lane separates startup timing from accepted-loss
+recovery while retaining exact hashes and strict checkpoints.
+The indexed local feed races its live native long poll against a cancellable,
+revisioned durable-consumer wake. Buffered revisions and the native finish/poll
+handshake still drain normally; legacy adapters keep their polling fallback.
+See `streamingIndexRecovery.test.ts` and the idle-wake checklist in `TESTING.md`.
+Mac access 1.21.0 adds the typed `observe-path` boundary used only by two-way
+streaming preparation. `nativePathObservation.ts` is shared by the installed
+adapter and canonical fixture: current saved settings are checked first, then
+one native request observes the candidate and immediate parent under live
+network/charging, expiry, bookmark and CPU guards, with fresh entry/reply
+identity. Older hosts retain separate context/inspection requests. This does
+not reuse identity responses or change transfer, scan, CPU or identity budgets.
+Regressions cover settings changes before IO, exact complete response binding,
+queue expiry, cancellation, account/grant revocation and conditions changes.
+Mac paged native inventory reads use `MobileFolderInventory.read` and
+`RustInventoryClient.checkedPage`: each Rust `page` reply includes its checked
+status so the client can validate generation, root version and coverage with
+one helper request per page. The 10,001-entry regression in
+`MobileFolderInventoryTests` asserts 79 bounded pages and no separate status
+request during read. See the Mac paged checklist in `TESTING.md`.
 
 ## Where the code lives
 
@@ -38,10 +119,10 @@ grants and transfer journals stay on the target device. See
 | Bulk move/copy/delete/share | `app/routes/api/v1/things/bulk` |
 | Thing routes | `app/routes/api/v1/things/_things.tsx` (GET/POST/PATCH/PUT/DELETE) plus `export`, `import`, `fork`, `share`, `react`, `comment`, `save`, `vote`, `updown`, `views`, `search`, `feed`, `trending`, `rss`, `reveal`, `actions` |
 | Portable transfer (export plan, ZIP/JSON bundles, import) | `app/api/utils/things/exportTransfer.ts`, `importTransfer.ts`, `app/utils/thingTransfer/*` (client: `browser.ts`, `archive.ts`) |
-| Independent sealed backup copies | `app/api/utils/backups/portableBackup.ts`, shared `backupObjectKey.ts`, `localBackupStore.ts`, `s3BackupStore.ts`; native/worker pipe entry `scripts/backup-replica.mts` (`backup:replica`), transport/resume tests in `s3BackupStore.test.ts`. Same portable v1 format; explicit vault credentials, no ambient provider configuration. Setup and incomplete live-provider/UI gates: `docs/portable-backups.md#independent-s3-replica-worker` |
+| Independent sealed backup copies | `app/api/utils/backups/portableBackup.ts`, shared `backupObjectKey.ts`, `localBackupStore.ts`, `s3BackupStore.ts`; native/worker pipe entry `scripts/backup-replica.mts` (`backup:replica`), transport/resume tests in `s3BackupStore.test.ts`. Portable v1 container with retained v1 readers; ordinary `backup-thing-content@2` uses `utils/canonicalJsonStream.ts` and streaming retention without backup-only record caps (`thingStream.test.ts`). Explicit vault credentials, no ambient provider configuration. Setup and incomplete live-provider/UI gates: `docs/portable-backups.md#independent-s3-replica-worker` |
 | Kind schemas and protected kinds | `app/schemas/registry.ts` (`PROTECTED_THINGTIME`, `folderSchema`, `isProtectedThingtime`) |
 | Indexes | `app/api/utils/mongodb/collections.ts` `ensureIndexes()` (central registry; new indexes are rare, evidence-backed exceptions) |
-| Internal point-in-time owner inventory (managed-family coverage incomplete) | `app/api/utils/backups/accountInventory.ts`, `withHomeMongoSnapshot` in `collections.ts`; canonical snapshots plus all seven Timeline record families via `backups/timelineRecords.ts`; ready attachment bytes and file-history dependency checks via `backups/attachmentRecords.ts`; offline current/version reads via `accountFileRecovery.ts`; exact draft/template/tombstone records and media dependencies via `draftRecords.ts`; large canonical ordinary content via `thingSnapshots.ts`; saved canonical themes via `themeSnapshots.ts`; approved account profile/private preferences and exact profile-media closure via `accountSnapshots.ts` and shared `timeline/accountContent.ts`; bounded owner/ID paging, modern index plan only. Contract: `docs/portable-backups.md` |
+| Internal point-in-time owner inventory (managed-family coverage incomplete) | `app/api/utils/backups/accountInventory.ts`, `withHomeMongoSnapshot` in `collections.ts`; canonical snapshots plus all seven Timeline record families via `backups/timelineRecords.ts`; ready attachment bytes and file-history dependency checks via `backups/attachmentRecords.ts`; offline current/version reads via `accountFileRecovery.ts`; exact draft/template/tombstone records and media dependencies via `draftRecords.ts`; large canonical ordinary content via `thingSnapshots.ts`; saved canonical themes via `themeSnapshots.ts`; approved account profile/private preferences and exact profile-media closure via `accountSnapshots.ts` and shared `timeline/accountContent.ts`; stored ordinary reference/media and active-selection evidence through `storedReferences.ts`; streamed notification history through `notificationSnapshots.ts` and `timeline/notificationContent.ts`; explicit subscription-authority exclusions; bounded owner/ID paging, modern index plan only. Real API proof: `test:backups:references`. Contract: `docs/portable-backups.md` |
 | Shared event/link records, IndexedDB relational queue/index, bounded cache, draft recorder and account sync | `app/timeline/` (`records.ts` and `branches.ts` are the identical local/remote durable schemas) |
 | Transactional history recording, protected binary event Things and paging | `app/api/utils/timeline/` |
 | Trusted Action/AI attribution and relational operation grouping | `app/api/utils/timeline/mutationContext.ts`, established by `actions/execute.ts`, `actions/firstPartyActionHost.ts` and `lopu/chatTools.ts`; not request-controlled |
@@ -173,6 +254,16 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
 
 ## Remote and stored files
 
+Completed one-way and two-way streams retain their exact receipt link through
+strict reconciliation. `pagedRunJournal.ts` builds a restartable completion
+summary in bounded history pages, separating cumulative confirmed activity from
+latest-per-path checkpoint effects and excluding unpublished intents.
+Historical-only paths remain activity records, without inventing current files
+or checkpoint effects; parent/root counters include that activity.
+`progressProjection.client.ts` joins per-path historical counters into the saved
+progress tree; `backupCompletionProgress.test.ts` covers completed/reloaded,
+no-work, A/B/A revision, and interrupted-migration behavior.
+
 For connected folder sync, `app/fileSync/streamingForegroundSync.ts` can
 prepare two-way copies from native and cloud index hints while both source
 feeds remain open. `app/api/utils/files/inventory.ts` resolves the exact
@@ -180,6 +271,9 @@ destination under the same transaction and ancestor locks used by the
 canonical file and folder writers. Early two-way cloud writes negotiate
 `api.files` 1.10.0 before using that guard. The strict paged plan and
 checkpoint remain responsible for reconciliation and agreement.
+`app/fileSync/cloudIndexChanges.client.ts` validates Timeline deltas against
+the same sync entry contract as snapshots: nonempty files require multipart
+fingerprints, while canonical zero-byte files use the empty SHA-256 identity.
 
 
 `FilesystemThingsBrowser.tsx` adapts ephemeral remote inode entries into the
@@ -834,3 +928,59 @@ contracts; `componentDefinitions.ts` aligns nested stable identities. The
 compatible write corrections are `api.things` 1.49.2, `api.things-update` 1.18.1
 and `api.timeline` 1.19.1. Run `test:timeline` and the disposable
 `test:timeline:large-pages:acceptance` after a node-server build.
+
+### Builder app entry points and scoped navigation
+
+`components/Builder/builderAppNavigation.ts` resolves
+`crystal.metadata.entryPointThingId` through independent authorized app and target
+reads. `/builder?app=<id>` opens the target's existing live reader. An unset
+entry point browses contents; invalid, missing, inaccessible and folder/cyclic
+targets show an error with Browse/Retry. Navigation never executes an Action,
+changes audiences or assigns Things. `BuilderAppDialog` exposes a paged saved-page
+selector and exact Thing ID input, validating availability before saving.
+
+App cards keep explicit Browse/Edit controls. Kind, view, sort, group, display
+and search changes preserve `folder` and query in the current URL; only explicit
+All apps navigation leaves the container. Scoped search uses the existing
+ACL-checked search conditions, not client-only filtering. Coverage:
+`builderAppEntryPoint.test.ts`, `thingsLocation.test.ts`, and the isolated
+`scripts/builder-entrypoint-acceptance.mjs` real API/browser check.
+
+
+## Reviewed account recovery planning
+
+`app/backups/accountRestore.ts` defines machine-readable whole-account scope and
+explicit unknown source coverage/unavailable writer readiness.
+`api/utils/backups/accountRestorePlan.ts` and `accountRestoreRecord.ts` validate
+sealed independent entries, index reference mappings in disposable local-worker
+SQLite, and seal immutable paged reviews through `BackupObjectStore`.
+`backupObjectKey.ts` admits only generated `restore-plans` review keys.
+No destination mutation endpoint or account writer is introduced. Run
+`test:backups`; see [planning and completion boundaries](../portable-backups.md#account-restore-admission-and-durable-review-plans).
+
+## Reviewed ordinary creation and execution holds
+
+`backups/ordinaryRestoreTransaction.ts` composes the existing canonical Thing
+writer and accounted Timeline effects for explicitly selected, closed private
+graphs. Parent containment and strict reference closure are preflighted on
+disposable disk indexes. Command intents, per-effect receipts and the folder's
+protected scalar checkpoint provide resumable state; SQLite supplies no durable
+write authority. `things/contentExecutionGate.ts` and canonical
+`timeline/recordMutation.ts` fence current edits and release execution only after
+the exact new completion proof. `auth/fenceAccountSession.ts` checks the current
+full principal and writes its live session in the home content transaction.
+See [portable backups](../portable-backups.md#selected-ordinary-graph-execution-primitives--2026-11-06).
+Run `test:backups:ordinary-restore`, `test:backups`, and `test:api-capabilities`.
+No whole-account readiness or public restore endpoint is added.
+
+### File phase over reviewed restored folders
+
+`backups/accountFileRestore.ts` reuses ordinary restored folder Things and their
+protected creation/completion provenance; it never duplicates folder creation.
+`things/contentExecutionGate.attachContentExecutionHold` accounts a new scoped
+hold on an exact reviewed row and refuses an active prior hold. Canonical files
+and compact managed placements advance the active root epoch before completion
+can release holds. `api.things-bulk` 1.7.1 and `api.things-delete` 1.1.1 publish
+managed placement/drain fencing. Run the file-restore real-replica proof plus
+Things/Files/Timeline and content-gate regressions. UI/job activation, History
+audit grouping and installed/native acceptance remain separate.

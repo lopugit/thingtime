@@ -1,4 +1,5 @@
 import React from 'react';
+import { ContentExecutionBoundary } from '../Builder/ContentExecutionHold';
 import { Box, Text } from '@chakra-ui/react';
 import { useRouteLoaderData } from 'react-router';
 import { useApi } from '~/hooks/useApi';
@@ -23,7 +24,7 @@ export function ThingRenderComponent({ thing }: { thing: unknown }) {
   const reference = declaration?.kind === 'reference' ? declaration.id : null;
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
   const identity = JSON.stringify([origin, root?.user?.id, actor?.id, character?.id, plane, reference]);
-  const [loaded, setLoaded] = React.useState<{ identity: string; component: Record<string, unknown> | null } | null>(null);
+  const [loaded, setLoaded] = React.useState<{ identity: string; component: Record<string, unknown> | null; executionHeld: boolean } | null>(null);
   React.useEffect(() => {
     if (!reference) return;
     let disposed = false;
@@ -35,10 +36,10 @@ export function ThingRenderComponent({ thing }: { thing: unknown }) {
       controller = new AbortController();
       try {
         const result = await apiRef.current.v1.things.get({ id: reference }, renderComponentReadOptions({ actor: actor?.id, character: character?.id, plane, origin }, controller.signal));
-        if (!disposed && request === generation) setLoaded({ identity, component: referencedRenderComponent(result?.thing, reference) });
+        if (!disposed && request === generation) setLoaded({ identity, component: referencedRenderComponent(result?.thing, reference), executionHeld: result?.thing?.executionHeld === true });
       } catch {
         // A refused or failed refresh must not retain an old private renderer.
-        if (!disposed && request === generation) setLoaded({ identity, component: null });
+        if (!disposed && request === generation) setLoaded({ identity, component: null, executionHeld: false });
       }
     };
     void refresh();
@@ -56,11 +57,15 @@ export function ThingRenderComponent({ thing }: { thing: unknown }) {
   const component = declaration?.kind === 'embedded' ? declaration.component : current?.component;
   if (!component) return <Text role="status" fontSize="sm" color="var(--tt-muted)">{reference && !current ? 'Opening render Component…' : 'This render Component is unavailable or invalid. Open the data view to inspect this Thing.'}</Text>;
   const node = renderComponentNode(component, thing);
+  // Keep the server envelope alongside the extracted crystal. Display-only
+  // rendering must inherit holds from both the data and its saved Component.
+  const executionHeld = (!!thing && typeof thing === 'object' && (thing as { executionHeld?: unknown }).executionHeld === true) ||
+    (declaration?.kind === 'reference' && current?.executionHeld === true);
   // Both canonical Component renderers are inert by default. No source hooks,
   // action runtime or visitor authority is installed for a display template.
-  return <ComponentDisplayOnly.Provider value={true}><ComponentUploadEnabled.Provider value={false}><ComponentDataScope.Provider value={renderComponentScope(component, thing)}><NativeControlsEnabled.Provider value={false}><ComponentLocalControl.Provider value={null}>
+  return <ContentExecutionBoundary held={executionHeld}><ComponentDisplayOnly.Provider value={true}><ComponentUploadEnabled.Provider value={false}><ComponentDataScope.Provider value={renderComponentScope(component, thing)}><NativeControlsEnabled.Provider value={false}><ComponentLocalControl.Provider value={null}>
     <Box minW={0} maxW="100%" overflowWrap="anywhere" onClick={event => event.stopPropagation()} onSubmit={event => { event.preventDefault(); event.stopPropagation(); }}>
       {isChakraThingNode(node) ? <ChakraThingRenderer node={node as ChakraThingNode} /> : <HtmlThingRenderer node={node as HtmlThingNode} />}
     </Box>
-  </ComponentLocalControl.Provider></NativeControlsEnabled.Provider></ComponentDataScope.Provider></ComponentUploadEnabled.Provider></ComponentDisplayOnly.Provider>;
+  </ComponentLocalControl.Provider></NativeControlsEnabled.Provider></ComponentDataScope.Provider></ComponentUploadEnabled.Provider></ComponentDisplayOnly.Provider></ContentExecutionBoundary>;
 }

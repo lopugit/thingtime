@@ -63,8 +63,8 @@ const signaturePaths =
 		runtimePath
 	};
 const signature = signingMode === 'unsigned'
-	? await verifyUnsignedArtifacts(signaturePaths)
-	: await verifySignedArtifacts(signaturePaths, undefined, { requireExactLeafCertificate: true });
+	? await verifyUnsignedArtifacts(signaturePaths, undefined, { requireNodeLocationEntitlement: true })
+	: await verifySignedArtifacts(signaturePaths, undefined, { requireExactLeafCertificate: true, requireNodeLocationEntitlement: true });
 
 console.log(signingMode === 'unsigned'
 	? 'Thingtime Node unsigned resources verified.'

@@ -17,6 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 commander-core = { path = "../core" }
+commander-platform = { path = "../platform" }
 cpu-time = "=1.0.0"
 globset = "=0.4.18"
 ignore = "=0.4.25"

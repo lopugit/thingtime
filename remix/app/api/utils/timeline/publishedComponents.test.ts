@@ -127,7 +127,7 @@ test('published component preview validates exact resource, references, projecti
 	const injected = structuredClone(preview);
 	(injected.components.result.card as any).value.secure = 'secret';
 	assert.throws(() => parsePublishedVersionPreview(injected, 'source', 'page', command), /projection/);
-	assert.throws(() => parsePublishedVersionPreview({ ...preview, padding: 'a'.repeat(16 * 1024 * 1024) }, 'source', 'page', command), /byte budget/);
+	assert.throws(() => parsePublishedVersionPreview({ ...preview, padding: 'a'.repeat(16 * 1024 * 1024) }, 'source', 'page', command), /another version/);
 	const apply = { ...command, command: 'apply-version', expectedHeadId: 'head', operationId: '177abf25-b322-4ac0-9707-a59c36e7bcd5' };
 	assert.throws(() => parseVersionRequest(apply), /Review the components/);
 	assert.equal(parseVersionRequest({ ...apply, expectedComponents: components.fingerprint }).componentMode, 'recorded');
@@ -214,4 +214,25 @@ test('published previews do not reject existing large content because three snap
 		(parsePublishedVersionPreview(preview, 'source', 'page', { ...request, mode: 'restore' }).result.value as any).crystal.value.length,
 		2_250_000
 	);
+});
+
+test('recorded Component comparison preserves broad authorized definitions beyond aggregate content budgets', async () => {
+ const { definitionSnapshot, componentValues } = await import('../../../timeline/componentDefinitions');
+ const definitions = Object.fromEntries(Array.from({ length: 4 }, (_, index) => {
+  const ref = `card${index}`;
+  const captured = (componentBindingSnapshot(ref, { id: `source-${ref}`, crystal: { name: ref, render: { tag: 'div', children: 'content' }, defaults: { rows: Array.from({ length: 60_001 }, (_, n) => n % 2), text: 'x'.repeat(2_200_000) } } }).value as any).component;
+  return [ref, { present: true as const, value: captured }];
+ }));
+ const copy = definitionSnapshot(componentValues(definitions));
+ assert.equal((copy.value as any).card3.crystal.defaults.rows.length, 60_001);
+ const componentRequest: VersionRequest = { command: 'preview-version', mode: 'restore', eventId: 'source', componentMode: 'recorded', componentChoices: {} };
+ const refs = Object.keys(definitions);
+ const result = comparePublishedComponents(componentRequest, definitions, definitions, { current: definitions, result: definitions, fingerprint: 'a'.repeat(64) }, refs);
+ assert.equal(result.conflicts.length, 0); assert.equal(result.copyCount, 4);
+ assert.deepEqual(componentValues(result.result), componentValues(definitions));
+ const page = { crystal: { blocks: refs.map((ref, index) => ({ type: 'component', id: `block-${index}`, component: ref })) }, extended: null, tags: [], geo: null, acl: ['tt:user'], folderId: null };
+ const snapshot = { adapter: 'thing-content', version: 1, value: page };
+ const preview = { eventId: 'source', thingId: 'page', mode: 'restore', expectedHeadId: 'current', current: snapshot, incoming: snapshot, result: snapshot, baseEventId: null, conflicts: [], thingtime: ['webpage'], components: result };
+ const parsed = parsePublishedVersionPreview(preview, 'source', 'page', componentRequest);
+ assert.deepEqual(componentValues(parsed.components!.result), componentValues(definitions));
 });

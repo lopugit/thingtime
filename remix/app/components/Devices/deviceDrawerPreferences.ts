@@ -2,6 +2,7 @@ import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 
 export const DEVICE_DRAWER_SECTION_IDS = [
 	'node',
+	'location',
 	'permissions',
 	'observed-state',
 	'audio',

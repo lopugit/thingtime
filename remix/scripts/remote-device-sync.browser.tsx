@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { Box, ChakraProvider } from '@chakra-ui/react';
 import { SyncFolderCard } from '../app/components/Devices/SyncFolderCard';
+import { MobileSyncConnections } from '../app/components/Devices/MobileSyncConnections';
+import { requireThingtimeCapability } from '../app/api/utils/capabilities/requireCapability.client';
 import { DeviceSyncPanel } from '../app/components/Devices/DeviceSyncBrowser';
 import { apiEndpointDocs } from '../app/docs/apiDocs';
 import type { RemoteSyncStatus } from '../app/fileSync/remoteSyncProtocol';
@@ -12,10 +14,12 @@ const fixtureCapabilities = (origin: string) => ({ schemaVersion: 1, origin, fea
 
 // This fixture has no native bridge, credentials, file access or real backend.
 // Every application fetch is handled here; unknown requests fail closed.
-const ownerId = 'remote-sync-owner', deviceId = 'remote-sync-mac';
+const params = new URLSearchParams(location.search);
+const ownerId = params.get('owner') || 'remote-sync-owner', deviceId = params.get('device') || 'remote-sync-mac';
+const databaseKey = 'remote-sync-fixture-rows' + (params.size ? ':' + JSON.stringify([ownerId, deviceId]) : '');
 const configuration = { configurationVersion: 1, name: 'Documents backup', deviceId, localRootId: 'local-documents',
  remoteFolderId: 'cloud-documents', mode: 'backup', paused: false, propagateDeletes: false, network: 'any', chargingOnly: false, excludedPaths: [] };
-let rows: any[] = JSON.parse(localStorage.getItem('remote-sync-fixture-rows') || 'null') ?? [
+let rows: any[] = JSON.parse(localStorage.getItem(databaseKey) || 'null') ?? [
  { id: 'cloud-documents', thingtime: ['folder'], author: { id: ownerId }, acl: ['tt:user'], crystal: { name: 'Cloud documents' } },
  { id: 'documents-sync', thingtime: ['file-sync'], author: { id: ownerId }, acl: ['tt:user'], updatedAt: '2026-10-23T00:00:00.000Z', crystal: configuration },
  { id: 'archive-sync', thingtime: ['file-sync'], author: { id: ownerId }, acl: ['tt:user'], updatedAt: '2026-10-23T00:00:00.000Z', crystal: { ...configuration, name: 'Archive backup' } },
@@ -98,9 +102,15 @@ window.fetch = async (input, init) => {
  } else if (method === 'POST') {
   rows.push({ id: body.shareId, thingtime: body.thingtime, crystal: body.crystal, ...(body.folderId !== undefined ? { folderId: body.folderId } : {}), author: { id: ownerId }, acl: body.acl, updatedAt: new Date().toISOString() }); writes++;
  } else throw Error('Unexpected fixture write');
- localStorage.setItem('remote-sync-fixture-rows', JSON.stringify(rows));
+ localStorage.setItem(databaseKey, JSON.stringify(rows));
  return json({ ok: true, thing: rows.find(row => row.id === (body.id || body.shareId)) });
 };
+const nativeFixtureHost = {
+ origin: () => location.origin, capabilities: initialStatus().capabilities,
+ request: async (_owner: string, request: any) => { if (request.action !== 'list') throw Error('Unexpected native fixture action'); return { roots: initialStatus().roots }; },
+ authorizeDevice: async (owner: string, device: string, signal: AbortSignal) => { signal.throwIfAborted(); if (owner !== ownerId || device !== deviceId) throw Error('Wrong native fixture identity'); },
+ fetch: window.fetch.bind(window), requireCapability: requireThingtimeCapability, assertCurrent() {}
+};
 const router = createMemoryRouter([{ id: 'root', path: '/', loader: () => ({ user: { id: ownerId, accountKind: 'user' }, dataPlane: 'home' }),
- element: <ChakraProvider><Box maxW="1000px" mx="auto" p={4}><DeviceSyncPanel ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={[]} ownedDeviceIds={[deviceId]} /><SyncFolderCard title="Editable folder preview" path="/Sample/Folder" description="Synthetic shared card" stats="No transfer started" scopeKey="fixture-shared-card"><p>Folder details preview</p></SyncFolderCard></Box></ChakraProvider> }]);
+ element: <ChakraProvider><Box maxW="1000px" mx="auto" p={4}>{params.has('native') ? <MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={initialStatus().roots} host={nativeFixtureHost} /> : <DeviceSyncPanel ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={[]} ownedDeviceIds={[deviceId]} />}<SyncFolderCard title="Editable folder preview" path="/Sample/Folder" description="Synthetic shared card" stats="No transfer started" scopeKey="fixture-shared-card"><p>Folder details preview</p></SyncFolderCard></Box></ChakraProvider> }]);
 createRoot(document.getElementById('root')!).render(<StrictMode><RouterProvider router={router} /></StrictMode>);

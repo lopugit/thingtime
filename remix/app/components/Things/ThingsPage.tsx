@@ -1,3 +1,4 @@
+import { builderAppLaunchHref } from '../Builder/builderAppNavigation';
 import { openSharePreview } from '~/components/Sharing/sharePreviewLink';
 import { BUILDER_THING_KIND } from '~/schemas/builderThing';
 import { UnfiledAttachmentsPage } from './UnfiledAttachmentsPage';
@@ -145,8 +146,12 @@ const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
   });
 };
 
-export const ThingsPage = ({ builderMode = false }: { builderMode?: boolean }) => {
+export type ThingsLocationPicker = { onLocationChange: (folderId: string | null, name: string) => void };
+type ThingsPageProps = { builderMode?: boolean; locationPicker?: ThingsLocationPicker };
+
+export const ThingsPage = ({ builderMode = false, locationPicker }: ThingsPageProps) => {
   const [params] = useSearchParams();
+  if (locationPicker) return <ThingsLibraryPage locationPicker={locationPicker} />;
   if (!builderMode && params.get('activity') === '1') return <ActivityManagerPage />;
   if (!builderMode && params.get('unfiled') === 'attachments') return <UnfiledAttachmentsPage />;
   const folder = params.get('folder');
@@ -158,7 +163,7 @@ const ThingsPageContents = ({ builderMode = false }: { builderMode?: boolean }) 
   return !builderMode && params.has("files") ? <FilesystemThingsPage /> : !builderMode && params.get("deviceFiles") && !params.get("folder") ? <DeviceSyncedFilesPage deviceId={params.get("deviceFiles")!} /> : <ThingsLibraryPage builderMode={builderMode} />;
 };
 
-const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) => {
+const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPageProps) => {
   const user = useCurrentUser();
   const [importOpen, setImportOpen] = useState(false);
   const [importBundle, setImportBundle] = useState<TransferBundle | null>(null);
@@ -180,7 +185,15 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
   const [searchParams, setSearchParams] = useSearchParams();
 
   const apiRef = useRef(api);
-  apiRef.current = api;
+  // A save-location picker has one explicit storage/identity destination.
+  // These fences reject a concurrent account/database switch before a request.
+  const pickerScope = { expectedActor: user?.id, expectedApiOrigin: typeof window === 'undefined' ? undefined : window.location.origin, expectedDataPlane: 'home' };
+  apiRef.current = locationPicker ? { ...api, v1: { ...api.v1, things: { ...api.v1.things,
+    get: (args, options) => api.v1.things.get(args, { ...options, ...pickerScope }),
+    list: (args, options) => api.v1.things.list(args, { ...options, ...pickerScope }),
+    search: (args, options) => api.v1.things.search(args, { ...options, ...pickerScope }),
+    create: (args, options) => api.v1.things.create(args, { ...options, ...pickerScope })
+  } } } : api;
   const lopuRef = useRef(lopu);
   lopuRef.current = lopu;
   const recordingOwner = useRef(user?.id);
@@ -196,7 +209,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
 
   const archive = useAttachmentArchive();
 
-	const devicesEnabled = !builderMode && Boolean(user && user.accountKind === 'user' && !user.temporary);
+	const devicesEnabled = !locationPicker && !builderMode && Boolean(user && user.accountKind === 'user' && !user.temporary);
 	const deviceStore = useDeviceStore({
 		userId: user?.id,
 		selectedDeviceId: deviceParam,
@@ -218,12 +231,12 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
 	const localDeviceControlFor = localNode.controlFor;
 	const executeLocalDeviceAction = localNode.executeAction;
 
-  const cacheKey = builderMode ? `tt-builder-things-v1-${user?.id || 'anon'}-${folderId || 'root'}-${searchParams.get('kind') || 'apps'}` : thingsCacheKey(user?.id);
+  const cacheKey = locationPicker ? `tt-share-picker-home-${window.location.origin}-${user?.id || 'anon'}` : builderMode ? `tt-builder-things-v1-${user?.id || 'anon'}-${folderId || 'root'}-${searchParams.get('kind') || 'apps'}` : thingsCacheKey(user?.id);
   const cached = useMemo(() => readLocalCache<ThingsCache>(cacheKey), [cacheKey]);
 
   const locationState = readThingsLocation(searchParams, cached);
   const { q: urlQ, view, display: displayMode, sort, group: groupBy } = locationState;
-  const kindFilter = builderMode && !searchParams.has('kind') ? 'apps' : locationState.kind;
+  const kindFilter = builderMode && !searchParams.has('kind') ? (folderId ? 'all' : 'apps') : locationState.kind;
   // Router navigation may transition asynchronously; the input itself must
   // update synchronously so fast typing/paste cannot lose characters.
   const [q, setQueryDraft] = useState(urlQ);
@@ -245,27 +258,24 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
   useEffect(() => {
     if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).toString() !== searchParams.toString()) return;
     const state = readThingsLocation(searchParams, cached);
-    if (builderMode && !searchParams.has('kind')) state.kind = 'apps';
+    if (builderMode && !searchParams.has('kind')) state.kind = folderId ? 'all' : 'apps';
     const next = writeThingsLocation(searchParams, state);
     if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true, preventScrollReset: true });
-  }, [searchParams, setSearchParams, cached, builderMode]);
+  }, [searchParams, setSearchParams, cached, builderMode, folderId]);
   const setQ = useCallback((value: string) => { setQueryDraft(value); updateLocation({ q: value }, true); }, [updateLocation]);
   const setView = useCallback((value: ThingsView) => updateLocation({ view: value }), [updateLocation]);
   const setDisplayMode = useCallback((value: ThingsDisplayMode) => updateLocation({ display: value }), [updateLocation]);
   const setSort = useCallback((value: ThingsSort) => updateLocation({ sort: value }), [updateLocation]);
   const setGroupBy = useCallback((value: ThingsGroupBy) => updateLocation({ group: value }), [updateLocation]);
-  const setKindFilter = useCallback((value: ThingsKindFilter) => {
-    if (!builderMode || !folderId || value === 'all') { updateLocation({ kind: value }); return; }
-    setSearchParams(previous => {
-      const next = new URLSearchParams(previous);
-      next.delete('folder'); next.delete('q'); next.set('kind', value);
-      return next;
-    });
-  }, [builderMode, folderId, updateLocation, setSearchParams]);
+  const setKindFilter = useCallback((value: ThingsKindFilter) => updateLocation({ kind: value }), [updateLocation]);
   const [folderPages, setFolderPages] = useState<Record<string, ThingsThing[]>>(cached?.folders || {});
   const [cursors, setCursors] = useState<Record<string, string | null>>({});
   const [loadingKeys, setLoadingKeys] = useState<Set<string>>(new Set());
   const [folderMeta, setFolderMeta] = useState<NonNullable<ThingsCache['folderMeta']>>(cached?.folderMeta || {});
+
+  useEffect(() => {
+    locationPicker?.onLocationChange(folderId, folderId ? folderMeta[folderId]?.name || 'Folder' : 'All things');
+  }, [folderId, folderMeta, locationPicker]);
 
   // "Download all files" for the folder being browsed: one small manifest read
   // says whether a ZIP would hold anything (folders with no stored files show
@@ -567,7 +577,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     if (!arranged || !user || searchMode) return;
     const cursor = cursors[currentKey];
     if (!cursor || loadingKeys.has(currentKey)) return;
-    if (!builderMode && (folderPages[currentKey] || []).length >= MAX_ARRANGE_THINGS) return;
+    if (!builderMode && !locationPicker && (folderPages[currentKey] || []).length >= MAX_ARRANGE_THINGS) return;
     fetchFolder(folderId, cursor);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [arranged, user?.id, currentKey, cursors, loadingKeys, folderId, builderMode]);
@@ -773,6 +783,14 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
   // The PreviewModal stays the explicit quick-look ('preview' / ?preview=).
   const openThing = useCallback(
     (thing: ThingsThing) => {
+      if (locationPicker) {
+        if (isFolder(thing)) navigateToFolder(thing.id);
+        else setPreviewThing(thing);
+        return;
+      }
+      const launchHref = builderMode ? builderAppLaunchHref(thing) : null;
+      if (launchHref) { navigate(launchHref); return; }
+
       const builderHref = thingBuilderHref(thing, user?.id);
       if (builderHref) { navigate(builderHref); return; }
       if (isFolder(thing)) {
@@ -781,7 +799,8 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
       }
       navigate(thingOpenHref(thing, 'things', user?.id));
     },
-    [navigate, navigateToFolder, user?.id]
+    [navigate, navigateToFolder, user?.id, locationPicker, builderMode]
+
   );
 
   const toggleSelect = useCallback((thing: ThingsThing) => {
@@ -1494,6 +1513,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
   // ------------------------------------------------------------------ keyboard
 
   useEffect(() => {
+    if (locationPicker) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (dialogOpen || itemMenu.open || backgroundMenu.open) return;
       const target = event.target as HTMLElement | null;
@@ -1531,7 +1551,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('paste', onPaste);
     return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('paste', onPaste); };
-  }, [backgroundMenu.open, clipboard, copyToClipboard, dialogOpen, itemMenu.open, pasteClipboardTo, folderId, selectAll, selectedThings, selection]);
+  }, [backgroundMenu.open, clipboard, copyToClipboard, dialogOpen, itemMenu.open, pasteClipboardTo, folderId, selectAll, selectedThings, selection, locationPicker]);
 
   // ------------------------------------------------------------------ render
 
@@ -1568,9 +1588,12 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     );
   }
 
+  const eventlessItemContextMenu: ThingsItemHandlers['onItemContextMenu'] = (_thing, event) => { event.preventDefault(); event.stopPropagation(); };
   const itemHandlers: ThingsItemHandlers = {
-    ...(builderMode ? { itemMenuFor: (thing: ThingsThing) => buildThingsItemMenu({ thing, actCount: selection.has(thing.id) ? Math.max(1, selection.size) : 1, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode: true }) } : {}),
-    itemHref: (thing: ThingsThing) => thingBrowseHref(thing, searchParams.toString(), user?.id),
+    builderMode,
+    ...(locationPicker ? { itemMenuFor: () => ({ sections: [] }) } : builderMode ? { itemMenuFor: (thing: ThingsThing) => buildThingsItemMenu({ thing, actCount: selection.has(thing.id) ? Math.max(1, selection.size) : 1, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode: true }) } : {}),
+    itemHref: (thing: ThingsThing) => locationPicker ? (isFolder(thing) ? `?${new URLSearchParams({ ...Object.fromEntries(searchParams), folder: thing.id })}` : undefined) : (builderMode ? builderAppLaunchHref(thing) : null) || thingBrowseHref(thing, searchParams.toString(), user?.id),
+
     locationSearch: searchParams.toString(),
     clipboardCount: clipboard?.ids.length || 0,
     ownerId: user?.id,
@@ -1581,16 +1604,16 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     onItemOpen: openThing,
     onItemToggle: toggleSelect,
     onItemAction,
-    onItemContextMenu,
-    onItemDragStart,
+    onItemContextMenu: locationPicker ? eventlessItemContextMenu : onItemContextMenu,
+    onItemDragStart: locationPicker ? () => {} : onItemDragStart,
     onItemDragEnd,
     dropTargetId: dropTarget,
-    onFolderDragOver,
-    onFolderDragLeave,
-    onFolderDrop
+    onFolderDragOver: locationPicker ? () => {} : onFolderDragOver,
+    onFolderDragLeave: locationPicker ? () => {} : onFolderDragLeave,
+    onFolderDrop: locationPicker ? () => {} : onFolderDrop
   };
 
-  const treeDnd = { dropTargetId: dropTarget, onDragOver: onFolderDragOver, onDragLeave: onFolderDragLeave, onDrop: onFolderDrop };
+  const treeDnd = { dropTargetId: dropTarget, onDragOver: locationPicker ? () => {} : onFolderDragOver, onDragLeave: locationPicker ? () => {} : onFolderDragLeave, onDrop: locationPicker ? () => {} : onFolderDrop };
 
   // drop-target props for the breadcrumb row (null = root)
   const crumbDropProps = (target: string | null) => ({
@@ -1655,17 +1678,17 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     <Flex
       background="var(--tt-surface, #fafafb)"
       justifyContent="center"
-      minHeight="100vh"
-      paddingBottom={16}
-      paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
+      minHeight={locationPicker ? "320px" : "100vh"}
+      paddingBottom={locationPicker ? 4 : 16}
+      paddingTop={locationPicker ? 0 : "calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"}
       width="100%"
     >
       <Flex direction="column" gap={4} maxWidth="100%" paddingTop={[4, 6]} paddingX={4} width={['100%', '100%', '1100px']}
         style={{ boxSizing: 'border-box', minWidth: 0, paddingInline: 16 }}>
         <Flex alignItems="baseline" gap={3} wrap="wrap">
           <Text {...monoLabel}>Thingtime · {builderMode ? 'Builder' : 'Things'}</Text>
-          {builderMode ? <Button as={RouterLink} to="/things" size="sm" variant="ghost">All Things</Button> : <Button as={RouterLink} to="/things?files=thingtime" size="sm" variant="ghost">Browse files</Button>}
-          {!builderMode && !folderId && !searchMode ? <Button as={RouterLink} to="/things?unfiled=attachments" size="sm" variant="outline" minHeight="44px">Unfiled files</Button> : null}
+          {!locationPicker && (builderMode ? <Button as={RouterLink} to="/things" size="sm" variant="ghost">All Things</Button> : <Button as={RouterLink} to="/things?files=thingtime" size="sm" variant="ghost">Browse files</Button>)}
+          {!locationPicker && !builderMode && !folderId && !searchMode ? <Button as={RouterLink} to="/things?unfiled=attachments" size="sm" variant="outline" minHeight="44px">Unfiled files</Button> : null}
         </Flex>
         <Flex alignItems="center" gap={3} wrap="wrap">
           <Text
@@ -1698,7 +1721,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
               <MenuItem onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import Things…</MenuItem>
               <MenuItem onClick={() => void fetchFolder(folderId)}>Refresh this folder</MenuItem>
               <MenuItem onClick={selectAll}>{allSelected ? 'Clear selection' : 'Select all'}</MenuItem>
-              <MenuDivider /><MenuItem as={RouterLink} to="/things?logs=1">Error logs</MenuItem>
+              {!locationPicker && <><MenuDivider /><MenuItem as={RouterLink} to="/things?logs=1">Error logs</MenuItem></>}
             </MenuList></Portal>
           </Menu>
           <Menu placement="bottom-end">
@@ -1712,12 +1735,12 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
                 {builderMode ? <MenuItem as={RouterLink} to="/components">New component</MenuItem> : null}
                 {builderMode ? <MenuItem as={RouterLink} to="/actions">New action</MenuItem> : null}
                 {(!builderMode || folderId) && <MenuItem onClick={() => openNewFolder(folderId)}>📁 New folder</MenuItem>}
-              {!builderMode && <MenuItem as={RouterLink} to="/feed">
+              {!locationPicker && !builderMode && <MenuItem as={RouterLink} to="/feed">
                   📝 New post
                 </MenuItem>}
-                <MenuItem as={RouterLink} to="/schemas">
+                {!locationPicker && <MenuItem as={RouterLink} to="/schemas">
                   💎 New data thing
-                </MenuItem>
+                </MenuItem>}
               </MenuList>
             </Portal>
           </Menu>
@@ -1827,9 +1850,9 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
             </Menu>
           </ToolbarGroup>
           <ToolbarGroup label="kind" wrap>
-            {(builderMode ? BUILDER_KIND_FILTERS.filter(entry => folderId || entry.id !== 'all') : THINGS_KIND_FILTERS).map((entry) => (
+            {(builderMode ? BUILDER_KIND_FILTERS.filter(entry => folderId ? entry.id !== 'apps' : entry.id !== 'all') : THINGS_KIND_FILTERS).map((entry) => (
               <Button key={entry.id} {...pillProps(kindFilter === entry.id)} onClick={() => setKindFilter(entry.id)}>
-                {entry.icon} {entry.label}
+                {entry.icon} {builderMode && folderId && entry.id !== 'all' ? entry.label.replace(/^All /, '') : entry.label}
               </Button>
             ))}
           </ToolbarGroup>
@@ -1892,7 +1915,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
         ) : null}
 
         {/* breadcrumbs — every crumb is also a drag-and-drop move target */}
-        {!searchMode && (
+        {(!searchMode || builderMode) && (
           <Flex alignItems="center" color="var(--tt-muted, #9a9aa6)" fontSize="13px" gap={1} wrap="wrap">
             <Box
               as="button"
@@ -1924,8 +1947,8 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
         {searchMode && (
           <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
 						{searching
-							? 'Searching all your folders…'
-							: `${searchResultCount} result${searchResultCount === 1 ? '' : 's'} across your things and computers`}
+							? (builderMode ? (folderId ? 'Searching this app…' : 'Searching this Builder view…') : 'Searching all your folders…')
+							: `${searchResultCount} result${searchResultCount === 1 ? '' : 's'} ${builderMode ? (folderId ? 'in this app' : 'in this Builder view') : 'across your things and computers'}`}
           </Text>
         )}
 

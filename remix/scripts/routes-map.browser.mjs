@@ -92,6 +92,7 @@ async function exercise(context, profile) {
 				setLngLat([longitude]) { this.longitude = longitude; return this; }
 				addTo(map) {
 					this.element.style.position = 'absolute';
+					this.element.style.transform = 'translate(-50%, -50%)';
 					this.element.style.left = '8%';
 					this.element.style.top = this.longitude > 144.96 ? '56%' : '8%';
 					map.container.append(this.element);
@@ -110,7 +111,7 @@ async function exercise(context, profile) {
 		contentType: 'text/css', body: '[aria-label="Composed fixture map"] { position: relative; background: #c8ded5 }'
 	}));
 	await page.route(origin + '/.well-known/thingtime-capabilities.json', route => route.fulfill({ json: {
-		schemaVersion: 1, origin, features: { 'api.maps': { version: '1.0.0' }, 'api.webpages-resolve': { version: '1.10.0' }, 'api.attachment-content': { version: '1.12.0' }, 'api.actions-run': { version: '1.39.0' } }
+		schemaVersion: 1, origin, features: { 'api.maps': { version: '1.2.0' }, 'api.webpages-resolve': { version: '1.10.0' }, 'api.attachment-content': { version: '1.12.0' }, 'api.actions-run': { version: '1.39.0' } }
 	} }));
 	await page.route(origin + '/api/v1/maps', route => {
 		assert.equal(route.request().postDataJSON().operation, 'browser-config');
@@ -183,6 +184,10 @@ async function exercise(context, profile) {
 
 		const bounds = await quay.boundingBox();
 		assert.ok(bounds.width >= 44 && bounds.height >= 44);
+		const nativeFace = fern.locator('[data-tt-map-marker-face]');
+		const faceBounds = await nativeFace.boundingBox(), targetBounds = await fern.boundingBox();
+		assert.ok(faceBounds.height < targetBounds.height, 'scaled native colored face shrinks while the target stays44px');
+		assert.ok(Math.abs((faceBounds.y+faceBounds.height/2)-(targetBounds.y+targetBounds.height/2))<1, 'native face remains centered');
 		const draft = page.getByRole('textbox', { name: 'Nested draft' });
 		await draft.fill('Fixture draft');
 		const search = page.getByRole('searchbox', { name: 'Search saved places' });
@@ -331,6 +336,7 @@ async function exerciseComposed(page, profile) {
 	await page.getByText('Selected marker: fixture-fern', { exact: true }).waitFor();
 	assert.equal(await quayDraft.inputValue(), 'Composed fixture draft');
 	assert.equal(await fernDraft.inputValue(), '');
+	await exerciseMarkerMenu(page, map, 'Fern Library', 1, profile, true);
 	assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
 	await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
 	await page.screenshot({ path: join(screenshots, profile + '-composed.png'), fullPage: true });
@@ -374,5 +380,46 @@ async function exerciseComposed(page, profile) {
 	await framedQuay.press('Enter');
 	await page.getByText('Selected marker: fixture-quay', { exact: true }).waitFor();
 	assert.equal(await framedQuay.evaluate(node => node === node.ownerDocument.activeElement), true);
+	await exerciseMarkerMenu(page, framedMap, 'Copper Quay', 2, profile);
 	await page.screenshot({ path: join(screenshots, profile + '-iframe.png'), fullPage: true });
+}
+
+async function exerciseMarkerMenu(page, map, label, pulse, profile, structural = false) {
+ const trigger = map.getByRole('button', { name: 'Marker commands for ' + label, exact: true });
+ await trigger.waitFor();
+ assert.equal(await trigger.getAttribute('aria-haspopup'), 'menu', 'new conditional trigger receives the menu binding');
+ const show = () => profile === 'mobile' ? trigger.tap() : trigger.click();
+ await show();
+ const popup = map.getByRole('menu', { name: 'Commands for ' + label, exact: true });
+ await popup.waitFor();
+ const original = await popup.elementHandle();
+ const beforePulse = Number((await page.getByText(/^Marker refresh: [0-9]+;/).innerText()).match(/Marker refresh: ([0-9]+);/)[1]);
+ await page.evaluate(() => window.fixtureMarkerRefresh('scope'));
+ await page.getByText(new RegExp('^Marker refresh: ' + (beforePulse + 1) + ';')).waitFor();
+ assert.equal(await original.evaluate(node => node.isConnected && node.matches(':popover-open')), true, 'ordinary source scope reconciliation preserves the same native popup');
+ await popup.getByRole('menuitem', { name: 'Refreshed marker action', exact: true }).waitFor();
+ const command = popup.getByRole('menuitem', { name: 'Use marker', exact: true });
+ assert.equal(await command.evaluate(node => node === node.ownerDocument.activeElement), true, 'refresh keeps keyboard focus on the existing command');
+ await page.screenshot({ path: join(screenshots, profile + '-menu-refresh-' + pulse + '.png'), fullPage: true });
+ await command.click();
+ await page.getByText('Marker command: ' + (label === 'Fern Library' ? 'fixture-fern' : 'fixture-quay'), { exact: true }).waitFor();
+ await popup.waitFor({ state: 'hidden' });
+ if (!structural) return;
+ await show();
+ await popup.waitFor();
+ await page.evaluate(() => window.fixtureMarkerRefresh('disabled'));
+ await page.getByText(/menu disabled: true;/).waitFor();
+ await popup.waitFor({ state: 'hidden' });
+ assert.equal(await trigger.getAttribute('aria-disabled'), 'true');
+ await page.evaluate(() => window.fixtureMarkerRefresh('disabled'));
+ await page.getByText(/menu disabled: false;/).waitFor();
+ await show();await popup.waitFor();
+ const replaced = await popup.elementHandle();
+ await page.evaluate(() => window.fixtureMarkerRefresh('slot'));
+ await page.getByText(/alternate slot: true$/).waitFor();
+ assert.equal(await replaced.evaluate(node => node.isConnected), false, 'actual popup replacement ends the previous menu lifetime');
+ await popup.waitFor({ state: 'hidden' });
+ await show();await popup.waitFor();
+ await popup.press('Escape');
+ assert.equal(await trigger.evaluate(node => node === node.ownerDocument.activeElement), true);
 }

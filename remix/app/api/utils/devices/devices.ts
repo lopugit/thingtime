@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { normalizeDeviceDescriptorPatch } from './deviceDescriptorPatch';
 import { isDevicePlatform } from '../../../devices/platform';
 import { normalizeCapabilities, safeCapabilities } from './deviceCapabilities';
 
@@ -54,6 +55,9 @@ export const DEVICE_CONTROL_EVENT_MAX_ROW_BYTES = 16 * 1024;
 type DeviceThingKind =
 	| 'device'
 	| 'device-state'
+	| 'device-observation'
+	| 'device-alert-sound'
+	| 'device-observation-cleanup'
 	| 'device-connector'
 	| 'device-command'
 	| 'device-command-event'
@@ -64,6 +68,9 @@ type DeviceThingKind =
 const DEVICE_UNIQUE_KEY_FIELDS = [
 	'deviceKey',
 	'deviceStateKey',
+	'deviceObservationKey',
+	'deviceAlertSoundKey',
+	'deviceObservationCleanupKey',
 	'deviceConnectorKey',
 	'deviceCommandKey',
 	'deviceEventKey',
@@ -788,6 +795,7 @@ export const listDevices = async (
 };
 
 type UpdateDeviceStateInput = {
+	descriptorPatch?: unknown;
 	capabilities?: unknown;
 	revision?: unknown;
 	state?: unknown;
@@ -799,6 +807,8 @@ export const updateDeviceState = async (
 	deviceId: string,
 	input: UpdateDeviceStateInput
 ): Promise<DeviceFail | { ok: true; revision: number; applied: boolean; stale: boolean }> => {
+	const descriptorPatch = input?.descriptorPatch === undefined ? undefined : normalizeDeviceDescriptorPatch(input.descriptorPatch);
+	if (descriptorPatch === null) return deviceFail(400, 'descriptorPatch requires model and only optional osVersion/appVersion strings');
 	const capabilities = input?.capabilities === undefined ? undefined : normalizeCapabilities(input.capabilities);
 	if (capabilities === null) return deviceFail(400, 'capabilities must be a bounded list of identifiers');
 	const revision = Number(input?.revision);
@@ -818,7 +828,7 @@ export const updateDeviceState = async (
 		things.find({ thingtime: 'device-connector', ownerId, targetId: deviceId } as any).toArray()
 	]);
 	const stateHash = devicePayloadHash(state);
-	const snapshotHash = deviceSnapshotHash(state, connectors, capabilities);
+	const snapshotHash = deviceSnapshotHash(state, connectors, capabilities, descriptorPatch);
 	const stateDecision = decideDeviceRevision(
 		Number.isSafeInteger(existingState?.crystal?.revision) ? Number(existingState.crystal.revision) : null,
 		typeof existingState?.crystal?.snapshotHash === 'string' ? existingState.crystal.snapshotHash : null,
@@ -878,6 +888,9 @@ export const updateDeviceState = async (
 					{ ...HOME_ACCOUNTING, session }
 				);
 				if (!updated.modifiedCount) throw Object.assign(new Error('device_snapshot_race'), { status: 409 });
+			}
+			if (descriptorPatch) {
+				await updateAccountedThing(things,{shareId:deviceId,ownerId,thingtime:'device'} as any,{$set:{...Object.fromEntries(Object.entries(descriptorPatch).map(([key,value])=>[`crystal.${key}`,value])),updatedAt:now}},{...HOME_ACCOUNTING,session});
 			}
 			if (capabilities !== undefined) {
 				await updateAccountedThing(things, { shareId: deviceId, ownerId, thingtime: 'device' } as any,

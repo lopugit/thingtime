@@ -1,3 +1,4 @@
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT } from '~/api/http';
 import { createAttachmentMutationAction, attachmentPostOnlyLoader } from '~/api/utils/attachments/attachmentResponses';
 import { startAttachmentUpload } from '~/api/utils/attachments/attachments';
 
@@ -7,6 +8,7 @@ import { startAttachmentUpload } from '~/api/utils/attachments/attachments';
 // start with both withheld (even once their email is verified) until an admin
 // grants them — per scope or all — from the /admin Users tab.
 export const action = createAttachmentMutationAction({
+	bodyBudget: JSON_BODY_WITHOUT_APPLICATION_LIMIT,
 	rateKey: 'attachments.start',
 	service: startAttachmentUpload,
 	requireUploadPermission: true

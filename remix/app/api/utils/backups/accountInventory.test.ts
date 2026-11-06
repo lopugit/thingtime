@@ -18,7 +18,7 @@ import { copySealedBackup } from './portableBackup';
 import assert from 'node:assert/strict';
 import { BSON } from 'mongodb';
 import test from 'node:test';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { createAccountInventoryProducer } from './accountInventory';
 import { captureBackup, sealBackup, openBackupItem, type BackupObjectStore } from './portableBackup';
 
@@ -174,7 +174,7 @@ function accountFixture(ownerId = 'owner') {
 			hideEmailOnProfile: false,
 			readReceiptsEnabled: false,
 			activeThemeId: null,
-			activeFeedAlgorithmId: 'algorithm-old',
+			activeFeedAlgorithmId: null,
 			notificationPrefs: { 'action-run': false, email: { 'weekly-summary': false }, masters: { push: false } },
 			lopuInstructions: { revision: 'prompt-old', instructions: [{ id: 'quiet', text: 'Keep replies brief', enabled: false }] },
 			mongoEndpoints: 'NEVER_EXPORT',
@@ -440,7 +440,7 @@ test('freezes more than two pages despite source edits, inserts and deletions; c
 		}
 	};
 	const plan = await f.run();
-	assert.equal(plan.items, 300);
+	assert.equal(plan.items, 301);
 	assert.equal(plan.pages, 3);
 	assert.equal(plan.bytes, '0');
 	assert.equal(f.state.queries, 7);
@@ -503,8 +503,8 @@ test('file items retain canonical immutable content references and fingerprints'
 test('empty inventory still needs a server timestamp and produces a valid empty plan', async () => {
 	const f = fixture(0);
 	const plan = await f.run();
-	assert.equal(plan.items, 0);
-	assert.equal(plan.pages, 0);
+	assert.equal(plan.items, 1);
+	assert.equal(plan.pages, 1);
 	assert.equal(f.state.ended, 1);
 	assert.equal(f.json('header.json').boundary.token, 'mongo:1792195200:7');
 });
@@ -548,7 +548,7 @@ test('unsupported managed family refuses before fetching its private payload and
 	}
 });
 
-for (const mode of ['revoked', 'cancelled', 'scope', 'boundary', 'missing', 'duplicate', 'oversized', 'expired'] as const) {
+for (const mode of ['revoked', 'cancelled', 'scope', 'boundary', 'missing', 'duplicate', 'invalid-value', 'expired'] as const) {
 	test(`${mode} enumeration never publishes a complete plan and closes its cursor/session`, async () => {
 		const f = fixture(2),
 			controller = new AbortController();
@@ -568,7 +568,7 @@ for (const mode of ['revoked', 'cancelled', 'scope', 'boundary', 'missing', 'dup
 			if (mode === 'expired') throw Error('SnapshotTooOld');
 			if (mode === 'missing') return rows.slice(1);
 			if (mode === 'duplicate') return [rows[0], rows[0]];
-			if (mode === 'oversized') rows[0].crystal = Array.from({ length: 90_001 }, () => null);
+			if (mode === 'invalid-value') rows[0].crystal = { invalid: undefined };
 			return rows;
 		};
 		await assert.rejects(f.run());
@@ -584,7 +584,7 @@ test('canonical Timeline records and large snapshot parts survive source and fir
 	f.source.push(...history.docs);
 	const expected = new Map(history.docs.map((doc) => [doc.shareId, timelineBackupRecordFromDoc(doc)]));
 	const plan = await f.run();
-	assert.equal(plan.items, history.docs.length + 1);
+	assert.equal(plan.items, history.docs.length + 2);
 	assert.ok(BigInt(plan.bytes) > BigInt(2_400_000));
 	assert.ok(f.state.queries < history.docs.length, 'history payload reads are batched');
 	for (const projection of f.projections.filter((p) => p.secure)) {
@@ -776,7 +776,7 @@ async function fileHistoryBackup() {
 test('old, current and conflict bytes survive source removal and independent account-vault copy', async () => {
 	const { f, history, available, requests, runtime } = await fileHistoryBackup();
 	const plan = await f.run();
-	assert.equal(plan.items, history.docs.length);
+	assert.equal(plan.items, history.docs.length + 1);
 	assert.equal(f.headReads.length, 3); // history references reuse immutable HEADs
 	assert.equal(f.state.queries, 5 + Math.ceil(history.docs.filter((doc) => doc.thingtime[0].startsWith('timeline-')).length / 8)); // bounded family and reference batches
 	const originalPut = f.store.put;
@@ -879,7 +879,7 @@ test('attachment fingerprint verification uses at most eight concurrent storage 
 		active--;
 	};
 	const plan = await f.run();
-	assert.equal(plan.items, 24);
+	assert.equal(plan.items, 25);
 	assert.equal(f.state.queries, 3);
 	assert.equal(f.headReads.length, 24);
 	assert.equal(peak, 8);
@@ -929,7 +929,7 @@ test('large ordinary content, drafts, templates and deletion tombstones survive 
 	const plan = await f.run();
 	assert.ok(observedStreaming);
 	f.state.beforePut = () => {};
-	assert.equal(plan.items, 7);
+	assert.equal(plan.items, 8);
 	assert.ok(BigInt(plan.bytes) > BigInt(9 * 1024 * 1024));
 	assert.equal(f.state.queries, 6, 'one batched media dependency query, no per-draft payload lookup');
 	assert.ok(f.projections.every((p) => !p.secure && !p.tokenAcl && !p.linkKey));
@@ -986,3 +986,102 @@ for (const mode of ['missing', 'foreign', 'target', 'purpose', 'profile', 'delet
 		assert.equal(f.state.closed, f.state.queries);
 	});
 }
+
+
+test('ordinary account capture retains valid content beyond the legacy 100000-node codec', async () => {
+	const f = fixture(2);
+	f.state.alterRows = (n, rows) => {
+		if (n === 2) rows[0].crystal = Array.from({ length: 150_001 }, () => null);
+		return rows;
+	};
+	const plan = await f.run();
+	assert.equal(plan.items, 3);
+	assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), true);
+	assert.equal(f.state.closed, f.state.queries);
+	assert.equal(f.state.ended, 1);
+	await sealBackup(f.store, f.id, f.access);
+	const restored = await openBackupThingSnapshot(f.store, f.id, 'thing-0000', f.access);
+	assert.equal((restored.value as any).crystal.length, 150_001);
+});
+
+test('ordinary nested composition/schema/action/media closure stays pinned and independently readable', async () => {
+	const f = fixture(0), media = await backupAttachmentFixture('owner', 'closure-media', Buffer.from('independent stored media'), 'post', 'closure-component');
+	f.source.push(
+		{ shareId: 'closure-page', ownerId: 'owner', thingtime: ['webpage'], crystal: { blocks: [{ type: 'component', component: 'closure-widget', args: { action: 'closure-other' } }] } },
+		{ shareId: 'closure-component', ownerId: 'owner', thingtime: ['component'], crystal: { componentKey: 'closure-widget', version: 2, savedArgs: { action: 'closure-action' }, render: { tag: 'button', ttAction: '{action}', props: { backgroundImage: "url('/api/v1/attachments/content?id=closure-media')" } } } },
+		{ shareId: 'closure-action', ownerId: 'owner', thingtime: ['action'], crystal: { actionKey: 'closure-action', steps: [{ op: 'things.get', id: 'closure-data', schema: 'closure-schema-name' }, { op: 'actions.invoke', action: 'closure-other' }] } },
+		{ shareId: 'closure-other', ownerId: 'owner', thingtime: ['action'], crystal: { steps: [{ op: 'actions.invoke', action: 'closure-action' }] } },
+		{ shareId: 'closure-schema', ownerId: 'owner', thingtime: ['schema'], crystal: { name: 'closure-schema-name', render: { tag: 'button', ttAction: 'closure-other' } } },
+		{ shareId: 'closure-data', ownerId: 'owner', thingtime: ['data'], crystal: { schemaId: 'closure-schema', text: 'pinned' } },
+		media.doc
+	);
+	f.heads.set(media.doc.objectKey, media.head);
+	f.state.beforeQuery = n => { if (n === 2) f.source.length = 0; };
+	await f.run();
+	await captureBackup(f.store, f.id, { read: async (_item, offset, length) => media.bytes.subarray(offset, offset + length) }, f.access);
+	await sealBackup(f.store, f.id, f.access);
+	const second = fixture(0);
+	await copySealedBackup(f.store, second.store, f.id, f.access);
+	f.objects.clear();
+	assert.equal(((await openBackupThingSnapshot(second.store, f.id, 'closure-data', f.access)).value as any).crystal.text, 'pinned');
+	assert.deepEqual(((await openBackupThingSnapshot(second.store, f.id, 'closure-page', f.access)).value as any).crystal.blocks[0].args, { action: 'closure-other' });
+	const opened = await openBackupItem(second.store, f.id, 'closure-media', f.access), bytes = [];
+	for await (const range of opened.ranges) bytes.push(range);
+	assert.deepEqual(Buffer.concat(bytes), media.bytes);
+});
+
+for (const mode of ['missing', 'foreign', 'wrong-kind', 'active-theme'] as const) test(`uncaptured ${mode} dependency is preserved with explicit unresolved evidence`, async () => {
+	const f = fixture(0);
+	if (mode === 'active-theme') {
+		const account = accountFixture(), snapshot = backupAccountSnapshotFromDoc(account), value = accountContentValue(snapshot);
+		const { secure } = buildUserSecure({ email: 'test@example.invalid', passwordHash: 'synthetic', emailVerified: true, meta: { ...value.preferences, activeThemeId: 'absent-theme' } });
+		f.source.push({ ...account, secure });
+	} else {
+		f.source.push({ shareId: 'root', ownerId: 'owner', thingtime: ['component'], crystal: { render: { tag: 'button', ttAction: 'dependency' } } });
+		if (mode !== 'missing') f.source.push({ shareId: 'dependency', ownerId: mode === 'foreign' ? 'foreign' : 'owner', thingtime: mode === 'wrong-kind' ? ['data'] : ['action'], crystal: {} });
+	}
+	await f.run();
+	assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), true);
+	const evidence = f.json('plan/0.json').items.find((item: any) => item.snapshot.adapter === 'backup-reference-coverage');
+	assert.equal(evidence.snapshot.value.coverage.resolution, 'unresolved');
+	assert.equal(evidence.snapshot.value.coverage.wholeAccountReady, false);
+});
+
+test('one oversized escaped diagnostic cannot prevent exact independent recovery of saved owner content', async () => {
+	const f = fixture(0), reference = '\0'.repeat(2 * 1024 * 1024);
+	f.source.push({ shareId: 'oversized-reference', ownerId: 'owner', thingtime: ['data'], crystal: { renderComponent: { id: reference }, text: 'Keep this exact saved data' } });
+	await f.run();
+	const evidence = f.json('plan/0.json').items.find((item: any) => item.snapshot.adapter === 'backup-reference-coverage').snapshot.value;
+	assert.equal(evidence.coverage.discovery, 'unsupported'); assert.equal(evidence.coverage.wholeAccountReady, false);
+	assert.equal(evidence.issues[0].reference, null);
+	assert.deepEqual(evidence.issues[0].referenceDiagnostic, { encoding: 'utf8', bytes: Buffer.byteLength(reference), sha256: createHash('sha256').update(reference).digest('hex') });
+	await sealBackup(f.store, f.id, f.access);
+	const second = fixture(0); await copySealedBackup(f.store, second.store, f.id, f.access);
+	f.source.length = 0; f.objects.clear();
+	const restored = await openBackupThingSnapshot(second.store, f.id, 'oversized-reference', f.access);
+	assert.equal((restored.value as any).crystal.renderComponent.id, reference);
+	assert.equal((restored.value as any).crystal.text, 'Keep this exact saved data');
+});
+
+test('real-shaped moderation Dates and provider diagnostics are excluded before portable attachment bounding', async () => {
+ const f = fixture(0), attachment = await backupAttachmentFixture('owner', 'moderated-attachment', Buffer.from('saved bytes'));
+ (attachment.doc as any).moderation = { status: 'clear', checkedAt: new Date(), provider: 'DO_NOT_EXPORT_PROVIDER_DIAGNOSTICS', details: { response: 'DO_NOT_EXPORT_PROVIDER_DIAGNOSTICS' } };
+ f.source.push(attachment.doc); f.heads.set(attachment.doc.objectKey, attachment.head);
+ await f.run();
+ assert.ok(f.projections.some((p: any) => p['moderation.status'] === 1 && p.moderation === undefined));
+ assert.ok(![...f.objects.values()].some(bytes => Buffer.from(bytes).includes('DO_NOT_EXPORT_PROVIDER_DIAGNOSTICS')));
+ const item = f.json('plan/0.json').items.find((item: any) => item.thingId === attachment.doc.shareId);
+ assert.equal(item.snapshot.value.moderation, null);
+ assert.deepEqual(item.snapshot.value.content, attachment.content);
+});
+
+test('account file descriptors preserve inert symlink metadata alongside its exact target bytes', async () => {
+ const f = fixture(0), bytes = Buffer.from('../target'), attachment = await backupAttachmentFixture('owner', 'symlink-attachment', bytes);
+ f.source.push(attachment.doc); f.heads.set(attachment.doc.objectKey, attachment.head);
+ const symbolicLink = { format: 'posix-symlink-v1', targetBase64: bytes.toString('base64') };
+ f.source.push({ shareId: 'file-one', ownerId: 'owner', thingtime: ['file'], timelineHeadId: 'symlink-revision', folderId: 'folder-one', crystal: { name: 'link', trashed: false, content: attachment.content, symbolicLink } });
+ await f.run();
+ const file = f.json('plan/0.json').items.find((item: any) => item.thingId === 'file-one');
+ assert.deepEqual(file.snapshot.value.symbolicLink, symbolicLink);
+ assert.ok(f.projections.some((p: any) => p['crystal.symbolicLink'] === 1));
+});

@@ -40,6 +40,14 @@ data stay on the home data plane.
 | Admin routes | `app/routes/api/v1/admin/*` (users/public-uploads, ci, integrations, error-logs, moderation, migrations) |
 | Client hooks | `app/hooks/useCurrentUser.tsx`, account switcher components in `app/components/Account/*` |
 
+Native mobile background authority is watched by `mobileDeviceIdentity.ts`,
+mounted outside the optional polling activity in `MobileDevicePresenceBootstrap`.
+Identity/unmount withdrawal cancels scoped in-flight native authorizations while
+retaining opt-in; one read-only status can resume the same verified identity.
+Ordinary visibility hiding does not withdraw an authorized location session.
+Run the Devices identity/presence/location bridge tests and the native location
+scope regressions; see `TESTING.md` for activity-disabled logout/relogin checks.
+
 ## Authorization helper
 
 - Every API route: `const user = await getCurrentUser(request)`; treat
@@ -442,3 +450,14 @@ metadata. Connections renders a local link mark while pending or unavailable.
 The provider catalog uses a separate Settings Builder document with one editable
 repeated card template. Its logo has normal upload and optional URL controls;
 its Connect block calls the same scoped, synchronous OAuth gesture handler.
+
+## Transaction-bound full-account mutation fence
+
+`auth/fenceAccountSession.ts` is an internal home-plane composition helper. It
+reuses canonical JWT/current-user resolution, requires the actual principal's
+own supported full session and performs a fresh random session write inside
+the content transaction. Revocation or selection changes therefore conflict;
+no-op updates and caller-supplied actor IDs are not authority. The selected
+ordinary-restore primitive currently refuses Character delegation and scoped
+credentials; this is an explicit initial capability scope, not impersonation.
+The real replica check covers wrong-account and revoked accepted-receipt retries.

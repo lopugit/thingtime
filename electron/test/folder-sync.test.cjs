@@ -482,6 +482,16 @@ test('native identity retry crosses Electron as a plain fixed Error while author
     await assert.rejects(f.host.request(f.event, f.input()), error => error.name === 'Error' && error.message === marker);
 });
 
+test('volume reconnect markers require the exact trusted native code and fixed message', async () => {
+    const { ThingtimeNodeBridgeError } = require('../lib/thingtime-node-bridge.cjs');
+    for (const marker of ['[folder_volume_offline] The granted volume is offline. Saved sync will retry.',
+        '[folder_volume_remounted] The granted volume returned. Reconcile its saved transfer before continuing.']) {
+        const f = fixture();
+        f.run(async () => { throw new ThingtimeNodeBridgeError('folder_volume_retry', marker); });
+        await assert.rejects(f.host.request(f.event, f.input({ action: 'inspect' })), error => error.name === 'Error' && error.message === marker);
+    }
+});
+
 test('authority drift wins over a concurrent native transport interruption and diagnostics never break a request', async () => {
     const { ThingtimeNodeBridgeError }=require('../lib/thingtime-node-bridge.cjs');
     const f=fixture(); f.host.diagnostic=()=>{throw Error('diagnostic sink unavailable');};
@@ -679,4 +689,37 @@ test('desktop advertises the signed download recovery patch on compatible stagin
     } });
     const reply = await f.host.request(f.event, f.input({ action: 'context' }));
     assert.equal(reply.capabilities.fileDownloadVersion, '1.0.1');
+});
+
+test('compound upload dispatch requires an independently negotiated native capability', async () => {
+ const f = fixture();
+ f.run(async (_method, request) => ({ ...request, roots: [], capabilities: { fileAccessVersion: '1.19.0' } }));
+ await f.host.request(f.event, f.input({ action: 'context', origin: undefined }));
+ const before = f.calls.length;
+ await assert.rejects(f.host.request(f.event, f.input({ action: 'upload-single', rootId: randomUUID() })), /support/);
+ assert.equal(f.calls.length, before);
+});
+
+
+test('compound observations retain fresh host checks', async () => {
+ const f = fixture(), input = f.input({ action: 'observe-path', rootId: randomUUID(), path: 'nested/file', remainingMs: 30_000,
+  observation: { version: 1, network: 'wifi', chargingOnly: false, configurationId: 'connection', configurationRevision: 'r1' } });
+ f.run(async (_method, request) => ({ ...request, roots: [], complete: true }));
+ const result = await f.host.request(f.event, input);
+ assert.equal(result.complete, true); assert.equal(f.calls.length, 1); assert.ok(f.calls[0].remainingMs > 0 && f.calls[0].remainingMs <= 30_000);
+ f.run(async (_method, request) => { f.account('other'); return { ...request, roots: [], complete: true }; });
+ await assert.rejects(f.host.request(f.event, f.input({ ...input, requestId: randomUUID() })));
+});
+
+
+test('compound observation queue delay consumes its original deadline before native dispatch', async () => {
+ const f = fixture(); let now = 0, release, entered;
+ const gate = new Promise(resolve => { release = resolve; }), started = new Promise(resolve => { entered = resolve; });
+ f.host.now = () => now;
+ f.run(async (_method, request) => { entered(); await gate; return { ...request, roots: [] }; });
+ const first = f.host.request(f.event, f.input({ action: 'list' })); await started;
+ const queued = f.host.request(f.event, f.input({ action: 'observe-path', remainingMs: 10, rootId: randomUUID(), path: 'file' }));
+ const rejected = assert.rejects(queued);
+ now = 11; release(); await first; await rejected;
+ assert.equal(f.calls.length, 1);
 });

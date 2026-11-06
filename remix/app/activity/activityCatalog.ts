@@ -123,9 +123,9 @@ export const activityCatalog: ActivitySpec[] = [
 	},
 	{
 		id: 'timer:components/Devices/MobileDeviceSetupCard:1',
-		title: 'Mobile Device Setup Card',
+		title: 'Mobile device connection',
 		kind: 'polling',
-		detail: 'Runs only while its owning view is mounted; hidden windows release the interval.'
+		detail: 'Refreshes saved mobile presence while visible and permits supported iOS background check-ins when scheduled by the system; no file access or pairing is created.'
 	},
 	{
 		id: 'timer:components/Devices/useDeviceStore:1',

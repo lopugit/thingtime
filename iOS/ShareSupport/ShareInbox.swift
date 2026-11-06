@@ -147,6 +147,27 @@ final class ShareInbox {
         }
         if failures > 0 { throw Failure.waitingBatches(failures) }
     }
+    func composerDirectory(id: UUID) throws -> URL {
+        let directory = root.appendingPathComponent("ready/\(id.uuidString)", isDirectory: true)
+        guard (try? String(contentsOf: directory.appendingPathComponent("receipt"), encoding: .utf8)) == id.uuidString else { throw Failure.unavailable }
+        return directory
+    }
+    func pendingComposers(origin: URL) throws -> [UUID] {
+        let ready = root.appendingPathComponent("ready", isDirectory: true)
+        guard files.fileExists(atPath: ready.path) else { return [] }
+        return try files.contentsOfDirectory(at: ready, includingPropertiesForKeys: [.creationDateKey])
+            .sorted {
+                let left = (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                let right = (try? $1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                return left == right ? $0.lastPathComponent < $1.lastPathComponent : left < right
+            }
+            .compactMap { directory in
+                guard let id = UUID(uuidString: directory.lastPathComponent),
+                      let metadata = try? ShareComposerMetadata.read(from: directory),
+                      metadata.origin == ShareComposerSession.origin(origin), !metadata.completed else { return nil }
+                return id
+            }
+    }
     private func drainBatch(_ source: URL, to sharedDirectory: URL) throws {
             guard let id = UUID(uuidString: source.lastPathComponent),
                   try String(contentsOf: source.appendingPathComponent("receipt"), encoding: .utf8) == id.uuidString else {
@@ -171,6 +192,9 @@ final class ShareInbox {
                     try files.moveItem(at: incoming, to: destination)
                 } catch { try? files.removeItem(at: incoming); throw error }
             }
+            // Keep an unfinished composer available across extension termination,
+            // while still exposing the independent local copy in Files.
+            if let metadata = try? ShareComposerMetadata.read(from: source), !metadata.completed { return }
             try files.removeItem(at: source)
     }
 }

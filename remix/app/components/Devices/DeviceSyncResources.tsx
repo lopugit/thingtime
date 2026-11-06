@@ -186,7 +186,15 @@ function DeviceResourceSession({ ownerId, deviceId, allowed, remote: suppliedRem
  const observed = allowed ? (local ? native?.resources : remote.resources) : undefined;
  const activeSample = current ? run.progress.resources : allowed && !local ? remote.taskResources : undefined;
  const currentSample = (activeSample?.measuredAt ?? 0) > (observed?.measuredAt ?? 0) ? activeSample : observed;
- const resources = (sampled?.measuredAt ?? 0) > (currentSample?.measuredAt ?? 0) ? sampled : currentSample;
+ const latestResources = (sampled?.measuredAt ?? 0) > (currentSample?.measuredAt ?? 0) ? sampled : currentSample;
+ // A policy/status reply may omit a resource sample while the same scoped
+ // connection refreshes. Retain only the last measured sample, never authority.
+ const lastMeasurement = React.useRef<{ key: string; resources: SyncResourceStatus } | undefined>(undefined);
+ if (!allowed || lastMeasurement.current?.key !== key) lastMeasurement.current = undefined;
+ if (allowed && latestResources?.measuredAt != null && latestResources.measuredAt >= (lastMeasurement.current?.resources.measuredAt ?? -1))
+  lastMeasurement.current = { key, resources: latestResources };
+ const resources = allowed ? lastMeasurement.current?.resources ?? latestResources : undefined;
+ const retainingMeasurement = !!resources && resources !== latestResources;
  const observedAt = allowed ? local ? native?.observedAt : remote.observedAt : undefined;
  const receivedAt = allowed && !local ? remote.receivedAt : undefined;
  const sourceClock = React.useRef({ observedAt, receivedAt });
@@ -295,16 +303,17 @@ function DeviceResourceSession({ ownerId, deviceId, allowed, remote: suppliedRem
  const data = {
   status: !allowed ? 'Sign in to view this device’s private Sync resources.'
    : liveCold ? ''
-   : display.idle ? 'Idle · no active Sync or Backup work on this device.'
+   : display.idle ? display.lastNative || retainingMeasurement ? 'Idle · no active Sync or Backup work. CPU and memory show the last measurements, not current usage.' : 'Idle · no active Sync or Backup work on this device.'
+   : retainingMeasurement ? 'Last measurements · waiting for a new reading. These values are not current.'
    : display.stale ? 'Last measurement · stale. These readings are not current.'
    : display.sampleCurrent ? 'Measuring Sync and Backup on this device.'
    : local ? (online ? 'Sync is active. Waiting for the first resource measurement…' : 'Local resource status is temporarily unavailable.')
    : remote.status,
-  measurement: display.measurementAt == null ? liveCold ? '' : 'No resource reading yet.' : `${display.idle ? 'Idle confirmed' : 'Last measured'}: ${resourceDateTime(display.measurementAt)}`,
+  measurement: display.measurementAt == null ? liveCold ? '' : 'No resource reading yet.' : `${display.idle && !display.lastNative && !retainingMeasurement ? 'Idle confirmed' : 'Last measured'}: ${resourceDateTime(retainingMeasurement ? resources!.measuredAt! : display.measurementAt)}`,
   ...meter('transfer', transfer, (selectedPolicy?.transferBytesPerSecond ?? 625000) / 125000, 'Mbps', budget(selectedPolicy && selectedPolicy.transferBytesPerSecond / 125000, 'Mbps shared')),
   ...meter('scan', scan, (selectedPolicy?.scanBytesPerSecond ?? 625000) / 125000, 'Mbps', budget(selectedPolicy && selectedPolicy.scanBytesPerSecond / 125000, 'Mbps')),
-  ...meter('cpu', cpu, 100, '%', budget(selectedPolicy?.cpuPercent, '% target'), cpu != null ? ` (${resources?.cpuScopes?.length ?? '?'} of 3 scopes)` : ''),
-  ...meter('memory', memory, 512, 'MiB', '512 MiB indexer budget'),
+  ...meter('cpu', cpu, 100, '%', budget(selectedPolicy?.cpuPercent, '% target'), cpu != null ? ` (${resources?.cpuScopes?.length ?? '?'} of 3 scopes)${display.lastNative || retainingMeasurement ? ' · last measured' : ''}` : ''),
+  ...meter('memory', memory, 512, 'MiB', '512 MiB indexer budget', memory != null && (display.lastNative || retainingMeasurement) ? ' · last measured' : ''),
   directions: `Upload: ${resourceReading(upload, 'Mbps')} · Download: ${resourceReading(download, 'Mbps')}. Memory covers the native indexer only.`,
   ...Object.fromEntries((['transfer', 'scan', 'cpu'] as const).flatMap(name => [[`${name}Id`, `${prefix}-${name}`], [`${name}Target`, draft[name]]])),
   disabled: !allowed || (local ? !native?.online : !remote.save), error,

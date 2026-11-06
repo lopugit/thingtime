@@ -37,6 +37,91 @@ the legacy latest-only contract, the client falls back to
 `https://thingtime.com/api/v1/vercel/deployments`; production builds use that
 stable endpoint directly.
 
+## Background device connection activity
+
+After a paired device is verified in the foreground, **Mobile device connection
+activity** also permits a native background presence refresh for that exact
+account and destination. Turning that setting off cancels the native refresh.
+iOS **Settings → General → Background App Refresh** also controls whether the
+system permits refreshes. Logout, account/destination changes and revocation
+invalidate the saved approval; foreground entry requires fresh verification.
+
+The app uses Apple's [BGAppRefreshTask](https://developer.apple.com/documentation/backgroundtasks/bgapprefreshtask)
+with an earliest requested opportunity 15 minutes later. iOS chooses whether
+and when it runs; this is no promised interval and does not keep the app awake
+or continuously online. Force-quitting, device power policy and system settings
+can prevent execution. Apple's [BGContinuedProcessingTask](https://developer.apple.com/documentation/backgroundtasks/bgcontinuedprocessingtask)
+is for finite work begun by the user, and is not used as an always-awake
+heartbeat. Scene [foreground notifications](https://developer.apple.com/documentation/uikit/uiscene/willenterforegroundnotification)
+clear old approval before active web callbacks can establish a new binding.
+
+Background requests negotiate `api.devices-node-state` 1.9.0 and send only the
+existing Keychain device credential to `/api/v1/devices/node/state`. They do not
+read WebView cookies, create a pairing or broaden Keychain accessibility.
+
+## Device location history
+
+Location history is off until the owning device user enables it. The native
+`deviceLocationVersion` 1.1.0 bridge adds immediate scoped authorization suspension, fencing pending verification while preserving consent for a verified same-account return. The web adapter requires mobile 1.1; desktop location and HTTP observation/alert features retain their independent versions. This bridge uses explicit permission actions; launch,
+status checks and background restoration never show an authorization prompt.
+While-in-use authorization supports a foreground fix. **Always** authorization
+permits low-power significant-change updates and supported background relaunch;
+this is not a fixed-rate GPS recorder or an always-awake service. Apple's
+[significant-change service](https://developer.apple.com/documentation/corelocation/cllocationmanager/startmonitoringsignificantlocationchanges())
+and system Background App Refresh policy determine delivery. The app preserves
+Core Location measurement time, horizontal accuracy and approximate/precise
+permission status; it never substitutes IP geolocation or invented coordinates.
+
+Each offline observation is a separate protected local file. Retries keep its
+original ID, timestamp and collection generation. The app negotiates
+`api.devices-node-observations` 1.0.0 and verifies the selected device's enabled
+collection generation before uploading with its existing device credential.
+Account/destination changes, device revocation or a changed/disabled server
+collection stop the old binding. Authentication rechecks preserve the scoped
+opt-in and offline observations while durably withdrawing background authority;
+only verification of the same owner and origin resumes that saved preference.
+An unverified background relaunch cannot upload it. The server retains previously saved history
+according to the owner's retention setting; **Never** is the default retention,
+not permission to collect without opting in. This adapter reports the iPhone's
+location only; it does not claim a paired Watch's location.
+
+The device descriptor sends the public `hw.machine` model identifier. It never
+reads or sends a hardware serial number.
+
+## Selected-device alerts and uploaded sounds
+
+The native alert adapter negotiates `api.devices-node-commands` 1.11.0 and the
+independently versioned `api.devices-node-push`, `api.devices-node-media` and
+`api.devices-node-alert-sounds` 1.0.0 contracts. A saved device credential binds
+APNs registration to the exact owning device and selected origin. Notification
+permission is requested only through an explicit **Allow notifications** action.
+Normal Focus, silent-mode and notification settings still apply; provider
+acceptance is not proof that a person saw or heard a notification.
+
+An uploaded sound remains an original attachment. The native `media.prepare`
+command downloads its server-pinned version through the protected media helper,
+converts a notification-compatible sound to PCM CAF shorter than 30 seconds,
+saves its account-scoped receipt, then confirms readiness to the server. The
+sound filename is `tt-<soundId>.caf` in `Library/Sounds`. Installation cache
+generation is stored in the app container, so a reinstall cannot reuse a stale
+ready receipt merely because device pairing survived in the Keychain. Unready,
+missing or invalid sounds are refused rather than silently choosing another
+sound. These are Apple's [custom notification sound constraints](https://developer.apple.com/documentation/usernotifications/unnotificationsound).
+
+`media.play` supports a pinned attachment version while the app is active.
+Arbitrary background MP3 playback, continuous keep-awake audio and critical
+alerts that override system settings are not promised. Native execution uses
+only the registered notification/media commands, checks approval and leases,
+renews a finite operation's lease, and records a protected receipt before an
+audible side effect. An uncertain started action requires review and is never
+automatically played again. Selected-device push uses one delivery path per
+operation to avoid both an APNs alert and a later duplicate local alert.
+
+Explicit account/origin teardown unregisters local push and requests removal of
+the matching remote binding. If offline, remote removal remains unconfirmed;
+it is not reported as a successful server change. Foreground transitions only
+pause native execution until the selected account is verified again.
+
 ## Setup
 
 ### Connect the Watch during preview testing

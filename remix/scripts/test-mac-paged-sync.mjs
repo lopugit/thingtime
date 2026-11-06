@@ -8,9 +8,13 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createServer, connect } from 'node:net';
 import { randomUUID, createHash } from 'node:crypto';
+import { validateFixtureProofKind, validateFixtureWorkerParity } from './mac-fixture-transport.mjs';
+import { validateMacFixtureCapabilities } from './mac-fixture-capabilities.mjs';
+import { createFixtureTLS, createFixtureTLSFetch } from './mac-fixture-tls.mjs';
 import { accountBackupSandbox, verifyAccountBackupIsolation } from './account-backup-isolation.mjs';
 const apiPort = 28311,
 	dbPort = 28312,
+    tlsPort = 28313,
 	base = `http://127.0.0.1:${apiPort}`,
 	root = resolve(import.meta.dirname, '..');
 const wide = process.argv.includes('--wide');
@@ -22,6 +26,17 @@ const indexer = process.env.THINGTIME_MAC_SYNC_INDEXER_BIN;
 if (indexer && !indexer.startsWith('/')) throw Error('The fixture Rust indexer path must be absolute.');
 const symlinksOnly = process.argv.includes('--symlinks-only');
 const early = process.argv.includes('--two-way-early');
+const modernMixed = process.argv.includes('--canonical-worker');
+const streamingMixed = process.argv.includes('--streaming-two-way');
+const healthy = process.argv.includes('--healthy');
+if (healthy && !streamingMixed) throw Error('--healthy requires --streaming-two-way');
+if (streamingMixed && !modernMixed) throw Error('--streaming-two-way requires --canonical-worker');
+if (modernMixed && !wideMixed) throw Error('--canonical-worker requires --wide --wide-mixed');
+const canonicalFixture = early || modernMixed;
+const normalEarlyBudget = process.argv.includes('--normal-early-budget');
+const uploadStartDiagnostic = process.argv.includes('--upload-start-diagnostic');
+if (uploadStartDiagnostic && (!early || !normalEarlyBudget)) throw Error('--upload-start-diagnostic requires --two-way-early --normal-early-budget');
+if (normalEarlyBudget && !early) throw Error('--normal-early-budget requires --two-way-early.');
 if (early && (wide || symlinksOnly)) throw Error('The early acceptance requires only --two-way-early.');
 const clean = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR || tmpdir() };
 if (!process.env.TT_MAC_PAGED_WORKER) {
@@ -30,7 +45,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 	const resolvedIndexer = indexer || resolve(root, '../filesystem-indexer/target/debug/commander-indexer');
 	if (!indexer) execFileSync('cargo', ['build', '--manifest-path', resolve(root, '../filesystem-indexer/Cargo.toml'), '-p', 'commander-indexer', '--bin', 'commander-indexer'], { cwd: resolve(root, '..'), stdio: 'pipe', timeout: 180000 });
 	await access(resolvedIndexer, fsConstants.X_OK);
-	for (const port of [apiPort, dbPort]) {
+	for (const port of [apiPort, dbPort, ...(canonicalFixture ? [tlsPort] : [])]) {
 		const server = createServer();
 		server.listen(port, '127.0.0.1');
 		await once(server, 'listening');
@@ -39,8 +54,10 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 	await verifyAccountBackupIsolation(apiPort, clean);
 	const directory = await mkdtemp(join(tmpdir(), 'thingtime-mac-paged-'));
 	await chmod(directory, 0o700);
+    let tls;
 	let timer, deadlineExpired = false;
 	try {
+        if (canonicalFixture) tls = await createFixtureTLS(directory);
 		const binary = join(directory, 'MacFolderSyncFixture');
 		await copyFile(resolve(root, '../macos/ThingtimeNode/.build/debug/MacFolderSyncFixture'), binary);
 		await chmod(binary, 0o700);
@@ -72,23 +89,24 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
         if (process.env.THINGTIME_MAC_PAGED_EVIDENCE_PATH) {
             const target = process.env.THINGTIME_MAC_PAGED_EVIDENCE_PATH;
             assert.ok(target.startsWith('/'), 'Evidence path must be absolute');
-            const sourcePaths = execFileSync('rg', ['--files', '../apple/FileSync/Sources', '../macos/ThingtimeNode/Sources', '../filesystem-indexer/crates/indexer/src', 'app/fileSync', 'app/api/utils/files'], { cwd: root, encoding: 'utf8' }).trim().split('\n').filter(p => /\.(swift|rs|ts|tsx|mts)$/.test(p));
-            sourcePaths.push('scripts/mac-file-sync.integration.mts', 'scripts/test-mac-paged-sync.mjs'); sourcePaths.sort();
+            const sourcePaths = execFileSync('rg', ['--files', '../apple/FileSync/Sources', '../macos/ThingtimeNode/Sources', '../filesystem-indexer/crates/indexer/src', 'app/fileSync', 'app/api/utils/files', '../electron/lib'], { cwd: root, encoding: 'utf8' }).trim().split('\n').filter(p => /\.(swift|rs|ts|tsx|mts|cjs|mjs)$/.test(p));
+            sourcePaths.push('../macos/ThingtimeNode/Tests/MacFolderSyncFixture/main.swift', 'scripts/mac-file-sync.integration.mts', 'scripts/mac-fixture-transport.mjs', 'scripts/mac-fixture-host.mts', 'scripts/mac-fixture-http-observer.mjs', 'scripts/mac-fixture-tls.mjs', 'scripts/mac-fixture-worker-trust.cjs', 'scripts/test-mac-paged-sync.mjs', 'scripts/mac-fixture-capabilities.mjs', 'app/api/utils/capabilities/capabilityContract.ts'); sourcePaths.sort();
             const sha = async p => createHash('sha256').update(await readFile(p)).digest('hex');
             const files = Object.fromEntries(await Promise.all(sourcePaths.map(async p => [p, await sha(resolve(root, p))])));
             const metadata = { capturedAt: new Date().toISOString(), head: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
                 fixture: { path: binary, sha256: await sha(binary), compiledPath: resolve(root, '../macos/ThingtimeNode/.build/debug/MacFolderSyncFixture'), compiledSha256: await sha(resolve(root, '../macos/ThingtimeNode/.build/debug/MacFolderSyncFixture')) },
                 backend: { path: resolve(root, '.output/server/index.mjs'), sha256: await sha(resolve(root, '.output/server/index.mjs')) },
+                indexer: { path: resolvedIndexer, sha256: await sha(resolvedIndexer) },
                 sourceContentFingerprint: createHash('sha256').update(JSON.stringify(files)).digest('hex'), files };
             await writeFile(target, JSON.stringify(metadata, null, 2), { mode: 0o600, flag: 'wx' });
         }
 
 		const policy =
 			accountBackupSandbox(apiPort, true) +
-			`\n(allow network-outbound (remote ip "localhost:${dbPort}"))\n(allow network-inbound (local ip "localhost:${dbPort}"))`;
-		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename, ...(wide ? ['--wide'] : []), ...(wideMixed ? ['--wide-mixed'] : []), ...(wideCountArg ? [wideCountArg] : []), ...(symlinksOnly ? ['--symlinks-only'] : []), ...(early ? ['--two-way-early'] : [])], {
+			`\n(allow network-outbound (remote ip "localhost:${dbPort}"))\n(allow network-inbound (local ip "localhost:${dbPort}"))` + (tls ? `\n(allow network-outbound (remote ip "localhost:${tlsPort}"))\n(allow network-inbound (local ip "localhost:${tlsPort}"))` : "");
+		const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, process.execPath, import.meta.filename, ...(wide ? ['--wide'] : []), ...(wideMixed ? ['--wide-mixed'] : []), ...(modernMixed ? ['--canonical-worker'] : []), ...(streamingMixed ? ['--streaming-two-way'] : []), ...(healthy ? ['--healthy'] : []), ...(wideCountArg ? [wideCountArg] : []), ...(symlinksOnly ? ['--symlinks-only'] : []), ...(early ? ['--two-way-early'] : []), ...(normalEarlyBudget ? ['--normal-early-budget'] : []), ...(uploadStartDiagnostic ? ['--upload-start-diagnostic'] : [])], {
 			cwd: root,
-			env: { ...clean, TT_MAC_PAGED_WORKER: directory, THINGTIME_MAC_SYNC_FIXTURE_BIN: binary, THINGTIME_MAC_SYNC_INDEXER_BIN: resolvedIndexer },
+			env: { ...clean, TT_MAC_PAGED_WORKER: directory, ...(tls ? { THINGTIME_FIXTURE_CA_FILE: tls.caFile, THINGTIME_FIXTURE_TLS_ROOT: tls.root } : {}), THINGTIME_MAC_SYNC_FIXTURE_BIN: binary, THINGTIME_MAC_SYNC_INDEXER_BIN: resolvedIndexer },
 			stdio: ['ignore', 'pipe', 'pipe']
 		});
 		let output = '', pendingLine = '';
@@ -122,8 +140,8 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 	await mkdir(join(directory, 'objects'));
 	// This worker and all descendants share the OS boundary. Test its exact policy.
 	for (const [host, port] of [
-		['127.0.0.1', 28313],
-		['localhost', 28313],
+		['127.0.0.1', 28314],
+		['localhost', 28314],
 		['192.0.2.1', 443]
 	]) {
 		await assert.rejects(
@@ -142,7 +160,11 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 			(e) => ['EPERM', 'EACCES'].includes(e.code)
 		);
 	}
-	const children = new Set();
+	const tlsRoot = process.env.THINGTIME_FIXTURE_TLS_ROOT, tlsCA = process.env.THINGTIME_FIXTURE_CA_FILE;
+    if (canonicalFixture && (!tlsRoot || !tlsCA)) throw Error('Canonical fixture TLS setup is missing');
+    const tls = canonicalFixture ? { root: tlsRoot, caFile: tlsCA, keyFile: join(tlsRoot, 'server.key'), certFile: join(tlsRoot, 'server.pem'), origin: `https://127.0.0.1:${tlsPort}` } : undefined;
+    const tlsFetch = tls ? createFixtureTLSFetch(tls.origin, tls.caFile) : undefined;
+    const children = new Set();
 	let server;
 	const start = (command, args, env = clean) => {
 		const c = spawn(command, args, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -219,10 +241,12 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		THINGTIME_EMAIL_PROVIDER: 'console',
 		MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${dbPort}/thingtime?replicaSet=mac-paged-sync`,
 		THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR: join(directory, 'objects'),
-		THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN: base
+		THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN: tls?.origin ?? base,
+        ...(tls ? { THINGTIME_FIXTURE_TLS_KEY: tls.keyFile, THINGTIME_FIXTURE_TLS_CERT: tls.certFile, THINGTIME_FIXTURE_TLS_PORT: String(tlsPort) } : {}),
+        THINGTIME_FIXTURE_REQUEST_TIMINGS: join(directory, 'http-request-timings.jsonl')
 	};
 	const startServer = async (admin = false) => {
-		server = start(process.execPath, ['--input-type=module', '-e', "import {createServer} from 'node:http'; const app=await import('./.output/server/index.mjs'); if(typeof app.middleware!=='function')throw Error('Build Nitro with NITRO_PRESET=node_middleware');createServer(app.middleware).listen(Number(process.env.NITRO_PORT),'127.0.0.1');"], { ...env, ...(admin ? { ADMIN_USERNAMES: username } : {}) });
+		server = start(process.execPath, ['--input-type=module', '-e', "import {createServer} from 'node:http'; import {createServer as createTLS} from 'node:https'; import {readFileSync} from 'node:fs'; import {createFixtureHttpObserver} from './scripts/mac-fixture-http-observer.mjs'; const observe=createFixtureHttpObserver(process.env.THINGTIME_FIXTURE_REQUEST_TIMINGS); const app=await import('./.output/server/index.mjs'); if(typeof app.middleware!=='function')throw Error('Build Nitro with NITRO_PRESET=node_middleware');createServer((req,res)=>{observe(req);return app.middleware(req,res)}).listen(Number(process.env.NITRO_PORT),'127.0.0.1'); if(process.env.THINGTIME_FIXTURE_TLS_PORT)createTLS({key:readFileSync(process.env.THINGTIME_FIXTURE_TLS_KEY),cert:readFileSync(process.env.THINGTIME_FIXTURE_TLS_CERT)},(req,res)=>{const path=new URL(req.url,'https://fixture.invalid').pathname;if(path!=='/api/v1/attachments/local-object'||!['GET','HEAD','PUT'].includes(req.method)){res.writeHead(404);res.end();return;}observe(req);return app.middleware(req,res)}).listen(Number(process.env.THINGTIME_FIXTURE_TLS_PORT),'127.0.0.1');"], { ...env, ...(admin ? { ADMIN_USERNAMES: username } : {}) });
 		const output = collect(server);
 		await wait(async () => {
 			assert.equal(server.exitCode, null, 'Built server exited: ' + output().slice(-500));
@@ -232,6 +256,11 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 				return false;
 			}
 		}, 'Built server');
+        if (tlsFetch) {
+            const response = await tlsFetch(tls.origin + '/api/v1/attachments/local-object', { method: 'HEAD', credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(2000) });
+            await response.body?.cancel();
+            assert.ok(response.status >= 400 && response.status < 500, 'Unsigned TLS byte requests must be refused after successful certificate verification');
+        }
 	};
 	try {
 		await wait(async () => {
@@ -249,10 +278,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		await startServer();
 		console.log('MAC_PAGED_STAGE signup');
 		const manifest = await fetch(base + '/.well-known/thingtime-capabilities.json').then((r) => r.json());
-		assert.equal(manifest.origin, base);
-		assert.equal(manifest.features['api.files'].version, '1.10.0');
-		assert.equal(manifest.features['api.attachment-content'].version, '1.17.2');
-		assert.equal(manifest.features['api.file-sync-batches'].version, '1.3.0');
+		validateMacFixtureCapabilities(manifest, base);
 		const registered = await fetch(base + '/api/v1/auth/register', {
 			method: 'POST',
 			headers: { Origin: base, 'Content-Type': 'application/json' },
@@ -262,14 +288,14 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		assert.equal(registered.status, 200, 'Disposable API signup: ' + JSON.stringify(data));
 		assert.ok(data.user.id);
 		const fixturePath = join(directory, 'fixture.json');
-		await writeFile(fixturePath, JSON.stringify({ base, username, password, userId: data.user.id }), { mode: 0o600 });
+		await writeFile(fixturePath, JSON.stringify({ base, username, password, requestTimings: env.THINGTIME_FIXTURE_REQUEST_TIMINGS, ...(tls ? { tls: { origin: tls.origin, caFile: tls.caFile, root: tls.root } } : {}), userId: data.user.id }), { mode: 0o600 });
 		await stop(server);
 		await startServer(true);
 		console.log('MAC_PAGED_STAGE native-transfers');
 		const test = start(
 			process.execPath,
-			['--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', ...(early ? ['--two-way-early'] : symlinksOnly ? ['--symlinks-only'] : ['--large-upload', '--large-download']), ...(wide ? ['--wide'] : []), ...(wideMixed ? ['--wide-mixed'] : []), ...(wideCountArg ? [wideCountArg] : [])],
-			{ ...clean, THINGTIME_MAC_SYNC_FIXTURE_BIN: process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN, ...(indexer ? { THINGTIME_MAC_SYNC_INDEXER_BIN: indexer } : {}) }
+			[...(tls ? ['--require', resolve(root, 'scripts/mac-fixture-worker-trust.cjs')] : []), '--import', 'tsx', 'scripts/mac-file-sync.integration.mts', fixturePath, '--paged', ...(early ? ['--two-way-early'] : symlinksOnly ? ['--symlinks-only'] : ['--large-upload', '--large-download']), ...(normalEarlyBudget ? ['--normal-early-budget'] : []), ...(uploadStartDiagnostic ? ['--upload-start-diagnostic'] : []), ...(wide ? ['--wide'] : []), ...(wideMixed ? ['--wide-mixed'] : []), ...(modernMixed ? ['--canonical-worker'] : []), ...(streamingMixed ? ['--streaming-two-way'] : []), ...(healthy ? ['--healthy'] : []), ...(wideCountArg ? [wideCountArg] : [])],
+			{ ...clean, ...(tls ? { THINGTIME_FIXTURE_CA_FILE: tls.caFile, THINGTIME_FIXTURE_TLS_ROOT: tls.root } : {}), THINGTIME_MAC_SYNC_FIXTURE_BIN: process.env.THINGTIME_MAC_SYNC_FIXTURE_BIN, ...(indexer ? { THINGTIME_MAC_SYNC_INDEXER_BIN: indexer } : {}) }
 		);
 		const output = collect(test, true);
 		const [code, exitSignal] = await once(test, 'exit');
@@ -281,7 +307,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		console.log(
 			JSON.stringify({
 				macPagedSyncProof: true,
-				...JSON.parse(result),
+				...validateFixtureWorkerParity(validateFixtureProofKind(JSON.parse(result), early ? uploadStartDiagnostic ? 'upload-start-diagnostic' : 'two-way-before-seal' : 'legacy'), canonicalFixture, streamingMixed, healthy),
 				isolation: 'OS-enforced disposable loopback API and Mongo replica; synthetic picker and credential store; not installed UI acceptance'
 			})
 		);

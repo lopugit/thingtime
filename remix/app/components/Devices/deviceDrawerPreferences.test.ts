@@ -26,6 +26,7 @@ test('device drawer preferences collapse every section by default', () => {
 		screen: false,
 		files: false,
 		sync: false,
+		location: false,
 		approvals: false,
 		'command-activity': false
 	});

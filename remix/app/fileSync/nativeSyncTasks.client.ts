@@ -1,3 +1,4 @@
+import { nativePathObserver } from './nativePathObservation';
 import { reportDeviceSyncHistoryStorage } from './deviceSyncHistory.client';
 import { createDeviceSyncHistoryRecorder } from './deviceSyncHistoryRecorder';
 import { deviceResourceKey, deviceSyncGovernor, readDeviceSyncResourcePolicy } from './deviceResourcePolicy';
@@ -276,8 +277,8 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					...(host.folderBatch ? { folderBatch: host.folderBatch } : {}),
 					...(supportsNativeAuthorizationContext(capabilities) ? { nativeOperationGuards: true as const } : {}),
 					...(!photoSource && inspect && supportsNativeStreamingIndex(capabilities) && !reviewed.configuration.propagateDeletes ? {
-						streamLocalChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>) => readNativeIndexChanges({ ownerId: binding.ownerId, deviceId: binding.deviceId,
-							rootId: reviewed.configuration.localRootId, captureId, afterSequence, readyToFinish, signal: streamSignal ?? signal, request, excludedPaths: reviewed.configuration.excludedPaths, ignoreRules: reviewed.configuration.ignoreRules,
+						streamLocalChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>, waitForFinish?: (signal: AbortSignal) => Promise<void>) => readNativeIndexChanges({ ownerId: binding.ownerId, deviceId: binding.deviceId,
+							rootId: reviewed.configuration.localRootId, captureId, afterSequence, readyToFinish, waitForFinish, signal: streamSignal ?? signal, request, excludedPaths: reviewed.configuration.excludedPaths, ignoreRules: reviewed.configuration.ignoreRules,
 							...(supportsNativeStreamingBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}) }),
 						streamRemoteChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>, resume?: { cursor?: string; snapshotComplete?: boolean; checkpoint(cursor: string, snapshotComplete: boolean): Promise<void> }) => {
 							if (!readyToFinish || !resume) throw Error('The durable cloud index consumer is unavailable.');
@@ -316,6 +317,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					...(inspect && supportsNativeInventoryPages(capabilities) ? {
 						scanLocalPages: nativePages, ...(backup ? { beginLocalImport, releaseLocalImport } : {})
 					} : {}),
+					observeLocal: nativePathObserver(host, binding.ownerId, signal),
 					...(inspect ? { inspectLocal: async (path: string) => (await request(binding.ownerId,
 						{ action: 'inspect', rootId: reviewed.configuration.localRootId, path }, signal)).inspectedEntry! } : {}),
 					inventory: () => readCloudFolderInventory(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal }),
@@ -366,7 +368,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			}
 			if (failed && jobs && !signal.aborted && !(error instanceof SyncConditionsWait) && !(error instanceof NativeInventoryRetryWait)) {
 				historyStatus = 'error';
-				await jobs.attention(failed);
+				await jobs.attention(failed, error);
 			}
 			throw error;
 		} finally {

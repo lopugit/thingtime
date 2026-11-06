@@ -40,8 +40,8 @@ try {
    }));
   }
  };
- const source = `import React,{useState} from 'react';import{createRoot}from'react-dom/client';import{ChakraProvider}from'@chakra-ui/react';import{createMemoryRouter,RouterProvider}from'react-router';import{DeviceSyncResources}from'../app/components/Devices/DeviceSyncResources';
- function Fixture(){const[revision,setRevision]=useState(0),[mode,setMode]=useState('active'),[policy,setPolicy]=useState({transferBytesPerSecond:625000,scanBytesPerSecond:625000,cpuPercent:15});Object.assign(window,{resourceFixture:{refresh:()=>setRevision(x=>x+1),setMode,policy:()=>policy}});const remote={origin:window.location.origin,policy:{...policy},active:mode==='active'||mode==='stale',online:mode!=='unknown',observedAt:Date.now()+3_600_000,receivedAt:Date.now(),status:'Synthetic selected device · observed '+revision,refresh:async()=>setRevision(x=>x+1),resources:mode==='unknown'?undefined:{version:1,cpuPercent:3,cpuStatus:'measured',cpuScopes:['source-thread','indexer-process','transport-process'],effectiveTransferConcurrency:1,effectiveIndexingConcurrency:1,currentUploadBytesPerSecond:125000,currentDownloadBytesPerSecond:62500,scanBytesPerSecond:100000,memoryBytes:67108864,measuredAt:Date.now()+3_600_000-(mode==='idle'||mode==='stale'?5000:0)},save:async next=>{setPolicy(next);return next;}};return <ChakraProvider><main style={{maxWidth:1000,margin:'auto',padding:16}}><DeviceSyncResources ownerId='resource-fixture-owner' deviceId='resource-fixture-device' allowed={true} remote={location.search ? undefined : remote}/><div style={{height:600}}>End of resource fixture</div></main></ChakraProvider>;}
+ const source = `import React,{useState} from 'react';import{createRoot}from'react-dom/client';import{ChakraProvider}from'@chakra-ui/react';import{createMemoryRouter,RouterProvider}from'react-router';import{DeviceSyncResources}from'../app/components/Devices/DeviceSyncResources';import{rootIdentity}from'../app/utils/rootIdentity';
+ function Fixture(){const[revision,setRevision]=useState(0),[mode,setMode]=useState('active'),[policy,setPolicy]=useState({transferBytesPerSecond:625000,scanBytesPerSecond:625000,cpuPercent:15});Object.assign(window,{resourceFixture:{invalidate:()=>rootIdentity.changed(),refresh:()=>setRevision(x=>x+1),setMode,policy:()=>policy}});const remote={origin:window.location.origin,policy:{...policy},checking:mode==='refreshing',active:mode==='active'||mode==='stale'||mode==='refreshing',online:mode!=='unknown',observedAt:Date.now()+3_600_000,receivedAt:Date.now(),status:'Synthetic selected device · observed '+revision,refresh:async()=>setRevision(x=>x+1),resources:mode==='unknown'||mode==='refreshing'?undefined:{version:1,cpuPercent:3,cpuStatus:'measured',cpuScopes:['source-thread','indexer-process','transport-process'],effectiveTransferConcurrency:1,effectiveIndexingConcurrency:1,currentUploadBytesPerSecond:125000,currentDownloadBytesPerSecond:62500,scanBytesPerSecond:100000,memoryBytes:67108864,measuredAt:Date.now()+3_600_000-(mode==='idle'||mode==='stale'?5000:0)},save:async next=>{setPolicy(next);return next;}};return <ChakraProvider><main style={{maxWidth:1000,margin:'auto',padding:16}}><DeviceSyncResources ownerId='resource-fixture-owner' deviceId='resource-fixture-device' allowed={true} remote={location.search ? undefined : remote}/><div style={{height:600}}>End of resource fixture</div></main></ChakraProvider>;}
  const router=createMemoryRouter([{id:'root',path:'*',element:<Fixture/>}],{hydrationData:{loaderData:{root:{user:null,dataPlane:'home'}}}});createRoot(document.getElementById('root')).render(<RouterProvider router={router}/>);`;
  await require('esbuild').build({ stdin:{contents:source,loader:'tsx',resolveDir:join(root,'scripts')},bundle:true,plugins:[localFixture],format:'esm',platform:'browser',target:'esnext',outfile:join(scratch,'fixture.js'),tsconfig:join(root,'tsconfig.json'),define:{'process.env.NODE_ENV':'"development"'},logLevel:'error',loader:{'.wasm':'file'} });
  const bundle = await readFile(join(scratch,'fixture.js'));
@@ -132,23 +132,33 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'custom date controls must not overflow');
   await page.getByRole('button',{name:'Live',exact:true}).click();
   await page.evaluate(()=>window.resourceFixture.setMode('stale'));
-  await page.getByText(/Last measurement · stale/).waitFor();
+  await page.getByText(/Last measurements · waiting for a new reading/).waitFor();
   await page.getByText('1.5 Mbps / 2.5 Mbps shared',{exact:true}).waitFor();
+  await page.evaluate(()=>window.resourceFixture.setMode('refreshing'));
+  await page.getByText(/Last measurements · waiting for a new reading/).waitFor();
+  await page.getByText('1.5 Mbps / 2.5 Mbps shared',{exact:true}).waitFor();
+  await page.getByText('3% (3 of 3 scopes) · last measured / 15 % target',{exact:true}).waitFor();
+  await page.screenshot({path:join(evidence,label+'-refresh-retained.png'),fullPage:true});
   await page.evaluate(()=>window.resourceFixture.setMode('idle'));
   await page.getByText(/Idle · no active Sync or Backup/).waitFor();
   await page.getByText('0 Mbps / 2.5 Mbps shared',{exact:true}).waitFor();
   await page.evaluate(()=>window.resourceFixture.setMode('unknown'));
-  await page.getByText('Unavailable / 2.5 Mbps shared',{exact:true}).waitFor();
+  await page.getByText('1.5 Mbps / 2.5 Mbps shared',{exact:true}).waitFor();
+  await page.getByText(/Last measurements · waiting for a new reading/).waitFor();
   assert.equal(await page.locator('progress').count(),0,'unknown values must not animate indeterminate progress');
-  assert.equal(await page.locator('[role="meter"][aria-hidden="true"]').count(),4,'unknown bars are decorative, never announced as measured zero');
+  assert.equal(await page.locator('[role="meter"][aria-hidden="true"]').count(),0,'retained readings remain labeled historical measurements');
   await page.screenshot({path:join(evidence,label+'-unavailable.png'),fullPage:true});
  }
  await page.goto(origin+'/?mode=remote-missing');
  await page.getByText('No resource reading yet.',{exact:true}).waitFor();
+ assert.equal(await page.locator('[role="meter"][aria-hidden="true"]').count(),4,'cold start does not invent measurements');
  await page.goto(origin+'/?mode=local');
  await page.getByText('0 Mbps / 40 Mbps shared',{exact:true}).waitFor();
  assert.equal(await page.getByText('Remote device resources are unavailable.',{exact:true}).count(),0);
  await page.evaluate(()=>window.startLocalResourceFixture());
  await page.getByText('Unavailable / 40 Mbps shared',{exact:true}).waitFor();
- assert.deepEqual(errors,[]);await writeFile(join(evidence,'result.json'),JSON.stringify({passed:true,views:['desktop','mobile'],checks:['actual Builder bar primitives','background edit preservation','selected-device save','full scroll and overflow','unknown static bars','history window and custom date transport','measured zero vs missing intervals','confirmed idle and stale readings','local idle and active readings vs missing remote']},null,2));console.log('Sync resource dashboard desktop/mobile checks passed. Evidence: '+evidence);
+ await page.evaluate(()=>window.resourceFixture.invalidate());
+ await page.getByText('Sign in to view this device’s private Sync resources.',{exact:true}).waitFor();
+ assert.equal(await page.getByText('0 Mbps / 40 Mbps shared',{exact:true}).count(),0);
+ assert.deepEqual(errors,[]);await writeFile(join(evidence,'result.json'),JSON.stringify({passed:true,views:['desktop','mobile'],checks:['actual Builder bar primitives','background edit preservation','selected-device save','full scroll and overflow','cold unknown bars and retained historical readings','history window and custom date transport','measured zero vs missing intervals','confirmed idle and scoped monotonic sample retention','identity invalidation clears measurements','local idle and active readings vs missing remote']},null,2));console.log('Sync resource dashboard desktop/mobile checks passed. Evidence: '+evidence);
 }catch(error){if(context?.pages()[0]){await context.pages()[0].screenshot({path:join(evidence,'failure.png'),fullPage:true}).catch(()=>{});console.error((await context.pages()[0].locator('body').innerText()).slice(0,2500));}throw error;}finally{await context?.close();if(server){server.close();await once(server,'close');}await rm(scratch,{recursive:true,force:true});}

@@ -152,3 +152,21 @@ transport governor into read-only resource responses after verifying the selecte
 origin, owner and device. These reads never create or alter a resource policy.
 Transport readings expire after two seconds and clear when their worker exits;
 older 1.1.0 collectors remain compatible but may provide partial measurements.
+
+
+## Healthy startup timing
+
+Use `node remix/scripts/test-mac-paged-sync.mjs --wide --wide-mixed --wide-count=8 --canonical-worker --streaming-two-way --healthy`
+for the small isolated 40-path/26-file diagnostic. Omit `--healthy` for
+accepted-stage/commit/publication loss and restart coverage; neither lane replaces
+the other. Use the same cardinality for before/after comparisons and retain
+`THINGTIME_MAC_PAGED_EVIDENCE_PATH` source certificates. First confirmation,
+first HTTP upload byte, strict reconciliation and unchanged-run timings are
+separate observations. Resource policy remains 5,000,000 B/s (5 MB/s), CPU 15%.
+
+Guarded early planning rejects an unusable journal ancestor before requesting
+connection policy or opening protected point reads. This only defers the hint;
+it supplies no authority, observation or receipt. Surviving hints still check
+current saved connection policy before reading either replica, and all actual
+native effects keep fresh identity verification. Strict reconciliation remains
+responsible for deferred entries and completion.

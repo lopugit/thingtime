@@ -39,7 +39,8 @@ test('confirmed idle resets completed throughput without converting missing CPU 
  assert.equal(idle.idle, true);
  assert.equal(idle.transfer, 0);
  assert.equal(idle.scan, 0);
- assert.equal(idle.cpu, null);
+ assert.equal(idle.cpu, 3);
+ assert.equal(idle.lastNative, true, 'idle retains the explicitly historical CPU reading');
  assert.equal(liveDeviceResourceDisplay({ ...input, resources: undefined, online: false }).transfer, null);
 });
 test('historical measured zero and absent intervals have distinct coverage and chart marks', () => {

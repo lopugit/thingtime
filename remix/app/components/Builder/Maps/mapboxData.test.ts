@@ -2,6 +2,22 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { activeMapboxNavigation, mapboxFavouritePoints, mapboxHeight, markerSelection, mapboxOrderedRoutePoints, mapboxPoints, mapboxRoute, mapboxStyle, publicMapboxToken, validCoordinates } from './mapboxData';
 
+test('explicit source ordinals survive omitted invalid-coordinate points and remain authoritative', () => {
+	const points = mapboxOrderedRoutePoints({
+		items: [{ id: 'one', markerLabel: 1, crystal: { rank: 1 } }, { id: 'missing', markerLabel: 2, crystal: { rank: 2 } }, { id: 'three', markerLabel: 3, crystal: { rank: 3 } }],
+		points: [{ id: 'one', coordinates: [144, -37] }, { id: 'missing', coordinates: null }, { id: 'three', coordinates: [145, -38] }]
+	}, null);
+	assert.deepEqual(points.map(point => point.markerLabel), ['1', '3']);
+	assert.equal(mapboxOrderedRoutePoints({ items: [{ id: 'one', markerLabel: 1 }], points: [{ id: 'one', coordinates: [144, -37], markerLabel: 'A' }] }, null)[0].markerLabel, 'A');
+});
+
+test('full rank-sorted itinerary ordinals include unresolved rows and do not display arbitrary rank values', () => {
+	const result = mapboxOrderedRoutePoints({ items: [
+		{ id: 'third', crystal: { rank: 9 } }, { id: 'first', crystal: { rank: 7 } }, { id: 'unresolved', crystal: { rank: 8.5 } }
+	], points: [{ id: 'third', coordinates: [145, -38] }, { id: 'first', coordinates: [144, -37] }] }, null);
+	assert.deepEqual(result.map(point => [point.id, point.markerLabel]), [['first', '1'], ['third', '3']]);
+});
+
 test('Mapbox primitives retain only valid finite coordinates', () => {
 	assert.equal(validCoordinates([180, 90]), true);
 	assert.equal(validCoordinates([181, 0]), false);
@@ -108,4 +124,12 @@ test('favourite and stop selection can use separate local state without changing
 
 test('marker selection can atomically navigate to its related view', () => {
  assert.deepEqual(markerSelection({ group: 'favourite', id: 'item' }, { onSelectQuery: 'favoriteId', onSelectQueryParams: { view: 'favourites' }, queryScope: 'page' }, { view: 'routes' }), { op: 'query', scope: 'page', params: { view: 'favourites', favoriteId: 'item' } });
+});
+
+test('transient optimization numbers the full itinerary with unresolved slots and preserves authored labels', () => {
+ const source = { items: [{id:'a',crystal:{rank:7}},{id:'missing',crystal:{rank:8}},{id:'c',crystal:{rank:9}}], points: [{id:'a',coordinates:[144,-37]},{id:'c',coordinates:[145,-38]}] };
+ const result = mapboxOrderedRoutePoints(source,{orderedStopIds:['c','a']});
+ assert.deepEqual(result.map(p=>[p.id,p.markerLabel]),[['c','1'],['a','3']]);
+ source.points[0] = {...source.points[0],markerLabel:'Authored'} as any;
+ assert.equal(mapboxOrderedRoutePoints(source,{orderedStopIds:['c','a']})[1].markerLabel,'Authored');
 });

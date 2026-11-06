@@ -1,5 +1,8 @@
 import { audienceDescription, audienceOfAcl, THING_AUDIENCE_META } from '~/components/Sharing/audienceCore';
 import React from 'react';
+import { ContentExecutionBoundary, ContentExecutionScope, useContentExecutionHeld } from '~/components/Builder/ContentExecutionHold';
+import { ComponentDisplayOnly } from '~/components/Builder/NativeComponentControls';
+import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { ChatArchivePage } from '~/components/Things/ChatArchivePage';
 import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
 import { Badge, Box, Button, Center, Flex, Heading, Spinner, Stack, Switch, Text } from '@chakra-ui/react';
@@ -29,10 +32,11 @@ import {
 	type SensitiveThingRevealDescriptor
 } from '~/components/Things/SensitiveThingReveal';
 import { isSourceActionKey } from '~/components/ComponentsLibrary/componentBrowseTypes';
-import { parseThingsReferrer, schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingRenameCrystal, thingsCacheKey } from '~/components/Things/thingsCore';
-import type { ThingsCache, ThingsReferrer } from '~/components/Things/thingsCore';
+import { parseThingsReferrer, schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingRenameCrystal } from '~/components/Things/thingsCore';
+import type { ThingsReferrer } from '~/components/Things/thingsCore';
 import { apiErrorMessage } from '~/hooks/apiFailure';
-import { clearLocalCache, pruneCacheNamespace, readLocalCache, readStampedCache, writeStampedCache } from '~/hooks/localCache';
+import { clearLocalCache, pruneCacheNamespace, readStampedCache, writeStampedCache } from '~/hooks/localCache';
+import { rootIdentity } from '~/utils/rootIdentity';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useDataPlane } from '~/hooks/useDataPlane';
@@ -209,14 +213,16 @@ const ComponentLive = ({
 	confirm: React.ComponentProps<typeof LiveTemplate>['confirm'];
 	onUnowned: React.ComponentProps<typeof LiveTemplate>['onUnowned'];
 }) => {
+	const held = useContentExecutionHeld(thing.executionHeld);
+	interactive = interactive && !held;
 	const crystal = (thing.crystal || {}) as Record<string, unknown>;
 	const { argValues } = useComponentArgValues(crystal, null);
-	const { scope } = useThingSource({ source, cacheId: thing.id, argValues, interactive });
+	const { scope } = useThingSource({ source, cacheId: thing.id, argValues, interactive, executionHeld: held });
 	const templateScope = React.useMemo(() => ({ ...argValues, ...scope }), [argValues, scope]);
 	if (!crystal.render) return <ThingView thing={crystal} />;
 	return (
 		<Box data-testid="thing-component-live" minW={0}>
-			<LiveTemplate render={crystal.render} scope={templateScope} interactive={interactive} confirm={confirm} onUnowned={onUnowned} />
+			<LiveTemplate executionHeld={held} render={crystal.render} scope={templateScope} interactive={interactive} confirm={confirm} onUnowned={onUnowned} />
 			{source && scope.state === 'not-installed' ? (
 				<Text color={MUTED} fontSize="xs" mt={2}>
 					No action you own matches <Box as="code" fontFamily={MONO}>{source.action}</Box> — install the suite it belongs to, or pick one of yours.
@@ -234,9 +240,12 @@ const ComponentLive = ({
 // Only the detail page arms schema controls; list/grid thumbnails stay inert.
 // The surrounding runtime chooses inherited read-only execution unless both
 // the data and its freshly fetched schema are owned by the viewer.
-const SchemaTemplateLive = ({ template, crystal, id }: { template: Record<string, unknown>; crystal: Record<string, unknown>; id: string }) => {
-	const { scope } = useThingSource({ source: null, cacheId: id, argValues: crystal, interactive: true });
-	return <LiveTemplate render={template} scope={{ ...crystal, ...scope }} interactive />;
+const SchemaTemplateLive = ({ template, crystal, id, interactive }: { template: Record<string, unknown>; crystal: Record<string, unknown>; id: string; interactive: boolean }) => {
+	const displayOnly = React.useContext(ComponentDisplayOnly);
+	const held = useContentExecutionHeld();
+	interactive = interactive && !held;
+	const { scope } = useThingSource({ source: null, cacheId: id, argValues: crystal, interactive });
+	return <ContentExecutionScope blocked={!interactive}><ComponentDisplayOnly.Provider value={displayOnly || !interactive}><LiveTemplate render={template} scope={{ ...crystal, ...scope }} interactive={interactive} /></ComponentDisplayOnly.Provider></ContentExecutionScope>;
 };
 
 // Why the controls are off: a stranger's thing (ownership is the only thing
@@ -291,6 +300,7 @@ function GenericThingPage() {
 	const { v1 } = api;
 	const currentUser = useCurrentUser();
 	const dataPlane = useDataPlane();
+	const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
 	const lopu = useLopu();
 	const lopuRef = React.useRef(lopu);
 	lopuRef.current = lopu;
@@ -469,7 +479,8 @@ function GenericThingPage() {
 		RESERVED_ID.test(thing.id) &&
 		(isWebpage ? suiteResolves && webpage.resolved?.source !== 'user' : !SUITE_PART_ID.test(thing.id) || suiteResolves);
 	const shared = !isThingOwner && (isComponent || isWebpage) && (!seeded || !currentUser?.id);
-	const interactive = isThingOwner || seeded || shared;
+	const executionHeld = useContentExecutionHeld(thing?.executionHeld === true || page?.executionHeld === true);
+	const interactive = !executionHeld && (isThingOwner || seeded || shared);
 
 	// The catalog-side confirm: a seeded thing's controls name what will run
 	// before anything executes. The viewer's own thing skips it — except for
@@ -619,28 +630,34 @@ function GenericThingPage() {
 	// a data thing's schema render template: the /things Previews cache paints
 	// it instantly, the schema fetch reconciles (null = fetched, has none)
 	const schemaId = thing && isData ? schemaIdOf({ thingtime: kinds, crystal: thing.crystal || {} }) : null;
-	const schemaContext = schemaId && thing ? JSON.stringify([thing.id, schemaId, currentUser?.id || '', linkKey || '']) : null;
-	const [schemaRender, setSchemaRender] = React.useState<{ context: string; template: Record<string, unknown> | null; owned: boolean } | null>(null);
+	const schemaContext = schemaId && thing && !identity.pending ? JSON.stringify([window.location.origin, requestKey, schemaId, identity.generation]) : null;
+	const [schemaRender, setSchemaRender] = React.useState<{ context: string; generation: number; template: Record<string, unknown> | null; owned: boolean; verified: boolean; executionHeld: boolean } | null>(null);
 	React.useEffect(() => {
 		if (!schemaId || !schemaContext || !thing?.id) return;
-		// Inherited templates are capabilities of this root/key/viewer, never a
-		// schema-only persistent cache entry reusable on a different shared page.
-		const cached = isThingOwner ? readLocalCache<ThingsCache>(thingsCacheKey(currentUser?.id))?.schemaRenders?.[schemaId] : undefined;
-		if (cached !== undefined) setSchemaRender({ context: schemaContext, template: cached, owned: false });
+		const controller = new AbortController();
+		// The list cache carries no origin/plane/root authorization provenance.
+		// Only a live template verified in this exact scope may survive refresh.
+		// Keep this scope's live template and its hold while the new read is
+		// pending. Reseeding from the list cache would replace drafts/controls.
+		setSchemaRender(current => current?.context === schemaContext
+			? { ...current, generation: historyRefresh, verified: false }
+			: { context: schemaContext, generation: historyRefresh, template: null, owned: false, verified: false, executionHeld: false });
 		let cancelled = false;
-		void requireThingtimeCapability('api.things', '1.6.0')
-			.then(() => cancelled ? null : apiRef.current.v1.things.get({ id: schemaId, sharedRoot: thing.id, ...(linkKey ? { key: linkKey } : {}) }))
+		void requireThingtimeCapability('api.things', CONTENT_EXECUTION_READ_REQUIREMENTS['api.things'])
+			.then(() => cancelled ? null : apiRef.current.v1.things.get({ id: schemaId, sharedRoot: thing.id, ...(linkKey ? { key: linkKey } : {}) }, { signal: controller.signal }))
 			.then((response: any) => {
-				if (!cancelled) setSchemaRender({ context: schemaContext, template: schemaRenderOf(response?.thing), owned: !!currentUser?.id && response?.thing?.author?.id === currentUser.id });
+				if (!cancelled) setSchemaRender({ context: schemaContext, generation: historyRefresh, template: schemaRenderOf(response?.thing), verified: true, executionHeld: response?.thing?.executionHeld === true, owned: !!currentUser?.id && response?.thing?.author?.id === currentUser.id });
 			})
-			.catch(() => {
-				if (!cancelled) setSchemaRender((current) => isThingOwner && current?.context === schemaContext ? { ...current, owned: false } : { context: schemaContext, template: null, owned: false });
+			.catch((failure) => {
+				if (!cancelled) setSchemaRender((current) => current?.context === schemaContext && canKeepThingAfterReadFailure(failure) ? { ...current, generation: historyRefresh, verified: false } : { context: schemaContext, generation: historyRefresh, template: null, owned: false, verified: false, executionHeld: false });
 			});
-		return () => {
-			cancelled = true;
-		};
-	}, [schemaId, schemaContext, thing?.id, currentUser?.id, linkKey, isThingOwner]);
+		return () => { cancelled = true; controller.abort(); };
+	}, [schemaId, schemaContext, thing?.id, currentUser?.id, linkKey, isThingOwner, historyRefresh]);
 	const dataTemplate = schemaContext && schemaRender?.context === schemaContext ? schemaRender.template : null;
+	// Invalidate synchronously on refresh, before the effect/old request can
+	// run. A late response from a prior generation can never arm callbacks.
+	const schemaVerified = schemaRender?.context === schemaContext && schemaRender?.generation === historyRefresh && schemaRender?.verified === true;
+	const previewHeld = executionHeld || (schemaRender?.context === schemaContext && schemaRender?.executionHeld === true);
 
 	// ---------------------------------------------------------------- view
 
@@ -708,7 +725,7 @@ function GenericThingPage() {
 					confirm={isThingOwner ? undefined : confirm}
 					onUnowned={seeded ? onUnowned : undefined}
 				/>
-				{!interactive && !trustPending ? <InertLabel kind="component" author={authorName} platform={isPlatform} /> : null}
+				{!interactive && !executionHeld && !trustPending ? <InertLabel kind="component" author={authorName} platform={isPlatform} /> : null}
 			</>
 		) : isWebpage ? (
 			<Stack spacing={3} minW={0}>
@@ -736,7 +753,7 @@ function GenericThingPage() {
 						This page can’t be resolved for you here — open it on its own page.
 					</Text>
 				)}
-				{!interactive && !trustPending ? <InertLabel kind="page" author={authorName} platform={isPlatform} /> : null}
+				{!interactive && !executionHeld && !trustPending ? <InertLabel kind="page" author={authorName} platform={isPlatform} /> : null}
 			</Stack>
 		) : isAction && actionCrystal ? (
 			<Stack spacing={3} minW={0}>
@@ -837,7 +854,7 @@ function GenericThingPage() {
 			</Stack>
 		) : isData && dataTemplate ? (
 			<Box data-testid="thing-data-template" minW={0}>
-				<SchemaTemplateLive template={dataTemplate} crystal={(thing.crystal || {}) as Record<string, unknown>} id={thing.id} />
+				<SchemaTemplateLive interactive={schemaVerified && !previewHeld} template={dataTemplate} crystal={(thing.crystal || {}) as Record<string, unknown>} id={thing.id} />
 			</Box>
 		) : (
 			<ThingView thing={thing.crystal} />
@@ -1016,6 +1033,7 @@ function GenericThingPage() {
 							// Its source is the viewer's ownership; its installer exists only
 							// for a seeded suite thing.
 							<WebpageRuntimeProvider
+								enabled={!previewHeld}
 								key={`${thing.id}:${currentUser?.id || ''}:${linkKey}`}
 								pageId={thing.id}
 								shared={shared || (isData && !(isThingOwner && schemaRender?.context === schemaContext && schemaRender.owned))}
@@ -1023,7 +1041,7 @@ function GenericThingPage() {
 								pageKey={isWebpage && typeof thing.crystal?.pageKey === 'string' ? thing.crystal.pageKey : null}
 								suiteKey={suiteKey ?? null}
 								source={isThingOwner ? 'user' : 'system'}
-								onInstall={seeded && suiteKey ? onInstall : undefined}
+								onInstall={!previewHeld && seeded && suiteKey ? onInstall : undefined}
 							>
 								<Box width="100%" minW={0} data-live={interactive ? 'true' : 'false'} data-preview-fullwidth={isWebpage ? 'true' : undefined}>
 									<Flex align="center" justify="space-between" gap={3} mb={3} wrap="wrap" width={isWebpage ? 'calc(100% - 32px)' : undefined} maxW={isWebpage ? '920px' : undefined} mx={isWebpage ? 'auto' : undefined}>
@@ -1036,7 +1054,7 @@ function GenericThingPage() {
 											</Text>
 										) : null}
 									</Flex>
-									<Box minW={0} width="100%">{previewBody}</Box>
+									<ContentExecutionBoundary held={previewHeld}><Box minW={0} width="100%">{previewBody}</Box></ContentExecutionBoundary>
 								</Box>
 							</WebpageRuntimeProvider>
 						) : null}

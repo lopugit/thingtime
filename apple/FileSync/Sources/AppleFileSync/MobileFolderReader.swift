@@ -96,6 +96,7 @@ public struct MobileFolderReader {
     }
     /// Same exact-path/descendant and NFC/lowercase contract as syncPathKey.
     /// Validate before accessing the grant; globs have no special meaning.
+    public static func validatePath(_ path: String) throws { _ = try components(path) }
     public static func canonicalExclusions(_ paths: [String]) throws -> [String] {
         guard paths.count <= 100, paths.reduce(0, { $0 + $1.utf8.count }) <= 16_384 else { throw Failure.invalid }
         let keys = try paths.map { path -> String in
@@ -144,7 +145,8 @@ public struct MobileFolderReader {
             }) else {
                 try invalidName(); continue
             }
-            if name == "." || name == ".." || NativeSymbolicLinks.isOwnedJournal(fd, name: name) { continue }
+            if name == "." || name == ".." { continue }
+            if try NativeSymbolicLinks.checkedOwnedJournal(fd, name: name) { continue }
             try visit(name)
         }
     }

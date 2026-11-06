@@ -1,4 +1,6 @@
+import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { requiresCollectionPagingContract } from './savedCollectionContract';
+import { AUTHORED_CONTROL_REQUIREMENTS, usesAuthoredControls } from '~/schemas/authoredControls';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { requiresEditableBlockContract, requiresEditableIntrinsicContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
@@ -35,7 +37,7 @@ export type WebpageTarget =
 	| { kind: 'global' };
 
 export type ResolvedWebpage = {
-	page: { id: string; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[]; linkKey?: string; timelineHeadId?: string } | null;
+	page: { id: string; executionHeld?: boolean; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[]; linkKey?: string; timelineHeadId?: string } | null;
 	source: 'user' | 'system' | null;
 	componentsByRef: ComponentsByRef;
 };
@@ -63,13 +65,12 @@ export const loadWebpageClient = async (target: WebpageTarget): Promise<WebpageL
 	// behaviour, one less request per navigation.
 	if (target.kind === 'path' && (target.path.length > MAX_WEBPAGE_ROUTE_CHARS || !WEBPAGE_ROUTE_PATTERN.test(target.path))) return { status: 'missing' };
 	try {
-		await requireThingtimeCapability('api.webpages-resolve', '1.8.1');
+		await requireThingtimeCapability('api.webpages-resolve', CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
 		const response = await fetch(`/api/v1/webpages/resolve?${targetQuery(target)}`, { credentials: 'include' });
 		if ([400, 401, 403, 404].includes(response.status)) return { status: 'missing' };
 		if (!response.ok) return { status: 'error' };
 		const data = await response.json();
 		if (data?.ok !== true || !Object.prototype.hasOwnProperty.call(data, 'page')) return { status: 'error' };
-		if (requiresCollectionPagingContract(data.page?.crystal?.blocks)) await requireThingtimeCapability('api.webpages-resolve', '1.11.0');
 		return {
 			status: 'ready',
 			data: {
@@ -154,6 +155,7 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 			...carried,
 			id,
 			crystal,
+			...(typeof thing.executionHeld === 'boolean' ? { executionHeld: thing.executionHeld } : {}),
 			...(author !== undefined ? { author } : {}),
 			...(updatedAt ? { updatedAt } : {}),
 			...(timelineHeadId ? { timelineHeadId } : {}),
@@ -393,7 +395,11 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
-				if (requiresCollectionPagingContract(blocks)) {
+				if (usesAuthoredControls(blocks)) {
+					await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things']);
+					await requireThingtimeCapability('api.webpages-resolve', AUTHORED_CONTROL_REQUIREMENTS['api.webpages-resolve']);
+					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update']);
+				} else if (requiresCollectionPagingContract(blocks)) {
 					await requireThingtimeCapability('api.things', '1.49.0');
 					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.18.0');
 				} else if (requiresEditableIntrinsicContract(blocks, ['tt-upload'])) {

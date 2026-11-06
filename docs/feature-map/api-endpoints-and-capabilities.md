@@ -1,5 +1,58 @@
 # API endpoints and capabilities
 
+## Private device observations and locate actions
+
+`deviceObservations.ts` implements owner-only location reads/settings and
+device-bearer observations, with collection-generation fencing, immutable
+sample IDs, observed/received timestamps and accounted retention cleanup.
+The observations, observation-settings, node-observations and cleanup routes
+have independently negotiated `api.devices-*` features at 1.0.0. History is
+relational protected `device-observation` Things, not a growing device array.
+
+`deviceAlerts.ts` and `deviceAlertMedia.ts` implement owner-targeted alerts,
+bound APNs registrations, lease-authorized attachment versions and prepared
+notification sounds. Their alerts/node-push/node-media/node-alert-sounds
+features are 1.0.0; command features are 1.11.0. Devices/node-state 1.15.0
+accept a closed optional model descriptor patch. Notification lists/settings
+1.8.0 include device-alert history. Notifications-devices 1.3.0 removes the
+old registration count limits that could discard existing device bindings.
+Reuse existing ownership/session checks,
+command approvals, leases, media holds and notification history. APNs provider
+acceptance never asserts playback; uncertain effects retain their request ID.
+
+Run `test:devices`, `test:api-capabilities`, the built-server manifest smoke,
+and the native mobile/Node suites. `DeviceLocationWorkspace` is a scope-fenced
+read/action adapter for private saved editable layouts, with canonical uploads
+and a separately negotiated native location bridge. No new MCP is introduced.
+
+## Independent backup destinations
+
+`api.backup-destinations` 1.0.0 registers private full-account home-plane
+`GET /api/v1/backups/destinations` in the docs registry and Nitro map. The shared
+client negotiates its explicit requirement map before reading. Fixed-label
+administrator vault registration is selected by exact deployment environment
+and origin; only opaque destination IDs, labels and configured-unverified
+status are projected. Primary attachment bucket reuse refuses. This is
+configuration discovery only: execution remains unavailable. Run destination
+unit/route tests, `test:api-capabilities` and the compiled
+`scripts/smoke-built-backup-destinations.mjs --bundle <output>` proof; see
+[independent destination setup](../backup-destinations.md).
+
+## Incoming-share message compatibility
+
+`api.chats-messages` 1.3.0 accepts large purpose-matched attachment selections
+and message text without the old 25-item/4,000-character product ceilings.
+`api.chats-messages-edit` 1.1.0 removes the matching edit ceiling. Both public
+manifests derive these versions from `apiDocs.ts`; the Messenger client
+negotiates them before mutation. No new HTTP route or permission is introduced.
+Native sharing negotiates its own exact-origin `thingtimeShare` 1.x bridge.
+Zero-byte social files require upload-start 1.9.0 and upload-complete 1.7.0.
+Long shared Data text requires Things 1.50.0; updates, imports and the built-in
+schema descriptor publish compatible contracts 1.19.0, 1.13.0 and 1.2.0.
+Run `test:api-capabilities`, the attachment service tests, and the built-server
+incoming-share acceptance before release.
+
+
 ## Connector confirmations and large mutation plans
 
 `api.settings-connector-protections` 1.0.0 registers GET/POST
@@ -708,3 +761,74 @@ Large/deep editable Webpage capture is corrected by `api.things` 1.49.2,
 Timeline block traversal removes the hidden 1,200-block/24-level write and
 comparison limits; existing Component authorization and capture contracts remain.
 Both manifests derive these PATCH versions from the canonical endpoint registry.
+
+The bounded Mac byte transport negotiates independent native
+`fileSingleUploadVersion` 1.0.0; it does not add HTTP endpoints or alter existing
+API feature versions. The host/client continue to negotiate the selected origin's
+attachment start/part/complete/content contracts and use those canonical routes.
+The native proof includes attachment identity/version/size/fingerprint only;
+publication remains the existing guarded Files contract. See the
+[compound transport contract](../mobile-file-sync.md#bounded-compound-mac-upload-transport--2026-11-06).
+
+
+## Shared-content request transport
+
+Incoming sharing negotiates `api.things` 1.51.0, `api.things-update` 1.20.0,
+`api.things-comment` 1.11.0, `api.chats-messages` 1.4.0,
+`api.chats-messages-edit` 1.2.0, `api.attachment-uploads` 1.10.0,
+`api.attachment-annotate` 1.3.0, `api.attachment-link` 1.2.0 and `api.files`
+1.12.0. Both manifest generators derive these independent minors from apiDocs.
+The scoped shared-content JSON reader admits authorization/rate limits before
+streaming fatal UTF-8 decoding with no application body ceiling. Other control
+requests retain numeric budgets. Completion accepts only uploadId and enumerates
+parts server-side; presigning pages every part. See [incoming sharing](../incoming-sharing.md);
+run `test:shared-content`, `test:api-capabilities` and the isolated real-API
+`remix/scripts/shared-body-acceptance.mjs` harness.
+
+The merged shared-value Action contract is `api.actions-run` 1.42.0. The
+authored-controls branch independently used 1.41.0, so that origin alone must
+not satisfy clients requiring complete shared Data values. Both generators
+read the canonical version; shared-content Action clients require 1.42.0, while
+older authored-control-only minima remain valid for their narrower contract.
+
+`api.timeline` 1.19.2 corrects ordinary revision copy/reconstruction for valid
+broad content. Existing snapshot parts handle breadth beyond inline processing
+windows; no total-content node cap remains. Full-content checkout, merge,
+export and restore clients require this patch. Metadata reads retain their
+older minima. Run `test:timeline`; the wire/parts formats are unchanged.
+
+## Reviewed creation projections and execution admission
+
+Things 1.52.0 adds derived `executionHeld` and owner-only scalar
+`creationProgress`. Component browse 1.1.0 and Webpage resolve 1.13.0 retain the
+hold; Actions run 1.43.0 refuses held server/browser/shared/child admission.
+Both manifests derive from `apiDocs.ts`; clients negotiate the small maps in
+`backups/contentCreation.ts` and `utils/sharedContentCapabilities.ts`.
+There is no new restore route/import-map entry. Run capability coverage plus
+`backups/creationContract.test.ts`, the real ordinary-restore replica proof and
+the isolated execution-hold browser check. After the canonical Remix build,
+`test:content-execution:built` imports the compiled Vercel fetch handler in a
+clean synthetic runtime and checks both manifests and all four docs routes.
+
+
+## Client discovery failure classification
+
+`requireCapability.client.ts` uses the canonical `ThingtimeApiError` for network,
+deadline and HTTP discovery errors, including an interrupted response body.
+Parsing and compatibility checks remain separate: malformed/missing/breaking or
+wrong-origin manifests and 401/403/404 cannot retain protected projections.
+Temporary failures may retain a same-scope readable template only while execution
+remains unverified and inert. This is a client lifecycle correction, with no
+endpoint/manifest feature change. Run its focused tests and the full real-route
+Schema refresh/revocation fixture documented in `TESTING.md`.
+
+### Account-file restore writer epoch corrections
+
+`api.files` 1.12.1, `api.things-bulk` 1.7.1 and `api.things-delete` 1.1.1 fence
+writes/moves/drains of held restored content through the root content epoch.
+`ACCOUNT_FILE_RESTORE_REQUIREMENTS` negotiates them with existing Things,
+Timeline and exact attachment content contracts. Both manifest generators derive
+versions from `apiDocs.ts`. Trusted transaction composition and audit labels are
+internal options, never new accepted HTTP fields; public retained-version input
+and upload approval remain unchanged. Run `test:api-capabilities`, the backup
+contract test, canonical build/output smoke and `test:backups:file-restore`.

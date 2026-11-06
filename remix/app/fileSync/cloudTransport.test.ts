@@ -661,3 +661,57 @@ test('symbolic-link uploads negotiate tagged file support before opening bytes o
  await assert.rejects(executeSyncRun(run, f.port(run, async () => {})), /updated server/);
  assert.equal(tagged, true); assert.deepEqual(f.counts(), { puts: 0, starts: 0, commits: 0, opens: 0 });
 });
+
+test('compound attachment transport retains guarded publication hook, operation identity and receipt-first replay', async () => {
+ const f = await fixture(), run = f.make(), write = run.cloudWrites[0]; write.guardDestination = true; write.cloudRootId = "cloud"; write.folderId = "cloud";
+ f.runtime.nativeUploadApproval = { id: scope.rootId, updatedAt: '2026-11-06T00:00:00Z', scope,
+  configuration: { configurationVersion: 1, name: 'Two way', deviceId: scope.deviceId, localRootId: 'local', remoteFolderId: 'cloud', mode: 'two-way', paused: false, propagateDeletes: false, network: 'wifi', chargingOnly: false, excludedPaths: [] } };
+ let calls = 0, hooks = 0;
+ f.runtime.beforeFilePublication = async id => { assert.equal(id, write.operation.id); hooks++; };
+ const native: FingerprintSource = { ...source(), check: () => { throw Error('Duplicate native check'); }, verify: async () => { throw Error('Duplicate native verify'); },
+  uploadSingle: async request => { calls++; assert.equal(request.requestId, write.operation.id); assert.equal(request.uploadId, 'att1');
+   return { attachmentId: 'att1', version: 'a'.repeat(64), size: f.entry.size, fingerprint: f.entry.fingerprint!, payloadBytes: f.entry.size }; } };
+ await createCloudFileTransport(f.runtime, write).apply(native);
+ await createCloudFileTransport(f.runtime, write).apply(native);
+ assert.equal(calls, 1); assert.equal(hooks, 1); assert.equal(f.counts().commits, 1);
+});
+test('compound refuses mismatched content and preserves occupied/revised destination guard', async () => {
+ for (const failure of ['proof', 'destination']) {
+  const f = await fixture(), write = f.make().cloudWrites[0]; write.guardDestination = true; write.cloudRootId = "cloud"; write.folderId = "cloud";
+  f.runtime.nativeUploadApproval = { id: scope.rootId, updatedAt: '2026-11-06T00:00:00Z', scope,
+   configuration: { configurationVersion: 1, name: 'Sync', deviceId: scope.deviceId, localRootId: 'local', remoteFolderId: 'cloud', mode: 'two-way', paused: false, propagateDeletes: false, network: 'wifi', chargingOnly: false, excludedPaths: [] } };
+  if (failure === 'destination') f.runtime.beforeFilePublication = async () => { throw Error('Destination revision changed'); };
+  await assert.rejects(createCloudFileTransport(f.runtime, write).apply({ ...source(), uploadSingle: async () => ({ attachmentId: 'att1', version: 'a'.repeat(64), size: f.entry.size,
+   fingerprint: failure === 'proof' ? { ...f.entry.fingerprint!, sha256: '0'.repeat(64) } : f.entry.fingerprint!, payloadBytes: f.entry.size }) }));
+  assert.equal(f.counts().commits, 0);
+ }
+});
+test('absent native approval leaves custom mutation policy on its original per-part path', async () => {
+ const f = await fixture(), write = f.make().cloudWrites[0]; let authorized = 0;
+ f.runtime.authorizeMutation = async () => { authorized++; };
+ await createCloudFileTransport(f.runtime, write).apply({ ...source(), uploadSingle: async () => { throw Error('Custom policy bypass'); } });
+ assert.ok(authorized > 0); assert.equal(f.counts().puts, 1);
+});
+
+test('composed byte staging keeps imports private without inventing native provenance or publishing content', async () => {
+ const { stageCloudFileBytes } = await import('./cloudTransport');
+ const f = await fixture(), run = f.make(), write = run.cloudWrites[0], targetId = randomUUID();
+ let upload: any;
+ f.hook((path, body) => { if (path === '/api/v1/attachments/uploads') upload = body; return null; });
+ const staged = await stageCloudFileBytes(f.runtime, write, targetId, source());
+ assert.equal(staged.attachmentId, 'att1');
+ assert.equal(upload.requestId, write.operation.id);
+ assert.equal(upload.purpose, 'file-import');
+ assert.equal(upload.fileSyncOrigin, undefined);
+ assert.equal(f.counts().commits, 0);
+ assert.equal(f.counts().puts, 1);
+});
+
+test('ordinary sync preserves file purpose and exact native upload provenance', async () => {
+ const f = await fixture(), run = f.make(), write = run.cloudWrites[0]; let upload: any;
+ f.hook((path, body) => { if (path === '/api/v1/attachments/uploads') upload = body; return null; });
+ await createCloudFileTransport(f.runtime, write).apply(source());
+ assert.equal(upload.purpose, 'file'); assert.equal(upload.fileSyncOrigin.fileId, write.operation.id);
+ assert.equal(upload.fileSyncOrigin.deviceId, scope.deviceId); assert.equal(upload.fileSyncOrigin.localRootId, scope.rootId);
+ assert.equal(upload.fileSyncOrigin.folderId, write.folderId); assert.equal(upload.fileSyncOrigin.path, write.operation.mutation.path);
+});
