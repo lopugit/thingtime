@@ -194,6 +194,16 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
 
 ## Remote and stored files
 
+Completed one-way and two-way streams retain their exact receipt link through
+strict reconciliation. `pagedRunJournal.ts` builds a restartable completion
+summary in bounded history pages, separating cumulative confirmed activity from
+latest-per-path checkpoint effects and excluding unpublished intents.
+Historical-only paths remain activity records, without inventing current files
+or checkpoint effects; parent/root counters include that activity.
+`progressProjection.client.ts` joins per-path historical counters into the saved
+progress tree; `backupCompletionProgress.test.ts` covers completed/reloaded,
+no-work, A/B/A revision, and interrupted-migration behavior.
+
 For connected folder sync, `app/fileSync/streamingForegroundSync.ts` can
 prepare two-way copies from native and cloud index hints while both source
 feeds remain open. `app/api/utils/files/inventory.ts` resolves the exact
