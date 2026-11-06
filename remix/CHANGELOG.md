@@ -122,6 +122,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Preserve owned backup content with paged source-reference evidence, explicit unresolved/unsupported/excluded-authority coverage, and streamed notification history. Verify pinned API capture, independent recovery, runtime alias differences and private dependency boundaries; whole-account readiness remains false. [PR1386 verification](../PRs/1386-codex-backup-reference-closure-preserve-backup-content-with-explicit-source-reference-coverage.md). **Codex (AI)**
+
 - 2026-11-06: Add local-worker account restore admission and immutable paged review plans with explicit incomplete coverage, source-format limitations, per-page integrity/identity fences and disposable available-disk indexes. No account writer or full-backup completion is exposed. See [scope and verification](../PRs/1383-codex-account-restore-admission-add-durable-account-restore-review-planning.md). **Codex (AI)**
 
 - 2026-11-06: Preserve confirmed backup stream counters through strict reconciliation and reload; retain repeated live revisions as cumulative activity while checkpointing only the final confirmed effect. Completion evidence migrates in bounded resumable pages and excludes unpublished intents.

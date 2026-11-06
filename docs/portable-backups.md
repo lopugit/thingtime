@@ -109,8 +109,8 @@ without an approved exporter, missing payload, expired database snapshot,
 oversized metadata, changed account or revoked access refuses the plan. It never
 skips an unsupported row and then reports complete coverage. Ready owned
 attachments, saved themes, drafts/templates/tombstones and all seven Timeline families
-have dedicated exporters, along with approved account profile content and private
-preferences. Credentials/security state and other managed families still need
+have dedicated exporters, along with stored notification history and approved account profile content and private
+preferences. Subscription authority is recorded as an explicit source exclusion. Credentials/security state and other managed families still need
 coverage; ordinary real accounts cannot yet rely on this producer for a complete
 account backup. Settings in
 other collections and device-local data also need separate coverage contracts.
@@ -135,6 +135,67 @@ the producer rather than exceed MongoDB's 64-index limit or scan all accounts.
 The modern default plan uses 52 slots; the full legacy-compatible plan uses 64.
 No worker endpoints, scheduling, quota admission, encryption or Timeline backup
 lifecycle receipts are introduced by this internal producer.
+
+### Stored references and historical notifications — 2026-11-06
+
+The owner census now validates ordinary stored composition, explicit render
+Component, schema, Action, media and active theme/algorithm references against
+its own pinned source rows. It does not fetch current revisions or another
+owner's content. Reference discovery never supplies an ACL, grant, destination
+identity or permission to execute an archived Action.
+
+Private SQLite scratch retains records, aliases and deduplicated persisted
+component contexts. Generator frames traverse stored trees without the
+renderer count/depth or 512-instance policies; cancellation and authorization
+checks occur during traversal. RAM includes one materialized source record,
+its parser tree/scopes and bounded metadata pages, rather than the account graph.
+Scratch uses available disk and is removed on normal exits. A transformed
+recursive component context is explicitly unsupported; identical contexts and
+ordinary Action cycles terminate. Runtime-selected outputs, render/media merge
+formats, formatted media and repeated scalar media interpolation remain explicit
+unsupported discovery, never silently certified prefixes. Public/system/foreign
+dependency capture remains a required separate authorized path.
+
+Valid dangling or external pointers do **not** prevent preservation of the
+owner's data. The producer appends `backup-reference-coverage` v1 evidence pages
+with at most 128 issues each and an encoded-byte flush below the manifest item budget. A single oversized diagnostic is represented by UTF-8 byte count and SHA-256, explicitly labelled as diagnostic metadata; the full saved reference stays in its original retained source record. Discovery completeness applies specifically to
+`ordinary-composition-and-account-selections`; resolution, unsupported traversal
+and excluded authority are separate measured fields. `wholeAccountReady` is
+always false. Duplicate owner aliases are unresolved ambiguity: real Action
+execution orders equal-version aliases by `createdAt`, whereas shared composition
+uses `updatedAt` and `shareId`. The backup does not invent a winner. Required
+functional restore must refuse unresolved or unsupported closure even though
+those source records remain recoverable.
+
+Evidence IDs use the archive-only `~.backup-coverage:<snapshot UUID>:<16-digit
+page>` namespace. Canonical generic Thing creation rejects its dot. The portable
+reader binds the UUID and contiguous page sequence to the enclosing header;
+other adapters cannot use the reserved namespace. Evidence is included in the
+sealed manifest and receives no new user-Thing destination on restore review.
+This is an additive archive adapter with an explicit compatibility boundary:
+older readers may reject new snapshots containing the namespace/adapter. Old
+snapshots and their existing adapters remain readable by the updated reader.
+
+`notification-content` v1 retains only approved stored message/actor fields,
+subject links and historical time/read/history-only state. The generic streamed
+payload primitive stores it as `backup-notification-content` v1 without a new
+message-size cap. It never loads a newer actor profile, captures delivery keys,
+provider diagnostics, secret envelopes or live dedupe authority, nor re-emits a
+notification. Live subscription entitlement records are instead represented by
+`backup-source-exclusion` v1 (`live-entitlement-authority`); their private payloads
+are not read or restored. Other managed families still need approved exporters
+or explicit reviewed exclusion contracts and otherwise refuse census admission.
+
+`npm --prefix remix run test:backups:references` uses a disposable replica, real
+signup and canonical API handlers/utils. It completes the actual legacy-index
+migration/cache-drain path, captures five ordinary records and two notifications
+including large detail, updates a component after the server snapshot, compares
+independent API readbacks, deletes ordinary sources and the first vault, and
+recovers from the independent copy. A permitted foreign pointer survives with
+unresolved evidence while its private target remains unreadable. The fixture
+also compares the two real alias entry points. This proves the internal capture
+worker and offline readers; native UI, public backup admission, complete
+credential/settings/device coverage and full-account restore remain open.
 
 ### Canonical Timeline history in the vault
 
