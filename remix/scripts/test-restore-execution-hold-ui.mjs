@@ -27,7 +27,7 @@ try {
  server=createServer((req,res)=>{res.writeHead(200,{'Content-Type':req.url==='/fixture.js'?'application/javascript':'text/html','Cache-Control':'no-store'});res.end(req.url==='/fixture.js'?bundle:'<!doctype html><title>Restore execution hold regression</title><meta name="viewport" content="width=device-width,initial-scale=1"><div id="root"></div><script type="module" src="/fixture.js"></script>');});
  server.listen(0,'127.0.0.1');await once(server,'listening');
  const origin=`http://127.0.0.1:${server.address().port}`;
- browser=await createRequire(join(root,'../MCP/package.json'))('playwright').chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH}:process.platform==='linux'?{executablePath:'/usr/bin/chromium'}:{})});
+ browser=await createRequire(join(root,'../MCP/package.json'))('playwright').chromium.launch({headless:true,chromiumSandbox:true,...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH}:process.platform==='linux'?{executablePath:'/usr/bin/chromium'}:{})});
  for(const [label,width,height] of [['desktop',1440,1000],['mobile',390,844]]) {
   const context=await browser.newContext({viewport:{width,height},serviceWorkers:'block'}),page=await context.newPage();page.setDefaultTimeout(10000);page.on('pageerror',error=>errors.push(error.message));
   try {
@@ -95,12 +95,27 @@ try {
    await page.evaluate(()=>{for(const [name,control] of Object.entries(window.restoreFixture.localControls))control({op:'query',scope:'page',params:{marker:name+'-current'}});});
    assert.deepEqual(await page.evaluate(()=>window.restoreFixture.queryCalls.sort()),['live-current','page-current'],'current native callbacks dispatch after release');
    assert.equal(await page.getByRole('textbox',{name:'Ordinary draft',exact:true}).inputValue(),'Draft retained across hold');
+   const quiet=page.getByRole('region',{name:'Background verification'});
+   await page.getByLabel('Quiet draft').fill('Quiet verification preserves draft');await page.getByLabel('Quiet draft').focus();
+   const quietBefore=await page.evaluate(()=>{window.restoreFixture.savedQuiet=window.restoreFixture.quietLocal;window.restoreFixture.quietInput=document.querySelector('[aria-label="Quiet draft"]');return window.restoreFixture.queryCalls.length;});
+   await page.evaluate(()=>window.restoreFixture.setQuiet(true));await page.getByTestId('quiet-native-enabled').filter({hasText:'false'}).waitFor();
+   assert.equal(await page.evaluate(()=>window.restoreFixture.quietInput===document.querySelector('[aria-label="Quiet draft"]')&&document.activeElement===window.restoreFixture.quietInput),true,'pending verification keeps ordinary input DOM and focus');
+   assert.equal(await quiet.getByRole('status').count(),0,'verification does not claim restoration');
+   await page.evaluate(()=>window.restoreFixture.savedQuiet({op:'query',scope:'page',params:{marker:'quiet-stale'}}));
+   await page.getByRole('button',{name:'Quiet action',exact:true}).click();
+   assert.equal(await page.evaluate(()=>window.restoreFixture.queryCalls.length),quietBefore);
+   assert.equal((await state()).calls.includes('quiet-action'),false);
+   const quietUrl=page.url();await page.getByRole('link',{name:'Quiet navigation',exact:true}).click();assert.equal(page.url(),quietUrl);await page.getByRole('link',{name:'Quiet navigation',exact:true}).focus();await page.keyboard.press('Enter');assert.equal(page.url(),quietUrl);await page.locator('form[data-quiet-form]').evaluate(form=>form.requestSubmit());assert.equal(page.url(),quietUrl);
+   await page.evaluate(()=>window.restoreFixture.setQuiet(false));await page.getByTestId('quiet-native-enabled').filter({hasText:'true'}).waitFor();
+   await page.evaluate(()=>window.restoreFixture.quietLocal({op:'query',scope:'page',params:{marker:'quiet-current'}}));
+   assert.equal(await page.evaluate(()=>window.restoreFixture.queryCalls.length),quietBefore+1);
+   assert.equal(await page.getByLabel('Quiet draft').inputValue(),'Quiet verification preserves draft');
    await page.evaluate(()=>window.scrollTo(0,0));
    await page.screenshot({path:join(evidence,`${label}-released-top.png`),fullPage:true});
    await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'released controls have no overflow');
    await page.screenshot({path:join(evidence,`${label}-released-bottom.png`),fullPage:true});
-   results.push({label,scope:'synthetic browser fixture with real hooks, renderer and controls; mocked API/session/runtime/upload-byte adapter',heldDispatchRefused:true,sourceAutorunRefused:true,projectedComponentHoldAndRelease:true,libraryAndReferencedRendererHold:true,expandedRowsIsolated:true,ancestorHold:true,nativeAndUploadGated:true,pendingConfirmationFenced:true,capturedNativeLocalCallbacksFenced:true,draftRetained:true,unheldActions:true,noOverflow:true});
+   results.push({label,scope:'synthetic browser fixture with real hooks, renderer and controls; mocked API/session/runtime/upload-byte adapter',heldDispatchRefused:true,sourceAutorunRefused:true,projectedComponentHoldAndRelease:true,libraryAndReferencedRendererHold:true,expandedRowsIsolated:true,ancestorHold:true,nativeAndUploadGated:true,pendingConfirmationFenced:true,capturedNativeLocalCallbacksFenced:true,draftRetained:true,quietVerificationDraftFocusAndCapturedCallbackFenced:true,unheldActions:true,noOverflow:true});
   } catch(error){await page.screenshot({path:join(evidence,`${label}-failure.png`),fullPage:true});await writeFile(join(evidence,`${label}-failure.txt`),await page.locator('body').innerText());throw error;} finally {await context.close();}
  }
  assert.deepEqual(errors,[]);await writeFile(join(evidence,'results.json'),JSON.stringify({results,errors},null,2));console.log(JSON.stringify({results,errors,evidence}));

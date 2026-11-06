@@ -771,3 +771,15 @@ There is no new restore route/import-map entry. Run capability coverage plus
 the isolated execution-hold browser check. After the canonical Remix build,
 `test:content-execution:built` imports the compiled Vercel fetch handler in a
 clean synthetic runtime and checks both manifests and all four docs routes.
+
+
+## Client discovery failure classification
+
+`requireCapability.client.ts` uses the canonical `ThingtimeApiError` for network,
+deadline and HTTP discovery errors, including an interrupted response body.
+Parsing and compatibility checks remain separate: malformed/missing/breaking or
+wrong-origin manifests and 401/403/404 cannot retain protected projections.
+Temporary failures may retain a same-scope readable template only while execution
+remains unverified and inert. This is a client lifecycle correction, with no
+endpoint/manifest feature change. Run its focused tests and the full real-route
+Schema refresh/revocation fixture documented in `TESTING.md`.

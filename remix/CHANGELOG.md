@@ -122,6 +122,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Revalidate detail-page Schema execution holds after normal refresh, preserve same-scope drafts during verification, clear revoked templates, and distinguish temporary capability-discovery failures from invalid authority. Add full real-backend route and quiet-control regressions. [PR 1390 evidence](../PRs/PR-1390-codex-schema-hold-refresh-refresh-schema-execution-holds-without-discarding-detail-page-drafts.md). **Codex (AI)**
+
 - 2026-11-06: Keep saved mobile device connections alive across app routes and
   retry on foreground/network recovery, independently of file-sync jobs. Preserve
   account boundaries, explicit revoked-device repair and connection preferences.
