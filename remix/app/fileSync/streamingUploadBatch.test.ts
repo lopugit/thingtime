@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { foregroundFixture, saved, scope } from './foregroundSync.fixture';
+import { runPagedForegroundCloudSync } from './pagedForegroundSync';
 import { streamOneWayForegroundSync } from './streamingForegroundSync';
 import { createFileBatchService } from '../api/utils/files/batches';
 import { attachmentIdForRequest } from '../api/utils/attachments/attachments';
-import type { ForegroundSyncInput } from './foregroundSync';
+import type { ForegroundSyncInput, ForegroundSyncProgress } from './foregroundSync';
 import type { SyncEntry } from './reconcile';
 import type { NativeUploadBatch, UploadBatchContent } from './uploadBatch';
 
@@ -22,7 +23,7 @@ const deferred = () => {
 	return { promise, resolve };
 };
 
-async function run(count: number, bulk: boolean, firstBeforeCompletion = false, nested = false) {
+async function run(count: number, bulk: boolean, firstBeforeCompletion = false, nested = false, finishBackup = false) {
 	const f = await foregroundFixture(),
 		controller = new AbortController(),
 		timer = setTimeout(() => controller.abort(Error('Isolated streaming batch test deadline')), 30000),
@@ -261,7 +262,16 @@ async function run(count: number, bulk: boolean, firstBeforeCompletion = false, 
 	};
 	const started = performance.now();
 	try {
-		await streamOneWayForegroundSync(saved, scope, input, controller.signal);
+		if (finishBackup) {
+            input.scanLocal = async () => [...local.values()];
+            input.inventory = async () => ({ version: 1, complete: true, rootId: 'cloud-root', rootRevision: 'root',
+                nodes: [...files.values()].map(file => ({ kind: 'file', path: file.name, file })) });
+            let completed: ForegroundSyncProgress | undefined;
+            const report = input.progress;
+            input.progress = value => { report(value); if (value.stage === 'complete') completed = value; };
+            await runPagedForegroundCloudSync(saved, scope, input, controller.signal);
+            assert.deepEqual([completed?.confirmed, completed?.total, completed?.directions?.upload.bytesConfirmed], [count, count, String(count * 4)]);
+        } else await streamOneWayForegroundSync(saved, scope, input, controller.signal);
 	} finally {
 		clearTimeout(timer);
 		writeFileSync('/tmp/batch-stream-debug.json', JSON.stringify(counts));
@@ -308,4 +318,9 @@ test('controlled complete-file comparison removes per-file native and metadata a
 			2
 		)
 	);
+});
+
+test('native upload batch completion survives its zero-work strict backup pass', async () => {
+    const result = await run(1, true, false, false, true);
+    assert.equal(result.bulkCalls, 1); assert.equal(result.confirmed, 1);
 });
