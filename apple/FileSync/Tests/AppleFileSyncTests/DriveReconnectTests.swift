@@ -128,7 +128,10 @@ final class DriveReconnectTests: XCTestCase {
     func testUnboundLegacyJournalRemainsUnreadableInsteadOfUploadingPrivateBytes() throws {
         try remountFixture(legacy: false, publicationPhase: "unbound-legacy")
     }
-    private func remountFixture(legacy: Bool, publicationPhase: String? = nil, sameMountpoint: Bool = false) throws {
+    func testAbandonedCaptureRemainsInterruptedAfterRealRemount() throws {
+        try remountFixture(legacy: false, abandoned: true)
+    }
+    private func remountFixture(legacy: Bool, publicationPhase: String? = nil, sameMountpoint: Bool = false, abandoned: Bool = false) throws {
         guard ProcessInfo.processInfo.environment["THINGTIME_TEST_DRIVE_REMOUNT"] == "1" else {
             throw XCTSkip("Set THINGTIME_TEST_DRIVE_REMOUNT=1 for disposable APFS remount acceptance")
         }
@@ -231,6 +234,7 @@ final class DriveReconnectTests: XCTestCase {
         try inventory.sealBackup(scope, capture: capture, bookmark: bookmark)
         let before = try inventory.read(scope, capture: capture, bookmark: bookmark, offset: 0)
         XCTAssertEqual(before.entries.map(\.path), ["sample"])
+        if abandoned { try inventory.abandonBackup(scope, capture: capture, bookmark: bookmark) }
         if legacy {
             // Model a capture written by the previous released app. The
             // original picker bookmark remains byte-for-byte unchanged.
@@ -260,6 +264,13 @@ final class DriveReconnectTests: XCTestCase {
         let resolved = try FolderBookmark.resolve(bookmark, stale: &stale)
         XCTAssertFalse(stale)
         XCTAssertEqual(try Data(contentsOf: resolved.appendingPathComponent("sample")), Data("synthetic bytes".utf8))
+        if abandoned {
+            let status = try XCTUnwrap(inventory.backupStatus(scope, id: capture.id, bookmark: bookmark))
+            XCTAssertEqual(status.state, "interrupted"); XCTAssertEqual(status.generation, capture.generation)
+            XCTAssertEqual(try inventory.backupStatus(scope, id: capture.id, bookmark: bookmark)?.generation, capture.generation)
+            XCTAssertThrowsError(try inventory.read(scope, capture: capture, bookmark: bookmark, offset: 0))
+            try detachLast(); try detachLast(); return
+        }
         XCTAssertThrowsError(try inventory.read(scope, capture: capture, bookmark: bookmark, offset: 0)) { error in
             guard case FolderReconnectFailure.remounted = error else { return XCTFail("Expected verified remount, got \(error)") }
         }

@@ -439,6 +439,13 @@ public struct MobileFolderInventory: Sendable {
                 return true
             }
             if remounted {
+                if current.phase == "retired" {
+                    // An availability change cannot undo explicit abandonment.
+                    // Status may report its retained private counts, but cannot
+                    // turn it into a new automatic-capture admission.
+                    let status = try client.requireStatus(scope, generation: current.generation)
+                    return BackupStatus(capture: try capture(current, status: status), state: "interrupted", ignoredCount: status.ignoredCount)
+                }
                 // The exact authorized bookmark returned, on the same volume
                 // and root inode/birth. Old device IDs and paths are still
                 // invalid: retire its Rust snapshot before allocating another.
