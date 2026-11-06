@@ -876,6 +876,26 @@ persisted; every check is client-side.
   proves UI behavior only; signed-in native picker acceptance is separate.
 
 - [ ] Mobile presence: with a saved pairing and no sync jobs, stay on Home, Things overview and device detail for over 45 seconds; verify last-seen remains fresh. Background/foreground, reconnect networking and navigate routes; verify automatic recovery without a second pairing. Switch account/origin during a pending check and verify cancellation; revoke the credential and verify only explicit pairing can restore it. Run `node --import tsx --test app/components/Devices/mobileDevicePresence.test.ts` from `remix/`.
+- [ ] iOS background presence: on native pairing contract 1.1.0, enable Mobile
+  device connection in Activity manager and verify foreground identity before
+  backgrounding. Exercise a scheduled refresh, expiration, interrupted transport,
+  background-only relaunch, revocation, foreground return, logout and origin change.
+  A task uses only the scoped native device credential; it never pairs, reads web
+  cookies or reports success after cancellation. Disable the activity between
+  requests and during authorization: the pending task and durable approval clear.
+  Older 1.0.0 shells retain foreground checks. Run native
+  `MobileDeviceBackgroundPresenceTests`, `MobileDevicePairingTests` and
+  `MobileDeviceBridgeLifecycleTests`, plus web `mobileDeviceBridge.test.ts` and
+  `mobileDevicePresence.test.ts`. Simulator/task-injection checks do not prove an
+  actual iOS-scheduled wake: record physical-device delivery separately. Scheduling
+  is discretionary, not a 15-minute guarantee or an always-online promise.
+- [ ] Muted device contact status: compare API `lastSeenAt` with grey "Last seen
+  2m 5s ago" labels in grid/list, device dashboard, expanded Node & pairing,
+  connectors and desktop node controls at 390px and desktop widths. Scroll each
+  surface fully and reload. Offline/stale/degraded machine states must not render
+  the alarming degraded badge or duplicate contact lines; unknown/invalid/future
+  timestamps stay unknown. Real errors, revoked credentials, required approvals
+  and incompatible versions remain distinguishable and action gates stay intact.
 - [ ] Native iOS pairing: select a compatible local origin, sign in, add this
       device from Things and Settings, reload/relaunch and verify exactly one
       iOS device. Interrupt prepare/complete and retry; change accounts/origins

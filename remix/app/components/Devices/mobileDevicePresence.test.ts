@@ -16,11 +16,13 @@ function fixture() {
 	};
 	const timers = new Map<() => void, number>();
 	const requests: Array<{ signal: AbortSignal; resolve(value: MobileDeviceStatus): void; reject(error: Error): void }> = [];
+	let backgroundStops = 0;
 	const presence = startMobileDevicePresence({
 		window,
 		document,
 		current: () => current,
 		bridge: () => bridge,
+		stopBackground: () => { backgroundStops += 1; },
 		request: (signal) =>
 			new Promise((resolve, reject) => {
 				requests.push({ signal, resolve, reject });
@@ -45,6 +47,7 @@ function fixture() {
 		timers,
 		presence,
 		fire,
+		backgroundStops: () => backgroundStops,
 		setCurrent: (value: boolean) => {
 			current = value;
 		},
@@ -87,6 +90,7 @@ test('hidden, changed-account/origin and stopped lifecycles abort pending work a
 		f.document.dispatchEvent(new Event('visibilitychange'));
 		assert.equal(f.requests[0].signal.aborted, true);
 		assert.equal(f.timers.size, 0);
+		assert.equal(f.backgroundStops(), 0, 'Hiding the page preserves approved native background presence');
 		f.document.visibilityState = 'visible';
 		f.document.dispatchEvent(new Event('visibilitychange'));
 		assert.equal(f.requests.length, 2);
@@ -95,6 +99,7 @@ test('hidden, changed-account/origin and stopped lifecycles abort pending work a
 		assert.equal(f.timers.size, 0);
 		f.setCurrent(false);
 		f.presence.refresh();
+		assert.equal(f.backgroundStops(), 1, 'An account boundary withdraws background approval');
 		assert.equal(f.requests[1].signal.aborted, true);
 		f.requests[1].resolve({ state: 'paired', deviceId: 'old' });
 		await settle();
@@ -104,6 +109,20 @@ test('hidden, changed-account/origin and stopped lifecycles abort pending work a
 	} finally {
 		f.presence.stop();
 	}
+});
+test('identity changes and disabling activity stop background presence even between requests', async () => {
+	const f = fixture();
+	f.fire();
+	f.requests[0].resolve({ state: 'paired', deviceId: 'device' });
+	await settle();
+	f.setCurrent(false);
+	f.presence.refresh();
+	f.presence.refresh();
+	assert.equal(f.backgroundStops(), 1);
+	assert.equal(f.timers.size, 0);
+	f.presence.stop();
+	f.presence.stop();
+	assert.equal(f.backgroundStops(), 2, 'Disposal withdraws once independently of pending requests');
 });
 test('late bridge readiness starts presence; failures back off, and revoked status never creates a pairing', async () => {
 	const f = fixture();

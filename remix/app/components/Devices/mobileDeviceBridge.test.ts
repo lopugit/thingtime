@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseMobileDeviceResult, supportsMobileDevice } from './mobileDeviceBridge';
+import { parseMobileDeviceResult, supportsMobileDevice, supportsMobileBackgroundPresence, requestMobileDevicePresence, stopMobileBackgroundPresence } from './mobileDeviceBridge';
 import type { ThingtimeNativeBridge } from '~/utils/nativeBridge';
 const expected = { requestId: 'request', ownerId: 'owner', origin: 'https://example.test' };
 const result = (payload: Record<string, unknown>) => ({ type: 'mobile-device-result', payload: { ...expected, state: 'paired', deviceId: 'device', ...payload } });
@@ -11,6 +11,54 @@ test('mobile pairing requires its explicit native capability and platform', () =
 	assert.equal(supportsMobileDevice({ ...bridge, platform: 'android', devicePairingVersion: '1.0.0' }), true);
 	assert.equal(supportsMobileDevice({ ...bridge, platform: 'macos', devicePairingVersion: '1.0.0' }), false);
 	assert.equal(supportsMobileDevice({ ...bridge, devicePairingVersion: '2.0.0' }), false);
+	assert.equal(supportsMobileBackgroundPresence({ ...bridge, devicePairingVersion: '1.0.0' }), false);
+	assert.equal(supportsMobileBackgroundPresence({ ...bridge, devicePairingVersion: '1.1.0' }), true);
+	assert.equal(supportsMobileBackgroundPresence({ ...bridge, devicePairingVersion: '2.0.0' }), false);
+	assert.equal(supportsMobileBackgroundPresence({ ...bridge, platform: 'android', devicePairingVersion: '1.1.0' }), false);
+});
+
+test('background presence negotiates the host and stops immediately without crossing an origin', async () => {
+	const { nativeBridgeMessageEvent } = await import('../../utils/nativeBridge');
+	const messages: Array<{ payload: Record<string, unknown> }> = [];
+	const target = Object.assign(new EventTarget(), {
+		location: { origin: 'https://example.test' },
+		thingtimeNativeBridge: { isNativeWebView: true, platform: 'ios', devicePairingVersion: '1.0.0',
+			postMessage: (message: { payload: Record<string, unknown> }) => messages.push(message) }
+	});
+	const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+	Object.defineProperty(globalThis, 'window', { configurable: true, value: target });
+	const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
+	const reply = (index: number) => target.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, {
+		detail: { type: 'mobile-device-result', payload: { ...messages[index].payload, state: 'paired', deviceId: 'device' } }
+	}));
+	try {
+		const oldHost = requestMobileDevicePresence('owner', new AbortController().signal);
+		await tick();
+		assert.equal(messages[0].payload.action, 'status');
+		stopMobileBackgroundPresence('owner', target.location.origin);
+		assert.equal(messages.length, 1, 'Old hosts receive no unknown command');
+		reply(0); await oldHost;
+		target.thingtimeNativeBridge.devicePairingVersion = '1.1.0';
+		const controller = new AbortController();
+		const current = requestMobileDevicePresence('owner', controller.signal);
+		const cancelled = assert.rejects(current, { name: 'AbortError' });
+		await tick();
+		assert.equal(messages[1].payload.action, 'presence');
+		assert.equal(messages[1].payload.enabled, true);
+		stopMobileBackgroundPresence('owner', target.location.origin);
+		assert.equal(messages[2].payload.action, 'presence');
+		assert.equal(messages[2].payload.enabled, false, 'Withdrawal bypasses pending request queue');
+		assert.equal(messages[2].payload.ownerId, 'owner');
+		assert.notEqual(messages[2].payload.requestId, messages[1].payload.requestId);
+		controller.abort(); await cancelled;
+		const count = messages.length;
+		target.location.origin = 'https://other.example.test';
+		stopMobileBackgroundPresence('owner', 'https://example.test');
+		assert.equal(messages.length, count, 'An old page cannot send its cleanup to another origin');
+	} finally {
+		if (previous) Object.defineProperty(globalThis, 'window', previous);
+		else Reflect.deleteProperty(globalThis, 'window');
+	}
 });
 test('foreign, stale and wrong-origin native replies cannot change this view', () => {
 	for (const field of ['requestId', 'ownerId', 'origin']) assert.equal(parseMobileDeviceResult(result({ [field]: 'other' }), expected), null);

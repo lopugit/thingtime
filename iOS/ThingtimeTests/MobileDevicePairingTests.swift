@@ -113,6 +113,30 @@ final class MobileDevicePairingTests: XCTestCase {
         XCTAssertThrowsError(try MobileDevicePairing.Scope(ownerId: "owner", url: URL(string: "http://untrusted.test")!))
         XCTAssertThrowsError(try MobileDevicePairing.Scope(ownerId: "owner", url: URL(string: "https://user:pass@example.test")!))
     }
+    func testBackgroundUsesOnlySavedCredentialAndNeverPairsOrReadsCookies() async throws {
+        _ = try await engine().pair(scope, descriptor: descriptor)
+        let oldCount = createCount
+        let background = MobileDevicePairing(load: { _ in self.saved }, save: { self.saved = $0 }, transport: { request in
+            XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
+            let response: [String: Any]
+            if request.url!.path == LopuVoiceContract.manifestPath {
+                response = ["schemaVersion": 1, "origin": "https://example.test", "features":
+                    ["api.devices-node-state": ["version": "1.9.0"]]]
+            } else {
+                XCTAssertEqual(request.url!.path, "/api/v1/devices/node/state")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(self.saved!.credential)")
+                response = ["ok": true]
+            }
+            return (try MobileDevicePairing.json(response), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }, cookie: { _ in XCTFail("Background must never ask for web authentication"); throw CancellationError() })
+        let paired = try await background.backgroundHeartbeat(scope, locked: true)
+        XCTAssertEqual(paired.state, "paired")
+        XCTAssertEqual(createCount, oldCount)
+        saved = nil
+        let absent = try await background.backgroundHeartbeat(scope, locked: true)
+        XCTAssertEqual(absent.state, "unpaired")
+    }
+
     func testCanonicalWireUsesUtf8LengthsAndBoundedDescriptor() throws {
         XCTAssertEqual(String(data: MobileDevicePairing.message(["📱", "é"]), encoding: .utf8), "4:📱2:é")
         let long = try MobileDevicePairing.descriptor(descriptor.merging(["name": String(repeating: "📱", count: 80)]) { _, b in b })
