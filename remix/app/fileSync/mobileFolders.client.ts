@@ -68,6 +68,7 @@ export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePol
 	| { action: 'scan-page'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; offset: number; pageSize?: number; ignoreRules?: string; capturePolicy?: 'backup-supported' }
 	| { action: 'scan-discard'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; ignoreRules?: string; capturePolicy?: 'backup-supported' }
 	| { action: 'inspect'; rootId: string; path: string }
+	| { action: 'observe-path'; rootId: string; path: string; observation: { version: 1; network: 'wifi' | 'any'; chargingOnly: boolean; configurationId: string; configurationRevision: string }; remainingMs: number }
 	| { action: 'version-list'; rootId: string; cursor?: string }
 	| { action: 'version-inspect'; rootId: string; versionId: string; expected: SyncEntry }
 	| { action: 'version-restore-reviewed' | 'version-restore-status'; rootId: string; restore: NativeVersionRestore }
@@ -114,6 +115,8 @@ export type FolderResult = {
 	conditions?: SyncConditions;
 	entries?: SyncEntry[];
 	inspectedEntry?: SyncEntry | null;
+	observedEntries?: (SyncEntry | null)[];
+	observationUnavailable?: true;
 	backupCapture?: NativeBackupStatus;
 	strictCapture?: { id: string; generation: string; state: NativeBackupStatus['state']; indexedEntries: number };
 	skippedPage?: NativeSkippedPage;
@@ -167,6 +170,7 @@ export const supportsNativeUploadBatches = (bridge: FolderCapabilities | undefin
 	bridge?.platform === 'macos' && supportsNativeAuthorizationContext(bridge) && /^1\.\d+\.\d+$/.test(bridge.fileUploadBatchVersion ?? '');
 export const supportsNativeFolderBatches = (bridge: FolderCapabilities | undefined) =>
 	bridge?.platform === 'macos' && supportsNativeAuthorizationContext(bridge) && /^1\.\d+\.\d+$/.test(bridge.fileFolderBatchVersion ?? '');
+export const supportsNativePathObservation = (bridge: FolderCapabilities | undefined) => bridge?.platform === 'macos' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.21.0');
 /** These native access contracts independently add exact single-path inspection. */
 export const supportsNativeInventoryPages = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
 	const minimum = bridge?.platform === 'macos' ? 5 : bridge?.platform === 'ios' ? 3 : undefined;
@@ -686,6 +690,15 @@ export function parseMobileFolderResult(
 			if (result.capture.id !== request.captureId) throw Error('Native capture identity changed.');
 		} else if (request.action === 'scan-page') result.inventoryPage = parseNativeInventoryPage(payload.inventoryPage, request.capture, request.offset, request.pageSize);
 		else if (payload.discarded !== true) throw Error('Native inventory cleanup was not confirmed.');
+	} else if (request.action === 'observe-path') {
+		const parent = request.path.split('/').slice(0, -1).join('/'), paths = parent ? [request.path, parent] : [request.path];
+		if (!validSyncPath(request.path) || payload.rootId !== request.rootId || payload.path !== request.path || (payload.observationUnavailable === true ? payload.complete !== false : payload.complete !== true) ||
+			(!payload.observation || Object.keys(request.observation).some(key => payload.observation[key] !== request.observation[key as keyof typeof request.observation])) || !Array.isArray(payload.observedEntries) || payload.observedEntries.length !== (payload.observationUnavailable === true ? 0 : paths.length) ||
+			payload.observedEntries.some((entry: SyncEntry | null, i: number) => entry !== null && (!validSyncEntry(entry) || entry.path !== paths[i])) || !payload.conditions || !['wifi', 'cellular', 'ethernet'].includes(payload.conditions.network) || (payload.conditions.charging !== null && typeof payload.conditions.charging !== 'boolean'))
+			throw Error('Invalid native compound observation.');
+		result.observedEntries = structuredClone(payload.observedEntries);
+		if (payload.observationUnavailable === true) result.observationUnavailable = true;
+		result.conditions = { network: payload.conditions.network, charging: payload.conditions.charging };
 	} else if (request.action === 'inspect') {
 		if (!validSyncPath(request.path) || payload.rootId !== request.rootId || payload.path !== request.path || payload.complete !== true ||
 			(payload.entry !== null && (!validSyncEntry(payload.entry) || payload.entry.path !== request.path)))
@@ -790,6 +803,8 @@ export function requestMobileFolders(
 	try { assertNativeScanExclusions(request, bridge); assertNativeSymbolicLinkRequest(request, bridge); } catch (error) { return Promise.reject(error); }
 	if (['scan-capture', 'scan-page', 'scan-discard'].includes(request.action) && !supportsNativeInventoryPages(bridge))
 		return Promise.reject(Error('Inventory pages require a supported Mac or iOS app.'));
+	if (request.action === 'observe-path' && (!supportsNativePathObservation(bridge) || !validSyncPath(request.path)))
+		return Promise.reject(Error('Compound observation requires a supported app and a relative path.'));
 	if (request.action === 'inspect' && (!supportsNativePathInspection(bridge) || !validSyncPath(request.path)))
 		return Promise.reject(Error('Path inspection requires a supported app and a relative path.'));
 	if (request.action === 'upload-single' && (!supportsNativeSingleUpload(bridge) || !validFileUpload(request.upload) || request.upload.source.size > UPLOAD_BATCH_FILE_BYTES)) return Promise.reject(Error('Unsupported native single upload.'));

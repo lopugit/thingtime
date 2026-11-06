@@ -1,3 +1,4 @@
+import { nativePathObserver } from './nativePathObservation';
 import { reportDeviceSyncHistoryStorage } from './deviceSyncHistory.client';
 import { createDeviceSyncHistoryRecorder } from './deviceSyncHistoryRecorder';
 import { deviceResourceKey, deviceSyncGovernor, readDeviceSyncResourcePolicy } from './deviceResourcePolicy';
@@ -316,6 +317,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					...(inspect && supportsNativeInventoryPages(capabilities) ? {
 						scanLocalPages: nativePages, ...(backup ? { beginLocalImport, releaseLocalImport } : {})
 					} : {}),
+					observeLocal: nativePathObserver(host, binding.ownerId, signal),
 					...(inspect ? { inspectLocal: async (path: string) => (await request(binding.ownerId,
 						{ action: 'inspect', rootId: reviewed.configuration.localRootId, path }, signal)).inspectedEntry! } : {}),
 					inventory: () => readCloudFolderInventory(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal }),

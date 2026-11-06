@@ -1,3 +1,4 @@
+import { nativePathObserver } from '../app/fileSync/nativePathObservation';
 // Non-shipping adapters around the same host factories used by the Mac worker.
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
@@ -68,6 +69,7 @@ export function macFixtureWorkerOptions(host: Awaited<ReturnType<typeof createMa
  if (!supportsNativeAuthorizationContext(host.capabilities) || !host.authorizeContext) throw Error('Missing authenticated native context');
  return {
   nativeOperationGuards: true as const,
+  observeLocal: nativePathObserver(host, ownerId, signal),
   authorizeContext: async () => (await host.authorizeContext!(ownerId, deviceId, signal)).conditions,
   ...(host.uploadBatch ? { uploadBatch: host.uploadBatch } : {}),
   ...(host.folderBatch ? { folderBatch: host.folderBatch } : {})

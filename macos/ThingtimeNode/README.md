@@ -396,3 +396,15 @@ These temporary ad-hoc fixtures are never installed or executed. Stable release
 signing, OS consent, owner pairing and explicit location opt-in remain separate
 requirements. Runtime recovery may validate older signed helpers without this
 optional grant; new local/production packages must include it.
+
+
+Mac file-access 1.21.0 adds `observe-path` for two-way preparation. The typed
+request carries the exact candidate, saved configuration identity/revision,
+network/charging policy and remaining operation deadline. The adapter observes
+only that candidate and its immediate parent through the shared reader, with
+metered CPU and current grant/policy/cancellation checks around each observation.
+Fresh identity is required at entry and reply, including after a queued wait;
+no identity result is cached or shared. The complete reply echoes the policy
+and returns ordered observations and current conditions. Older hosts retain
+separate requests. This contract does not authorize writes or relax later
+read/publication guards, and does not change byte, CPU or identity limits.

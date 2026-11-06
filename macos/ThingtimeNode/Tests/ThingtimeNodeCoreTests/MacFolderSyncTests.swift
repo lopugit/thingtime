@@ -152,6 +152,75 @@ final class MacFolderSyncTests: XCTestCase {
         XCTAssertEqual(MacFolderSync.backupDiagnosticCode(NSError(domain: sensitive, code: 1, userInfo: [NSLocalizedDescriptionKey: sensitive])), "unexpected")
     }
 
+    func testCompoundPathObservationUsesOneFreshEntryAndReplyCheck() async throws {
+        var saved: [String: Data] = [:]
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+        let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+        let selected = folder.appendingPathComponent("selected")
+        try FileManager.default.createDirectory(at: selected.appendingPathComponent("nested"), withIntermediateDirectories: true)
+        try Data("content".utf8).write(to: selected.appendingPathComponent("nested/file"))
+        let grant = try store.add(owner, selected: selected)
+        var checks = 0
+        let service = try MacFolderSync(origin: origin, store: store, staging: MobileSyncStaging(directory: folder.appendingPathComponent("stage")),
+            verify: { _, _ in checks += 1 }, choose: { nil }, approve: { _ in false }, conditions: { .init(network: "wifi", charging: true) })
+        let fields: [String: JSONValue] = ["rootId": .string(grant.id), "path": .string("nested/file"), "remainingMs": .number(30_000),
+            "observation": .object(["version": .number(1), "network": .string("wifi"), "chargingOnly": .bool(true), "configurationId": .string("connection"), "configurationRevision": .string("r1")])]
+        let result = try await service.handle(request("observe-path", fields)).decode([String: JSONValue].self)
+        let entries = try XCTUnwrap(result["observedEntries"]).decode([[String: JSONValue]].self)
+        XCTAssertEqual(entries.map { $0["path"] }, [.string("nested/file"), .string("nested")]); XCTAssertEqual(checks, 2)
+        XCTAssertEqual(result["complete"], .bool(true))
+    }
+
+    func testCompoundPathObservationRefusesAuthorityPolicyAndCancellationChangesBeforeReply() async throws {
+        for failure in ["grant", "network", "charging", "identity", "cancel"] {
+            var saved: [String: Data] = [:]
+            let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+            let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+            let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
+            var checks = 0, network = "wifi", charging = true
+            let service = try MacFolderSync(origin: origin, store: store, staging: MobileSyncStaging(directory: folder.appendingPathComponent("stage-" + failure)),
+                verify: { _, _ in
+                    checks += 1
+                    if checks == 2 {
+                        if failure == "grant" { try store.remove(owner, id: grant.id) }
+                        if failure == "network" { network = "offline" }
+                        if failure == "charging" { charging = false }
+                        if failure == "identity" { throw MobileFolderStore.Failure.unavailable }
+                        if failure == "cancel" { throw CancellationError() }
+                    }
+                }, choose: { nil }, approve: { _ in false }, conditions: { .init(network: network, charging: charging) })
+            let fields: [String: JSONValue] = ["rootId": .string(grant.id), "path": .string("missing"), "remainingMs": .number(30_000),
+                "observation": .object(["version": .number(1), "network": .string("wifi"), "chargingOnly": .bool(true), "configurationId": .string("connection"), "configurationRevision": .string("r1")])]
+            await rejects { try await service.handle(self.request("observe-path", fields)) }
+            XCTAssertEqual(checks, 2, failure)
+        }
+    }
+
+    func testCompoundPathObservationDoesNotTreatUnsafeOrExpiredReadsAsAbsence() async throws {
+        var saved: [String: Data] = [:]
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+        let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+        let selected = folder.appendingPathComponent("selected")
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("outside"), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: selected.appendingPathComponent("nested"), withDestinationURL: folder.appendingPathComponent("outside"))
+        let grant = try store.add(owner, selected: selected)
+        var checks = 0, slow = false
+        let service = try MacFolderSync(origin: origin, store: store, staging: MobileSyncStaging(directory: folder.appendingPathComponent("stage")),
+            verify: { _, _ in checks += 1; if slow { try await Task.sleep(for: .milliseconds(20)) } },
+            choose: { nil }, approve: { _ in false }, conditions: { .init(network: "wifi", charging: true) })
+        var fields: [String: JSONValue] = ["rootId": .string(grant.id), "path": .string("nested/file"), "remainingMs": .number(30_000),
+            "observation": .object(["version": .number(1), "network": .string("wifi"), "chargingOnly": .bool(false), "configurationId": .string("connection"), "configurationRevision": .string("r1")])]
+        let result = try await service.handle(request("observe-path", fields)).decode([String: JSONValue].self)
+        XCTAssertEqual(result["observationUnavailable"], .bool(true)); XCTAssertEqual(result["complete"], .bool(false))
+        XCTAssertEqual(result["observedEntries"], .array([])); XCTAssertEqual(checks, 2)
+        checks = 0; slow = true; fields["remainingMs"] = .number(1)
+        await rejects { try await service.handle(self.request("observe-path", fields)) }
+        XCTAssertEqual(checks, 1)
+        checks = 0; fields["path"] = .string("../escape"); fields["remainingMs"] = .number(30_000)
+        await rejects { try await service.handle(self.request("observe-path", fields)) }
+        XCTAssertEqual(checks, 0)
+    }
+
     private var folder: URL!
     override func setUpWithError() throws {
         folder = FileManager.default.temporaryDirectory.appendingPathComponent("mac-sync-" + UUID().uuidString)
@@ -884,7 +953,7 @@ final class MacFolderSyncTests: XCTestCase {
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
         XCTAssertNotNil(context["conditions"])
         XCTAssertNotNil(context["roots"])
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.20.0", "fileSymbolicLinksVersion": "1.0.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.3.0", "fileUploadBatchVersion": "1.0.0", "fileSingleUploadVersion": "1.0.0", "fileFolderBatchVersion": "1.0.0", "fileResourceLimitsVersion": "1.1.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.21.0", "fileSymbolicLinksVersion": "1.0.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.3.0", "fileUploadBatchVersion": "1.0.0", "fileSingleUploadVersion": "1.0.0", "fileFolderBatchVersion": "1.0.0", "fileResourceLimitsVersion": "1.1.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }
