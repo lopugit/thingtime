@@ -19,6 +19,127 @@ function allowed(event, ref, input = {}, overrides = {}) {
   return evaluate(github, { release_kind: 'pr', triggering_event: event, ...input }, (array, item) => array.includes(item));
 }
 
+const xcodegenStepName = 'Provision XcodeGen for native password provider';
+function xcodegenProvisioningStep() {
+  const sections = workflow.split(`      - name: ${xcodegenStepName}\n`);
+  assert.equal(sections.length, 2, 'the release workflow provisions XcodeGen exactly once');
+  return sections[1].split('\n      - name: ')[0];
+}
+
+function runXcodegenProvisioning({ existing = 'missing', install = 'success' } = {}) {
+  const step = xcodegenProvisioningStep();
+  assert.match(step, /^        shell: bash$/m);
+  const run = step.split('        run: |\n');
+  assert.equal(run.length, 2, 'execute the actual provisioning shell from the workflow');
+  const shell = run[1].split('\n').map(line => line.replace(/^          /, '')).join('\n');
+  const directory = mkdtempSync(path.join(tmpdir(), 'thingtime xcodegen provisioning '));
+  try {
+    const bin = path.join(directory, 'bin');
+    const trace = path.join(directory, 'trace');
+    const template = path.join(directory, 'xcodegen-template');
+    mkdirSync(bin);
+    writeFileSync(trace, '');
+    const xcodegen = `#!/bin/bash
+printf 'xcodegen:%s\\n' "$*" >> "$PROVISION_TRACE"
+[[ "$#" -eq 1 && "$1" == --version ]] || exit 65
+printf 'fixture-xcodegen 1.0.0\\n'
+exit ${existing === 'broken' ? 19 : 0}
+`;
+    writeFileSync(template, xcodegen, { mode: 0o755 });
+    if (existing !== 'missing') {
+      writeFileSync(path.join(bin, 'xcodegen'), existing === 'unlaunchable'
+        ? `#!${path.join(directory, 'missing-interpreter')}\n`
+        : xcodegen, { mode: 0o755 });
+    }
+    // Only these fixture commands are on PATH. The fake installer writes a
+    // synthetic executable; it cannot reach Homebrew, native builds or signing.
+    writeFileSync(path.join(bin, 'brew'), `#!${process.execPath}
+const fs = require('node:fs');
+const path = require('node:path');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.PROVISION_TRACE, 'brew:' + args.join(' ') + '\\n');
+if (JSON.stringify(args) !== JSON.stringify(['install', 'xcodegen'])) process.exit(64);
+if (process.env.PROVISION_INSTALL === 'failure') process.exit(23);
+if (process.env.PROVISION_INSTALL === 'success') {
+  const destination = path.join(process.env.PROVISION_BIN, 'xcodegen');
+  fs.copyFileSync(process.env.PROVISION_TEMPLATE, destination);
+  fs.chmodSync(destination, 0o755);
+}
+`, { mode: 0o755 });
+    const result = spawnSync('/bin/bash', ['--noprofile', '--norc', '-c', shell], {
+      cwd: directory,
+      encoding: 'utf8',
+      timeout: 5000,
+      env: {
+        PATH: bin,
+        PROVISION_BIN: bin,
+        PROVISION_TRACE: trace,
+        PROVISION_TEMPLATE: template,
+        PROVISION_INSTALL: install,
+      },
+    });
+    assert.ifError(result.error);
+    return { ...result, calls: readFileSync(trace, 'utf8').split('\n').filter(Boolean) };
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+}
+
+test('XcodeGen is provisioned before dependency tests and signing credential access', () => {
+  const names = [...workflow.matchAll(/^      - name: (.+)$/gm)].map(match => match[1]);
+  const provisioning = names.indexOf(xcodegenStepName);
+  const corepack = names.indexOf('Enable Corepack');
+  assert.notEqual(corepack, -1, 'the release still enables its package manager');
+  assert.ok(provisioning > corepack);
+  for (const name of [
+    'Install release dependencies',
+    'Test unsigned source before accessing signing credentials',
+    'Select release distribution',
+    'Import Developer ID and notarization credentials',
+  ]) {
+    assert.ok(names.indexOf(name) > provisioning, `${name} runs after XcodeGen provisioning`);
+  }
+  const step = xcodegenProvisioningStep();
+  assert.doesNotMatch(step, /^        if:/m, 'both signed and unsigned releases need XcodeGen');
+  assert.doesNotMatch(workflow.split(`      - name: ${xcodegenStepName}\n`)[0] + step, /\bsecrets\./);
+});
+
+test('XcodeGen provisioning verifies an installed tool without invoking Homebrew', () => {
+  const result = runXcodegenProvisioning({ existing: 'working' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.calls, ['xcodegen:--version']);
+  assert.match(result.stdout, /fixture-xcodegen 1\.0\.0/);
+});
+
+test('XcodeGen provisioning installs a missing tool and verifies the installed executable', () => {
+  const result = runXcodegenProvisioning();
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.calls, ['brew:install xcodegen', 'xcodegen:--version']);
+  assert.match(result.stdout, /fixture-xcodegen 1\.0\.0/);
+});
+
+test('XcodeGen provisioning stops when Homebrew installation fails', () => {
+  const result = runXcodegenProvisioning({ install: 'failure' });
+  assert.equal(result.status, 23, result.stderr);
+  assert.deepEqual(result.calls, ['brew:install xcodegen']);
+});
+
+test('XcodeGen provisioning rejects a successful installer that leaves no usable tool', () => {
+  const result = runXcodegenProvisioning({ install: 'no-tool' });
+  assert.notEqual(result.status, 0);
+  assert.deepEqual(result.calls, ['brew:install xcodegen']);
+});
+
+test('XcodeGen provisioning rejects an installed tool whose version probe fails', () => {
+  const result = runXcodegenProvisioning({ existing: 'broken' });
+  assert.equal(result.status, 19, result.stderr);
+  assert.deepEqual(result.calls, ['xcodegen:--version']);
+});
+
+test('XcodeGen provisioning rejects an executable that cannot launch', () => {
+  const result = runXcodegenProvisioning({ existing: 'unlaunchable' });
+  assert.notEqual(result.status, 0);
+  assert.deepEqual(result.calls, []);
+});
+
 test('real caller events reach the approved PR builder', () => {
   for (const ref of ['main', 'develop']) {
     assert.equal(allowed('pull_request_target', ref), true);

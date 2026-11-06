@@ -1,5 +1,14 @@
 # Control-plane changelog
 
+## 2026-11-06 — Provision XcodeGen before Electron release builds
+
+- Install XcodeGen when absent and verify it launches before dependencies,
+  unsigned source checks or signing credentials in the shared main/PR release
+  workflow. This supplies the native password-provider project's generator;
+  failed installation or launch stops the release without changing signing policy.
+- Exercise the actual setup shell with isolated tool fixtures, including install
+  failure, a missing post-install executable and an existing broken executable.
+
 ## 2026-11-02 — Pass the existing team slug into prebuilt prepare
 
 - Map the protected environment’s `VERCEL_TEAM_SLUG` into authorization before

@@ -759,6 +759,14 @@ variable without this explicit mapping.
 
 ### Clean native release test prerequisites
 
+The shared main/approved-PR macOS worker installs
+[XcodeGen through Homebrew](https://github.com/yonaskolb/XcodeGen#homebrew)
+when it is absent and requires `xcodegen --version` to launch successfully.
+This prepares the native password-provider project generator before dependency
+installation, unsigned source checks and signing credential access. Forks using
+custom macOS runners must provide Homebrew or an executable XcodeGen on `PATH`.
+Provisioning and launch failures stop the release before signing is selected.
+
 Before the unsigned Thingtime Node suite, the Electron release worker builds
 `commander-indexer` from the checked-out source with the locked Cargo workspace,
 exports its exact debug executable as `THINGTIME_TEST_COMMANDER_INDEXER`, and

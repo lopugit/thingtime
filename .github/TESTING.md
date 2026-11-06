@@ -408,3 +408,18 @@ pre-queued with no jobs, logs, or cancellable run graph.
   privileged identity drop. Verify failure diagnostics reject arbitrary output,
   command arguments/messages, environment values and unregistered labels;
   malformed prefixed JSON and non-string stage/error-type fields are ignored.
+
+## Electron release prerequisites (2026-11-06)
+
+- Run `node --test .github/scripts/electron-release-gates.test.mjs` and
+  `node .github/scripts/electron-pr-release-contract.mjs`.
+- The shared macOS main/approved-PR release workflow must provision XcodeGen
+  before unsigned source checks and before selecting/accessing signing secrets.
+  Reuse an available executable, install an absent one through Homebrew, and
+  require `xcodegen --version` to succeed. Test the actual workflow shell with
+  isolated tool fixtures: already installed, missing then installed, failed
+  install, install without an executable, and a broken existing executable.
+- After controller activation, verify a protected macOS release run progresses
+  through native password-provider project generation and compilation. Local
+  Linux fixtures do not establish macOS packaging, entitlement or notarization
+  acceptance. Preserve the existing source-admission and signing gates.

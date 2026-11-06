@@ -152,6 +152,16 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.12.1 --activate
 
+      - name: Provision XcodeGen for native password provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          # Verify the executable before source builds or signing credentials.
+          xcodegen --version
+
       - name: Install release dependencies
         run: |
           set -euo pipefail
