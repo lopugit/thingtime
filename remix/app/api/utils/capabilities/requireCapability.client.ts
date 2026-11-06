@@ -1,4 +1,5 @@
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from './capabilityContract';
+import { ThingtimeApiError } from '../../../hooks/apiFailure';
 
 type CapabilityManifest = {
   schemaVersion?: number;
@@ -40,6 +41,10 @@ export const createThingtimeCapabilityChecker = () => {
     const load = () => {
       const deadline = AbortSignal.timeout(20_000);
       manifestSignal = transport?.signal ? AbortSignal.any([deadline, transport.signal]) : deadline;
+      const transportFailure = (failure: unknown): never => {
+        if (transport?.signal?.aborted) throw failure;
+        throw new ThingtimeApiError(failure instanceof Error ? failure.message : 'Thingtime capability discovery failed', { status: null, method: 'GET', action: 'check server capabilities' });
+      };
       return (transport?.fetch ?? fetch)(scoped ? new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, origin).href : THINGTIME_CAPABILITY_MANIFEST_PATH, {
         headers: { Accept: 'application/json' },
         credentials: scoped ? 'omit' : 'same-origin',
@@ -48,9 +53,17 @@ export const createThingtimeCapabilityChecker = () => {
         // Successful checks still share this checker's in-memory request.
         cache: 'no-store',
         signal: manifestSignal
+      }).catch(failure => {
+        // Preserve the shared distinction between retryable transport failure
+        // and refused/invalid authority. Explicit caller cancellation stays an
+        // abort; a deadline or network interruption is a retryable read error.
+        return transportFailure(failure);
       }).then(async response => {
-        if (!response.ok) throw new Error('Thingtime capability manifest is unavailable');
-        return response.json() as Promise<CapabilityManifest>;
+        if (!response.ok) throw new ThingtimeApiError('Thingtime capability manifest is unavailable', { status: response.status, method: 'GET', action: 'check server capabilities' });
+        // Headers can arrive before a deadline or connection failure. Classify
+        // body transport separately; malformed JSON is still invalid authority.
+        const body = await response.text().catch(transportFailure);
+        return JSON.parse(body) as CapabilityManifest;
       });
     };
     // StrictMode cleanup or a cancelled view may abort before the previous

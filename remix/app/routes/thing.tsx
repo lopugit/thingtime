@@ -1,6 +1,6 @@
 import { audienceDescription, audienceOfAcl, THING_AUDIENCE_META } from '~/components/Sharing/audienceCore';
 import React from 'react';
-import { ContentExecutionBoundary, useContentExecutionHeld } from '~/components/Builder/ContentExecutionHold';
+import { ContentExecutionBoundary, ContentExecutionScope, useContentExecutionHeld } from '~/components/Builder/ContentExecutionHold';
 import { ComponentDisplayOnly } from '~/components/Builder/NativeComponentControls';
 import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { ChatArchivePage } from '~/components/Things/ChatArchivePage';
@@ -32,10 +32,11 @@ import {
 	type SensitiveThingRevealDescriptor
 } from '~/components/Things/SensitiveThingReveal';
 import { isSourceActionKey } from '~/components/ComponentsLibrary/componentBrowseTypes';
-import { parseThingsReferrer, schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingRenameCrystal, thingsCacheKey } from '~/components/Things/thingsCore';
-import type { ThingsCache, ThingsReferrer } from '~/components/Things/thingsCore';
+import { parseThingsReferrer, schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingRenameCrystal } from '~/components/Things/thingsCore';
+import type { ThingsReferrer } from '~/components/Things/thingsCore';
 import { apiErrorMessage } from '~/hooks/apiFailure';
-import { clearLocalCache, pruneCacheNamespace, readLocalCache, readStampedCache, writeStampedCache } from '~/hooks/localCache';
+import { clearLocalCache, pruneCacheNamespace, readStampedCache, writeStampedCache } from '~/hooks/localCache';
+import { rootIdentity } from '~/utils/rootIdentity';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useDataPlane } from '~/hooks/useDataPlane';
@@ -244,7 +245,7 @@ const SchemaTemplateLive = ({ template, crystal, id, interactive }: { template: 
 	const held = useContentExecutionHeld();
 	interactive = interactive && !held;
 	const { scope } = useThingSource({ source: null, cacheId: id, argValues: crystal, interactive });
-	return <ComponentDisplayOnly.Provider value={displayOnly || !interactive}><LiveTemplate render={template} scope={{ ...crystal, ...scope }} interactive={interactive} /></ComponentDisplayOnly.Provider>;
+	return <ContentExecutionScope blocked={!interactive}><ComponentDisplayOnly.Provider value={displayOnly || !interactive}><LiveTemplate render={template} scope={{ ...crystal, ...scope }} interactive={interactive} /></ComponentDisplayOnly.Provider></ContentExecutionScope>;
 };
 
 // Why the controls are off: a stranger's thing (ownership is the only thing
@@ -299,6 +300,7 @@ function GenericThingPage() {
 	const { v1 } = api;
 	const currentUser = useCurrentUser();
 	const dataPlane = useDataPlane();
+	const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
 	const lopu = useLopu();
 	const lopuRef = React.useRef(lopu);
 	lopuRef.current = lopu;
@@ -628,29 +630,33 @@ function GenericThingPage() {
 	// a data thing's schema render template: the /things Previews cache paints
 	// it instantly, the schema fetch reconciles (null = fetched, has none)
 	const schemaId = thing && isData ? schemaIdOf({ thingtime: kinds, crystal: thing.crystal || {} }) : null;
-	const schemaContext = schemaId && thing ? JSON.stringify([thing.id, schemaId, currentUser?.id || '', linkKey || '']) : null;
-	const [schemaRender, setSchemaRender] = React.useState<{ context: string; template: Record<string, unknown> | null; owned: boolean; verified: boolean; executionHeld: boolean } | null>(null);
+	const schemaContext = schemaId && thing && !identity.pending ? JSON.stringify([window.location.origin, requestKey, schemaId, identity.generation]) : null;
+	const [schemaRender, setSchemaRender] = React.useState<{ context: string; generation: number; template: Record<string, unknown> | null; owned: boolean; verified: boolean; executionHeld: boolean } | null>(null);
 	React.useEffect(() => {
 		if (!schemaId || !schemaContext || !thing?.id) return;
-		// Inherited templates are capabilities of this root/key/viewer, never a
-		// schema-only persistent cache entry reusable on a different shared page.
-		const cached = isThingOwner ? readLocalCache<ThingsCache>(thingsCacheKey(currentUser?.id))?.schemaRenders?.[schemaId] : undefined;
-		if (cached !== undefined) setSchemaRender({ context: schemaContext, template: cached, owned: false, verified: false, executionHeld: false });
+		const controller = new AbortController();
+		// The list cache carries no origin/plane/root authorization provenance.
+		// Only a live template verified in this exact scope may survive refresh.
+		// Keep this scope's live template and its hold while the new read is
+		// pending. Reseeding from the list cache would replace drafts/controls.
+		setSchemaRender(current => current?.context === schemaContext
+			? { ...current, generation: historyRefresh, verified: false }
+			: { context: schemaContext, generation: historyRefresh, template: null, owned: false, verified: false, executionHeld: false });
 		let cancelled = false;
 		void requireThingtimeCapability('api.things', CONTENT_EXECUTION_READ_REQUIREMENTS['api.things'])
-			.then(() => cancelled ? null : apiRef.current.v1.things.get({ id: schemaId, sharedRoot: thing.id, ...(linkKey ? { key: linkKey } : {}) }))
+			.then(() => cancelled ? null : apiRef.current.v1.things.get({ id: schemaId, sharedRoot: thing.id, ...(linkKey ? { key: linkKey } : {}) }, { signal: controller.signal }))
 			.then((response: any) => {
-				if (!cancelled) setSchemaRender({ context: schemaContext, template: schemaRenderOf(response?.thing), verified: true, executionHeld: response?.thing?.executionHeld === true, owned: !!currentUser?.id && response?.thing?.author?.id === currentUser.id });
+				if (!cancelled) setSchemaRender({ context: schemaContext, generation: historyRefresh, template: schemaRenderOf(response?.thing), verified: true, executionHeld: response?.thing?.executionHeld === true, owned: !!currentUser?.id && response?.thing?.author?.id === currentUser.id });
 			})
-			.catch(() => {
-				if (!cancelled) setSchemaRender((current) => isThingOwner && current?.context === schemaContext ? { ...current, owned: false, verified: false } : { context: schemaContext, template: null, owned: false, verified: false, executionHeld: false });
+			.catch((failure) => {
+				if (!cancelled) setSchemaRender((current) => current?.context === schemaContext && canKeepThingAfterReadFailure(failure) ? { ...current, generation: historyRefresh, verified: false } : { context: schemaContext, generation: historyRefresh, template: null, owned: false, verified: false, executionHeld: false });
 			});
-		return () => {
-			cancelled = true;
-		};
-	}, [schemaId, schemaContext, thing?.id, currentUser?.id, linkKey, isThingOwner]);
+		return () => { cancelled = true; controller.abort(); };
+	}, [schemaId, schemaContext, thing?.id, currentUser?.id, linkKey, isThingOwner, historyRefresh]);
 	const dataTemplate = schemaContext && schemaRender?.context === schemaContext ? schemaRender.template : null;
-	const schemaVerified = schemaRender?.context === schemaContext && schemaRender?.verified === true;
+	// Invalidate synchronously on refresh, before the effect/old request can
+	// run. A late response from a prior generation can never arm callbacks.
+	const schemaVerified = schemaRender?.context === schemaContext && schemaRender?.generation === historyRefresh && schemaRender?.verified === true;
 	const previewHeld = executionHeld || (schemaRender?.context === schemaContext && schemaRender?.executionHeld === true);
 
 	// ---------------------------------------------------------------- view
@@ -1027,7 +1033,7 @@ function GenericThingPage() {
 							// Its source is the viewer's ownership; its installer exists only
 							// for a seeded suite thing.
 							<WebpageRuntimeProvider
-								enabled={!previewHeld && (!dataTemplate || schemaVerified)}
+								enabled={!previewHeld}
 								key={`${thing.id}:${currentUser?.id || ''}:${linkKey}`}
 								pageId={thing.id}
 								shared={shared || (isData && !(isThingOwner && schemaRender?.context === schemaContext && schemaRender.owned))}

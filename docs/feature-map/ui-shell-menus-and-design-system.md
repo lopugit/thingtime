@@ -424,3 +424,17 @@ nested controls, live release and retained draft checks; the separate
 `test:backups:ordinary-restore` proves real-replica projection/receipt behavior.
 A projected folder `creationProgress` is not a finished restore dashboard,
 folder badge or installed-app acceptance.
+
+
+## Detail-page Schema revalidation
+
+`routes/thing.tsx` binds a live Schema template to origin, viewer/data plane,
+Thing, Schema, link and root-identity generation. A separate refresh generation
+invalidates execution before an async read starts, retains only the same-scope
+template on transient failure, and aborts/ignores stale reads. Refusal clears the
+template. The unscoped list-template cache cannot establish this provenance.
+`ContentExecutionScope` blocks activation/native callbacks quietly;
+`ContentExecutionBoundary` preserves actual restoring ancestry and stable fields.
+The parent page runtime remains stable during verification to retain drafts.
+Run `test:content-execution:browser` and the real compiled
+`test:content-execution:route` fixture; see the Schema checklist in `TESTING.md`.

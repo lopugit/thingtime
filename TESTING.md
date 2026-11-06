@@ -14936,3 +14936,28 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - Keep whole-account readiness false. This phase has no public restore endpoint,
   complete account restore workflow/folder badge, managed/file writers, live
   provider durability, installed-app acceptance or measured large-volume proof.
+
+
+### Generic Thing Schema refresh and revoked dependencies
+
+- Run `test:content-execution:browser` for actual restoring inheritance plus quiet
+  verification: draft DOM/value/focus survive; links, Enter, form submission,
+  saved/pseudo/native controls and captured callbacks remain fenced. Quiet
+  verification must not claim restoration or relax an actual ancestor hold.
+- Build the client and a compiled middleware API (`pnpm --dir remix run
+  build:client`, then `NITRO_PRESET=node_middleware pnpm --dir remix run
+  build:server`), then run `pnpm --dir remix run test:content-execution:route`.
+  An explicit `THINGTIME_ROUTE_TEST_SERVER_BUNDLE` may select a verified compiled
+  middleware artifact. The harness copies artifacts, owns a fresh replica and
+  browser profile, and creates synthetic accounts through the real API. It
+  never uses personal app settings, mock API responses or direct DB content.
+- On full `/thing/:id`, restore real held content, complete its receipt, and use
+  the normal Rename control to trigger a fresh Schema read. Also cover the
+  existing Timeline-applied event path. Completion alone is not an automatic
+  refresh workflow. Check 390px top/bottom, menu and Rename dialog plus desktop.
+- Interrupt a Schema read; retain the existing template/draft inertly. A newer
+  read must supersede delayed success/error. Revoke a foreign Schema's ACL while
+  the outer Data remains readable: clear its protected template immediately,
+  including after an old authorized response arrives. Current authoritative
+  success may release controls; 401/403/404 and invalid/incompatible discovery
+  may not. Manifest transport/HTTP/deadline failure includes body interruption.
