@@ -9128,6 +9128,9 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Apple widgets and Control Centre
 
+- [ ] Widgets platform sources (2026-11-06): run `node --test macos/ThingtimeWidgets/script/release-contract.test.mjs`. The macOS target must exclude the iOS-only Chat Activity client, controller and snapshot while retaining shared Lopu voice/recording sources; the iOS app and Chat Activity tests must still include their sources.
+- [ ] Native source-selection acceptance: run `xcodegen generate --spec macos/ThingtimeWidgets/project.yml`, then the Widgets workflow's unsigned arm64 macOS `xcodebuild test` with `THINGTIME_WIDGET_GROUP=group.com.thingtime.widgets.tests.per-endpoint`. Regenerate the iOS project and run the `Thingtime` scheme's iOS Simulator build-for-testing. Portable source-selection checks do not establish either native compile result, signing or notarization acceptance.
+
 - [ ] Widgets release/Recovery: verify the main-only workflow runs tests before importing secrets and publishes both Widgets and matching Recovery ZIPs after notarization/extraction checks. In Recovery select Thingtime Widgets; verify architecture filtering, isolated cache, download verification, install/launch and rollback without touching another app. Reject mismatched bundle IDs and never accept development signing as a production release.
 
 - [ ] Per-widget Mac endpoints: pin two widgets to different saved, authenticated servers, including Things with identical IDs. Verify the picker lists only the chosen server’s Things, each dashboard/Thing/action link opens that server, and changing the companion’s active endpoint does not change pinned widgets. Remove/disconnect one server and confirm its content clears without affecting the other. Verify unconfigured widgets still follow the active endpoint and turning content sharing off clears every endpoint.
