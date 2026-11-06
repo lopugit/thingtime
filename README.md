@@ -5473,6 +5473,8 @@ handler/database integration check; it does not claim HTTP/browser acceptance.
 
 ```sh
 npm --prefix remix run test:backups:account-profile
+# Pinned owner-content/reference/notification capture through real APIs:
+npm --prefix remix run test:backups:references
 ```
 
 The fixture proves concurrent updates keep the old database snapshot, independent

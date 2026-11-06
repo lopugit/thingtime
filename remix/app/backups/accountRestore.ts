@@ -1,8 +1,8 @@
 import { timelineScopeKey, type TimelineScope } from '../timeline/contract';
 
 export const ACCOUNT_RESTORE_PLAN_FORMAT = 'thingtime-account-restore-plan-v1' as const;
-export const ACCOUNT_RESTORE_FAMILIES = ['ordinary', 'files', 'attachments', 'drafts', 'themes', 'account-content', 'timeline', 'other-managed', 'credentials-security', 'external-settings', 'device-local'] as const;
-export type AccountRestoreFamily = (typeof ACCOUNT_RESTORE_FAMILIES)[number];
+export const ACCOUNT_RESTORE_FAMILIES = ['ordinary', 'files', 'attachments', 'drafts', 'themes', 'account-content', 'notifications', 'timeline', 'other-managed', 'credentials-security', 'external-settings', 'device-local'] as const;
+export type AccountRestoreFamily = (typeof ACCOUNT_RESTORE_FAMILIES)[number] | 'source-coverage' | 'source-exclusion';
 export type AccountRestoreDestination = {
 	scope: TimelineScope;
 	rootId: string;
@@ -65,7 +65,7 @@ export function parseAccountRestoreRecord(input: unknown): AccountRestoreRecord 
 	if (!expected || Object.keys(record).sort().join(',') !== [...expected].sort().join(',')) throw Error('Invalid restore review fields');
 	const text = (value: unknown): value is string => typeof value === 'string' && !!value.trim();
 	if (record.kind === 'entry') {
-		if (![record.sourceId, record.targetId, record.adapter].every(text) || !ACCOUNT_RESTORE_FAMILIES.includes(record.family) ||
+		if (![record.sourceId, record.targetId, record.adapter].every(text) || !(ACCOUNT_RESTORE_FAMILIES.includes(record.family) || record.family === 'source-coverage' || record.family === 'source-exclusion') ||
 			!Number.isSafeInteger(record.ordinal) || record.ordinal < 0 || !Number.isSafeInteger(record.version) || record.version < 1 ||
 			!/^[a-f0-9]{64}$/.test(record.itemHash)) throw Error('Invalid restore review entry');
 	} else if (record.kind === 'dependency') {

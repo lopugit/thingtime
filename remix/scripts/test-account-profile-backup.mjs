@@ -7,7 +7,12 @@ import { createServer } from 'node:net';
 import { once } from 'node:events';
 import assert from 'node:assert/strict';
 
-const port = 28142;
+const mode = process.argv[2] || 'account-profile';
+if (!['account-profile', 'reference-closure'].includes(mode) || process.argv.length > 3) throw Error('Unsupported account backup proof');
+const referenceClosure = mode === 'reference-closure';
+const port = referenceClosure ? 28162 : 28142;
+const script = referenceClosure ? 'scripts/account-reference-backup.integration.mts' : 'scripts/account-profile-backup.integration.mts';
+const marker = referenceClosure ? 'accountReferenceBackupProof' : 'accountProfileBackupProof';
 const probe = createServer();
 await new Promise((resolve, reject) => {
 	probe.once('error', reject);
@@ -94,7 +99,7 @@ try {
 	assert.equal(cancelled, false, 'Fixture was cancelled');
 	child = isolatedAccountBackupProcess(
 		process.execPath,
-		['--import', 'tsx', 'scripts/account-profile-backup.integration.mts'],
+		['--import', 'tsx', script],
 		{
 			cwd: resolve(import.meta.dirname, '..'),
 			stdio: ['ignore', 'pipe', 'pipe'],
@@ -115,10 +120,10 @@ try {
 	const [code] = await once(child, 'exit');
 	clearTimeout(timer);
 	// Console email output can include one-use fixture links. Never forward it.
-	const result = output.split('\n').find((line) => line.startsWith('{"accountProfileBackupProof":'));
+	const result = output.split('\n').find((line) => line.startsWith('{"' + marker + '":'));
 	if (code !== 0 || !result) {
 		const { writeFile } = await import('node:fs/promises');
-		const failureLog = join(tmpdir(), 'thingtime-account-profile-backup-failure.log');
+		const failureLog = join(tmpdir(), `thingtime-${mode}-backup-failure.log`);
 		await writeFile(failureLog, output.replace(/https?:\/\/[^\s"<>]+/g, '[url withheld]'), { mode: 0o600 });
 		throw Error('Account profile API proof failed; private diagnostic log: ' + failureLog);
 	}

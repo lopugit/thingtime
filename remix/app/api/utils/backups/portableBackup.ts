@@ -11,6 +11,7 @@ import {
 	backupJson,
 	parseBackupHeader,
 	parseBackupItem,
+	nextBackupCoveragePage,
 	parseBackupPage,
 	parseBackupPlan,
 	parseBackupRangePage,
@@ -79,7 +80,7 @@ export async function prepareBackup(
 		count = 0,
 		bytes = BigInt(0),
 		previous: string | null = null,
-		lastId = '';
+		lastId = '', coveragePage = 0;
 	const flush = async () => {
 		if (!pending.length) return;
 		const page = parseBackupPage({ format: BACKUP_FORMAT, snapshotId: header.snapshotId, ordinal: pages, previous, items: pending });
@@ -91,6 +92,7 @@ export async function prepareBackup(
 	for await (const raw of items) {
 		await check(access, header);
 		const item = parseBackupItem(raw);
+		coveragePage = nextBackupCoveragePage(item, header.snapshotId, coveragePage);
 		if (item.ordinal !== count || item.thingId <= lastId) throw Error('Backup inventory is unordered or repeats an item');
 		if (
 			pending.length &&
@@ -235,13 +237,14 @@ async function* planItems(store: BackupObjectStore, header: BackupHeader, plan: 
 	let previous: string | null = null,
 		count = 0,
 		bytes = BigInt(0),
-		lastId = '';
+		lastId = '', coveragePage = 0;
 	for (let ordinal = 0; ordinal < plan.pages; ordinal++) {
 		await check(access, header);
 		const page = parseBackupPage(await readJson(store, `${prefix(header.snapshotId)}/plan/${ordinal}.json`));
 		if (page.snapshotId !== header.snapshotId || page.ordinal !== ordinal || page.previous !== previous) throw Error('Backup page sequence changed');
 		previous = digest(backupJson(page));
 		for (const item of page.items) {
+			coveragePage = nextBackupCoveragePage(item, header.snapshotId, coveragePage);
 			if (item.ordinal !== count || item.thingId <= lastId) throw Error('Backup inventory is unordered or repeats an item');
 			count++;
 			lastId = item.thingId;
