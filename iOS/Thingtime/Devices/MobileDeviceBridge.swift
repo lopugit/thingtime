@@ -8,11 +8,12 @@ final class MobileDeviceRedirectPolicy: NSObject, URLSessionTaskDelegate {
 
 @MainActor
 final class MobileDeviceBridge {
-    static let script = WKUserScript(source: "window.thingtimeNativeBridge.devicePairingVersion = '1.0.0';",
+    static let script = WKUserScript(source: "window.thingtimeNativeBridge.devicePairingVersion = '1.1.0';",
                                      injectionTime: .atDocumentStart, forMainFrameOnly: true)
     private var task: Task<Void, Never>?
     private var generation = UUID()
     private var requestId: String?
+    private var requestScope: MobileDevicePairing.Scope?
     private var cancellationReply: (() -> Void)?
     private var observer: NSObjectProtocol?
     private let session: URLSession
@@ -27,7 +28,7 @@ final class MobileDeviceBridge {
     deinit { if let observer { NotificationCenter.default.removeObserver(observer) }; session.invalidateAndCancel(); task?.cancel() }
     func suspend() {
         let reply = cancellationReply; cancellationReply = nil
-        generation = UUID(); task?.cancel(); task = nil; requestId = nil
+        generation = UUID(); task?.cancel(); task = nil; requestId = nil; requestScope = nil
         reply?()
     }
 
@@ -37,12 +38,22 @@ final class MobileDeviceBridge {
                 reply: @escaping (String, [String: Any]) -> Void) {
         guard let payload = body["payload"] as? [String: Any], let id = payload["requestId"] as? String,
               UUID(uuidString: id) != nil, let owner = payload["ownerId"] as? String,
-              let action = payload["action"] as? String, ["status", "pair", "suspend"].contains(action),
+              let action = payload["action"] as? String, ["status", "pair", "suspend", "presence"].contains(action),
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
+        if action == "presence" {
+            guard let enabled = payload["enabled"] as? Bool else { return }
+            if !enabled {
+                if requestScope == scope { suspend() }
+                MobileDeviceBackgroundPresence.shared.stop(matching: scope)
+                reply("mobile-device-result", ["requestId": id, "ownerId": owner,
+                    "origin": scope.origin.absoluteString, "state": "paused"])
+                return
+            }
+        }
         if action == "suspend" { if requestId == id { suspend() }; return }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
         guard task == nil else { reply("mobile-device-result", base.merging(["error": "Another device request is still running. Try again shortly."]) { _, new in new }); return }
-        let operation = UUID(); generation = operation; requestId = id
+        let operation = UUID(); generation = operation; requestId = id; requestScope = scope
         cancellationReply = { [weak webView] in
             guard let current = webView?.url, currentRoot() == root, LopuVoiceContract.sameOrigin(current, root) else { return }
             reply("mobile-device-result", base.merging(["error": "Device connection paused. Retry when the app is active."]) { _, new in new })
@@ -54,7 +65,7 @@ final class MobileDeviceBridge {
         }
         let engine = makeEngine(webView: webView, cookies: cookies, check: check)
         task = Task { [weak self] in
-            defer { if self?.generation == operation { self?.task = nil; self?.requestId = nil; self?.cancellationReply = nil } }
+            defer { if self?.generation == operation { self?.task = nil; self?.requestId = nil; self?.requestScope = nil; self?.cancellationReply = nil } }
             do {
                 let result: MobileDevicePairing.Status
                 if action == "pair" {
@@ -63,6 +74,10 @@ final class MobileDeviceBridge {
                         "osVersion": device.systemVersion, "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"])
                 } else { result = try await engine.status(scope) }
                 try check()
+                if action == "presence" {
+                    if result.state == "paired" { MobileDeviceBackgroundPresence.shared.approve(scope) }
+                    else { MobileDeviceBackgroundPresence.shared.stop(matching: scope) }
+                }
                 var response = base; response["state"] = result.state; response["deviceId"] = result.deviceId
                 reply("mobile-device-result", response)
             } catch is CancellationError {

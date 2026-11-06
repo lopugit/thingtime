@@ -7,6 +7,7 @@ import { Link as RouterLink } from 'react-router';
 
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
 
+import { deviceServicePresentation } from './deviceStatusPresentation';
 import { resolvedDevicePresence, DeviceHealthBadges, DeviceStatusPill, formatDeviceLastSeen } from './DeviceCard';
 import { DeviceApplications } from './DeviceApplications';
 import { DeviceAudioControls } from './DeviceAudioControls';
@@ -123,14 +124,14 @@ const batteryLabel = (value: number | null | undefined): string | null => {
 	return `${Math.round(Math.max(0, Math.min(1, normalized)) * 100)}% battery`;
 };
 
-const Notice = ({ icon, children, danger = false }: { icon: React.ReactNode; children: React.ReactNode; danger?: boolean }) => (
+const Notice = ({ icon, children, danger = false, neutral = false }: { icon: React.ReactNode; children: React.ReactNode; danger?: boolean; neutral?: boolean }) => (
 	<Flex
 		alignItems="flex-start"
-		background={danger ? 'rgba(220, 38, 38, 0.07)' : 'rgba(217, 119, 6, 0.08)'}
+		background={neutral ? 'var(--tt-surface-alt, #f2f2f5)' : danger ? 'rgba(220, 38, 38, 0.07)' : 'rgba(217, 119, 6, 0.08)'}
 		border="1px solid"
-		borderColor={danger ? 'rgba(220, 38, 38, 0.25)' : 'rgba(217, 119, 6, 0.26)'}
+		borderColor={neutral ? 'var(--tt-border, #ececef)' : danger ? 'rgba(220, 38, 38, 0.25)' : 'rgba(217, 119, 6, 0.26)'}
 		borderRadius="var(--tt-radius-md, 12px)"
-		color={danger ? 'var(--tt-danger, #dc2626)' : 'var(--tt-warning, #b45309)'}
+		color={neutral ? 'var(--tt-muted, #71717a)' : danger ? 'var(--tt-danger, #dc2626)' : 'var(--tt-warning, #b45309)'}
 		fontSize="11px"
 		gap={2}
 		lineHeight="1.45"
@@ -355,7 +356,7 @@ export const DeviceDetailsDrawer = memo(
 									{summary.system?.model || summary.platform}
 									{summary.system?.osVersion ? ` · ${summary.system.osVersion}` : ''}
 									{battery ? ` · ${battery}` : ''}
-									{` · ${formatDeviceLastSeen(summary.lastSeenAt, now)}`}
+									{presence === 'online' && summary.serviceStatus !== 'degraded' ? ` · ${formatDeviceLastSeen(summary.lastSeenAt, now)}` : null}
 								</Text>
 							</Box>
 						) : (
@@ -391,7 +392,7 @@ export const DeviceDetailsDrawer = memo(
 								) : (
 									<>
 								{presence !== 'online' ? (
-									<Notice icon={<WifiOff aria-hidden size={15} />}>
+									<Notice neutral icon={<WifiOff aria-hidden size={15} />}>
 										{presence === 'stale'
 											? 'This device has stopped reporting recently. Queueable actions can wait for it to reconnect.'
 											: 'This device is offline. Live state may be stale, and unsupported offline actions remain disabled.'}
@@ -406,7 +407,7 @@ export const DeviceDetailsDrawer = memo(
 									<Notice danger icon={<CircleAlert aria-hidden size={15} />}>
 										{summary.serviceStatus === 'version-mismatch'
 											? 'The desktop node and web client versions are incompatible.'
-											: `Node health: ${summary.lastError?.code || 'degraded'}`}
+											: `Node health: ${summary.lastError?.code || 'Connection unavailable'}`}
 									</Notice>
 								) : null}
 
@@ -493,8 +494,7 @@ export const DeviceDetailsDrawer = memo(
 									>
 										<Flex alignItems="center" gap={1.5} wrap="wrap">
 											<DeviceStatusPill
-												label={`service · ${summary.serviceStatus}`}
-												tone={summary.serviceStatus === 'running' ? 'positive' : 'warning'}
+												{...deviceServicePresentation(summary.serviceStatus, summary.lastSeenAt, now)}
 											/>
 											<DeviceStatusPill
 												label={`pairing · ${summary.pairingStatus}`}

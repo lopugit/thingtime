@@ -37,6 +37,28 @@ the legacy latest-only contract, the client falls back to
 `https://thingtime.com/api/v1/vercel/deployments`; production builds use that
 stable endpoint directly.
 
+## Background device connection activity
+
+After a paired device is verified in the foreground, **Mobile device connection
+activity** also permits a native background presence refresh for that exact
+account and destination. Turning that setting off cancels the native refresh.
+iOS **Settings → General → Background App Refresh** also controls whether the
+system permits refreshes. Logout, account/destination changes and revocation
+invalidate the saved approval; foreground entry requires fresh verification.
+
+The app uses Apple's [BGAppRefreshTask](https://developer.apple.com/documentation/backgroundtasks/bgapprefreshtask)
+with an earliest requested opportunity 15 minutes later. iOS chooses whether
+and when it runs; this is no promised interval and does not keep the app awake
+or continuously online. Force-quitting, device power policy and system settings
+can prevent execution. Apple's [BGContinuedProcessingTask](https://developer.apple.com/documentation/backgroundtasks/bgcontinuedprocessingtask)
+is for finite work begun by the user, and is not used as an always-awake
+heartbeat. Scene [foreground notifications](https://developer.apple.com/documentation/uikit/uiscene/willenterforegroundnotification)
+clear old approval before active web callbacks can establish a new binding.
+
+Background requests negotiate `api.devices-node-state` 1.9.0 and send only the
+existing Keychain device credential to `/api/v1/devices/node/state`. They do not
+read WebView cookies, create a pairing or broaden Keychain accessibility.
+
 ## Setup
 
 ### Connect the Watch during preview testing

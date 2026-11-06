@@ -1,5 +1,18 @@
 # UI shell, menus and design system
 
+## Native mobile background presence
+
+`MobileDevicePresenceBootstrap` owns the Activity manager preference and identity
+fence. `mobileDeviceBridge` negotiates iOS pairing bridge 1.1.0 before requesting
+`presence(enabled:true)`; 1.0.0 hosts retain foreground `status`. Identity changes
+and stopping the activity withdraw background approval even between requests;
+ordinary page hiding only cancels the foreground request. Native
+`MobileDeviceBackgroundPresence` registers Background App Refresh, keeps one
+foreground-verified origin/owner binding and sends scoped device-bearer check-ins
+without using web cookies. iOS controls timing. See `iOS/README.md` and the mobile
+presence checklist in `TESTING.md`; run native lifecycle/pairing and web bridge/
+presence tests together.
+
 ## Incoming sharing and contextual toolbar
 
 `/share` uses the focused shell in `app/root.tsx`, with the existing Post,
@@ -440,3 +453,12 @@ template. The unscoped list-template cache cannot establish this provenance.
 The parent page runtime remains stable during verification to retain drafts.
 Run `test:content-execution:browser` and the real compiled
 `test:content-execution:route` fixture; see the Schema checklist in `TESTING.md`.
+
+Device contact badges use `Devices/deviceStatusPresentation.ts` across cards,
+lists, details, connector status and desktop node controls. Offline/stale contact
+and the queue-compatible `degraded` enum render as one neutral “Last seen …”
+label. Only `lastSeenAt` supplies contact time; missing/invalid times remain
+unknown. Pairing, approval, permission, compatibility and concrete errors keep
+their independent safety meanings. Run `deviceStatusPresentation.test.ts` with
+the device component tests; machine status contracts and action admission stay
+unchanged.

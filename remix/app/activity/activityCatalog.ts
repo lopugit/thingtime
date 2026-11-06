@@ -125,7 +125,7 @@ export const activityCatalog: ActivitySpec[] = [
 		id: 'timer:components/Devices/MobileDeviceSetupCard:1',
 		title: 'Mobile device connection',
 		kind: 'polling',
-		detail: 'The authenticated shell refreshes saved mobile presence across routes while visible; no file access or pairing is created.'
+		detail: 'Refreshes saved mobile presence while visible and permits supported iOS background check-ins when scheduled by the system; no file access or pairing is created.'
 	},
 	{
 		id: 'timer:components/Devices/useDeviceStore:1',
