@@ -7,6 +7,7 @@ import { sourceFailure } from './sourceFailure';
 import { loadMapboxSourcePages } from './Maps/mapboxSource';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
+import { ContentExecutionBoundary, useContentExecutionHeld } from './ContentExecutionHold';
 import { useLocation, useNavigate } from 'react-router';
 import { componentPageHref, componentNavigationState, hasComponentBackEntry } from './componentNavigation';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -83,7 +84,8 @@ export const useThingSource = ({
 	argValues,
 	interactive,
 	loadAllPages = false,
-	resolvedInputs = false
+	resolvedInputs = false,
+	executionHeld = false
 }: {
 	source: ThingSourceBinding | null | undefined;
 	// namespaces the localStorage cache line under the runtime's pageId — a
@@ -94,7 +96,10 @@ export const useThingSource = ({
 	// Map overlays consume every page, using the same delegated read/cache boundary.
 	loadAllPages?: boolean;
 	resolvedInputs?: boolean;
+	executionHeld?: boolean;
 }): { scope: ThingSourceScope; refetch: () => void } => {
+	const held = useContentExecutionHeld(executionHeld);
+	interactive = interactive && !held;
 	const runtime = useWebpageRuntime();
 	const api = useApi();
 	const dataPlane = useDataPlane();
@@ -113,7 +118,7 @@ export const useThingSource = ({
 		: source?.inputs;
 	const inputsKey = JSON.stringify(resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? resolved : {});
 	const inputs = React.useMemo(() => JSON.parse(inputsKey) as Record<string, unknown>, [inputsKey]);
-	const binding = JSON.stringify([sourceKey, inputsKey, cacheId, dataPlane, character?.id || null]);
+	const binding = JSON.stringify([sourceKey, inputsKey, cacheId, dataPlane, character?.id || null, held]);
 	const initial = React.useMemo(
 		() => ({
 			identity: runtime.identity,
@@ -359,6 +364,7 @@ export const LiveTemplate = ({
 	onUnowned,
 	confirm,
 	onDoubleClickCapture,
+	executionHeld = false,
 	children
 }: {
 	render: unknown;
@@ -368,8 +374,11 @@ export const LiveTemplate = ({
 	onUnowned?: TtActionUnownedHandler;
 	confirm?: TtActionConfirmHandler;
 	onDoubleClickCapture?: (event: React.MouseEvent) => void;
+	executionHeld?: boolean;
 	children?: React.ReactNode;
 }) => {
+	const held = useContentExecutionHeld(executionHeld);
+	interactive = interactive && !held;
 	const runtime = useWebpageRuntime();
 	const instanceIdentity = React.useContext(ComponentInstanceIdentity);
 	const user = useCurrentUser();
@@ -388,7 +397,12 @@ export const LiveTemplate = ({
 	const [local, setLocal] = React.useState<{ identity: object; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
 	const active = local.identity === identity ? local : { identity, values: {}, outcome: undefined };
 	const [pending, setPending] = React.useState<{ identity: object; action: string | null }>({ identity, action: null });
+	React.useEffect(() => { if (held) setPending({ identity, action: null }); }, [held, identity]);
+	const heldRef = React.useRef(held);
+	heldRef.current = held;
 	const onLocal = (input: Record<string, unknown>) => {
+		// Native adapters may retain a callback across an async event.
+		if (heldRef.current) return;
 		if (input.op === 'query' && input.scope === 'page') {
 			runtime.setPageQuery(input.params);
 			return;
@@ -426,6 +440,7 @@ export const LiveTemplate = ({
 		}));
 	};
 	const onTtAction = useTtActionClicks({
+		executionHeld: held,
 		onUnowned,
 		confirm,
 		onLocal,
@@ -442,6 +457,7 @@ export const LiveTemplate = ({
 	);
 	if (!resolved) return null;
 	return (
+		<ContentExecutionBoundary held={held}>
 		<NativeControlsEnabled.Provider key={`${runtime.identity.key}:${draftKey}`} value={interactive}>
 			<ComponentDragBoundary>
 			<ComponentLocalControl.Provider value={interactive ? onLocal : null}>
@@ -498,5 +514,6 @@ export const LiveTemplate = ({
 			</ComponentLocalControl.Provider>
 			</ComponentDragBoundary>
 		</NativeControlsEnabled.Provider>
+		</ContentExecutionBoundary>
 	);
 };

@@ -16,6 +16,7 @@ import { ComponentMap } from '../Builder/ComponentMap';
 import { ComponentMapbox } from '../Builder/Maps/ComponentMapbox';
 import { ComponentDialog, ComponentForm, ComponentCountdown, NativeControlsEnabled, ComponentDisplayOnly } from '../Builder/NativeComponentControls';
 import { ComponentUpload } from '../Builder/ComponentUpload';
+import { useContentExecutionHeld } from '../Builder/ContentExecutionHold';
 import React from 'react';
 import { HtmlTemplateField } from './HtmlTemplateField';
 import { mapStyleMediaUrls } from '../Sharing/renderMediaCore';
@@ -418,7 +419,8 @@ const renderChildren = (children: HtmlThingNode[] | HtmlThingNode | undefined, d
 };
 
 export const HtmlThingRenderer = ({ node }: { node: HtmlThingNode }) => {
-	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl(), displayOnly: React.useContext(ComponentDisplayOnly) };
+	const held = useContentExecutionHeld();
+	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl(), displayOnly: React.useContext(ComponentDisplayOnly) || held };
 	return <>{renderNode(node, 0, 0, state)}</>;
 };
 

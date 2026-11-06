@@ -1,4 +1,5 @@
 import React from 'react';
+import { useContentExecutionHeld } from './ContentExecutionHold';
 import { Box } from '@chakra-ui/react';
 import { useLocation, useNavigate } from 'react-router';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -40,6 +41,8 @@ export const PageActionSurface = ({
 	confirm?: TtActionConfirmHandler;
 	surfaceRef?: React.Ref<HTMLDivElement>;
 }) => {
+	const held = useContentExecutionHeld();
+	actionEnabled = actionEnabled && !held;
 	const runtime = useWebpageRuntime();
 	const parentScope = React.useContext(ComponentDataScope);
 	const navigate = useNavigate();
@@ -49,7 +52,11 @@ export const PageActionSurface = ({
 	const identity = React.useMemo(() => ({}), [runtime.identity, location.key]);
 	const [local, setLocal] = React.useState<{ identity: object; values: Record<string, unknown> }>({ identity, values: {} });
 	const values = local.identity === identity ? local.values : {};
+	const heldRef = React.useRef(held);
+	heldRef.current = held;
 	const onLocal = (input: Record<string, unknown>) => {
+		// Native adapters may retain a callback across an async event.
+		if (heldRef.current) return;
 		if (input.op === 'query' && input.scope === 'page') {
 			runtime.setPageQuery(input.params);
 			return;

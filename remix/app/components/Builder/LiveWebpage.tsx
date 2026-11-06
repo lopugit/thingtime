@@ -1,4 +1,5 @@
 import React from 'react';
+import { ContentExecutionBoundary, useContentExecutionHeld } from './ContentExecutionHold';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Link, useNavigate, useParams, useSearchParams, useLocation, useRouteLoaderData } from 'react-router';
 
@@ -82,6 +83,7 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 	}, []);
 	const [editorChrome, setEditorChrome] = React.useState<BuilderChrome | null>(null);
 	const page = draft.resolved?.page || null;
+	const executionHeld = useContentExecutionHeld(page?.executionHeld);
 	const isOwner = !!user?.id && page?.author?.id === user.id;
 	const copy = useCopyPage({ id: page?.id, linkKey, name: page?.crystal?.name });
 	const editorMode =
@@ -269,11 +271,11 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 	}
 
 	const shared = !isOwner && (!isSeeded || !user?.id);
-	const interactive = isOwner || isSeeded || shared;
+	const interactive = !executionHeld && (isOwner || isSeeded || shared);
 
 	return (
 		<WebpageRuntimeProvider
-			enabled={!draft.branch && usesPageRuntime(editorMode)}
+			enabled={!executionHeld && !draft.branch && usesPageRuntime(editorMode)}
 			key={`${page?.id || ''}:${user?.id || ''}:${linkKey}`}
 			pageId={page?.id || null}
 			shared={shared}
@@ -281,7 +283,7 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 			pageKey={typeof page?.crystal?.pageKey === 'string' ? page.crystal.pageKey : null}
 			suiteKey={suiteKey}
 			source={draft.resolved?.source || null}
-			onInstall={draft.branch ? undefined : isSeeded ? onInstall : page && !isOwner ? copy.requestCopy : undefined}
+			onInstall={executionHeld || draft.branch ? undefined : isSeeded ? onInstall : page && !isOwner ? copy.requestCopy : undefined}
 		>
 			{!draft.branch && copy.dialog}
 			<SharedPageSurface
@@ -321,6 +323,7 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 							</Button>
 						</Flex>
 					)}
+					<ContentExecutionBoundary held={executionHeld}>
 					<BuilderViewport size={editorMode ? viewport : null}>
 						<PageActionSurface
 							surfaceRef={setSurface}
@@ -345,6 +348,7 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 							/>
 						</PageActionSurface>
 					</BuilderViewport>
+					</ContentExecutionBoundary>
 					{editorMode && (
 						<React.Suspense fallback={null}>
 							<SeamlessPageEditor
