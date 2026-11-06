@@ -1,4 +1,5 @@
 import React from 'react';
+import { ContentExecutionBoundary } from '../Builder/ContentExecutionHold';
 
 import { Box, Button, Checkbox, Flex, Grid, IconButton, Image, Text } from '@chakra-ui/react';
 import type { TextProps } from '@chakra-ui/react';
@@ -106,7 +107,7 @@ const ThingPreviewBox = ({
       }}
       width="100%"
     >
-      {body}
+      <ContentExecutionBoundary held={thing.executionHeld}>{body}</ContentExecutionBoundary>
     </Box>
   );
 };

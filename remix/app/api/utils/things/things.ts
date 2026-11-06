@@ -1,3 +1,4 @@
+import { contentExecutionHold, contentExecutionStates, type ContentExecutionHold } from './contentExecutionGate';
 import { relatedCommentPipeline, relatedInteractionPipeline, pagedThreadCounts, tallyRelatedUpdown, tallyRelatedPoll, type CountedPollVote, type CountedUpdown } from './relatedWindows';
 import { discussionAttachmentMap } from './discussionAttachments';
 import { builderThingUpdateKinds } from '../../../schemas/builderThing';
@@ -474,6 +475,9 @@ export type PublicSubspaceMod = {
 
 // Generic projection for non-post things (and the unified read endpoint).
 export type PublicThing = {
+  /** Derived server envelope state; authored content cannot set it. */
+  executionHeld?: boolean;
+  creationProgress?: { phase: 'planning' | 'restoring' | 'complete'; planned: number; applied: number; count: number };
   fileSyncOrigin?: FileSyncUploadOrigin;
   // Owner-only immutable revision id, used to branch locally without a race.
   timelineHeadId?: string;
@@ -1298,7 +1302,8 @@ const FOLDER_UNFILEABLE = ['reaction', 'save', 'vote', UPDOWN_THINGTIME];
 const resolveFolderAssignment = async (
   ownerId: string,
   rawFolderId: unknown,
-  thingtime: string[]
+  thingtime: string[],
+  session?: any
 ): Promise<{ ok: true; folderId: string | null } | Fail> => {
   if (rawFolderId === undefined || rawFolderId === null || rawFolderId === '') {
     return { ok: true, folderId: null };
@@ -1315,7 +1320,7 @@ const resolveFolderAssignment = async (
     shareId: rawFolderId.trim(),
     ownerId,
     ...folderThingMatch()
-  } as any)) as any as ThingDoc | null;
+  } as any, session ? { session } : {})) as any as ThingDoc | null;
   if (!folder) return fail(404, 'Folder not found');
   return { ok: true, folderId: folder.shareId };
 };
@@ -1377,6 +1382,8 @@ type CreateThingResult = Fail | { ok: true; doc: ThingDoc; rootSubspaceId?: stri
  * enclosing writer owns commit/retry and runs effects after successful commit. */
 export type ThingWriteTransaction = { session: any; afterCommit: (effect: () => Promise<void>) => void };
 export type CreateThingHooks = {
+	/** Trusted creation coordinator only; never copied from input/snapshots. */
+	executionHold?: ContentExecutionHold;
 	transaction?: ThingWriteTransaction;
 	timelineCapture?: ThingMutationCapture;
 	postAttachments?: { hasAny: boolean; hasVisual: boolean };
@@ -1418,13 +1425,13 @@ const resolveInputAcl = (input: { acl?: unknown; visibility?: unknown }): string
 // writer can see, and the display name is overwritten from that schema, so no
 // client can attribute its data to a schema under a mismatched schemaId/name
 // pair. Mutates `crystal` in place; a data thing with no schemaId is untouched.
-const resolveDataSchemaProvenance = async (thingtime: string[], crystal: Record<string, unknown>, asOwner: Viewer): Promise<{ ok: true } | Fail> => {
+const resolveDataSchemaProvenance = async (thingtime: string[], crystal: Record<string, unknown>, asOwner: Viewer, session?: any): Promise<{ ok: true } | Fail> => {
   if (!thingtime.includes('data') || crystal.schemaId === undefined) return { ok: true };
   const rawSchemaId = crystal.schemaId;
   if (typeof rawSchemaId !== 'string' || !rawSchemaId.trim()) {
     return fail(400, 'crystal.schemaId must be a schema thing id');
   }
-  const schemaThing = await findViewableThing(rawSchemaId.trim(), asOwner);
+  const schemaThing = await findViewableThing(rawSchemaId.trim(), asOwner, session);
   if (!schemaThing || !thingtimeOf(schemaThing).includes('schema')) {
     return fail(400, 'crystal.schemaId does not resolve to a schema you can see');
   }
@@ -1464,7 +1471,7 @@ export const createThing = async (
     return fail(403, `${validated.thingtime.join('+')} things are first-party surfaces — not available to app tokens`);
   }
 
-  const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, asOwner);
+  const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, asOwner, hooks.transaction?.session);
   if (isFail(provenance)) return provenance;
 
   // subspace posting gate (api/utils/subspaces/gate.ts): membership, ban,
@@ -1601,7 +1608,7 @@ export const createThing = async (
   // makes an unlisted thing reachable (canView honors it while acl says hidden)
   const linkKey = acl.includes(ACL_HIDDEN) ? generateLinkKey() : null;
 
-  const folderAssignment = await resolveFolderAssignment(ownerId, input.folderId, validated.thingtime);
+  const folderAssignment = await resolveFolderAssignment(ownerId, input.folderId, validated.thingtime, hooks.transaction?.session);
   if (isFail(folderAssignment)) return folderAssignment;
   if (validated.thingtime.includes('folder') && validated.crystal.builderApp === true && folderAssignment.folderId)
     return fail(400, 'Builder apps must be top-level folders');
@@ -1662,6 +1669,7 @@ export const createThing = async (
     ...(linkKey ? { linkKey } : {}),
     createdAt: now,
     updatedAt: now,
+		...(hooks.executionHold ? { executionHold: contentExecutionHold(hooks.executionHold) } : {}),
 		...(app ? appNamespaceStamp(app, sizeBytes) : {}),
 		...(hooks?.sourceDeviceId ? { sourceDeviceId: hooks.sourceDeviceId } : {})
 	};
@@ -2817,7 +2825,7 @@ const toPublicDiscussionPage = async (
 export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Viewer, resolveAudience = false): Promise<PublicThing[]> => {
   if (!docs.length) return [];
   const viewer = asViewer(viewerInput);
-  const [profiles, audiences] = await Promise.all([resolveProfiles(docs.map((doc) => doc.ownerId)), resolveAudience ? resolvePublicAudiences(docs, viewer) : Promise.resolve(new Map<string, ResolvedAudience>())]);
+  const [profiles, audiences, executionStates] = await Promise.all([resolveProfiles(docs.map((doc) => doc.ownerId)), resolveAudience ? resolvePublicAudiences(docs, viewer) : Promise.resolve(new Map<string, ResolvedAudience>()), contentExecutionStates(docs)]);
   return docs.map((doc) => {
     // token grants are owner-facing management data, not audience — only the
     // owner's own credentials (session or their tokens) see them
@@ -2830,6 +2838,11 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
         : null;
     return {
       id: doc.shareId,
+      ...(executionStates.has(doc.shareId) ? { executionHeld: executionStates.get(doc.shareId) } : {}),
+      ...(viewer?.id === doc.ownerId && (doc as any).creationCheckpoint ? { creationProgress: {
+        phase: (doc as any).creationCheckpoint.phase, planned: (doc as any).creationCheckpoint.planned,
+        applied: (doc as any).creationCheckpoint.applied, count: (doc as any).creationCheckpoint.count
+      } } : {}),
       thingtime: thingtimeOf(doc),
       author: profiles.get(doc.ownerId) || null,
       audience: audiences.get(doc.shareId),
@@ -3193,16 +3206,16 @@ export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) =>
   return fence ? { $and: [query, fence] } : query;
 };
 
-const findThing = async (shareId: unknown): Promise<ThingDoc | null> => {
+const findThing = async (shareId: unknown, session?: any): Promise<ThingDoc | null> => {
   if (typeof shareId !== 'string' || !shareId.trim()) return null;
   const things = await getThingsCollection();
-  return (await things.findOne({ shareId: shareId.trim() } as any)) as any as ThingDoc | null;
+  return (await things.findOne({ shareId: shareId.trim() } as any, session ? { session } : {})) as any as ThingDoc | null;
 };
 
 // exported for the dedicated engagement utils that live outside this module
 // (things/vote.ts) — the ONE visibility gate every interaction path shares
-export const findViewableThing = async (shareId: unknown, viewer: Viewer): Promise<ThingDoc | null> => {
-  const doc = await findThing(shareId);
+export const findViewableThing = async (shareId: unknown, viewer: Viewer, session?: any): Promise<ThingDoc | null> => {
+  const doc = await findThing(shareId, session);
   // friend enrichment happens here so every interaction path (react, comment,
   // share, save, view) resolves friends-only targets for real friends
   if (!doc || !(await canViewInherited(doc, withThingLink(await withFriendIds(viewer), doc.shareId)))) return null;

@@ -408,3 +408,19 @@ fields retain their menu and validation focus; click propagation is irrelevant.
 Actual slot replacement, disable and unmount end the binding. `scripts/routes-map.browser.mjs` covers same-popup refresh, conditional controls, replacement/disable,
 keyboard focus and iframe ownership; the real API authored-control fixture
 retains ordinary/rich form submission coverage.
+
+## Inert previews during reviewed creation
+
+`Builder/ContentExecutionHold.tsx` composes the server-derived `executionHeld`
+flag through Components, Webpages and nested renderers. Held content stays
+readable; source Actions, local/pseudo controls, native/upload mounts, pending
+confirmation and delayed native callbacks remain disabled until release.
+`liveComponent`, `PageActionSurface`, the shared action-click hook, detail
+surfaces and the HTML/Chakra renderers share the same inherited gate; a child
+cannot release an ancestor hold. The server independently checks immutable
+completion before both server and browser Action admission.
+Run `test:content-execution:browser` for synthetic API desktop/mobile, scroll,
+nested controls, live release and retained draft checks; the separate
+`test:backups:ordinary-restore` proves real-replica projection/receipt behavior.
+A projected folder `creationProgress` is not a finished restore dashboard,
+folder badge or installed-app acceptance.

@@ -5,7 +5,7 @@ test('full-content contracts negotiate the exact selected origin and reject an o
  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window'), oldFetch = globalThis.fetch;
  const selected = 'https://content-contract.example', requested: string[] = [];
  Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin: 'http://unrelated-ui.example' } } });
- globalThis.fetch = async input => { requested.push(String(input)); return new Response(JSON.stringify({ schemaVersion: 1, origin: selected, features: { 'api.things': { version: '1.51.1' }, 'api.attachment-annotate': { version: '1.1.0' } } }), { headers: { 'Content-Type': 'application/json' } }); };
+ globalThis.fetch = async input => { requested.push(String(input)); return new Response(JSON.stringify({ schemaVersion: 1, origin: selected, features: { 'api.things': { version: '1.52.1' }, 'api.attachment-annotate': { version: '1.1.0' } } }), { headers: { 'Content-Type': 'application/json' } }); };
  t.after(() => { globalThis.fetch = oldFetch; if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow); else Reflect.deleteProperty(globalThis, 'window'); });
  await requireSharedContentCapability('api.things', { expectedApiOrigin: selected });
  await assert.rejects(requireSharedContentCapability('api.attachment-annotate', { expectedApiOrigin: selected }));

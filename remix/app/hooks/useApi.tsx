@@ -1,5 +1,5 @@
 import { requireSharedContentCapability, sharedContentWrite } from '~/utils/sharedContentCapabilities';
-import { requiresCollectionPagingContract } from '~/components/Builder/savedCollectionContract';
+import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { AUTHORED_CONTROL_REQUIREMENTS, usesAuthoredControls } from '~/schemas/authoredControls';
 import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
 import { isBuilderThing } from '~/schemas/builderThing';
@@ -169,7 +169,7 @@ export function useApi() {
     drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     webpages: {
       resolveComponents: useCallback(async (scope: { ownerId: string; dataPlane: string }, blocks: unknown[], options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.webpages-resolve', requiresCollectionPagingContract(blocks) ? '1.11.0' : '1.5.0');
+        await requireThingtimeCapability('api.webpages-resolve', CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
         return asyncFetcher.submit({ blocks }, { action: `/api/v1/webpages/resolve${toQuery({ ownerId: scope.ownerId, dataPlane: scope.dataPlane })}`, expectedActor: scope.ownerId, expectedDataPlane: scope.dataPlane, signal: options?.signal });
       }, [asyncFetcher])
     },
@@ -1723,7 +1723,7 @@ export function useApi() {
     },
     components: {
       // paginated component browsing — { q, sort, cursor, limit, lib, category, library, mine }
-      browse: useCallback(async (args) => getJson(`/api/v1/components/browse${toQuery(args)}`), [])
+      browse: useCallback(async (args) => { await requireThingtimeCapability('api.components-browse', CONTENT_EXECUTION_READ_REQUIREMENTS['api.components-browse']); return getJson(`/api/v1/components/browse${toQuery(args)}`); }, [getJson])
       // creation rides the unified path: things.create({ thingtime: ['component'], crystal })
     },
     actions: {

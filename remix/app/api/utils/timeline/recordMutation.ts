@@ -1,3 +1,4 @@
+import { recordCreationContentEpoch } from '../things/contentExecutionGate';
 import { recordPageComponentBindings } from './componentBindings';
 import { TIMELINE_SNAPSHOT_MAX_BYTES } from '../../../timeline/snapshotParts.ts';
 import { splitLargeThingSnapshot, storeTimelineSnapshotParts } from './snapshotParts.ts';
@@ -90,6 +91,7 @@ export function thingMutationEvent(before: any, after: any, capture: ThingMutati
 /** Call within the content transaction after its successful CAS. A thrown
  * append/accounting error rolls back the content and head as one operation. */
 export async function recordThingMutation(things: any, before: any, after: any, capture: ThingMutationCapture, session: any) {
+	await recordCreationContentEpoch(things, before, after, session);
 	const prepared = prepareThingMutation(before, after, capture);
 	if (!prepared) return null;
 	const { parts } = prepared;

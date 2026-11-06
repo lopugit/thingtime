@@ -1,3 +1,4 @@
+import { contentExecutionHeld, type ContentExecutionHold } from '../things/contentExecutionGate';
 import { validateRunInputs } from './actionInputs';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
 import { capabilitySatisfies } from '../capabilities/capabilityContract';
@@ -198,21 +199,21 @@ const resolveActionProgram = async (
 	const trimmed = typeof reference === 'string' ? reference.trim() : '';
 	if (!trimmed) return fail(400, 'Which action? Pass its id or actionKey');
 
-	let doc: { id: string; ownerId?: string; crystal: Record<string, unknown> } | null = null;
+	let doc: { id: string; ownerId?: string; crystal: Record<string, unknown>; executionHold?: ContentExecutionHold; executionHeld?: boolean } | null = null;
 	if (options?.shared) {
 		const included = options.parentId
 			? options.shared.children.get(`${options.parentId}:${trimmed}`)
 			: options.shared.actions.get(trimmed);
 		if (!included) return fail(404, 'This action is not included in the shared app');
-		doc = { id: included.shareId, crystal: included.crystal || {} };
+		doc = { id: included.shareId, ownerId: included.ownerId, crystal: included.crystal || {}, executionHold: (included as any).executionHold };
 	} else if (options?.ownedOnly) {
 		const things = await getThingsCollection();
 		const own = await things.findOne({ shareId: trimmed, ownerId: viewer.id, thingtime: 'action' } as any);
-		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown> };
+		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown>, executionHold: own.executionHold };
 	} else {
 		const byId = await getThing(viewer, trimmed);
 		if (byId.ok !== false && byId.thing && Array.isArray(byId.thing.thingtime) && byId.thing.thingtime.includes('action')) {
-			doc = { id: byId.thing.id, ownerId: byId.thing.author?.id, crystal: (byId.thing.crystal || {}) as Record<string, unknown> };
+			doc = { id: byId.thing.id, ownerId: byId.thing.author?.id, crystal: (byId.thing.crystal || {}) as Record<string, unknown>, executionHeld: byId.thing.executionHeld };
 		}
 	}
 	if (!doc) {
@@ -231,7 +232,7 @@ const resolveActionProgram = async (
 			.sort({ 'crystal.version': -1, createdAt: -1 })
 			.limit(1)
 			.toArray();
-		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown> };
+		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown>, executionHold: own.executionHold };
 	}
 	if (!doc) {
 		return fail(
@@ -241,6 +242,11 @@ const resolveActionProgram = async (
 				: `No runnable action matches "${trimmed.slice(0, 80)}"`
 		);
 	}
+
+	// Every ID/key/shared/child path and browser preparation reaches this
+	// resolver. Current ACL resolution above remains mandatory; a held graph
+	// never lends its invoker authority before durable completion.
+	if (doc.executionHeld === true || await contentExecutionHeld(doc)) return fail(409, 'This content is still restoring; actions are unavailable until verification completes');
 
 	// Re-sanitize so run-time enforces the exact save-time contract (steps
 	// grammar, capability coverage, ref validity) even for legacy documents.

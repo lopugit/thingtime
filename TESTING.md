@@ -14891,3 +14891,38 @@ the isolated real-API/browser command and the metadata-only session boundary.
   removes its source and first vault, then checks exact offline content. The
   selected-record capture interval does not claim whole-account readiness or a
   physical 100 GB/100 TB backup.
+
+### Reviewed ordinary graph execution and execution holds
+
+- Build Remix, then run `pnpm --dir remix run test:content-execution:built`.
+  Both compiled manifest handlers must return origin-scoped JSON with the four
+  current execution/read contracts; all four compiled docs routes must agree.
+  This clean synthetic runtime uses only an unreachable loopback database URI
+  and does not establish installed-app acceptance.
+- Run `pnpm --dir remix run test:backups:ordinary-restore`. Its owned replica
+  uses real signup/Action Request handlers and canonical Things utilities;
+  no fixture content is inserted through Mongo. Confirm source content and
+  first vault loss and original-session revocation, exact independent
+  content/geo/schema/hierarchy readback through the owned local vault,
+  cyclic Action remapping, immutable intent resume, child-process death after
+  a committed effect, and retry without duplicate writes or overwritten edits.
+- Require null/missing/outside-owned/non-folder parents, unsupported media or
+  managed families, unresolved references, unmapped same-key destination aliases,
+  HTTP payload references, outside Data parent links, changed review/capabilities, stale
+  destination, wrong actor and revoked-session replay to refuse safely.
+- Interrupt after intents and after all effects but before completion. Read
+  durable planning/restoring counts; verify every restored executable surface
+  remains held. Exercise ID, key, child, shared and real browser preparation.
+  A user mutation after current-state verification must advance the epoch and
+  refuse completion; a later retry preserves that user change and activates
+  only after the new exact completion effect.
+- Run `pnpm --dir remix run test:content-execution:browser`. At desktop/mobile
+  sizes inspect the actual held/released render, scroll to the end, and exercise
+  nested pseudo/local/server actions, source loads, native/upload controls,
+  pending confirmation, delayed callbacks, release and retained draft state.
+  Synthetic browser APIs are not the real-replica or installed-app proof. The
+  full GenericThingPage selected-origin route and cached read-refresh path still
+  need installed/real-app acceptance.
+- Keep whole-account readiness false. This phase has no public restore endpoint,
+  complete account restore workflow/folder badge, managed/file writers, live
+  provider durability, installed-app acceptance or measured large-volume proof.
