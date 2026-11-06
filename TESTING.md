@@ -14638,10 +14638,17 @@ the isolated real-API/browser command and the metadata-only session boundary.
   repeats the check for one-sided edits from a sealed baseline, and exercises
   stale hints, conflicting edits, lost replies, cancellation, authority loss,
   and a deletion between strict planning and checkpoint capture.
+- Run `node --test remix/scripts/mac-fixture-capabilities.test.mjs`. The real
+  native HTTP fixture must accept compatible additive/patch API releases, while
+  refusing a foreign manifest origin and missing, malformed, older or breaking
+  required capabilities before creating its disposable account.
 - For an isolated native+HTTP timing diagnostic, run
   `pnpm --dir remix run test:files:mac-paged -- --two-way-early --normal-early-budget`.
-  Record first local change, admitted operation, first PUT, and the first
-  native/HTTP request stages separately. This calibration uses 5,000,000 B/s
+  Record first local change, admitted operation, first body byte, durable file
+  confirmation and post-resume strict reconciliation separately. Run
+  `node --test remix/scripts/mac-fixture-http-observer.test.mjs`: observing
+  request enqueue must retain every byte while API body consumption is delayed,
+  report the complete payload length, and omit signed URLs/body contents. This calibration uses 5,000,000 B/s
   scan and transfer, CPU 15%, and a 2,500,000 B/s Rust scan reservation;
   require exact upload/download receipts while the same capture is still
   running and unsealed, then one strict checkpoint with no duplicate transfer.

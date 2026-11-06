@@ -780,3 +780,16 @@ This is internal resource scheduling; native/HTTP contracts, user-selected scan
 and transfer rates, CPU targets and data-size acceptance are unchanged.
 Tests: `cargo test --locked --manifest-path filesystem-indexer/Cargo.toml -p commander-indexer`
 (fake clock, aggregate small reads, burst bounds and real concurrent cancellation).
+
+### Native HTTP fixture compatibility
+
+`remix/scripts/mac-fixture-capabilities.mjs` declares the native paged fixture's
+minimum file, content and batch API requirements. `test-mac-paged-sync.mjs`
+checks the exact fixture origin and the shared `capabilitySatisfies` contract
+before disposable registration, so compatible additive releases do not stop
+real byte-transfer acceptance. Missing, malformed, old or breaking features
+still refuse. Run `node --test remix/scripts/mac-fixture-capabilities.test.mjs`
+and the relevant `test:files:mac-paged` scenario. The closed HTTP observer records
+first parsed body-byte enqueue and completed payload length without switching
+the request into flowing mode; its real-network regression delays consumption
+and verifies unchanged bytes and diagnostic redaction.
