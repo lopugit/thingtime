@@ -1,3 +1,4 @@
+import type { ConfirmedHistoryTotals } from './pagedRunJournal';
 import type { SyncOperation } from './execute';
 import type { ForegroundSyncProgress } from './foregroundSync';
 import { parsePagedRunSpec, type PagedRunSpec } from './pagedRunJournal';
@@ -15,7 +16,7 @@ export function parseSyncProgressDescriptor(value: unknown): SyncProgressDescrip
 	return { scope: structuredClone(input.scope), run };
 }
 export type SyncProgressState = 'running' | 'paused' | 'cancelled' | 'error' | 'complete';
-export type SyncProgressRow = { entry: SyncEntry; operation: SyncOperation | null; early?: SyncOperation; observed?: boolean; excluded?: boolean };
+export type SyncProgressRow = { entry: SyncEntry; operation: SyncOperation | null; early?: SyncOperation; history?: ConfirmedHistoryTotals | null; observed?: boolean; excluded?: boolean };
 export type SyncProgressTotals = {
 	path: string; kind: 'file' | 'folder'; files: number; folders: number; indexedBytes: number; excluded: number;
 	unchanged: number; operations: number; confirmed: number; transferFiles: number; confirmedFiles: number;
@@ -36,8 +37,16 @@ const add = (target: SyncProgressTotals, row: SyncProgressRow, activePath?: stri
 	if (row.observed !== false) {
 		if (entry.kind === 'file') { target.files++; target.indexedBytes = safeAdd(target.indexedBytes, entry.size); } else target.folders++;
 		if (row.excluded) target.excluded++;
-		else if (!row.operation && !row.early) target.unchanged++;
+		else if (!row.operation && !row.early && !row.history?.operations) target.unchanged++;
 	}
+ if (row.history) {
+  target.operations = safeAdd(target.operations, row.history.operations);
+  target.confirmed = safeAdd(target.confirmed, row.history.operations);
+  target.transferFiles = safeAdd(target.transferFiles, row.history.files);
+  target.confirmedFiles = safeAdd(target.confirmedFiles, row.history.files);
+  target.bytesTotal = safeAdd(target.bytesTotal, Number(row.history.bytes));
+  target.bytesConfirmed = safeAdd(target.bytesConfirmed, Number(row.history.bytes));
+ }
 	for (const operation of [row.early, row.excluded ? null : row.operation]) {
 		if (!operation) continue;
 		target.operations++; if (operation.confirmed) target.confirmed++;
