@@ -352,7 +352,7 @@ try {
 	);
 	await startNative();
 	const nativeContext = await send({ requestId: randomUUID(), ownerId: fixture.userId, deviceId, origin: base.origin, action: 'context' });
-	assert.equal(nativeContext.capabilities.filePublicationVersion, '1.2.0');
+	assert.ok(capabilitySatisfies(nativeContext.capabilities.filePublicationVersion, '1.2.0'), 'Native publication must satisfy the negotiated compatible contract');
     if (canonicalFixture) {
         saveDeviceSyncResourcePolicy(deviceResourceKey(base.origin, fixture.userId, deviceId!), benchmarkDeviceLimits!);
         canonicalHost = await createMacFixtureHost({ origin: base.origin, ownerId: fixture.userId, deviceId: deviceId!, signal,

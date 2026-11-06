@@ -14715,11 +14715,15 @@ the isolated real-API/browser command and the metadata-only session boundary.
   pause, configuration removal or destination change: the original fresh policy
   gate must still refuse it before either replica is observed. Legacy hosts keep
   their existing ordering; deferral cannot create receipts or seal a checkpoint.
+  Capture the guard decision before awaits: changing host negotiation during
+  ancestor lookup cannot skip policy before a surviving point read.
 - Separate healthy startup from accepted-loss recovery with `--healthy` added
   to `test:files:mac-paged -- --wide --wide-mixed --canonical-worker --streaming-two-way`.
   This explicit lane disables accepted-loss/restart injections only; retain real
   host/worker/API/Rust paths, exact hashes, full byte counts, strict checkpoints
-  and unchanged no-PUT checks. Compare identical `--wide-count` values and source
+  and unchanged no-PUT checks. Native publication negotiation accepts compatible
+  minor updates and refuses missing/breaking contracts. Compare identical
+  `--wide-count` values and source
   certificates; a small tree does not explain an older wide fault-run timing.
 - For mixed-file current-worker acceptance, add `--canonical-worker` to
   `test:files:mac-paged -- --wide --wide-mixed`; add `--streaming-two-way`

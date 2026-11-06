@@ -709,3 +709,28 @@ for (const change of ['pause', 'remove', 'revision'] as const) test(`deferred an
     assert.equal(await x.checkpoints().current(), null);
     x.f.journal().close();
 });
+
+test('guard negotiation changing during journal ancestry cannot bypass policy before point reads', async () => {
+    const x = await fixture('Parent/child.bin');
+    let contexts = 0, reads = 0, contextsBeforeRead: number | undefined;
+    x.input.nativeOperationGuards = true;
+    x.input.authorizeContext = async () => { contexts++; return { network: 'wifi', charging: true }; };
+    x.input.inspectLocal = async () => { contextsBeforeRead ??= contexts; reads++; return null; };
+    const original = x.input.journal.pagedRuns.bind(x.input.journal);
+    x.input.journal = { ...x.input.journal, pagedRuns: (...args) => {
+        const runs = original(...args);
+        return { ...runs, streamPrevious: async (...values) => {
+            if (values[1] !== 'Parent') return runs.streamPrevious(...values);
+            x.input.nativeOperationGuards = undefined;
+            const entry: SyncEntry = { path: 'Parent', id: 'parent', version: 'v1', kind: 'folder', size: 0, sha256: null };
+            return { operation: { id: 'parent-operation', confirmed: true, mutation: { kind: 'copy' as const, from: 'local' as const, path: 'Parent', source: entry, expectedTarget: null } }, receipt: { operationId: 'parent-operation', scope, entry } };
+        } };
+    } };
+    x.feeds([x.f.entry()], []);
+    await x.stream();
+    assert.equal(contextsBeforeRead, 2);
+    assert.ok(reads >= 1);
+    assert.equal(x.f.publications(), 0);
+    assert.equal(await x.checkpoints().current(), null);
+    x.f.journal().close();
+});

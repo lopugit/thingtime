@@ -255,7 +255,7 @@ export async function streamForegroundSync(
     // echo. It never supplies authority, ancestry or a future copy binding.
     const deferredFolderEchoes = new Map<string, { from: 'local' | 'remote'; local: SyncEntry; remote: SyncEntry }>();
 	const prepareTwoWay = async (event: NonNullable<Awaited<ReturnType<typeof runs.nextStreamInput>>>) => {
-		const entry = event.entry, from = event.replica!;
+		const entry = event.entry, from = event.replica!, nativeGuards = input.nativeOperationGuards === true;
 		const defer = async () => {
 			// Keep positive folder rows for the provisional progress tree. A
 			// matching ancestor often needs no operation of its own.
@@ -271,12 +271,12 @@ export async function streamForegroundSync(
 			await wait(observed);
 		}
 		if (entry.symbolicLink || ignore.ignored(entry.path, entry.kind)) { await defer(); return; }
-		if (input.nativeOperationGuards && entry.kind === 'folder' && await runs.queuedFolderPeer(spec, event)) {
+		if (nativeGuards && entry.kind === 'folder' && await runs.queuedFolderPeer(spec, event)) {
 			// Two positive folder hints need no early effect. They are not fresh
 			// observations: strict reconciliation still decides their real state.
 			check(); await defer(); return;
 		}
-        const echo = input.nativeOperationGuards && entry.kind === 'folder' ? deferredFolderEchoes.get(entry.path) : undefined;
+        const echo = nativeGuards && entry.kind === 'folder' ? deferredFolderEchoes.get(entry.path) : undefined;
         if (echo && echo.from !== from && sameSyncStamp(entry, echo[from])) {
             deferredFolderEchoes.delete(entry.path);
             await defer(); return;
@@ -298,7 +298,7 @@ export async function streamForegroundSync(
 		// Save their cursor without hashing or point-reading either replica.
 		if (sameSyncStamp(entry, priorSource) || priorSource?.kind === 'folder' || priorTarget?.kind === 'folder' ||
 			(entry.kind === 'folder' && (priorSource || priorTarget))) { await defer(); return; }
-		if (!input.nativeOperationGuards) await authorize();
+		if (!nativeGuards) await authorize();
 		let node: CloudInventoryNode | null, left: SyncEntry | null, right: SyncEntry | null;
 		let cloudParent: CloudInventoryNode | null = null;
 		const parent = entry.path.split('/').slice(0, -1).join('/');
@@ -324,7 +324,7 @@ export async function streamForegroundSync(
 		// Missing journal ancestry already proves no early operation is possible.
 		// Guarded transports defer it without opening any protected observation;
 		// every surviving hint still checks current connection policy before reads.
-		if (input.nativeOperationGuards) await authorize();
+		if (nativeGuards) await authorize();
 		let parentsReady = !parent;
 		try {
 			left = await readLocal(entry.path);
@@ -345,7 +345,7 @@ export async function streamForegroundSync(
 		const source = from === 'local' ? left : right,
 			target = from === 'local' ? right : left;
 		if (!sameSyncStamp(source, entry) || target?.symbolicLink) { await defer(); return; }
-        if (input.nativeOperationGuards && entry.kind === 'folder' && left?.kind === 'folder' && right?.kind === 'folder') {
+        if (nativeGuards && entry.kind === 'folder' && left?.kind === 'folder' && right?.kind === 'folder') {
             // Both current point reads proved this folder needs no early copy.
             // Only its opposite-feed, exact-stamp echo may skip those reads;
             // all actual preparation/effects keep the fresh policy checks.
