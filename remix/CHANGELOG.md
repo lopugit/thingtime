@@ -145,6 +145,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-07: Two-way startup preparation negotiates one typed Mac policy and
+  candidate/parent observation, retaining fresh authorization and strict legacy
+  fallback. The canonical synthetic fixture uses the same observation adapter.
+  [Validation and scope](../PRs/1406-codex-sync-compound-observation-guarded-native-startup-observations.md).
+
+
 - 2026-11-07: Preserve the Node location entitlement through canonical signing
   and require its Boolean grant in final bundle verification. Keep OS consent
   and explicit collection opt-in separate from signing eligibility. **Codex (AI)**

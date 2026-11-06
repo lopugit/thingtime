@@ -1,3 +1,4 @@
+import { NativePathObservationUnavailable } from './nativePathObservation';
 import { CLOUD_SYNC_DESTINATION_REQUIREMENTS, ExactCloudSyncDestinationChanged } from './cloudSyncDestination';
 import { executeCloudFolderBatch, folderBatchFailure } from './cloudFolderBatch.client';
 import { eligibleFolderBatchEntry } from './folderBatch';
@@ -45,7 +46,7 @@ export async function streamForegroundSync(
 		return;
 	const controller = new AbortController(),
 		signal = AbortSignal.any([outerSignal, controller.signal]);
-	const { check, authorize, runtime, readLocal, openSource, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
+	const { check, authorize, runtime, readLocal, observeLocal, openSource, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	const access = { scope, currentScope: input.currentScope, signal, cleanup: 'foreground' as const };
 	const runs = input.journal.pagedRuns(access),
 		inventory = input.journal.inventory(access),
@@ -328,14 +329,17 @@ export async function streamForegroundSync(
 		// Missing journal ancestry already proves no early operation is possible.
 		// Guarded transports defer it without opening any protected observation;
 		// every surviving hint still checks current connection policy before reads.
-		if (nativeGuards) await authorize();
+		let compound: (SyncEntry | null)[] | undefined;
+		try { compound = nativeGuards && observeLocal ? await observeLocal(entry.path, parent) : undefined; }
+		catch (error) { if (!(error instanceof NativePathObservationUnavailable)) throw error; check(); await defer(); return; }
+		if (nativeGuards && !compound) await authorize();
 		let parentsReady = !parent;
 		try {
-			left = await readLocal(entry.path);
+			left = compound ? compound[0] : await readLocal(entry.path);
 			node = await cloudNode(entry.path);
 			right = node && inventorySyncEntry(node);
 			if (parent) {
-				const localParent = await readLocal(parent);
+				const localParent = compound ? compound[1] : await readLocal(parent);
 				cloudParent = await cloudNode(parent);
 				parentsReady = localParent?.kind === 'folder' && cloudParent?.kind === 'folder' && !ignore.ignored(parent, 'folder');
 			}
