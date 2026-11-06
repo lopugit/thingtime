@@ -1,5 +1,9 @@
+import { backupId } from '../../../backups/manifest';
+
 /** One portable key grammar for every provider; archived names are never keys. */
 export function assertBackupObjectKey(key: string): void {
+	const restore = /^restore-plans\/([^/]+)\/(header\.json|sealed\.json|pages\/(0|[1-9][0-9]{0,15})\.json)$/.exec(key);
+	if (restore && backupId(restore[1])) return;
 	if (
 		!/^(chunks\/[a-f0-9]{64}|snapshots\/[0-9a-f-]{36}\/(header|plan|complete)\.json|snapshots\/[0-9a-f-]{36}\/plan\/(0|[1-9][0-9]{0,15})\.json|snapshots\/[0-9a-f-]{36}\/ranges\/(0|[1-9][0-9]{0,15})\/(0|[1-9][0-9]{0,15})\.json)$/.test(
 			key

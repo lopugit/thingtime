@@ -14838,3 +14838,24 @@ the isolated real-API/browser command and the metadata-only session boundary.
   compilation must exclude test-only `@testable` fixtures; a failed product or
   missing shipped executable must stop before staging/replacement. Verify all
   three Swift binaries and the Rust helper through the signed-bundle verifier.
+
+
+### Account restore admission plans
+
+- Run `pnpm --dir remix run test:backups` for independent sealed mixed-graph
+  recovery after live-source/first-vault loss, bounded metadata pages, cyclic
+  executable references, structural-cycle refusal, alias/dependency admission,
+  canonical file/attachment closure and immutable accepted-page resume.
+- Change a review destination, revision, capability contract or source seal and
+  verify the old plan refuses reuse. Change a page between validation and record
+  iteration and verify no unreviewed record is yielded.
+- Keep `planIntegrity: verified` distinct from source completeness and writer
+  availability. Legacy prose-only coverage must remain unknown; no plan may
+  report whole-account restoration ready or complete while writers are absent.
+- This phase has no product UI or destination mutation. Full managed/security
+  coverage, canonical writer/history recovery, installed acceptance and measured
+  100 GB–100 TB transfers remain separate required gates.
+
+- Account-inventory oversized-record fixtures must exceed the current canonical
+  per-record processing bound. Retain positive coverage for a valid 90,001-node
+  value; never make that test pass by introducing a smaller product/data cap.

@@ -885,3 +885,15 @@ All apps navigation leaves the container. Scoped search uses the existing
 ACL-checked search conditions, not client-only filtering. Coverage:
 `builderAppEntryPoint.test.ts`, `thingsLocation.test.ts`, and the isolated
 `scripts/builder-entrypoint-acceptance.mjs` real API/browser check.
+
+
+## Reviewed account recovery planning
+
+`app/backups/accountRestore.ts` defines machine-readable whole-account scope and
+explicit unknown source coverage/unavailable writer readiness.
+`api/utils/backups/accountRestorePlan.ts` and `accountRestoreRecord.ts` validate
+sealed independent entries, index reference mappings in disposable local-worker
+SQLite, and seal immutable paged reviews through `BackupObjectStore`.
+`backupObjectKey.ts` admits only generated `restore-plans` review keys.
+No destination mutation endpoint or account writer is introduced. Run
+`test:backups`; see [planning and completion boundaries](../portable-backups.md#account-restore-admission-and-durable-review-plans).
