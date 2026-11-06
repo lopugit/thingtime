@@ -129,6 +129,7 @@ public actor ThingtimeNodeController {
 
     private static let readMethods: Set<String> = [
         "node.status",
+        "location.status",
         "telemetry.snapshot",
         "telemetry.battery",
         "permissions.preflight",
@@ -144,6 +145,10 @@ public actor ThingtimeNodeController {
         "pairing.resume",
         "pairing.unpair",
         "permissions.request",
+        "location.set-enabled",
+        "location.request-permission",
+        "location.request-notification-permission",
+        "location.open-settings",
         "action.execute",
         "connector.start",
         "connector.stop",
@@ -151,6 +156,8 @@ public actor ThingtimeNodeController {
         "desktop-chat.send"
     ]
 
+    private let alerts: DeviceAlertService?
+    private let location: DeviceLocationService?
     private let folderSync: MacFolderSync?
     private let journal: CommandJournal
     private let pairing: PairingManager
@@ -164,6 +171,8 @@ public actor ThingtimeNodeController {
     public init(
         journal: CommandJournal,
         folderSync: MacFolderSync? = nil,
+        location: DeviceLocationService? = nil,
+        alerts: DeviceAlertService? = nil,
         pairing: PairingManager,
         connector: ConnectorRuntime,
         telemetry: any DeviceTelemetryProviding,
@@ -172,6 +181,8 @@ public actor ThingtimeNodeController {
         desktopChat: DesktopChatRuntime? = nil,
         pairingScopeChanged: @escaping @Sendable (String?) async throws -> Void = { _ in }
     ) {
+        self.alerts = alerts
+        self.location = location
         self.folderSync = folderSync
         self.journal = journal
         self.pairing = pairing
@@ -215,6 +226,9 @@ public actor ThingtimeNodeController {
     }
 
     public func handleLeasedCommand(_ command: LeasedCommand) async -> NodeResponse {
+        if ["notification.show", "media.play", "media.prepare"].contains(command.method) {
+            return await handleAlert(command)
+        }
         do {
             let request = try await request(for: command)
             return await handle(request)
@@ -223,9 +237,39 @@ public actor ThingtimeNodeController {
         }
     }
 
+    private func handleAlert(_ command: LeasedCommand) async -> NodeResponse {
+        do {
+            guard let alerts, let client = controlPlaneClient as? ThingtimeAPIClient else { throw ThingtimeNodeError.invalidRequest("Alerts are unavailable.") }
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+            let payload = try encoder.encode(JSONValue.object(["method": .string(command.method), "input": command.parameters, "deviceId": command.deviceID.map(JSONValue.string) ?? .null]))
+            switch try await journal.begin(commandId: command.commandID, payload: payload) {
+            case .replay(let outcome): return outcome.response(requestId: command.leaseID)
+            case .inProgress: throw ThingtimeNodeError.commandInProgress
+            case .uncertain: throw ThingtimeNodeError.commandOutcomeUncertain
+            case .execute(let hash):
+                do {
+                    let result = try await alerts.execute(command, client: client)
+                    let response = NodeResponse.success(id: command.leaseID, result: result)
+                    try await journal.finish(commandId: command.commandID, payloadHash: hash, outcome: JournaledOutcome(response: response))
+                    return response
+                } catch {
+                    // Every uncertain audible delivery remains review-only, including crashes during execution.
+                    try await journal.markUncertain(commandId: command.commandID, payloadHash: hash)
+                    throw error
+                }
+            }
+        } catch { return failureResponse(requestID: command.leaseID, error: error) }
+    }
+
     private func executeRead(_ request: NodeRequest) async throws -> NodeResponse {
         let result: JSONValue
         switch request.method {
+        case "location.status":
+            guard let location, let client = controlPlaneClient as? ThingtimeAPIClient,
+                  let deviceID = request.parameters.objectValue?["deviceId"]?.stringValue,
+                  let ownerID = request.parameters.objectValue?["ownerId"]?.stringValue else { throw ThingtimeNodeError.invalidRequest("Location requires a paired deviceId.") }
+            try await client.verifyFileSyncIdentity(ownerID: ownerID, deviceID: deviceID)
+            result = await location.status(deviceID: deviceID)
         case "node.status":
             let status = try await NodeStatus(
                 service: "running",
@@ -315,6 +359,19 @@ public actor ThingtimeNodeController {
     private func executeMutation(_ request: NodeRequest, commandID: String) async throws -> NodeResponse {
         let result: JSONValue
         switch request.method {
+        case "location.set-enabled", "location.request-permission", "location.request-notification-permission", "location.open-settings":
+            guard let location, let client = controlPlaneClient as? ThingtimeAPIClient,
+                  let deviceID = request.parameters.objectValue?["deviceId"]?.stringValue,
+                  let ownerID = request.parameters.objectValue?["ownerId"]?.stringValue else { throw ThingtimeNodeError.invalidRequest("Location requires a paired deviceId.") }
+            try await client.verifyFileSyncIdentity(ownerID: ownerID, deviceID: deviceID)
+            if request.method == "location.set-enabled" {
+                guard case let .bool(enabled) = request.parameters.objectValue?["enabled"] else { throw ThingtimeNodeError.invalidRequest("Location requires enabled.") }
+                try await location.setEnabled(enabled, deviceID: deviceID)
+            } else if request.method == "location.open-settings" { await location.openSettings()
+            } else if request.method == "location.request-notification-permission" {
+                guard let alerts else { throw ThingtimeNodeError.invalidRequest("Notifications unavailable.") }; _ = try await alerts.requestPermission()
+            } else { await location.requestPermission() }
+            result = await location.status(deviceID: deviceID)
         case "pairing.claim":
             guard let controlPlaneClient else {
                 throw ThingtimeNodeError.invalidRequest("This node has no Thingtime API connection configured.")
@@ -444,6 +501,7 @@ public actor ThingtimeNodeController {
 
     public static func runtimeCapabilities(for device: DeviceTelemetry) -> [String] {
         var pairingCapabilities = Self.basePairingCapabilities
+        pairingCapabilities.append(contentsOf: ["notification.show.v1", "media.play.v1", "media.prepare.v1"])
         if device.menuBar != nil { pairingCapabilities.append("system.menu-bar.read.v1") }
         if let mainDisplay = device.displays.first(where: { $0.isMain }), mainDisplay.brightness != nil {
             pairingCapabilities.append("system.brightness.read")

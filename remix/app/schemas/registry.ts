@@ -2700,6 +2700,7 @@ const friendThingSchema: ThingtimeSchema = {
 // the removal reason), report (a post report, to the mods), role (promoted /
 // demoted / made owner / "s/<slug> was deleted"), ban (banned / unbanned).
 export const NOTIFICATION_TYPES = [
+  'device-alert',
   'friend-request',
   'friend-accepted',
   'new-follower',
@@ -2775,6 +2776,7 @@ export const NOTIFICATION_CATEGORY_META: Record<NotificationCategory, { label: s
 };
 
 export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCategory> = {
+  'device-alert':'system',
   'friend-request': 'social',
   'friend-accepted': 'social',
   'new-follower': 'social',
@@ -4260,6 +4262,9 @@ export const EXTERNAL_CONNECTION_THINGTIME = [
 export const EXTERNAL_RESERVED_ID_PREFIX = 'ext-';
 
 export const DEVICE_THINGTIME = [
+	'device-alert-sound',
+	'device-observation-cleanup',
+	'device-observation',
 	'device',
 	'device-state',
 	'device-connector',
@@ -4275,7 +4280,7 @@ export const DEVICE_THINGTIME = [
 // Thing kinds are bounded operational machinery and remain writable while an
 // account is full; the durable device/state/connector/screen mirror and all
 // imported chat rows stay ordinary quota-billed content.
-export const DEVICE_CONTROL_THINGTIME = ['device-sync-control', 'device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
+export const DEVICE_CONTROL_THINGTIME = ['device-observation-cleanup', 'device-sync-control', 'device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
 
 // Historical chats have a dedicated atomic lifecycle, never generic CRUD.
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;

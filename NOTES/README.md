@@ -1,5 +1,7 @@
 # Thingtime notes
 
+[Device location history and find-device evidence](device-location-history.md) — current device, map and platform boundaries (2026-11-06).
+
 [Shared Rust index/sync evidence](shared-rust-index-sync.md) — current producers, permission boundaries and portability (2026-11-04).
 
 `NOTES/` preserves evidence, observations, questions, and design thinking that

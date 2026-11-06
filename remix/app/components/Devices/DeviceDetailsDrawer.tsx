@@ -15,6 +15,7 @@ import { DeviceApprovalCard } from './DeviceApprovalCard';
 import { DeviceCommandTimeline } from './DeviceCommandTimeline';
 import { DeviceConnectors } from './DeviceConnectors';
 import { DeviceDashboard } from './DeviceDashboard';
+import { DeviceLocationWorkspace } from './DeviceLocationWorkspace';
 import { DeviceNetworkControls } from './DeviceNetworkControls';
 import { DevicePowerControls } from './DevicePowerControls';
 import { DeviceSystemControls } from './DeviceSystemControls';
@@ -387,6 +388,7 @@ export const DeviceDetailsDrawer = memo(
 						) : (
 							<>
 								<DeviceDashboard deviceId={state.deviceId} ownerId={ownerId} snapshot={snapshot} presence={presence} now={now} />
+								{ownerId && <Section deviceId={state.deviceId} section="location" label="Location history"><DeviceLocationWorkspace ownerId={ownerId} deviceId={state.deviceId} model={summary.system?.model} platform={summary.platform} /></Section>}
 								{isWatch ? (
 									<WatchDeviceDetails now={now} summary={summary} />
 								) : (
