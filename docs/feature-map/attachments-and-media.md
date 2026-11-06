@@ -822,3 +822,11 @@ fresh. `twoWayStreaming.test.ts` covers policy, scope, stale ancestors, restart
 and eviction. Use `--canonical-worker --streaming-two-way` in the mixed native
 fixture for the actual deletes-off dual-feed path; scalar deletes-on and legacy
 transport lanes remain separate evidence.
+
+For initial folder prefixes, `pagedRunJournal.queuedFolderPeer` reads only
+already committed opposite-replica folder inputs through the existing path
+index, with a bounded revision scan and fresh-preparation fallback. Guarded
+streaming may defer a paired folder without authorizing any effect, child or
+checkpoint. Consumed source rows are not peer evidence. Strict reconciliation
+still reads both replicas afresh. The canonical mixed fixture reports queued
+peer deferrals before first confirmed file alongside byte/hash/recovery proof.
