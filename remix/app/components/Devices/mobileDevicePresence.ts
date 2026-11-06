@@ -7,6 +7,7 @@ type PresenceEnvironment = {
 	current(): boolean;
 	bridge(): ThingtimeNativeBridge | undefined;
 	request(signal: AbortSignal): Promise<MobileDeviceStatus>;
+	stopBackground(): void;
 	schedule(callback: () => void, delay: number): () => void;
 };
 
@@ -18,6 +19,7 @@ export function startMobileDevicePresence(environment: PresenceEnvironment) {
 	let pendingBridge: ThingtimeNativeBridge | undefined;
 	let cancelTimer: (() => void) | undefined;
 	let failures = 0;
+	let identityStopped = false;
 	const cancel = () => {
 		cancelTimer?.();
 		cancelTimer = undefined;
@@ -27,7 +29,14 @@ export function startMobileDevicePresence(environment: PresenceEnvironment) {
 	};
 	const refresh = () => {
 		if (disposed) return;
-		if (!environment.current() || environment.document.visibilityState !== 'visible') {
+		if (!environment.current()) {
+			cancel();
+			if (!identityStopped) environment.stopBackground();
+			identityStopped = true;
+			return;
+		}
+		identityStopped = false;
+		if (environment.document.visibilityState !== 'visible') {
 			cancel();
 			return;
 		}
@@ -64,8 +73,10 @@ export function startMobileDevicePresence(environment: PresenceEnvironment) {
 	return {
 		refresh,
 		stop() {
+			if (disposed) return;
 			disposed = true;
 			cancel();
+			environment.stopBackground();
 			for (const name of events) environment.window.removeEventListener(name, refresh);
 			environment.document.removeEventListener('visibilitychange', refresh);
 		}

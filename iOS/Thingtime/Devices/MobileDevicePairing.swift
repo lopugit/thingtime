@@ -114,6 +114,29 @@ final class MobileDevicePairing {
         }
         return Status(state: "paired", deviceId: deviceId)
     }
+    /// A previously approved device credential is sufficient for node presence.
+    /// Background work never reads WebKit cookies or creates/resumes a pairing.
+    func backgroundHeartbeat(_ scope: Scope, locked: Bool) async throws -> Status {
+        try checked()
+        guard var value = try record(scope), !value.revoked, let deviceId = value.deviceId else {
+            return Status(state: "unpaired", deviceId: nil)
+        }
+        let manifest = try await request(scope, LopuVoiceContract.manifestPath, authenticated: false)
+        guard LopuVoiceContract.accepts(manifest, baseURL: scope.origin,
+                feature: "api.devices-node-state", minimum: [1, 9, 0]) else { throw Failure.incompatible }
+        try checked()
+        value.revision = max(value.revision + 1, Int64(Date().timeIntervalSince1970 * 1000))
+        try save(value)
+        let snapshot: [String: Any] = ["revision": value.revision, "capabilities": [String](),
+            "connectors": [String](), "state": ["locked": locked]]
+        do {
+            _ = try await request(scope, "/api/v1/devices/node/state", body: Self.json(snapshot), credential: value.credential)
+        } catch Failure.revoked {
+            value.revoked = true; try save(value)
+            return Status(state: "revoked", deviceId: nil)
+        }
+        return Status(state: "paired", deviceId: deviceId)
+    }
     func pair(_ scope: Scope, descriptor: [String: String]) async throws -> Status {
         try await verify(scope)
         var value = try record(scope)

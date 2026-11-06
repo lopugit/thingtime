@@ -6,16 +6,17 @@ import { Box, Flex, Text } from '@chakra-ui/react';
 import { deviceThingsPageHref } from './deviceNavigation';
 import { Laptop, Monitor, Server, Smartphone, Watch as WatchIcon } from 'lucide-react';
 
-import { deriveDevicePresence } from './deviceCore';
-import type { DevicePresenceStatus, DeviceSnapshot, DeviceSummary } from './deviceTypes';
+import { deviceHealthPresentation, resolvedDevicePresence, type DeviceStatusTone } from './deviceStatusPresentation';
+import type { DeviceSnapshot, DeviceSummary } from './deviceTypes';
+export { resolvedDevicePresence } from './deviceStatusPresentation';
 
-type StatusTone = 'positive' | 'warning' | 'negative' | 'neutral' | 'accent';
+type StatusTone = DeviceStatusTone;
 
 const STATUS_TONES: Record<StatusTone, { background: string; color: string }> = {
 	positive: { background: 'rgba(22, 163, 74, 0.12)', color: 'var(--tt-success, #15803d)' },
 	warning: { background: 'rgba(217, 119, 6, 0.13)', color: 'var(--tt-warning, #b45309)' },
 	negative: { background: 'rgba(220, 38, 38, 0.11)', color: 'var(--tt-danger, #dc2626)' },
-	neutral: { background: 'var(--tt-surface-alt, #f2f2f5)', color: 'var(--tt-muted, #71717a)' },
+	neutral: { background: 'var(--tt-surface-alt, #f2f2f5)', color: 'color-mix(in srgb, var(--tt-ink, #17171c) 70%, var(--tt-card, #ffffff))' },
 	accent: { background: 'var(--tt-accent-soft, rgba(244, 114, 182, 0.12))', color: 'var(--tt-accent, #db2777)' }
 };
 
@@ -29,21 +30,14 @@ export const DeviceStatusPill = memo(({ label, tone = 'neutral', title }: { labe
 		lineHeight="18px"
 		paddingX="7px"
 		title={title}
-		whiteSpace="nowrap"
+		whiteSpace="normal"
+		overflowWrap="anywhere"
+		maxWidth="100%"
 	>
 		{label}
 	</Box>
 ));
 DeviceStatusPill.displayName = 'DeviceStatusPill';
-
-export const resolvedDevicePresence = (summary: DeviceSummary, now = Date.now()): DevicePresenceStatus => {
-	const lastSeenPresence = deriveDevicePresence(summary.lastSeenAt, now);
-	if (summary.transportStatus === 'offline') return 'offline';
-	if (summary.transportStatus === 'connecting' || summary.transportStatus === 'backoff') {
-		return lastSeenPresence === 'offline' ? 'offline' : 'stale';
-	}
-	return lastSeenPresence;
-};
 
 export const formatDeviceLastSeen = (lastSeenAt: string | null | undefined, now = Date.now()): string => {
 	if (!lastSeenAt) return 'Never seen';
@@ -57,32 +51,11 @@ export const formatDeviceLastSeen = (lastSeenAt: string | null | undefined, now 
 	return `${Math.floor(elapsed / 86_400_000)}d ago`;
 };
 
-const presenceTone = (presence: DevicePresenceStatus): StatusTone => {
-	if (presence === 'online') return 'positive';
-	if (presence === 'stale') return 'warning';
-	return 'neutral';
-};
-
-const serviceTone = (summary: DeviceSummary): StatusTone => {
-	if (summary.serviceStatus === 'running') return 'positive';
-	if (summary.serviceStatus === 'starting' || summary.serviceStatus === 'needs-approval') return 'warning';
-	if (summary.serviceStatus === 'degraded') return 'warning';
-	if (summary.serviceStatus === 'version-mismatch') return 'negative';
-	return 'neutral';
-};
-
-export const DeviceHealthBadges = memo(({ summary, now }: { summary: DeviceSummary; now?: number }) => {
-	const presence = resolvedDevicePresence(summary, now);
-	return (
-		<Flex alignItems="center" gap={1.5} minWidth={0} wrap="wrap">
-			<DeviceStatusPill label={presence} tone={presenceTone(presence)} />
-			{summary.serviceStatus !== 'running' ? <DeviceStatusPill label={summary.serviceStatus} tone={serviceTone(summary)} /> : null}
-			{summary.pairingStatus !== 'paired' ? (
-				<DeviceStatusPill label={summary.pairingStatus} tone={summary.pairingStatus === 'revoked' ? 'negative' : 'warning'} />
-			) : null}
-		</Flex>
-	);
-});
+export const DeviceHealthBadges = memo(({ summary, now }: { summary: DeviceSummary; now?: number }) => (
+	<Flex alignItems="center" gap={1.5} minWidth={0} wrap="wrap">
+		{deviceHealthPresentation(summary, now).map(({ label, tone }) => <DeviceStatusPill key={label} label={label} tone={tone} />)}
+	</Flex>
+));
 DeviceHealthBadges.displayName = 'DeviceHealthBadges';
 
 const DevicePlatformIcon = ({ platform }: { platform: string }) => {
@@ -170,7 +143,7 @@ export const DeviceCard = memo(
 				</Flex>
 
 				<Flex alignItems="center" color="var(--tt-muted, #71717a)" fontSize="11px" gap={2} marginTop={4} wrap="wrap">
-					<Text title={device.lastSeenAt || undefined}>{formatDeviceLastSeen(device.lastSeenAt, now)}</Text>
+					{resolvedDevicePresence(device, now) === 'online' && device.serviceStatus !== 'degraded' ? <Text title={device.lastSeenAt || undefined}>{formatDeviceLastSeen(device.lastSeenAt, now)}</Text> : null}
 					{observed?.locked ? <DeviceStatusPill label="locked" tone="warning" /> : null}
 					{pendingCommandCount > 0 ? <DeviceStatusPill label={`${pendingCommandCount} queued`} tone="accent" /> : null}
 					{pendingApprovalCount > 0 ? <DeviceStatusPill label={`${pendingApprovalCount} approval`} tone="warning" /> : null}

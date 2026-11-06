@@ -57,6 +57,7 @@ struct WebView: UIViewRepresentable {
         // and detaches its queued uploads, even when a widget tap is delivered in
         // the same update. Widget navigation alone stays within the same origin.
         if rootChanged {
+            MobileDeviceBackgroundPresence.shared.destinationChanged()
             WidgetStore.clear(); context.coordinator.resetChatActivity()
             context.coordinator.configureShareComposer(configuration: webView.configuration, origin: url)
             context.coordinator.shareComposer?.webView = webView
@@ -113,6 +114,11 @@ struct WebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            // A background refresh may construct the initial web scene. Only a
+            // foreground navigation invalidates its persisted approval here.
+            if UIApplication.shared.applicationState == .active {
+                MobileDeviceBackgroundPresence.shared.destinationChanged()
+            }
             mobileDevice.suspend()
             mobileFolders.suspend()
             fileExports.suspend()
@@ -142,7 +148,7 @@ struct WebView: UIViewRepresentable {
                 "lopuVoiceVersion": "1.3.0",
                 "lopuChatActivityVersion": "1.0.0",
                 "notificationsVersion": "1.0.0",
-                "devicePairingVersion": "1.0.0",
+                "devicePairingVersion": "1.1.0",
                 "fileAccessVersion": MobileFolderBridge.accessVersion,
                 "fileUploadVersion": MobileFolderBridge.uploadVersion,
                 "fileExportVersion": FileExportBridge.version,
