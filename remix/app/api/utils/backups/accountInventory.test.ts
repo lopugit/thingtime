@@ -5,7 +5,7 @@ import { buildUserSecure, packRecentReactions } from '../auth/users';
 import { backupThemeFixtures } from './themeSnapshots.fixtures';
 import { backupThemeSnapshotFromDoc, openBackupThemeSnapshot, BACKUP_THEME_CONTENT_ADAPTER } from './themeSnapshots';
 import { backupDraftFromDoc, openBackupDraft } from './draftRecords';
-import { openBackupThingSnapshot } from './thingSnapshots';
+import { openBackupThingSnapshot, BACKUP_THING_CONTENT_MAX_NODES } from './thingSnapshots';
 import { openAccountBackupFile, openAccountBackupFileVersion } from './accountFileRecovery';
 import { timelineEventThingId } from '../timeline/repository';
 import { backupAttachmentFixture, backupFileHistoryFixture } from './attachmentRecords.fixtures';
@@ -568,7 +568,7 @@ for (const mode of ['revoked', 'cancelled', 'scope', 'boundary', 'missing', 'dup
 			if (mode === 'expired') throw Error('SnapshotTooOld');
 			if (mode === 'missing') return rows.slice(1);
 			if (mode === 'duplicate') return [rows[0], rows[0]];
-			if (mode === 'oversized') rows[0].crystal = Array.from({ length: 90_001 }, () => null);
+			if (mode === 'oversized') rows[0].crystal = Array.from({ length: BACKUP_THING_CONTENT_MAX_NODES + 1 }, () => null);
 			return rows;
 		};
 		await assert.rejects(f.run());
@@ -986,3 +986,17 @@ for (const mode of ['missing', 'foreign', 'target', 'purpose', 'profile', 'delet
 		assert.equal(f.state.closed, f.state.queries);
 	});
 }
+
+
+test('ordinary account capture retains a valid 90001-node value below its existing record bound', async () => {
+	const f = fixture(2);
+	f.state.alterRows = (n, rows) => {
+		if (n === 2) rows[0].crystal = Array.from({ length: 90_001 }, () => null);
+		return rows;
+	};
+	const plan = await f.run();
+	assert.equal(plan.items, 2);
+	assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), true);
+	assert.equal(f.state.closed, f.state.queries);
+	assert.equal(f.state.ended, 1);
+});
