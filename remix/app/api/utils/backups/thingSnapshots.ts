@@ -7,6 +7,9 @@ import { BACKUP_METADATA_BYTES, parseBackupItem } from '../../../backups/manifes
 import { BACKUP_RETAINED_PAYLOAD_BYTES, retainBackupPayload, openBackupItem, type BackupObjectStore, type BackupAccess } from './portableBackup';
 
 export const BACKUP_THING_CONTENT_ADAPTER = 'backup-thing-content';
+// Existing v1 serializer limitation: larger valid contents currently cannot
+// be captured by this codec. A future streaming codec must retain v1 decoding.
+export const BACKUP_THING_CONTENT_MAX_NODES = 100_000;
 export const backupThingJson = (input: unknown) =>
 	JSON.stringify(
 		copyBoundedJson(
@@ -14,7 +17,7 @@ export const backupThingJson = (input: unknown) =>
 			{
 				maxBytes: BACKUP_RETAINED_PAYLOAD_BYTES,
 				maxDepth: 94,
-				maxNodes: 100_000,
+				maxNodes: BACKUP_THING_CONTENT_MAX_NODES,
 				sortKeys: true
 			},
 			'Backup Thing snapshot'

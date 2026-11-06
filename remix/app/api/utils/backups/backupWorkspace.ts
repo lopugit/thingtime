@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export const BACKUP_WORKSPACE_BYTES = 512 * 1024 * 1024;
-export type BackupWorkspaceOptions = { maxBytes?: number; temporaryDirectory?: string };
+export type BackupWorkspaceOptions = { maxBytes?: number; temporaryDirectory?: string; diskBudget?: 'available' };
 type Value = string | number | null;
 export type BackupWorkspaceRow = Record<string, Value>;
 type Statement = {
@@ -17,11 +17,15 @@ type Statement = {
 type Database = { exec(sql: string): void; prepare(sql: string): Statement; close(): void };
 
 /** Private scratch data only. A process crash can leave this directory behind;
- * no durable snapshot or recovery receipt depends on it. Normal callers close
+ * Available-disk workers keep bounded RAM and use the selected filesystem's
+ * actual capacity/SQLite limits unless a caller explicitly supplies maxBytes.
+ * Existing callers retain their original bounded workspace policy.
+ * No durable snapshot or recovery receipt depends on it. Normal callers close
  * in finally, including cancellation, disk exhaustion and validation failure. */
 export async function openBackupWorkspace(options: BackupWorkspaceOptions = {}) {
-	const maxBytes = options.maxBytes ?? BACKUP_WORKSPACE_BYTES;
-	if (!Number.isSafeInteger(maxBytes) || maxBytes < 65536 || maxBytes > 8 * 1024 ** 3)
+	const available = options.diskBudget === 'available';
+	const maxBytes = options.maxBytes ?? (available ? undefined : BACKUP_WORKSPACE_BYTES);
+	if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes < 65536 || (!available && maxBytes > 8 * 1024 ** 3)))
 		throw Error('Invalid backup tree workspace bound');
 	// Node 24 is required. The workspace's older ambient Node types do not yet
 	// declare this built-in module; no third-party SQLite binding is needed.
@@ -38,7 +42,7 @@ export async function openBackupWorkspace(options: BackupWorkspaceOptions = {}) 
 		const file = await open(path, constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);
 		await file.close();
 		db = new DatabaseSync(path);
-		db.exec(`PRAGMA page_size=4096; PRAGMA max_page_count=${Math.floor(maxBytes / 4096)};
+		db.exec(`PRAGMA page_size=4096; ${maxBytes === undefined ? '' : `PRAGMA max_page_count=${Math.floor(maxBytes / 4096)};`}
 			PRAGMA cache_size=-2048; PRAGMA mmap_size=0; PRAGMA temp_store=FILE;`);
 		return { db, close };
 	} catch (error) { await close(); throw error; }

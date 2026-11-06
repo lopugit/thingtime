@@ -634,3 +634,89 @@ with 401, and rejects an unscoped retained read with 400. Targeted lint passes;
 the full TypeScript check retains 91 existing diagnostics with none in the
 changed retention/backup/route files. Live provider, installed app, full-account
 coverage and large-scale acceptance remain open.
+
+
+## Account restore admission and durable review plans
+
+`api/utils/backups/accountRestorePlan.ts` is a local/native worker planning
+boundary. It reads a sealed independent vault without contacting the original
+account or source files. It does not call destination writers, expose a mutation
+endpoint, sign in, replace an account, replay historical receipts or restore
+permissions. Actual writer coordination and full-account delivery remain open.
+
+`prepareAccountRestorePlan` requires an explicit UUID v4 plan ID, source snapshot,
+source authorization and destination owner/origin/root/revision/capability values.
+The same ID resumes immutable accepted pages; a new ID allocates distinct content
+identities. Those identities are allocation intentions, never permission to write
+or overwrite anything. Changing source seal, destination or contracts requires a
+new plan and review. Destination capability values are bound into review; they
+must be negotiated and authorization rechecked by a future writer coordinator.
+
+The planner validates each retained byte stream once and decodes the existing
+canonical ordinary, file, attachment, theme, draft, account and Timeline formats.
+Account files require metadata-only descriptors and exact owned attachment
+fingerprint/size/version closure. The shared stored-composition discoverer and
+remapper identify executable references and aliases. Executable cycles are valid;
+folder containment cycles, missing/foreign references, ambiguous aliases and
+unsupported adapters/versions become explicit review issues. Malformed known
+payloads, corrupt bytes and contradictory file closure refuse plan sealing.
+Context-dependent composition, template media, draft and historical relationship
+closure remain explicitly incomplete rather than being silently assumed complete.
+
+A private SQLite index supplies bounded pagination and is discarded on close.
+Account planning uses available-disk mode with a 2 MiB SQLite cache, disabled
+memory mapping and disk temporary storage; it imposes no application total-graph
+size ceiling. A caller can explicitly request a disk resource budget. Actual
+filesystem capacity and SQLite format limits still apply. Existing selected-tree
+and cloud-capture consumers retain their current workspace policies.
+It is not durable task state or a server/Vercel database. Immutable
+`restore-plans/<planId>/header.json`, `pages/<ordinal>.json` and `sealed.json`
+objects use the existing provider key grammar and compare-on-replay storage.
+The plan seal binds the exact source descriptor, destination, contracts, ordered
+review records, discovered family counts and issues. It means **plan sealed**,
+not restoration complete. No source snapshot or backup format is changed.
+
+`openAccountRestorePlan` checks the exact review hash, source seal hash and
+normalized destination. Before exposing its bounded record iterator, it verifies
+all pages and pins their hashes in fresh private scratch storage; each page is
+checked against its pin before yielding records. Callers must close the returned
+plan in `finally`, including for never-consumed handles. Iterator completion,
+early break and errors also close scratch automatically; explicit close is
+idempotent. Scratch loss requires
+reopening and revalidating the immutable pages, never trusting scratch receipts.
+
+The versioned `AccountRestoreCoverage` contract separates `planIntegrity`,
+`sourceCoverage`, `writerReadiness` and `wholeAccountReady`. Existing portable v1
+headers describe coverage in prose, so their source coverage remains `unknown`.
+Missing managed/security/settings/device families cannot be inferred absent from
+an inventory that lacks them. No canonical writer coordinator is shipped here;
+writer readiness is `unavailable` and whole-account readiness is always false.
+Reference discovery is explicitly `partial`, including schema-specific and
+managed relationships beyond the current discoverers. All plans include
+machine-readable unverified-coverage, incomplete-reference-discovery and
+writers-unavailable issues. There is deliberately no positive whole-account-ready fixture.
+
+`test:backups` exercises an actual independent sealed mixed graph after removing
+live source records and the first vault, large retained ordinary content,
+executable and structural cycles, foreign dependencies, unsupported versions,
+accepted-page interruption/reopen, destination/review changes, corrupt retained
+bytes and page mutation between validation and iteration. Separate file fixtures
+cover exact independent attachment bytes and contradictory closure refusal.
+These are worker/storage tests, not installed restore UI, full account restore,
+live S3 durability, complete history import or measured 100 GB–100 TB acceptance.
+
+
+The coverage also records the existing ordinary-record v1 serializer envelope as
+`sourceFormatLimitations`: 100,000 JSON nodes and 128 MiB of retained JSON payload.
+These are avoidable legacy serializer processing budgets, not a protocol or
+product data-size contract; canonical Thing content is not intrinsically limited
+to that node count. This phase preserves existing v1 bytes and refusal behavior.
+A separately versioned streaming ordinary-record codec, with retained v1 reader
+compatibility, is required before backups can admit arbitrary valid ordinary
+content. Available-disk graph indexing does not remove that source-format gap.
+
+
+Interrupted preparation revalidates the sealed source inventory and bytes before
+resealing the same review. Accepted review pages are reused immutably, but this
+phase does not checkpoint a long full-byte validation pass; durable verification
+checkpoints remain a separate large-volume acceptance requirement.
