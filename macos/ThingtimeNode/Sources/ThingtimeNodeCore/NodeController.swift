@@ -188,6 +188,9 @@ public actor ThingtimeNodeController {
             return .failure(id: request.id, code: "unsupported_feature", message: "This node does not support local folder sync.")
         }
         do { return .success(id: request.id, result: try await folderSync.handle(request.parameters, stream: stream, receive: receive, batchCallback: batchCallback)) }
+        catch let error as FolderReconnectFailure {
+            return .failure(id: request.id, code: "folder_volume_retry", message: error.localizedDescription)
+        }
         catch let error as MobileFolderStore.Failure { return .failure(id: request.id, code: "folder_unavailable", message: error.localizedDescription) }
         catch is CancellationError { return .failure(id: request.id, code: "cancelled", message: "Folder access was cancelled.") }
         catch where MacFolderSync.identityVerificationIsTransient(error) {

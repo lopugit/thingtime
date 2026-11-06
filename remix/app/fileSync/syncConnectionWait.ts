@@ -7,6 +7,13 @@ export class SyncConnectionWait extends Error {
 		super(message);
 	}
 }
+/** The native host proved bookmark/volume/root continuity. The old inode
+ * namespace is still invalid; finish receipt recovery and rescan it. */
+export class SyncVolumeRemounted extends SyncConnectionWait {
+	constructor() {
+		super('The granted volume returned. Reconciling saved sync work.');
+	}
+}
 /** A bounded scheduling hint only. Never retain response bodies, URLs or headers. */
 export function cloudSyncHttpError(status: number, retryAfter: string | null = null, now = Date.now()): Error {
 	const message = `Cloud sync request failed (${status}); retain this run for retry or reconciliation.`;

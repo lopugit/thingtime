@@ -482,6 +482,16 @@ test('native identity retry crosses Electron as a plain fixed Error while author
     await assert.rejects(f.host.request(f.event, f.input()), error => error.name === 'Error' && error.message === marker);
 });
 
+test('volume reconnect markers require the exact trusted native code and fixed message', async () => {
+    const { ThingtimeNodeBridgeError } = require('../lib/thingtime-node-bridge.cjs');
+    for (const marker of ['[folder_volume_offline] The granted volume is offline. Saved sync will retry.',
+        '[folder_volume_remounted] The granted volume returned. Reconcile its saved transfer before continuing.']) {
+        const f = fixture();
+        f.run(async () => { throw new ThingtimeNodeBridgeError('folder_volume_retry', marker); });
+        await assert.rejects(f.host.request(f.event, f.input({ action: 'inspect' })), error => error.name === 'Error' && error.message === marker);
+    }
+});
+
 test('authority drift wins over a concurrent native transport interruption and diagnostics never break a request', async () => {
     const { ThingtimeNodeBridgeError }=require('../lib/thingtime-node-bridge.cjs');
     const f=fixture(); f.host.diagnostic=()=>{throw Error('diagnostic sink unavailable');};

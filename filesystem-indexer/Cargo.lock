@@ -83,6 +83,7 @@ name = "commander-indexer"
 version = "0.1.0"
 dependencies = [
  "commander-core",
+ "commander-platform",
  "cpu-time",
  "globset",
  "ignore",
@@ -107,6 +108,13 @@ dependencies = [
  "commander-indexer",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "commander-platform"
+version = "0.1.0"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

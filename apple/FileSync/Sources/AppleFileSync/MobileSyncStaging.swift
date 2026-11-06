@@ -83,6 +83,11 @@ public final class MobileSyncStaging: @unchecked Sendable {
         let bookmarkHash: String
         let rootIdentity: String
         let candidate: Entry
+        var rootContinuity: String? = nil
+        var candidateContinuity: String? = nil
+        var expectedContinuity: String? = nil
+        var journalContinuity: String? = nil
+        var journalMarkerHash: String? = nil
         var destinationJournal: String? = nil
         var journalIdentity: String? = nil
         var twoStep: Bool? = nil
@@ -102,7 +107,9 @@ public final class MobileSyncStaging: @unchecked Sendable {
     private let afterPublication: (() throws -> Void)?
     private let unsupportedLinks: Bool
     private let afterDisplacement: (() throws -> Void)?
-    public init(directory: URL, afterBytesFlushed: (() throws -> Void)? = nil, afterPublication: (() throws -> Void)? = nil, beforePublication: (() throws -> Void)? = nil, unsupportedLinks: Bool = false, afterDisplacement: (() throws -> Void)? = nil) {
+    private let exchangeSupported: ((Int32) throws -> Bool)?
+    public init(directory: URL, afterBytesFlushed: (() throws -> Void)? = nil, afterPublication: (() throws -> Void)? = nil, beforePublication: (() throws -> Void)? = nil, unsupportedLinks: Bool = false, afterDisplacement: (() throws -> Void)? = nil, exchangeSupported: ((Int32) throws -> Bool)? = nil) {
+        self.exchangeSupported = exchangeSupported
         self.afterDisplacement = afterDisplacement
         self.unsupportedLinks = unsupportedLinks
         self.directory = directory
@@ -280,15 +287,20 @@ public final class MobileSyncStaging: @unchecked Sendable {
     private func openDestination(_ root: Int32, path: String) throws -> Int32? {
         try NativeFileDestination.openDestination(root, path: path)
     }
-    private func checkExpected(_ root: Int32, request: Request) throws {
+    private func checkExpected(_ root: Int32, request: Request, continuity: String? = nil) throws {
         let expected = request.operation.mutation.expectedTarget
         guard let file = try openDestination(root, path: request.operation.mutation.path) else {
             guard expected == nil else { throw Failure.changed }; return
         }
         defer { close(file) }
-        guard let expected, try entry(MobileFolderReader.info(file), source: expected) == expected else { throw Failure.changed }
+        guard let expected else { throw Failure.changed }
+        let actual = try entry(MobileFolderReader.info(file), source: expected)
+        if actual != expected {
+            guard try pinned(file, entry: expected, continuity: continuity),
+                  actual.version.split(separator: ":").dropFirst(2).elementsEqual(expected.version.split(separator: ":").dropFirst(2)) else { throw Failure.changed }
+        }
         try verifyContent(file, source: expected)
-        guard try MobileFolderReader.stamp(MobileFolderReader.info(file)) == expected.version else { throw Failure.changed }
+        guard try MobileFolderReader.stamp(MobileFolderReader.info(file)) == actual.version else { throw Failure.changed }
     }
     private func prepareCandidate(_ fd: Int32, payloadFD: Int32? = nil, row: Record) throws -> Entry {
         let source = row.request.operation.mutation.source
@@ -329,11 +341,30 @@ public final class MobileSyncStaging: @unchecked Sendable {
     private func publicationDirectory(_ parent: Int32, publication: Publication) throws -> Int32? {
         guard let name = publication.destinationJournal else { return nil }
         _ = try MobileFolderReader.components(name)
-        guard !name.contains("/"), NativeSymbolicLinks.isOwnedJournal(parent, name: name) else { throw Failure.changed }
+        guard !name.contains("/") else { throw Failure.changed }
         let fd = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard fd >= 0 else { throw Failure.changed }
-        guard try Self.identity(MobileFolderReader.info(fd)) == publication.journalIdentity else { close(fd); throw Failure.changed }
+        do {
+            if let continuity = publication.journalContinuity,
+               try NativeFilesystemContinuity.identity(fd) != continuity { throw Failure.changed }
+            if try Self.identity(MobileFolderReader.info(fd)) != publication.journalIdentity {
+                guard let continuity = publication.journalContinuity, let marker = publication.journalMarkerHash else { throw Failure.changed }
+                try NativeSymbolicLinks.reconnectJournal(fd, continuity: continuity, markerHash: marker)
+            }
+            guard NativeSymbolicLinks.isOwnedJournal(parent, name: name) else { throw Failure.changed }
+        } catch { close(fd); throw error }
         return fd
+    }
+    private func pinned(_ fd: Int32, entry: Entry, continuity: String?) throws -> Bool {
+        if let continuity { return try NativeFilesystemContinuity.identity(fd) == continuity }
+        return try Self.identity(MobileFolderReader.info(fd)) == entry.id
+    }
+    private func checkPublicationRoot(_ root: Int32, publication: Publication) throws {
+        if let continuity = publication.rootContinuity,
+           try NativeFilesystemContinuity.identity(root) != continuity { throw Failure.changed }
+        if try Self.identity(MobileFolderReader.info(root)) == publication.rootIdentity { return }
+        guard let continuity = publication.rootContinuity,
+              try NativeFilesystemContinuity.identity(root) == continuity else { throw Failure.changed }
     }
     private func createPublicationDirectory(_ parent: Int32, operation: String) throws -> (String, Int32) {
         let name = ".thingtime-link-journal-" + operation
@@ -360,8 +391,9 @@ public final class MobileSyncStaging: @unchecked Sendable {
         let candidate = try NativeSymbolicLinks.openEntry(candidateFD, name: "publication", absent: true) ?? -1
         if candidate >= 0 {
             defer { close(candidate) }
-            if try Self.identity(MobileFolderReader.info(candidate)) == publication.candidate.id {
-                guard try entry(MobileFolderReader.info(candidate), source: publication.candidate) == publication.candidate else { throw Failure.changed }
+            if try pinned(candidate, entry: publication.candidate, continuity: publication.candidateContinuity) {
+                guard try MobileFolderReader.stamp(MobileFolderReader.info(candidate)).split(separator: ":").dropFirst(2)
+                    .elementsEqual(publication.candidate.version.split(separator: ":").dropFirst(2)) else { throw Failure.changed }
                 try verifyContent(candidate, source: row.request.operation.mutation.source)
                 return Lookup(status: "missing", receipt: nil) // Prepared, but rename has not happened.
             }
@@ -376,7 +408,7 @@ public final class MobileSyncStaging: @unchecked Sendable {
             guard let file = try openDestination(root, path: row.request.operation.mutation.path) else { throw Failure.changed }
             defer { close(file) }
             let before = try MobileFolderReader.info(file)
-            guard Self.identity(before) == publication.candidate.id else { throw Failure.changed }
+            guard try pinned(file, entry: publication.candidate, continuity: publication.candidateContinuity) else { throw Failure.changed }
             try verifyContent(file, source: row.request.operation.mutation.source)
             guard try MobileFolderReader.stamp(MobileFolderReader.info(file)) == MobileFolderReader.stamp(before) else { throw Failure.changed }
             if let expected = row.request.operation.mutation.expectedTarget {
@@ -384,8 +416,8 @@ public final class MobileSyncStaging: @unchecked Sendable {
                 guard old >= 0 else { throw Failure.changed }; defer { close(old) }
                 let info = try MobileFolderReader.info(old)
                 // rename changes ctime; identity, size, mtime and all bytes must match.
-                guard Self.identity(info) == expected.id,
-                      MobileFolderReader.stamp(info).split(separator: ":").dropLast(2).elementsEqual(expected.version.split(separator: ":").dropLast(2)) else { throw Failure.changed }
+                guard try pinned(old, entry: expected, continuity: publication.expectedContinuity),
+                      MobileFolderReader.stamp(info).split(separator: ":").dropFirst(2).dropLast(2).elementsEqual(expected.version.split(separator: ":").dropFirst(2).dropLast(2)) else { throw Failure.changed }
                 try verifyContent(old, source: expected)
             } else if candidate >= 0 { throw Failure.changed }
             guard fsync(file) == 0, fsync(candidateFD) == 0, fsync(parent) == 0, fsync(root) == 0, fsync(fd) == 0 else { throw Failure.storage }
@@ -406,7 +438,7 @@ public final class MobileSyncStaging: @unchecked Sendable {
             // edits/deletes the destination. Returning it performs no write there.
             if let receipt = publication.receipt { return Lookup(status: "complete", receipt: receipt) }
             return try destination(request, bookmark: bookmark) { root, parent in
-                guard try Self.identity(MobileFolderReader.info(root)) == publication.rootIdentity else { throw Failure.changed }
+                try checkPublicationRoot(root, publication: publication)
                 return try recoverPublication(fd, root: root, parent: parent, row: &row)
             }
         }
@@ -421,15 +453,15 @@ public final class MobileSyncStaging: @unchecked Sendable {
             let file = try payload(fd, row: row); defer { close(file) }; try verify(file, row: row)
             return try destination(request, bookmark: bookmark) { root, parent in
                 let info = try MobileFolderReader.info(root)
-                let localCandidate = request.operation.mutation.source.symbolicLink != nil || request.operation.mutation.expectedTarget?.symbolicLink != nil
-                guard try localCandidate || info.st_dev == MobileFolderReader.info(fd).st_dev else { throw Failure.unavailable }
+                let payloadInfo = try MobileFolderReader.info(fd)
+                let localCandidate = request.operation.mutation.source.symbolicLink != nil || request.operation.mutation.expectedTarget?.symbolicLink != nil || info.st_dev != payloadInfo.st_dev
                 if let publication = row.publication {
-                    guard publication.rootIdentity == Self.identity(info) else { throw Failure.changed }
+                    try checkPublicationRoot(root, publication: publication)
                     let recovered = try recoverPublication(fd, root: root, parent: parent, row: &row)
                     if let receipt = recovered.receipt { return receipt }
                     guard recovered.status == "missing" else { throw Failure.changed }
                 }
-                if row.publication?.twoStep != true { try checkExpected(root, request: request) }
+                if row.publication?.twoStep != true { try checkExpected(root, request: request, continuity: row.publication?.expectedContinuity) }
                 if row.publication == nil {
                     if localCandidate {
                         let (name, destinationFD) = try createPublicationDirectory(root, operation: request.operation.id)
@@ -437,15 +469,27 @@ public final class MobileSyncStaging: @unchecked Sendable {
                         let candidate = try prepareCandidate(destinationFD, payloadFD: fd, row: row)
                         row.publication = Publication(bookmarkHash: Self.hex(bookmark), rootIdentity: Self.identity(info), candidate: candidate,
                             destinationJournal: name, journalIdentity: try Self.identity(MobileFolderReader.info(destinationFD)),
-                            twoStep: request.operation.mutation.expectedTarget == nil ? false : try !NativeSymbolicLinks.supportsExchange(destinationFD))
+                            twoStep: request.operation.mutation.expectedTarget == nil ? false : try !(exchangeSupported?(destinationFD) ?? NativeSymbolicLinks.supportsExchange(destinationFD)))
+                        row.publication?.journalContinuity = try NativeFilesystemContinuity.identity(destinationFD)
+                        row.publication?.journalMarkerHash = try NativeSymbolicLinks.journalProof(destinationFD)
                     } else {
                         let candidate = try prepareCandidate(fd, row: row)
                         row.publication = Publication(bookmarkHash: Self.hex(bookmark), rootIdentity: Self.identity(info), candidate: candidate)
                     }
+                    row.publication?.rootContinuity = try NativeFilesystemContinuity.identity(root)
+                    let journal = try publicationDirectory(root, publication: row.publication!)
+                    defer { if let journal { close(journal) } }
+                    let candidate = try NativeSymbolicLinks.openEntry(journal ?? fd, name: "publication")!
+                    defer { close(candidate) }
+                    row.publication?.candidateContinuity = try NativeFilesystemContinuity.identity(candidate)
+                    if let expected = try openDestination(root, path: request.operation.mutation.path) {
+                        defer { close(expected) }
+                        row.publication?.expectedContinuity = try NativeFilesystemContinuity.identity(expected)
+                    }
                     try save(row, fd)
                 }
                 try Task.checkCancellation()
-                if row.publication?.twoStep != true { try checkExpected(root, request: request) }
+                if row.publication?.twoStep != true { try checkExpected(root, request: request, continuity: row.publication?.expectedContinuity) }
                 // Descriptor-relative validated paths and no-follow stay mandatory.
                 // SWAP retains the old inode in private storage. A non-cooperating
                 // writer racing the precondition is detected during recovery; its
@@ -459,11 +503,11 @@ public final class MobileSyncStaging: @unchecked Sendable {
                     if let old = try NativeSymbolicLinks.openEntry(candidateFD, name: "displaced", absent: true) {
                         defer { close(old) }
                         let info = try MobileFolderReader.info(old)
-                        guard Self.identity(info) == expected.id,
-                              MobileFolderReader.stamp(info).split(separator: ":").dropLast(2).elementsEqual(expected.version.split(separator: ":").dropLast(2)) else { throw Failure.changed }
+                        guard try pinned(old, entry: expected, continuity: row.publication?.expectedContinuity),
+                              MobileFolderReader.stamp(info).split(separator: ":").dropFirst(2).dropLast(2).elementsEqual(expected.version.split(separator: ":").dropFirst(2).dropLast(2)) else { throw Failure.changed }
                         try verifyContent(old, source: expected)
                     } else {
-                        try checkExpected(root, request: request)
+                        try checkExpected(root, request: request, continuity: row.publication?.expectedContinuity)
                         try NativeFileDestination.rename(root, request.operation.mutation.path, candidateFD, "displaced", flags: UInt32(RENAME_EXCL))
                         guard fsync(candidateFD) == 0, fsync(parent) == 0, fsync(root) == 0 else { throw Failure.storage }
                         try afterDisplacement?()
