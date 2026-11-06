@@ -29,7 +29,7 @@ await verifyUnsignedArtifacts({
     helperExecutable,
     outerApp: appPath,
     runtimePath
-});
+}, undefined, { requireNodeLocationEntitlement: true });
 await verifyPasswordProvider(path.join(contentsPath, 'Helpers/Thingtime Passwords.app'), { unsigned: true });
 const mongoRoot = path.join(contentsPath, 'Resources', 'database', 'mongodb');
 if (requireBundledMongo || existsSync(mongoRoot))

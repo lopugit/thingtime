@@ -140,6 +140,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-07: Preserve the Node location entitlement through canonical signing
+  and require its Boolean grant in final bundle verification. Keep OS consent
+  and explicit collection opt-in separate from signing eligibility. **Codex (AI)**
+
 - 2026-11-06: Add opt-in private device location history with Never retention,
   accounted expiry, native iOS/Mac collection and scoped locate messages/audio.
   Mapbox, marker artwork, filters and settings compose from private editable

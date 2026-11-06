@@ -375,3 +375,24 @@ node --test electron/test/thingtime-node-bridge.test.cjs
 Signed-installed acceptance additionally requires OS permission and real Core
 Location fixes, exact-Thing readback of uploaded observations, notification display,
 and audible MP3/default-tone playback. Unit tests do not establish those outcomes.
+
+
+### Location eligibility in the signed helper
+
+The canonical `Resources/ThingtimeNode.entitlements` grants
+`com.apple.security.personal-information.location` as Boolean `true`. The
+standalone build checks the actual signed payload, and native staging plus final
+Electron local/production verification require that same enabled entitlement.
+All checks request XML explicitly from `codesign` and parse it as a plist; a
+modern display-only `[Dict]` rendering, false/string values, and stripped grants
+cannot pass. Electron's existing `signIgnore` preserves the separately signed
+Node and bridge bundles; final verification checks the nested helper again.
+The outer Electron process and IPC bridge do not receive the location grant.
+
+`node --test electron/test/node-location-signing.test.cjs` builds disposable
+Mach-O fixtures, signs a nested helper and outer bundle, then proves that a
+valid deep signature with a stripped Node location entitlement is still refused.
+These temporary ad-hoc fixtures are never installed or executed. Stable release
+signing, OS consent, owner pairing and explicit location opt-in remain separate
+requirements. Runtime recovery may validate older signed helpers without this
+optional grant; new local/production packages must include it.
