@@ -276,8 +276,8 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					...(host.folderBatch ? { folderBatch: host.folderBatch } : {}),
 					...(supportsNativeAuthorizationContext(capabilities) ? { nativeOperationGuards: true as const } : {}),
 					...(!photoSource && inspect && supportsNativeStreamingIndex(capabilities) && !reviewed.configuration.propagateDeletes ? {
-						streamLocalChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>) => readNativeIndexChanges({ ownerId: binding.ownerId, deviceId: binding.deviceId,
-							rootId: reviewed.configuration.localRootId, captureId, afterSequence, readyToFinish, signal: streamSignal ?? signal, request, excludedPaths: reviewed.configuration.excludedPaths, ignoreRules: reviewed.configuration.ignoreRules,
+						streamLocalChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>, waitForFinish?: (signal: AbortSignal) => Promise<void>) => readNativeIndexChanges({ ownerId: binding.ownerId, deviceId: binding.deviceId,
+							rootId: reviewed.configuration.localRootId, captureId, afterSequence, readyToFinish, waitForFinish, signal: streamSignal ?? signal, request, excludedPaths: reviewed.configuration.excludedPaths, ignoreRules: reviewed.configuration.ignoreRules,
 							...(supportsNativeStreamingBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}) }),
 						streamRemoteChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>, resume?: { cursor?: string; snapshotComplete?: boolean; checkpoint(cursor: string, snapshotComplete: boolean): Promise<void> }) => {
 							if (!readyToFinish || !resume) throw Error('The durable cloud index consumer is unavailable.');

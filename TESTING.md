@@ -15159,3 +15159,21 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - This internal worker phase is not a complete account restore/jobs/UI workflow.
   Live object-provider durability, History audit grouping, final signed/installed
   acceptance and measured large-volume behavior remain independent gates.
+
+### Native indexed feed idle wake — 2026-11-07
+
+- Run `node --import tsx --test app/fileSync/streamingIndexRecovery.test.ts
+  app/fileSync/streamingIndex.test.ts` from `remix/`, then `test:file-sync`.
+  Hold a publication after indexing: require a live 25-second native read,
+  no repeated two-second reads, continued native delta delivery, and immediate
+  finish when the durable consumer drains. Delay a false durable-read result
+  across consumer completion and require another readiness check without a tick.
+- Stop while both the native read and readiness wait are held: both owned
+  signals must abort, preserve the original Stop reason and make no new calls.
+  Drain buffered pages before waiting; retain folder-identity-only backoff,
+  immediate authority failures, generation/cursor validation and the mandatory
+  read after a refused finish. A concurrent native revision must survive finish.
+- Re-run the canonical healthy mixed fixture on the final installed app and
+  compare native `scan-changes` counts and first-file startup attribution with
+  its retained baseline. Unit fixtures do not prove installed startup speed;
+  preserve native watcher, uncached admission and current authorization checks.
