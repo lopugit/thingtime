@@ -9,6 +9,7 @@ import { join, resolve } from 'node:path';
 import { createServer, connect } from 'node:net';
 import { randomUUID, createHash } from 'node:crypto';
 import { validateFixtureProofKind } from './mac-fixture-transport.mjs';
+import { validateMacFixtureCapabilities } from './mac-fixture-capabilities.mjs';
 import { createFixtureTLS, createFixtureTLSFetch } from './mac-fixture-tls.mjs';
 import { accountBackupSandbox, verifyAccountBackupIsolation } from './account-backup-isolation.mjs';
 const apiPort = 28311,
@@ -82,7 +83,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
             const target = process.env.THINGTIME_MAC_PAGED_EVIDENCE_PATH;
             assert.ok(target.startsWith('/'), 'Evidence path must be absolute');
             const sourcePaths = execFileSync('rg', ['--files', '../apple/FileSync/Sources', '../macos/ThingtimeNode/Sources', '../filesystem-indexer/crates/indexer/src', 'app/fileSync', 'app/api/utils/files', '../electron/lib'], { cwd: root, encoding: 'utf8' }).trim().split('\n').filter(p => /\.(swift|rs|ts|tsx|mts|cjs|mjs)$/.test(p));
-            sourcePaths.push('../macos/ThingtimeNode/Tests/MacFolderSyncFixture/main.swift', 'scripts/mac-file-sync.integration.mts', 'scripts/mac-fixture-transport.mjs', 'scripts/mac-fixture-host.mts', 'scripts/mac-fixture-http-observer.mjs', 'scripts/mac-fixture-tls.mjs', 'scripts/mac-fixture-worker-trust.cjs', 'scripts/test-mac-paged-sync.mjs'); sourcePaths.sort();
+            sourcePaths.push('../macos/ThingtimeNode/Tests/MacFolderSyncFixture/main.swift', 'scripts/mac-file-sync.integration.mts', 'scripts/mac-fixture-transport.mjs', 'scripts/mac-fixture-host.mts', 'scripts/mac-fixture-http-observer.mjs', 'scripts/mac-fixture-tls.mjs', 'scripts/mac-fixture-worker-trust.cjs', 'scripts/test-mac-paged-sync.mjs', 'scripts/mac-fixture-capabilities.mjs', 'app/api/utils/capabilities/capabilityContract.ts'); sourcePaths.sort();
             const sha = async p => createHash('sha256').update(await readFile(p)).digest('hex');
             const files = Object.fromEntries(await Promise.all(sourcePaths.map(async p => [p, await sha(resolve(root, p))])));
             const metadata = { capturedAt: new Date().toISOString(), head: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
@@ -269,10 +270,7 @@ if (!process.env.TT_MAC_PAGED_WORKER) {
 		await startServer();
 		console.log('MAC_PAGED_STAGE signup');
 		const manifest = await fetch(base + '/.well-known/thingtime-capabilities.json').then((r) => r.json());
-		assert.equal(manifest.origin, base);
-		assert.equal(manifest.features['api.files'].version, '1.10.0');
-		assert.equal(manifest.features['api.attachment-content'].version, '1.17.2');
-		assert.equal(manifest.features['api.file-sync-batches'].version, '1.3.0');
+		validateMacFixtureCapabilities(manifest, base);
 		const registered = await fetch(base + '/api/v1/auth/register', {
 			method: 'POST',
 			headers: { Origin: base, 'Content-Type': 'application/json' },

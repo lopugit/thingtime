@@ -111,6 +111,7 @@ const httpLatency: Record<string, { count: number; totalMs: number; maxMs: numbe
 const nativeLatency: Record<string, { count: number; totalMs: number; maxMs: number }> = {};
 const slowEvents: Record<string, number> = {};
 let transferRunStartedAt = 0, firstTransferMs: number | null = null;
+const benchmarkTimeline: { firstCompleteNativeInventoryObservedMs: number | null; firstConfirmedFileMs: number | null } = { firstCompleteNativeInventoryObservedMs: null, firstConfirmedFileMs: null };
 const earlyFirstRequestMs: Record<string, number> = {};
 const markEarlyRequest = (label: string) => {
 	if (earlyFixture && transferRunStartedAt && earlyFirstRequestMs[label] === undefined)
@@ -270,8 +271,13 @@ async function measured<T>(phase: string, work: () => Promise<T>): Promise<T> {
 }
 const serverPuts = async () => {
  if (!fixture.requestTimings) throw Error('Canonical worker requires server-side PUT observation');
- try { return (await readFile(fixture.requestTimings, 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(event => event.operation === 'attachment-object-put'); }
- catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error; }
+ try { const rows = (await readFile(fixture.requestTimings, 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+ return rows.filter(event => event.operation === 'attachment-object-put').map(event => {
+   const first = rows.find(row => row.sequence === event.sequence && row.operation === 'attachment-object-put-first-byte');
+   const body = rows.find(row => row.sequence === event.sequence && row.operation === 'attachment-object-put-body');
+   return { ...event, firstByteAt: first?.firstByteAt ?? null, payloadBytes: body?.payloadBytes ?? null };
+ }); }
+ catch (error) { if ((error as { code?: string }).code === 'ENOENT') return []; throw error; }
 };
 let caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.17.0', fileSymbolicLinksVersion: '1.0.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.2.0', fileTrashVersion: '1.2.0' };
 let deviceId: string | undefined, remoteRoot: string | undefined, configurationId: string | undefined;
@@ -625,7 +631,9 @@ try {
 				...(pagedFixture ? {
 					scanLocalPages: async function* () {
 						for await (const page of readNativeInventory({ ownerId: fixture.userId, deviceId: deviceId!, rootId: nativeRoot, signal, request })) {
-							nativePages++; yield page;
+							nativePages++;
+                            if (page.totalEntries !== undefined && transferRunStartedAt) benchmarkTimeline.firstCompleteNativeInventoryObservedMs ??= Date.now() - transferRunStartedAt;
+                            yield page;
 						}
 					},
 					inspectLocal: async (path: string) => (await request(fixture.userId, { action: 'inspect', rootId: nativeRoot, path }, signal)).inspectedEntry!,
@@ -650,6 +658,7 @@ try {
 				journal: pagedFixture ? { ...journal, pagedRuns: access => {
 					const runs = journal.pagedRuns(access); return { ...runs, confirm: async (spec, receipt) => {
 						const result = await runs.confirm(spec, receipt), ids = confirmedIds.get(spec.id) ?? new Set<string>();
+                        if (receipt.entry?.kind === 'file' && transferRunStartedAt) benchmarkTimeline.firstConfirmedFileMs ??= Date.now() - transferRunStartedAt;
 						ids.add(receipt.operationId); confirmedIds.set(spec.id, ids); return result;
 					} };
 				} } : journal,
@@ -855,9 +864,10 @@ try {
 			await rename(blocker, path.join(directory, 'held-scan.bin'));
 			const countsBefore = { ...counts };
             const serverPutCountBefore = (await serverPuts()).length;
-			const resume = AbortSignal.timeout(120000);
+			const resume = AbortSignal.timeout(120000), resumedAt = Date.now();
 			const settled = await runPagedForegroundCloudSync(saved, scope, await input(resume, false), resume);
-			assert.ok('progress' in settled); assert.equal(settled.progress.operations, 0);
+			const reconciliationCompletedAt = Date.now(), indexAfterReconciliation = nativeIndex();
+            assert.ok('progress' in settled); assert.equal(settled.progress.operations, 0);
 			assert.equal(capture, originalCapture);
 			const entries = (await api('/api/v1/timeline?' + new URLSearchParams({ ownerId: fixture.userId, dataPlane: 'home', thingId: remote.id }))).entries.map(parseTimelineEntry);
 			assert.equal(entries.filter(entry => entry.event.mode === 'revision').length, 1);
@@ -869,13 +879,15 @@ try {
 			assert.ok(await journal.pagedCheckpoints(journalAccess).current());
             const observedPuts = (await serverPuts()).slice(serverPutBaseline);
             assert.equal(observedPuts.length, 1, 'Exactly one native worker upload PUT is expected');
-            firstTransferMs = observedPuts[0].at - transferRunStartedAt;
+            assert.ok(observedPuts[0].firstByteAt !== null);
+            assert.equal(observedPuts[0].payloadBytes, localBytes.length);
+            firstTransferMs = observedPuts[0].firstByteAt - transferRunStartedAt;
             assert.ok(firstTransferMs >= 0, 'Server timestamp must not precede the observation append barrier');
 			assert.ok(firstLocalChangeMs !== null && firstAdmittedMs !== null && firstTransferMs !== null);
 			assert.ok(firstLocalChangeMs <= firstAdmittedMs && firstAdmittedMs <= firstTransferMs);
 			console.log(JSON.stringify({ ok: true, scenario: uploadStartDiagnostic ? 'Canonical upload-start diagnostic with empty cloud folder' : 'Mac two-way transfer before initial index seal',
                 proofKind: uploadStartDiagnostic ? 'upload-start-diagnostic' : 'two-way-before-seal', twoWayAcceptance: !uploadStartDiagnostic,
-				firstLocalChangeMs, firstAdmittedMs, firstAdmittedPath, serverPutBaseline, serverPutEvents: await serverPuts(), firstPutMs: firstTransferMs, firstPutObservation: 'server-received native transfer-worker PUT', earlyFirstRequestMs,
+				firstLocalChangeMs, firstAdmittedMs, firstAdmittedPath, serverPutBaseline, serverPutEvents: await serverPuts(), firstPutMs: firstTransferMs, firstPutObservation: 'server parsed native transfer-worker first body byte (request enqueue; full byte count + independent content hash verified)', earlyFirstRequestMs,
                 parity: { capabilities: caps, nativeOperationGuards: true, compositeAuthorization: true, customMutationHook: false,
                     canonicalDesktopManager: true, canonicalRendererHost: true, canonicalTransferWorkerSelected: true,
                     tlsTrust: fixture.tls ? "ephemeral CA scoped to exact canonical child; setup byte fetch scoped to TLS origin; no OS trust changes" : "none",
@@ -886,12 +898,14 @@ try {
 				resourceLimits: { scanBytesPerSecond, transferBytesPerSecond: 5_000_000, cpuPercent: 15, effectiveRustScanBytesPerSecond: scanBytesPerSecond / 2 }, blockerBytes,
 				upload: { at: upload.at, receiptCommittedAtMonotonic: upload.receiptCommittedAtMonotonic, nativePageObservedAtMonotonic: upload.nativePageObservedAtMonotonic, nativePageObservationSequence: upload.nativePageObservationSequence, nativeState: upload.nativeState, index: upload.index, operationId: upload.receipt.operationId, revision: remote.revision, sha256: hash(localBytes) },
 				download: uploadStartDiagnostic ? { exercised: false, reason: 'Initially empty cloud folder; signed native download remains unverified' } : { at: download!.at, receiptCommittedAtMonotonic: download!.receiptCommittedAtMonotonic, nativePageObservedAtMonotonic: download!.nativePageObservedAtMonotonic, nativePageObservationSequence: download!.nativePageObservationSequence, nativeState: download!.nativeState, index: download!.index, operationId: download!.receipt.operationId, sha256: hash(remoteBytes) },
-				cancelledAt, sameNativeCaptureAfterResume: true, strictCheckpointAfterResume: true, duplicateTransfers: false, cloudHistoryRevisions: 1 }));
+				timeline: { firstCommittedIndexEntryObservedMs: firstLocalChangeMs, firstUploadPayloadReceivedMs: firstTransferMs, firstConfirmedFileMs: Math.min(upload.receiptCommittedAtMonotonic, download?.receiptCommittedAtMonotonic ?? upload.receiptCommittedAtMonotonic) - transferRunStartedAtMonotonic, interruptedAtMs: cancelledAt - transferRunStartedAt, resumedAtMs: resumedAt - transferRunStartedAt, strictReconciliationCompletedMs: reconciliationCompletedAt - transferRunStartedAt, indexAfterReconciliation, scope: 'feed/receipt observations; interrupted initial index has no completion time; final strict reconciliation is observed after resume' },
+                verifiedFiles: [{ path: 'local.bin', bytes: localBytes.length, sha256: hash(localBytes) }, ...(!uploadStartDiagnostic ? [{ path: 'remote.bin', bytes: remoteBytes.length, sha256: hash(remoteBytes) }] : [])],
+                cancelledAt, sameNativeCaptureAfterResume: true, strictCheckpointAfterResume: true, duplicateTransfers: false, cloudHistoryRevisions: 1 }));
 		} catch (error) {
 			// Keep a bounded, non-secret stage snapshot when the deliberate
 			// before-seal deadline fires; otherwise its only symptom is a timeout.
 			console.log(JSON.stringify({ earlyTimingFailure: true, firstLocalChangeMs, firstAdmittedMs,
-				firstAdmittedPath, serverPutBaseline, serverPutEvents: await serverPuts(), firstPutMs: firstTransferMs, firstPutObservation: 'server-received native transfer-worker PUT', earlyFirstRequestMs,
+				firstAdmittedPath, serverPutBaseline, serverPutEvents: await serverPuts(), firstPutMs: firstTransferMs, firstPutObservation: 'server parsed native transfer-worker first body byte (request enqueue; full byte count + independent content hash verified)', earlyFirstRequestMs,
                 parity: { capabilities: caps, nativeOperationGuards: true, compositeAuthorization: true, customMutationHook: false,
                     canonicalDesktopManager: true, canonicalRendererHost: true, canonicalTransferWorkerSelected: true,
                     tlsTrust: fixture.tls ? "ephemeral CA scoped to exact canonical child; setup byte fetch scoped to TLS origin; no OS trust changes" : "none",
@@ -971,7 +985,9 @@ try {
 		const usage = process.resourceUsage();
 		const initialLocalBytes = localBytes.length + Object.values(mixedFiles).reduce((sum, bytes) => sum + bytes.length, 0);
 		assert.ok((await stat(path.join(directory, 'private-filesystem-index.sqlite3'))).isFile(), 'Rust inventory must use the disposable fixture database');
-		console.log(JSON.stringify({ ok: true, paged: true, wideFolders, nestedFolders: mixedFolders.length, mixedFiles: Object.keys(mixedFiles).length, totalPaths: wideFolders + mixedFolders.length + Object.keys(expectedFiles).length, initialLocalBytes, finalFileBytes: initialLocalBytes + remoteBytes.length, actualHashedBytes: null, warmHashedBytes: null, benchmarkDeviceLimits, effectiveRustScanBytesPerSecond: benchmarkDeviceLimits ? benchmarkDeviceLimits.scanBytesPerSecond / 2 : null, privateIndexDatabase: true, firstTransferMs, phaseMs, httpRequests, httpLatency, nativeLatency, integrationProcessOnly: { maxRssKiB: usage.maxRSS, userCpuMs: Math.round(usage.userCPUTime / 1000), systemCpuMs: Math.round(usage.systemCPUTime / 1000) }, nativePages, cloudPages,
+		console.log(JSON.stringify({ ok: true, paged: true, wideFolders, nestedFolders: mixedFolders.length, mixedFiles: Object.keys(mixedFiles).length, totalPaths: wideFolders + mixedFolders.length + Object.keys(expectedFiles).length, initialLocalBytes, finalFileBytes: initialLocalBytes + remoteBytes.length, actualHashedBytes: null, warmHashedBytes: null, benchmarkDeviceLimits, effectiveRustScanBytesPerSecond: benchmarkDeviceLimits ? benchmarkDeviceLimits.scanBytesPerSecond / 2 : null, privateIndexDatabase: true, firstTransferMs, serverPutEvents: await serverPuts(), benchmarkTimeline, operationIds: originalIds, checkpointRunId: head.runId, countsBeforeRecovery: beforeRecovery, acceptedStagedBytesBeforeRestart: firstStagedBytes,
+            verifiedFiles: Object.entries(expectedFiles).map(([path, bytes]) => ({ path, bytes: bytes.length, sha256: hash(bytes) })),
+            checkpointEntries: { local: (await journal.inventory(journalAccess).read(head.baseline.local)).totalEntries, remote: (await journal.inventory(journalAccess).read(head.baseline.remote)).totalEntries }, phaseMs, httpRequests, httpLatency, nativeLatency, integrationProcessOnly: { maxRssKiB: usage.maxRSS, userCpuMs: Math.round(usage.userCPUTime / 1000), systemCpuMs: Math.round(usage.systemCPUTime / 1000) }, nativePages, cloudPages,
 			nativeCalls, verifyCalls, cooldownCount, cooldownSeconds, counts, picker: 'fixture', keychain: 'not-used',
 			checks: ['wide-native-and-cloud-pages', 'complete-checkpoint', 'real-upload-download-byte-hashes', 'lost-accepted-replies',
 				'native-restart', 'original-operation-IDs', 'no-replayed-transfers', 'stable-convergence'],

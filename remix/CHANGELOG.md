@@ -12,6 +12,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-06: Negotiate compatible minimum API versions in the disposable native
+  paged-sync acceptance runner, retaining exact-origin and missing/breaking
+  capability refusals before registration; record first body-byte timing, exact
+  payload lengths and checkpoint/hash evidence without consuming request data. **Codex (AI)**
+
 - 2026-11-06: Retain ordinary backup content with the versioned streaming v2
   codec while preserving v1 bytes/readers; verify deep/wide content, scalars beyond
   the legacy 128 MiB processing budget, immutable retries and independent source

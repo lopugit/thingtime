@@ -9,7 +9,24 @@ export function createFixtureHttpObserver(file, now = () => Date.now()) {
     if (request.method !== 'PUT') return;
     const path = new URL(request.url, 'http://fixture.invalid').pathname;
     const known = path === '/api/v1/attachments/local-object' || path === '/api/v1/attachments/local-object/';
-    appendFileSync(file, JSON.stringify({ at: now(), sequence: ++sequence,
-      operation: known ? 'attachment-object-put' : 'other-put' }) + '\n', { mode: 0o600 });
+    const id = ++sequence;
+    const record = fields => appendFileSync(file, JSON.stringify({ at: now(), sequence: id, ...fields }) + '\n', { mode: 0o600 });
+    record({ operation: known ? 'attachment-object-put' : 'other-put' });
+    if (!known || typeof request.push !== 'function' || typeof request.once !== 'function') return;
+    // Observe parsed body chunks at enqueue, without attaching a data listener:
+    // flowing-mode observation could discard bytes before the API reads them.
+    const push = request.push;
+    let bytes = 0, firstByteAt = null;
+    request.push = function(chunk, ...args) {
+      if (chunk && chunk.length) {
+        bytes += chunk.length;
+        if (firstByteAt === null) {
+          firstByteAt = now();
+          record({ operation: 'attachment-object-put-first-byte', firstByteAt });
+        }
+      }
+      return push.call(this, chunk, ...args);
+    };
+    request.once('end', () => record({ operation: 'attachment-object-put-body', firstByteAt, payloadBytes: bytes }));
   };
 }
