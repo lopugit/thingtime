@@ -8,11 +8,15 @@ import { once } from 'node:events';
 import assert from 'node:assert/strict';
 
 const mode = process.argv[2] || 'account-profile';
-if (!['account-profile', 'reference-closure'].includes(mode) || process.argv.length > 3) throw Error('Unsupported account backup proof');
-const referenceClosure = mode === 'reference-closure';
-const port = referenceClosure ? 28162 : 28142;
-const script = referenceClosure ? 'scripts/account-reference-backup.integration.mts' : 'scripts/account-profile-backup.integration.mts';
-const marker = referenceClosure ? 'accountReferenceBackupProof' : 'accountProfileBackupProof';
+const fixtures = {
+  'account-profile': { marker: 'accountProfileBackupProof', script: 'scripts/account-profile-backup.integration.mts', port: 28142 },
+  'ordinary-restore': { marker: 'ordinaryRestoreProof', script: 'scripts/ordinary-restore.integration.mts', port: 28143 },
+  'reference-closure': { marker: 'accountReferenceBackupProof', script: 'scripts/account-reference-backup.integration.mts', port: 28162 }
+};
+if (!Object.hasOwn(fixtures, mode) || process.argv.length > 3) throw Error('Unsupported account backup proof');
+const fixture = fixtures[mode];
+const proofMarker = fixture.marker;
+const port = fixture.port;
 const probe = createServer();
 await new Promise((resolve, reject) => {
 	probe.once('error', reject);
@@ -99,7 +103,7 @@ try {
 	assert.equal(cancelled, false, 'Fixture was cancelled');
 	child = isolatedAccountBackupProcess(
 		process.execPath,
-		['--import', 'tsx', script],
+		['--import', 'tsx', fixture.script],
 		{
 			cwd: resolve(import.meta.dirname, '..'),
 			stdio: ['ignore', 'pipe', 'pipe'],
@@ -120,7 +124,7 @@ try {
 	const [code] = await once(child, 'exit');
 	clearTimeout(timer);
 	// Console email output can include one-use fixture links. Never forward it.
-	const result = output.split('\n').find((line) => line.startsWith('{"' + marker + '":'));
+	const result = output.split('\n').find((line) => line.startsWith('{"' + proofMarker + '":'));
 	if (code !== 0 || !result) {
 		const { writeFile } = await import('node:fs/promises');
 		const failureLog = join(tmpdir(), `thingtime-${mode}-backup-failure.log`);

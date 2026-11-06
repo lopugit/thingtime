@@ -897,3 +897,18 @@ SQLite, and seal immutable paged reviews through `BackupObjectStore`.
 `backupObjectKey.ts` admits only generated `restore-plans` review keys.
 No destination mutation endpoint or account writer is introduced. Run
 `test:backups`; see [planning and completion boundaries](../portable-backups.md#account-restore-admission-and-durable-review-plans).
+
+## Reviewed ordinary creation and execution holds
+
+`backups/ordinaryRestoreTransaction.ts` composes the existing canonical Thing
+writer and accounted Timeline effects for explicitly selected, closed private
+graphs. Parent containment and strict reference closure are preflighted on
+disposable disk indexes. Command intents, per-effect receipts and the folder's
+protected scalar checkpoint provide resumable state; SQLite supplies no durable
+write authority. `things/contentExecutionGate.ts` and canonical
+`timeline/recordMutation.ts` fence current edits and release execution only after
+the exact new completion proof. `auth/fenceAccountSession.ts` checks the current
+full principal and writes its live session in the home content transaction.
+See [portable backups](../portable-backups.md#selected-ordinary-graph-execution-primitives--2026-11-06).
+Run `test:backups:ordinary-restore`, `test:backups`, and `test:api-capabilities`.
+No whole-account readiness or public restore endpoint is added.
