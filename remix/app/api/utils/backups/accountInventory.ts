@@ -60,7 +60,8 @@ const fileProjection = {
 	folderId: 1,
 	'crystal.name': 1,
 	'crystal.trashed': 1,
-	'crystal.content': 1
+	'crystal.content': 1,
+ 'crystal.symbolicLink': 1
 };
 type Census = { shareId: string; ownerId: string; thingtime: string[] };
 type Family = 'content' | 'file' | 'timeline' | 'attachment' | 'draft' | 'theme' | 'account' | 'notification' | 'excluded-authority';
@@ -91,7 +92,8 @@ function fileItem(doc: any, ordinal: number): BackupItem {
 		folderId: doc.folderId ?? null,
 		name: doc.crystal?.name,
 		trashed: doc.crystal?.trashed,
-		content: doc.crystal?.content
+		content: doc.crystal?.content,
+  ...(doc.crystal?.symbolicLink ? { symbolicLink: doc.crystal.symbolicLink } : {})
 	});
 	return parseBackupItem({
 		ordinal,
@@ -194,6 +196,9 @@ export function createAccountInventoryProducer(
 						else if (projection !== contentProjection) {
 							const bounded = projection === backupAttachmentProjection ? { ...row } : row;
 							if (projection === backupAttachmentProjection) {
+								// Only the portable policy status is relevant; provider stamps
+								// contain Dates/diagnostics and must never enter JSON export.
+								if ('moderation' in bounded) bounded.moderation = { status: bounded.moderation?.status ?? null };
 								for (const key of ['attachmentExpiresAt', 'attachmentPartsIssuedAt', 'attachmentMpuEmptyVerifiedAt']) {
 									if (bounded[key] instanceof Date) bounded[key] = bounded[key].toISOString();
 								}

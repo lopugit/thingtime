@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { contentPartPlan, fingerprintSource } from '../../../fileSync/contentFingerprint';
 import { timelineScopeKey, type TimelineScope } from '../../../timeline/contract';
+import { openBackupWorkspace, type BackupWorkspaceOptions } from './backupWorkspace';
 import {
 	BACKUP_FORMAT,
 	BACKUP_CHUNK_BYTES,
@@ -572,6 +573,101 @@ export async function* verifiedBackupItemBytes(input: BackupItem, bytes: AsyncIt
 	}
 	if (size !== item.content.size) throw Error('Restored file is incomplete');
 	fingerprint.verify();
+}
+
+export type IndexedSealedBackup = {
+	header: BackupHeader;
+	seal: BackupSeal;
+	get(thingId: string): Promise<{ item: BackupItem; ranges: AsyncIterable<Uint8Array> }>;
+	items(): AsyncIterable<BackupItem>;
+	close(): Promise<void>;
+};
+
+/** One complete sealed metadata traversal, followed by disk-indexed lookups.
+ * The private index pins descriptors and range hashes together; subsequent
+ * source metadata changes cannot replace the reviewed input. Bytes stay in the
+ * independent provider and are verified against pinned chunk hashes and the
+ * complete source fingerprint on every read. Consumers must exhaust ranges
+ * before publishing, and close the reader in finally (including cancellation).
+ * This is read authority only, never permission to restore archived state. */
+export async function openIndexedSealedBackup(
+	store: BackupObjectStore, id: string, access: BackupAccess,
+	options: BackupWorkspaceOptions = {}
+): Promise<IndexedSealedBackup> {
+	const { root, header, plan } = await openPlan(store, id, access);
+	const expected = parseBackupSeal(await readJson(store, `${root}/complete.json`, BACKUP_METADATA_BYTES));
+	const workspace = await openBackupWorkspace({ ...options, diskBudget: 'available' }), db = workspace.db;
+	let closed = false;
+	const close = async () => { closed = true; await workspace.close(); };
+	const authorize = async () => {
+		if (closed) throw Error('Backup reader is closed');
+		await check(access, header);
+		if (closed) throw Error('Backup reader is closed');
+	};
+	try {
+		db.exec(`CREATE TABLE items(ordinal INTEGER PRIMARY KEY,thingId TEXT UNIQUE NOT NULL,value TEXT NOT NULL);
+			CREATE TABLE ranges(itemOrdinal INTEGER NOT NULL,offset INTEGER NOT NULL,length INTEGER NOT NULL,sha256 TEXT NOT NULL,PRIMARY KEY(itemOrdinal,offset));
+			BEGIN;`);
+		const insertItem = db.prepare('INSERT INTO items VALUES(?,?,?)');
+		const insertRange = db.prepare('INSERT INTO ranges VALUES(?,?,?,?)');
+		const manifest = createHash('sha256');
+		manifest.update(BACKUP_FORMAT + '\0' + backupJson(plan) + '\0');
+		let chunks = BigInt(0);
+		for await (const item of planItems(store, header, plan, access)) {
+			await authorize();
+			insertItem.run(item.ordinal, item.thingId, backupJson(item));
+			let offset = 0, ordinal = 0;
+			while (item.content && offset < item.content.size) {
+				await authorize();
+				const result = validateRanges(await readJson(store, `${root}/ranges/${item.ordinal}/${ordinal}.json`, BACKUP_METADATA_BYTES), id, item, ordinal, offset);
+				manifest.update(backupJson(result.page) + '\0');
+				for (const range of result.page.ranges) {
+					insertRange.run(item.ordinal, range.offset, range.length, range.sha256);
+					chunks++;
+				}
+				offset = result.offset; ordinal++;
+			}
+		}
+		await authorize();
+		const actual = parseBackupSeal({ ...plan, manifestHash: manifest.digest('hex'), chunks: chunks.toString() });
+		if (backupJson(expected) !== backupJson(actual)) throw Error('Backup completion seal does not match its manifest');
+		db.exec('COMMIT;');
+		return {
+			header: parseBackupHeader(header), seal: parseBackupSeal(actual), close,
+			async *items() {
+				await authorize();
+				for (const row of db.prepare('SELECT value FROM items ORDER BY ordinal').iterate()) {
+					await authorize(); yield parseBackupItem(JSON.parse(String(row.value)));
+				}
+				await authorize();
+			},
+			async get(thingId) {
+				await authorize();
+				const row = db.prepare('SELECT value FROM items WHERE thingId=?').get(thingId);
+				if (!row) throw Error('Backup item not found');
+				// Keep the generator's identity private from the caller's mutable copy.
+				const pinned = parseBackupItem(JSON.parse(String(row.value)));
+				async function* ranges() {
+					await authorize();
+					if (!pinned.content) return;
+					const fingerprint = new FileFingerprint(pinned);
+					const nextRange = db.prepare('SELECT offset,length,sha256 FROM ranges WHERE itemOrdinal=? AND offset=?');
+					let offset = 0;
+					while (offset < pinned.content.size) {
+						await authorize();
+						const range = nextRange.get(pinned.ordinal, offset);
+						if (!range || range.offset !== offset) throw Error('Indexed backup ranges are incomplete');
+						const bytes = await retainedChunk(store, { offset, length: Number(range.length), sha256: String(range.sha256) });
+						await authorize();
+						fingerprint.update(bytes); offset += bytes.length; yield bytes;
+					}
+					if (offset !== pinned.content.size) throw Error('Indexed backup ranges are incomplete');
+					fingerprint.verify(); await authorize();
+				}
+				return { item: parseBackupItem(pinned), ranges: ranges() };
+			}
+		};
+	} catch (error) { await close(); throw error; }
 }
 
 /** Selected-file compatibility path. Consumers publish only after the iterator

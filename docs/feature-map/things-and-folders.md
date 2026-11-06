@@ -912,3 +912,15 @@ full principal and writes its live session in the home content transaction.
 See [portable backups](../portable-backups.md#selected-ordinary-graph-execution-primitives--2026-11-06).
 Run `test:backups:ordinary-restore`, `test:backups`, and `test:api-capabilities`.
 No whole-account readiness or public restore endpoint is added.
+
+### File phase over reviewed restored folders
+
+`backups/accountFileRestore.ts` reuses ordinary restored folder Things and their
+protected creation/completion provenance; it never duplicates folder creation.
+`things/contentExecutionGate.attachContentExecutionHold` accounts a new scoped
+hold on an exact reviewed row and refuses an active prior hold. Canonical files
+and compact managed placements advance the active root epoch before completion
+can release holds. `api.things-bulk` 1.7.1 and `api.things-delete` 1.1.1 publish
+managed placement/drain fencing. Run the file-restore real-replica proof plus
+Things/Files/Timeline and content-gate regressions. UI/job activation, History
+audit grouping and installed/native acceptance remain separate.

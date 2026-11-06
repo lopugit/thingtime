@@ -22,7 +22,8 @@ if (process.argv[2] !== '--worker') {
 	assert.equal(typeof app.fetch, 'function');
 	const contracts = {
 		'api.things': '1.52.0', 'api.actions-run': '1.43.0',
-		'api.components-browse': '1.1.0', 'api.webpages-resolve': '1.13.0'
+		'api.components-browse': '1.1.0', 'api.webpages-resolve': '1.13.0',
+		'api.files': '1.12.1', 'api.things-bulk': '1.7.1', 'api.things-delete': '1.1.1'
 	};
 	for (const path of ['/.well-known/thingtime-capabilities.json', '/api/v1/capabilities']) {
 		const response = await app.fetch(new Request('https://thingtime.test' + path), { waitUntil() {} });
@@ -35,7 +36,7 @@ if (process.argv[2] !== '--worker') {
 			assert.equal(typeof entry === 'string' ? entry : entry.version, expected, feature);
 		}
 	}
-	for (const [path, feature] of [['things', 'api.things'], ['actions/run', 'api.actions-run'], ['components/browse', 'api.components-browse'], ['webpages/resolve', 'api.webpages-resolve']]) {
+	for (const [path, feature] of [['things', 'api.things'], ['actions/run', 'api.actions-run'], ['components/browse', 'api.components-browse'], ['webpages/resolve', 'api.webpages-resolve'], ['files', 'api.files'], ['things/bulk', 'api.things-bulk'], ['things/delete', 'api.things-delete']]) {
 		const response = await app.fetch(new Request(`https://thingtime.test/api/v1/${path}-docs`), { waitUntil() {} });
 		assert.equal(response.status, 200, path);
 		assert.match(response.headers.get('content-type') || '', /application\/json/);
@@ -43,5 +44,5 @@ if (process.argv[2] !== '--worker') {
 		assert.equal(body.ok, true);
 		assert.equal(body.docs.contractVersion, contracts[feature], path);
 	}
-	console.log('PASS: compiled Vercel origin manifest, registry and four content-execution docs contracts; synthetic loopback database configuration, no installed-app acceptance.');
+	console.log('PASS: compiled Vercel origin manifest, registry and seven content-execution and file-restore fence docs contracts; synthetic loopback database configuration, no installed-app acceptance.');
 }

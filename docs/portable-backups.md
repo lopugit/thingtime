@@ -903,3 +903,70 @@ callbacks. Browser fixture evidence is distinct from the real-replica proof.
 The full generic Thing route's selected-origin refresh/cache behavior remains
 an installed/real-app acceptance gate; the focused synthetic browser fixture
 does not establish that complete route journey.
+
+### Reviewed account-file publication — 6 November 2026
+
+`accountFileRestore.ts` is a trusted worker primitive for a selected, complete
+file-history graph. It reuses folders already created by ordinary graph restore;
+it does not introduce a second folder writer, public restore endpoint or MCP.
+The reviewed map binds each source folder to its exact current destination
+revision and protected original creation/completion provenance. Names, parent
+relationships and original folder content remain in the ordinary restored
+Things. Missing historical parent folders require recovery before this phase;
+an incomplete map or history graph refuses rather than inventing a path.
+
+One immutable command hash binds the source seal, fresh file identities,
+destination account/origin/root/revision, capabilities and full selected history.
+The private `openIndexedSealedBackup` SQLite index verifies metadata once, pins
+exact descriptors/ranges, and reauthorizes lookups and chunk reads. Normalized
+Timeline events are reconstructed from verified archived links; missing parents,
+foreign-file parents, unsupported snapshots and omitted archived versions or
+branch heads refuse. File snapshots retain names, placement, inert symlink
+metadata and exact content identity. Compact managed placement records retain
+their canonical adapter and remapped folder IDs. Source receipts remain data.
+
+`accountFileRestoreBytes.ts` exhausts full source fingerprint verification into a
+private temporary file before reserving an upload. The worker pins the complete
+runtime scope once and checks every stage against the reviewed destination
+before source reads. It uses normal upload approval, quota, deterministic
+requests, signed multipart transport, network-stall deadlines and stored-byte
+verification. Staging uses private, expiring `file-import` drafts without fabricated
+native-sync provenance. Only the trusted canonical transaction can consume a
+ready, unexpired owned draft; public commit bodies cannot opt into consumption.
+The binding and checkpoint commit together, and an interrupted stage stays hidden
+from the ordinary library. Streaming parts keep RAM bounded; cancellation/close removes
+normal staging. A process crash can leave private temporary files for local
+cleanup, as with the existing scratch workspace; scratch never grants authority.
+
+Each canonical file write, new audit receipt and scalar checkpoint commits with
+a current Request/session fence and exact destination checks. Reviewed mapped
+folders and fresh files carry execution holds; accounted hold assignment refuses
+active foreign operations. Current canonical file and managed-placement writes
+advance the same root epoch. Bounded final hierarchy/content checks precede one
+epoch/CAS completion. User edits, moves and revocation prevent stale completion.
+Completed replay reauthorizes the current owner/root and needs no source vault;
+it never overwrites later edits.
+
+Historical events receive fresh same-file parent and attachment references and
+fresh archive branch IDs with preserved branch names. The newly restored live
+file keeps its own Published head. Source Trash state is an explicit reviewed finalization: after byte/history work, a conditional canonical Trash commit retains that state. Completed replay never re-trashes a file the owner later untrashed or edited. Normal retention/upload audit effects and
+imported source events are distinct records: restoration creates new audit
+history, not additional original revisions. Product History grouping/filtering
+for these audit effects is not implemented in this phase.
+
+The existing reachable writer contracts deliberately advance to `api.files`
+1.12.1, `api.things-bulk` 1.7.1 and `api.things-delete` 1.1.1 for active restore
+epoch fencing. Public retained-version inputs and ordinary upload permissions
+are unchanged. Restore admission negotiates those versions on the exact origin;
+all writers sharing its database must deploy the fence-aware implementation.
+
+Only moderation policy status enters attachment inventory projection. Provider
+moderation diagnostics and timestamps are intentionally excluded before JSON
+bounding; portable attachment metadata and byte identities remain unchanged.
+Current account-file snapshots also retain inert symlink metadata. Empty byte wrappers use the existing null-fingerprint manifest representation while retaining the exact empty attachment content identity.
+
+Run `pnpm --dir remix run test:backups:file-restore` for canonical synthetic
+signup/upload/file/Timeline handlers, a private replica and the durable local
+object adapter. This phase does not establish public restore/jobs/UI, complete
+managed/account/security adapters, live S3/provider durability, installed/native
+acceptance or measured 100 GB–100 TB operation. `wholeAccountReady` stays false.

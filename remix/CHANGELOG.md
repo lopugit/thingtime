@@ -141,6 +141,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   withdrawing background approval on identity or Activity manager changes.
   Background App Refresh runs only when iOS schedules it; physical background
   delivery remains a separate native acceptance check. **Codex (AI)**
+- 2026-11-06: Add reviewed account-file publication over ordinary restored folders, verified indexed offline bytes, canonical upload/Timeline audit records, mapped rename/move/branch history and atomic session/root/checkpoint/epoch recovery. Preserve source-loss and owner-edit boundaries; public restore/jobs/UI, provider and installed acceptance remain separate. **Codex (AI)**
 
 - 2026-11-06: Revalidate detail-page Schema execution holds after normal refresh, preserve same-scope drafts during verification, clear revoked templates, and distinguish temporary capability-discovery failures from invalid authority. Add full real-backend route and quiet-control regressions. [PR 1390 evidence](../PRs/PR-1390-codex-schema-hold-refresh-refresh-schema-execution-holds-without-discarding-detail-page-drafts.md). **Codex (AI)**
 

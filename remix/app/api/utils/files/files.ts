@@ -1,3 +1,4 @@
+import { contentExecutionHold, recordCreationContentEpoch, type ContentExecutionHold } from '../things/contentExecutionGate';
 import { ExactCloudSyncDestinationChanged, SYNC_DESTINATION_CHANGED } from '../../../fileSync/cloudSyncDestination';
 import { assertCloudSyncDestination } from './inventory';
 import { symbolicLinkBytes, symbolicLinkFingerprint } from '../../../fileSync/symbolicLink';
@@ -96,7 +97,8 @@ export function createCloudFileService(overrides: Partial<{
 				return doc ? { ok: true as const, file: publicFile(doc) } : failure(404, 'File not found');
 			} catch (error) { return errorResult(error); }
 		},
-		async commit(ownerId: string, value: unknown) {
+		async commit(ownerId: string, value: unknown, context?: { session: any; executionHold?: ContentExecutionHold; auditLabel?: string; consumeImportDraft?: true }) {
+			if (context && !context.session?.inTransaction?.()) throw Error('File composition requires an active transaction');
 			if (deps.customPlane()) return failure(409, 'Files currently require the home data plane');
 			if (!ownerId) return failure(401, 'Unauthorized');
 			const retained = (value as any)?.kind === 'retained-version';
@@ -108,13 +110,13 @@ export function createCloudFileService(overrides: Partial<{
 				return { ok: true as const, file: saved.file, replayed: true, ...(retained ? { retained: true as const } : {}) };
 			};
 			try {
-				const things = await deps.collection(); await owned(things, ownerId, input.id);
-				const prior = await receipt(things, ownerId, input.id, input.operationId, undefined, retained); if (prior) return replay(prior);
+				const things = await deps.collection(); await owned(things, ownerId, input.id, context?.session);
+				const prior = await receipt(things, ownerId, input.id, input.operationId, context?.session, retained); if (prior) return replay(prior);
 				const verified = await deps.fingerprint({ id: ownerId }, input.attachmentId);
 				if (verified.ok === false) return verified;
 				if (verified.version !== input.contentVersion) conflict('File bytes changed before commit');
 				if (input.symbolicLink && (symbolicLinkBytes(input.symbolicLink).byteLength !== verified.size || !equalContentFingerprints(await symbolicLinkFingerprint(input.symbolicLink), verified.fingerprint))) conflict('Symbolic link metadata does not match its verified target bytes');
-				return await deps.transaction(async session => {
+				return await (context ? async (work: (session: any) => Promise<any>) => work(context.session) : deps.transaction)(async session => {
 					const before = await owned(things, ownerId, input.id, session);
 					const saved = await receipt(things, ownerId, input.id, input.operationId, session, retained); if (saved) return replay(saved);
 					if ((before?.timelineHeadId ?? null) !== input.expectedRevision) {
@@ -125,8 +127,11 @@ export function createCloudFileService(overrides: Partial<{
 						conflict('The reviewed file changed before retention');
 					if (before && currentContentStorageSizeBytes(before) === null) conflict('File storage requires reconciliation');
 					const attachment = await things.findOne({ shareId: input.attachmentId, ownerId, thingtime: 'attachment' }, { session });
+          const bindingNow = deps.now();
+          const consumeImport = context?.consumeImportDraft === true && attachment?.attachmentImportDraft === true && attachment.targetId == null &&
+            attachment.attachmentExpiresAt instanceof Date && attachment.attachmentExpiresAt.getTime() > bindingNow.getTime();
 					if (!attachment || attachment.thingtime?.length !== 1 || attachment.thingtime[0] !== 'attachment' || attachment.attachmentState !== 'ready' || attachment.attachmentPurpose !== 'file' || attachment.attachmentLinked ||
-						attachmentIsBlocked(attachment) || attachment.attachmentImportDraft || attachment.attachmentExpiresAt != null || attachment.appId != null || attachment.sandbox != null || attachment.sandboxSpace != null ||
+						attachmentIsBlocked(attachment) || ((attachment.attachmentImportDraft || attachment.attachmentExpiresAt != null) && !consumeImport) || attachment.appId != null || attachment.sandbox != null || attachment.sandboxSpace != null ||
 						(attachment.targetId != null && attachment.targetId !== input.id) || currentContentStorageSizeBytes(attachment) === null ||
 						attachment.objectSizeBytes !== verified.size || attachmentContentVersion(attachment.shareId, attachment.objectKey, attachment.objectVersionId) !== verified.version)
 						conflict('Use an owned, ready file upload or a retained version of this file');
@@ -141,11 +146,12 @@ export function createCloudFileService(overrides: Partial<{
 					// Binding writes the attachment even on restore: cleanup and content
 					// publication cannot both win a concurrent transaction.
 					const bound = await things.updateOne({ _id: attachment._id, ownerId, attachmentState: 'ready', objectVersionId: attachment.objectVersionId,
+            ...(consumeImport ? { attachmentImportDraft: true, attachmentExpiresAt: { $gt: bindingNow } } : {}),
 						...(attachment.targetId == null ? { targetId: { $in: [null] } } : { targetId: input.id }) },
-						{ $set: { targetId: input.id, parentId: input.id, folderId: null, acl: ['tt:inherit'], updatedAt: now, fileBindingToken: eid } }, { session });
+						{ $set: { targetId: input.id, parentId: input.id, folderId: null, acl: ['tt:inherit'], updatedAt: now, fileBindingToken: eid, ...(consumeImport ? { attachmentImportDraft: false, attachmentExpiresAt: null } : {}) } }, { session });
 					if (bound.matchedCount !== 1) conflict('File upload changed before publication');
 					const crystal = { name: input.name, trashed: input.trashed, ...(input.symbolicLink ? { symbolicLink: input.symbolicLink } : {}), content: { attachmentId: verified.id, version: verified.version, size: verified.size, fingerprint: verified.fingerprint } };
-					const next: any = { ...(before ?? {}), shareId: input.id, ownerId, thingtime: [CLOUD_FILE_KIND], schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+					const next: any = { ...(before ?? {}), ...(context?.executionHold && !before ? { executionHold: contentExecutionHold(context.executionHold) } : {}), shareId: input.id, ownerId, thingtime: [CLOUD_FILE_KIND], schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
 						crystal, extended: null, tags: [], acl: ['tt:user'], targetId: null, folderId: input.folderId, timelineHeadId: eid,
 						storageClass: 'content', storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION, createdAt: before?.createdAt ?? now, updatedAt: now };
 					// A retention writes a bounded token on the existing root, fencing
@@ -153,6 +159,7 @@ export function createCloudFileService(overrides: Partial<{
 					// revision, placement or modification date. The Timeline effect owns
 					// the alternate snapshot; Published history must not advance.
 					const stored = retained ? { ...before, fileRetentionToken: eid } : next;
+					await recordCreationContentEpoch(things, before, stored, session);
 					stored.sizeBytes = thingStorageSizeBytes(stored);
 					await deps.debit(ownerId, stored.sizeBytes - (before?.sizeBytes ?? 0), session);
 					if (before) {
@@ -162,12 +169,12 @@ export function createCloudFileService(overrides: Partial<{
 					} else await things.insertOne(stored, { session });
 					const event = parseTimelineEvent({ formatVersion: 1, id: eid, ownerId, thingId: input.id, branchId: 'main', parentIds: before?.timelineHeadId ? [before.timelineHeadId] : [],
 						operationId: input.operationId, actorId: ownerId, source: 'api', clientId: null, occurredAt: now.toISOString(), mode: retained ? 'effect' : 'revision',
-						operation: retained ? 'effect' : before ? 'update' : 'create', label: retained ? 'Saved conflicting file version' : input.trashed ? 'Moved file to Trash' : before?.crystal?.trashed ? 'Restored file' : before ? 'Updated file' : 'Created file',
+						operation: retained ? 'effect' : before ? 'update' : 'create', label: context?.auditLabel ?? (retained ? 'Saved conflicting file version' : input.trashed ? 'Moved file to Trash' : before?.crystal?.trashed ? 'Restored file' : before ? 'Updated file' : 'Created file'),
 						before: before ? snapshot(before, null) : null, after: snapshot(next, requestHash), dependencies: [] } as TimelineEvent);
 					await deps.append(things, event, session, { plane: 'home' });
 					return { ok: true as const, file: publicFile(next), replayed: false, ...(retained ? { retained: true as const } : {}) };
 				});
-			} catch (error) { return errorResult(error); }
+			} catch (error) { if (context) throw error; return errorResult(error); }
 		}
 	};
 }
