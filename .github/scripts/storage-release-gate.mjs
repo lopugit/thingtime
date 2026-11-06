@@ -201,13 +201,29 @@ export async function monitor({ fetcher = fetch, now = Date.now, runtimeLogs = r
     { state, context: 'Production storage runtime', description: `Storage readiness + runtime logs: ${code}`.slice(0, 140), target_url },
     { state: runtimeState, context: 'Production runtime errors', description: `Error/fatal request scan: ${runtimeCode}`.slice(0, 140), target_url }
   ];
-  const statuses = await github(`/commits/${sha}/status`);
-  // Stable target URL permits repeated unchanged observations to deduplicate.
-  for (const next of nextStatuses) if (shouldPublishStatus(statuses.statuses?.find((row) => row.context === next.context), next)) await github(`/statuses/${sha}`, { method: 'POST', body: JSON.stringify(next) });
-  const observation = { event: 'production-runtime-monitor', sourceSha: sha, deploymentId: deployment.id, window, storage: { state, code }, runtime: { state: runtimeState, code: runtimeCode, queryComplete: summary !== null && summary.unknownSeverityRecords === 0, summary } };
-  if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, `Production monitor for source ${sha}, deployment ${deployment.id}, ${window.since} through ${window.until}.\n\nStorage: ${state} (${code}). Runtime: ${runtimeState} (${runtimeCode}).\n\n${summary ? `Returned request records: ${summary.records}; error: ${summary.errorRecords}; fatal: ${summary.fatalRecords}; unknown severity: ${summary.unknownSeverityRecords}. Categories (may overlap): ${Object.entries(summary.categories).map(([key, count]) => `${key}=${count}`).join(', ')}.` : 'Runtime query unavailable or incomplete; no clean-log claim.'}\n\nOnly error/fatal-filtered request records are covered; no raw logs, browser acceptance, or unique-event/comprehensive outage coverage is provided.\n`);
+  // Preserve the validated observation even if summary I/O or GitHub's status
+  // API fails. It describes this deployment/window, not successful delivery.
+  const observation = { event: 'production-runtime-monitor', sourceSha: sha, deploymentId: deployment.id, window, storage: { state, code }, runtime: { state: runtimeState, code: runtimeCode, queryComplete: summary !== null && summary.unknownSeverityRecords === 0, summary }, githubStatusDelivery: 'pending' };
   report(JSON.stringify({ event: 'production-storage-monitor', state, code }));
   report(JSON.stringify(observation));
+  if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, `Production monitor for source ${sha}, deployment ${deployment.id}, ${window.since} through ${window.until}.\n\nStorage: ${state} (${code}). Runtime: ${runtimeState} (${runtimeCode}).\n\n${summary ? `Returned request records: ${summary.records}; error: ${summary.errorRecords}; fatal: ${summary.fatalRecords}; unknown severity: ${summary.unknownSeverityRecords}. Categories (may overlap): ${Object.entries(summary.categories).map(([key, count]) => `${key}=${count}`).join(', ')}.` : 'Runtime query unavailable or incomplete; no clean-log claim.'}\n\nObservation captured before GitHub status delivery. See the separate production-monitor-status-delivery event for delivery outcome; a missing outcome does not establish delivery.\n\nOnly error/fatal-filtered request records are covered; no raw logs, browser acceptance, or unique-event/comprehensive outage coverage is provided.\n`);
+  let published = 0, unchanged = 0;
+  const reportDelivery = (state, code) => report(JSON.stringify({ event: 'production-monitor-status-delivery', sourceSha: sha, deploymentId: deployment.id, state, code, published, unchanged }));
+  try {
+    const statuses = await github(`/commits/${sha}/status`);
+    // Stable target URL permits repeated unchanged observations to deduplicate.
+    for (const next of nextStatuses) {
+      if (shouldPublishStatus(statuses.statuses?.find((row) => row.context === next.context), next)) {
+        await github(`/statuses/${sha}`, { method: 'POST', body: JSON.stringify(next) });
+        published++;
+      } else unchanged++;
+    }
+  } catch (error) {
+    const deliveryCode = safeFailureCode(error);
+    reportDelivery('failed', deliveryCode);
+    throw failure(deliveryCode);
+  }
+  reportDelivery('delivered', 'ready');
   if (state !== 'success') throw failure(code);
   if (runtimeState !== 'success') throw failure(runtimeCode);
   return observation;

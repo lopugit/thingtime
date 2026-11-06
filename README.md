@@ -189,6 +189,14 @@ an alias change rejects stale observations. Raw logs stay in memory and are
 never written to artifacts, statuses, PR comments or summaries. The publisher's
 storage release gate remains unchanged.
 
+After identity and alias validation, the monitor writes its observation before
+summary-file I/O and GitHub status calls. GitHub quota or transport failures
+therefore retain the collected evidence while still failing the run. The
+observation marks status delivery pending; a separate
+`production-monitor-status-delivery` event records confirmed delivery or a
+sanitized failure, with counts of confirmed writes and unchanged statuses.
+Missing delivery evidence does not establish that statuses were updated.
+
 Counts represent returned request records, not unique log events; categories
 can overlap. The pinned CLI's normalization, pagination, provider retention and
 application ingestion limit coverage. Browser acceptance and errors outside the

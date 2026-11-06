@@ -11,6 +11,11 @@
   storage-only release gate, existing token scope, workflow concurrency and CLI.
 - Cover classification, redaction, provider failures, recovery and independent
   storage/runtime outcomes with synthetic tests. Browser coverage is separate.
+- Preserve validated observations before GitHub status delivery so exhausted
+  reporting quota cannot erase health evidence. Report delivery separately with
+  sanitized codes and confirmed write counts; partial/status failures still fail
+  the run. Cover quota exhaustion and summary-file failure without changing
+  credentials, quota policy or deployment gates.
 
 ## 2026-11-02 — Pass the existing team slug into prebuilt prepare
 

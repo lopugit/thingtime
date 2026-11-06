@@ -223,14 +223,25 @@ async function withMonitorFixture(work, summaryPath = '') {
   const previous = Object.fromEntries(Object.keys(environment).map((key) => [key, process.env[key]]));
   Object.assign(process.env, environment);
   const fixture = {
-    healthy: true, rows: [], statuses: [], reports: [], calls: [], aliasReads: 0, logReads: 0,
+    healthy: true, rows: [], statuses: [], reports: [], calls: [], events: [], aliasReads: 0, logReads: 0,
     race: false, providerFailure: null, throwLogError: false, logError: null, summaryOverride: null,
+    githubFailure: null, githubPostAttempts: 0,
     gateway: { origin, environment: 'production', deploymentId: 'dpl_test' },
     deployment: { id: 'dpl_test', projectId: 'prj_test', target: 'production', meta: { githubCommitRef: 'main', githubCommitSha: 'a'.repeat(40) } }
   };
   const fetcher = async (input, init = {}) => {
     const url = new URL(input);
-    fixture.calls.push({ host: url.hostname, path: url.pathname, method: init.method || 'GET' });
+    const request = { host: url.hostname, path: url.pathname, method: init.method || 'GET' };
+    fixture.calls.push(request);
+    fixture.events.push({ type: 'request', ...request });
+    if (url.hostname === 'api.github.com') {
+      if (request.method === 'POST') fixture.githubPostAttempts++;
+      const failure = fixture.githubFailure;
+      if (failure && request.method === failure.method && (request.method !== 'POST' || fixture.githubPostAttempts === failure.at)) {
+        if (Object.hasOwn(failure, 'throw')) throw failure.throw;
+        return new Response('synthetic-private-provider-body', { status: 403, headers: { 'x-ratelimit-remaining': '0' } });
+      }
+    }
     if (fixture.providerFailure === url.hostname) return new Response('private provider response', {
       status: 403, headers: { 'x-ratelimit-remaining': '0' }
     });
@@ -258,10 +269,14 @@ async function withMonitorFixture(work, summaryPath = '') {
     return fixture.summaryOverride || readRuntimeLogs(scope, { runner: async () => ({ stdout: jsonLines(fixture.rows) }) });
   };
   fixture.run = () => monitor({
-    fetcher, runtimeLogs, now: () => Date.parse(options.until), report: (line) => fixture.reports.push(line)
+    fetcher, runtimeLogs, now: () => Date.parse(options.until), report: (line) => {
+      fixture.reports.push(line);
+      fixture.events.push({ type: 'report', event: JSON.parse(line).event });
+    }
   });
   fixture.latest = (context) => [...fixture.statuses].reverse().find((status) => status.context === context);
   fixture.observation = () => fixture.reports.map((line) => JSON.parse(line)).findLast((row) => row.event === 'production-runtime-monitor');
+  fixture.delivery = () => fixture.reports.map((line) => JSON.parse(line)).findLast((row) => row.event === 'production-monitor-status-delivery');
   try { await work(fixture); }
   finally {
     for (const [key, value] of Object.entries(previous)) {
@@ -275,12 +290,21 @@ test('monitor publishes separate exact-source statuses and deduplicates failures
     const observed = await fixture.run();
     assert.deepEqual(observed, {
       event: 'production-runtime-monitor', sourceSha: 'a'.repeat(40), deploymentId: 'dpl_test',
+      githubStatusDelivery: 'pending',
       window: { since: options.since, until: options.until },
       storage: { state: 'success', code: 'ready' },
       runtime: { state: 'success', code: 'ready', queryComplete: true, summary: emptySummary() }
     });
+    assert.deepEqual(fixture.delivery(), {
+      event: 'production-monitor-status-delivery', sourceSha: 'a'.repeat(40), deploymentId: 'dpl_test',
+      state: 'delivered', code: 'ready', published: 2, unchanged: 0
+    });
     await fixture.run();
     assert.equal(fixture.statuses.length, 2);
+    assert.deepEqual(fixture.delivery(), {
+      event: 'production-monitor-status-delivery', sourceSha: 'a'.repeat(40), deploymentId: 'dpl_test',
+      state: 'delivered', code: 'ready', published: 0, unchanged: 2
+    });
     fixture.rows = [logRow({ message: 'TypeError: failed generic operation' })];
     await assert.rejects(fixture.run(), /runtime-errors-1/);
     assert.equal(fixture.latest('Production storage runtime').state, 'success');
@@ -364,6 +388,7 @@ test('monitor fences alias movement and returned deployment identity before repo
     await assert.rejects(fixture.run(), /production-advanced/);
     assert.equal(fixture.logReads, 1);
     assert.equal(fixture.statuses.length, 0); assert.equal(fixture.reports.length, 0);
+    assert.ok(!fixture.calls.some((call) => call.host === 'api.github.com'));
   });
   for (const patch of [
     { id: 'dpl_other' }, { projectId: 'prj_other' }, { target: 'preview' },
@@ -374,6 +399,19 @@ test('monitor fences alias movement and returned deployment identity before repo
     await assert.rejects(fixture.run(), /production-deployment-identity-mismatch/);
     assert.equal(fixture.logReads, 0);
     assert.equal(fixture.statuses.length, 0); assert.equal(fixture.reports.length, 0);
+    assert.ok(!fixture.calls.some((call) => call.host === 'api.github.com'));
+  });
+});
+
+test('repository mismatch suppresses observations and GitHub requests after collecting fenced evidence', async () => {
+  await withMonitorFixture(async (fixture) => {
+    process.env.GITHUB_REPOSITORY = 'unrelated/repository';
+    await assert.rejects(fixture.run(), /repository-mismatch/);
+    assert.equal(fixture.aliasReads, 2);
+    assert.equal(fixture.logReads, 1);
+    assert.equal(fixture.reports.length, 0);
+    assert.equal(fixture.statuses.length, 0);
+    assert.ok(!fixture.calls.some((call) => call.host === 'api.github.com'));
   });
 });
 
@@ -390,15 +428,120 @@ test('wrong health gateway cannot certify the snapshotted deployment while runti
   }
 });
 
-test('provider failures never publish false success or expose response bodies', async () => {
-  for (const host of ['api.github.com', 'api.vercel.com']) await withMonitorFixture(async (fixture) => {
-    fixture.providerFailure = host;
+test('Vercel identity lookup failure publishes neither observations nor statuses', async () => {
+  await withMonitorFixture(async (fixture) => {
+    fixture.providerFailure = 'api.vercel.com';
     await assert.rejects(fixture.run(), (error) => {
       assert.match(error.message, /http-403-rate-limit-exhausted/);
       assert.ok(!error.message.includes('private')); return true;
     });
     assert.equal(fixture.statuses.length, 0); assert.equal(fixture.reports.length, 0);
   });
+});
+
+test('verified observation survives a rate-limited GitHub status read without claiming delivery', async () => {
+  await withMonitorFixture(async (fixture) => {
+    fixture.githubFailure = { method: 'GET' };
+    await assert.rejects(fixture.run(), { message: 'Storage release gate: github-http-403-rate-limit-exhausted' });
+    const observation = fixture.observation();
+    assert.equal(observation.githubStatusDelivery, 'pending');
+    assert.equal(observation.sourceSha, 'a'.repeat(40));
+    assert.equal(observation.deploymentId, 'dpl_test');
+    assert.deepEqual(observation.window, { since: options.since, until: options.until });
+    assert.deepEqual(observation.storage, { state: 'success', code: 'ready' });
+    assert.deepEqual(observation.runtime, { state: 'success', code: 'ready', queryComplete: true, summary: emptySummary() });
+    assert.deepEqual(fixture.delivery(), {
+      event: 'production-monitor-status-delivery', sourceSha: 'a'.repeat(40), deploymentId: 'dpl_test',
+      state: 'failed', code: 'github-http-403-rate-limit-exhausted', published: 0, unchanged: 0
+    });
+    assert.equal(fixture.statuses.length, 0);
+    assert.equal(fixture.githubPostAttempts, 0);
+    const observationIndex = fixture.events.findIndex((event) => event.type === 'report' && event.event === 'production-runtime-monitor');
+    const lastAliasIndex = fixture.events.findLastIndex((event) => event.type === 'request' && event.path === '/v4/aliases/thingtime.com');
+    const githubIndex = fixture.events.findIndex((event) => event.type === 'request' && event.host === 'api.github.com');
+    const deliveryIndex = fixture.events.findIndex((event) => event.type === 'report' && event.event === 'production-monitor-status-delivery');
+    assert.ok(lastAliasIndex >= 0 && lastAliasIndex < observationIndex);
+    assert.ok(observationIndex < githubIndex && githubIndex < deliveryIndex);
+    assert.ok(!fixture.reports.join('\n').includes('synthetic-private-provider-body'));
+  });
+});
+
+test('failed first or second status POST preserves evidence and reports only confirmed publication counts', async () => {
+  for (const at of [1, 2]) await withMonitorFixture(async (fixture) => {
+    fixture.githubFailure = { method: 'POST', at };
+    await assert.rejects(fixture.run(), { message: 'Storage release gate: github-http-403-rate-limit-exhausted' });
+    assert.equal(fixture.observation().githubStatusDelivery, 'pending');
+    assert.equal(fixture.observation().runtime.queryComplete, true);
+    assert.deepEqual(fixture.delivery(), {
+      event: 'production-monitor-status-delivery', sourceSha: 'a'.repeat(40), deploymentId: 'dpl_test',
+      state: 'failed', code: 'github-http-403-rate-limit-exhausted', published: at - 1, unchanged: 0
+    });
+    assert.equal(fixture.githubPostAttempts, at);
+    assert.equal(fixture.statuses.length, at - 1);
+    assert.ok(!fixture.reports.join('\n').includes('synthetic-private-provider-body'));
+    if (at === 2) {
+      fixture.githubFailure = null;
+      await fixture.run();
+      assert.equal(fixture.statuses.length, 2);
+      assert.deepEqual(fixture.delivery(), {
+        event: 'production-monitor-status-delivery', sourceSha: 'a'.repeat(40), deploymentId: 'dpl_test',
+        state: 'delivered', code: 'ready', published: 1, unchanged: 1
+      });
+    }
+  });
+});
+
+test('GitHub delivery failure retains unhealthy storage and incomplete runtime evidence independently', async () => {
+  for (const incomplete of [false, true]) await withMonitorFixture(async (fixture) => {
+    fixture.githubFailure = { method: 'GET' };
+    fixture.healthy = false;
+    fixture.rows = [logRow({ level: 'fatal', message: 'FUNCTION_INVOCATION_TIMEOUT', messageTruncated: incomplete })];
+    await assert.rejects(fixture.run(), { message: 'Storage release gate: github-http-403-rate-limit-exhausted' });
+    const observation = fixture.observation();
+    assert.equal(observation.githubStatusDelivery, 'pending');
+    assert.deepEqual(observation.storage, { state: 'failure', code: 'storage-not-ready' });
+    assert.equal(observation.runtime.state, incomplete ? 'error' : 'failure');
+    assert.equal(observation.runtime.code, incomplete ? 'log-message-truncated' : 'runtime-errors-1');
+    assert.equal(observation.runtime.queryComplete, !incomplete);
+    if (incomplete) assert.equal(observation.runtime.summary, null);
+    else {
+      assert.equal(observation.runtime.summary.fatalRecords, 1);
+      assert.equal(observation.runtime.summary.categories.timeout, 1);
+    }
+    assert.equal(fixture.delivery().state, 'failed');
+    assert.equal(fixture.statuses.length, 0);
+  });
+});
+
+test('untrusted GitHub transport exceptions cannot inject raw content through delivery reports or rejections', async () => {
+  for (const method of ['GET', 'POST']) await withMonitorFixture(async (fixture) => {
+    const secret = 'synthetic-private-provider-token-and-account';
+    fixture.githubFailure = { method, at: 1, throw: Object.assign(new Error('Storage release gate: ' + secret), { code: 'ready', body: secret }) };
+    await assert.rejects(fixture.run(), { message: 'Storage release gate: monitor-unavailable' });
+    assert.equal(fixture.observation().githubStatusDelivery, 'pending');
+    assert.equal(fixture.observation().runtime.queryComplete, true);
+    assert.deepEqual(fixture.delivery(), {
+      event: 'production-monitor-status-delivery', sourceSha: 'a'.repeat(40), deploymentId: 'dpl_test',
+      state: 'failed', code: 'monitor-unavailable', published: 0, unchanged: 0
+    });
+    assert.ok(!JSON.stringify([fixture.statuses, fixture.reports]).includes(secret));
+  });
+});
+
+test('summary-file I/O failure preserves the pending observation and prevents GitHub status requests', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'runtime-monitor-summary-failure-'));
+  try {
+    // Appending to a directory reliably fails without relying on filesystem
+    // permissions or a privileged test runner; the report must already exist.
+    await withMonitorFixture(async (fixture) => {
+      await assert.rejects(fixture.run());
+      assert.equal(fixture.observation().githubStatusDelivery, 'pending');
+      assert.equal(fixture.observation().runtime.queryComplete, true);
+      assert.deepEqual(fixture.observation().runtime.summary, emptySummary());
+      assert.equal(fixture.statuses.length, 0);
+      assert.ok(!fixture.calls.some((call) => call.host === 'api.github.com'));
+    }, dir);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test('malicious prefixed collector errors cannot inject private content into statuses or reports', async () => {
