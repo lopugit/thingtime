@@ -1,4 +1,4 @@
-import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
+import { activityEvents } from '~/activity/activityManager';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
@@ -7,7 +7,7 @@ import { getNativeBridge, nativeBridgeReadyEvent } from '~/utils/nativeBridge';
 import { requestMobileDevice, supportsMobileDevice, type MobileDeviceStatus } from './mobileDeviceBridge';
 import { deviceThingsPageHref } from './deviceNavigation';
 
-const observations = new Map<string, MobileDeviceStatus>();
+import { mobileDeviceScope, readMobileDeviceObservation, observeMobileDevice, publishMobileDeviceObservation } from './mobileDeviceObservations';
 
 export function MobileDeviceSetupCard({ ownerId, onPaired }: { ownerId: string; onPaired?: () => unknown }) {
 	const [available, setAvailable] = useState(() => supportsMobileDevice());
@@ -21,10 +21,11 @@ export function MobileDeviceSetupCard({ ownerId, onPaired }: { ownerId: string; 
 }
 
 function MobileDeviceConnection({ ownerId, onPaired }: { ownerId: string; onPaired?: () => unknown }) {
-	const scope = `${window.location.origin}:${ownerId}`;
-	const [status, setStatus] = useState<MobileDeviceStatus | null>(() => observations.get(scope) ?? null);
+	const scope = mobileDeviceScope(window.location.origin, ownerId);
+	const [status, setStatus] = useState<MobileDeviceStatus | null>(() => readMobileDeviceObservation(scope) ?? null);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState('');
+	useEffect(() => observeMobileDevice(scope, next => { setStatus(next); setError(''); }), [scope]);
 	const pending = useRef<AbortController | null>(null);
 	const paired = useRef(onPaired); paired.current = onPaired;
 	const run = useCallback(async (action: 'status' | 'pair') => {
@@ -34,8 +35,7 @@ function MobileDeviceConnection({ ownerId, onPaired }: { ownerId: string; onPair
 		try {
 			const next = await requestMobileDevice(ownerId, action, controller.signal);
 			if (controller.signal.aborted) return;
-			observations.set(scope, next);
-			if (observations.size > 32) observations.delete(observations.keys().next().value!);
+			publishMobileDeviceObservation(scope, next);
 			setStatus(next);
 			if (action === 'pair' && next.state === 'paired') void paired.current?.();
 		} catch (cause) {
@@ -50,9 +50,9 @@ function MobileDeviceConnection({ ownerId, onPaired }: { ownerId: string; onPair
             else { pending.current?.abort(); pending.current = null; setBusy(false); }
         };
 		refresh();
-		const interval = activityInterval('timer:components/Devices/MobileDeviceSetupCard:1', 'Mobile Device Setup Card', refresh, 30_000);
+		// The root shell owns recurring presence across every route.
 		activityEvents(window, 'events:components/Devices/MobileDeviceSetupCard', 'MobileDeviceSetupCard').addEventListener('focus', refresh); activityEvents(document, 'events:components/Devices/MobileDeviceSetupCard', 'MobileDeviceSetupCard').addEventListener('visibilitychange', refresh);
-		return () => { clearActivityInterval(interval); activityEvents(window, 'events:components/Devices/MobileDeviceSetupCard', 'MobileDeviceSetupCard').removeEventListener('focus', refresh); activityEvents(document, 'events:components/Devices/MobileDeviceSetupCard', 'MobileDeviceSetupCard').removeEventListener('visibilitychange', refresh); pending.current?.abort(); };
+		return () => { activityEvents(window, 'events:components/Devices/MobileDeviceSetupCard', 'MobileDeviceSetupCard').removeEventListener('focus', refresh); activityEvents(document, 'events:components/Devices/MobileDeviceSetupCard', 'MobileDeviceSetupCard').removeEventListener('visibilitychange', refresh); pending.current?.abort(); };
 	}, [run]);
 	const isPaired = status?.state === 'paired';
 	return (
