@@ -21,6 +21,7 @@ import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './stre
 import type { PagedRunProgress, PagedRunSpec } from './pagedRunJournal';
 import { NATIVE_INVENTORY_BATCH_ENTRIES } from './nativeInventory';
 import { INVENTORY_PAGE_ENTRIES } from './inventoryJournal';
+import { recoverRemountedNativeFeed } from './nativeFeedRecovery';
 
 /** Streaming uses the existing durable run, scheduler and guarded transports.
  * A terminal feed releases no baseline: sealed reconciliation owns that proof. */
@@ -591,12 +592,15 @@ export async function streamForegroundSync(
 	};
 	const readyToFinish = () => runs.streamReadyToFinish(spec);
 	const produce = async () => {
+		let remounted = false;
 		let status = await runs.streamState(spec);
 		check();
 		if (status.terminal || status.sourceTerminal) return;
 		const after = status.indexedSequence ?? status.sequence;
 		const source = local
-			? input.streamLocalChanges!(spec.streaming!.captureId, after, signal, readyToFinish)
+			? recoverRemountedNativeFeed(input.streamLocalChanges!(spec.streaming!.captureId, after, signal, readyToFinish), async () => {
+				await runs.endRemountedLocalFeed(spec); check(); remounted = true; wake();
+			}, signal)
 			: input.streamRemoteChanges
 			? input.streamRemoteChanges(spec.streaming!.captureId, after, signal, readyToFinish, {
 					cursor: status.sourceCursor,
@@ -637,9 +641,10 @@ export async function streamForegroundSync(
 			report();
 			if (terminal) return;
 		}
-		throw Error('Streaming source ended without a terminal watermark.');
+		if (!remounted) throw Error('Streaming source ended without a terminal watermark.');
 	};
 	const produceReplica = async (replica: 'local' | 'remote') => {
+		let remounted = false;
 		const status = await runs.streamState(spec);
 		check();
 		if (status.terminal || status.replicaFeeds?.[replica]?.terminal) return;
@@ -648,7 +653,9 @@ export async function streamForegroundSync(
 		// Local and cloud watchers have independent upstream watermarks; the
 		// shared journal assigns an ordered input position on each append.
 		const source = replica === 'local'
-			? input.streamLocalChanges!(captureId, after, signal, readyToFinish)
+			? recoverRemountedNativeFeed(input.streamLocalChanges!(captureId, after, signal, readyToFinish), async () => {
+				await runs.endRemountedLocalFeed(spec); check(); remounted = true; wake();
+			}, signal)
 			: input.streamRemoteChanges
 			? input.streamRemoteChanges(captureId, after, signal, readyToFinish, {
 				cursor: status.sourceCursor,
@@ -676,7 +683,7 @@ export async function streamForegroundSync(
 				return;
 			}
 		}
-		throw Error('A two-way source ended without a terminal watermark.');
+		if (!remounted) throw Error('A two-way source ended without a terminal watermark.');
 	};
 	const plan = async () => {
 		for (;;) {

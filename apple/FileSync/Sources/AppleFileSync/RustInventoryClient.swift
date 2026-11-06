@@ -10,6 +10,8 @@ struct RustInventoryClient: Sendable {
     struct Root: Equatable, Sendable {
         let path: String
         let identity: String
+        let continuity: String?
+        let volumeUUID: String?
         init(fd: Int32) throws {
             var bytes = [CChar](repeating: 0, count: Int(MAXPATHLEN))
             guard fcntl(fd, F_GETPATH, &bytes) == 0, let path = String(validatingCString: bytes),
@@ -17,6 +19,22 @@ struct RustInventoryClient: Sendable {
             let info = try MobileFolderReader.info(fd)
             guard info.st_mode & S_IFMT == S_IFDIR else { throw Failure.unavailable }
             self.path = path; identity = NativeSymbolicLinks.identity(info)
+            // st_dev is an attachment number and changes on a real reconnect.
+            // Only a volume UUID plus the root's inode and birth time can
+            // establish continuity. A missing UUID never relaxes equality.
+            continuity = try NativeFilesystemContinuity.identity(fd)
+            volumeUUID = continuity?.split(separator: ":").first.map(String.init)
+        }
+        func continues(identity previous: String, continuity anchor: String?, bookmark: Data) -> Bool {
+            if let anchor { return continuity == anchor }
+            // Older captures predate the extra birth-time fence. Their exact
+            // original security-scoped bookmark still contains its original
+            // volume UUID and opaque file identifier. Normal nonstale bookmark
+            // resolution has already rebound that original object, not a path.
+            let saved = URL.resourceValues(forKeys: [.volumeUUIDStringKey, .fileResourceIdentifierKey], fromBookmarkData: bookmark)
+            let old = previous.split(separator: ":"), current = identity.split(separator: ":")
+            return saved?.fileResourceIdentifier != nil && volumeUUID != nil && saved?.volumeUUIDString?.lowercased() == volumeUUID &&
+                old.count == 2 && current.count == 2 && old[1] == current[1]
         }
         var fields: [String: Any] { ["root": path, "rootIdentity": identity] }
         func revalidate(fd: Int32) throws {

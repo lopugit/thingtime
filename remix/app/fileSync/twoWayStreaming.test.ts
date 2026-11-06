@@ -14,6 +14,7 @@ import { streamingFileFixture } from './streamingFile.fixture';
 import { INVENTORY_PAGE_ENTRIES } from './inventoryJournal';
 import { streamForegroundSync } from './streamingForegroundSync';
 import type { NativeIndexChangesPage } from './streamingIndex';
+import { SyncVolumeRemounted } from './syncConnectionWait';
 
 const twoWay = { ...saved, configuration: { ...saved.configuration, mode: 'two-way' as const } };
 const deferred = () => {
@@ -82,6 +83,29 @@ async function fixture(path?: string) {
 	return { f, input, native, downloads, receipts, putCloud, feeds, run, stream, removeSource: () => { removeSource = true; },
 		runs: () => input.journal.pagedRuns(access), checkpoints: () => input.journal.pagedCheckpoints(access) };
 }
+
+test('verified local remount preserves bidirectional receipts and finishes with fresh sealed agreement', { timeout: 10000 }, async () => {
+	const x = await fixture(), uploaded = deferred(), downloaded = deferred();
+	const remote = await x.putCloud('download.bin', [5, 6, 7]);
+	const both = Promise.all([uploaded.promise, downloaded.promise]).then(() => {});
+	x.feeds([x.f.entry()], [remote], both);
+	x.input.transfer = event => {
+		if ('kind' in event && event.kind === 'file') (event.direction === 'upload' ? uploaded : downloaded).resolve();
+	};
+	x.input.streamLocalChanges = async function* (id) {
+		yield frame(id, [x.f.entry()], 0);
+		await both;
+		await x.f.revise([1, 2, 3], 'remounted-inode-version');
+		throw new SyncVolumeRemounted();
+	};
+	try {
+		await x.run();
+		assert.equal(x.f.publications(), 1); assert.equal(x.receipts.size, 1);
+		assert.deepEqual([...x.downloads.values()].at(-1), new Uint8Array([5, 6, 7]));
+		assert.ok(await x.checkpoints().current());
+		assert.equal(await x.runs().active(), null);
+	} finally { x.f.journal().close(); }
+});
 
 test('new files and one-sided file edits in both directions confirm while both initial feeds remain open; strict seal publishes agreement', { timeout: 10000 }, async () => {
 	const x = await fixture();

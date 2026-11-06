@@ -23,7 +23,7 @@ const unavailable = () => new Error('Folder access changed. Reopen this device w
 const verificationRetry = () => new Error('[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.');
 const shutdownWait = () => new Error('[folder_sync_shutdown] Thingtime is closing. Saved sync work can resume when reopened.');
 const transportRetry = () => new Error('[folder_transport_retry] Folder service is temporarily unavailable. Retry after reconnecting.');
-const nativeFailureCodes = new Set(['node_timeout', 'node_unavailable', 'node_protocol_error', 'folder_unavailable', 'folder_identity_retry', 'cancelled', 'unsupported_feature']);
+const nativeFailureCodes = new Set(['node_timeout', 'node_unavailable', 'node_protocol_error', 'folder_unavailable', 'folder_identity_retry', 'folder_volume_retry', 'cancelled', 'unsupported_feature']);
 const requestFailureCode = error => error?.name === 'ThingtimeNodeBridgeError' && nativeFailureCodes.has(error.code) ? error.code :
     error?.message === verificationRetry().message ? 'folder_identity_retry' : error?.message === unavailable().message ? 'host-refused' : 'unclassified';
 const transientStatus = status => status === 408 || status === 429 || (status >= 500 && status <= 599);
@@ -469,6 +469,10 @@ class DesktopFolderSync {
                 // this exact native marker to the renderer's existing contract.
                 if (error?.name === 'ThingtimeNodeBridgeError' && error.code === 'folder_identity_retry' &&
                     error.message === verificationRetry().message) throw verificationRetry();
+                if (error?.name === 'ThingtimeNodeBridgeError' && error.code === 'folder_volume_retry' &&
+                    ['[folder_volume_offline] The granted volume is offline. Saved sync will retry.',
+                     '[folder_volume_remounted] The granted volume returned. Reconcile its saved transfer before continuing.'].includes(error.message))
+                    throw new Error(error.message);
             }
             // The native bridge reports cancellation with its own fixed code.
             // A genuine authority/protocol refusal still keeps its diagnosis.

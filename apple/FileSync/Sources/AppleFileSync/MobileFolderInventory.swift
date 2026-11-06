@@ -87,6 +87,8 @@ public struct MobileFolderInventory: Sendable {
         let exclusions: [String]
         let ignoreRules: String?
         let rootIdentity: String
+        var rootContinuity: String? = nil
+        var rootPath: String? = nil
         var phase: String
     }
     private struct LegacyRecord: Decodable {
@@ -212,10 +214,14 @@ public struct MobileFolderInventory: Sendable {
     private func canonical(_ excludedPaths: [String], _ ignoreRules: String?) throws -> ([String], String?) {
         (try MobileFolderReader.canonicalExclusions(excludedPaths), try MobileFolderIgnoreRules(ignoreRules).text)
     }
-    private func withRoot<T>(_ bookmark: Data, expected: String? = nil, work: (RustInventoryClient.Root) throws -> T) throws -> T {
+    private func withRoot<T>(_ bookmark: Data, expected: String? = nil, continuity: String? = nil, path: String? = nil, work: (RustInventoryClient.Root) throws -> T) throws -> T {
         try MobileFolderReader.access(bookmark) { fd in
             let root = try RustInventoryClient.Root(fd: fd)
-            guard expected == nil || expected == root.identity else { throw Failure.changed }
+            if let continuity, continuity != root.continuity { throw Failure.changed }
+            if expected != nil && (expected != root.identity || (path != nil && path != root.path)) {
+                guard let expected, root.continues(identity: expected, continuity: continuity, bookmark: bookmark) else { throw Failure.changed }
+                throw FolderReconnectFailure.remounted
+            }
             let result = try work(root)
             try Task.checkCancellation()
             // Keep the security scope alive during Rust calls, and catch a
@@ -251,7 +257,8 @@ public struct MobileFolderInventory: Sendable {
     private func makeRecord(_ scope: Scope, id: String, bookmark: Data, policy: String, generation: String,
                             exclusions: [String], rules: String?, root: RustInventoryClient.Root) -> Record {
         Record(scope: scope, bookmarkHash: Self.digest(bookmark), id: id.lowercased(), generation: generation.lowercased(),
-            policy: policy, exclusions: exclusions, ignoreRules: rules, rootIdentity: root.identity, phase: "running")
+            policy: policy, exclusions: exclusions, ignoreRules: rules, rootIdentity: root.identity,
+            rootContinuity: root.continuity, rootPath: root.path, phase: "running")
     }
 
     private func start(_ scope: Scope, id: String, generation: String, bookmark: Data, excludedPaths: [String], ignoreRules: String?,
@@ -271,7 +278,9 @@ public struct MobileFolderInventory: Sendable {
                           MobileFolderIgnoreRules.sameText(legacy.ignoreRules, rules) else { throw Failure.changed }
                 }
                 if let old {
-                    guard matches(old, policy: policy, exclusions: exclusions, rules: rules), old.rootIdentity == root.identity else { throw Failure.changed }
+                    if let continuity = old.rootContinuity, continuity != root.continuity { throw Failure.changed }
+                    guard matches(old, policy: policy, exclusions: exclusions, rules: rules),
+                          old.rootIdentity == root.identity || (["retired", "reindex"].contains(old.phase) && root.continues(identity: old.rootIdentity, continuity: old.rootContinuity, bookmark: bookmark)) else { throw Failure.changed }
                     if old.phase == "complete" { return old }
                     // An exact prepared retry can resume sealing after loss of
                     // the scan reply, but never expose its rows yet.
@@ -359,7 +368,7 @@ public struct MobileFolderInventory: Sendable {
         try record(scope, id: capture.id, bookmark: bookmark) { current, _, fd in
             guard var current, current.generation == capture.generation, current.policy == policy,
                   ["prepared", "complete"].contains(current.phase) else { throw Failure.changed }
-            try withRoot(bookmark, expected: current.rootIdentity) { root in
+            try withRoot(bookmark, expected: current.rootIdentity, continuity: current.rootContinuity, path: current.rootPath) { root in
                 let existing = try client.requireStatus(scope, generation: current.generation)
                 guard try self.capture(current, status: existing) == capture else { throw Failure.changed }
                 if current.policy == Self.backup {
@@ -414,7 +423,7 @@ public struct MobileFolderInventory: Sendable {
         guard FileManager.default.fileExists(atPath: try location(scope, id: id).path) else { return nil }
         let client = try requireClient()
         try MobileFolderReader.checkAccess(bookmark: bookmark)
-        return try record(scope, id: id, bookmark: bookmark) { current, legacy, _ in
+        return try record(scope, id: id, bookmark: bookmark) { current, legacy, fd in
             guard let current else {
                 guard let legacy else { return nil }
                 guard legacy.capturePolicy == policy, (legacy.excludedPaths ?? []) == exclusions,
@@ -422,9 +431,37 @@ public struct MobileFolderInventory: Sendable {
                 return BackupStatus(capture: legacy.capture, state: "interrupted")
             }
             guard matches(current, policy: policy, exclusions: exclusions, rules: rules) else { throw Failure.changed }
-            return try withRoot(bookmark, expected: current.rootIdentity) { _ in
+            if current.phase == "reindex" { return nil }
+            let remounted = try withRoot(bookmark) { root in
+                if let continuity = current.rootContinuity, continuity != root.continuity { throw Failure.changed }
+                guard root.identity != current.rootIdentity || (current.rootPath != nil && current.rootPath != root.path) else { return false }
+                guard root.continues(identity: current.rootIdentity, continuity: current.rootContinuity, bookmark: bookmark) else { throw Failure.changed }
+                return true
+            }
+            if remounted {
+                if current.phase == "retired" {
+                    // An availability change cannot undo explicit abandonment.
+                    // Status may report its retained private counts, but cannot
+                    // turn it into a new automatic-capture admission.
+                    let status = try client.requireStatus(scope, generation: current.generation)
+                    return BackupStatus(capture: try capture(current, status: status), state: "interrupted", ignoredCount: status.ignoredCount)
+                }
+                // The exact authorized bookmark returned, on the same volume
+                // and root inode/birth. Old device IDs and paths are still
+                // invalid: retire its Rust snapshot before allocating another.
+                try client.invalidateIfPresent(scope, generation: current.generation)
+                var retired = current; retired.phase = "reindex"
+                try NativeFileJournal.save(retired, fd)
+                return nil
+            }
+            return try withRoot(bookmark, expected: current.rootIdentity, continuity: current.rootContinuity, path: current.rootPath) { _ in
                 guard let status = try client.status(scope, generation: current.generation) else {
                     return BackupStatus(capture: Capture(id: current.id, generation: current.generation, totalEntries: 0), state: "interrupted")
+                }
+                if current.phase != "retired", status.coverage == "invalidated" {
+                    var retired = current; retired.phase = "reindex"
+                    try NativeFileJournal.save(retired, fd)
+                    return nil
                 }
                 let readable = current.phase == "complete" && status.coverage == (strict ? "sealed" : "provisional")
                 return BackupStatus(capture: try capture(current, status: status), state: readable ? "complete" : "interrupted",
@@ -439,7 +476,7 @@ public struct MobileFolderInventory: Sendable {
         return try record(scope, id: capture.id, bookmark: bookmark) { current, _, _ in
             guard let current, current.phase == "complete", current.generation == capture.generation,
                   current.policy != Self.stream, MobileFolderIgnoreRules.sameText(current.ignoreRules, rules) else { throw Failure.changed }
-            return try withRoot(bookmark, expected: current.rootIdentity) { _ in
+            return try withRoot(bookmark, expected: current.rootIdentity, continuity: current.rootContinuity, path: current.rootPath) { _ in
                 return try work(current, client)
             }
         }
@@ -553,8 +590,12 @@ public struct MobileFolderInventory: Sendable {
                 // different log. The caller must allocate a fresh capture ID.
                 guard legacy == nil else { throw Failure.changed }
                 if var existing {
-                    guard matches(existing, policy: Self.stream, exclusions: exclusions, rules: rules), existing.rootIdentity == root.identity,
-                          existing.phase != "retired" else { throw Failure.changed }
+                    if let continuity = existing.rootContinuity, continuity != root.continuity { throw Failure.changed }
+                    guard matches(existing, policy: Self.stream, exclusions: exclusions, rules: rules), existing.phase != "retired" else { throw Failure.changed }
+                    if existing.rootIdentity != root.identity || (existing.rootPath != nil && existing.rootPath != root.path) {
+                        guard root.continues(identity: existing.rootIdentity, continuity: existing.rootContinuity, bookmark: bookmark) else { throw Failure.changed }
+                        throw FolderReconnectFailure.remounted
+                    }
                     if existing.phase != "complete" { existing.phase = "running"; try NativeFileJournal.save(existing, fd) }
                     return existing
                 }
@@ -574,7 +615,7 @@ public struct MobileFolderInventory: Sendable {
         let client = try requireClient()
         return try record(scope, id: id, bookmark: bookmark) { current, _, _ in
             guard let current, current.phase != "retired", matches(current, policy: Self.stream, exclusions: exclusions, rules: rules) else { throw Failure.changed }
-            return try withRoot(bookmark, expected: current.rootIdentity) { _ in
+            return try withRoot(bookmark, expected: current.rootIdentity, continuity: current.rootContinuity, path: current.rootPath) { _ in
                 guard try client.status(scope, generation: current.generation) != nil else {
                     guard afterSequence == 0, current.phase != "complete" else { throw Failure.changed }
                     return emptyStream(current, state: current.phase)
@@ -604,7 +645,7 @@ public struct MobileFolderInventory: Sendable {
         try record(scope, id: id, bookmark: bookmark) { current, _, fd in
             guard var current, current.policy == Self.stream, current.phase != "retired" else { throw Failure.changed }
             if state == "complete" {
-                try withRoot(bookmark, expected: current.rootIdentity) { _ in
+                try withRoot(bookmark, expected: current.rootIdentity, continuity: current.rootContinuity, path: current.rootPath) { _ in
                     let status = try client.requireStatus(scope, generation: current.generation)
                     guard status.coverage == "provisional" else { throw Failure.changed }
                 }
@@ -623,7 +664,7 @@ public struct MobileFolderInventory: Sendable {
             guard let current, matches(current, policy: Self.stream, exclusions: exclusions, rules: rules), current.phase == "running" else { throw Failure.changed }
             return current
         }
-        try withRoot(bookmark, expected: current.rootIdentity) { root in
+        try withRoot(bookmark, expected: current.rootIdentity, continuity: current.rootContinuity, path: current.rootPath) { root in
             try authorize()
             if try client.status(scope, generation: current.generation)?.coverage == "provisional" {
                 // Rust finished before a lost completion reply or a revoked

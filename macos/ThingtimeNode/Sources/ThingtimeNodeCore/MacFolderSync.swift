@@ -5,7 +5,7 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.19.0"
+    public static let version = "1.20.0"
     private static let supportedActions: Set<String> = ["validate-folder-batch", "upload-batch", "upload-single", "resources", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
@@ -661,7 +661,7 @@ public final class MacFolderSync {
             try await authorized(r)
             return .object(result)
         } else if r.action == "context" {
-            var capabilities: [String: JSONValue] = ["fileAccessVersion": .string(Self.version), "fileSymbolicLinksVersion": .string("1.0.0"), "fileStagingVersion": .string("1.1.0"), "filePublicationVersion": .string("1.2.0")]
+            var capabilities: [String: JSONValue] = ["fileAccessVersion": .string(Self.version), "fileSymbolicLinksVersion": .string("1.0.0"), "fileStagingVersion": .string("1.1.0"), "filePublicationVersion": .string("1.3.0")]
             if inventories.supportsResourceGovernance { capabilities["fileResourceLimitsVersion"] = .string("1.1.0") }
             capabilities["fileSingleUploadVersion"] = .string("1.0.0")
             capabilities["fileUploadBatchVersion"] = .string("1.0.0")
