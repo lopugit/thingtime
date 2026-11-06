@@ -793,3 +793,20 @@ and the relevant `test:files:mac-paged` scenario. The closed HTTP observer recor
 first parsed body-byte enqueue and completed payload length without switching
 the request into flowing mode; its real-network regression delays consumption
 and verifies unchanged bytes and diagnostic redaction.
+
+The native mixed fixture retains legacy fallback coverage by default. Add
+`--canonical-worker` to select the canonical desktop manager, negotiated native
+compound/batch/authorization context and scoped TLS, while keeping the same
+synthetic bytes, accepted-reply losses and restart assertions. Proof validation
+rejects legacy/missing worker parity when the modern lane was requested. Server
+PUT observations, retained IDs, exact hashes and admission/HTTP timing make the
+transport and cost visible without cached authorization.
+
+`streamingForegroundSync.ts` retains one inventory chunk of no-op folder pairs
+only after fresh policy and both point reads. An opposite-feed exact echo can
+only defer; it cannot authorize a copy or child. New/changed/evicted observations
+and every effect retain current checks; strict reconciliation always reads
+fresh. `twoWayStreaming.test.ts` covers policy, scope, stale ancestors, restart
+and eviction. Use `--canonical-worker --streaming-two-way` in the mixed native
+fixture for the actual deletes-off dual-feed path; scalar deletes-on and legacy
+transport lanes remain separate evidence.

@@ -60,6 +60,11 @@ if (normalEarlyBudget && !earlyFixture) throw Error('Normal early budget require
 const pagedFixture = process.argv.includes('--paged');
 const wideFixture = process.argv.includes('--wide');
 const wideMixedFixture = process.argv.includes('--wide-mixed');
+const modernMixedFixture = process.argv.includes('--canonical-worker');
+const streamingMixedFixture = process.argv.includes('--streaming-two-way');
+assert.ok(!streamingMixedFixture || modernMixedFixture, 'Streaming mixed mode requires canonical worker');
+assert.ok(!modernMixedFixture || wideMixedFixture, 'Canonical worker comparison requires the mixed fixture');
+const canonicalFixture = earlyFixture || modernMixedFixture;
 const wideCountArg = process.argv.find(arg => arg.startsWith('--wide-count='));
 const wideFolders = wideFixture ? Number(wideCountArg?.slice(13) || 10001) : 0;
 const benchmarkDeviceLimits = (wideMixedFixture || earlyFixture) ? { transferBytesPerSecond: 5_000_000, scanBytesPerSecond: earlyFixture && !normalEarlyBudget ? 400_000 : 5_000_000, cpuPercent: 15 } : null;
@@ -111,7 +116,7 @@ const httpLatency: Record<string, { count: number; totalMs: number; maxMs: numbe
 const nativeLatency: Record<string, { count: number; totalMs: number; maxMs: number }> = {};
 const slowEvents: Record<string, number> = {};
 let transferRunStartedAt = 0, firstTransferMs: number | null = null;
-const benchmarkTimeline: { firstCompleteNativeInventoryObservedMs: number | null; firstConfirmedFileMs: number | null } = { firstCompleteNativeInventoryObservedMs: null, firstConfirmedFileMs: null };
+const benchmarkTimeline: { firstCompleteNativeInventoryObservedMs: number | null; firstConfirmedFileMs: number | null; firstCommittedEntryObservedMs?: number; firstChangeFeedCompleteMs?: number } = { firstCompleteNativeInventoryObservedMs: null, firstConfirmedFileMs: null };
 const earlyFirstRequestMs: Record<string, number> = {};
 const markEarlyRequest = (label: string) => {
 	if (earlyFixture && transferRunStartedAt && earlyFirstRequestMs[label] === undefined)
@@ -120,6 +125,7 @@ const markEarlyRequest = (label: string) => {
 let earlyIdentityStartTotalMs = 0;
 let cooldownCount = 0,
 	cooldownSeconds = 0;
+let acceptedStageRepliesLost = 0;
 let loseCloud = false,
 	losePublication = false,
     loseStage = false;
@@ -180,7 +186,7 @@ async function startNative() {
     nativeTransport = new MacFixtureTransport({
         write: (frame: Buffer) => current.stdin.write(frame),
         createStream: (payload: any) => new FolderStream({ id: payload.requestId, method: 'folder-sync.request', parameters: payload }),
-        observeRequest: (event: any) => { if (earlyFixture) nativeRequestTimings.push({ ...event, session }); }
+        observeRequest: (event: any) => { if (earlyFixture || wideMixedFixture) nativeRequestTimings.push({ ...event, session }); }
     });
     const transport = nativeTransport;
     nativeExit = new Promise((resolve, reject) => {
@@ -217,7 +223,7 @@ async function startNative() {
                     assert.ok(Number.isSafeInteger(call.checkId) && call.checkId > 0);
                     if (!seenIdentityChecks.has(call.checkId)) { seenIdentityChecks.add(call.checkId); nativeIdentityCalls.push({ ...call, session }); }
                 }
-                if (earlyFixture && value.nativeRequestTiming && !seenServiceCalls.has(value.requestId)) {
+                if ((earlyFixture || wideMixedFixture) && value.nativeRequestTiming && !seenServiceCalls.has(value.requestId)) {
                     seenServiceCalls.add(value.requestId);
                     const timing = value.nativeRequestTiming;
                     assert.ok(['active','poll','resources'].includes(timing.lane) && Number.isFinite(timing.startedMs) && Number.isFinite(timing.endedMs) && timing.endedMs >= timing.startedMs);
@@ -260,7 +266,13 @@ async function send(payload: any, signal?: AbortSignal, options: any = {}) {
     if (payload.action === 'read-range') { counts.streams++; counts.streamedBytes += payload.length; }
     if (payload.action === 'publish') counts.publishes++;
     if (payload.action === 'stage-range') { counts.stageRanges++; counts.stagedBytes += payload.bytes.length; }
-    return nativeTransport.request(payload, signal, options);
+    const result = await nativeTransport.request(payload, signal, options);
+    // Lose only the accepted native frame, including ranges issued inside the
+    // canonical transfer worker; retain the same disk offset for restart.
+    if (payload.action === 'stage-range' && loseStage) {
+        loseStage = false; acceptedStageRepliesLost++; throw Error('Lost accepted native stage');
+    }
+    return result;
 }
 const signal = new AbortController().signal;
 let canonicalHost: Awaited<ReturnType<typeof createMacFixtureHost>> | undefined;
@@ -339,7 +351,7 @@ try {
 	await startNative();
 	const nativeContext = await send({ requestId: randomUUID(), ownerId: fixture.userId, deviceId, origin: base.origin, action: 'context' });
 	assert.equal(nativeContext.capabilities.filePublicationVersion, '1.2.0');
-    if (earlyFixture) {
+    if (canonicalFixture) {
         saveDeviceSyncResourcePolicy(deviceResourceKey(base.origin, fixture.userId, deviceId!), benchmarkDeviceLimits!);
         canonicalHost = await createMacFixtureHost({ origin: base.origin, ownerId: fixture.userId, deviceId: deviceId!, signal,
             fetch: sessionFetch, sendNative: send,
@@ -373,10 +385,6 @@ try {
 		if (!canonicalHost) assert.equal(payload.deviceId, deviceId);
 		const result = canonicalHost ? payload : parseMobileFolderResult({ type: 'mobile-files-result', payload }, expected, input);
 		assert.ok(result);
-        if (input.action === 'stage-range' && loseStage) {
-            loseStage = false;
-            throw Error('Lost accepted native stage');
-        }
 		if (input.action === 'publish' && losePublication) {
 			losePublication = false;
 			throw Error('Lost accepted native publication');
@@ -397,7 +405,7 @@ try {
 			crystal: {
 				...newFileSyncConfiguration({ name: deviceName, deviceId: deviceId!, localRootId: nativeRoot, remoteFolderId: remoteRoot!, ...(photoFixture ? { sourceKind: 'photos' } : {}) }),
 				mode: photoFixture ? 'backup' : 'two-way',
-				propagateDeletes: !photoFixture && !earlyFixture,
+				propagateDeletes: !photoFixture && !earlyFixture && !streamingMixedFixture,
 				paused: false
 			}
 		})
@@ -600,13 +608,24 @@ try {
 		if (!pagedFixture) return (await journal.read(scope))!;
 		const runs = journal.pagedRuns(journalAccess), active = await runs.active(); assert.ok(active);
 		const pending = await runs.read(active.spec);
-		assert.equal(pending.progress.confirmed, 0, 'Capture operation IDs at the first lost reply');
-		return { id: active.spec.id, operations: pending.operations };
+		if (!streamingMixedFixture) assert.equal(pending.progress.confirmed, 0, 'Capture operation IDs at the first lost reply');
+		return { id: active.spec.id, operations: pending.operations, spec: active.spec };
 	};
-	const assertCompletedRun = async (id: string, ids: string[]) => {
+	const assertCompletedRun = async (id: string, ids: string[], streamedSpec?: import('../app/fileSync/pagedRunJournal').PagedRunSpec) => {
 		if (pagedFixture) {
 			assert.equal(await journal.pagedRuns(journalAccess).active(), null);
-			assert.equal((await journal.pagedCheckpoints(journalAccess).current())?.runId, id);
+            if (streamingMixedFixture) {
+                assert.ok(streamedSpec?.streaming);
+                const runs = journal.pagedRuns(journalAccess), retained: string[] = [];
+                let next: import('../app/fileSync/pagedRunJournal').ConfirmedSyncCursor | undefined;
+                do {
+                    const page = await runs.readConfirmed(streamedSpec, next);
+                    retained.push(...page.rows.map(row => row.operation.id)); next = page.next ?? undefined;
+                } while (next);
+                assert.deepEqual(retained.sort(), [...ids].sort(), 'Strict reconciliation retains every original streaming receipt');
+                assert.equal(await runs.streamAwaitingReconciliation(), null);
+                assert.ok(await journal.pagedCheckpoints(journalAccess).current());
+            } else assert.equal((await journal.pagedCheckpoints(journalAccess).current())?.runId, id);
 			assert.deepEqual([...(confirmedIds.get(id) ?? [])].sort(), [...ids].sort());
 		} else {
 			const run = (await journal.read(scope))!; assert.equal(run.id, id);
@@ -622,6 +641,7 @@ try {
 			scope,
 			{
 				currentScope: () => scope,
+                ...(canonicalHost ? macFixtureWorkerOptions(canonicalHost, fixture.userId, deviceId!, signal) : {}),
 				readConfiguration: async () => measured('configuration', async () => (await api('/api/v1/things?id=' + row.id)).thing),
 				authorizeDevice: async () => {
 					await request(fixture.userId, { action: 'list' }, signal);
@@ -629,8 +649,8 @@ try {
 				conditions: async () => (await request(fixture.userId, { action: 'conditions' }, signal)).conditions!,
 				scanLocal: async () => (await request(fixture.userId, { action: 'scan', rootId: nativeRoot }, signal)).entries!,
 				...(pagedFixture ? {
-					scanLocalPages: async function* () {
-						for await (const page of readNativeInventory({ ownerId: fixture.userId, deviceId: deviceId!, rootId: nativeRoot, signal, request })) {
+					scanLocalPages: async function* (options) {
+						for await (const page of readNativeInventory({ ownerId: fixture.userId, deviceId: deviceId!, rootId: nativeRoot, signal, request, ...(streamingMixedFixture ? { ...options, strictAsync: true, captureId: randomUUID(), pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}) })) {
 							nativePages++;
                             if (page.totalEntries !== undefined && transferRunStartedAt) benchmarkTimeline.firstCompleteNativeInventoryObservedMs ??= Date.now() - transferRunStartedAt;
                             yield page;
@@ -642,6 +662,21 @@ try {
 							cloudPages++; yield page;
 						}
 					},
+                    ...(streamingMixedFixture ? {
+                        streamLocalChanges: async function* (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>) {
+                            for await (const page of readNativeIndexChanges({ ownerId: fixture.userId, deviceId: deviceId!, rootId: nativeRoot,
+                                captureId, afterSequence, readyToFinish, signal: streamSignal ?? signal, request,
+                                ...(supportsNativeStreamingBatches(caps) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}) })) {
+                                if (page.changes.length) benchmarkTimeline.firstCommittedEntryObservedMs ??= Date.now() - transferRunStartedAt;
+                                if (page.state === 'complete') benchmarkTimeline.firstChangeFeedCompleteMs ??= Date.now() - transferRunStartedAt;
+                                yield page;
+                            }
+                        },
+                        streamRemoteChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>, resume?: { cursor?: string; snapshotComplete?: boolean; checkpoint(cursor: string, snapshotComplete: boolean): Promise<void> }) => {
+                            assert.ok(readyToFinish && resume);
+                            return readCloudIndexChanges(scope, remoteRoot!, { ...runtime, signal: streamSignal ?? signal }, captureId, afterSequence, readyToFinish, resume);
+                        }
+                    } : {}),
 					reviewPagedConflicts: async (session: import('../app/fileSync/pagedForegroundReview').PagedConflictReviewSession) => {
 						const page = await session.read(); assert.equal(page.next, null); assert.equal(page.rows.length, 1);
 						const row = page.rows[0];
@@ -921,16 +956,53 @@ try {
 		await run(); await exerciseSymbolicLinks();
 		console.log(JSON.stringify({ok:true, scenario:'Mac symlink round trip',nativeCalls,verifyCalls,nativePages,cloudPages,counts,checks:['regular-link-regular-kind-transitions','raw-target-bytes-no-follow','dangling-and-non-utf8-links','link-metadata-attachment-integrity','link-timeline-restore-after-restart','stable-convergence'],picker:'fixture',keychain:'not-used'}));
 	} else {
+	const initialServerPutCount = wideFixture ? (await serverPuts()).length : 0;
 	transferRunStartedAt = Date.now();
+    let original!: Awaited<ReturnType<typeof readRun>>, originalIds: string[] = [], firstStagedBytes = 0;
+    const injectedLossOrder: string[] = [];
+    if (streamingMixedFixture) {
+        loseCloud = true; loseStage = true; losePublication = true;
+        for (let attempt = 0; loseCloud || loseStage || losePublication; attempt++) {
+            assert.ok(attempt < 3, 'Each accepted reply is lost once');
+            const before = { cloud: loseCloud, stage: loseStage, publication: losePublication };
+            // This awaited predicate settles before the loop can change its fault latches.
+            // eslint-disable-next-line no-loop-func
+            await assert.rejects(measure('acceptedLoss-' + attempt, run), error => {
+                const after = { cloud: loseCloud, stage: loseStage, publication: losePublication };
+                const losses = (['cloud', 'stage', 'publication'] as const).filter(kind => before[kind] && !after[kind]);
+                assert.equal(losses.length, 1, 'Failure must follow one accepted reply injection');
+                const kind = losses[0]; injectedLossOrder.push(kind);
+                assert.ok(error instanceof Error);
+                assert.equal(error.message, kind === 'cloud' ? 'Lost accepted cloud commit' : kind === 'publication' ? 'Lost accepted native publication' : 'Folder access could not be verified. Check the connection, pairing and selected account.');
+                return true;
+            });
+            const current = await readRun();
+            if (!original) original = current;
+            assert.equal(current.id, original.id, 'Native restart retains the streaming run identity');
+            originalIds = [...new Set([...originalIds, ...current.operations.map(op => op.id)])];
+            if (before.stage && !loseStage) {
+                firstStagedBytes = counts.stagedBytes;
+                assert.equal(firstStagedBytes, Math.min(2 * 1024 * 1024, remoteBytes.length));
+                assert.equal(acceptedStageRepliesLost, 1);
+            }
+            await stopNative(); journal.close(); journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange); await startNative();
+        }
+    } else {
 	loseCloud = true;
 	losePublication = true;
 	await assert.rejects(measure('lostCloud', run), /Lost accepted cloud commit/);
-	const original = await readRun(),
-		originalIds = original.operations.map((op) => op.id);
+	original = await readRun();
+        originalIds = original.operations.map((op) => op.id);
 	const afterCloud = counts.puts;
     loseStage = true;
-	await assert.rejects(measure('lostStage', run), /Lost accepted native stage/);
-    const firstStagedBytes = counts.stagedBytes;
+    const stageRepliesLostBefore = acceptedStageRepliesLost;
+	await assert.rejects(measure('lostStage', run), error => {
+        assert.equal(acceptedStageRepliesLost, stageRepliesLostBefore + 1, 'Failure must follow exactly one accepted native range reply');
+        assert.ok(error instanceof Error);
+        assert.equal(error.message, canonicalHost ? 'Folder access could not be verified. Check the connection, pairing and selected account.' : 'Lost accepted native stage');
+        return true;
+    });
+    firstStagedBytes = counts.stagedBytes;
     assert.equal(firstStagedBytes, Math.min(2 * 1024 * 1024, remoteBytes.length));
     await stopNative(); journal.close(); journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange); await startNative();
 	await assert.rejects(measure('lostPublication', run), /Lost accepted native publication/);
@@ -940,14 +1012,20 @@ try {
 	journal.close();
 	journal = await openSyncJournal(factory, 'thingtime-file-sync-v1', IDBKeyRange);
 	await startNative();
+    }
 	const beforeRecovery = { ...counts };
+    const serverPutsBeforeRecovery = wideFixture ? (await serverPuts()).length : 0;
 	await measure('recovery', run);
-	if (wideMixedFixture) assert.equal(counts.puts - beforeRecovery.puts,
+	if (wideMixedFixture && !streamingMixedFixture) assert.equal(canonicalHost ? (await serverPuts()).length - serverPutsBeforeRecovery : counts.puts - beforeRecovery.puts,
 		Object.values(mixedFiles).filter(bytes => bytes.length > 0).length,
 		'Recovery uploads each remaining nonempty nested file once without replaying acknowledged bytes');
-	else assert.equal(counts.puts, beforeRecovery.puts);
+	else if (!streamingMixedFixture) assert.equal(counts.puts, beforeRecovery.puts);
 	assert.equal(counts.publishes, beforeRecovery.publishes);
-	await assertCompletedRun(original.id, originalIds);
+    if (streamingMixedFixture) {
+        assert.equal(counts.stagedBytes, remoteBytes.length, 'Accepted native range is never replayed across streaming restarts');
+        originalIds = [...new Set([...originalIds, ...(confirmedIds.get(original.id) ?? [])])];
+    }
+	await assertCompletedRun(original.id, originalIds, 'spec' in original ? original.spec : undefined);
 	const verifyBytes = async (expected: Record<string, Uint8Array>) => {
 		const inv = await inventory();
 		assert.equal(inv.nodes.length, Object.keys(expected).length + wideFolders + mixedFolders.length);
@@ -968,12 +1046,12 @@ try {
 			revision: node.kind === 'file' ? node.file.revision : node.revision
 		}));
 	};
-	assert.ok(counts.streams > 0 && counts.streamedBytes >= localBytes.length);
+	if (!canonicalHost) assert.ok(counts.streams > 0 && counts.streamedBytes >= localBytes.length);
 	const expectedFiles = { 'local.bin': localBytes, 'remote.bin': remoteBytes, ...mixedFiles };
 	const first = await measure('verify', () => verifyBytes(expectedFiles));
-	const beforeUnchanged = { puts: counts.puts, publishes: counts.publishes, reads: counts.reads, streams: counts.streams, stageRanges: counts.stageRanges };
+	const beforeUnchanged = { puts: counts.puts, publishes: counts.publishes, reads: counts.reads, streams: counts.streams, stageRanges: counts.stageRanges, serverPuts: wideFixture ? (await serverPuts()).length : null };
 	await measure('unchanged', run);
-	assert.deepEqual({ puts: counts.puts, publishes: counts.publishes, reads: counts.reads, streams: counts.streams, stageRanges: counts.stageRanges }, beforeUnchanged);
+	assert.deepEqual({ puts: counts.puts, publishes: counts.publishes, reads: counts.reads, streams: counts.streams, stageRanges: counts.stageRanges, serverPuts: wideFixture ? (await serverPuts()).length : null }, beforeUnchanged);
 	assert.deepEqual(await verifyBytes(expectedFiles), first);
 	if (wideFixture) {
 		const head = (await journal.pagedCheckpoints(journalAccess).current())!; assert.ok(head);
@@ -985,7 +1063,22 @@ try {
 		const usage = process.resourceUsage();
 		const initialLocalBytes = localBytes.length + Object.values(mixedFiles).reduce((sum, bytes) => sum + bytes.length, 0);
 		assert.ok((await stat(path.join(directory, 'private-filesystem-index.sqlite3'))).isFile(), 'Rust inventory must use the disposable fixture database');
-		console.log(JSON.stringify({ ok: true, paged: true, wideFolders, nestedFolders: mixedFolders.length, mixedFiles: Object.keys(mixedFiles).length, totalPaths: wideFolders + mixedFolders.length + Object.keys(expectedFiles).length, initialLocalBytes, finalFileBytes: initialLocalBytes + remoteBytes.length, actualHashedBytes: null, warmHashedBytes: null, benchmarkDeviceLimits, effectiveRustScanBytesPerSecond: benchmarkDeviceLimits ? benchmarkDeviceLimits.scanBytesPerSecond / 2 : null, privateIndexDatabase: true, firstTransferMs, serverPutEvents: await serverPuts(), benchmarkTimeline, operationIds: originalIds, checkpointRunId: head.runId, countsBeforeRecovery: beforeRecovery, acceptedStagedBytesBeforeRestart: firstStagedBytes,
+        if (streamingMixedFixture) {
+            assert.ok('spec' in original && original.spec.streaming?.source === 'both');
+            assert.ok(nativeServiceTiming['scan-stream']?.count && nativeServiceTiming['scan-changes']?.count);
+            assert.ok(benchmarkTimeline.firstCommittedEntryObservedMs !== undefined);
+            assert.equal(saved.configuration.propagateDeletes, false);
+        }
+        const transferredPuts = (await serverPuts()).slice(initialServerPutCount);
+        assert.ok(transferredPuts[0]?.firstByteAt !== null && transferredPuts[0]?.firstByteAt !== undefined);
+        firstTransferMs = transferredPuts[0].firstByteAt - transferRunStartedAt;
+        const observedUploadPayloadBytes = transferredPuts.reduce((total, event) => total + (event.payloadBytes ?? 0), 0);
+        assert.ok(transferredPuts.every(event => event.payloadBytes !== null), 'Every payload must complete before byte accounting');
+        assert.equal(observedUploadPayloadBytes, initialLocalBytes, 'Observed HTTP uploads include each nonempty source byte exactly once');
+		console.log(JSON.stringify({ ok: true, paged: true,
+            parity: { canonicalDesktopManager: !!canonicalHost, canonicalRendererHost: !!canonicalHost, canonicalTransferWorkerSelected: !!canonicalHost, nativeOperationGuards: !!canonicalHost, capabilities: caps, customMutationHook: false, streamingTwoWay: streamingMixedFixture, propagateDeletes: saved.configuration.propagateDeletes, localFeed: streamingMixedFixture, remoteFeed: streamingMixedFixture, strictAsyncCapture: streamingMixedFixture },
+            injectedLossOrder, nativeIdentityCalls, nativeIdentityTiming, nativeServiceCalls, nativeRequestTimings, nativeServiceTiming, nativeTransportTiming: nativeTransport?.timings, observedUploadPayloadBytes,
+            wideFolders, nestedFolders: mixedFolders.length, mixedFiles: Object.keys(mixedFiles).length, totalPaths: wideFolders + mixedFolders.length + Object.keys(expectedFiles).length, initialLocalBytes, finalFileBytes: initialLocalBytes + remoteBytes.length, actualHashedBytes: null, warmHashedBytes: null, benchmarkDeviceLimits, effectiveRustScanBytesPerSecond: benchmarkDeviceLimits ? benchmarkDeviceLimits.scanBytesPerSecond / 2 : null, privateIndexDatabase: true, firstTransferMs, firstTransferObservation: 'server first parsed body byte, excluding fixture seed uploads', serverPutEvents: await serverPuts(), benchmarkTimeline, operationIds: originalIds, checkpointRunId: head.runId, countsBeforeRecovery: beforeRecovery, acceptedStagedBytesBeforeRestart: firstStagedBytes,
             verifiedFiles: Object.entries(expectedFiles).map(([path, bytes]) => ({ path, bytes: bytes.length, sha256: hash(bytes) })),
             checkpointEntries: { local: (await journal.inventory(journalAccess).read(head.baseline.local)).totalEntries, remote: (await journal.inventory(journalAccess).read(head.baseline.remote)).totalEntries }, phaseMs, httpRequests, httpLatency, nativeLatency, integrationProcessOnly: { maxRssKiB: usage.maxRSS, userCpuMs: Math.round(usage.userCPUTime / 1000), systemCpuMs: Math.round(usage.systemCPUTime / 1000) }, nativePages, cloudPages,
 			nativeCalls, verifyCalls, cooldownCount, cooldownSeconds, counts, picker: 'fixture', keychain: 'not-used',
