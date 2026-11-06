@@ -1,5 +1,13 @@
 # Things and folders
 
+Device pages expose Location history through `DeviceLocationWorkspace`, a
+scoped data/action adapter that resolves private saved `/devices/location` and
+`settings-device-location-settings` layouts. Map markers, filters, retention,
+message controls and uploads remain separately editable blocks. Protected
+`device-observation` history is read through its owner-only device API, not
+ordinary Things discovery. See the [API map](api-endpoints-and-capabilities.md)
+and the Device location history checklist in `TESTING.md`.
+
 ## Native external-volume reconnect
 
 `FolderBookmark` distinguishes a detached original volume from deletion on an

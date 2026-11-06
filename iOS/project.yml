@@ -53,7 +53,10 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLSchemes: [thingtime]
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
+        ThingtimeAPNSEnvironment: $(APS_ENVIRONMENT)
         ITSAppUsesNonExemptEncryption: false
+        NSLocationWhenInUseUsageDescription: Thingtime can save this device's measured location when you enable location history.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Thingtime can save significant location changes in the background when you enable device location history. You can turn this off in device settings.
         NSCameraUsageDescription: Thingtime uses the camera so you can take photos and videos to share.
         NSMicrophoneUsageDescription: Thingtime uses the microphone for Lopu voice conversations and when you record a video to share.
         NSSpeechRecognitionUsageDescription: Thingtime transcribes your speech so Lopu can respond or save private transcription pages.
@@ -66,6 +69,7 @@ targets:
           - audio
           - processing
           - fetch
+          - location
         NSSupportsLiveActivities: true
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
@@ -130,6 +134,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
+        ThingtimeAPNSEnvironment: $(APS_ENVIRONMENT)
         ITSAppUsesNonExemptEncryption: false
         WKApplication: true
         WKCompanionAppBundleIdentifier: $(THINGTIME_IOS_BUNDLE_IDENTIFIER)
@@ -197,6 +202,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ThingtimeWidgetGroup: $(THINGTIME_WIDGET_GROUP)
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
+        ThingtimeAPNSEnvironment: $(APS_ENVIRONMENT)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController

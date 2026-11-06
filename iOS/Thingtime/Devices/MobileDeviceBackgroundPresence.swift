@@ -97,7 +97,13 @@ final class MobileDeviceBackgroundPresence {
                     }
                     return (data, http)
                 }, cookie: { _ in throw MobileDevicePairing.Failure.identity }, check: backgroundCheck)
-            return try await engine.backgroundHeartbeat(scope, locked: !UIApplication.shared.isProtectedDataAvailable)
+            await MobileDeviceAlerts.shared.refresh(scope, check: backgroundCheck)
+            let status = try await engine.backgroundHeartbeat(scope, locked: !UIApplication.shared.isProtectedDataAvailable)
+            if status.state == "paired" {
+                try await MobileDeviceLocation.shared.flushAndWait(check: backgroundCheck)
+            }
+            else { MobileDeviceLocation.shared.disable(matching: scope) }
+            return status
         })
     }
 

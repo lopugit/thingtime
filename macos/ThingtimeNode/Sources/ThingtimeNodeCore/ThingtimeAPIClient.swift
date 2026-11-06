@@ -672,7 +672,8 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             method: command.kind,
             parameters: command.input,
             leaseExpiresAt: expiresAt,
-            approvedForExecution: !command.requiresApproval || command.approvalState == "approved"
+            approvedForExecution: !command.requiresApproval || command.approvalState == "approved",
+            deviceID: credential.deviceID
         )])
     }
 
@@ -742,10 +743,12 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
     }
 
     private func requireCredential(deviceID: String? = nil) async throws -> DeviceCredential {
-        guard let credential = try await credentialStore.load(),
-              deviceID == nil || credential.deviceID == deviceID else {
-            throw ThingtimeAPIClientError.notPaired
+        if let deviceID {
+            let matching = try await credentialStore.loadAll().filter { $0.deviceID == deviceID }
+            guard matching.count == 1, let credential = matching.first else { throw ThingtimeAPIClientError.notPaired }
+            return credential
         }
+        guard let credential = try await credentialStore.load() else { throw ThingtimeAPIClientError.notPaired }
         return credential
     }
 
@@ -777,6 +780,80 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             throw ThingtimeAPIClientError.rejected(status: response.statusCode)
         }
         return try decoder.decode(Response.self, from: data)
+    }
+
+    public func verifyAlertLease(_ command: LeasedCommand) async throws {
+        guard let deviceID = command.deviceID else { throw ThingtimeAPIClientError.notPaired }
+        let credential = try await requireCredential(deviceID: deviceID)
+        let response: LeaseHeartbeatResponse = try await send(path: "api/v1/devices/node/commands",
+            body: ["op": "heartbeat", "commandId": command.commandID, "leaseId": command.leaseID], credential: credential.refreshToken)
+        guard response.ok, let expiry = Self.isoDate(response.leaseExpiresAt), expiry > Date() else { throw ThingtimeAPIClientError.invalidResponse }
+        try Task.checkCancellation()
+    }
+
+    public func verifyAlertsCapabilities() async throws {
+        try await requireObservationCapability("api.devices-alerts")
+    }
+
+    public struct AlertMedia: Decodable, Sendable {
+        public let url: URL
+        public let attachmentId: String
+        public let versionId: String
+        public let size: Int64
+        public let contentType: String
+    }
+    public func alertMedia(command: LeasedCommand) async throws -> AlertMedia {
+        guard let deviceID = command.deviceID else { throw ThingtimeAPIClientError.notPaired }
+        try await requireObservationCapability("api.devices-node-media")
+        let credential = try await requireCredential(deviceID: deviceID)
+        return try await send(path: "api/v1/devices/node/media", body: ["commandId": command.commandID, "leaseId": command.leaseID], credential: credential.refreshToken)
+    }
+    public func registerAlertSound(command: LeasedCommand, soundID: String, duration: Double, cacheGeneration: String) async throws {
+        guard let deviceID = command.deviceID else { throw ThingtimeAPIClientError.notPaired }
+        try await requireObservationCapability("api.devices-node-alert-sounds")
+        let credential = try await requireCredential(deviceID: deviceID)
+        let registration: OKResponse = try await send(path: "api/v1/devices/node/alert-sounds",
+            body: ["op": "cache", "cacheGeneration": cacheGeneration], credential: credential.refreshToken)
+        guard registration.ok else { throw ThingtimeAPIClientError.invalidResponse }
+        let body: [String: JSONValue] = ["commandId": .string(command.commandID), "leaseId": .string(command.leaseID),
+            "cacheGeneration": .string(cacheGeneration), "soundId": .string(soundID),
+            "durationSeconds": .number(duration), "format": .string("caf"), "status": .string("ready")]
+        let response: OKResponse = try await send(path: "api/v1/devices/node/alert-sounds", body: body, credential: credential.refreshToken)
+        guard response.ok else { throw ThingtimeAPIClientError.invalidResponse }
+    }
+
+    private func requireObservationCapability(_ feature: String = "api.devices-node-observations") async throws {
+        let url = baseURL.appendingPathComponent(".well-known/thingtime-capabilities.json")
+        let (data, raw) = try await session.data(for: URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20))
+        guard let response = raw as? HTTPURLResponse, response.statusCode == 200,
+              response.url?.host == baseURL.host, response.url?.scheme == baseURL.scheme, response.url?.port == baseURL.port, data.count <= 2_097_152,
+              Self.compatibleManifest(data, origin: baseURL),
+              let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [String: [String: Any]],
+              let version = features[feature]?["version"] as? String,
+              version.range(of: "^1\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$", options: .regularExpression) != nil else {
+            throw ThingtimeAPIClientError.incompatibleCapabilities
+        }
+    }
+
+    public func observationPolicy(deviceID: String) async throws -> DeviceObservationPolicy {
+        try await requireObservationCapability()
+        let credential = try await requireCredential(deviceID: deviceID)
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/v1/devices/node/observations"), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        request.setValue("Bearer \(credential.refreshToken)", forHTTPHeaderField: "Authorization")
+        let (data, raw) = try await session.data(for: request)
+        guard let response = raw as? HTTPURLResponse, response.url?.host == baseURL.host,
+              response.url?.scheme == baseURL.scheme, response.url?.port == baseURL.port, data.count <= 65_536 else { throw ThingtimeAPIClientError.invalidResponse }
+        guard response.statusCode == 200 else { throw ThingtimeAPIClientError.rejected(status: response.statusCode) }
+        struct Envelope: Decodable { let settings: DeviceObservationPolicy }
+        return try decoder.decode(Envelope.self, from: data).settings
+    }
+
+    public func sendObservation(_ observation: DeviceLocationObservation, deviceID: String) async throws {
+        try await requireObservationCapability()
+        let credential = try await requireCredential(deviceID: deviceID)
+        let response: OKResponse = try await send(path: "api/v1/devices/node/observations", body: observation, credential: credential.refreshToken)
+        guard response.ok else { throw ThingtimeAPIClientError.invalidResponse }
     }
 
     private static func allowed(_ url: URL) -> Bool {

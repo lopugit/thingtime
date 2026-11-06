@@ -325,3 +325,53 @@ and copies that same product set before signing. Test-only fixture executables
 can retain private `@testable` instrumentation in their separate debug lane.
 `electron/test/native-bundle-build.test.cjs` proves a failed required product and
 a missing executable both stop before any staged bundle replacement.
+
+## Device location and alerts
+
+Location uses Core Location, with no IP-derived substitute. Startup and telemetry
+never request location or notification authorization. Sharing defaults off locally
+and requires both the paired owner's server policy and explicit local enablement.
+The local OS permission request is separate. Each observation is bound to the
+server's current `collectionId`; policy is checked again after the asynchronous
+OS callback. Disablement, OS revocation, and local unpairing fence callbacks and
+remove pending coordinates. App shutdown suspends collection while preserving the
+user's saved choice. The origin-scoped, mode-0600 outbox keeps only the exact
+unacknowledged observation per pairing for idempotent retry, never a local history.
+Server history retention defaults to Never; native clients never substitute a TTL.
+
+The installed Electron bridge exposes `deviceLocationVersion: '1.0.0'` and
+`deviceLocationRequest({ action, ownerId, deviceId, enabled? })`. Supported actions:
+`status`, `set-enabled`, `request-permission`, `open-settings`, and
+`request-notification-permission`. Status returns `{ version, enabled,
+authorization, servicesEnabled }` without coordinates. The bridge verifies the
+current authenticated owner against the selected API origin, and the native
+adapter verifies the exact pairing's live owner through `api.devices-node-identity`.
+Mutation methods use the existing signed local presence gate. Location publishing
+requires origin-scoped `api.devices-node-observations` 1.x compatibility.
+
+Typed `notification.show`, `media.play`, and `media.prepare` commands use the
+normal leased-command journal. The node advertises their `.v1` capabilities.
+Notifications require an already-granted local notification permission. Media
+resolves only through the current command/lease's `api.devices-node-media` 1.x
+endpoint; download requests contain no node bearer and refuse redirects. Prepared
+sounds decode to CAF in the normal macOS `Library/Sounds` directory, register an
+installation cache UUID through `api.devices-node-alert-sounds` 1.x, and return a
+ready receipt only after saving. Apple's notification-sound limit is shorter than
+30 seconds; the separate Play audio command handles longer uploaded recordings.
+The native adapter reauthorizes the exact attachment/version after download and
+conversion, immediately before playback or prepared-sound persistence; lease
+renewal alone never substitutes for current media authorization. Audio plays
+once. Crashes or uncertain delivery remain review-only in the journal,
+and must never replay automatically. An accepted notification request is evidence
+of OS acceptance, not proof that a notification was displayed or a speaker sounded.
+
+Focused verification:
+
+```bash
+swift test --package-path macos/ThingtimeNode --filter 'DeviceAlertsTests|DeviceLocationTests|ThingtimeAPIClientTests|NodeControllerTests|CommandJournalTests|ControlPlaneSchedulerTests'
+node --test electron/test/thingtime-node-bridge.test.cjs
+```
+
+Signed-installed acceptance additionally requires OS permission and real Core
+Location fixes, exact-Thing readback of uploaded observations, notification display,
+and audible MP3/default-tone playback. Unit tests do not establish those outcomes.
