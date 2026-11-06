@@ -12,6 +12,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-06: Defer already queued two-replica folder hints before expensive
+  initial point reads. Preserve sequential journal processing, fresh effect
+  policy and strict reconciliation; measure first-file startup and queued-peer
+  effectiveness in the canonical mixed recovery fixture. **Codex (AI)**
+
 - 2026-11-06: Avoid repeated point reads for exact opposite-feed folder echoes
   already proven to need no early copy. Keep fresh policy/effect checks, bounded
   observation memory and independent strict reconciliation. **Codex (AI)**
@@ -19,11 +24,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-11-06: Add an explicit canonical desktop-worker lane to mixed-file sync
   acceptance, preserving legacy fallback coverage, exact real-byte/restart
   checks and uncached native admission/HTTP timing. **Codex (AI)**
-- 2026-11-06: Add opt-in private device location history with Never retention,
-  accounted expiry, native iOS/Mac collection and scoped locate messages/audio.
-  Mapbox, marker artwork, filters and settings compose from private editable
-  Things. Keep background scheduling, provider receipts and physical-device
-  acceptance distinct. **Codex (AI)**
 
 - 2026-11-06: Negotiate compatible minimum API versions in the disposable native
   paged-sync acceptance runner, retaining exact-origin and missing/breaking
@@ -139,6 +139,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+- 2026-11-06: Add opt-in private device location history with Never retention,
+  accounted expiry, native iOS/Mac collection and scoped locate messages/audio.
+  Mapbox, marker artwork, filters and settings compose from private editable
+  Things. Keep background scheduling, provider receipts and physical-device
+  acceptance distinct. See [PR #1397 evidence](../PRs/1397-codex-device-location-history-private-device-location-and-alerts.md). **Codex (AI)**
 
 - 2026-11-06: Replace inactive device health warnings with muted last-seen labels
   across cards, lists and device controls. Negotiate native iOS background presence
