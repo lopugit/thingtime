@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { fingerprintSource } from '../../../fileSync/contentFingerprint';
+import { contentPartPlan, fingerprintSource } from '../../../fileSync/contentFingerprint';
 import { timelineScopeKey, type TimelineScope } from '../../../timeline/contract';
 import {
 	BACKUP_FORMAT,
@@ -164,6 +164,61 @@ export async function retainBackupPayload(
 		header
 	);
 	return item;
+}
+
+/** Versioned producers may freeze arbitrary valid records without a contiguous
+ * serialized payload. The caller measures a pinned stream first; this pass
+ * binds exact size/SHA and computes the existing multipart identity. Only one
+ * 8 MiB chunk and one bounded range page are resident. Immutable puts support
+ * replay after lost acknowledgement; changed replay cannot replace receipts.
+ * A failed/interrupted pass never returns an inventory item or seals a plan. */
+export async function retainBackupStream(
+	store: BackupObjectStore, id: string, descriptor: Omit<BackupItem, 'content'>,
+	input: { size: number; sha256: string; bytes: Iterable<Uint8Array> | AsyncIterable<Uint8Array> }, access: BackupAccess
+): Promise<BackupItem> {
+	await check(access);
+	const root = prefix(id), header = parseBackupHeader(await readJson(store, `${root}/header.json`, BACKUP_METADATA_BYTES));
+	if (header.snapshotId !== id) throw Error('Backup payload header changed');
+	await check(access, header);
+	if (await readJson(store, `${root}/plan.json`, BACKUP_METADATA_BYTES)) throw Error('Backup inventory is already sealed');
+	if (!Number.isSafeInteger(input.size) || input.size < 1 || !/^[a-f0-9]{64}$/.test(input.sha256)) throw Error('Invalid backup stream identity');
+	// Validate the descriptor before writing chunks, with its eventual format.
+	const plan = contentPartPlan(input.size);
+	parseBackupItem({ ...descriptor, content: { size: input.size, fingerprint: { algorithm: 'sha256-parts-v1', ...plan, sha256: input.sha256 } } });
+	let buffer = new Uint8Array(BACKUP_CHUNK_BYTES), used = 0, offset = 0, page = 0, partBytes = 0;
+	let part = createHash('sha256');
+	const full = createHash('sha256'), composite = createHash('sha256');
+	let ranges: BackupRange[] = [];
+	const flushPage = async () => {
+		if (!ranges.length) return;
+		await putJson(store, `${root}/ranges/${descriptor.ordinal}/${page}.json`,
+			parseBackupRangePage({ format: BACKUP_FORMAT, snapshotId: id, item: descriptor.ordinal, ordinal: page, ranges }), access, header);
+		page++; ranges = [];
+	};
+	const flushChunk = async () => {
+		const bytes = buffer.subarray(0, used), range = { offset, length: used, sha256: digest(bytes) };
+		await check(access, header); await store.put(`chunks/${range.sha256}`, bytes); await check(access, header);
+		await retainedChunk(store, range);
+		ranges.push(range); offset += used; used = 0;
+		if (ranges.length === 8) await flushPage();
+		buffer = new Uint8Array(BACKUP_CHUNK_BYTES);
+	};
+	for await (const bytes of input.bytes) {
+		await check(access, header);
+		if (!(bytes instanceof Uint8Array) || offset + used + bytes.length > input.size) throw Error('Backup stream changed size');
+		full.update(bytes);
+		for (let start = 0; start < bytes.length;) {
+			const length = Math.min(bytes.length - start, buffer.length - used, plan.partSizeBytes - partBytes);
+			const piece = bytes.subarray(start, start + length);
+			buffer.set(piece, used); part.update(piece); used += length; partBytes += length; start += length;
+			if (partBytes === plan.partSizeBytes || offset + used === input.size) { composite.update(part.digest()); part = createHash('sha256'); partBytes = 0; }
+			if (used === buffer.length) await flushChunk();
+		}
+	}
+	if (offset + used !== input.size || full.digest('hex') !== input.sha256) throw Error('Backup stream changed from its pinned identity');
+	if (used) await flushChunk();
+	await flushPage(); await check(access, header);
+	return parseBackupItem({ ...descriptor, content: { size: input.size, fingerprint: { algorithm: 'sha256-parts-v1', ...plan, sha256: composite.digest('hex') } } });
 }
 
 async function openPlan(store: BackupObjectStore, id: string, access: BackupAccess) {
@@ -497,6 +552,10 @@ export async function openSealedBackup(store: BackupObjectStore, id: string, acc
 /** Verify a staged/restored stream against the same canonical fingerprint used
  * for backup sealing, including source parts larger than one memory chunk. */
 export async function verifyBackupItemBytes(input: BackupItem, bytes: AsyncIterable<Uint8Array>) {
+	for await (const _chunk of verifiedBackupItemBytes(input, bytes)) { /* consume before publication */ }
+}
+/** The result is usable only after the complete iterator verifies. */
+export async function* verifiedBackupItemBytes(input: BackupItem, bytes: AsyncIterable<Uint8Array>) {
 	const item = parseBackupItem(input);
 	if (!item.content) throw Error('Backup item has no file content');
 	const fingerprint = new FileFingerprint(item);
@@ -506,6 +565,7 @@ export async function verifyBackupItemBytes(input: BackupItem, bytes: AsyncItera
 			throw Error('Restored file exceeds its verified byte bounds');
 		size += chunk.length;
 		if (chunk.length) fingerprint.update(chunk);
+		yield chunk;
 	}
 	if (size !== item.content.size) throw Error('Restored file is incomplete');
 	fingerprint.verify();

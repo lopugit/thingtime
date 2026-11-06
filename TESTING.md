@@ -14856,6 +14856,16 @@ the isolated real-API/browser command and the metadata-only session boundary.
   coverage, canonical writer/history recovery, installed acceptance and measured
   100 GB–100 TB transfers remain separate required gates.
 
-- Account-inventory oversized-record fixtures must exceed the current canonical
-  per-record processing bound. Retain positive coverage for a valid 90,001-node
-  value; never make that test pass by introducing a smaller product/data cap.
+- `accountInventory.test.ts` retains valid ordinary content beyond 100,000 nodes.
+  `thingStream.test.ts` checks fixed v1 bytes/hash/reader compatibility, v2 deep and
+  wide content, a scalar beyond 128 MiB, multiple range pages, independent-copy
+  source loss, immutable lost-acknowledgement retry and unknown codec/version
+  refusal. `canonicalJsonStream.test.ts` checks integer-key order, exact Unicode
+  across byte/escape boundaries, inert tags and accessors/cycle refusal; a fresh
+  128 MiB-heap worker reports measured heap/RSS for 500,000 values including the
+  input-width property-reflection allocation. Do not call chunk size total RAM.
+- `test:backups:account-profile` also creates/reads/deletes a 150,001-value ordinary
+  Thing through production handlers in its disposable replica, retains a v2 copy,
+  removes its source and first vault, then checks exact offline content. The
+  selected-record capture interval does not claim whole-account readiness or a
+  physical 100 GB/100 TB backup.

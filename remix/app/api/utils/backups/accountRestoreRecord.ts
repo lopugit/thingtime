@@ -5,7 +5,7 @@ import type { AccountRestoreFamily } from '../../../backups/accountRestore';
 import { themeContentSnapshot, themeContentValue } from '../../../timeline/themeContent';
 import { accountContentSnapshot, accountContentValue } from '../../../timeline/accountContent';
 import { BACKUP_RETAINED_PAYLOAD_BYTES, verifyBackupItemBytes } from './portableBackup';
-import { backupThingJson, parseBackupThingSnapshot } from './thingSnapshots';
+import { backupThingJson, parseBackupThingSnapshot, readBackupThingStream } from './thingSnapshots';
 import { BACKUP_DRAFT_BYTES, backupDraftJson, parseBackupDraft } from './draftRecords';
 import { BACKUP_THEME_BYTES } from './themeSnapshots';
 import { BACKUP_ACCOUNT_BYTES } from './accountSnapshots';
@@ -27,8 +27,14 @@ const wrappers: Record<string, number> = {
 };
 /** One pass over this entry's already-open verified ranges. Never rescan the
  * inventory once per record, and never collect attachment bytes in memory. */
-export async function readAccountRestoreRecord(item: BackupItem, ranges: AsyncIterable<Range>, ownerId: string): Promise<RestoreSourceRecord | null> {
+export async function readAccountRestoreRecord(item: BackupItem, ranges: AsyncIterable<Range>, ownerId: string, check: () => void = () => {}): Promise<RestoreSourceRecord | null> {
+	check();
 	const adapter = item.snapshot.adapter;
+	if (adapter === 'backup-thing-content' && item.snapshot.version === 2) {
+		const snapshot = await readBackupThingStream(item, (async function* () { for await (const range of ranges) { check(); yield await range.read(); } })(), check);
+		const value = snapshot.value as any;
+		return { family: 'ordinary', kinds: value.thingtime, crystal: value.crystal, value };
+	}
 	const maximum = item.snapshot.version === 1 && Object.prototype.hasOwnProperty.call(wrappers, adapter) ? wrappers[adapter] : undefined;
 	const parts: Uint8Array[] = [];
 	if (maximum && (!item.content || item.content.size > maximum)) throw Error('Invalid retained restore payload size');

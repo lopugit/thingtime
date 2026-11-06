@@ -28,13 +28,15 @@ const freshId = (planId: string, sourceId: string, destination: AccountRestoreDe
 	'restore-' + digest(json({ planId, sourceId, destination }));
 function guardFor(access: BackupAccess) {
 	const scopeKey = timelineScopeKey(access.scope);
-	return async () => {
-		access.signal?.throwIfAborted();
-		if (timelineScopeKey(access.scope) !== scopeKey) throw Error('Restore source account changed');
-		await access.authorize();
+	const check = () => {
 		access.signal?.throwIfAborted();
 		if (timelineScopeKey(access.scope) !== scopeKey) throw Error('Restore source account changed');
 	};
+	return Object.assign(async () => {
+		check();
+		await access.authorize();
+		check();
+	}, { check });
 }
 async function write(store: BackupObjectStore, key: string, value: unknown, guard: () => Promise<void>) {
 	await guard();
@@ -74,6 +76,7 @@ export async function prepareAccountRestorePlan(
 	let entries = 0, dependencies = 0, issues = 0, pages = 0, previous: string | null = null;
 	let pending: AccountRestoreRecord[] = [];
 	const observed: Partial<Record<AccountRestoreFamily, number>> = {};
+	let legacyOrdinary = false;
 	const flush = async () => {
 		if (!pending.length) return;
 		const page = { format: ACCOUNT_RESTORE_PLAN_FORMAT, planId, ordinal: pages, previous, records: pending };
@@ -103,7 +106,9 @@ export async function prepareAccountRestorePlan(
 		};
 		for await (const { item, ranges } of backup.entries) {
 			await guard();
-			const decoded = await readAccountRestoreRecord(item, ranges, backup.header.scope.ownerId);
+			if (item.snapshot.version === 1 && ['thing-content', 'backup-thing-content'].includes(item.snapshot.adapter)) legacyOrdinary = true;
+			const decoded = await readAccountRestoreRecord(item, ranges, backup.header.scope.ownerId, guard.check);
+			await guard();
 			const family = decoded?.family ?? 'other-managed';
 			const targetId = family === 'account-content' ? destination.scope.ownerId : freshId(planId, item.thingId, destination);
 			db.prepare('INSERT INTO entries VALUES (?,?,?,?,?)').run(item.ordinal, item.thingId, targetId, family, json(decoded?.kinds ?? []));
@@ -191,7 +196,7 @@ export async function prepareAccountRestorePlan(
 		if (db.prepare('SELECT 1 FROM folders WHERE done=0 LIMIT 1').get()) await issue('structural-cycle');
 		await issue('unverified-coverage'); await issue('incomplete-reference-discovery'); await issue('writers-unavailable');
 		await flush();
-		const coverage: AccountRestoreCoverage = { formatVersion: 1, selection: 'whole-account', sourceCoverage: 'unknown', referenceDiscovery: 'partial', requiredFamilies: ACCOUNT_RESTORE_FAMILIES, observedFamilies: observed, sourceFormatLimitations: [{ adapter: 'thing-content|backup-thing-content', reason: 'legacy-record-json-processing-budget', maxNodes: BACKUP_THING_CONTENT_MAX_NODES, maxPayloadBytes: BACKUP_RETAINED_PAYLOAD_BYTES }], writerReadiness: 'unavailable', wholeAccountReady: false };
+		const coverage: AccountRestoreCoverage = { formatVersion: 1, selection: 'whole-account', sourceCoverage: 'unknown', referenceDiscovery: 'partial', requiredFamilies: ACCOUNT_RESTORE_FAMILIES, observedFamilies: observed, sourceFormatLimitations: legacyOrdinary ? [{ adapter: 'thing-content|backup-thing-content', reason: 'legacy-record-json-processing-budget', maxNodes: BACKUP_THING_CONTENT_MAX_NODES, maxPayloadBytes: BACKUP_RETAINED_PAYLOAD_BYTES }] : [], writerReadiness: 'unavailable', wholeAccountReady: false };
 		const summary = { format: ACCOUNT_RESTORE_PLAN_FORMAT, planId, headerHash, pages, headHash: previous, entries, dependencies, issues, coverage, planIntegrity: 'verified' as const };
 		const seal = { ...summary, reviewHash: digest(json(summary)) };
 		await write(plans, `${root}/sealed.json`, seal, guard);
