@@ -50,10 +50,46 @@ unknown. Healthy startup is independently slow, as the matched baseline shows.
 ## Verification and remaining delivery
 
 - Regression failed before the fix (two policy contexts instead of one).
-- 29 focused dual-feed tests, 760 file-sync tests and 20 fixture transport tests
+- 31 focused dual-feed tests, 765 file-sync tests and 20 fixture transport tests
   pass. Pause/removal/destination change after deferral still refuse protected
   reads; legacy behavior and zero-effect/checkpoint boundaries are covered.
 - Raw TypeScript passes; focused lint has zero errors and seven existing warnings.
-- Final integration with reconnect work, corrected proof-label acceptance,
-  recovery acceptance and current graph are tracked in the PR follow-up.
+- Integrated reconnect merge `23015acf06a25c00eacd90abd3ec1f0cfbdddd9d`.
+  Frozen runtime source: `442c898801863646de2182c985c3c97f5101bdd7`.
+- Final same-source healthy and recovery runs both passed. Healthy: 186.995 s,
+  first upload body 42.915 s, first confirmation 34.206 s, 279 native calls and
+  586 fresh identity checks. Recovery measurements are retained below.
+- The final pair used freshly rebuilt native fixture, Rust indexer and middleware API.
+  Source certificates pin 383 source hashes and actual native/backend/indexer
+  binary paths and hashes; Rust reports `commander-indexer 0.1.0`. The temporary
+  signed fixture is removed by normal cleanup. Parent independently verified
+  all 383 hashes and surviving binary hashes with zero mismatches.
+- Compatible native publication 1.3.0 exposed a stale exact 1.2.0 fixture
+  assertion. The harness now uses the canonical major/minimum contract check.
+- Capture the guarded-host decision once before journal awaits. A controlled
+  true-to-undefined change failed before the fix and now retains authorization
+  before protected point reads. No cached policy or identity result is reused.
 - Signed installed-app acceptance remains with the parent release task.
+
+## Final recovery acceptance
+
+Same 40-path tree and exact bytes/hashes as the healthy run, all three accepted
+reply losses (stage, publication, cloud) and native restarts exercised.
+Recovery scenario: 199.994 s across fault/recovery phases; first upload body 55.615 s; first
+confirmation 44.886 s. Preserve original operation IDs, accepted range offsets, no-replay transfer
+counts, strict checkpoints and unchanged convergence. Complete per-phase timings
+are in `/tmp/tt-sync-healthy-startup/integrated-validation.json`; phase definitions
+differ from the healthy lane, so this is recovery coverage, not a causal
+healthy-versus-fault speed ratio.
+
+First confirmation still takes about 34 seconds. This latency remains open;
+the source improvement does not complete the parent's broader performance goal.
+
+## Graph coverage
+
+The scoped semantic refresh expanded the five changed documents into 109 model
+chunks. That attempt was stopped before activation to bound cost; its partial
+output is not published as complete coverage. The canonical structural update,
+clustering and portable export cover the final source fingerprint. Semantic
+coverage of this note, TESTING.md, CHANGELOG.md and the two changed sync/map docs
+was not refreshed; that limitation is distinct from passing source acceptance.
