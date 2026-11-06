@@ -12,7 +12,12 @@ test('actual native network PUT is observed and selected by append barrier witho
   const directory = await mkdtemp(join(tmpdir(), 'mac-fixture-observer-'));
   const file = join(directory, 'events.jsonl'), observe = createFixtureHttpObserver(file);
   const server = createServer(async (request, response) => {
-    observe(request); for await (const _ of request) {} response.writeHead(204); response.end();
+    observe(request);
+    // Delayed body consumption must retain every byte in the readable buffer.
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const received = []; for await (const chunk of request) received.push(chunk);
+    assert.equal(Buffer.concat(received).toString(), 'synthetic-native-body');
+    response.writeHead(204); response.end();
   });
   try {
     server.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -25,9 +30,13 @@ test('actual native network PUT is observed and selected by append barrier witho
     const response = await network.put(target, {}, body(), bytes.length, new AbortController().signal, () => {});
     assert.equal(response.status, 204);
     const raw = await readFile(file, 'utf8'), events = raw.trim().split('\n').map(JSON.parse);
-    assert.equal(events.length, 2); const selected = events.slice(baseline);
+    assert.equal(events.filter(e => e.operation === 'attachment-object-put').length, 2); const selected = events.slice(baseline).filter(e => e.operation === 'attachment-object-put');
     assert.equal(selected.length, 1); assert.equal(selected[0].operation, 'attachment-object-put');
     assert.ok(selected[0].at >= before);
+    const first = events.find(e => e.sequence === selected[0].sequence && e.operation === 'attachment-object-put-first-byte');
+    const completed = events.find(e => e.sequence === selected[0].sequence && e.operation === 'attachment-object-put-body');
+    assert.ok(first.firstByteAt >= selected[0].at); assert.equal(completed.firstByteAt, first.firstByteAt);
+    assert.equal(completed.payloadBytes, bytes.length);
     assert.ok(!raw.includes('must-not-appear')); assert.ok(!raw.includes('synthetic-native-body'));
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); await rm(directory, { recursive: true, force: true }); }
 });
