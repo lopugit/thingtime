@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
-import { checkRuntimeLogs, checkStorageManifest, checkStorageReadiness, logLimit, monitor, productionOrigin as origin, requireStorageManifest, requireStorageReady, runtimeLogArgs, shouldPublishStatus, summarizeRuntimeLogs, waitForStorageReadiness } from './storage-release-gate.mjs';
+import { checkRuntimeLogs, checkStorageManifest, checkStorageReadiness, logLimit, monitor, productionOrigin as origin, readRuntimeLogs, requireStorageManifest, requireStorageReady, runtimeLogArgs, shouldPublishStatus, summarizeRuntimeLogs, waitForStorageReadiness } from './storage-release-gate.mjs';
 
 const manifest = { schemaVersion: 1, origin, features: { 'api.health-nitro': { version: '1.3.0' }, 'api.storage-accounting': { version: '1.0.0' } }, operations: [{ feature: 'api.health-nitro', path: '/api/v1/health/nitro', methods: ['GET'] }] };
 const health = { origin, targetOrigin: origin, service: 'nitro', ok: true, state: 'ready', storageAccounting: { state: 'ready', expectedVersion: 1 } };
@@ -62,81 +65,384 @@ test('candidate manifest binds gateway identity and health operation without cal
   for (const patch of [{ origin: 'https://other.example' }, { environment: 'preview' }, { deploymentId: 'dpl_other' }]) assert.throws(() => requireStorageManifest({ ...local, gateway: { ...gateway, ...patch } }, origin, '1.3.0', gateway), /gateway-identity-mismatch/);
   for (const operations of [[], [{ feature: 'api.health-nitro', path: '/wrong', methods: ['GET'] }], [{ feature: 'api.health-nitro', path: '/api/v1/health/nitro', methods: ['POST'] }]]) assert.throws(() => requireStorageManifest({ ...local, operations }, origin, '1.3.0', gateway), /health-operation-unavailable/);
 });
-test('runtime log summary detects nested migration errors and never returns private content', () => {
-  const secret = 'synthetic-private-account';
-  const summary = summarizeRuntimeLogs(JSON.stringify({ requestId: secret, logs: [{ message: 'Account content requires storage migration before its ledger can be reconciled' }] }));
-  assert.deepEqual(summary, { records: 1, storageFailures: 1 });
-  assert.ok(!JSON.stringify(summary).includes(secret));
-  assert.deepEqual(summarizeRuntimeLogs(''), { records: 0, storageFailures: 0 });
-  for (const code of ['STORAGE_MIGRATION_REQUIRED', 'STORAGE_RECOVERY_BUSY', 'STORAGE_ACCOUNTING_UNAVAILABLE', 'STORAGE_INVARIANT']) {
-    assert.equal(summarizeRuntimeLogs(JSON.stringify({ logs: [{ message: JSON.stringify({ source: 'storage-accounting', code, message: 'HTTP request returned a server error' }) }] })).storageFailures, 1);
-  }
-  assert.equal(summarizeRuntimeLogs(JSON.stringify({ logs: [{ message: 'Storage accounting requires recovery' }] })).storageFailures, 1);
-  assert.equal(summarizeRuntimeLogs(JSON.stringify({ logs: [{ message: 'HTTP request returned a server error' }] })).storageFailures, 0);
-  assert.throws(() => summarizeRuntimeLogs('unexpected provider response'), /invalid/);
-  assert.throws(() => summarizeRuntimeLogs(JSON.stringify({ logs: [{ messageTruncated: true }] })), /truncated/);
-  assert.throws(() => summarizeRuntimeLogs(('{}\n').repeat(logLimit)), /truncated/);
-});
 const options = { cli: '/verified/vercel', projectId: 'prj_test', deploymentId: 'dpl_test', scope: 'authorized-team', since: '2026-10-29T00:00:00.000Z', until: '2026-10-29T00:30:00.000Z' };
-test('pinned CLI queries a bounded exact production deployment with credentials only in environment', async () => {
-  const args = runtimeLogArgs(options);
-  assert.ok(args.includes('--no-follow'));
-  assert.equal(args.filter((arg) => arg === '--level').length, 2);
-  assert.equal(args.includes('--query'), false);
-  assert.equal(args[args.indexOf('--deployment') + 1], 'dpl_test');
-  assert.equal(args[args.indexOf('--limit') + 1], String(logLimit));
-  await checkRuntimeLogs(options, { environment: { VERCEL_API_TOKEN: 'synthetic-secret', GH_TOKEN: 'synthetic-github-secret' }, runner: async (cli, actual, config) => {
-    assert.equal(cli, options.cli); assert.deepEqual(actual, args);
-    assert.equal(config.env.VERCEL_TOKEN, 'synthetic-secret');
-    assert.equal(config.env.GH_TOKEN, undefined);
-    assert.ok(!actual.includes('synthetic-secret')); assert.equal(config.timeout, 60_000);
-    return { stdout: '' };
-  } });
-  await assert.rejects(checkRuntimeLogs(options, { runner: async () => { throw new Error('secret token raw log'); } }), /runtime-log-access-unavailable/);
-  const row = { projectId: options.projectId, deploymentId: options.deploymentId, timestamp: Date.parse(options.since), message: 'storage migration required' };
-  await assert.rejects(checkRuntimeLogs(options, { runner: async () => ({ stdout: JSON.stringify(row) }) }), /runtime-storage-errors-1/);
-  await assert.rejects(checkRuntimeLogs(options, { runner: async () => ({ stdout: JSON.stringify({ ...row, deploymentId: 'dpl_other' }) }) }), /log-scope-mismatch/);
-  await assert.rejects(checkRuntimeLogs(options, { runner: async () => ({ stdout: JSON.stringify({ ...row, timestamp: Date.parse(options.since) - 1 }) }) }), /log-scope-mismatch/);
+const emptySummary = () => ({
+  records: 0, storageFailures: 0, errorRecords: 0, fatalRecords: 0, unknownSeverityRecords: 0,
+  categories: { storage: 0, timeout: 0, memory: 0, exception: 0, database: 0, http5xx: 0, other: 0 }
 });
-test('monitor binds current production source, deduplicates failure and recovery, and rejects alias races', async () => {
-  const environment = { GITHUB_REPOSITORY: 'lopugit/thingtime', GH_TOKEN: 'synthetic-gh', VERCEL_API_TOKEN: 'synthetic-vc', VERCEL_PROJECT_ID: 'prj_test', VERCEL_TEAM_ID: 'team_test', VERCEL_TEAM_SLUG: 'authorized-team', VERCEL_CLI_PATH: '/verified/vercel', GITHUB_STEP_SUMMARY: '' };
+const logRow = (patch = {}) => ({
+  projectId: options.projectId, deploymentId: options.deploymentId, environment: 'production',
+  timestamp: Date.parse(options.since), level: 'error', message: 'An operation failed', logs: [], ...patch
+});
+const jsonLines = (rows) => rows.map((row) => JSON.stringify(row)).join('\n');
+
+test('runtime summary counts requests once when top-level severity repeats nested errors', () => {
+  const message = 'TypeError: synthetic-private-account at https://private.example/secret?token=secret';
+  const rows = [
+    logRow({ message, logs: [{ level: 'error', message }, { level: 'error', message }] }),
+    logRow({ level: 'fatal', message: 'heap out of memory', logs: [
+      { level: 'info', message: 'private informational context' },
+      { level: 'error', message }, { level: 'fatal', message: 'heap out of memory' }
+    ] })
+  ];
+  const summary = summarizeRuntimeLogs(jsonLines(rows), options);
+  assert.deepEqual(summary, {
+    records: 2, storageFailures: 0, errorRecords: 1, fatalRecords: 1, unknownSeverityRecords: 0,
+    categories: { storage: 0, timeout: 0, memory: 1, exception: 2, database: 0, http5xx: 0, other: 0 }
+  });
+  assert.deepEqual(summarizeRuntimeLogs(' \n\t\n', options), emptySummary());
+});
+
+test('runtime categories are a closed aggregate projection that never returns private provider fields', () => {
+  const secret = 'synthetic-private-account-secret';
+  const messages = [
+    'STORAGE_ACCOUNTING_UNAVAILABLE', 'FUNCTION_INVOCATION_TIMEOUT', 'ERR_WORKER_OUT_OF_MEMORY',
+    'ReferenceError', 'MongoNetworkError', 'HTTP request returned a server error', 'opaque provider error'
+  ];
+  const rows = messages.map((message, index) => logRow({
+    message: message + ' ' + secret, responseStatusCode: index === 5 ? 503 : 200,
+    requestId: secret, requestPath: '/private/' + secret, url: 'https://private.example/' + secret,
+    headers: { authorization: 'Bearer ' + secret }, accountId: secret, stack: secret,
+    arbitraryCategory: secret, logs: [{ level: 'error', message: message + ' ' + secret }]
+  }));
+  const summary = summarizeRuntimeLogs(jsonLines(rows), options);
+  assert.deepEqual(summary, {
+    records: 7, storageFailures: 1, errorRecords: 7, fatalRecords: 0, unknownSeverityRecords: 0,
+    categories: { storage: 1, timeout: 1, memory: 1, exception: 1, database: 1, http5xx: 1, other: 1 }
+  });
+  assert.ok(!JSON.stringify(summary).includes(secret));
+  for (const code of ['STORAGE_MIGRATION_REQUIRED', 'STORAGE_RECOVERY_BUSY', 'STORAGE_ACCOUNTING_UNAVAILABLE', 'STORAGE_INVARIANT']) {
+    const row = logRow({ logs: [{ level: 'error', message: JSON.stringify({ source: 'storage-accounting', code }) }] });
+    assert.equal(summarizeRuntimeLogs(JSON.stringify(row), options).storageFailures, 1);
+  }
+  for (const message of ['Account content requires storage migration before its ledger can be reconciled', 'Storage accounting requires recovery']) {
+    assert.equal(summarizeRuntimeLogs(JSON.stringify(logRow({ message })), options).storageFailures, 1);
+  }
+});
+
+test('missing and unknown severities stay explicitly unknown even alongside a known fatal record', () => {
+  for (const level of [undefined, '', 'warning', 'info', 'emergency', 'ERROR']) {
+    const summary = summarizeRuntimeLogs(JSON.stringify(logRow({ level })), options);
+    assert.equal(summary.records, 1);
+    assert.equal(summary.unknownSeverityRecords, 1, String(level));
+  }
+  const summary = summarizeRuntimeLogs(JSON.stringify(logRow({
+    level: 'fatal', logs: [{ level: 'fatal', message: '' }, { level: 'unrecognized-provider-level', message: '' }]
+  })), options);
+  assert.equal(summary.fatalRecords, 1);
+  assert.equal(summary.errorRecords, 0);
+  assert.equal(summary.unknownSeverityRecords, 1);
+});
+
+test('pinned CLI nullable truncation metadata is accepted without masking actual truncation', () => {
+  assert.equal(summarizeRuntimeLogs(JSON.stringify(logRow({
+    message: '', messageTruncated: null, logs: [{ level: 'error', message: '', messageTruncated: null }]
+  })), options).records, 1);
+  for (const patch of [{ messageTruncated: true }, { logs: [{ level: 'error', message: '', messageTruncated: true }] }]) {
+    assert.throws(() => summarizeRuntimeLogs(JSON.stringify(logRow(patch)), options), /log-message-truncated/);
+  }
+});
+
+test('runtime parsing rejects malformed structure, saturated results and unverifiable scope', () => {
+  for (const value of [undefined, null, {}, 'not json', 'null', '[]', '"private response"']) {
+    assert.throws(() => summarizeRuntimeLogs(value, options), /log-response-invalid/);
+  }
+  for (const patch of [
+    { logs: {} }, { logs: null }, { logs: [null] }, { logs: [[]] }, { logs: ['private log'] },
+    { message: 123 }, { level: 123 }, { messageTruncated: 'false' },
+    { logs: [{ level: 'error', message: {}, messageTruncated: false }] }
+  ]) assert.throws(() => summarizeRuntimeLogs(JSON.stringify(logRow(patch)), options), /log-response-invalid/);
+  for (const patch of [
+    { deploymentId: 'dpl_other' }, { projectId: 'prj_other' }, { environment: 'preview' },
+    { timestamp: null }, { timestamp: options.since },
+    { timestamp: Date.parse(options.since) - 1 }, { timestamp: Date.parse(options.until) + 1 }
+  ]) assert.throws(() => summarizeRuntimeLogs(JSON.stringify(logRow(patch)), options), /log-scope-mismatch/);
+  assert.throws(() => summarizeRuntimeLogs(jsonLines(Array.from({ length: logLimit }, () => logRow())), options), /log-window-truncated/);
+  assert.equal(summarizeRuntimeLogs(JSON.stringify(logRow({ timestamp: Date.parse(options.until) })), options).records, 1);
+});
+
+test('invalid log windows fail before invoking the provider and cannot silently skip timestamp validation', async () => {
+  for (const window of [
+    { since: 'invalid', until: options.until }, { since: options.since, until: 'invalid' },
+    { since: options.until, until: options.since }, { since: options.since, until: options.since },
+    { since: options.since, until: '2026-10-29T00:30:00.001Z' }
+  ]) {
+    let called = false;
+    const scoped = { ...options, ...window };
+    assert.throws(() => runtimeLogArgs(scoped), /invalid-log-window/);
+    assert.throws(() => summarizeRuntimeLogs('', scoped), /invalid-log-window/);
+    await assert.rejects(readRuntimeLogs(scoped, { runner: async () => { called = true; return { stdout: '' }; } }), /invalid-log-window/);
+    assert.equal(called, false);
+  }
+});
+
+test('pinned CLI queries exact deployment and window with credentials only in a scrubbed environment', async () => {
+  const args = runtimeLogArgs(options);
+  assert.deepEqual(args, [
+    'logs', '--project', 'prj_test', '--deployment', 'dpl_test', '--environment', 'production', '--scope', 'authorized-team',
+    '--since', options.since, '--until', options.until, '--level', 'error', '--level', 'fatal', '--limit', '500', '--json', '--no-follow'
+  ]);
+  const summary = await readRuntimeLogs(options, {
+    environment: { VERCEL_API_TOKEN: 'synthetic-secret', GH_TOKEN: 'synthetic-github-secret', UNRELATED_SECRET: 'private' },
+    runner: async (cli, actual, config) => {
+      assert.equal(cli, options.cli); assert.deepEqual(actual, args);
+      assert.equal(config.env.VERCEL_TOKEN, 'synthetic-secret');
+      assert.equal(config.env.GH_TOKEN, undefined); assert.equal(config.env.UNRELATED_SECRET, undefined);
+      assert.ok(!actual.includes('synthetic-secret')); assert.equal(config.timeout, 60_000);
+      assert.equal(config.maxBuffer, 4 * 1024 * 1024);
+      return { stdout: '' };
+    }
+  });
+  assert.deepEqual(summary, emptySummary());
+  for (const code of ['ETIMEDOUT', 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER', 'EACCES']) {
+    await assert.rejects(readRuntimeLogs(options, { runner: async () => {
+      throw Object.assign(new Error('private provider stderr token'), { code, stderr: 'private provider body' });
+    } }), { message: 'Storage release gate: runtime-log-access-unavailable' });
+  }
+});
+
+test('publisher storage gate still accepts unrelated runtime errors while rejecting storage failures', async () => {
+  const generic = logRow({ level: 'fatal', message: 'TypeError: unrelated operation failed' });
+  const summary = await checkRuntimeLogs(options, { runner: async () => ({ stdout: JSON.stringify(generic) }) });
+  assert.equal(summary.fatalRecords, 1);
+  assert.equal(summary.storageFailures, 0);
+  await assert.rejects(checkRuntimeLogs(options, { runner: async () => ({
+    stdout: JSON.stringify(logRow({ message: 'STORAGE_INVARIANT' }))
+  }) }), /runtime-storage-errors-1/);
+  await assert.rejects(checkRuntimeLogs(options, { runner: async () => ({
+    stdout: JSON.stringify(logRow({ deploymentId: 'dpl_other' }))
+  }) }), /log-scope-mismatch/);
+});
+
+async function withMonitorFixture(work, summaryPath = '') {
+  const environment = {
+    GITHUB_REPOSITORY: 'lopugit/thingtime', GH_TOKEN: 'synthetic-gh', VERCEL_API_TOKEN: 'synthetic-vc',
+    VERCEL_PROJECT_ID: 'prj_test', VERCEL_TEAM_ID: 'team_test', VERCEL_TEAM_SLUG: 'authorized-team',
+    VERCEL_CLI_PATH: '/verified/vercel', GITHUB_STEP_SUMMARY: summaryPath
+  };
   const previous = Object.fromEntries(Object.keys(environment).map((key) => [key, process.env[key]]));
   Object.assign(process.env, environment);
-  const statuses = [];
-  let healthy = true, race = false, aliasReads = 0, logReads = 0, providerFailure = null;
+  const fixture = {
+    healthy: true, rows: [], statuses: [], reports: [], calls: [], aliasReads: 0, logReads: 0,
+    race: false, providerFailure: null, throwLogError: false, logError: null, summaryOverride: null,
+    gateway: { origin, environment: 'production', deploymentId: 'dpl_test' },
+    deployment: { id: 'dpl_test', projectId: 'prj_test', target: 'production', meta: { githubCommitRef: 'main', githubCommitSha: 'a'.repeat(40) } }
+  };
   const fetcher = async (input, init = {}) => {
     const url = new URL(input);
-    if (providerFailure === 'github' && url.hostname === 'api.github.com') return new Response('private provider response', { status: 403, headers: { 'x-ratelimit-remaining': '0' } });
-    if (providerFailure === 'vercel' && url.hostname === 'api.vercel.com') return new Response('private provider response', { status: 403 });
-    if (url.pathname === '/v4/aliases/thingtime.com') return Response.json({ deploymentId: race && ++aliasReads > 1 ? 'dpl_new' : 'dpl_test' });
-    if (url.pathname === '/v13/deployments/dpl_test') return Response.json({ id: 'dpl_test', projectId: 'prj_test', target: 'production', meta: { githubCommitRef: 'main', githubCommitSha: 'a'.repeat(40) } });
-    if (url.pathname === '/.well-known/thingtime-capabilities.json') return Response.json(manifest);
-    if (url.pathname === '/api/v1/health/nitro') return Response.json({ ...health, ok: healthy });
-    if (url.pathname.endsWith('/status')) return Response.json({ statuses: [...statuses].reverse() });
-    if (url.pathname.includes('/statuses/') && init.method === 'POST') { statuses.push(JSON.parse(init.body)); return Response.json({}); }
+    fixture.calls.push({ host: url.hostname, path: url.pathname, method: init.method || 'GET' });
+    if (fixture.providerFailure === url.hostname) return new Response('private provider response', {
+      status: 403, headers: { 'x-ratelimit-remaining': '0' }
+    });
+    if (url.pathname === '/v4/aliases/thingtime.com') {
+      fixture.aliasReads++;
+      return Response.json({ deploymentId: fixture.race && fixture.aliasReads > 1 ? 'dpl_new' : 'dpl_test' });
+    }
+    if (url.pathname === '/v13/deployments/dpl_test') return Response.json(fixture.deployment);
+    if (url.pathname === '/.well-known/thingtime-capabilities.json') return Response.json({ ...manifest, gateway: fixture.gateway });
+    if (url.pathname === '/api/v1/health/nitro') return Response.json({ ...health, ok: fixture.healthy });
+    if (url.pathname.endsWith('/status')) {
+      assert.equal(url.pathname, '/repos/lopugit/thingtime/commits/' + 'a'.repeat(40) + '/status');
+      return Response.json({ statuses: [...fixture.statuses].reverse() });
+    }
+    if (url.pathname.includes('/statuses/') && init.method === 'POST') {
+      assert.equal(url.pathname, '/repos/lopugit/thingtime/statuses/' + 'a'.repeat(40));
+      fixture.statuses.push(JSON.parse(init.body)); return Response.json({});
+    }
     throw new Error('Unexpected fixture path');
   };
-  const runtimeLogs = async (scope) => { logReads++; assert.equal(scope.deploymentId, 'dpl_test'); };
+  const runtimeLogs = async (scope) => {
+    fixture.logReads++;
+    assert.deepEqual(scope, options);
+    if (fixture.throwLogError) throw fixture.logError;
+    return fixture.summaryOverride || readRuntimeLogs(scope, { runner: async () => ({ stdout: jsonLines(fixture.rows) }) });
+  };
+  fixture.run = () => monitor({
+    fetcher, runtimeLogs, now: () => Date.parse(options.until), report: (line) => fixture.reports.push(line)
+  });
+  fixture.latest = (context) => [...fixture.statuses].reverse().find((status) => status.context === context);
+  fixture.observation = () => fixture.reports.map((line) => JSON.parse(line)).findLast((row) => row.event === 'production-runtime-monitor');
+  try { await work(fixture); }
+  finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+}
+
+test('monitor publishes separate exact-source statuses and deduplicates failures and recovery', async () => {
+  await withMonitorFixture(async (fixture) => {
+    const observed = await fixture.run();
+    assert.deepEqual(observed, {
+      event: 'production-runtime-monitor', sourceSha: 'a'.repeat(40), deploymentId: 'dpl_test',
+      window: { since: options.since, until: options.until },
+      storage: { state: 'success', code: 'ready' },
+      runtime: { state: 'success', code: 'ready', queryComplete: true, summary: emptySummary() }
+    });
+    await fixture.run();
+    assert.equal(fixture.statuses.length, 2);
+    fixture.rows = [logRow({ message: 'TypeError: failed generic operation' })];
+    await assert.rejects(fixture.run(), /runtime-errors-1/);
+    assert.equal(fixture.latest('Production storage runtime').state, 'success');
+    assert.equal(fixture.latest('Production runtime errors').state, 'failure');
+    assert.equal(fixture.observation().runtime.queryComplete, true);
+    await assert.rejects(fixture.run(), /runtime-errors-1/);
+    assert.equal(fixture.statuses.length, 3);
+    fixture.rows = [];
+    await fixture.run();
+    assert.equal(fixture.statuses.length, 4);
+    assert.equal(fixture.latest('Production runtime errors').state, 'success');
+  });
+});
+
+test('unhealthy storage still queries runtime and reports both failures independently', async () => {
+  await withMonitorFixture(async (fixture) => {
+    fixture.healthy = false;
+    fixture.rows = [logRow({ level: 'fatal', message: 'FUNCTION_INVOCATION_TIMEOUT' })];
+    await assert.rejects(fixture.run(), /storage-not-ready/);
+    assert.equal(fixture.logReads, 1);
+    assert.equal(fixture.latest('Production storage runtime').state, 'failure');
+    assert.equal(fixture.latest('Production runtime errors').state, 'failure');
+    assert.equal(fixture.observation().storage.code, 'storage-not-ready');
+    assert.equal(fixture.observation().runtime.code, 'runtime-errors-1');
+    assert.equal(fixture.observation().runtime.queryComplete, true);
+    fixture.rows = [];
+    await assert.rejects(fixture.run(), /storage-not-ready/);
+    assert.equal(fixture.logReads, 2);
+    assert.equal(fixture.latest('Production runtime errors').state, 'success');
+  });
+});
+
+test('storage runtime errors fail both contexts and recover without duplicate unchanged statuses', async () => {
+  await withMonitorFixture(async (fixture) => {
+    fixture.rows = [logRow({ message: 'STORAGE_RECOVERY_BUSY' })];
+    await assert.rejects(fixture.run(), /runtime-storage-errors-1/);
+    assert.equal(fixture.latest('Production storage runtime').state, 'failure');
+    assert.equal(fixture.latest('Production runtime errors').state, 'failure');
+    assert.equal(fixture.observation().runtime.summary.storageFailures, 1);
+    assert.equal(fixture.observation().runtime.queryComplete, true);
+    await assert.rejects(fixture.run(), /runtime-storage-errors-1/);
+    assert.equal(fixture.statuses.length, 2);
+    fixture.rows = [];
+    await fixture.run();
+    assert.equal(fixture.statuses.length, 4);
+    assert.equal(fixture.latest('Production storage runtime').state, 'success');
+    assert.equal(fixture.latest('Production runtime errors').state, 'success');
+  });
+});
+
+test('missing or unknown severity cannot become a successful broad runtime observation', async () => {
+  for (const row of [
+    logRow({ level: undefined }),
+    logRow({ level: 'warning' }),
+    logRow({ level: 'fatal', logs: [{ level: 'secret-provider-severity', message: 'private' }] })
+  ]) await withMonitorFixture(async (fixture) => {
+    fixture.rows = [row];
+    await assert.rejects(fixture.run(), /runtime-severity-unknown-1/);
+    assert.equal(fixture.latest('Production runtime errors').state, 'error');
+    assert.equal(fixture.observation().runtime.queryComplete, false);
+    assert.equal(fixture.observation().runtime.summary.unknownSeverityRecords, 1);
+    assert.ok(!fixture.reports.join('\n').includes('secret-provider-severity'));
+  });
+});
+
+test('collector failures remain incomplete, never a clean empty window, even while storage is unhealthy', async () => {
+  await withMonitorFixture(async (fixture) => {
+    fixture.healthy = false;
+    fixture.rows = [logRow({ messageTruncated: true })];
+    await assert.rejects(fixture.run(), /storage-not-ready/);
+    assert.equal(fixture.observation().runtime.code, 'log-message-truncated');
+    assert.equal(fixture.observation().runtime.state, 'error');
+    assert.equal(fixture.observation().runtime.queryComplete, false);
+    assert.equal(fixture.observation().runtime.summary, null);
+  });
+});
+
+test('monitor fences alias movement and returned deployment identity before reporting current results', async () => {
+  await withMonitorFixture(async (fixture) => {
+    fixture.race = true;
+    await assert.rejects(fixture.run(), /production-advanced/);
+    assert.equal(fixture.logReads, 1);
+    assert.equal(fixture.statuses.length, 0); assert.equal(fixture.reports.length, 0);
+  });
+  for (const patch of [
+    { id: 'dpl_other' }, { projectId: 'prj_other' }, { target: 'preview' },
+    { meta: { githubCommitRef: 'develop', githubCommitSha: 'a'.repeat(40) } },
+    { meta: { githubCommitRef: 'main', githubCommitSha: 'private-invalid-sha' } }
+  ]) await withMonitorFixture(async (fixture) => {
+    Object.assign(fixture.deployment, patch);
+    await assert.rejects(fixture.run(), /production-deployment-identity-mismatch/);
+    assert.equal(fixture.logReads, 0);
+    assert.equal(fixture.statuses.length, 0); assert.equal(fixture.reports.length, 0);
+  });
+});
+
+test('wrong health gateway cannot certify the snapshotted deployment while runtime evidence stays separate', async () => {
+  for (const patch of [{ origin: 'https://other.example' }, { environment: 'preview' }, { deploymentId: 'dpl_other' }]) {
+    await withMonitorFixture(async (fixture) => {
+      Object.assign(fixture.gateway, patch);
+      await assert.rejects(fixture.run(), /gateway-identity-mismatch/);
+      assert.equal(fixture.logReads, 1);
+      assert.equal(fixture.latest('Production storage runtime').state, 'failure');
+      assert.equal(fixture.latest('Production runtime errors').state, 'success');
+      assert.ok(!fixture.calls.some((call) => call.path === '/api/v1/health/nitro'));
+    });
+  }
+});
+
+test('provider failures never publish false success or expose response bodies', async () => {
+  for (const host of ['api.github.com', 'api.vercel.com']) await withMonitorFixture(async (fixture) => {
+    fixture.providerFailure = host;
+    await assert.rejects(fixture.run(), (error) => {
+      assert.match(error.message, /http-403-rate-limit-exhausted/);
+      assert.ok(!error.message.includes('private')); return true;
+    });
+    assert.equal(fixture.statuses.length, 0); assert.equal(fixture.reports.length, 0);
+  });
+});
+
+test('malicious prefixed collector errors cannot inject private content into statuses or reports', async () => {
+  for (const error of [
+    new Error('Storage release gate: synthetic-private-token'),
+    Object.assign(new Error('Storage release gate: synthetic-private-token'), { code: 'ready' }),
+    { message: 'Storage release gate: synthetic-private-token' },
+    null, 'Storage release gate: synthetic-private-token'
+  ]) await withMonitorFixture(async (fixture) => {
+    fixture.throwLogError = true;
+    fixture.logError = error;
+    await assert.rejects(fixture.run(), { message: 'Storage release gate: monitor-unavailable' });
+    assert.equal(fixture.latest('Production runtime errors').state, 'error');
+    assert.equal(fixture.observation().runtime.summary, null);
+    assert.ok(!JSON.stringify([fixture.statuses, fixture.reports]).includes('synthetic-private-token'));
+  });
+});
+
+test('monitor rejects impossible aggregate counts and projects future collector fields out of all outputs', async () => {
+  for (const patch of [
+    { records: -1 }, { records: logLimit }, { records: 1.5 }, { errorRecords: 1 },
+    { records: 1 }, { categories: { ...emptySummary().categories, storage: 1 } }
+  ]) await withMonitorFixture(async (fixture) => {
+    fixture.summaryOverride = { ...emptySummary(), ...patch };
+    await assert.rejects(fixture.run(), /log-response-invalid/);
+    assert.equal(fixture.observation().runtime.summary, null);
+    assert.equal(fixture.observation().runtime.queryComplete, false);
+  });
+  const dir = await mkdtemp(join(tmpdir(), 'runtime-monitor-summary-'));
+  const summaryPath = join(dir, 'summary.md');
   try {
-    await monitor({ fetcher, runtimeLogs });
-    await monitor({ fetcher, runtimeLogs });
-    assert.equal(statuses.length, 1);
-    healthy = false;
-    await assert.rejects(monitor({ fetcher, runtimeLogs }), /storage-not-ready/);
-    await assert.rejects(monitor({ fetcher, runtimeLogs }), /storage-not-ready/);
-    assert.equal(statuses.length, 2); assert.equal(logReads, 2);
-    healthy = true;
-    await monitor({ fetcher, runtimeLogs });
-    assert.equal(statuses.length, 3); assert.equal(statuses.at(-1).state, 'success');
-    race = true; aliasReads = 0;
-    await assert.rejects(monitor({ fetcher, runtimeLogs }), /production-advanced/);
-    assert.equal(statuses.length, 3);
-    race = false; providerFailure = 'github';
-    await assert.rejects(monitor({ fetcher, runtimeLogs }), { message: 'Storage release gate: github-http-403-rate-limit-exhausted' });
-    providerFailure = 'vercel';
-    await assert.rejects(monitor({ fetcher, runtimeLogs }), { message: 'Storage release gate: vercel-http-403' });
-    assert.equal(statuses.length, 3);
-  } finally { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
+    await withMonitorFixture(async (fixture) => {
+      const secret = 'synthetic-private-token-and-account';
+      fixture.summaryOverride = {
+        ...emptySummary(), raw: secret, messages: [secret], requestUrl: 'https://private.example/' + secret,
+        categories: { ...emptySummary().categories, attackerCategory: secret }
+      };
+      const observation = await fixture.run();
+      assert.deepEqual(observation.runtime.summary, emptySummary());
+      const output = JSON.stringify([observation, fixture.statuses, fixture.reports]) + await readFile(summaryPath, 'utf8');
+      assert.ok(!output.includes(secret)); assert.ok(!output.includes('attackerCategory'));
+      assert.match(output, /dpl_test/); assert.match(output, /2026-10-29T00:30:00.000Z/);
+    }, summaryPath);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 test('unchanged monitor observations do not duplicate statuses', () => {
   const next = { state: 'failure', description: 'Storage readiness + runtime logs: storage-not-ready', target_url: 'https://github.com/lopugit/thingtime/actions/workflows/storage-release-monitor.yml' };

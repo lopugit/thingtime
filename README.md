@@ -170,6 +170,31 @@ path instead of entering dependency installation. Only a contents 404 means the
 file is missing; authentication, rate-limit, and server errors remain errors.
 See [.github/TESTING.md](.github/TESTING.md) for regression and rollout checks.
 
+### Production runtime monitoring
+
+The existing `storage-release-monitor.yml` listener runs the protected monitor
+on this branch. Its existing `vercel-prebuilt-control` token and project/team
+configuration query only the current `thingtime.com` production deployment's
+previous 30 minutes of error/fatal request records. No credential or permission
+change is needed for broad error reporting. This controller is deployed by
+merging its PR into `github-actions`; do not merge the thin control-plane tree
+into `main` or rebuild the product just to activate monitoring.
+
+`Production storage runtime` retains its storage meaning. A separate
+`Production runtime errors` status flags any returned severe request records
+and reports unavailable or unknown evidence as an error. Per-run console/step
+summary evidence contains only validated source/deployment/window metadata,
+counts, and fixed categories. Logs are collected even when storage health fails;
+an alias change rejects stale observations. Raw logs stay in memory and are
+never written to artifacts, statuses, PR comments or summaries. The publisher's
+storage release gate remains unchanged.
+
+Counts represent returned request records, not unique log events; categories
+can overlap. The pinned CLI's normalization, pagination, provider retention and
+application ingestion limit coverage. Browser acceptance and errors outside the
+error/fatal filter remain separate. See the storage/runtime regression and live
+acceptance checks in [.github/TESTING.md](.github/TESTING.md).
+
 ### Missing-build wildcard page
 
 Preview wildcards must not impersonate the live application when an exact PR

@@ -1,5 +1,17 @@
 # Control-plane changelog
 
+## 2026-11-06 — Report production runtime errors beyond storage
+
+- Reuse the protected monitor's exact-deployment, bounded error/fatal query to
+  publish a separate `Production runtime errors` status and fresh sanitized
+  source/window/count evidence. Classify fixed error categories per returned
+  request record without exporting raw logs, URLs, account IDs or credentials.
+- Query logs independently when storage health fails; reject identity races,
+  malformed or incomplete results and unknown severity. Preserve the publisher's
+  storage-only release gate, existing token scope, workflow concurrency and CLI.
+- Cover classification, redaction, provider failures, recovery and independent
+  storage/runtime outcomes with synthetic tests. Browser coverage is separate.
+
 ## 2026-11-02 — Pass the existing team slug into prebuilt prepare
 
 - Map the protected environment’s `VERCEL_TEAM_SLUG` into authorization before
