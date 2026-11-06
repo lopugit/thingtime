@@ -6953,3 +6953,16 @@ link while preserving its ID; shared legacy tokens are refused until reconnect.
 Secret rotation keeps compatible grants; changing client, callback or environment
 requires a fresh connection. Disconnect and token refresh serialize through the
 home-plane transactional account path. No provider request API is added here.
+
+### Account-file restore worker proof
+
+Run `corepack pnpm --dir remix run test:backups:file-restore` with local `mongod`
+and `mongosh` on macOS. It owns replica port **28167**, isolated synthetic
+accounts and private temporary vault/object directories. It uses canonical APIs,
+including the fixture-only documented administrator policy for upload approval
+and the existing legacy-index migration/cache drain; it never imports app env or
+personal credentials. The proof reads a copied sealed vault after source-object
+and first-vault loss, preserves nested folder metadata and file history, and
+checks current/historical bytes, interruption and authority races. This is an
+internal selected-file worker, not a new public restore UI or complete account
+restore. See [the contract](docs/portable-backups.md#reviewed-account-file-publication--6-november-2026).

@@ -1062,3 +1062,26 @@ test('one oversized escaped diagnostic cannot prevent exact independent recovery
 	assert.equal((restored.value as any).crystal.renderComponent.id, reference);
 	assert.equal((restored.value as any).crystal.text, 'Keep this exact saved data');
 });
+
+test('real-shaped moderation Dates and provider diagnostics are excluded before portable attachment bounding', async () => {
+ const f = fixture(0), attachment = await backupAttachmentFixture('owner', 'moderated-attachment', Buffer.from('saved bytes'));
+ (attachment.doc as any).moderation = { status: 'clear', checkedAt: new Date(), provider: 'DO_NOT_EXPORT_PROVIDER_DIAGNOSTICS', details: { response: 'DO_NOT_EXPORT_PROVIDER_DIAGNOSTICS' } };
+ f.source.push(attachment.doc); f.heads.set(attachment.doc.objectKey, attachment.head);
+ await f.run();
+ assert.ok(f.projections.some((p: any) => p['moderation.status'] === 1 && p.moderation === undefined));
+ assert.ok(![...f.objects.values()].some(bytes => Buffer.from(bytes).includes('DO_NOT_EXPORT_PROVIDER_DIAGNOSTICS')));
+ const item = f.json('plan/0.json').items.find((item: any) => item.thingId === attachment.doc.shareId);
+ assert.equal(item.snapshot.value.moderation, null);
+ assert.deepEqual(item.snapshot.value.content, attachment.content);
+});
+
+test('account file descriptors preserve inert symlink metadata alongside its exact target bytes', async () => {
+ const f = fixture(0), bytes = Buffer.from('../target'), attachment = await backupAttachmentFixture('owner', 'symlink-attachment', bytes);
+ f.source.push(attachment.doc); f.heads.set(attachment.doc.objectKey, attachment.head);
+ const symbolicLink = { format: 'posix-symlink-v1', targetBase64: bytes.toString('base64') };
+ f.source.push({ shareId: 'file-one', ownerId: 'owner', thingtime: ['file'], timelineHeadId: 'symlink-revision', folderId: 'folder-one', crystal: { name: 'link', trashed: false, content: attachment.content, symbolicLink } });
+ await f.run();
+ const file = f.json('plan/0.json').items.find((item: any) => item.thingId === 'file-one');
+ assert.deepEqual(file.snapshot.value.symbolicLink, symbolicLink);
+ assert.ok(f.projections.some((p: any) => p['crystal.symbolicLink'] === 1));
+});

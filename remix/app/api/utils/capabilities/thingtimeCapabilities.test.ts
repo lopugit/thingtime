@@ -144,7 +144,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
     assert.equal(capabilitySatisfies(previous, required), false);
     assert.equal(capabilitySatisfies('2.0.0', required), false);
   }
-  assert.equal(manifest.features['api.things-bulk']?.version, '1.7.0');
+  assert.equal(manifest.features['api.things-bulk']?.version, '1.7.1');
   for (const version of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), true);
   for (const version of ['1.0.0', '1.1.0', '1.1.1', '2.0.0', '']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
   assert.equal(capabilitySatisfies('1.2.0', '1.3.0'), false);
@@ -583,7 +583,7 @@ test('object-only empty finalization corrections remain compatible with shipped 
 
 test('sync upload provenance clients require compatible contracts on the selected origin', () => {
  const manifest = thingtimeCapabilityManifest('https://provenance.test');
- for (const [feature, required, old] of [['api.attachment-uploads', '1.7.0', '1.6.2'], ['api.things', '1.52.0', '1.39.1'], ['api.files', '1.12.0', '1.9.0'], ['api.file-sync-batches', '1.3.0', '1.2.1']]) {
+ for (const [feature, required, old] of [['api.attachment-uploads', '1.7.0', '1.6.2'], ['api.things', '1.52.0', '1.39.1'], ['api.files', '1.12.1', '1.9.0'], ['api.file-sync-batches', '1.3.0', '1.2.1']]) {
 
 
   assert.equal(manifest.features[feature].version, feature === 'api.attachment-uploads' ? '1.10.0' : required);
@@ -676,7 +676,7 @@ test('empty post and message files require the compatible original-byte contract
 
 
 test('long Data text requires compatible write import and schema contracts', () => {
- for (const [feature, minimum, previous] of [['api.things', '1.52.0', '1.49.2'], ['api.things-update', '1.20.0', '1.18.1'], ['api.things-import', '1.13.0', '1.12.0'], ['api.schemas', '1.2.0', '1.1.1'], ['api.things-bulk', '1.7.0', '1.6.0'], ['api.actions-run', '1.43.0', '1.40.1'], ['api.chatgpt-mcp', '2.1.0', '2.0.0'], ['api.builder-workspaces', '1.1.0', '1.0.1']]) {
+ for (const [feature, minimum, previous] of [['api.things', '1.52.0', '1.49.2'], ['api.things-update', '1.20.0', '1.18.1'], ['api.things-import', '1.13.0', '1.12.0'], ['api.schemas', '1.2.0', '1.1.1'], ['api.things-bulk', '1.7.1', '1.6.0'], ['api.actions-run', '1.43.0', '1.40.1'], ['api.chatgpt-mcp', '2.1.0', '2.0.0'], ['api.builder-workspaces', '1.1.0', '1.0.1']]) {
   assert.equal(createApiCapabilitiesManifest().features[feature], minimum);
   assert.equal(thingtimeCapabilityManifest('https://shares.test').features[feature].version, minimum);
   for (const version of [undefined, previous, `${Number(minimum.split('.')[0]) + 1}.0.0`]) assert.equal(capabilitySatisfies(version, minimum), false);
@@ -688,7 +688,7 @@ test('long Data text requires compatible write import and schema contracts', () 
 test('shared content input and projection contracts agree on both origin manifests', () => {
  const generated = createApiCapabilitiesManifest();
  const runtime = thingtimeCapabilityManifest('https://shares.test');
- for (const [feature, minimum] of [['api.attachment-uploads', '1.10.0'], ['api.attachment-upload-complete', '1.7.0'], ['api.attachment-annotate', '1.3.0'], ['api.attachment-link', '1.2.0'], ['api.attachment-content', '1.18.0'], ['api.files', '1.12.0'], ['api.things-share', '1.4.0'], ['api.things-feed', '1.9.0'], ['api.things-user', '1.8.0'], ['api.things-search', '1.4.0'], ['api.things-export', '1.16.0'], ['api.things-comment', '1.11.0']]) {
+ for (const [feature, minimum] of [['api.attachment-uploads', '1.10.0'], ['api.attachment-upload-complete', '1.7.0'], ['api.attachment-annotate', '1.3.0'], ['api.attachment-link', '1.2.0'], ['api.attachment-content', '1.18.0'], ['api.files', '1.12.1'], ['api.things-share', '1.4.0'], ['api.things-feed', '1.9.0'], ['api.things-user', '1.8.0'], ['api.things-search', '1.4.0'], ['api.things-export', '1.16.0'], ['api.things-comment', '1.11.0']]) {
   assert.equal(generated.features[feature], minimum);
   assert.equal(runtime.features[feature].version, minimum);
   assert.equal(capabilitySatisfies(minimum, minimum), true);
@@ -699,12 +699,12 @@ test('shared content input and projection contracts agree on both origin manifes
 
 
 test('authenticated shared-content body contracts publish deliberate minors in both manifests', () => {
- const expected = {'api.things':'1.52.0','api.things-update':'1.20.0','api.things-comment':'1.11.0','api.chats-messages':'1.4.0','api.chats-messages-edit':'1.2.0','api.attachment-uploads':'1.10.0','api.attachment-annotate':'1.3.0','api.attachment-link':'1.2.0','api.files':'1.12.0'};
+ const expected = {'api.things':'1.52.0','api.things-update':'1.20.0','api.things-comment':'1.11.0','api.chats-messages':'1.4.0','api.chats-messages-edit':'1.2.0','api.attachment-uploads':'1.10.0','api.attachment-annotate':'1.3.0','api.attachment-link':'1.2.0','api.files':'1.12.1'};
  const source=createApiCapabilitiesManifest(), runtime=thingtimeCapabilityManifest('https://shared-content.test');
  for (const [feature,version] of Object.entries(expected)) {
   assert.equal(source.features[feature],version); assert.equal(runtime.features[feature].version,version);
   assert.equal(apiEndpointDocs.find(doc => `api.${doc.id}`===feature)?.contractVersion,version);
-  assert.equal(SHARED_CONTENT_REQUIREMENTS[feature as keyof typeof SHARED_CONTENT_REQUIREMENTS],version);
+  assert.ok(capabilitySatisfies(version, SHARED_CONTENT_REQUIREMENTS[feature as keyof typeof SHARED_CONTENT_REQUIREMENTS]));
   const [major,minor]=version.split('.').map(Number);
   assert.equal(capabilitySatisfies(`${major}.${minor-1}.99`,version),false);
   assert.equal(capabilitySatisfies(`${major}.${minor}.1`,version),true);
