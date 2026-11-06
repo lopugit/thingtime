@@ -1,5 +1,6 @@
 import { requireSharedContentCapability, sharedContentWrite } from '~/utils/sharedContentCapabilities';
 import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
+import { BACKUP_DESTINATIONS_PATH, BACKUP_DESTINATIONS_REQUIREMENTS, type BackupDestinationsResult } from '~/backups/destinations';
 import { AUTHORED_CONTROL_REQUIREMENTS, usesAuthoredControls } from '~/schemas/authoredControls';
 import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
 import { isBuilderThing } from '~/schemas/builderThing';
@@ -147,6 +148,16 @@ export function useApi() {
   actionActor.current = actionUser?.id;
 
   const v1 = {
+    backups: {
+      destinations: useCallback(async (scope: TimelineScope, options?: { signal?: AbortSignal }): Promise<BackupDestinationsResult> => {
+        if (scope.dataPlane !== 'home') throw Error('Backups require home storage.');
+        for (const [feature, minimum] of Object.entries(BACKUP_DESTINATIONS_REQUIREMENTS))
+          await requireThingtimeCapability(feature, minimum, scope.apiOrigin);
+        options?.signal?.throwIfAborted();
+        return getJson(BACKUP_DESTINATIONS_PATH, { ...options, expectedActor: scope.ownerId,
+          expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
+      }, [getJson])
+    },
     files: {
       read: useCallback(async (scope: TimelineScope, id: string, options?: { signal?: AbortSignal }) => {
         if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
