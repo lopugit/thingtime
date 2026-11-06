@@ -1,5 +1,48 @@
 # Things and folders
 
+Device pages expose Location history through `DeviceLocationWorkspace`, a
+scoped data/action adapter that resolves private saved `/devices/location` and
+`settings-device-location-settings` layouts. Map markers, filters, retention,
+message controls and uploads remain separately editable blocks. Protected
+`device-observation` history is read through its owner-only device API, not
+ordinary Things discovery. See the [API map](api-endpoints-and-capabilities.md)
+and the Device location history checklist in `TESTING.md`.
+
+## Native external-volume reconnect
+
+`FolderBookmark` distinguishes a detached original volume from deletion on an
+online volume without prompting or mounting it. `NativeFilesystemContinuity`
+and `RustInventoryClient.Root` retain volume UUID, root inode and birth as an
+additional recovery fence; exact live descriptor checks remain mandatory.
+`MobileFolderInventory` retires old device/path snapshots and creates fresh
+generations rather than rewriting their identities. Legacy captures require
+the original nonstale bookmark's saved UUID and original root inode.
+
+`NativeSymbolicLinks` and Rust `backup/native_receipts.rs` resolve matching
+persistent receipt aliases for journals and portable links, including current
+attachment migration of older receipts. A legacy journal with insufficient
+volume proof is unreadable, never ordinary upload content. The small
+`commander-platform` descriptor metadata adapter isolates Darwin UUID FFI from
+the indexer's `forbid(unsafe_code)` policy.
+
+`MobileSyncStaging` uses an on-volume verified candidate for different-device
+regular downloads. Root/candidate/displaced/journal anchors and the private
+marker/content hash gate uncertain-publication recovery. Historical receipts
+remain historical; missing legacy anchors never authorize another swap.
+
+The Electron host recognizes only fixed typed availability markers. Existing
+job backoff resumes offline work. `nativeFeedRecovery` ends the old local hint
+prefix through `pagedRunJournal.endRemountedLocalFeed`, retaining every cursor,
+operation and receipt; the ordinary guarded consumer drains it before fresh
+sealed reconciliation can publish agreement. Native contracts are Mac file
+access 1.20.0 and publication 1.3.0.
+
+Regressions: `DriveReconnectTests` (opt-in real APFS), `nativeFeedRecovery`,
+`twoWayStreaming`, `desktopFolders.client`, Electron `folder-sync`, Rust native
+receipt tests and `commander-platform`. Runbooks: `TESTING.md` external-drive
+reconnect checklist. APFS images prove native remount behavior; physical USB
+hardware and the final signed installation are separate acceptance gates.
+
 ## Incoming-share location selection
 
 `ThingsPage` accepts an optional `locationPicker` adapter. It keeps the existing
@@ -42,6 +85,14 @@ The device sync screen keeps saved connection editing available offline and
 uses a protected, leased control channel for live device operations. Native
 grants and transfer journals stay on the target device. See
 [browser device sync](../browser-device-sync.md) for code paths and checks.
+Guarded streaming preparation defers missing journal ancestry before policy RPCs;
+protected point reads and executable bindings retain current policy checks. The
+`--healthy` canonical fixture lane separates startup timing from accepted-loss
+recovery while retaining exact hashes and strict checkpoints.
+The indexed local feed races its live native long poll against a cancellable,
+revisioned durable-consumer wake. Buffered revisions and the native finish/poll
+handshake still drain normally; legacy adapters keep their polling fallback.
+See `streamingIndexRecovery.test.ts` and the idle-wake checklist in `TESTING.md`.
 Mac paged native inventory reads use `MobileFolderInventory.read` and
 `RustInventoryClient.checkedPage`: each Rust `page` reply includes its checked
 status so the client can validate generation, root version and coverage with

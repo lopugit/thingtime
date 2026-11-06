@@ -14,6 +14,7 @@ import { streamingFileFixture } from './streamingFile.fixture';
 import { INVENTORY_PAGE_ENTRIES } from './inventoryJournal';
 import { streamForegroundSync } from './streamingForegroundSync';
 import type { NativeIndexChangesPage } from './streamingIndex';
+import { SyncVolumeRemounted } from './syncConnectionWait';
 
 const twoWay = { ...saved, configuration: { ...saved.configuration, mode: 'two-way' as const } };
 const deferred = () => {
@@ -82,6 +83,29 @@ async function fixture(path?: string) {
 	return { f, input, native, downloads, receipts, putCloud, feeds, run, stream, removeSource: () => { removeSource = true; },
 		runs: () => input.journal.pagedRuns(access), checkpoints: () => input.journal.pagedCheckpoints(access) };
 }
+
+test('verified local remount preserves bidirectional receipts and finishes with fresh sealed agreement', { timeout: 10000 }, async () => {
+	const x = await fixture(), uploaded = deferred(), downloaded = deferred();
+	const remote = await x.putCloud('download.bin', [5, 6, 7]);
+	const both = Promise.all([uploaded.promise, downloaded.promise]).then(() => {});
+	x.feeds([x.f.entry()], [remote], both);
+	x.input.transfer = event => {
+		if ('kind' in event && event.kind === 'file') (event.direction === 'upload' ? uploaded : downloaded).resolve();
+	};
+	x.input.streamLocalChanges = async function* (id) {
+		yield frame(id, [x.f.entry()], 0);
+		await both;
+		await x.f.revise([1, 2, 3], 'remounted-inode-version');
+		throw new SyncVolumeRemounted();
+	};
+	try {
+		await x.run();
+		assert.equal(x.f.publications(), 1); assert.equal(x.receipts.size, 1);
+		assert.deepEqual([...x.downloads.values()].at(-1), new Uint8Array([5, 6, 7]));
+		assert.ok(await x.checkpoints().current());
+		assert.equal(await x.runs().active(), null);
+	} finally { x.f.journal().close(); }
+});
 
 test('new files and one-sided file edits in both directions confirm while both initial feeds remain open; strict seal publishes agreement', { timeout: 10000 }, async () => {
 	const x = await fixture();
@@ -638,5 +662,75 @@ test('same-order folder feeds larger than the observation window retain complete
     assert.equal(x.preparedHints(), pairs * 2);
     assert.equal(x.f.publications(), 0); assert.equal(x.receipts.size, 0); assert.equal(await x.checkpoints().current(), null);
     context.diagnostic(JSON.stringify({ folderEchoWindowEffectiveness: { pairs, window: INVENTORY_PAGE_ENTRIES, guardedContexts: x.stats().contexts, scalarContexts: pairs * 2 + 1, scope: 'synthetic no-op orchestration diagnostic; not HTTP or installed throughput; poor effectiveness is reported rather than required' } }));
+    x.f.journal().close();
+});
+
+// A journal-only ancestor refusal cannot become authority for a later hint.
+for (const guarded of [false, true]) test(`missing ancestor defers before guarded policy work: ${guarded}`, async () => {
+    const x = await fixture('Missing/child.bin');
+    let contexts = 0, reads = 0;
+    x.input.nativeOperationGuards = guarded ? true : undefined;
+    x.input.authorizeContext = async () => { contexts++; return { network: 'wifi', charging: true }; };
+    x.input.inspectLocal = async () => { reads++; throw Error('Deferred hint must not inspect'); };
+    x.feeds([x.f.entry()], []);
+    await x.stream();
+    assert.equal(contexts, guarded ? 1 : 2);
+    assert.equal(reads, 0);
+    assert.equal(x.f.publications(), 0);
+    assert.equal(await x.checkpoints().current(), null);
+    x.f.journal().close();
+});
+
+for (const change of ['pause', 'remove', 'revision'] as const) test(`deferred ancestor cannot bypass subsequent ${change} policy`, async () => {
+    const x = await fixture();
+    let altered = false, reads = 0;
+    const read = x.input.readConfiguration;
+    x.input.nativeOperationGuards = true;
+    x.input.readConfiguration = async () => {
+        if (altered && change === 'remove') return null;
+        const current = await read() as any;
+        return altered ? { ...current, crystal: { ...current.crystal, ...(change === 'pause' ? { paused: true } : { remoteFolderId: 'changed-root' }) } } : current;
+    };
+    x.input.inspectLocal = async () => { reads++; throw Error('Changed policy must precede point reads'); };
+    const original = x.input.journal.pagedRuns.bind(x.input.journal);
+    x.input.journal = { ...x.input.journal, pagedRuns: (...args) => {
+        const runs = original(...args);
+        return { ...runs, appendStream: async (...values) => {
+            const result = await runs.appendStream(...values);
+            if (values[1].entry.path === 'Missing/hint') altered = true;
+            return result;
+        } };
+    } };
+    x.feeds([{ ...x.f.entry(), path: 'Missing/hint' }, x.f.entry()], []);
+    await assert.rejects(x.stream(), /configuration|changed|approved|revision/i);
+    assert.equal(reads, 0);
+    assert.equal(x.f.publications(), 0);
+    assert.equal(x.receipts.size, 0);
+    assert.equal(await x.checkpoints().current(), null);
+    x.f.journal().close();
+});
+
+test('guard negotiation changing during journal ancestry cannot bypass policy before point reads', async () => {
+    const x = await fixture('Parent/child.bin');
+    let contexts = 0, reads = 0, contextsBeforeRead: number | undefined;
+    x.input.nativeOperationGuards = true;
+    x.input.authorizeContext = async () => { contexts++; return { network: 'wifi', charging: true }; };
+    x.input.inspectLocal = async () => { contextsBeforeRead ??= contexts; reads++; return null; };
+    const original = x.input.journal.pagedRuns.bind(x.input.journal);
+    x.input.journal = { ...x.input.journal, pagedRuns: (...args) => {
+        const runs = original(...args);
+        return { ...runs, streamPrevious: async (...values) => {
+            if (values[1] !== 'Parent') return runs.streamPrevious(...values);
+            x.input.nativeOperationGuards = undefined;
+            const entry: SyncEntry = { path: 'Parent', id: 'parent', version: 'v1', kind: 'folder', size: 0, sha256: null };
+            return { operation: { id: 'parent-operation', confirmed: true, mutation: { kind: 'copy' as const, from: 'local' as const, path: 'Parent', source: entry, expectedTarget: null } }, receipt: { operationId: 'parent-operation', scope, entry } };
+        } };
+    } };
+    x.feeds([x.f.entry()], []);
+    await x.stream();
+    assert.equal(contextsBeforeRead, 2);
+    assert.ok(reads >= 1);
+    assert.equal(x.f.publications(), 0);
+    assert.equal(await x.checkpoints().current(), null);
     x.f.journal().close();
 });

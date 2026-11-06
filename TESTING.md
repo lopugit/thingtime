@@ -6941,6 +6941,13 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       both checks against `~/Applications/Thingtime.app`, and compare the outer
       app/node/bridge team identifiers, designated requirements, and executable
       hashes between build and install.
+- [ ] After standalone signing and final Electron sealing, inspect the embedded
+      Node signed entitlements as XML and require Boolean `true` for
+      `com.apple.security.personal-information.location`; keep the IPC bridge
+      entitlements unchanged. Run `electron/test/node-location-signing.test.cjs`
+      and confirm a valid deep signature with that entitlement stripped fails
+      final verification. Unconsented startup must not request location; use the
+      ordinary device control for OS consent after installing the verified app.
 - [ ] Confirm electron-builder compiled `electron/build/Thingtime.icon` into
       the installed app. Inspect Finder/Dock in light and dark appearance: both
       must keep the exact green canopy/brown trunk artwork legible against the
@@ -13260,6 +13267,39 @@ separate from deterministic discovery/lease tests.
 
 - [ ] File sync: after one completed transfer, force the next indexing attempt to fail. It must show Needs attention and Indexing stopped before completion, without reusing the old hierarchy or uploading additional entries.
 
+### External-drive reconnect — 2026-11-06
+
+- Build the real helper with `cargo build --locked --manifest-path
+  filesystem-indexer/Cargo.toml -p commander-indexer`, then run
+  `THINGTIME_TEST_DRIVE_REMOUNT=1 swift test --package-path apple/FileSync
+  --filter DriveReconnectTests`. The opt-in fixture creates/detaches only its
+  own APFS images, isolated bookmarks, staging and receipt registry. It never
+  ejects a user volume. Its cleanup must leave no owned mounts.
+- Verify original-volume reconnect at the same and a different mountpoint,
+  including forced device-number reassignment. Reuse the grant and capture ID;
+  refuse old snapshots, recapture with a fresh generation, and retain content
+  fingerprints. A replacement volume at the old path with identical filenames
+  and bytes must never inherit the grant. A deleted root on an online volume
+  must not become an endless offline retry.
+- Verify staged download offsets, regular cross-device publication, interruption
+  before rename, after rename/before receipt, and after two-step displacement.
+  Keep original operation IDs and exact receipts. Preserve later local edits;
+  refuse replacement journals even when their marker bytes were copied.
+- Complete publication before detaching, then scan immediately after reconnect
+  **before** receipt lookup. Both Swift and Rust must exclude private marker and
+  displaced bytes, and retain portable-link meaning. Upgrade old registrations
+  only while exact current-attachment identity and marker/envelope proof are
+  available. An unbound legacy journal must remain an explicit unreadable gap.
+- Run `nativeFeedRecovery.test.ts` and `twoWayStreaming.test.ts` through the
+  normal Node/tsx test runner. Cover acknowledged and pending observations,
+  accepted writes with lost replies/reload, both byte-transfer directions,
+  pause, account change and current policy. No cursor reset, duplicated cloud
+  publication, guessed receipt or weaker identity may close an unfinished run.
+- Repeat the authorized fixture against the final installed signed app, keeping
+  live account/settings/grants separate from disposable tests. Record installed
+  source/signatures, exact byte/receipt results, and remaining physical USB
+  acceptance separately. Diskimage results alone are not USB-hardware evidence.
+
 ### Desktop shutdown with an unfinished page load
 
 - Quit while the bundled window is still loading and while closing its local
@@ -14677,6 +14717,21 @@ the isolated real-API/browser command and the metadata-only session boundary.
   current preparation. Verify no cursor changes during peer lookup, fresh strict
   inventory after a stale pair, and the mixed fixture's actual queued-peer hits
   before first confirmation. A positive hint is never current-state authority.
+- Guarded dual-feed hints with no usable journal ancestor must defer without
+  policy RPCs or protected point reads. Follow one with an executable hint after
+  pause, configuration removal or destination change: the original fresh policy
+  gate must still refuse it before either replica is observed. Legacy hosts keep
+  their existing ordering; deferral cannot create receipts or seal a checkpoint.
+  Capture the guard decision before awaits: changing host negotiation during
+  ancestor lookup cannot skip policy before a surviving point read.
+- Separate healthy startup from accepted-loss recovery with `--healthy` added
+  to `test:files:mac-paged -- --wide --wide-mixed --canonical-worker --streaming-two-way`.
+  This explicit lane disables accepted-loss/restart injections only; retain real
+  host/worker/API/Rust paths, exact hashes, full byte counts, strict checkpoints
+  and unchanged no-PUT checks. Native publication negotiation accepts compatible
+  minor updates and refuses missing/breaking contracts. Compare identical
+  `--wide-count` values and source
+  certificates; a small tree does not explain an older wide fault-run timing.
 - For mixed-file current-worker acceptance, add `--canonical-worker` to
   `test:files:mac-paged -- --wide --wide-mixed`; add `--streaming-two-way`
   to exercise production-style deletes-off dual feeds and strict async capture. Keep the default mixed mode
@@ -14860,6 +14915,50 @@ the isolated real-API/browser command and the metadata-only session boundary.
   A processing page size must never become a total comment limit.
 - Record web fixture, simulator, signed build, TestFlight processing and physical
   device evidence separately. A fake native bridge proves the web adapter only.
+
+### Device location history and locate actions — 2026-11-06
+
+- [ ] Run `test:devices` and `test:api-capabilities`; smoke the built manifest
+      and real owner/node routes. Verify other-owner, revoked and stale
+      collection refusal, duplicate immutable samples and late-arrival ordering.
+- [ ] On desktop and phone, compare current/history timestamps, coordinates,
+      accuracy and age colours with exact API samples. Exercise empty history,
+      pagination, date filters, unknown model fallback, retries and identity
+      changes. Scroll fully and open every changed control without overflow.
+- [ ] Change Never to a duration and back, including custom days. Read policy
+      back, verify expiry and accounted cleanup, and disable collection while
+      preserving retained history. Delay/fail checkbox saves: optimistic state
+      must reconcile or roll back without a second click or lost history.
+- [ ] In Builder, edit nested marker image, label, age colour, input and button
+      individually; save/reload and verify the live device composition still
+      operates. A standalone layout preview is not device-action acceptance.
+- [ ] Exercise explicit native location/notification consent, denial, revocation,
+      approximate/precise readings, background/foreground, offline outbox and
+      relaunch. Compare physical readings independently on each claimed host.
+      Missing optional capabilities must leave pairing/heartbeats operational.
+      StrictMode cleanup or identity suspension must withdraw background
+      authority without forgetting explicit collection consent; only verified
+      same-owner/device/origin activation may resume it. Ordinary backgrounding
+      preserves an already authorized location session. With Mobile device
+      connection activity disabled, explicitly start location collection, then
+      log out/switch origin or account: pending status callbacks must not restore
+      the old authority. Sign back into the same account with activity still off:
+      one read-only verified status must resume retained opt-in without another
+      enable/permission prompt. Hide/show the app without withdrawing authority.
+- [ ] Send a target-device message/default tone and an approved uploaded MP3.
+      Verify original bytes, exact prepared derivative, target isolation,
+      cancellation and lease expiry. Lose replies and retry the same request:
+      no second command/effect. A definite admission refusal may be corrected;
+      conflict/network/unknown outcomes retain the original operation identity.
+- [ ] Check APNs provider acceptance separately from actual displayed/sounded
+      notification. Native crash-after-effect becomes needs-review, never
+      automatic replay. Record simulator, real API, signed installed app,
+      TestFlight and physical-device evidence separately.
+- [ ] Expire the previous latest location, then receive a fresh sample: cleanup
+      must preserve the fresh pointer. Approve an APNs command and retry the
+      same approval after a lost reply: dispatch once, with canonical terminal
+      status and cleanup expiry. Revoke/replace audio during native download:
+      the final authorization check must prevent playback and cache commits.
 
 ### Builder app launch and scope regression
 
@@ -15114,3 +15213,21 @@ the isolated real-API/browser command and the metadata-only session boundary.
   and body stream when adding a deadline signal; native `new Request(h3Request)`
   fails Undici private-state branding. Smoke the built workspace GET refusal and
   normal authenticated POST body path, retaining abort/deadline semantics.
+
+### Native indexed feed idle wake — 2026-11-07
+
+- Run `node --import tsx --test app/fileSync/streamingIndexRecovery.test.ts
+  app/fileSync/streamingIndex.test.ts` from `remix/`, then `test:file-sync`.
+  Hold a publication after indexing: require a live 25-second native read,
+  no repeated two-second reads, continued native delta delivery, and immediate
+  finish when the durable consumer drains. Delay a false durable-read result
+  across consumer completion and require another readiness check without a tick.
+- Stop while both the native read and readiness wait are held: both owned
+  signals must abort, preserve the original Stop reason and make no new calls.
+  Drain buffered pages before waiting; retain folder-identity-only backoff,
+  immediate authority failures, generation/cursor validation and the mandatory
+  read after a refused finish. A concurrent native revision must survive finish.
+- Re-run the canonical healthy mixed fixture on the final installed app and
+  compare native `scan-changes` counts and first-file startup attribution with
+  its retained baseline. Unit fixtures do not prove installed startup speed;
+  preserve native watcher, uncached admission and current authorization checks.

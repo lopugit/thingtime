@@ -234,3 +234,10 @@ test('requested streaming two-way proof requires actual feeds, async capture and
     assert.throws(() => validateFixtureWorkerParity({ parity: { ...streaming, [key]: false } }, true, true), /streaming two-way/);
   assert.throws(() => validateFixtureWorkerParity({ parity: { ...streaming, propagateDeletes: true } }, true, true), /streaming two-way/);
 });
+
+test('healthy baseline validation cannot accept injected recovery or an unspecified lane', () => {
+  const healthy = { healthyFixture: true, injectedLossOrder: [], phaseMs: { healthy: 100 }, checks: ['wide-native-and-cloud-pages', 'complete-checkpoint', 'real-upload-download-byte-hashes', 'healthy-no-fault-injections', 'no-replayed-transfers', 'stable-convergence'] };
+  assert.equal(validateFixtureWorkerParity(healthy, false, false, true), healthy);
+  for (const changed of [{ healthyFixture: false }, { injectedLossOrder: ['cloud'] }, { injectedLossOrder: undefined }, { phaseMs: { recovery: 100 } }, { checks: undefined }, { checks: [...healthy.checks, 'native-restart'] }, { checks: healthy.checks.filter(label => label !== 'real-upload-download-byte-hashes') }])
+    assert.throws(() => validateFixtureWorkerParity({ ...healthy, ...changed }, false, false, true), /healthy baseline/);
+});

@@ -62,6 +62,8 @@ const wideFixture = process.argv.includes('--wide');
 const wideMixedFixture = process.argv.includes('--wide-mixed');
 const modernMixedFixture = process.argv.includes('--canonical-worker');
 const streamingMixedFixture = process.argv.includes('--streaming-two-way');
+const healthyFixture = process.argv.includes('--healthy');
+assert.ok(!healthyFixture || streamingMixedFixture, 'Healthy measurement requires canonical streaming two-way');
 assert.ok(!streamingMixedFixture || modernMixedFixture, 'Streaming mixed mode requires canonical worker');
 assert.ok(!modernMixedFixture || wideMixedFixture, 'Canonical worker comparison requires the mixed fixture');
 const canonicalFixture = earlyFixture || modernMixedFixture;
@@ -350,7 +352,7 @@ try {
 	);
 	await startNative();
 	const nativeContext = await send({ requestId: randomUUID(), ownerId: fixture.userId, deviceId, origin: base.origin, action: 'context' });
-	assert.equal(nativeContext.capabilities.filePublicationVersion, '1.2.0');
+	assert.ok(capabilitySatisfies(nativeContext.capabilities.filePublicationVersion, '1.2.0'), 'Native publication must satisfy the negotiated compatible contract');
     if (canonicalFixture) {
         saveDeviceSyncResourcePolicy(deviceResourceKey(base.origin, fixture.userId, deviceId!), benchmarkDeviceLimits!);
         canonicalHost = await createMacFixtureHost({ origin: base.origin, ownerId: fixture.userId, deviceId: deviceId!, signal,
@@ -605,6 +607,7 @@ try {
 	const journalAccess = { scope, currentScope: () => scope };
 	const queuedFolderPeers = { probes: 0, deferred: 0 };
 	const confirmedIds = new Map<string, Set<string>>();
+    let firstStreamingSpec: import('../app/fileSync/pagedRunJournal').PagedRunSpec | undefined;
 	const readRun = async () => {
 		if (!pagedFixture) return (await journal.read(scope))!;
 		const runs = journal.pagedRuns(journalAccess), active = await runs.active(); assert.ok(active);
@@ -664,9 +667,9 @@ try {
 						}
 					},
                     ...(streamingMixedFixture ? {
-                        streamLocalChanges: async function* (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>) {
+                        streamLocalChanges: async function* (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>, waitForFinish?: (signal: AbortSignal) => Promise<void>) {
                             for await (const page of readNativeIndexChanges({ ownerId: fixture.userId, deviceId: deviceId!, rootId: nativeRoot,
-                                captureId, afterSequence, readyToFinish, signal: streamSignal ?? signal, request,
+                                captureId, afterSequence, readyToFinish, waitForFinish, signal: streamSignal ?? signal, request,
                                 ...(supportsNativeStreamingBatches(caps) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}) })) {
                                 if (page.changes.length) benchmarkTimeline.firstCommittedEntryObservedMs ??= Date.now() - transferRunStartedAt;
                                 if (page.state === 'complete') benchmarkTimeline.firstChangeFeedCompleteMs ??= Date.now() - transferRunStartedAt;
@@ -692,7 +695,11 @@ try {
 				inventory,
 				source: async (entry) => mobileFolderSource(fixture.userId, nativeRoot, entry, signal, request, caps),
 				journal: pagedFixture ? { ...journal, pagedRuns: access => {
-					const runs = journal.pagedRuns(access); return { ...runs, queuedFolderPeer: async (...args) => {
+					const runs = journal.pagedRuns(access); return { ...runs, begin: async spec => {
+                        const result = await runs.begin(spec);
+                        if (spec.streaming) firstStreamingSpec ??= structuredClone(spec);
+                        return result;
+                    }, queuedFolderPeer: async (...args) => {
                         queuedFolderPeers.probes++;
                         const paired = await runs.queuedFolderPeer(...args);
                         if (paired) queuedFolderPeers.deferred++;
@@ -803,10 +810,10 @@ try {
                     signal: current, request: governedRequest, ...options, strictAsync: true, captureId: randomUUID(), pageSize: NATIVE_INVENTORY_BATCH_ENTRIES }),
                 inventoryPages: () => readCloudFolderInventoryPages(scope, remoteRoot!, { ...runtime, signal: current }),
 				inspectLocal: async name => (await governedRequest(fixture.userId, { action: 'inspect', rootId: nativeRoot, path: name }, current)).inspectedEntry!,
-				streamLocalChanges: async function* (id, after, streamSignal, readyToFinish) {
+				streamLocalChanges: async function* (id, after, streamSignal, readyToFinish, waitForFinish) {
 					capture = id;
 					for await (const page of readNativeIndexChanges({ ownerId: fixture.userId, deviceId: deviceId!, rootId: nativeRoot, captureId: id,
-						afterSequence: after, signal: streamSignal ?? current, readyToFinish, request: governedRequest,
+						afterSequence: after, signal: streamSignal ?? current, readyToFinish, waitForFinish, request: governedRequest,
                             ...(supportsNativeStreamingBatches(caps) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}) })) {
                         if (observe) nativePagesObserved.publish(page);
 						if (page.changes.length) {
@@ -966,7 +973,10 @@ try {
 	transferRunStartedAt = Date.now();
     let original!: Awaited<ReturnType<typeof readRun>>, originalIds: string[] = [], firstStagedBytes = 0;
     const injectedLossOrder: string[] = [];
-    if (streamingMixedFixture) {
+    if (healthyFixture) {
+        // No accepted-loss or restart injection in the healthy startup baseline.
+        loseCloud = false; loseStage = false; losePublication = false;
+    } else if (streamingMixedFixture) {
         loseCloud = true; loseStage = true; losePublication = true;
         for (let attempt = 0; loseCloud || loseStage || losePublication; attempt++) {
             assert.ok(attempt < 3, 'Each accepted reply is lost once');
@@ -1021,12 +1031,16 @@ try {
     }
 	const beforeRecovery = { ...counts };
     const serverPutsBeforeRecovery = wideFixture ? (await serverPuts()).length : 0;
-	await measure('recovery', run);
+	await measure(healthyFixture ? 'healthy' : 'recovery', run);
+    if (healthyFixture) {
+        assert.ok(firstStreamingSpec);
+        original = { id: firstStreamingSpec.id, operations: [], spec: firstStreamingSpec };
+    }
 	if (wideMixedFixture && !streamingMixedFixture) assert.equal(canonicalHost ? (await serverPuts()).length - serverPutsBeforeRecovery : counts.puts - beforeRecovery.puts,
 		Object.values(mixedFiles).filter(bytes => bytes.length > 0).length,
 		'Recovery uploads each remaining nonempty nested file once without replaying acknowledged bytes');
 	else if (!streamingMixedFixture) assert.equal(counts.puts, beforeRecovery.puts);
-	assert.equal(counts.publishes, beforeRecovery.publishes);
+	if (!healthyFixture) assert.equal(counts.publishes, beforeRecovery.publishes);
     if (streamingMixedFixture) {
         assert.equal(counts.stagedBytes, remoteBytes.length, 'Accepted native range is never replayed across streaming restarts');
         originalIds = [...new Set([...originalIds, ...(confirmedIds.get(original.id) ?? [])])];
@@ -1083,13 +1097,14 @@ try {
         assert.equal(observedUploadPayloadBytes, initialLocalBytes, 'Observed HTTP uploads include each nonempty source byte exactly once');
 		console.log(JSON.stringify({ ok: true, paged: true,
             parity: { canonicalDesktopManager: !!canonicalHost, canonicalRendererHost: !!canonicalHost, canonicalTransferWorkerSelected: !!canonicalHost, nativeOperationGuards: !!canonicalHost, capabilities: caps, customMutationHook: false, streamingTwoWay: streamingMixedFixture, propagateDeletes: saved.configuration.propagateDeletes, localFeed: streamingMixedFixture, remoteFeed: streamingMixedFixture, strictAsyncCapture: streamingMixedFixture },
-            injectedLossOrder, queuedFolderPeers, nativeIdentityCalls, nativeIdentityTiming, nativeServiceCalls, nativeRequestTimings, nativeServiceTiming, nativeTransportTiming: nativeTransport?.timings, observedUploadPayloadBytes,
+            healthyFixture, injectedLossOrder, queuedFolderPeers, nativeIdentityCalls, nativeIdentityTiming, nativeServiceCalls, nativeRequestTimings, nativeServiceTiming, nativeTransportTiming: nativeTransport?.timings, observedUploadPayloadBytes,
             wideFolders, nestedFolders: mixedFolders.length, mixedFiles: Object.keys(mixedFiles).length, totalPaths: wideFolders + mixedFolders.length + Object.keys(expectedFiles).length, initialLocalBytes, finalFileBytes: initialLocalBytes + remoteBytes.length, actualHashedBytes: null, warmHashedBytes: null, benchmarkDeviceLimits, effectiveRustScanBytesPerSecond: benchmarkDeviceLimits ? benchmarkDeviceLimits.scanBytesPerSecond / 2 : null, privateIndexDatabase: true, firstTransferMs, firstTransferObservation: 'server first parsed body byte, excluding fixture seed uploads', serverPutEvents: await serverPuts(), benchmarkTimeline, operationIds: originalIds, checkpointRunId: head.runId, countsBeforeRecovery: beforeRecovery, acceptedStagedBytesBeforeRestart: firstStagedBytes,
             verifiedFiles: Object.entries(expectedFiles).map(([path, bytes]) => ({ path, bytes: bytes.length, sha256: hash(bytes) })),
             checkpointEntries: { local: (await journal.inventory(journalAccess).read(head.baseline.local)).totalEntries, remote: (await journal.inventory(journalAccess).read(head.baseline.remote)).totalEntries }, phaseMs, httpRequests, httpLatency, nativeLatency, integrationProcessOnly: { maxRssKiB: usage.maxRSS, userCpuMs: Math.round(usage.userCPUTime / 1000), systemCpuMs: Math.round(usage.systemCPUTime / 1000) }, nativePages, cloudPages,
 			nativeCalls, verifyCalls, cooldownCount, cooldownSeconds, counts, picker: 'fixture', keychain: 'not-used',
-			checks: ['wide-native-and-cloud-pages', 'complete-checkpoint', 'real-upload-download-byte-hashes', 'lost-accepted-replies',
-				'native-restart', 'original-operation-IDs', 'no-replayed-transfers', 'stable-convergence'],
+			checks: ['wide-native-and-cloud-pages', 'complete-checkpoint', 'real-upload-download-byte-hashes',
+                ...(healthyFixture ? ['healthy-no-fault-injections'] : ['lost-accepted-replies', 'native-restart', 'original-operation-IDs']),
+                'no-replayed-transfers', 'stable-convergence'],
 			provisioning: 'cloud folders created by the normal import API; real native directories and HTTP reads/transfers' }));
 	} else {
 	const oldInventory = await inventory();

@@ -2,6 +2,35 @@
 
 https://thingtime.com
 
+### Private device location history and locate actions
+
+Paired devices can opt into private location observations, retained with
+`Never` as the default delete-after policy. iOS uses authorized Core Location
+significant-change updates; macOS uses its own location provider. A platform
+without a provider remains unavailable. Collection permission and notification
+permission are explicit local device choices, independent of pairing.
+
+Fork setup: author a private Webpage with `siteRoute: /devices/location` and a
+private settings Webpage with `pageKey: settings-device-location-settings`.
+`DeviceLocationWorkspace` supplies `location` data and typed transient actions;
+use ordinary editable blocks, collections and `tt-mapbox` marker children.
+Configure Mapbox through your account's existing encrypted integration vault
+and reference its ID from the map block; never embed a secret token in source.
+The framework intentionally does not seed an account-specific layout.
+
+Optional history expiry uses the authenticated observations cleanup cron and
+the deployment's existing `CRON_SECRET` bootstrap, with accounted resumable
+deletion rather than a database TTL. Targeted iOS notifications use the existing
+APNs provider configuration and a verified device registration. Uploaded audio
+uses canonical approved Files; iPhone notification tones require a separate
+CAF derivative under 30 seconds, preserving the original file. Device model
+artwork and attribution are in `remix/public/assets/devices/`; unknown models
+use a generic fallback, and no serial number is sent to an image provider.
+
+See the native [iOS](iOS/README.md) and [Mac](macos/ThingtimeNode/README.md)
+runbooks and the location acceptance checklist in `TESTING.md`. Provider
+acceptance is distinct from physical location, notification or speaker proof.
+
 ### Agent browsers and tasks
 
 ChatGPT/Codex private lifecycle reporting uses the existing saved workspace

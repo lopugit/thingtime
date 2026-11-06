@@ -1,3 +1,5 @@
+import type {DeviceDescriptorPatch} from './deviceDescriptorPatch';
+import {normalizeNotificationInput,normalizeMediaInput,type DeviceNotificationInput,type DeviceMediaInput,type DeviceMediaPrepareInput} from './deviceAlertCore';
 import { normalizeDeviceScriptInput, type DeviceScriptInput } from './deviceScript';
 import { normalizeDeviceMenuBar, type DeviceMenuBar } from './deviceMenuBar';
 import { normalizeFilesystemInput, type FilesystemInput } from './deviceFilesystemCore';
@@ -5,6 +7,9 @@ import { createHash } from 'node:crypto';
 import { isDevicePlatform, type DevicePlatform } from '../../../devices/platform';
 
 export const DEVICE_COMMAND_KINDS = [
+	'notification.show',
+	'media.play',
+	'media.prepare',
 	'script.run',
 	'filesystem',
 	'connector.start',
@@ -727,6 +732,9 @@ type ConnectorInput = { connectorId: string };
 type CursorPageInput = { cursor?: string; limit?: number };
 
 export type DeviceCommandInputByKind = {
+	'notification.show':DeviceNotificationInput;
+	'media.play':DeviceMediaInput;
+	'media.prepare':DeviceMediaPrepareInput;
 	'script.run': DeviceScriptInput;
 	'filesystem': FilesystemInput;
 	'connector.start': ConnectorInput;
@@ -834,6 +842,9 @@ export const deviceConnectorSupportsCommand = (
 };
 
 const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
+	'notification.show':'notification.show.v1',
+	'media.play':'media.play.v1',
+	'media.prepare':'media.prepare.v1',
 	'filesystem': 'filesystem.v1',
 	'script.run': 'script.bash.v1',
 	'app.focus': 'apps.launch',
@@ -1015,6 +1026,9 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 	const ok = (input: unknown) => ({ ok: true as const, input: input as DeviceCommandInputByKind[K] });
 
 	switch (kind) {
+		case 'notification.show': {const normalized=normalizeNotificationInput(raw);return normalized?ok(normalized):deviceFail(400,'Invalid typed notification');}
+		case 'media.play':
+		case 'media.prepare': {const normalized=normalizeMediaInput(raw,kind==='media.prepare');return normalized?ok(normalized):deviceFail(400,'Invalid uploaded media reference');}
 		case	'script.run': {
 			const input = normalizeDeviceScriptInput(raw);
 			return input ? ok(input) : deviceFail(400, 'Invalid bounded Bash script');
@@ -1308,8 +1322,8 @@ export const decideDeviceRevision = (
 	return existingHash === incomingHash ? 'same' : 'conflict';
 };
 
-export const deviceSnapshotHash = (state: DeviceStateSnapshot, connectors: DeviceConnectorSnapshot[], capabilities?: string[]): string =>
-	devicePayloadHash({ state, connectors, ...(capabilities === undefined ? {} : { capabilities }) });
+export const deviceSnapshotHash = (state: DeviceStateSnapshot, connectors: DeviceConnectorSnapshot[], capabilities?: string[], descriptorPatch?: DeviceDescriptorPatch): string =>
+	devicePayloadHash({ state, connectors, ...(capabilities === undefined ? {} : { capabilities }), ...(descriptorPatch === undefined ? {} : {descriptorPatch}) });
 
 export type DeviceLeaseDecision = 'active' | 'expired' | 'invalid';
 export const decideDeviceLease = (storedLeaseHash: unknown, presentedLeaseHash: string, leaseExpiresAt: unknown, now: Date): DeviceLeaseDecision => {

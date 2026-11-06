@@ -18,6 +18,7 @@ struct WebView: UIViewRepresentable {
         configuration.websiteDataStore = .default()
         configuration.userContentController.addUserScript(Self.bridgeUserScript)
         configuration.userContentController.addUserScript(MobileDeviceBridge.script)
+        configuration.userContentController.addUserScript(MobileDeviceLocationBridge.script)
         configuration.userContentController.addUserScript(MobileFolderBridge.script)
         configuration.userContentController.addUserScript(FileExportBridge.script)
         configuration.userContentController.add(context.coordinator, name: Self.nativeMessageHandlerName)
@@ -58,6 +59,8 @@ struct WebView: UIViewRepresentable {
         // the same update. Widget navigation alone stays within the same origin.
         if rootChanged {
             MobileDeviceBackgroundPresence.shared.destinationChanged()
+            context.coordinator.mobileLocation.invalidate()
+            MobileDeviceAlerts.shared.stop()
             WidgetStore.clear(); context.coordinator.resetChatActivity()
             context.coordinator.configureShareComposer(configuration: webView.configuration, origin: url)
             context.coordinator.shareComposer?.webView = webView
@@ -85,6 +88,7 @@ struct WebView: UIViewRepresentable {
             configuration.userContentController.addUserScript(ShareComposerBridge.script(origin: origin))
         }
         let mobileDevice = MobileDeviceBridge()
+        let mobileLocation = MobileDeviceLocationBridge()
         let mobileFolders = MobileFolderBridge()
         let fileExports = FileExportBridge()
         private let lopuVoice = LopuVoiceSessionController()
@@ -118,6 +122,7 @@ struct WebView: UIViewRepresentable {
             // foreground navigation invalidates its persisted approval here.
             if UIApplication.shared.applicationState == .active {
                 MobileDeviceBackgroundPresence.shared.destinationChanged()
+                mobileLocation.invalidate()
             }
             mobileDevice.suspend()
             mobileFolders.suspend()
@@ -149,6 +154,7 @@ struct WebView: UIViewRepresentable {
                 "lopuChatActivityVersion": "1.0.0",
                 "notificationsVersion": "1.0.0",
                 "devicePairingVersion": "1.1.0",
+                "deviceLocationVersion": "1.1.0",
                 "fileAccessVersion": MobileFolderBridge.accessVersion,
                 "fileUploadVersion": MobileFolderBridge.uploadVersion,
                 "fileExportVersion": FileExportBridge.version,
@@ -199,6 +205,14 @@ struct WebView: UIViewRepresentable {
                         try await self.mobileDevice.verifyDevice(scope, deviceId: deviceId, webView: webView,
                             cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] }, check: check)
                     }, reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
+            case "mobile-device-location":
+                guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
+                      let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
+                      let frame = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frame, root) else { return }
+                mobileLocation.handle(body, webView: webView, root: root,
+                    currentRoot: { [weak self] in self?.loadedRootURL },
+                    cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] },
+                    reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
             case "mobile-device":
                 guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
                       let current = webView.url, LopuVoiceContract.sameOrigin(current, root),

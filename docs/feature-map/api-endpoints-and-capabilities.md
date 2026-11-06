@@ -1,5 +1,32 @@
 # API endpoints and capabilities
 
+## Private device observations and locate actions
+
+`deviceObservations.ts` implements owner-only location reads/settings and
+device-bearer observations, with collection-generation fencing, immutable
+sample IDs, observed/received timestamps and accounted retention cleanup.
+The observations, observation-settings, node-observations and cleanup routes
+have independently negotiated `api.devices-*` features at 1.0.0. History is
+relational protected `device-observation` Things, not a growing device array.
+
+`deviceAlerts.ts` and `deviceAlertMedia.ts` implement owner-targeted alerts,
+bound APNs registrations, lease-authorized attachment versions and prepared
+notification sounds. Their alerts/node-push/node-media/node-alert-sounds
+features are 1.0.0; command features are 1.11.0. Devices/node-state 1.15.0
+accept a closed optional model descriptor patch. Notification lists/settings
+1.8.0 include device-alert history. Notifications-devices 1.3.0 removes the
+old registration count limits that could discard existing device bindings.
+Reuse existing ownership/session checks,
+command approvals, leases, media holds and notification history. APNs provider
+acceptance never asserts playback; uncertain effects retain their request ID.
+
+Run `test:devices`, `test:api-capabilities`, the built-server manifest smoke,
+and the native mobile/Node suites. `DeviceLocationWorkspace` is a scope-fenced
+read/action adapter for private saved editable layouts, with canonical uploads
+and a separately negotiated native location bridge. No new MCP is introduced.
+
+## Independent backup destinations
+
 `api.backup-destinations` 1.0.0 registers private full-account home-plane
 `GET /api/v1/backups/destinations` in the docs registry and Nitro map. The shared
 client negotiates its explicit requirement map before reading. Fixed-label

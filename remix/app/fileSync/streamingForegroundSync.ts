@@ -21,6 +21,7 @@ import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './stre
 import type { PagedRunProgress, PagedRunSpec } from './pagedRunJournal';
 import { NATIVE_INVENTORY_BATCH_ENTRIES } from './nativeInventory';
 import { INVENTORY_PAGE_ENTRIES } from './inventoryJournal';
+import { recoverRemountedNativeFeed } from './nativeFeedRecovery';
 
 /** Streaming uses the existing durable run, scheduler and guarded transports.
  * A terminal feed releases no baseline: sealed reconciliation owns that proof. */
@@ -170,23 +171,27 @@ export async function streamForegroundSync(
 		wakeRevision++;
 		for (const fn of [...waiters]) fn();
 	};
-	const wait = (observed: number) => {
+	const wait = (observed: number, waitSignal = signal) => {
 		check();
+		waitSignal.throwIfAborted();
 		if (wakeRevision !== observed) return Promise.resolve();
 		return new Promise<void>((resolve, reject) => {
 			const done = () => {
 				waiters.delete(done);
 				signal.removeEventListener('abort', abort);
+				waitSignal.removeEventListener('abort', abort);
 				resolve();
 			};
 			const abort = () => {
 				waiters.delete(done);
 				signal.removeEventListener('abort', abort);
-				reject(signal.reason);
+				waitSignal.removeEventListener('abort', abort);
+				reject(signal.aborted ? signal.reason : waitSignal.reason);
 			};
 			waiters.add(done);
 			signal.addEventListener('abort', abort, { once: true });
-			if (signal.aborted) abort();
+			waitSignal.addEventListener('abort', abort, { once: true });
+			if (signal.aborted || waitSignal.aborted) abort();
 		});
 	};
 	let observationSequences = new Map<string, number>();
@@ -254,7 +259,7 @@ export async function streamForegroundSync(
     // echo. It never supplies authority, ancestry or a future copy binding.
     const deferredFolderEchoes = new Map<string, { from: 'local' | 'remote'; local: SyncEntry; remote: SyncEntry }>();
 	const prepareTwoWay = async (event: NonNullable<Awaited<ReturnType<typeof runs.nextStreamInput>>>) => {
-		const entry = event.entry, from = event.replica!;
+		const entry = event.entry, from = event.replica!, nativeGuards = input.nativeOperationGuards === true;
 		const defer = async () => {
 			// Keep positive folder rows for the provisional progress tree. A
 			// matching ancestor often needs no operation of its own.
@@ -270,12 +275,12 @@ export async function streamForegroundSync(
 			await wait(observed);
 		}
 		if (entry.symbolicLink || ignore.ignored(entry.path, entry.kind)) { await defer(); return; }
-		if (input.nativeOperationGuards && entry.kind === 'folder' && await runs.queuedFolderPeer(spec, event)) {
+		if (nativeGuards && entry.kind === 'folder' && await runs.queuedFolderPeer(spec, event)) {
 			// Two positive folder hints need no early effect. They are not fresh
 			// observations: strict reconciliation still decides their real state.
 			check(); await defer(); return;
 		}
-        const echo = input.nativeOperationGuards && entry.kind === 'folder' ? deferredFolderEchoes.get(entry.path) : undefined;
+        const echo = nativeGuards && entry.kind === 'folder' ? deferredFolderEchoes.get(entry.path) : undefined;
         if (echo && echo.from !== from && sameSyncStamp(entry, echo[from])) {
             deferredFolderEchoes.delete(entry.path);
             await defer(); return;
@@ -297,7 +302,7 @@ export async function streamForegroundSync(
 		// Save their cursor without hashing or point-reading either replica.
 		if (sameSyncStamp(entry, priorSource) || priorSource?.kind === 'folder' || priorTarget?.kind === 'folder' ||
 			(entry.kind === 'folder' && (priorSource || priorTarget))) { await defer(); return; }
-		await authorize();
+		if (!nativeGuards) await authorize();
 		let node: CloudInventoryNode | null, left: SyncEntry | null, right: SyncEntry | null;
 		let cloudParent: CloudInventoryNode | null = null;
 		const parent = entry.path.split('/').slice(0, -1).join('/');
@@ -320,6 +325,10 @@ export async function streamForegroundSync(
 				break;
 			}
 		}
+		// Missing journal ancestry already proves no early operation is possible.
+		// Guarded transports defer it without opening any protected observation;
+		// every surviving hint still checks current connection policy before reads.
+		if (nativeGuards) await authorize();
 		let parentsReady = !parent;
 		try {
 			left = await readLocal(entry.path);
@@ -340,7 +349,7 @@ export async function streamForegroundSync(
 		const source = from === 'local' ? left : right,
 			target = from === 'local' ? right : left;
 		if (!sameSyncStamp(source, entry) || target?.symbolicLink) { await defer(); return; }
-        if (input.nativeOperationGuards && entry.kind === 'folder' && left?.kind === 'folder' && right?.kind === 'folder') {
+        if (nativeGuards && entry.kind === 'folder' && left?.kind === 'folder' && right?.kind === 'folder') {
             // Both current point reads proved this folder needs no early copy.
             // Only its opposite-feed, exact-stamp echo may skip those reads;
             // all actual preparation/effects keep the fresh policy checks.
@@ -586,13 +595,30 @@ export async function streamForegroundSync(
 		}
 	};
 	const readyToFinish = () => runs.streamReadyToFinish(spec);
+	const waitForFinish = async (waitSignal: AbortSignal) => {
+		for (;;) {
+			check();
+			waitSignal.throwIfAborted();
+			// Observe before the asynchronous durable read: completion may wake
+			// us while that read still holds an older result.
+			const observed = wakeRevision;
+			const ready = await readyToFinish();
+			check();
+			waitSignal.throwIfAborted();
+			if (ready) return;
+			await wait(observed, waitSignal);
+		}
+	};
 	const produce = async () => {
+		let remounted = false;
 		let status = await runs.streamState(spec);
 		check();
 		if (status.terminal || status.sourceTerminal) return;
 		const after = status.indexedSequence ?? status.sequence;
 		const source = local
-			? input.streamLocalChanges!(spec.streaming!.captureId, after, signal, readyToFinish)
+			? recoverRemountedNativeFeed(input.streamLocalChanges!(spec.streaming!.captureId, after, signal, readyToFinish, waitForFinish), async () => {
+				await runs.endRemountedLocalFeed(spec); check(); remounted = true; wake();
+			}, signal)
 			: input.streamRemoteChanges
 			? input.streamRemoteChanges(spec.streaming!.captureId, after, signal, readyToFinish, {
 					cursor: status.sourceCursor,
@@ -633,9 +659,10 @@ export async function streamForegroundSync(
 			report();
 			if (terminal) return;
 		}
-		throw Error('Streaming source ended without a terminal watermark.');
+		if (!remounted) throw Error('Streaming source ended without a terminal watermark.');
 	};
 	const produceReplica = async (replica: 'local' | 'remote') => {
+		let remounted = false;
 		const status = await runs.streamState(spec);
 		check();
 		if (status.terminal || status.replicaFeeds?.[replica]?.terminal) return;
@@ -644,7 +671,9 @@ export async function streamForegroundSync(
 		// Local and cloud watchers have independent upstream watermarks; the
 		// shared journal assigns an ordered input position on each append.
 		const source = replica === 'local'
-			? input.streamLocalChanges!(captureId, after, signal, readyToFinish)
+			? recoverRemountedNativeFeed(input.streamLocalChanges!(captureId, after, signal, readyToFinish, waitForFinish), async () => {
+				await runs.endRemountedLocalFeed(spec); check(); remounted = true; wake();
+			}, signal)
 			: input.streamRemoteChanges
 			? input.streamRemoteChanges(captureId, after, signal, readyToFinish, {
 				cursor: status.sourceCursor,
@@ -672,7 +701,7 @@ export async function streamForegroundSync(
 				return;
 			}
 		}
-		throw Error('A two-way source ended without a terminal watermark.');
+		if (!remounted) throw Error('A two-way source ended without a terminal watermark.');
 	};
 	const plan = async () => {
 		for (;;) {

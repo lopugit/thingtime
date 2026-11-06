@@ -134,7 +134,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.things-fork']?.version, '1.8.1');
 	assert.equal(manifest.features['api.things-import']?.version, '1.13.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.16.1');
-	assert.equal(manifest.features['api.devices-node-state']?.version, '1.14.0');
+	assert.equal(manifest.features['api.devices-node-state']?.version, '1.15.0');
 
 	assert.equal(capabilitySatisfies('1.9.0', '1.10.0'), false);
 	assert.equal(capabilitySatisfies('1.11.0', '1.10.0'), true);
@@ -270,8 +270,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.subspaces-transfer']?.version, '1.2.2');
   assert.equal(manifest.features['api.subspaces-delete']?.version, '1.3.0');
   // S4 review: post-removed / ban rows carry the subspace's mod team as actor (1.2.0, additive)
-  assert.equal(manifest.features['api.notifications-list']?.version, '1.7.0');
-  assert.equal(manifest.features['api.notifications-settings']?.version, '1.7.0');
+  assert.equal(manifest.features['api.notifications-list']?.version, '1.8.0');
+  assert.equal(manifest.features['api.notifications-settings']?.version, '1.8.0');
   assert.equal(manifest.features['api.notifications-record']?.version, '1.0.0');
   assert.equal(manifest.features['api.things-update']?.version, '1.20.0');
 
@@ -361,8 +361,8 @@ test('both manifests publish notification history and system notification contra
   const apiManifest = createApiCapabilitiesManifest();
   // Both subspace moderation and private recording reminders are preserved.
   const expected: Record<string, string> = {
-    'api.notifications-list': '1.7.0',
-    'api.notifications-settings': '1.7.0'
+    'api.notifications-list': '1.8.0',
+    'api.notifications-settings': '1.8.0'
   };
   for (const [feature, version] of Object.entries(expected)) {
     assert.equal(originManifest.features[feature]?.version, version);
@@ -536,8 +536,8 @@ test('Characters negotiate management and acting identities on both manifests', 
 test('full Mac capability lists negotiate additive device contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://preview.example.test');
   for (const [feature, current, minimum] of [
-    ['api.devices', '1.14.0', '1.10.0'],
-    ['api.devices-node-state', '1.14.0', '1.11.0'],
+    ['api.devices', '1.15.0', '1.10.0'],
+    ['api.devices-node-state', '1.15.0', '1.11.0'],
     ['api.devices-pairing-claim', '1.2.0', '1.0.0']
   ]) {
     assert.equal(manifest.features[feature]?.version, current);
@@ -551,8 +551,8 @@ test('full Mac capability lists negotiate additive device contracts', () => {
 test('host resource telemetry negotiates both additive device contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://devices.test');
   for (const feature of ['api.devices', 'api.devices-node-state']) {
-    assert.equal(manifest.features[feature]?.version, '1.14.0');
-    assert.equal(createApiCapabilitiesManifest().features[feature], '1.14.0');
+    assert.equal(manifest.features[feature]?.version, '1.15.0');
+    assert.equal(createApiCapabilitiesManifest().features[feature], '1.15.0');
     for (const version of ['1.14.0', '1.14.1', '1.15.0']) assert(capabilitySatisfies(version, '1.14.0'));
     for (const version of [undefined, '1.13.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.14.0'), false);
   }

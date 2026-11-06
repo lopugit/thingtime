@@ -54,6 +54,7 @@ final class ThingtimeNativeNotifications: NSObject {
 
     func setPhoneDeviceToken(_ token: String) {
         phoneDeviceToken = token
+        MobileDeviceAlerts.shared.setToken(token)
         registrationStatus = "pending"
         Task {
             await registerPendingDevices()
@@ -97,7 +98,8 @@ final class ThingtimeNativeNotifications: NSObject {
             requestedAuthorization = false
             settings = await center.notificationSettings()
         }
-        if [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus),
+        if MobileDeviceAlerts.remoteRegistrationPermitted,
+           [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus),
            phoneDeviceToken == nil || !UIApplication.shared.isRegisteredForRemoteNotifications {
             UIApplication.shared.registerForRemoteNotifications()
         }

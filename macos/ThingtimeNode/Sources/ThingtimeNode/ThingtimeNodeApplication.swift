@@ -172,6 +172,8 @@ private final class LocalPairingPresenceGate {
         alert.alertStyle = .warning
         if method == "pairing.unpair" {
             alert.messageText = "Allow Thingtime to unpair this Mac?"
+        } else if method.hasPrefix("location.") {
+            alert.messageText = "Allow Thingtime to change location sharing on this Mac?"
         } else if method == "permissions.request" {
             alert.messageText = "Allow Thingtime Node to request a macOS permission?"
         } else {
@@ -315,6 +317,7 @@ private actor MultiAccountControlPlaneRuntime {
         let flushTask: Task<Void, Never>
     }
 
+    private let location: DeviceLocationService
     private let baseURL: URL
     private let endpointScope: ThingtimeNodeEndpointScope
     private let credentialStore: any DeviceCredentialStore
@@ -326,6 +329,7 @@ private actor MultiAccountControlPlaneRuntime {
 
     init(
         baseURL: URL,
+        location: DeviceLocationService,
         endpointScope: ThingtimeNodeEndpointScope,
         credentialStore: any DeviceCredentialStore,
         telemetry: DeviceTelemetryCollector,
@@ -333,6 +337,7 @@ private actor MultiAccountControlPlaneRuntime {
         desktopChat: DesktopChatRuntime,
         controllerRelay: NodeControllerRelay
     ) {
+        self.location = location
         self.baseURL = baseURL
         self.endpointScope = endpointScope
         self.credentialStore = credentialStore
@@ -345,9 +350,10 @@ private actor MultiAccountControlPlaneRuntime {
     func reconcile() async throws {
         let credentials = try await credentialStore.loadAll()
         let desired = Dictionary(uniqueKeysWithValues: credentials.map { ($0.deviceID, $0) })
+        try await location.reconcilePairings(Set(desired.keys))
 
         for deviceID in accounts.keys where desired[deviceID] == nil {
-            await stopAccount(deviceID)
+            await stopAccount(deviceID, revoke: true)
         }
         for credential in credentials {
             if let current = accounts[credential.deviceID], current.refreshToken == credential.refreshToken {
@@ -390,11 +396,13 @@ private actor MultiAccountControlPlaneRuntime {
         let connector = connector
         let desktopChat = desktopChat
         let controllerRelay = controllerRelay
+        let location = location
         let scheduler = ControlPlaneScheduler(
             client: client,
             hooks: ControlPlaneSchedulerHooks(
                 makeHeartbeat: {
-                    await DeviceHeartbeat(
+                    await location.publish(client: client, deviceID: deviceID)
+                    return await DeviceHeartbeat(
                         deviceID: deviceID,
                         telemetry: telemetry.snapshot(),
                         connector: connector.health(),
@@ -448,8 +456,10 @@ private actor MultiAccountControlPlaneRuntime {
         await scheduler.start()
     }
 
-    private func stopAccount(_ deviceID: String) async {
+    private func stopAccount(_ deviceID: String, revoke: Bool = false) async {
         guard let runtime = accounts.removeValue(forKey: deviceID) else { return }
+        if revoke { try? await location.revoke(deviceID: deviceID) }
+        else { await location.suspend() }
         runtime.flushTask.cancel()
         await runtime.scheduler.stop()
         await runtime.flushTask.value
@@ -501,9 +511,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 baseURL: endpointScope.canonicalBaseURL,
                 credentialStore: credentialStore
             )
+            let location = try DeviceLocationService(fileURL: endpointScope.commandJournalFileURL().deletingLastPathComponent()
+                .appendingPathComponent("location-" + endpointScope.identifier + ".json"))
             let controllerRelay = NodeControllerRelay()
             let controlPlaneRuntime = MultiAccountControlPlaneRuntime(
                 baseURL: endpointScope.canonicalBaseURL,
+                location: location,
                 endpointScope: endpointScope,
                 credentialStore: credentialStore,
                 telemetry: telemetry,
@@ -528,6 +541,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             let controller = ThingtimeNodeController(
                 journal: journal,
                 folderSync: folderSync,
+                location: location,
+                alerts: DeviceAlertService(),
                 pairing: pairing,
                 connector: connector,
                 telemetry: telemetry,

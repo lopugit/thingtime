@@ -132,5 +132,7 @@ case "${SIGNING_MODE}" in
         ;;
 esac
 /usr/bin/codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
+# Check the actual signed payload, including unsigned fixtures, not only the source plist.
+"${SCRIPT_DIR}/verify-location-entitlement.sh" "${APP_PATH}"
 /usr/bin/codesign -dr - "${APP_PATH}" 2>&1
 echo "${APP_PATH}"

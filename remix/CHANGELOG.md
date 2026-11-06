@@ -12,6 +12,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-07: Wake indexed native sync feeds when their durable consumer drains,
+  keeping live 25-second change reads during uploads instead of repeated
+  two-second polling. Retain fresh admission, cancellation and native revision
+  finish checks; installed startup timing remains a separate gate. **Codex (AI)**
+
 - 2026-11-06: Defer already queued two-replica folder hints before expensive
   initial point reads. Preserve sequential journal processing, fresh effect
   policy and strict reconciliation; measure first-file startup and queued-peer
@@ -149,12 +154,33 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [the scoped implementation note](../PRs/backup-restore-workspace-task.md).
   **Codex (AI)**
 
+- 2026-11-07: Preserve the Node location entitlement through canonical signing
+  and require its Boolean grant in final bundle verification. Keep OS consent
+  and explicit collection opt-in separate from signing eligibility. **Codex (AI)**
+
+- 2026-11-06: Add opt-in private device location history with Never retention,
+  accounted expiry, native iOS/Mac collection and scoped locate messages/audio.
+  Mapbox, marker artwork, filters and settings compose from private editable
+  Things. Keep background scheduling, provider receipts and physical-device
+  acceptance distinct. See [PR #1397 evidence](../PRs/1397-codex-device-location-history-private-device-location-and-alerts.md). **Codex (AI)**
+
+- 2026-11-06: Reconnect bookmarked external volumes through stable volume/root
+  proof, fresh Rust inventory generations and receipt-preserving reconciliation.
+  Preserve staged downloads and private publication journals across remounts;
+  verify cross-volume publication and portable links with disposable APFS images.
+  Native Mac file access 1.20.0 / publication 1.3.0. **Codex (AI)**
+
 - 2026-11-06: Register independent portable backup destinations through the
   existing encrypted administrator vault, exact environment/origin selection
   and AWS OIDC. Publish private read-only configuration discovery with explicit
   unverified-provider and unavailable-execution status; refuse primary attachment
   bucket reuse. Durable capture/restore and installed acceptance remain open.
   See [destination setup](../docs/backup-destinations.md). **Codex (AI)**
+
+- 2026-11-06: Defer guarded streaming hints with missing journal ancestry before
+  policy RPCs, retaining current connection checks before all protected reads.
+  Add an explicit healthy canonical timing lane alongside fault/restart coverage.
+  **Codex (AI)**
 
 - 2026-11-06: Replace inactive device health warnings with muted last-seen labels
   across cards, lists and device controls. Negotiate native iOS background presence
