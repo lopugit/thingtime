@@ -140,6 +140,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Reconnect bookmarked external volumes through stable volume/root
+  proof, fresh Rust inventory generations and receipt-preserving reconciliation.
+  Preserve staged downloads and private publication journals across remounts;
+  verify cross-volume publication and portable links with disposable APFS images.
+  Native Mac file access 1.20.0 / publication 1.3.0. **Codex (AI)**
+
 - 2026-11-06: Replace inactive device health warnings with muted last-seen labels
   across cards, lists and device controls. Negotiate native iOS background presence
   through pairing contract 1.1.0, retaining foreground support on older shells and

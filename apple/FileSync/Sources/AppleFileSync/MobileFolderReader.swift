@@ -144,7 +144,8 @@ public struct MobileFolderReader {
             }) else {
                 try invalidName(); continue
             }
-            if name == "." || name == ".." || NativeSymbolicLinks.isOwnedJournal(fd, name: name) { continue }
+            if name == "." || name == ".." { continue }
+            if try NativeSymbolicLinks.checkedOwnedJournal(fd, name: name) { continue }
             try visit(name)
         }
     }
