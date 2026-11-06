@@ -25,6 +25,19 @@ and the native mobile/Node suites. `DeviceLocationWorkspace` is a scope-fenced
 read/action adapter for private saved editable layouts, with canonical uploads
 and a separately negotiated native location bridge. No new MCP is introduced.
 
+## Independent backup destinations
+
+`api.backup-destinations` 1.0.0 registers private full-account home-plane
+`GET /api/v1/backups/destinations` in the docs registry and Nitro map. The shared
+client negotiates its explicit requirement map before reading. Fixed-label
+administrator vault registration is selected by exact deployment environment
+and origin; only opaque destination IDs, labels and configured-unverified
+status are projected. Primary attachment bucket reuse refuses. This is
+configuration discovery only: execution remains unavailable. Run destination
+unit/route tests, `test:api-capabilities` and the compiled
+`scripts/smoke-built-backup-destinations.mjs --bundle <output>` proof; see
+[independent destination setup](../backup-destinations.md).
+
 ## Incoming-share message compatibility
 
 `api.chats-messages` 1.3.0 accepts large purpose-matched attachment selections

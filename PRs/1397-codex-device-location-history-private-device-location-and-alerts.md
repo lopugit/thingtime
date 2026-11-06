@@ -2,7 +2,7 @@
 
 [Pull request](https://github.com/lopugit/thingtime/pull/1397). Branch:
 `codex/device-location-history`. Evidence date: 2026-11-06. Integrated main
-`520fb4ec7` after the initial feature commit; its unrelated sync changes are
+`520fb4ec7` and then `d0699759b` after the initial feature commit; their unrelated sync and backup changes are
 imported, not authored by this task.
 
 ## Behavior and boundaries
@@ -62,6 +62,13 @@ network. Normal pairing and existing user data are preserved.
   retryability and private/no-store headers without automatically retrying a
   mutation or bypassing accounting. Eleven focused tests, lint and raw TypeScript
   passed for that correction, including two new response-boundary regressions.
+
+- Final logout privacy correction: an essential identity observer runs independently
+  of optional connection polling. Scoped native suspension fences late verification
+  without forgetting collection consent; same-account return revalidates read-only.
+  Fourteen focused JavaScript tests, eleven native tests, lint and raw TypeScript
+  passed. The iOS native location bridge is 1.1.0; desktop and HTTP feature
+  versions remain independently negotiated.
 
 ## Installed build and remaining delivery evidence
 

@@ -3,11 +3,28 @@ import { activityManager } from '../../activity/activityManager';
 import { getNativeBridge } from '../../utils/nativeBridge';
 import { rootIdentity } from '../../utils/rootIdentity';
 import { requestMobileDevicePresence, stopMobileBackgroundPresence } from './mobileDeviceBridge';
-import { requestMobileLocation, supportsMobileLocation } from './mobileDeviceLocationBridge';
+import { requestMobileLocation, supportsMobileLocation, suspendMobileLocationAuthorization } from './mobileDeviceLocationBridge';
 import { mobileDeviceScope, publishMobileDeviceObservation } from './mobileDeviceObservations';
 import { startMobileDevicePresence } from './mobileDevicePresence';
+import { startMobileDeviceIdentity } from './mobileDeviceIdentity';
 
 export function MobileDevicePresenceBootstrap({ ownerId, generation }: { ownerId: string; generation: number }) {
+    useEffect(() => {
+        const origin = window.location.origin;
+        const identity = startMobileDeviceIdentity({
+            window, document,
+            current: () => window.location.origin === origin && !rootIdentity.read().pending && rootIdentity.read().generation === generation,
+            subscribe: (refresh) => rootIdentity.subscribe(refresh),
+            supported: supportsMobileLocation,
+            verify: (signal) => requestMobileLocation(ownerId, 'status', signal),
+            withdraw: () => {
+                stopMobileBackgroundPresence(ownerId, origin);
+                suspendMobileLocationAuthorization(ownerId, origin);
+            }
+        });
+        return () => identity.stop();
+    }, [ownerId, generation]);
+
 	useEffect(
 		() =>
 			activityManager.register(

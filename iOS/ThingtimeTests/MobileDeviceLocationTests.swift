@@ -2,6 +2,7 @@ import AVFoundation
 import CoreLocation
 import XCTest
 import WebKit
+import UIKit
 @testable import Thingtime
 
 @MainActor
@@ -182,6 +183,44 @@ final class MobileDeviceLocationTests: XCTestCase {
         XCTAssertEqual(saved?.backgroundAuthorized, false)
         XCTAssertEqual(coordinator.status["enabled"] as? Bool, true)
         XCTAssertTrue(driver.starts.isEmpty)
+    }
+
+    func testIdentitySuspendRejectsLateNativeStatusWithoutForgettingConsent() async throws {
+        let driver = LocationDriverFixture()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var saved: MobileDeviceLocation.Binding? = .init(scope: scope, collectionId: collectionId)
+        let coordinator = MobileDeviceLocation(driver: driver, outbox: .init(root: directory), load: { saved }, save: { saved = $0 }) { _, _, _ in }
+        coordinator.activate()
+        var completeVerification: CheckedContinuation<Void, Never>?
+        let bridge = MobileDeviceLocationBridge(location: coordinator, verify: { _, _, _, _ in
+            await withCheckedContinuation { completeVerification = $0 }
+        })
+        let web = WKWebView()
+        web.loadHTMLString("<html><body>Identity fixture</body></html>", baseURL: scope.origin)
+        for _ in 0..<200 {
+            if web.url == scope.origin, UIApplication.shared.applicationState == .active { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        func send(_ action: String, owner: String) {
+            bridge.handle(["payload": ["requestId": UUID().uuidString, "ownerId": owner, "action": action]],
+                webView: web, root: scope.origin, currentRoot: { self.scope.origin }, cookies: { values, _ in values }, reply: { _, _ in })
+        }
+        send("status", owner: scope.ownerId)
+        for _ in 0..<100 { if completeVerification != nil { break }; try await Task.sleep(nanoseconds: 5_000_000) }
+        let late = try XCTUnwrap(completeVerification)
+        send("suspend", owner: scope.ownerId)
+        XCTAssertEqual(saved?.backgroundAuthorized, false)
+        XCTAssertEqual(saved?.scope, scope)
+        late.resume() // A successful old HTTP response after logout is not new authority.
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(saved?.backgroundAuthorized, false)
+        XCTAssertEqual(coordinator.status(for: scope)["enabled"] as? Bool, true)
+        let newScope = try MobileDevicePairing.Scope(ownerId: "new-owner", url: scope.origin)
+        try coordinator.enable(newScope, collectionId: UUID().uuidString)
+        send("suspend", owner: scope.ownerId)
+        XCTAssertEqual(saved?.scope, newScope)
+        XCTAssertEqual(saved?.backgroundAuthorized, true, "Old-owner teardown cannot cancel a newer owner")
     }
 
     func testSoundNamesCannotEscapeNotificationDirectory() {

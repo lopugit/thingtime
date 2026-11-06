@@ -4,16 +4,27 @@ import WebKit
 
 @MainActor
 final class MobileDeviceLocationBridge {
-    static let script = WKUserScript(source: "window.thingtimeNativeBridge.deviceLocationVersion = '1.0.0';",
+    static let script = WKUserScript(source: "window.thingtimeNativeBridge.deviceLocationVersion = '1.1.0';",
                                      injectionTime: .atDocumentStart, forMainFrameOnly: true)
-    private let verifier = MobileDeviceBridge()
+    typealias Verification = (MobileDevicePairing.Scope, WKWebView, @escaping ([HTTPCookie], URL) -> [HTTPCookie], @escaping () throws -> Void) async throws -> Void
+    private let location: MobileDeviceLocation
+    private let verify: Verification
     private var task: Task<Void, Never>?
     private var generation = UUID()
     private var pendingScope: MobileDevicePairing.Scope?
     private var observedScope: MobileDevicePairing.Scope?
     private var statusChanged: (() -> Void)?
     private var observers: [NSObjectProtocol] = []
-    init() {
+    convenience init() {
+        let verifier = MobileDeviceBridge()
+        self.init(location: .shared, verify: { scope, webView, cookies, check in
+            try await verifier.verifyOwner(scope, webView: webView, cookies: cookies, check: check)
+            guard let record = try MobileDeviceKeychain.load(scope), let device = record.deviceId, !record.revoked else { throw MobileDevicePairing.Failure.revoked }
+            try await verifier.verifyDevice(scope, deviceId: device, webView: webView, cookies: cookies, check: check)
+        })
+    }
+    init(location: MobileDeviceLocation, verify: @escaping Verification) {
+        self.location = location; self.verify = verify
         for name in [MobileDeviceLocation.authorizationChangedNotification, UIScene.didActivateNotification] {
             observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.statusChanged?() }
@@ -23,7 +34,7 @@ final class MobileDeviceLocationBridge {
     deinit { for observer in observers { NotificationCenter.default.removeObserver(observer) }; task?.cancel() }
     func invalidate() {
         generation = UUID(); task?.cancel(); task = nil; pendingScope = nil; observedScope = nil; statusChanged = nil
-        MobileDeviceLocation.shared.suspendAuthorization()
+        location.suspendAuthorization()
     }
     func handle(_ body: [String: Any], webView: WKWebView, root: URL,
                 currentRoot: @escaping () -> URL?, cookies: @escaping ([HTTPCookie], URL) -> [HTTPCookie],
@@ -32,16 +43,17 @@ final class MobileDeviceLocationBridge {
               let id = payload["requestId"] as? String, UUID(uuidString: id) != nil,
               let owner = payload["ownerId"] as? String,
               let action = payload["action"] as? String,
-              ["status", "enable", "disable", "request-permission", "request-notification-permission", "open-settings"].contains(action),
+              ["status", "enable", "disable", "suspend", "request-permission", "request-notification-permission", "open-settings"].contains(action),
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
         func respond(_ value: [String: Any]) { reply("mobile-device-location-result", base.merging(value) { _, new in new }) }
-        if action == "disable" {
+        if action == "disable" || action == "suspend" {
             if pendingScope == scope || observedScope == scope {
                 generation = UUID(); task?.cancel(); task = nil; pendingScope = nil; observedScope = nil; statusChanged = nil
             }
-            MobileDeviceLocation.shared.disable(matching: scope)
-            respond(MobileDeviceLocation.shared.status(for: scope)); return
+            if action == "disable" { location.disable(matching: scope) }
+            else { location.suspendAuthorization(matching: scope) }
+            respond(location.status(for: scope)); return
         }
         guard task == nil else { respond(["error": "Another location request is still running. Try again shortly."]); return }
         let operation = UUID(); generation = operation; pendingScope = scope
@@ -59,18 +71,17 @@ final class MobileDeviceLocationBridge {
             defer { if generation == operation { task = nil; pendingScope = nil } }
             do {
                 try check()
-                try await verifier.verifyOwner(scope, webView: webView, cookies: cookies, check: check)
-                guard let record = try MobileDeviceKeychain.load(scope), let device = record.deviceId, !record.revoked else { throw MobileDevicePairing.Failure.revoked }
-                try await verifier.verifyDevice(scope, deviceId: device, webView: webView, cookies: cookies, check: check)
+                try await verify(scope, webView, cookies, check)
                 try check()
-                MobileDeviceLocation.shared.verified(scope)
+                location.verified(scope)
                 observedScope = scope
-                statusChanged = {
-                    guard (try? identityCheck()) != nil else { return }
-                    Task { @MainActor in
+                statusChanged = { [weak self] in
+                    guard self != nil, (try? identityCheck()) != nil else { return }
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
                         let settings = await UNUserNotificationCenter.current().notificationSettings()
                         guard (try? identityCheck()) != nil else { return }
-                        var status = MobileDeviceLocation.shared.status(for: scope)
+                        var status = self.location.status(for: scope)
                         status["ownerId"] = owner; status["origin"] = scope.origin.absoluteString
                         switch settings.authorizationStatus {
                         case .authorized: status["notificationAuthorization"] = "allowed"
@@ -86,21 +97,21 @@ final class MobileDeviceLocationBridge {
                     guard let collectionId = payload["collectionId"] as? String else { throw MobileDevicePairing.Failure.invalid }
                     try await MobileDeviceLocationTransport.make().verifyCollection(collectionId, scope: scope, check: check)
                     try check()
-                    try MobileDeviceLocation.shared.enable(scope, collectionId: collectionId)
+                    try location.enable(scope, collectionId: collectionId)
                 case "request-permission":
-                    MobileDeviceLocation.shared.requestPermission(always: payload["always"] as? Bool == true)
+                    location.requestPermission(always: payload["always"] as? Bool == true)
                 case "request-notification-permission":
                     await ThingtimeNativeNotifications.shared.notificationSettings(action: "enable", ownerId: scope.ownerId)
                     try identityCheck()
                     MobileDeviceAlerts.shared.approve(scope)
                 case "open-settings":
-                    respond(MobileDeviceLocation.shared.status(for: scope))
+                    respond(location.status(for: scope))
                     if let url = URL(string: UIApplication.openSettingsURLString) { await UIApplication.shared.open(url) }
                     return
-                default: MobileDeviceLocation.shared.flush()
+                default: location.flush()
                 }
                 try identityCheck()
-                var status = MobileDeviceLocation.shared.status(for: scope)
+                var status = location.status(for: scope)
                 let notificationSettings = await UNUserNotificationCenter.current().notificationSettings()
                 try identityCheck()
                 switch notificationSettings.authorizationStatus {

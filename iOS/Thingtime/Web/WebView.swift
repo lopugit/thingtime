@@ -122,6 +122,7 @@ struct WebView: UIViewRepresentable {
             // foreground navigation invalidates its persisted approval here.
             if UIApplication.shared.applicationState == .active {
                 MobileDeviceBackgroundPresence.shared.destinationChanged()
+                mobileLocation.invalidate()
             }
             mobileDevice.suspend()
             mobileFolders.suspend()
@@ -153,7 +154,7 @@ struct WebView: UIViewRepresentable {
                 "lopuChatActivityVersion": "1.0.0",
                 "notificationsVersion": "1.0.0",
                 "devicePairingVersion": "1.1.0",
-                "deviceLocationVersion": "1.0.0",
+                "deviceLocationVersion": "1.1.0",
                 "fileAccessVersion": MobileFolderBridge.accessVersion,
                 "fileUploadVersion": MobileFolderBridge.uploadVersion,
                 "fileExportVersion": FileExportBridge.version,

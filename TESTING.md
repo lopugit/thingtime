@@ -14884,7 +14884,12 @@ the isolated real-API/browser command and the metadata-only session boundary.
       StrictMode cleanup or identity suspension must withdraw background
       authority without forgetting explicit collection consent; only verified
       same-owner/device/origin activation may resume it. Ordinary backgrounding
-      preserves an already authorized location session.
+      preserves an already authorized location session. With Mobile device
+      connection activity disabled, explicitly start location collection, then
+      log out/switch origin or account: pending status callbacks must not restore
+      the old authority. Sign back into the same account with activity still off:
+      one read-only verified status must resume retained opt-in without another
+      enable/permission prompt. Hide/show the app without withdrawing authority.
 - [ ] Send a target-device message/default tone and an approved uploaded MP3.
       Verify original bytes, exact prepared derivative, target isolation,
       cancellation and lease expiry. Lose replies and retry the same request:
@@ -14964,6 +14969,17 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 
 ### Account restore admission plans
+
+- Run `node --import tsx --test app/api/utils/backups/backupDestinations.test.ts`
+  from `remix/` for exact-origin/environment vault registration, primary-bucket
+  refusal, safe projections, revoked-session/configuration-change refusal,
+  full-account/home-plane route guards and both manifest contracts. Negotiate
+  `api.backup-destinations` 1.0.0. A configured-unverified destination must never
+  enable execution or be reported as provider/independent-byte acceptance.
+- After building Nitro `node_middleware`, run
+  `node remix/scripts/smoke-built-backup-destinations.mjs --bundle remix/.output`
+  for compiled JSON manifests/docs and the anonymous private/no-store 401.
+  This fixture uses no private vault or reachable DB/provider.
 
 - Run `pnpm --dir remix run test:backups` for independent sealed mixed-graph
   recovery after live-source/first-vault loss, bounded metadata pages, cyclic

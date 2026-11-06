@@ -9,7 +9,20 @@ export type MobileLocationStatus = {
 };
 export type MobileLocationAction = 'status' | 'enable' | 'disable' | 'request-permission' | 'open-settings' | 'request-notification-permission';
 export const supportsMobileLocation = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
-	Boolean(bridge?.isNativeWebView && bridge.platform === 'ios' && /^1\.\d+\.\d+$/.test(bridge.deviceLocationVersion ?? ''));
+	Boolean(bridge?.isNativeWebView && bridge.platform === 'ios' && /^1\.\d+\.\d+$/.test(bridge.deviceLocationVersion ?? '') && Number(bridge.deviceLocationVersion?.split('.')[1]) >= 1);
+/** Immediate authority withdrawal must bypass a pending/serialized status read.
+ * Native suspends the matching scope and fences its in-flight authorizations,
+ * preserving the user's opt-in for a later verified same-account session. */
+export function suspendMobileLocationAuthorization(ownerId: string, origin: string): void {
+    const bridge = getNativeBridge();
+    if (!supportsMobileLocation(bridge) || window.location.origin !== origin) return;
+    try {
+        bridge!.postMessage({ type: 'mobile-device-location', payload: {
+            requestId: crypto.randomUUID(), ownerId, origin, action: 'suspend'
+        } });
+    } catch { /* Native foreground navigation independently suspends authority. */ }
+}
+
 export function parseMobileLocationResult(
 	value: unknown,
 	expected: { requestId: string; ownerId: string; origin: string }

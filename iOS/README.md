@@ -62,7 +62,7 @@ read WebView cookies, create a pairing or broaden Keychain accessibility.
 ## Device location history
 
 Location history is off until the owning device user enables it. The native
-`deviceLocationVersion` 1.0.0 bridge uses explicit permission actions; launch,
+`deviceLocationVersion` 1.1.0 bridge adds immediate scoped authorization suspension, fencing pending verification while preserving consent for a verified same-account return. The web adapter requires mobile 1.1; desktop location and HTTP observation/alert features retain their independent versions. This bridge uses explicit permission actions; launch,
 status checks and background restoration never show an authorization prompt.
 While-in-use authorization supports a foreground fix. **Always** authorization
 permits low-power significant-change updates and supported background relaunch;
