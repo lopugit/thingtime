@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { getEmailNotificationTargets } from '../auth/users';
 import type { EmailNotificationTarget } from '../auth/users';
+import { resolveTrustedOrigin } from '../auth/appOrigin';
 import { sendEmail } from '../email/service';
 import { renderNotificationEmailTemplate } from '../email/templates';
 import { getEmailMessagesCollection } from '../mongodb/collections';
@@ -37,10 +38,9 @@ export const verifyEmailUnsubscribeToken = (userId: string, token: unknown) => {
   return expected.length === provided.length && timingSafeEqual(expected, provided);
 };
 
-// Emails are rendered outside any request, so links use the configured APP_URL
-// (mirrors registerUser's verification-link fallback chain).
-export const notificationEmailOrigin = () =>
-  (process.env.APP_URL?.trim() || 'http://localhost:9999').replace(/\/+$/, '');
+// Background emails share the trusted configured/platform/public origin policy
+// with auth mail, without deriving a host from a request or a local fallback.
+export const notificationEmailOrigin = () => resolveTrustedOrigin();
 
 export const buildEmailUnsubscribeUrl = (userId: string) =>
   `${notificationEmailOrigin()}/api/v1/notifications/email/unsubscribe?uid=${encodeURIComponent(

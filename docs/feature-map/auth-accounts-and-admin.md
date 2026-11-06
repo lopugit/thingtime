@@ -85,6 +85,15 @@ emitted Vercel header. Custom client hub overrides do not grant CSP permission.
 The password extension forwards non-WebAuthn identity requests unchanged; its
 `test/fedcm-pass-through.test.mjs` covers success, refusal and disabled opt-in.
 
+## Email link origins
+
+`app/api/utils/auth/appOrigin.ts` owns the trusted origin policy for auth links
+and requestless notification/reminder/digest emails. Notification item, settings
+and unsubscribe links share that resolver through `notifications/emails.ts`.
+Explicit `APP_URL` supports forks and local development; platform URLs and the
+canonical origin supply public fallbacks. Run `test:auth-origin` and
+`test:notifications`; see README's email setup and TESTING's email-link checklist.
+
 ## Tests
 
 - `npm --prefix remix run test:auth-origin`, `test:auth-introspection`,

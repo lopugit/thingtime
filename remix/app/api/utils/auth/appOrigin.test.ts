@@ -104,3 +104,19 @@ test('local dev and our own domain still resolve to the requested origin', () =>
     assert.equal(origin('https://laptop.tailnet.ts.net/x'), 'https://laptop.tailnet.ts.net');
   });
 });
+
+test('requestless email links share the configured, platform and canonical origin policy', () => {
+  const cases: Array<[Partial<Record<(typeof ENV_KEYS)[number], string>>, string]> = [
+    [{}, 'https://thingtime.com'],
+    [{ APP_URL: '   ' }, 'https://thingtime.com'],
+    [{ APP_URL: ' https://fork.example/// ', VERCEL_URL: 'ignored.vercel.app' }, 'https://fork.example'],
+    [{ APP_URL: 'http://localhost:9999/' }, 'http://localhost:9999'],
+    [{ VERCEL_ENV: 'production', VERCEL_PROJECT_PRODUCTION_URL: 'thingtime.com', VERCEL_URL: 'immutable.vercel.app' }, 'https://thingtime.com'],
+    [{ VERCEL_TARGET_ENV: 'production', VERCEL_ENV: 'preview', VERCEL_PROJECT_PRODUCTION_URL: 'fork.example', VERCEL_URL: 'immutable.vercel.app' }, 'https://fork.example'],
+    [{ VERCEL_ENV: 'preview', VERCEL_BRANCH_URL: 'branch.vercel.app', VERCEL_URL: 'immutable.vercel.app' }, 'https://branch.vercel.app'],
+    [{ VERCEL_ENV: 'preview', VERCEL_URL: 'immutable.vercel.app' }, 'https://immutable.vercel.app']
+  ];
+  for (const [env, expected] of cases) {
+    withEnv(env, () => assert.equal(resolveTrustedOrigin(), expected));
+  }
+});

@@ -6757,6 +6757,14 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       only reach explicit opt-ins. Throttle: >10 notification emails to one
       recipient within an hour are silently skipped (digest excluded). A
       failed/slow send never fails or delays the triggering action.
+- [ ] Notification email links: render a synthetic reminder through the email
+      delivery boundary with `APP_URL` unset and blank. Item, settings and
+      unsubscribe URLs in both HTML and text use the trusted public origin,
+      without an implicit localhost fallback. Repeat with a configured fork,
+      a Vercel production target, preview branch/deployment URLs and an explicit
+      local development `APP_URL`. The shared `test:auth-origin` and
+      `test:notifications` regressions use mocked delivery; they do not prove
+      provider receipt or the private runtime environment configuration.
 - [ ] One-click unsubscribe: the footer link
       (`/api/v1/notifications/email/unsubscribe?uid&token`) flips ONLY the
       email master off, renders the

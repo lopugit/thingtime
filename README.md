@@ -2993,6 +2993,13 @@ allowlist for local development (`localhost`, `127.0.0.1`, `[::1]`,
 `*.thingtime.com`, `*.ts.net`); otherwise the canonical production origin.
 Forks should point `APP_URL` and the canonical origin at their own domain.
 
+Notification emails (including reminders and weekly summaries) use this same
+trusted origin resolver without a request. Their item, settings and unsubscribe
+links therefore use `APP_URL`, the platform's deployment URL, or the canonical
+production origin; they never implicitly fall back to localhost. For local email
+testing, explicitly set `APP_URL="http://localhost:9999"`. An explicit `APP_URL`
+always wins, so check it when diagnosing links to an unexpected deployment.
+
 The weekly digest is scheduled in `remix/vercel.json` (`crons`) against
 `GET /api/v1/notifications/email/weekly-summary`; Vercel attaches
 `Authorization: Bearer <CRON_SECRET>` automatically when that env var exists.

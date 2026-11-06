@@ -145,6 +145,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-06: Use the shared trusted public-origin policy for notification,
+  reminder and weekly-summary email links, replacing the implicit localhost
+  fallback while preserving configured fork/development URLs. Cover rendered
+  item, settings and unsubscribe links with synthetic delivery tests. **Codex (AI)**
+
 - 2026-11-06: Exclude iOS-only Chat Activity sources from the macOS Widgets
   target while retaining shared Lopu voice and recording support. Add a
   source-selection regression that preserves iOS app and test coverage.

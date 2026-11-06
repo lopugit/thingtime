@@ -1,4 +1,4 @@
-// Trusted origin for links we email to users (verification, password reset).
+// Trusted origin for links we email to users (auth, notifications and digests).
 //
 // These links carry single-use auth tokens. If the origin were taken from the
 // request Host header, an attacker could POST a reset request with
@@ -47,13 +47,17 @@ const vercelDeploymentOrigin = (): string | undefined => {
   return toOrigin(branchUrl) || toOrigin(deploymentUrl);
 };
 
-export const resolveTrustedOrigin = (request: Request): string => {
+export const resolveTrustedOrigin = (request?: Request): string => {
   const configured = process.env.APP_URL?.trim();
   if (configured) return configured.replace(/\/+$/, '');
 
   // On Vercel the platform names us, so the Host header is never consulted.
   const fromPlatform = vercelDeploymentOrigin();
   if (fromPlatform) return fromPlatform;
+
+  // Background notifications have no request. Use the same public fallback
+  // instead of inventing a local host that recipients cannot reach.
+  if (!request) return CANONICAL_ORIGIN;
 
   const requestUrl = new URL(request.url);
   if (TRUSTED_FALLBACK_HOST_PATTERN.test(requestUrl.hostname)) {
