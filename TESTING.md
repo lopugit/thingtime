@@ -12156,6 +12156,9 @@ transfer, whole-account snapshots or production deployment.
   an unsupported hosted `XCUIApplication` call or injected permission as consent.
   Assert storage accounting is ready before/after each phase. Automated mode
   retains originals; manual deletion/retention acceptance remains separate.
+  The compiled device sync control fixture checks accounting after pairing,
+  after the first device state with omitted telemetry, and after replaying it
+  and publishing a newer state. The fixture initializes its ledger only once.
 - On iOS without `fileResourceLimitsVersion`, start a saved backup with no
   explicit limits and confirm original bytes. Then confirm explicit saved limits
   refuse Start without clearing settings, including a device preference saved

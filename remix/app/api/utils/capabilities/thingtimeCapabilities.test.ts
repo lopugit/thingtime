@@ -134,7 +134,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.things-fork']?.version, '1.8.1');
 	assert.equal(manifest.features['api.things-import']?.version, '1.13.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.16.1');
-	assert.equal(manifest.features['api.devices-node-state']?.version, '1.15.0');
+	assert.equal(manifest.features['api.devices-node-state']?.version, '1.15.1');
 
 	assert.equal(capabilitySatisfies('1.9.0', '1.10.0'), false);
 	assert.equal(capabilitySatisfies('1.11.0', '1.10.0'), true);
@@ -537,7 +537,7 @@ test('full Mac capability lists negotiate additive device contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://preview.example.test');
   for (const [feature, current, minimum] of [
     ['api.devices', '1.16.0', '1.10.0'],
-    ['api.devices-node-state', '1.15.0', '1.11.0'],
+    ['api.devices-node-state', '1.15.1', '1.15.0'],
     ['api.devices-pairing-claim', '1.2.0', '1.0.0']
   ]) {
     assert.equal(manifest.features[feature]?.version, current);
@@ -551,7 +551,7 @@ test('full Mac capability lists negotiate additive device contracts', () => {
 test('host resource telemetry negotiates both additive device contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://devices.test');
   for (const feature of ['api.devices', 'api.devices-node-state']) {
-    const current = feature === 'api.devices' ? '1.16.0' : '1.15.0';
+    const current = feature === 'api.devices' ? '1.16.0' : '1.15.1';
     assert.equal(manifest.features[feature]?.version, current);
     assert.equal(createApiCapabilitiesManifest().features[feature], current);
     for (const version of ['1.14.0', '1.14.1', '1.15.0']) assert(capabilitySatisfies(version, '1.14.0'));
