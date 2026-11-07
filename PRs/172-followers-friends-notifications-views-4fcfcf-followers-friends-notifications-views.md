@@ -65,3 +65,31 @@ Loop task state file. Each /loop firing: read this, continue the first unchecked
   relationships 404 json; anon views POST accepted (unknown ids dropped, counted 0); notifications 401
   anon; anon feed payload carries viewCount + viewStats. PR #172 checks: Vercel SUCCESS, CodeQL/actions
   green, GitGuardian pass, mergeable. Loop task complete — cron job deleted.
+
+---
+
+## Addendum: per-channel toggles (push + email) & SES notification emails (2026-08-03)
+
+Second feature drop on this PR: every notification type now has SEPARATE push
+(bell/in-app) and email switches plus a master switch per channel, and the
+notification system emails via the existing AWS SES layer.
+
+- [x] Prefs model: stored `meta.notificationPrefs` keeps the original flat keys as the PUSH channel (zero migration); new nested `email` + `masters` keys; `normalizeNotificationPrefs` in `schemas/registry.ts` is the one shared defaults brain (absent=ON, post types email-opt-in; accepts stored AND wire shape — idempotent).
+- [x] Settings API: GET/POST `/api/v1/notifications/settings` now speaks the channel matrix `{ prefs: { push, email, masters } }`; flat legacy POST body still patches push; unknown keys 400; nested one-level merge in `setUserNotificationPrefs` (secure-blob CAS + legacy dot-path `$set`).
+- [x] Email sends: new `notification` EmailStream (from = `THINGTIME_EMAIL_NOTIFICATIONS_FROM` → transactional fallback), `api/utils/notifications/emails.ts` rides emitNotification/emitNotificationsBulk fire-and-forget — verified addresses only, master+type gates, ≤10/recipient/hour outbox throttle, per-type subjects/copy in `email/templates.ts`, manage + one-click unsubscribe links in every footer.
+- [x] One-click unsubscribe: `GET /api/v1/notifications/email/unsubscribe?uid&token` (HMAC over userId, secret = `THINGTIME_EMAIL_UNSUB_SECRET` → JWT secret fallback; timing-safe compare) flips ONLY `masters.email` off, tiny HTML confirmation page, IP rate-limited, idempotent.
+- [x] Weekly summary digest: email-only type `weekly-summary`; `api/utils/notifications/weeklySummary.ts` (one notification aggregation for all recipients + per-user posts/views counts, zero-activity skip, 6-day outbox idempotency lookback); route `GET|POST /api/v1/notifications/email/weekly-summary` (admin session OR `CRON_SECRET` bearer; dryRun mode); Vercel cron Sun 21:37 UTC (= Mon 07:37 AEST) in `remix/vercel.json`.
+- [x] UI: `NotificationSettings.tsx` rebuilt as a switch matrix — Push|Email column headers, master row, per-type rows (weekly-summary shows — in the push column), master-off dims+disables its column, optimistic + revert, cache key bumped to `tt-notif-prefs-v2-<id>`.
+- [x] Read-side: push master OFF empties bell list + badge; per-type read filtering unchanged (now channel-aware).
+- [x] Registration: 2 new routes in `server/routes/api/[...].ts` + apiDocs entries (auto Nitro registration + -docs tests); rate-limit bucket `notifications.emailUnsubscribe`; email_messages indexes for throttle + digest lookback; apiTests updated (settings matrix shape) + 2 new tests (unsubscribe bad-token, weekly-summary gate w/ dryRun so admin /tests runs never send).
+- [x] Docs: README "Notification emails" env setup, TESTING.md checklist additions, CHANGELOG entry.
+- [ ] Verification log (below) — local API battery + browser visual (desktop/375px) + outbox evidence.
+
+### Verification log (addendum, 2026-08-03)
+
+- Local dev (worktree trio 19030/19031/19032, real Mongo localhost, real API, THINGTIME_EMAIL_PROVIDER=console so outbox rows are written but no real SES sends):
+  - curl battery **37/37 PASS** (fresh users nta/ntb + env-admin ntadmin2): matrix defaults (email post types OFF, weekly-summary ON), legacy flat POST patches push, weekly-summary rejected in push map, unknown email type 400; follow → bell + `notification.new-follower` outbox row; reaction + comment emails; email master OFF blocks emails while the bell keeps receiving; per-type email OFF blocks just that type; friend-request email; unsubscribe link from email text (200 page, master flipped off, idempotent, tampered token 400); throttle capped at exactly 10/recipient/hour; weekly summary anon 401 / non-admin 403 / admin dryRun / CRON_SECRET bearer run (digest row for A) / second run idempotent via alreadySent / wrong secret 401.
+  - Push master OFF → GET /notifications returns 0 items + unreadCount 0; back ON → all 18 restored (read-time filter, nothing deleted).
+  - /tests in-browser battery: **269 passed / 1 failed** — the failure is the known environmental "Current user anonymous" test (browser session logged in), same as the original PR run. All 3 new notification tests PASS.
+  - Browser UI (1280 desktop + 375 mobile): settings matrix renders with PUSH|EMAIL column headers, "All notifications" master row, weekly-summary email-only row (— in push column); flipping the email master instantly dims + disables the whole email column (screenshot-verified) and persists (masters.email=false server-side); per-type email flip (post-from-friend) persists + reverts; mobile 375px shows no overflow/misalignment/collisions; unsubscribe confirmation page clean at 375px.
+  - Gotchas for future runs: env-admin usernames can't self-register (register first, then restart with ADMIN_USERNAMES); killing vite leaves nitro on :19032 (kill the whole port trio); outbox evidence lives in email_messages_v2 on the LOCALHOST connection line (the other MONGODB_CONNECTION_STRING line is Atlas prod — read-only, never write).

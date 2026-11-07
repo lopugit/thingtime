@@ -6001,15 +6001,55 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 
 ## Public posts Atom feed (`remix/app/api/utils/things/rss.ts`, `GET /api/v1/things/rss`)
 
-- [ ] `GET /api/v1/things/rss` (logged in OR out) returns well-formed Atom XML
-      (`Content-Type: application/atom+xml; charset=utf-8`, edge cache headers)
-      of the latest ~50 PUBLIC posts only — no friends/family/private post ever
-      appears, cookies are ignored, and no viewer field leaks into entries.
-      Posts containing quotes, angle brackets (`"><script>` probes), emoji, or
-      control characters escape cleanly (feed still parses with xmllint), and
-      the shell `<head>` keeps the `<link rel="alternate"
-      type="application/atom+xml" href="/api/v1/things/rss">` discovery tag on
-      every page (it lives outside the swapped tt-social-meta block).
+- [ ] Emission: new follower, friend request, friend accepted, comment on your
+      post, reply to your comment, reaction (preview = the token), repost, and
+      capped fan-out (≤200 newest connections) of new posts to followers
+      (`post-from-followed`) and friends (`post-from-friend`). Own actions
+      never notify yourself; a failed emit never fails the triggering action.
+- [ ] Fan-out respects the post's audience: public posts notify followers +
+      friends, friends-only posts notify friends only, private posts fan out
+      to nobody.
+- [ ] The bell 🔔 (auth only) shows the unread badge (seeded from localCache —
+      no flash), reconciles on mount/focus/slow poll, opens a popover of the
+      latest 20 (unread rows tinted, actor avatar + type emoji, preview,
+      time-ago), zeroes the badge on open (mark-all-read), and click-through
+      goes to `/post/<id>` or the actor's profile. Works within a 375px
+      viewport with no overflow.
+- [ ] Settings → Notifications: a per-type × per-channel matrix — Push and
+      Email switches per row plus a master switch per channel (top row).
+      Defaults ON except email for `post-from-followed`/`post-from-friend`
+      (opt-in) — and `weekly-summary` is email-only (push cell shows —).
+      Optimistic flip + revert on failure, per-user localCache seed
+      (`tt-notif-prefs-v2-*`), merge-patch POST in the channel shape
+      (`{ prefs: { push/email/masters } }`) with the flat legacy body still
+      patching push; unknown keys 400. Disabling a push type hides even
+      ALREADY-WRITTEN notifications of that type (read-time filtering) and
+      single-recipient emits skip writing it; push master OFF empties the bell
+      entirely. Master OFF dims + disables that channel's column. No overflow
+      or column misalignment at 375px.
+- [ ] Notification emails (SES `notification` stream): each single-recipient
+      emit also emails the recipient when their email master + per-type switch
+      are on AND their address is verified — check the `email_messages` outbox
+      row (`templateKey notification.<type>`, `metadata.notificationType`,
+      manage + unsubscribe links in both html and text). Fan-out post emails
+      only reach explicit opt-ins. Throttle: >10 notification emails to one
+      recipient within an hour are silently skipped (digest excluded). A
+      failed/slow send never fails or delays the triggering action.
+- [ ] One-click unsubscribe: the footer link (`/api/v1/notifications/email/
+      unsubscribe?uid&token`) flips ONLY the email master off, renders the
+      confirmation page (mobile viewport included), is idempotent, and rejects
+      a tampered token with the 400 page. Bell/push switches are untouched;
+      re-enabling from Settings works.
+- [ ] Weekly summary digest: admin `GET …/weekly-summary?dryRun=1` previews
+      counts without sending; a real run emails only opted-in verified users
+      with ≥1 nonzero stat, records `notification.weekly_summary` outbox rows,
+      and a second run within 6 days skips everyone (`alreadySent`). Anonymous
+      and non-admin callers get 401/403 (CRON_SECRET bearer also accepted).
+- [ ] Mobile nav overlap regression: the centered commander pill must NOT
+      cover the bell / username (they sit above it via `.nav-right-section`
+      z-index, and the pill reserves 148px on the right). Regression class:
+      nav-right controls rendered under the absolutely-positioned commander
+      host and were untappable on mobile (2026-08).
 
 ## Feed keyboard shortcuts (`remix/app/hooks/useFeedShortcuts.ts`, `/feed` + `/explore`)
 
