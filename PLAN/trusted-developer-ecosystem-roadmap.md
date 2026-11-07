@@ -17,6 +17,10 @@
 [full-power app namespaces](../TODO/claude-todo/16-full-power-app-namespaces.md),
 and [composed apps](../TODO/claude-todo/21-app-composition-surface.md)
 
+Agent-specific origin checks and durable private task reporting are a related
+but separately scoped follow-up in
+[TODO 58](../TODO/claude-todo/58-agent-coordination-and-task-reporting.md).
+
 ## Outcome
 
 Developers can move from a no-secrets sandbox to a supportable release with one
