@@ -316,13 +316,14 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-node-state',
-		featureVersion: '1.15.0',
-		contractVersion: '1.15.0',
+		featureVersion: '1.15.1',
+		contractVersion: '1.15.1',
 		group: 'devices',
 		title: 'Publish device state',
 		endpoint: '/api/v1/devices/node/state',
 		summary: 'Applies one quota-accounted, monotonic state and connector snapshot.',
 		detail:
+			'Version 1.15.1 keeps the snapshot storage charge consistent when optional telemetry is omitted. ' +
 			'Version 1.16 adds an origin/account/content-plane scoped rootFolderId normal-folder reference; GET devices-folders checks whether it exists, POST materializes it on explicit navigation or a new connection save. It never grants native file access. Version 1.15 accepts an optional closed descriptorPatch containing required model and optional osVersion/appVersion. It updates only this credential-bound device metadata atomically with a newer complete state revision; omitted fields are preserved. Owner, name, platform and serial fields are forbidden. ' +
 			'Version 1.14 accepts optional state.resources with cpuPercent (0–100), memoryUsedBytes, memoryTotalBytes, diskUsedBytes, diskTotalBytes, diskReadBytesPerSecond, diskWriteBytesPerSecond, networkRxBytesPerSecond and networkTxBytesPerSecond. Optional networkLinkBitsPerSecond is a measured comparable per-direction capacity for the interfaces contributing throughput. Byte totals and link capacity are safe integers, rates are finite non-negative numbers, and unavailable fields are omitted. Interface names, addresses and mount paths are excluded. ' +
 			'Version 1.13 adds optional 64px PNG menu-item thumbnails with explicit menu-bar/application provenance. Remote image URLs and SVG are rejected; old nodes may omit both fields. Optional capabilities replaces the paired device capability list atomically with a newer state revision. Version 1.12 accepts up to 128 identifiers, preserving fully equipped Macs that exceed the former 64-entry limit. Omission preserves older node capabilities; the full snapshot hash includes supplied capabilities. ' +

@@ -869,7 +869,8 @@ export const updateDeviceState = async (
 						targetId: deviceId,
 						crystal: { deviceStateKey: stateKey, revision, stateHash, snapshotHash, state, observedAt: now }
 					}),
-					{ ...HOME_ACCOUNTING, session }
+					// Match the logical JSON byte stamp. BSON otherwise stores undefined telemetry as null.
+					{ ...HOME_ACCOUNTING, session, ignoreUndefined: true }
 				);
 			} else if (stateDecision === 'update') {
 				const updated = await updateAccountedThing(
@@ -891,7 +892,7 @@ export const updateDeviceState = async (
 							updatedAt: now
 						}
 					},
-					{ ...HOME_ACCOUNTING, session }
+					{ ...HOME_ACCOUNTING, session, ignoreUndefined: true }
 				);
 				if (!updated.modifiedCount) throw Object.assign(new Error('device_snapshot_race'), { status: 409 });
 			}

@@ -322,7 +322,7 @@ test('capabilities publish the native Apple notification device contract', () =>
 	assert.equal(manifest.features['api.watch-sync'], '1.1.0');
 	assert.equal(manifest.features['api.watch-things'], '1.1.0');
 	assert.equal(manifest.features['api.devices'], '1.16.0');
-	assert.equal(manifest.features['api.devices-node-state'], '1.15.0');
+	assert.equal(manifest.features['api.devices-node-state'], '1.15.1');
 	assert.equal(manifest.features['api.attachment-uploads'], '1.10.0');
 	assert.equal(manifest.features['api.attachment-upload-parts'], '1.1.0');
 	assert.equal(manifest.features['api.attachment-upload-complete'], '1.7.0');
