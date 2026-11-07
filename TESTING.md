@@ -12133,6 +12133,18 @@ transfer, whole-account snapshots or production deployment.
 - `PhotoLibraryTests` covers distinct same-name resources, multipart fingerprints,
   bounded reads, owner/grant cache partitioning, changed inventories, revoked
   permission, missing originals, cancellation and denied write authority.
+- Opt-in installed Photos acceptance uses `THINGTIME_PHOTO_UI_AUTOMATION=1`
+  with a disposable loopback fixture: the separate UI-testing target must
+  execute a real consent test, followed by the hosted original-byte/hash test
+  using the same account/origin and native grant. Never treat a zero-test result,
+  an unsupported hosted `XCUIApplication` call or injected permission as consent.
+  Assert storage accounting is ready before/after each phase. Automated mode
+  retains originals; manual deletion/retention acceptance remains separate.
+- On iOS without `fileResourceLimitsVersion`, start a saved backup with no
+  explicit limits and confirm original bytes. Then confirm explicit saved limits
+  refuse Start without clearing settings, including a device preference saved
+  in this session and after reload. Do not report implicit native CPU,
+  scan or transfer targets as enforced; Mac resource enforcement must be unchanged.
 - PhotoKit export errors must distinguish network-required originals, revoked
   access, device storage exhaustion, cancellation and other read failures without
   exposing native asset IDs or paths. Retry after an unavailable original must

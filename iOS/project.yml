@@ -237,6 +237,19 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(PRODUCT_BUNDLE_IDENTIFIER).tests
         GENERATE_INFOPLIST_FILE: true
 
+  ThingtimeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: ThingtimeUITests
+    dependencies:
+      - target: Thingtime
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(PRODUCT_BUNDLE_IDENTIFIER).uitests
+        GENERATE_INFOPLIST_FILE: true
+        TEST_TARGET_NAME: Thingtime
+
 schemes:
   Thingtime:
     build:
@@ -244,10 +257,12 @@ schemes:
         Thingtime: all
         ThingtimeWatch: all
         ThingtimeTests: [test]
+        ThingtimeUITests: [test]
     test:
       gatherCoverageData: true
       targets:
         - ThingtimeTests
+        - ThingtimeUITests
     run:
       config: Debug
     archive:

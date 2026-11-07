@@ -17,7 +17,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
         var tick = 0
         while Date() < deadline {
             tick += 1
-            if tick > 0 && tick % 40 == 0 {
+            if tick > 0 && tick % 120 == 0 {
                 let status = try? await web.evaluateJavaScript("JSON.stringify({url:location.href,buttons:Array.from(document.querySelectorAll('button')).filter(e=>['Upload now','Stop transfer','Choose folder','Check connection','Connecting…'].includes(e.textContent.trim())).map(e=>({text:e.textContent,disabled:e.disabled})),status:Array.from(document.querySelectorAll('[role=status],[role=alert]')).map(e=>e.textContent)})")
                 print("IOS_PHOTO_WAIT: \(expression) ATTACHED: \(web.window != nil) STATUS: \(status as? String ?? "unavailable")")
             }
@@ -34,7 +34,9 @@ final class PhotoBackupInstalledTests: XCTestCase {
             throw XCTSkip("Run opt-in installed photo backup acceptance with a disposable loopback account")
         }
         XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "ThingtimeWebURL") as? String, base)
-        let configuration = URLSessionConfiguration.ephemeral, session = URLSession(configuration: configuration)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 20
+        let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
         func api(_ path: String, body: [String: Any]? = nil) async throws -> [String: Any] {
             var request = URLRequest(url: URL(string: path, relativeTo: origin)!.absoluteURL)
@@ -64,8 +66,12 @@ final class PhotoBackupInstalledTests: XCTestCase {
 
         let scope = try FileSyncOwnerScope(ownerId: owner, url: origin), store = MobileFolderStore()
         let prior = try store.list(scope).first { $0.sourceKind == "photos" }
-        guard prior == nil || prior?.id == env["THINGTIME_PHOTO_RESUME_GRANT"] else { throw XCTSkip("Preserve existing photo grant \(prior?.id ?? "unknown") unless its exact disposable-test ID is supplied") }
+        let uiAutomation = env["THINGTIME_PHOTO_UI_AUTOMATION"] == "1"
+        let resumeReceipt = env["THINGTIME_PHOTO_REOPEN_RECEIPT"].flatMap { Data($0.utf8) }
+        let uiVerified = uiAutomation && env["THINGTIME_PHOTO_PREPARE_ONLY"] != "1"
+        guard prior == nil || prior?.id == env["THINGTIME_PHOTO_RESUME_GRANT"] || uiAutomation else { throw XCTSkip("Preserve existing photo grant \(prior?.id ?? "unknown") unless its exact disposable-test ID is supplied") }
         web.configuration.userContentController.addUserScript(WKUserScript(source: """
+        window.__photoDocument=performance.timeOrigin;
         window.__nativeUploadStarted=null;window.__nativeUploadStats={files:0,parts:0,bytes:0,legacy:0};window.__photoScans=0;
         const photoOriginalPost=window.thingtimeNativeBridge.postMessage;
         window.thingtimeNativeBridge.postMessage=function(m){
@@ -86,8 +92,12 @@ final class PhotoBackupInstalledTests: XCTestCase {
         """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         web.load(URLRequest(url: origin.appendingPathComponent("things")))
         for _ in 0..<100 where UIApplication.shared.applicationState != .active { try await Task.sleep(nanoseconds: 100_000_000) }
-        try await awaitTrue(web, "Array.from(document.querySelectorAll('button')).some(b=>['Device setup','Add this device','Choose folder'].includes(b.textContent.trim()))")
-        _ = try await web.evaluateJavaScript("Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Device setup')?.click()")
+        try await awaitTrue(web, "Array.from(document.querySelectorAll('button,a')).some(b=>['Device setup','Add this device','Choose folder'].includes(b.textContent.trim()))")
+        if env["THINGTIME_PHOTO_PREPARE_ONLY"] == "1" {
+            print("IOS_PHOTO_ACCOUNT_PREPARED: verified disposable account and selected origin; no Photos permission changed")
+            return
+        }
+        _ = try await web.evaluateJavaScript("Array.from(document.querySelectorAll('button,a')).find(b=>b.textContent.trim()==='Device setup')?.click()")
         try await awaitTrue(web, "Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Add this device'||b.textContent.trim()==='Choose folder')")
         _ = try await web.evaluateJavaScript("Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Add this device')?.click()")
         try await awaitTrue(web, "Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Choose folder'&&!b.disabled)")
@@ -99,7 +109,9 @@ final class PhotoBackupInstalledTests: XCTestCase {
             if selected != nil { break }
             try await Task.sleep(nanoseconds: 250_000_000)
         }
-        let grant = try XCTUnwrap(selected), provider = SystemPhotoResources()
+        let grant = try XCTUnwrap(selected)
+        print("IOS_PHOTO_NATIVE_GRANT: \(grant.id)")
+        let provider = SystemPhotoResources()
         XCTAssertEqual(provider.access(), "full")
         guard try provider.inventory().count < 20 else { throw XCTSkip("Use a small disposable simulator library") }
         var owned: [String] = [], cloud: String?, connection: String?
@@ -142,7 +154,9 @@ final class PhotoBackupInstalledTests: XCTestCase {
         func verifyBytes(_ file: [String: Any]) async throws {
             let content = try XCTUnwrap(file["content"] as? [String: Any]), id = try XCTUnwrap(content["attachmentId"] as? String)
             let (download, response) = try await session.data(from: origin.appendingPathComponent("api/v1/attachments/content").appending(queryItems: [URLQueryItem(name: "id", value: id), URLQueryItem(name: "cache", value: "bytes")]))
-            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200); XCTAssertEqual(SHA256.hash(data: download), SHA256.hash(data: bytes))
+            guard (response as? HTTPURLResponse)?.statusCode == 200, SHA256.hash(data: download) == SHA256.hash(data: bytes) else {
+                throw NSError(domain: "PhotoBackupAcceptance", code: 4, userInfo: [NSLocalizedDescriptionKey: "Downloaded cloud original did not match the exact fixture bytes"])
+            }
         }
         let uploadCache = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("FileUploadParts-v1")
@@ -151,18 +165,25 @@ final class PhotoBackupInstalledTests: XCTestCase {
             return Set(try FileManager.default.contentsOfDirectory(atPath: uploadCache.path).filter { $0 != "lock" })
         }
         let retainedBefore = try retainedParts()
-        let name = "iOS photo backup " + UUID().uuidString.prefix(8)
+        var name = "iOS photo backup " + UUID().uuidString.prefix(8)
+        func reloadFresh() async throws {
+            let previous = (try await web.evaluateJavaScript("window.__photoDocument ?? -1")) as? Double ?? -1
+            web.reload()
+            try await awaitTrue(web, "typeof window.__photoDocument==='number' && window.__photoDocument!==" + String(previous))
+        }
         func startAndAwaitUpload(background: Bool = false) async throws {
             for _ in 0..<100 where UIApplication.shared.applicationState != .active { try await Task.sleep(nanoseconds: 100_000_000) }
             guard UIApplication.shared.applicationState == .active else { throw CancellationError() }
             try await awaitTrue(web, "typeof window.__photoScans==='number'")
             let previous = (try await web.evaluateJavaScript("window.__photoScans")) as? Int ?? -1
-            print("IOS_PHOTO_UPLOAD_READY: Starting the visible Upload now control for \(name).")
+            print("IOS_PHOTO_UPLOAD_READY: Starting the visible backup control for \(name).")
             let quoted = String(data: try JSONSerialization.data(withJSONObject: [name]), encoding: .utf8)!
-            let card = "Array.from(document.querySelectorAll('p')).find(e=>e.textContent===(" + quoted + ")[0])?.parentElement?.parentElement"
-            try await awaitTrue(web, "Array.from((" + card + ")?.querySelectorAll('button')||[]).some(b=>['Start backup','Upload now'].includes(b.textContent.trim())&&!b.disabled)")
-            _ = try await web.evaluateJavaScript("(" + card + ").scrollIntoView({block:'center'})")
-            _ = try await web.evaluateJavaScript("Array.from((" + card + ").querySelectorAll('button')).find(b=>['Start backup','Upload now'].includes(b.textContent.trim())&&!b.disabled).click()")
+            let card = "Array.from(document.querySelectorAll('h4,p')).find(e=>e.textContent===(" + quoted + ")[0])?.closest('article')"
+            try await awaitTrue(web, "!!(" + card + ")")
+            _ = try await web.evaluateJavaScript("(" + card + ").querySelector('button[aria-label=\"Expand folder\"]')?.click()")
+            try await awaitTrue(web, "Array.from((" + card + ")?.querySelectorAll('button')||[]).some(b=>['Start backup','Upload now'].includes(b.textContent.trim())&&!b.disabled&&b.getClientRects().length>0)")
+            let started = try await web.evaluateJavaScript("(()=>{const card=" + card + ";const button=Array.from(card?.querySelectorAll('button')||[]).find(b=>['Start backup','Upload now'].includes(b.textContent.trim())&&!b.disabled&&b.getClientRects().length>0);if(!button)return false;card.scrollIntoView({block:'center'});button.click();return true;})()")
+            guard started as? Bool == true else { throw NSError(domain: "PhotoBackupAcceptance", code: 6, userInfo: [NSLocalizedDescriptionKey: "The fresh saved backup action was unavailable"]) }
             try await awaitTrue(web, "window.__photoScans>" + String(previous))
             if background {
                 try await awaitTrue(web, "window.__nativeUploadStarted!==null")
@@ -179,47 +200,118 @@ final class PhotoBackupInstalledTests: XCTestCase {
                 guard UIApplication.shared.applicationState == .active else { throw CancellationError() }
                 print("IOS_BACKGROUND_UPLOAD_RETURNED")
             }
-            try await awaitTrue(web, "(" + card + ")?.querySelector('[role=status]')?.textContent === 'Last transfer finished.'")
+            try await awaitTrue(web, "Array.from((" + card + ")?.querySelectorAll('[role=status]')||[]).some(e=>e.textContent==='Last transfer finished.')", seconds: 360)
         }
-        var failure: Error?
+        if let resumeReceipt {
+            let receipt = try XCTUnwrap(JSONSerialization.jsonObject(with: resumeReceipt) as? [String: Any])
+            let id = try XCTUnwrap(receipt["id"] as? String)
+            name = try XCTUnwrap(receipt["name"] as? String)
+            cloud = try XCTUnwrap(receipt["rootId"] as? String)
+            let expected = try XCTUnwrap(receipt["files"] as? [String: String])
+            let saved = try await api("/api/v1/things?" + "id=" + id)
+            let cfg = try XCTUnwrap((saved["thing"] as? [String: Any])?["crystal"] as? [String: Any])
+            guard uiVerified, receipt["localRootId"] as? String == grant.id, cfg["localRootId"] as? String == grant.id,
+                  cfg["remoteFolderId"] as? String == cloud, cfg["name"] as? String == name,
+                  cfg["sourceKind"] as? String == "photos", cfg["mode"] as? String == "backup", !expected.isEmpty else {
+                throw NSError(domain: "PhotoBackupAcceptance", code: 7, userInfo: [NSLocalizedDescriptionKey: "Existing disposable backup identity changed"])
+            }
+            func revisions() async throws -> [String: String] {
+                let nodes = try await cloudNodes()
+                return Dictionary(uniqueKeysWithValues: try nodes.map { node in
+                    (try XCTUnwrap(node["path"] as? String), try XCTUnwrap((node["file"] as? [String: Any])?["revision"] as? String))
+                })
+            }
+            let before = try await revisions()
+            guard before == expected else { throw NSError(domain: "PhotoBackupAcceptance", code: 8, userInfo: [NSLocalizedDescriptionKey: "Existing cloud revisions changed before reopen"]) }
+            try await reloadFresh(); try await startAndAwaitUpload()
+            let after = try await revisions()
+            XCTAssertEqual(after, expected)
+            let uploadStats = try await web.evaluateJavaScript("window.__nativeUploadStats")
+            XCTAssertEqual((uploadStats as? [String: Int])?["files"], 0, "A saved backup retry must not reupload unchanged originals")
+            print("IOS_PHOTO_REOPEN_RETRY_PASS: \(after.count) exact original cloud revisions retained")
+            return
+        }
+        var failure: Error?, phase = "create synthetic original"
         do {
-            let firstID = try await createPhoto()
+            let firstID: String
+            if let retained = owned.first { firstID = retained }
+            else { firstID = try await createPhoto() }
             let resources = try provider.inventory(), first = try XCTUnwrap(resources.first { $0.asset == firstID })
-            let excluded = resources.filter { $0.asset != firstID }.map(\.path)
+            let excluded: [String] = [] // Strict Photos captures cover the disposable library, without unsupported exclusions.
+            phase = "read verified native pairing"
             let paired = try XCTUnwrap(MobileDeviceKeychain.load(scope)?.deviceId)
+            phase = "save private cloud folder"
             let root = try await api("/api/v1/things", body: ["thingtime": ["folder"], "crystal": ["name": name]])
             cloud = try XCTUnwrap((root["thing"] as? [String: Any])?["id"] as? String)
             let config: [String: Any] = ["configurationVersion": 1, "name": name, "deviceId": paired, "localRootId": grant.id, "sourceKind": "photos", "remoteFolderId": cloud!, "mode": "backup", "paused": false, "propagateDeletes": false, "network": "any", "chargingOnly": false, "excludedPaths": excluded]
+            phase = "save backup connection"
             let saved = try await api("/api/v1/things", body: ["thingtime": ["file-sync"], "crystal": config])
             connection = try XCTUnwrap((saved["thing"] as? [String: Any])?["id"] as? String)
+            phase = "start and confirm first original"
             let firstStarted = Date()
-            web.reload(); try await startAndAwaitUpload(background: env["THINGTIME_PHOTO_BACKGROUND_TEST"] == "1")
+            let firstReceipt = Task { @MainActor in
+                for _ in 0..<120 {
+                    try Task.checkCancellation()
+                    if let node = try await cloudNodes().first(where: { $0["path"] as? String == first.path }),
+                       let file = node["file"] as? [String: Any] {
+                        try await verifyBytes(file)
+                        print("IOS_PHOTO_FIRST_HASH_PASS: bytes=\(bytes.count)")
+                        print("IOS_PHOTO_FIRST_CONFIRMED_MS: \(Int(Date().timeIntervalSince(firstStarted) * 1000))")
+                        return file
+                    }
+                    try await Task.sleep(for: .seconds(3))
+                }
+                throw NSError(domain: "PhotoBackupAcceptance", code: 5, userInfo: [NSLocalizedDescriptionKey: "No verified cloud original arrived before the fixture deadline"])
+            }
+            defer { firstReceipt.cancel() }
+            try await reloadFresh(); try await startAndAwaitUpload(background: env["THINGTIME_PHOTO_BACKGROUND_TEST"] == "1")
+            let firstFile = try await firstReceipt.value
             let firstNodes = try await cloudNodes()
-            let firstNode = try XCTUnwrap(firstNodes.first { $0["path"] as? String == first.path }), firstFile = try XCTUnwrap(firstNode["file"] as? [String: Any])
-            try await verifyBytes(firstFile); print("IOS_PHOTO_FIRST_HASH_PASS")
-            print("IOS_PHOTO_FIRST_CONFIRMED_MS: \(Int(Date().timeIntervalSince(firstStarted) * 1000))")
-            _ = try await createPhoto()
-            try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(PHAsset.fetchAssets(withLocalIdentifiers: [firstID], options: nil)) }
-            owned.removeAll { $0 == firstID }
-            try await startAndAwaitUpload()
-            let nodes = try await cloudNodes(); XCTAssertEqual(nodes.count, 2)
-            for node in nodes { try await verifyBytes(try XCTUnwrap(node["file"] as? [String: Any])) }
+            let nodes: [[String: Any]]
+            if uiVerified {
+                nodes = firstNodes
+                XCTAssertEqual(nodes.count, resources.count)
+            } else {
+                let secondID = try await createPhoto()
+                let second = try XCTUnwrap(provider.inventory().first { $0.asset == secondID })
+                try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(PHAsset.fetchAssets(withLocalIdentifiers: [firstID], options: nil)) }
+                owned.removeAll { $0 == firstID }
+                phase = "discover second original"
+                try await startAndAwaitUpload()
+                nodes = try await cloudNodes(); XCTAssertEqual(nodes.count, firstNodes.count + 1)
+                let secondFile = try XCTUnwrap(nodes.first { $0["path"] as? String == second.path }?["file"] as? [String: Any])
+                try await verifyBytes(secondFile)
+            }
             let retained = try XCTUnwrap(nodes.first { $0["path"] as? String == first.path }?["file"] as? [String: Any])
             XCTAssertEqual(retained["revision"] as? String, firstFile["revision"] as? String)
             let observedStats = try await web.evaluateJavaScript("window.__nativeUploadStats")
             let stats = try XCTUnwrap(observedStats as? [String: Int])
-            XCTAssertEqual(stats["files"], 2)
-            XCTAssertGreaterThanOrEqual(stats["parts"] ?? 0, 4)
-            XCTAssertEqual(stats["bytes"], bytes.count * 2)
+            XCTAssertEqual(stats["files"], resources.count + (uiVerified ? 0 : 1))
+            XCTAssertGreaterThanOrEqual(stats["parts"] ?? 0, uiVerified ? 2 : 4)
+            XCTAssertGreaterThanOrEqual(stats["bytes"] ?? 0, bytes.count * (uiVerified ? 1 : 2))
             XCTAssertEqual(stats["legacy"], 0)
             XCTAssertEqual(try retainedParts(), retainedBefore, "Successful native parts must release their private cache")
             print("IOS_UPLOAD_CACHE_RELEASE_PASS")
             print("IOS_NATIVE_FILE_JOB_PASS: files=\(stats["files"] ?? 0)")
             print("IOS_NATIVE_UPLOAD_PASS: parts=\(stats["parts"] ?? 0) bytes=\(stats["bytes"] ?? 0) legacy=\(stats["legacy"] ?? -1)")
+            phase = "reopen and retry saved backup"
+            try await reloadFresh(); try await startAndAwaitUpload()
+            let reopened = try await cloudNodes()
+            XCTAssertEqual(reopened.count, nodes.count)
+            for node in nodes {
+                let old = try XCTUnwrap(node["file"] as? [String: Any])
+                let same = try XCTUnwrap(reopened.first { $0["path"] as? String == node["path"] as? String }?["file"] as? [String: Any])
+                XCTAssertEqual(same["revision"] as? String, old["revision"] as? String)
+            }
+            print("IOS_PHOTO_REOPEN_RETRY_PASS: saved connection and original cloud revisions retained")
             let shot = UIGraphicsImageRenderer(bounds: web.bounds).image { _ in web.drawHierarchy(in: web.bounds, afterScreenUpdates: true) }
             if let png = shot.pngData() { try png.write(to: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("photo-backup-complete.png")) }
-            print("IOS_PHOTO_BACKUP_PASS: Original PNG download hashes, new photo discovery and saved cloud copy after device deletion.")
-        } catch { failure = error }
+            print(uiVerified ? "IOS_PHOTO_BACKUP_PASS: Original PNG hashes, incremental discovery and saved-connection reopen/retry." : "IOS_PHOTO_BACKUP_PASS: Original PNG hashes, incremental discovery, retained deleted original and reopen/retry.")
+        } catch {
+            failure = error
+            print("IOS_PHOTO_FAILURE_PHASE: \(phase); domain=\((error as NSError).domain); code=\((error as NSError).code)")
+            if uiVerified { throw error } // Retain this disposable fixture for diagnosis, without an incidental Photos deletion prompt.
+        }
         if cloud != nil {
             for node in (try? await cloudNodes()) ?? [] {
                 if let file = node["file"] as? [String: Any], let content = file["content"] as? [String: Any] {
@@ -232,7 +324,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
             var request = URLRequest(url: origin.appendingPathComponent("api/v1/things").appending(queryItems: [URLQueryItem(name: "id", value: id)])); request.httpMethod = "DELETE"; request.setValue(base, forHTTPHeaderField: "Origin")
             let (_, response) = try await session.data(for: request); XCTAssertTrue((200..<300).contains((response as? HTTPURLResponse)?.statusCode ?? 0))
         }
-        if !owned.isEmpty { try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(PHAsset.fetchAssets(withLocalIdentifiers: owned, options: nil)) } }
+        if !uiVerified && !owned.isEmpty { try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(PHAsset.fetchAssets(withLocalIdentifiers: owned, options: nil)) } }
         try store.remove(scope, id: grant.id)
         if let failure { throw failure }
     }

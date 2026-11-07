@@ -492,13 +492,34 @@ and simulator, retaining the ordinary native Photos dialogs:
 
 ```sh
 DEST='platform=iOS Simulator,id=<simulator-uuid>' \
-THINGTIME_PHOTO_BACKUP_TEST=1 \
+THINGTIME_PHOTO_BACKUP_TEST=1 THINGTIME_PHOTO_UI_AUTOMATION=1 \
 iOS/scripts/test-mobile-sync-installed.sh /path/to/disposable-account.json
 ```
 
+The UI automation flag uses a separate `ThingtimeUITests` runner to operate the
+ordinary source-selection, explanation and system Photos dialogs. The hosted
+unit-test fixture first verifies its disposable loopback account, then reuses
+that same account/origin's actual native grant for original-byte verification.
+It neither injects a grant nor changes Simulator privacy settings. Without the
+flag, the existing visible manual-consent fixture remains available.
+
 Use a small disposable Photos library. The test creates its own deterministic multipart noise PNGs,
-compares downloaded cloud hashes, and moves only those test assets to Recently
-Deleted. Follow the `IOS_PHOTO_*` prompts and confirm the system deletion prompts.
+compares downloaded cloud hashes and reopens the same saved backup.
+Automated mode retains generated originals until its owned simulator is cleaned up;
+manual mode separately exercises new-original discovery and deletion/retention through the ordinary system prompt.
+The harness verifies canonical storage readiness before and after consent and transfer,
+and refuses zero/skipped test results. It never repairs a writer failure silently.
+To resume only a failed reopen check, supply `THINGTIME_PHOTO_REOPEN_RECEIPT`
+with a mode-0600 JSON file containing the exact connection `id`, `name`, `rootId`,
+`localRootId`, and `files` map of cloud path to revision, read from the same
+disposable fixture API. The runner checks the real grant, then reopens the saved
+backup and verifies unchanged revisions with zero native uploads.
+
+On iOS hosts without native resource-limit support, legacy connections with no
+explicit saved connection or device limits use the existing native path. Native CPU, scan and transfer
+limits are unavailable there; renderer pacing cannot constrain whole-file native
+uploads. Explicit saved connection and device limits remain unchanged and block
+transfer until supported.
 See [Apple's resource manager](https://developer.apple.com/documentation/photos/phassetresourcemanager)
 for the original-resource API.
 

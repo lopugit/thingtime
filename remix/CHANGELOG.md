@@ -145,6 +145,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-07: Restore legacy iOS backup starts on hosts without native resource
+  limits, while preserving explicitly saved device and connection policies. Add
+  ordinary Photos consent and original-byte acceptance with storage-readiness
+  checks ([PR 1408 notes](../PRs/1408-ios-photos-upload-recovery.md)). **Codex (AI)**
+
 - 2026-11-07: Compose an editable account backup workspace with protected durable
   snapshot/review/restore jobs, independent immutable storage, exact-T inventory,
   retained file history/annotations and canonical ordinary graph creation.
