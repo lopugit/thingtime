@@ -27,12 +27,12 @@ try {
  const origin = `http://127.0.0.1:${server.address().port}`;
  browser = await createRequire(join(root, '../MCP/package.json'))('playwright').chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : process.platform === 'linux' ? { executablePath: '/usr/bin/chromium' } : {}) });
  for (const [label, width, height] of [['desktop', 1440, 1000], ['phone', 390, 844]]) {
-  for (const scenario of ['success', 'cas', 'uncertain', 'draft', 'identity']) {
+  for (const scenario of ['success', 'cas', 'uncertain', 'draft', 'identity', 'ios-managed']) {
    const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
    await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
    const page = await context.newPage(); page.setDefaultTimeout(12_000); page.on('pageerror', error => errors.push(error.message));
    try {
-    await page.goto(origin + '/?paused=1');
+    await page.goto(origin + '/?paused=1' + (scenario === 'ios-managed' ? '&iosResources=1' : ''));
     await page.locator('summary').filter({ hasText: 'Manage sync connections' }).click();
     await page.getByRole('button', { name: 'Refresh device', exact: true }).waitFor();
     await page.evaluate(() => window.remoteSyncFixture.setOnline(true));
@@ -51,22 +51,36 @@ try {
      await card.getByRole('textbox', { name: 'Connection name', exact: true }).fill('Unfinished retained draft');
      await card.getByRole('button', { name: 'Collapse folder', exact: true }).click();
     }
+    if (scenario === 'ios-managed') {
+     await target.getByRole('button', { name: 'Expand folder', exact: true }).click();
+     await target.getByRole('button', { name: 'Edit', exact: true }).click();
+     await target.locator('summary').filter({ hasText: /^Resource limits$/ }).click();
+     await target.getByText(/iOS manages scheduling/).waitFor();
+     assert.equal(await target.getByRole('textbox', { name: 'Upload speed', exact: true }).isDisabled(), true);
+     await target.getByRole('button', { name: 'Discard draft', exact: true }).click();
+    }
     if (scenario === 'draft') {
      assert.equal(await start.isDisabled(), true);
      const state = await page.evaluate(() => window.remoteSyncFixture.state());
      assert.equal(state.resumeWrites.length, 0); assert.equal(state.commands.filter(command => command.action === 'start').length, 0);
      assert.equal(state.rows.find(row => row.id === 'documents-sync').crystal.paused, true);
     } else {
-     if (scenario !== 'success') await page.evaluate(mode => window.remoteSyncFixture.failResume(mode), scenario);
+     if (!['success', 'ios-managed'].includes(scenario)) await page.evaluate(mode => window.remoteSyncFixture.failResume(mode), scenario);
      await start.click();
-     if (scenario === 'success') {
+     if (scenario === 'success' || scenario === 'ios-managed') {
       await page.waitForFunction(() => window.remoteSyncFixture.state().commands.some(command => command.action === 'start' && command.connectionId === 'documents-sync'));
       const state = await page.evaluate(() => window.remoteSyncFixture.state());
       assert.equal(state.rows.find(row => row.id === 'documents-sync').crystal.paused, false);
       assert.deepEqual(state.resumeWrites.map(write => write.id), ['documents-sync']);
       assert.deepEqual(state.rows.filter(row => row.id !== 'documents-sync'), before.rows.filter(row => row.id !== 'documents-sync'));
       assert.equal(state.rows.find(row => row.id === 'home-sync').crystal.paused, true);
-      assert.equal(await page.evaluate(() => Object.keys(localStorage).some(key => key.startsWith('tt:sync-editor:') && localStorage.getItem(key).includes('Unfinished retained draft'))), true);
+      if (scenario === 'success') assert.equal(await page.evaluate(() => Object.keys(localStorage).some(key => key.startsWith('tt:sync-editor:') && localStorage.getItem(key).includes('Unfinished retained draft'))), true);
+      if (scenario === 'ios-managed') {
+       await page.getByText(/iOS manages scheduling/).first().waitFor();
+       assert.equal(await page.getByRole('spinbutton', { name: 'CPU target (%)', exact: true }).count(), 0);
+       assert.equal(await page.getByText(/512 MiB indexer budget/).count(), 0);
+       assert.equal(await page.getByText(/15% target/).count(), 0);
+      }
       await target.getByRole('button', { name: 'Pause sync', exact: true }).click();
      } else if (scenario === 'identity') {
       await page.waitForFunction(() => window.remoteSyncFixture.state().identityPending);

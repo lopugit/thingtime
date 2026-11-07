@@ -111,7 +111,7 @@ export function useDeviceSyncRemoteResources({ ownerId, deviceId, enabled }: { o
   try { taskResources = parseSyncResourceStatus(state.status.task.progress.resources); }
   catch { /* Malformed or unsupported task telemetry remains unavailable. */ }
  }
- return { origin, taskResources, receivedAt: state.receivedAt, online: state.online, checking: state.checking, refresh: state.refresh, policy: usage?.deviceResourceLimits, resources: usage?.resources, observedAt: state.status ? Date.parse(state.status.observedAt) : undefined,
+ return { origin, capabilities: state.status?.capabilities, taskResources, receivedAt: state.receivedAt, online: state.online, checking: state.checking, refresh: state.refresh, policy: usage?.deviceResourceLimits, resources: usage?.resources, observedAt: state.status ? Date.parse(state.status.observedAt) : undefined,
   active: state.online && !!state.status?.task?.active, status: state.error || (!enabled ? 'Remote device resources are unavailable.' : state.online ? usage ? usage.resources ? 'Measured on the selected device.' : 'Selected device policy available; resource measurements are unavailable.' : 'Update the selected device and server to view resource usage.' : 'Connecting to the selected device…'),
   save: enabled && state.online && usage && supportsRemoteResourceControls(state.status?.capabilities) ? state.save : undefined };
 }

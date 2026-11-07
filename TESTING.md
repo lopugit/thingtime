@@ -15307,3 +15307,10 @@ unknown save outcome, CAS refusal, draft arrival/retention, identity withdrawal,
 no cross-connection mutation and collapsed Start at desktop/phone widths. The
 compiled device-folder real-API fixture also verifies pause-only PATCH/CAS and
 private readback while an unrelated Home fixture remains paused.
+
+- [ ] For the selected paired iOS device without a compatible native resource
+  capability, show iOS-managed/unavailable CPU, scan and rate policy/telemetry.
+  Hide device targets, disable connection limit edits, retain saved limits and
+  drafts, and allow explicit Start with no limits. Never infer Mac defaults or
+  a 512 MiB native indexer budget from missing readings. The iOS browser fixture
+  deliberately supplies stale policy-like readings to verify they stay hidden.

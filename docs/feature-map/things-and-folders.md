@@ -1051,3 +1051,11 @@ never start or blindly retry. Save/open and automatic scheduling never unpause
 a connection; unrelated Home settings/drafts stay intact. Test with
 `configurationStart.test.ts`, `test-explicit-sync-start-ui.mjs` and the compiled
 device-folder replica fixture.
+
+`DeviceSyncResources` and connection limit controls classify the actual selected
+iOS bridge capability. A locally paired match is verified through its native
+identity; other devices use their scoped status. Missing native resource support
+shows iOS-managed/unavailable rather than Mac budgets or invented zero telemetry.
+Existing explicit limits/drafts remain intact; ordinary connection progress is
+independent from native CPU/scan telemetry. The paused-start browser harness
+exercises unsupported iOS capabilities and retained controls at both widths.

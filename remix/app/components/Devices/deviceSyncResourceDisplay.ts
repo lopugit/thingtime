@@ -1,3 +1,5 @@
+import { capabilitySatisfies } from '~/api/utils/capabilities/capabilityContract';
+import type { FolderCapabilities } from '~/fileSync/mobileFolders.client';
 import type { DeviceSyncHistory } from '~/fileSync/deviceSyncHistory';
 import type { SyncResourceStatus } from '~/fileSync/resourceGovernor';
 
@@ -83,3 +85,8 @@ export function deviceResourceHistoryDisplay(history?: DeviceSyncHistory) {
   }))
  };
 }
+
+/** Missing native support never implies the renderer's saved Mac defaults. */
+export const iosManagedSyncResources = (capabilities?: FolderCapabilities): boolean =>
+ capabilities?.platform === 'ios' && !capabilitySatisfies(capabilities.fileResourceLimitsVersion, '1.0.0');
+export const IOS_SYNC_RESOURCE_STATUS = 'iOS manages scheduling. Native CPU, scan and resource limits are unavailable in this version; transfer progress remains available on each connection.';
