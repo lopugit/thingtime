@@ -114,6 +114,132 @@ describe('PersistentStore Thingtime defaults', () => {
     }
   });
 
+  it('persists valid custom Thingtime environment profiles', async () => {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
+    vi.stubEnv('COMMANDER_DATA_DIR', path.join(temporary, 'data'));
+
+    try {
+      const store = new PersistentStore();
+      await store.load();
+      await store.setSettings({
+        ...store.snapshot().settings,
+        thingtimeBaseUrl: 'https://staging.thingtime.com',
+        thingtimeClientId: 'ttapp_staging',
+        thingtimeCustomEnvironments: [
+          {
+            id: 'staging',
+            name: 'Staging',
+            baseUrl: 'https://staging.thingtime.com/',
+            clientId: 'ttapp_staging',
+          },
+        ],
+      });
+      expect(store.snapshot().settings.thingtimeCustomEnvironments).toEqual([
+        {
+          id: 'staging',
+          name: 'Staging',
+          baseUrl: 'https://staging.thingtime.com',
+          clientId: 'ttapp_staging',
+        },
+      ]);
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves accounts and their exact credential identities through switches and restarts', async () => {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-session-test-'));
+    vi.stubEnv('COMMANDER_DATA_DIR', temporary);
+    try {
+      const store = new PersistentStore();
+      await store.load();
+      const original = {
+        id: 'original-user',
+        username: 'fixture',
+        scopes: [],
+        expiresAt: '2030-01-01',
+        environment: { baseUrl: 'https://thingtime.com', clientId: LEGACY_COMMANDER_THINGTIME_CLIENT_IDS[0] },
+      };
+      const development = {
+        ...original,
+        id: 'dev-user',
+        environment: {
+          baseUrl: 'https://dev.thingtime.com',
+          clientId: COMMANDER_THINGTIME_DEVELOPMENT_CLIENT_ID,
+        },
+      };
+      await store.upsertAccount(original);
+      await store.upsertAccount(development);
+      await store.setActiveAccount(development.id);
+      let reloaded = new PersistentStore();
+      await reloaded.load();
+      expect(reloaded.snapshot().settings).toMatchObject({
+        activeAccountId: development.id,
+        thingtimeBaseUrl: development.environment.baseUrl,
+        thingtimeClientId: development.environment.clientId,
+      });
+      await reloaded.setActiveAccount(original.id);
+      reloaded = new PersistentStore();
+      await reloaded.load();
+      expect(reloaded.snapshot().accounts).toEqual([development, original]);
+      expect(reloaded.snapshot().settings).toMatchObject({
+        activeAccountId: original.id,
+        thingtimeBaseUrl: original.environment.baseUrl,
+      });
+      expect(reloaded.snapshot().accounts.find((account) => account.id === original.id)?.environment).toEqual(
+        original.environment,
+      );
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('reconciles a legacy account to its one exact Keychain environment without guessing ambiguity', async () => {
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
+    vi.stubEnv('COMMANDER_DATA_DIR', path.join(temporary, 'data'));
+    try {
+      const store = new PersistentStore();
+      await store.load();
+      await store.upsertAccount({
+        id: 'production-user',
+        username: 'lopu',
+        scopes: [],
+        expiresAt: '2030-01-01T00:00:00.000Z',
+      });
+      await store.upsertAccount({
+        id: 'ambiguous-user',
+        username: 'lopu-dev',
+        scopes: [],
+        expiresAt: '2030-01-01T00:00:00.000Z',
+      });
+
+      const accounts = await store.reconcileAccountEnvironments([
+        {
+          accountId: 'production-user',
+          baseUrl: 'https://thingtime.com/',
+          clientId: 'ttapp_production',
+        },
+        {
+          accountId: 'ambiguous-user',
+          baseUrl: 'https://thingtime.com',
+          clientId: 'ttapp_production',
+        },
+        {
+          accountId: 'ambiguous-user',
+          baseUrl: 'https://dev.thingtime.com',
+          clientId: 'ttapp_development',
+        },
+      ]);
+      expect(accounts.find((account) => account.id === 'production-user')?.environment).toEqual({
+        baseUrl: 'https://thingtime.com',
+        clientId: 'ttapp_production',
+      });
+      expect(accounts.find((account) => account.id === 'ambiguous-user')?.environment).toBeUndefined();
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
+
   it('migrates legacy state to local filesystem indexing defaults', async () => {
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-persistence-test-'));
     const dataDirectory = path.join(temporary, 'data');

@@ -8,7 +8,7 @@ import { gunzipSync } from 'node:zlib';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { prodCsp, devCsp } from './csp.mjs';
-import { mediaWorkerCsp, draftPreviewCsp, platformRuntimeCsp } from './csp.mjs';
+import { draftPreviewCsp, platformRuntimeCsp } from './csp.mjs';
 import { builtPlatformScriptHash } from './platform-runtime.mjs';
 import { execFileSync } from 'node:child_process';
 import { claudeRuntimeFunctions, packageClaudeOAuthArtifacts, verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';

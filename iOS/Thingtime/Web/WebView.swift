@@ -55,9 +55,6 @@ struct WebView: UIViewRepresentable {
         // and detaches its queued uploads, even when a widget tap is delivered in
         // the same update. Widget navigation alone stays within the same origin.
         if rootChanged { WidgetStore.clear(); context.coordinator.resetChatActivity(); context.coordinator.passwordBridge.clear() }
-        context.coordinator.mobileDevice.suspend()
-        context.coordinator.mobileFolders.suspend()
-        context.coordinator.fileExports.suspend()
         context.coordinator.cancelVoice()
         if rootChanged { context.coordinator.suspendRecordingUploads() }
         context.coordinator.loadedRootURL = url

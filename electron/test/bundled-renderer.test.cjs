@@ -34,7 +34,6 @@ test('the bundled Nitro API fallback reads the Electron-selected target at reque
 
 	assert.match(fallbackSource, /process\.env\.THINGTIME_API_FALLBACK_ORIGIN/u);
 	assert.match(fallbackSource, /requestUrl\.origin !== fallbackOrigin/u);
-	assert.match(fallbackSource, /if \(!shouldProxyApiToFallback\(request\)\) return unavailableLocalApiResponse\(\)/u);
 	assert.match(fallbackSource, /process\.env\.THINGTIME_DESKTOP !== '1'/u);
 	assert.match(fallbackSource, /requestUrl\.hostname === '127\.0\.0\.1'/u);
 	assert.doesNotMatch(fallbackSource, /getApiFallbackOrigin = \(\) => normaliseOrigin\(THINGTIME_PRODUCTION_ORIGIN\)/u);

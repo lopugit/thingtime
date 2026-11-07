@@ -103,7 +103,6 @@ targets:
     dependencies:
       - package: ThingtimePasswordCore
       - target: ThingtimePasswordProvider
-      - package: AppleFileSync
       - target: ThingtimeWatch
         embed: true
         codeSign: true

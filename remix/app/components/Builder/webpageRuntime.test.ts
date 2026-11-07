@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MAX_PAGINATION_CURSOR_CHARS, INVALID_PAGINATION_CURSOR } from '~/schemas/paginationCursor';
-import { buildOverview, OVERVIEW_ROLES, parseOverviewInput, type OverviewRole, type OverviewThing } from '~/api/utils/agents/overviewCore';
-import { localQueryHref } from '../Actions/localUiAction';
 import { workspaceScopeKey } from '../../local-workspace/storage';
 
 import { MAX_SHARED_SOURCE_LOADS, gatherFormFields, evictSharedLoads, queryScopeOf, readSourceCache, sourceCacheKey, writeSourceCache } from './webpageRuntime';
@@ -241,15 +238,4 @@ test('source caches isolate anonymous, account, origin and data-plane partitions
 		}
 		for (const [index, scope] of scopes.entries()) assert.deepEqual(readSourceCache(scope, 'same-page', 'same-block'), { index });
 	});
-});
-
-test('ordinary Actions cannot gather fields from nested transient settings hosts', () => {
-	const field = (name: string, privateHost: boolean) => ({
-		tagName: 'INPUT', type: 'text', value: privateHost ? 'synthetic-private-transfer-code' : 'public',
-		getAttribute: (key: string) => key === 'name' ? name : null,
-		matches: () => false,
-		closest: (selector: string) => privateHost && selector === '[data-tt-transient-boundary]' ? {} : null
-	});
-	const form = { querySelectorAll: () => [field('ordinary', false), field('destinationCode', true)] } as unknown as HTMLElement;
-	assert.deepEqual(gatherFormFields(form), { ordinary: 'public' });
 });

@@ -169,53 +169,13 @@ document and accepts diagnostic reads only from its own popup. These are untrust
 status hints, not authority or ceremony evidence; no request or identity fields
 are retained. Browser tests cover missing/replaced hooks, redaction and navigation.
 
-`passwords/websites.ts` supplies shared bare-host-to-HTTPS normalization for
-catalog hints and exact-origin fill verification. The `api.passwords` 1.8.0
-AWS sign-in allowlist adds one exact login destination for the three known
-first-party AWS website origins; catalog and protected fill use the same rule.
-The browser fill client
-requires `api.passwords` 1.6.1; URL normalization is not an authorization grant.
-Extension 0.4.1 keeps the chooser inside active modal focus/accessibility scope
-and gives explicit website-reload recovery after extension replacement.
-`password-autofill-modal.browser.html` is a synthetic modal/runtime fixture;
-real signed-in fill and extension reload remain distinct acceptance checks.
-
-`NativePasswordConnection.tsx` and `nativePasswordConnectionBlocks.ts` supply the
-single editable device connection control shared by Password manager and Passwords
-settings. `nativeConnection.ts` owns ephemeral status, refresh and identity fences;
-`native.client.ts` requires desktop `passwordsVersion` 1.1.0. Electron's
-`password-provider.cjs` calls the read-only host `--status` path, backed by
-`PasswordConnectionStatus.swift` owner/origin linkage. Status does not probe the
-network or assert OS AutoFill enablement. Bridge 1.2.0 reports local-origin
-incompatibility explicitly. `HostConnection.swift` gates automatic initial linking
-on OS provider enablement and an account/origin opt-out; matching links renew while
-foreign or independently linked companion connections stay untouched. The native
-host verifies the live catalog before saving and fences concurrent link changes.
-The canonical Electron installer updates the standalone and nested provider together. Older bridges require an app update;
-this checkout's iOS web-only path has no native-password bridge.
-Native provider implementation lives in `apple/Passwords` and
-`apple/PasswordProvider`. `ProviderFeedback.swift` owns closed progress/error text,
-request fencing and immutable registration retry identity; `PasswordClient.swift`
-classifies HTTP failures and walks complete cursor-based catalogs. The provider
-controller starts registration once after OS selection when its view is visible,
-preserving device authentication, cancellation, retry and session fences. The macOS host
-and provider display Thingtime while retaining installed bundle/Keychain identities.
-Packaged metadata verification rejects old branding and mismatched host/provider
-versions. The passkey guide puts the native macOS provider before the optional
-browser adapter, and exact-default migration preserves authored guide blocks.
-`IdentityIndexTests.swift` verifies passkey discovery without password URL fields
-and prevents treating ordinary password entries as passkeys. `CatalogSelection.swift`
-owns the real chooser filter; assertion requests require an exact RP and allowed
-credential ID and cannot fall through to password/OTP website matching.
-Empty assertion results expose an ephemeral **Request details** disclosure with
-the actual requested site and count-only selection summary, never credential or
-account/session values. Its counts use the same decoder and matching rules.
-Run `swift test --package-path apple/Passwords` and
-`bash apple/PasswordProvider/tests/render-preview.sh`; the latter renders the
-actual SwiftUI view with synthetic status only. Signed packaging and real device registration/sign-in
-remain separate acceptance checks; the web guide uses the existing native bridge.
-
-## Account content snapshots
+Local account workers are bound to the confirmed root identity generation,
+origin, owner ID and data plane (`app/local-workspace/runtime.client.ts`).
+Expected-actor mismatch now also returns `code: ACTOR_CHANGED`; the existing
+409 refusal remains. A mismatched queue stops before another request and root
+identity refreshes. Temporary/anonymous users do not start account workers, and
+logging in does not adopt anonymous content. See the incomplete
+[local workspace acceptance matrix](../local-workspaces.md).
 
 The internal owner inventory uses `backups/accountSnapshots.ts` and the shared
 `timeline/accountContent.ts` v1 contract for approved profile content and private
@@ -232,39 +192,6 @@ direct IPs. It exercises explicit current-writer restoration,
 concurrent edits, source-vault removal and revoked authentication. HTTP/browser,
 managed profile-media restore and product restore orchestration remain separate gates.
 See [portable backups](../portable-backups.md#account-profile-content-and-private-preferences).
-
-Local account workers are bound to the confirmed root identity generation,
-origin, owner ID and data plane (`app/local-workspace/runtime.client.ts`).
-Expected-actor mismatch now also returns `code: ACTOR_CHANGED`; the existing
-409 refusal remains. A mismatched queue stops before another request and root
-identity refreshes. Temporary/anonymous users do not start account workers, and
-logging in does not adopt anonymous content. See the incomplete
-[local workspace acceptance matrix](../local-workspaces.md).
-
-Offline account roots contain only a local workspace pointer and `user: null`
-(`local-workspace/rootFallback.ts`), never a cached authenticated profile. Local
-and remote leases are separate. `createRootDataLoader` installs workspace binding
-only after its latest-request fence; a stale success/failure cannot change a
-newer pointer. `useWorkspaceUser` is content identity only. Legacy anonymous tree
-hydration does not silently claim data for an account. Test `test:root-data`,
-`test:local-workspace` and `test:autosave` for these boundaries.
-
-Delegated composer APIs and explicit Character submissions capture their local
-workspace lease when the callback is created (`characterRequest.client.ts`,
-`useApi.tsx`, `useAsyncFetcher.tsx`). A retained callback cannot acquire a later
-root account or database; remote confirmation is checked again for each request.
-`characterCallbacks.test.ts` exercises the real submission hook, while
-`characterDelegation.test.ts` covers the API facade, confirmation loss and
-same-account/new-generation retirement. This does not grant delegated offline
-workspace access or queue Character writes as the owner.
-
-
-The opt-in `drafts/workspaceSwitch.browser.test.ts` uses the actual account switcher
-and identity BroadcastChannel across three clean browser tabs. Held device reads
-and a delayed successful private-comment response cannot enter the next account;
-the original account retains edits, recovery sources and exactly one acknowledged
-comment. This is local account-switch acceptance, not coverage of every origin,
-data-plane or editor transition. Setup: [local workspaces](../local-workspaces.md#native-cross-tab-draft-isolation--2026-10-17).
 
 ## AI provider model availability
 
@@ -461,7 +388,7 @@ requires dry-run/confirmation, checks exact identity and idle account state, and
 deletes account/bootstrap/auth records atomically in the home DB. It cannot
 accept arbitrary target accounts. Delivery and migration audit records remain.
 
-OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpenAiCredential` through the existing admin credentials route and `PlatformCredentials.tsx`. It is same-origin, admin-only and create-only; `api.admin-ci-credentials` 3.1.1 is negotiated before use. The sole source is server `OPENAI_API_KEY`, and the destination is `OpenAI` / `OPENAI_THINGTIME_API_KEY`.
+OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpenAiCredential` through the existing admin credentials route and `PlatformCredentials.tsx`. It is same-origin, admin-only and create-only; `api.admin-ci-credentials` 3.1.0 is negotiated before use. The sole source is server `OPENAI_API_KEY`, and the destination is `OpenAI` / `OPENAI_THINGTIME_API_KEY`.
 
 
 ## Local ChatGPT plan connections
@@ -483,47 +410,3 @@ admin lookup, session selection, agent coordination and acceptance runbook.
 `resolveSessionUser` defaults to the authenticated principal for roster and
 credential callers; request authentication passes an explicit selection (or null
 for the session default). Never re-mint a principal session with an acting user ID.
-
-### Delegated editor draft storage
-
-`local-workspace/characterDrafts.client.ts` reuses the account draft/catalog/file
-services in a principal-and-actor partition. `drafts/draftClient.ts` routes a
-composer’s selected Character there without changing the root account binding.
-`characterRoster.client.ts` retains only selector labels; `useCharacters` keeps
-remote loading fenced and uses these labels offline. Neither retained labels nor
-local draft access grants remote Character authority. See `characterDrafts.test.ts`,
-`characterRoster.test.ts` and the opt-in `characterDrafts.browser.test.ts`.
-
-Character History cache separation uses optional device-only `TimelineScope.delegatedBy`
-and `accountTimelineScope`, with lease-checked assembly in `timeline/localBackend.client.ts`.
-`local-workspace/characterTimeline.test.ts` proves principal/actor isolation,
-legacy authored-version preservation and separate branch/note/name queues.
-The canonical Timeline event/receipt schema and server authority are unchanged.
-
-
-Delegated content now shares `accountWorkspaceWorker` through `useApi` and
-`characterDraftWorkspace`; `CharacterContentScope` owns reloadable post/History
-context. `characterWorkspace.test.ts` covers actual-hook offline files/posts,
-canonical History export and stale-principal refusal. The opt-in browser test
-uses disposable accounts and the normal upload approval API. Remote-operation
-connectivity is checked by `assertAccountSyncAllowed`; the profile transport
-regression covers a disconnect during capability discovery.
-
-### Character content navigation and selectors
-
-`CharacterContentRoute` gates content routes against the current principal's
-retained roster; `CharacterWorkspacePicker` exposes that selection in Things.
-`characterContentPath` retains it only on internal content navigation.
-`useApi` accepts an explicit editor actor for quick comments, preserving local
-completion and the existing remote delegation checks. Anonymous display users
-stay anonymous. Regressions: `characterWorkspace.test.ts`,
-`thingsLocation.test.ts` and opt-in `characterWorkspace.browser.test.ts`.
-## Account storage recovery
-
-OAuth client selection remains exact to the restored frontend origin and
-`getDeploymentDataEnvironment().id`. Gateway relay metadata does not grant a
-session, change a callback or substitute its environment label. State is one-use
-and session-bound; refresh retains the saved origin/environment/client binding
-and independent account lease. Run `test:connections`, `test:environment-gateway`,
-`test:admin-integrations` and `test:api-capabilities`. Connections major2 rollout
-is backend-first; see [the runbook](../environment-api-gateway.md#connections-major2-rollout).

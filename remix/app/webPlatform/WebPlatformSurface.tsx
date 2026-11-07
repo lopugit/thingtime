@@ -78,15 +78,6 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 		};
 		const receive = (e: MessageEvent) => {
 			if (e.origin !== 'null' || e.source !== frame.current?.contentWindow) return;
-			if (
-				e.data?.type === 'tt-platform-layout' &&
-				e.data.runId === job.id &&
-				job.program.media &&
-				Number.isFinite(e.data.height) &&
-				e.data.height > 0
-			)
-				setFrameHeight(Math.min(10000, e.data.height));
-			if (e.data?.runId === job.id) media?.receive(e.data);
 			if (e.data?.type === 'tt-platform-ready' && !ready) {
 				ready = true;
 				frame.current?.contentWindow?.postMessage({ type: 'tt-platform-start', program: job.program, input: job.input, runId: job.id }, '*');

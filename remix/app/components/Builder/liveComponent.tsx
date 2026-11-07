@@ -109,27 +109,25 @@ export const useThingSource = ({
 	const sourceKey = JSON.stringify(loadAllPages ? { source: source || null, allPages: true } : source || null);
 	const active = !!source && interactive;
 	const canRun = runtime.canRunSources || !!runtime.sharedRun;
-	const liveStream = source?.refresh === 'live' ? source.stream : undefined;
-	const liveSourceValid = !!liveStream && validateLiveSourceStream(liveStream);
-	// Only the resolved inputs identify a read. Selecting an unrelated panel
-	// or marker leaves this source, its existing result, and its cache intact.
-	const resolved = source?.inputs && !resolvedInputs
-		? resolveTemplate(source.inputs, { ...argValues, query: runtime.query })
-		: source?.inputs;
-	const inputsKey = JSON.stringify(resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? resolved : {});
-	const inputs = React.useMemo(() => JSON.parse(inputsKey) as Record<string, unknown>, [inputsKey]);
-	const binding = JSON.stringify([sourceKey, inputsKey, cacheId, dataPlane, character?.id || null, held]);
+	// inputs interpolate {arg} tokens against the args and {query.x} against
+	// the URL — the same substitution the template itself gets
+	const inputsKey = JSON.stringify({ i: source?.inputs || null, a: argValues, q: runtime.query });
+	const inputs = React.useMemo(() => {
+		if (!source?.inputs) return {};
+		const resolved = resolveTemplate(source.inputs, { ...argValues, query: runtime.query });
+		return resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? (resolved as Record<string, unknown>) : {};
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- inputsKey is the serialised form
+	}, [inputsKey]);
+	const binding = JSON.stringify([sourceKey, inputsKey, cacheId, dataPlane, character?.id || null]);
 	const initial = React.useMemo(
 		() => ({
 			identity: runtime.identity,
 			binding,
 			status: (!active ? 'inert' : !canRun ? 'signed-out' : 'loading') as ThingSourceState,
-			result: active && canRun && !runtime.sharedRun && (source?.refresh !== 'live' || liveSourceValid)
-				? readSourceCache(runtime.cacheScope, runtime.pageId, cacheId, binding)
-				: undefined,
+			result: active && canRun && !runtime.sharedRun ? readSourceCache(runtime.cacheScope, runtime.pageId, cacheId, binding) : undefined,
 			error: null as string | null
 		}),
-		[runtime.identity, binding, active, canRun, runtime.sharedRun, runtime.cacheScope, runtime.pageId, cacheId, liveSourceValid, source?.refresh]
+		[runtime.identity, binding, active, canRun, runtime.sharedRun, runtime.cacheScope, runtime.pageId, cacheId]
 	);
 	const [storedState, setState] = React.useState(initial);
 	// A new target must never render the preceding target's controls, even
@@ -300,7 +298,7 @@ export const useThingSource = ({
 		canRun,
 		runtime.sharedRun,
 		runtime.identity,
-		automaticLoader,
+		runtime.load,
 		cacheScope,
 		sourceKey,
 		inputsKey,
