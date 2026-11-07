@@ -67,7 +67,7 @@ export default function LocalMediaPipeline({
 					const matches = Array.from(element.querySelectorAll('input, select, textarea')).filter((node) => node.getAttribute('name') === option.name);
 					if (matches.length !== 1) throw new Error(`Media setting ${option.name} requires one named field`);
 					const field = matches[0] as HTMLInputElement;
-					values[option.name] = field.type === 'number' || field.type === 'range' ? field.valueAsNumber : field.value;
+					values[option.name] = field.type === 'number' || field.type === 'range' ? (field.value === '' ? '' : field.valueAsNumber) : field.value;
 				}
 				return values;
 			};
