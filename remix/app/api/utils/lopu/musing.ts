@@ -5,14 +5,6 @@ import { createClaudeOAuthClient, claudeOAuthConfigured } from '../ai/claudeOAut
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
-import { getAiPreferredModelWaterfall } from '../settings/prConflictResolverModelWaterfall';
-import {
-  type AiWorkflowModelChoice,
-  resolveAiPreferredAnthropicChoice,
-  resolveAiPreferredOpenAiChoice,
-  toAnthropicEffort,
-  toOpenAiReasoningEffort
-} from '../settings/prConflictResolverModelWaterfallCore';
 import { pickFallbackMusing } from './fallbacks';
 
 // 🦄 Lopu's musings — a little message generated from the user's real-world
