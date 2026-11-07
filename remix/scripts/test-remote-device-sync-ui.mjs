@@ -274,6 +274,24 @@ try {
    throw error;
   } finally { await context.close(); }
  }
+ for (const scenario of ['existing', 'missing', 'switched']) {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 900 }, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+   await page.goto(origin + '?desktopFolder=' + scenario);
+   await page.getByRole('button', { name: 'Show Folder', exact: true }).click();
+   if (scenario === 'switched') await page.getByText('The selected sync server changed.', { exact: true }).waitFor();
+   else await page.getByRole('heading', { name: 'Folder opened' }).waitFor();
+   const state = await page.evaluate(() => window.remoteSyncFixture.state());
+   assert.deepEqual(state.folderManifests, ['https://selected-sync.test']);
+   assert.deepEqual(state.folderRequests, (scenario === 'missing' ? ['GET', 'POST'] : ['GET'])
+    .map(method => ({ method, origin: 'https://selected-sync.test' })));
+   assert.equal(state.route.pathname, scenario === 'switched' ? '/' : '/things');
+   if (scenario !== 'switched') assert.ok(new URLSearchParams(state.route.search).get('folder'));
+   results.push({ desktopFolder: scenario, passed: true });
+  } finally { await context.close(); }
+ }
  assert.deepEqual(errors, []);
  await writeFile(join(evidence, 'results.json'), JSON.stringify({ results, errors }, null, 2));
  console.log(JSON.stringify({ ok: true, results, evidence }));

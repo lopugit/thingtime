@@ -34,6 +34,14 @@ const initialStatus = (): RemoteSyncStatus => ({ version: 1, deviceId, observedA
  roots: [{ id: 'local-documents', name: 'Documents on Mac', sourcePath: '/Users/example/Documents on Mac' }], rootsReady: true, capabilities: { platform: params.has('iosResources') ? 'ios' : 'macos', fileAccessVersion: '1.16.0', ...(params.has('iosResources') ? {} : { fileResourceLimitsVersion: '1.1.0' }), fileTrashVersion: '1.2.0', fileVersionsVersion: '1.0.0', fileStagingVersion: '1.0.0', filePublicationVersion: '1.2.0' }, jobs: [], task: null, resourceUsage: { deviceResourceLimits: { transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 }, resources: { version: 1, cpuPercent: 3, cpuStatus: 'measured', effectiveTransferConcurrency: 1, effectiveIndexingConcurrency: 1, currentUploadBytesPerSecond: 1000, currentDownloadBytesPerSecond: 2000, scanBytesPerSecond: 3000, memoryBytes: 1048576, measuredAt: Date.now() } } });
 let status = initialStatus(), offline = true, failure: string | null = null, writes = 0, holdNextStart = false;
 let priorities = { revision: 0, paths: [] as string[] };
+const desktopFolderTest = params.get('desktopFolder');
+const initialDesktopApi = 'https://selected-sync.test';
+let selectedDesktopApi = initialDesktopApi;
+const folderRequests: { method: string; origin: string | null }[] = [];
+const folderManifests: string[] = [];
+if (desktopFolderTest) Object.assign(window, {
+ thingtimeDesktop: { platform: 'darwin', getInfo: async () => ({ contentOrigin: location.origin, apiOrigin: selectedDesktopApi + '/' }) }
+});
 let resumeFault: string | null = null; const resumeWrites: any[] = [];
 const commands: any[] = [], replies = new Map<string, any>();
 const heldStarts = new Set<string>();
@@ -46,12 +54,17 @@ Object.assign(window, { remoteSyncFixture: {
  holdStartAcknowledgement() { holdNextStart = true; },
  releaseStartAcknowledgements() { for (const requestId of heldStarts) replies.set(requestId, { ok: true, status: 'complete', result: { accepted: true } }); heldStarts.clear(); },
  changeElsewhere() { const row = rows.find(r => r.id === 'documents-sync'); row.updatedAt = new Date().toISOString(); row.crystal.name = 'Changed on another browser'; },
- state: () => structuredClone({ rows, status, commands, writes, priorities, resumeWrites, identityPending: rootIdentity.read().pending, pendingStartRequests: [...heldStarts].filter(requestId => replies.get(requestId)?.status === 'processing') }),
+ state: () => structuredClone({ rows, status, commands, writes, priorities, resumeWrites, folderRequests, folderManifests, route: router.state.location, identityPending: rootIdentity.read().pending, pendingStartRequests: [...heldStarts].filter(requestId => replies.get(requestId)?.status === 'processing') }),
  reset() { localStorage.clear(); },
 } });
 window.fetch = async (input, init) => {
  init?.signal?.throwIfAborted();
  const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
+ if (desktopFolderTest && url.origin === initialDesktopApi && url.pathname === '/.well-known/thingtime-capabilities.json') {
+  folderManifests.push(url.origin);
+  if (init?.credentials !== 'omit' || init.redirect !== 'error') throw Error('Desktop public discovery must omit credentials and refuse redirects');
+  return json(fixtureCapabilities(url.origin));
+ }
  if (url.origin !== location.origin) throw Error('Fixture rejected external network');
  if (url.pathname === '/.well-known/thingtime-capabilities.json') return json(fixtureCapabilities(url.origin));
  if (url.pathname === '/api/v1/webpages/resolve') return json({ ok: false }, 404);
@@ -60,11 +73,20 @@ window.fetch = async (input, init) => {
  if (headers.get('X-Thingtime-Expected-Actor') !== ownerId || headers.get('X-Thingtime-Expected-Data-Plane') !== 'home')
   return json({ ok: false, error: 'Fixture scope headers missing' }, 409);
  if (url.pathname === '/api/v1/devices/folders') {
-  const scope = { origin: location.origin, ownerId, dataPlane: 'home', deviceId };
+  const method = init?.method || 'GET';
+  const expectedApiOrigin = headers.get('X-Thingtime-Expected-Api-Origin');
+  if (desktopFolderTest) folderRequests.push({ method, origin: expectedApiOrigin });
+  const folderJson = (data: unknown, status = 200) => Response.json(data, { status,
+   ...(desktopFolderTest ? { headers: { 'x-thingtime-api-fallback': initialDesktopApi } } : {}) });
+  if (desktopFolderTest && expectedApiOrigin !== selectedDesktopApi)
+   return folderJson({ ok: false, error: 'The selected sync server changed.' }, 409);
+  const scope = { origin: desktopFolderTest ? selectedDesktopApi : location.origin, ownerId, dataPlane: 'home', deviceId };
   const rootFolderId = await deviceFolderIdentity(scope, 'root');
-  if ((init?.method || 'GET') === 'GET') {
-   if (!url.searchParams.get('deviceId')) return json(url.searchParams.get('cursor') ? { ok: true, devices: [{ deviceId: 'other-owned-device', rootFolderId: 'other-owned-root', name: 'Travel tablet' }], nextCursor: null } : { ok: true, devices: [{ deviceId, rootFolderId, name: 'My Mac' }], nextCursor: 'fixture-device-page-2' });
-   return json({ ok: true, rootFolderId, deviceName: 'My Mac', folder: rows.find(row => row.id === rootFolderId) || null });
+  if (method === 'GET') {
+   if (!url.searchParams.get('deviceId')) return folderJson(url.searchParams.get('cursor') ? { ok: true, devices: [{ deviceId: 'other-owned-device', rootFolderId: 'other-owned-root', name: 'Travel tablet' }], nextCursor: null } : { ok: true, devices: [{ deviceId, rootFolderId, name: 'My Mac' }], nextCursor: 'fixture-device-page-2' });
+   if (desktopFolderTest === 'switched') selectedDesktopApi = 'https://replacement-sync.test';
+   return folderJson({ ok: true, rootFolderId, deviceName: 'My Mac',
+    folder: desktopFolderTest === 'existing' ? { id: rootFolderId, name: 'My Mac' } : rows.find(row => row.id === rootFolderId) || null });
   }
   const body = JSON.parse(String(init?.body));
   const resolved = await resolveDeviceFolders(scope, 'My Mac', body, {
@@ -72,7 +94,7 @@ window.fetch = async (input, init) => {
    async get(id) { const row = rows.find(row => row.id === id); if (!row) throw Object.assign(Error('Not found'), { status: 404 }); return row; },
    async create(input) { if (rows.some(row => row.id === input.shareId)) throw Object.assign(Error('Conflict'), { status: 409 }); rows.push({ ...input, id: input.shareId, author: { id: ownerId } }); writes++; localStorage.setItem(databaseKey, JSON.stringify(rows)); }
   });
-  return json({ ok: true, ...resolved });
+  return folderJson({ ok: true, ...resolved });
  }
  if (url.pathname === '/api/v1/devices/sync-control') {
   if ((init?.method || 'GET') === 'GET') return json(replies.get(url.searchParams.get('requestId')!) || { ok: false, error: 'Request missing' }, replies.has(url.searchParams.get('requestId')!) ? 200 : 404);
@@ -136,5 +158,5 @@ const nativeFixtureHost = {
  fetch: window.fetch.bind(window), requireCapability: requireThingtimeCapability, assertCurrent() {}
 };
 const router = createMemoryRouter([{ id: 'root', path: '/', loader: () => ({ user: { id: ownerId, accountKind: 'user' }, dataPlane: 'home' }),
- element: <ChakraProvider><Box maxW="1000px" mx="auto" p={4}>{params.has('native') ? <MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={initialStatus().roots} host={nativeFixtureHost} /> : <DeviceSyncPanel ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={[]} ownedDeviceIds={[deviceId]} />}<SyncFolderCard title="Editable folder preview" path="/Sample/Folder" description="Synthetic shared card" stats="No transfer started" scopeKey="fixture-shared-card"><p>Folder details preview</p></SyncFolderCard></Box></ChakraProvider> }]);
+ element: <ChakraProvider><Box maxW="1000px" mx="auto" p={4}>{params.has('native') ? <MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={initialStatus().roots} host={nativeFixtureHost} /> : <DeviceSyncPanel ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={[]} ownedDeviceIds={[deviceId]} />}<SyncFolderCard title="Editable folder preview" path="/Sample/Folder" description="Synthetic shared card" stats="No transfer started" scopeKey="fixture-shared-card"><p>Folder details preview</p></SyncFolderCard></Box></ChakraProvider> }, { path: '/things', element: <h1>Folder opened</h1> }]);
 createRoot(document.getElementById('root')!).render(<StrictMode><RouterProvider router={router} /></StrictMode>);
