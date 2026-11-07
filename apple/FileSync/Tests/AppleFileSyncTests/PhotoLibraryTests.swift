@@ -1,6 +1,7 @@
 @testable import AppleFileSync
 import XCTest
 import CryptoKit
+import Photos
 
 private final class PhotoFixtures: PhotoResourceProvider, @unchecked Sendable {
     var permission = "full", exports = 0, inventoryCalls = 0
@@ -26,6 +27,26 @@ private final class PhotoFixtures: PhotoResourceProvider, @unchecked Sendable {
     }
 }
 final class PhotoLibraryTests: XCTestCase {
+    func testPhotoExportFailuresDescribeTheActualRecoveryWithoutLeakingNativeDetails() {
+        let cases: [(String, Int, PhotoLibraryReader.Failure)] = [
+            (PHPhotosErrorDomain, PHPhotosError.Code.networkAccessRequired.rawValue, .cloudOriginal),
+            (PHPhotosErrorDomain, PHPhotosError.Code.accessRestricted.rawValue, .unavailable),
+            (PHPhotosErrorDomain, PHPhotosError.Code.accessUserDenied.rawValue, .unavailable),
+            (PHPhotosErrorDomain, PHPhotosError.Code.notEnoughSpace.rawValue, .storageFull),
+            (NSCocoaErrorDomain, CocoaError.fileWriteOutOfSpace.rawValue, .storageFull),
+            (PHPhotosErrorDomain, PHPhotosError.Code.internalError.rawValue, .readFailed),
+            ("unrelated-domain", PHPhotosError.Code.networkAccessRequired.rawValue, .readFailed)
+        ]
+        for (domain, code, expected) in cases {
+            let native = NSError(domain: domain, code: code, userInfo: [NSLocalizedDescriptionKey: "private asset /owner/photo.jpg"])
+            let failure = PhotoLibraryReader.exportFailure(native)
+            XCTAssertEqual((failure as? PhotoLibraryReader.Failure)?.errorDescription, expected.errorDescription)
+            XCTAssertFalse(failure.localizedDescription.contains("private asset"))
+        }
+        XCTAssertTrue(PhotoLibraryReader.exportFailure(NSError(domain: PHPhotosErrorDomain,
+            code: PHPhotosError.Code.userCancelled.rawValue)) is CancellationError)
+        XCTAssertTrue(PhotoLibraryReader.exportFailure(CancellationError()) is CancellationError)
+    }
     #if os(macOS)
     private func makeReader(_ provider: PhotoFixtures) throws -> PhotoLibraryReader {
         let environmentPath = ProcessInfo.processInfo.environment["THINGTIME_TEST_COMMANDER_INDEXER"]
@@ -79,6 +100,27 @@ final class PhotoLibraryTests: XCTestCase {
         provider.records = [resource]; provider.bytes = [:]; XCTAssertThrowsError(try reader.scan(scope: "cold"))
         provider.bytes[resource.path] = Data([1]); provider.onWrite = { provider.records = [] }
         XCTAssertThrowsError(try reader.scan(scope: "cold"))
+    }
+    func testUnavailableOriginalRetryKeepsCompletedObservationsAndEveryResource() throws {
+        let provider = PhotoFixtures()
+        provider.add("first", bytes: Data([1]))
+        provider.add("first", index: 1, bytes: Data([2]))
+        provider.records.sort { $0.path < $1.path }
+        let missing = provider.records[1], original = provider.bytes.removeValue(forKey: provider.records[1].path)!
+        let reader = try makeReader(provider)
+        XCTAssertThrowsError(try reader.scan(scope: "retry-owner/grant")) { error in
+            XCTAssertEqual((error as? PhotoLibraryReader.Failure)?.errorDescription,
+                PhotoLibraryReader.Failure.cloudOriginal.errorDescription)
+        }
+        XCTAssertEqual(provider.exports, 2)
+        provider.bytes[missing.path] = original
+        let rows = try reader.scan(scope: "retry-owner/grant")
+        XCTAssertEqual(rows.count, 2, "A failed scan must never turn into an empty successful backup")
+        XCTAssertEqual(provider.exports, 3, "Retry should retain the completed original observation")
+        for row in rows {
+            let chunk = try reader.read(scope: "retry-owner/grant", path: row.path, version: row.version, offset: 0, length: 4)
+            XCTAssertEqual(Data(base64Encoded: chunk.data), provider.bytes[row.path])
+        }
     }
     func testMutationAndCancellationCannotReturnACompleteInventory() async throws {
         let provider = PhotoFixtures(), resource = provider.add("first", bytes: Data([1])), reader = try makeReader(provider)

@@ -145,6 +145,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-07: Restore legacy iOS backup starts on hosts without native resource
+  limits, while preserving explicitly saved device and connection policies. Add
+  ordinary Photos consent and original-byte acceptance with storage-readiness
+  checks ([PR 1408 notes](../PRs/1408-ios-photos-upload-recovery.md)). **Codex (AI)**
+
 - **2026-11-07 — Codex (AI):** Add ordinary device root folder references and
   idempotent default backup destinations under Device / Files / Source, readable
   cloud paths and offline Show Folder navigation. Keep existing destinations,
