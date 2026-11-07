@@ -718,6 +718,20 @@ export const resolveConnectionCredential = async (user: SessionUser, connectionI
   return { ok: true as const, provider, tokens, account: toPublicConnection(pair.link, pair.account, provider).account };
 };
 
+export const resolveConnectionCredential = async (user: SessionUser, connectionId: string) => {
+  const [pair] = await linksWithAccounts(user.id, connectionId);
+  if (!pair?.account) return fail(404, 'Connection not found');
+  const provider = connectionProviderById(pair.link.crystal.provider);
+  if (!provider || provider.auth === 'none') return fail(400, 'This connection has no saved authorization.');
+  const tokens = await liveTokensFor(provider, pair.account, user.id);
+  if (!tokens) return fail(401, 'Reconnect this account to authorize it.');
+  if (tokens.expiresAt && Date.parse(tokens.expiresAt) <= Date.now()) return fail(401, 'This account authorization expired. Reconnect it.');
+  // An unlink during refresh must not release credentials from a retired account.
+  const home = await getHomeThingsCollection();
+  if (!await home.findOne({ shareId: connectionId, ownerId: user.id, thingtime: EXTERNAL_LINK_KIND, parentId: pair.account.shareId })) return fail(404, 'Connection not found');
+  return { ok: true as const, provider, tokens, account: toPublicConnection(pair.link, pair.account, provider).account };
+};
+
 export async function useNamedConnection(user: SessionUser, input: { id?: unknown; operation?: unknown }, origin: string) {
   const id = typeof input.id === 'string' ? input.id : '';
   const operation = typeof input.operation === 'string' ? input.operation as NamedOperation : null;

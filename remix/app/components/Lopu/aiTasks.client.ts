@@ -1,4 +1,4 @@
-import { AI_TASK_OPERATIONS, AI_TASK_OWNER_HEADER, AI_TASK_PATH, type AiBackgroundTask } from '~/api/utils/lopu/backgroundTaskCore';
+import { AI_TASK_OPERATIONS, AI_TASK_OWNER_HEADER, AI_TASK_PATH, type AiBackgroundTask, type AiTaskDiagnostics } from '~/api/utils/lopu/backgroundTaskCore';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { observeAiTask, type AiTaskFrame, type AiTaskRequest } from './aiTaskTransport';
 let ownerId: string | null = null;
@@ -6,6 +6,9 @@ let ownerGeneration = 0;
 let contextKey = 'unresolved';
 const unavailableOutputs = new Set<string>();
 export const getAiTaskContextKey = () => contextKey;
+// Stable primitive snapshot for inspector lifetime, including switch-away/back.
+export const getAiTaskIdentityKey = () => JSON.stringify([ownerId, ownerGeneration, contextKey]);
+export const getServerAiTaskIdentityKey = () => 'unbound';
 let taskState: 'idle' | 'ready' | 'unavailable' = 'idle';
 export const getAiTaskState = () => taskState;
 export const getServerAiTaskState = () => 'idle' as const;
@@ -138,6 +141,22 @@ export const readAiTaskOutput = async (task: AiBackgroundTask) => {
 		if (offset >= result.length) return { task: result.task as AiBackgroundTask, output };
 	} while (output.length < 2 * 1024 * 1024);
 	return null;
+};
+
+/** No origin fallback or output fetch; stale owner/source results are discarded. */
+export const readAiTaskDiagnostics = async (task: AiBackgroundTask): Promise<AiTaskDiagnostics | null> => {
+  const owner = ownerId, generation = ownerGeneration, scope = contextKey;
+  if (!owner || scope === 'unresolved') return null;
+  await requireThingtimeCapability('api.lopu-background-tasks', '1.4.0');
+  if (owner !== ownerId || generation !== ownerGeneration || scope !== contextKey) return null;
+  const response = await fetch(`${AI_TASK_PATH}?id=${encodeURIComponent(task.id)}&diagnostics=1`, {
+    credentials: 'include', cache: 'no-store', headers: { [AI_TASK_OWNER_HEADER]: owner }
+  });
+  if (owner !== ownerId || generation !== ownerGeneration || scope !== contextKey) return null;
+  if (!response.ok) throw new Error('Task diagnostics are unavailable on this origin.');
+  const result = await response.json();
+  if (owner !== ownerId || generation !== ownerGeneration || scope !== contextKey || result.ownerId !== owner || result.contextKey !== scope || result.diagnostics?.taskId !== task.id) return null;
+  return result.diagnostics as AiTaskDiagnostics;
 };
 
 export const aiTaskFetch = async (url: string, init: RequestInit = {}): Promise<Response> => {

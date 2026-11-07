@@ -42,3 +42,16 @@ export const isRunningLopuChatTask = (task: AiBackgroundTask, chatId: string | n
 	(task.status === 'running' || task.workflowStatus === 'running');
 export const taskNeedsAttention = (stopReason: unknown) =>
 	['checkpoint', 'error', 'max_tokens', 'tool_limit', 'hop_limit', 'time_limit'].includes(String(stopReason));
+
+// Diagnostic evidence is observational; missing values never prove termination.
+export type AiTaskWorkerEvidence = {
+  id: string | null; requestId: string | null; workerStarted: boolean | null; workerFinishedAt: string | null;
+};
+export type AiTaskDiagnostics = {
+  taskId: string; rootTaskId: string; observedAt: string; consistency: 'non-atomic-read';
+  workflowRunId: string | null; workflowGatewayDeploymentId: string | null;
+  workflowFinalStatus: Exclude<AiTaskStatus, 'running'> | null; workflowFinalizedAt: string | null;
+  conversationClaimRecorded: boolean; activeWorkerRequestId: string | null;
+  rootWorker: AiTaskWorkerEvidence; reservedWorker: AiTaskWorkerEvidence | null;
+  unacknowledgedWorker: AiTaskWorkerEvidence | null;
+};

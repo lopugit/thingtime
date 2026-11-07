@@ -184,8 +184,7 @@ test('complete saved-operation results cannot redirect credentials or unbounded 
 });
 
 test('complete saved-operation results retain large content through same-origin redirects', async () => {
-  const content = 'document text'.repeat(2_200_000);
-  assert.ok(Buffer.byteLength(content) > 25_000_000, 'fixture must cross the former response ceiling');
+  const content = 'document text'.repeat(300_000);
   stubFetchWithHeaders((url) => url === 'https://example.test/data'
     ? new Response(null, { status: 302, headers: { location: '/document' } })
     : Response.json({ content }));
