@@ -36,7 +36,7 @@ export const remoteSyncBlocks: WebpageBlock[] = [{ id: 'remote-sync', type: 'ele
                 ...syncConnectionGlanceBlocks('item.glance', 'remote-sync-glance'),
 				when('remote-sync-selected-controls', 'item.expanded', [element('remote-sync-connection-status', 'p', '{item.status}', { role: 'status' }), element('remote-sync-connection-speed', 'p', '{item.speed}'),
 				row('remote-sync-connection-actions', [button('remote-sync-edit', 'Edit', 'edit', '{remote.editDisabled}', { id: '{item.id}' }),
-					button('remote-sync-start', 'Sync now', 'start', '{item.startDisabled}', { id: '{item.id}' }),
+					button('remote-sync-start', '{item.startLabel}', 'start', '{item.startDisabled}', { id: '{item.id}' }),
 					button('remote-sync-pause', 'Pause sync', 'pause', '{item.pauseDisabled}', { id: '{item.id}' }),
 					button('remote-sync-details', 'Progress, coverage & priorities', 'details', '{remote.deviceDisabled}', { id: '{item.id}' }),
 					{ ...element('remote-sync-files', 'a', 'Browse synced files', { href: '{item.href}' }), css: control }]),
@@ -76,7 +76,11 @@ export function remoteSyncDisclosureBlocks(blocks: WebpageBlock[]): WebpageBlock
   }
   if (block.id === 'remote-sync-connection' && !JSON.stringify(block).includes('remote-sync-glance')) next.children = [...(next.children ?? []), ...syncConnectionGlanceBlocks('item.glance', 'remote-sync-glance')];
   if (block.id === 'remote-sync-connection' && !JSON.stringify(block).includes('remote-sync-editor-slot')) next.children = [...(next.children ?? []), { id: 'remote-sync-editor-slot', type: 'element', tag: 'div', props: { id: '{item.editorSlotId}', hidden: '{item.editorHidden}' } }];
-  const inputs = block.props?.['data-tt-action-inputs'];
+  if (block.id === 'remote-sync-connection' && !JSON.stringify(block).includes('remote-sync-quick')) next.children = [...(next.children ?? []),
+  element('remote-sync-quick-error', 'p', '{item.quickError}', { role: 'alert' }),
+  button('remote-sync-quick', '{item.quickLabel}', 'quick', '{item.quickDisabled}', { id: '{item.id}' })];
+ if (block.id === 'remote-sync-start' || block.id === 'remote-sync-pause') next.props = { ...next.props, hidden: true };
+ const inputs = block.props?.['data-tt-action-inputs'];
   if (connection && inputs && typeof inputs === 'object' && operations.has(String((inputs as { operation?: unknown }).operation)))
    return when(`${block.id}-selection`, 'item.expanded', [next]);
   return next;
