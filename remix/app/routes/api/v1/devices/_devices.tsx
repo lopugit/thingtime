@@ -10,7 +10,7 @@ export const loader = async ({ request }: { request: Request }) => {
 	const limit = await enforceRateLimit(request, 'devices.read', `user:${user.id}`);
 	if (!limit.allowed) return json({ ok: false, error: 'Device reads are moving too quickly' }, rateLimitedResponseInit(limit));
 	const deviceId = new URL(request.url).searchParams.get('id');
-	const result = await listDevices(user.id, deviceId);
+	const result = await listDevices(user.id, deviceId, new URL(request.url).origin);
 	if (result.ok === false) return json(result, { status: result.status });
 	return json(result, { headers: { 'Cache-Control': 'private, no-store' } });
 };

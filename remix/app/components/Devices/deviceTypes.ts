@@ -211,6 +211,7 @@ export type DeviceConnector = {
 
 export type DeviceSummary = {
 	id: string;
+	rootFolderId?: string | null;
 	name: string;
 	platform: string;
 	serviceStatus: DeviceServiceStatus;

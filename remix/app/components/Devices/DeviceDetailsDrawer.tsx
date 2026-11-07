@@ -1,3 +1,4 @@
+import { DeviceFolderControl } from './DeviceFolderControl';
 import { FilesystemThingsBrowser } from '../Things/FilesystemThingsBrowser';
 import React, { memo } from 'react';
 
@@ -387,6 +388,7 @@ export const DeviceDetailsDrawer = memo(
 							</Box>
 						) : (
 							<>
+								<DeviceFolderControl key={`folder:${state.deviceId}`} deviceId={state.deviceId} />
 								<DeviceDashboard deviceId={state.deviceId} ownerId={ownerId} snapshot={snapshot} presence={presence} now={now} />
 								{ownerId && <Section deviceId={state.deviceId} section="location" label="Location history"><DeviceLocationWorkspace ownerId={ownerId} deviceId={state.deviceId} model={summary.system?.model} platform={summary.platform} /></Section>}
 								{isWatch ? (

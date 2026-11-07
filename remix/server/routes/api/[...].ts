@@ -175,6 +175,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
 	'v1/backups/workspace': () => import('../../../app/routes/api/v1/backups/workspace/_workspace'),
 	'v1/backups/run': () => import('../../../app/routes/api/v1/backups/run/_run'),
 	'v1/backups/destinations': () => import('../../../app/routes/api/v1/backups/destinations/_destinations'),
+	'v1/devices/folders': () => import('../../../app/routes/api/v1/devices/folders/_folders'),
 	'v1/devices': () => import('../../../app/routes/api/v1/devices/_devices'),
 	'v1/devices/approvals': () => import('../../../app/routes/api/v1/devices/approvals/_approvals'),
 	'v1/devices/sync-control': () => import('../../../app/routes/api/v1/devices/sync-control/_sync-control'),
