@@ -499,485 +499,509 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
         task = Task<Void, Never> { [weak self, weak webView] in
             guard let self, let webView else { return }
             defer { if self.generation == operation { self.background?.finish(success: false); self.background = nil; self.task = nil; self.requestId = nil; self.cancellationReply = nil; self.transport?.close(); self.transport = nil } }
-            do {
-                try check()
-                if action == "cancel-deferred-upload" {
-                    guard let rootId = payload["rootId"] as? String, UUID(uuidString: rootId) != nil,
-                          let configurationId = payload["configurationId"] as? String,
-                          let deviceId = payload["deviceId"] as? String,
-                          [configurationId, deviceId].allSatisfy({ $0.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$", options: .regularExpression) != nil })
-                    else { throw MobileFolderStore.Failure.invalid }
-                    // The exact local scope may be disarmed even offline;
-                    // no grant data is returned. Node revocation is separately
-                    // fenced to the immutable issuing admission on the server.
-                    try NativeDeferredUpload.shared.pauseLocally(scope: scope, rootId: rootId, configurationId: configurationId, deviceId: deviceId)
-                    let cancelled: [String: Any] = ["rootId": rootId, "cancelled": true, "configurationId": configurationId, "roots": [[String: Any]]()]
-                    reply("mobile-files-result", base.merging(cancelled) { _, new in new })
-                    return
-                }
-                try await verifyOwner(scope, check); try check()
-                var result: [String: Any] = [:]
-                var inspectedGrant: MobileFolderStore.Grant?
-                var inventoryDevice: String?
-                var checkedApproval: MobileFolderStore.WriteApproval?
-                if action == "conditions" {
-                    let battery = UIDevice.current.batteryState
-                    let charging: Any = battery == .unknown ? NSNull() : (battery == .charging || battery == .full)
-                    result["conditions"] = ["network": self.networkKind, "charging": charging]
-                } else if action == "choose" {
-                    if let photoSource = try await self.chooseSource(webView: webView) {
-                        if photoSource {
-                            if try await self.authorizePhotos(webView: webView) {
-                                try check(); try await verifyOwner(scope, check); try check()
-                                _ = try self.store.addPhotos(scope)
-                            }
-                        } else if let url = try await self.choose(webView: webView) {
+            await self.performFolderRequest(payload, action: action, owner: owner, scope: scope, operation: operation,
+                base: base, webView: webView, root: root, currentRoot: currentRoot, cookies: cookies,
+                verifyOwner: verifyOwner, verifyDevice: verifyDevice, check: check, reply: reply)
+        }
+    }
+
+    private static func folderErrorMessage(_ error: Error) -> String {
+        if let message = (error as? NativeDeferredUploadStore.Failure)?.errorDescription { return message }
+        if let message = (error as? FileUploadPartStore.Failure)?.errorDescription { return message }
+        if let message = (error as? PhotoLibraryReader.Failure)?.errorDescription { return message }
+        if let message = (error as? MobileFolderStore.Failure)?.errorDescription { return message }
+        if let message = (error as? MobileDevicePairing.Failure)?.errorDescription { return message }
+        if let message = (error as? NativeDeferredUploadClient.Failure)?.errorDescription { return message }
+        return "Folder access failed. Your selections were preserved; try again."
+    }
+
+    // Explicit request and result types let Swift check each branch separately.
+    // The actor-owned Task only owns cancellation and the request generation.
+    private func performFolderRequest(_ payload: [String: Any], action: String, owner: String, scope: MobileDevicePairing.Scope,
+                                      operation: UUID, base: [String: Any], webView: WKWebView, root: URL,
+                                      currentRoot: @escaping () -> URL?,
+                                      cookies: (([HTTPCookie], URL) -> [HTTPCookie])?,
+                                      verifyOwner: @escaping (MobileDevicePairing.Scope, @escaping () throws -> Void) async throws -> Void,
+                                      verifyDevice: ((MobileDevicePairing.Scope, String, @escaping () throws -> Void) async throws -> Void)?,
+                                      check: @escaping () throws -> Void, reply: @escaping (String, [String: Any]) -> Void) async {
+        do {
+            try check()
+            if action == "cancel-deferred-upload" {
+                guard let rootId = payload["rootId"] as? String, UUID(uuidString: rootId) != nil,
+                      let configurationId = payload["configurationId"] as? String,
+                      let deviceId = payload["deviceId"] as? String,
+                      [configurationId, deviceId].allSatisfy({ $0.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$", options: .regularExpression) != nil })
+                else { throw MobileFolderStore.Failure.invalid }
+                // The exact local scope may be disarmed even offline;
+                // no grant data is returned. Node revocation is separately
+                // fenced to the immutable issuing admission on the server.
+                try NativeDeferredUpload.shared.pauseLocally(scope: scope, rootId: rootId, configurationId: configurationId, deviceId: deviceId)
+                let cancelled: [String: Any] = ["rootId": rootId, "cancelled": true, "configurationId": configurationId, "roots": [[String: Any]]()]
+                reply("mobile-files-result", base.merging(cancelled) { _, new in new })
+                return
+            }
+            try await verifyOwner(scope, check); try check()
+            var result: [String: Any] = [:]
+            var inspectedGrant: MobileFolderStore.Grant?
+            var inventoryDevice: String?
+            var checkedApproval: MobileFolderStore.WriteApproval?
+            if action == "conditions" {
+                let battery = UIDevice.current.batteryState
+                let charging: Any = battery == .unknown ? NSNull() : (battery == .charging || battery == .full)
+                result["conditions"] = ["network": self.networkKind, "charging": charging]
+            } else if action == "choose" {
+                if let photoSource = try await self.chooseSource(webView: webView) {
+                    if photoSource {
+                        if try await self.authorizePhotos(webView: webView) {
                             try check(); try await verifyOwner(scope, check); try check()
-                            _ = try self.store.add(scope, selected: url)
+                            _ = try self.store.addPhotos(scope)
                         }
+                    } else if let url = try await self.choose(webView: webView) {
+                        try check(); try await verifyOwner(scope, check); try check()
+                        _ = try self.store.add(scope, selected: url)
                     }
-                } else if action != "list" {
-                    guard let rootId = payload["rootId"] as? String, UUID(uuidString: rootId) != nil else { throw MobileFolderStore.Failure.invalid }
-                    if action == "remove" {
-                        NativeDeferredUpload.shared.disarm(matching: scope, rootId: rootId)
-                        if let job = self.inventoryJob, job.scope.owner == scope, job.scope.rootId == rootId {
-                            try await self.cancelInventoryCapture(job, preserveCompletedBackup: false); try check()
-                        }
-                        try self.store.remove(scope, id: rootId)
-                        let uploadParts = self.uploadParts
-                        let cleanup = Task.detached { try uploadParts.remove(scope: scope, rootId: rootId) }
-                        try await withTaskCancellationHandler(operation: { try await cleanup.value }, onCancel: { cleanup.cancel() })
+                }
+            } else if action != "list" {
+                guard let rootId = payload["rootId"] as? String, UUID(uuidString: rootId) != nil else { throw MobileFolderStore.Failure.invalid }
+                if action == "remove" {
+                    NativeDeferredUpload.shared.disarm(matching: scope, rootId: rootId)
+                    if let job = self.inventoryJob, job.scope.owner == scope, job.scope.rootId == rootId {
+                        try await self.cancelInventoryCapture(job, preserveCompletedBackup: false); try check()
                     }
-                    else {
-                        let grant = try self.store.grant(scope, id: rootId)
-                        guard grant.sourceKind != "photos" || ["scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard", "inspect", "read", "upload-part", "upload-file", "defer-upload"].contains(action) else { throw MobileFolderStore.Failure.invalid }
-                        if ["upload-part", "upload-file", "defer-upload"].contains(action) {
-                            result = try await self.handleUpload(payload, action: action, rootId: rootId, scope: scope,
-                                grant: grant, webView: webView, operation: operation, base: base, cookies: cookies,
-                                verifyOwner: verifyOwner, verifyDevice: verifyDevice, check: check, reply: reply)
-                        } else if action == "trash-list" {
-                            let trash = self.trash
-                            let cursor = payload["cursor"] as? String
-                            guard payload["cursor"] == nil || payload["cursor"] is String else { throw MobileFolderStore.Failure.invalid }
-                            let worker = Task.detached { try trash.list(owner: scope, rootId: rootId, bookmark: grant.bookmark, cursor: cursor) }
-                            let page = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                            result = ["rootId": rootId, "trashPage": try JSONSerialization.jsonObject(with: JSONEncoder().encode(page))]
-                        } else if action == "write-approve" || action == "write-check" {
-                            let approval = try self.decode(payload["approval"], as: MobileFolderStore.WriteApproval.self)
-                            try approval.validate(owner: scope)
-                            guard let verifyDevice else { throw MobileFolderStore.Failure.unavailable }
+                    try self.store.remove(scope, id: rootId)
+                    let uploadParts = self.uploadParts
+                    let cleanup = Task.detached { try uploadParts.remove(scope: scope, rootId: rootId) }
+                    try await withTaskCancellationHandler(operation: { try await cleanup.value }, onCancel: { cleanup.cancel() })
+                }
+                else {
+                    let grant = try self.store.grant(scope, id: rootId)
+                    guard grant.sourceKind != "photos" || ["scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard", "inspect", "read", "upload-part", "upload-file", "defer-upload"].contains(action) else { throw MobileFolderStore.Failure.invalid }
+                    if ["upload-part", "upload-file", "defer-upload"].contains(action) {
+                        result = try await self.handleUpload(payload, action: action, rootId: rootId, scope: scope,
+                            grant: grant, webView: webView, operation: operation, base: base, cookies: cookies,
+                            verifyOwner: verifyOwner, verifyDevice: verifyDevice, check: check, reply: reply)
+                    } else if action == "trash-list" {
+                        let trash = self.trash
+                        let cursor = payload["cursor"] as? String
+                        guard payload["cursor"] == nil || payload["cursor"] is String else { throw MobileFolderStore.Failure.invalid }
+                        let worker = Task.detached { try trash.list(owner: scope, rootId: rootId, bookmark: grant.bookmark, cursor: cursor) }
+                        let page = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                        result = ["rootId": rootId, "trashPage": try JSONSerialization.jsonObject(with: JSONEncoder().encode(page))]
+                    } else if action == "write-approve" || action == "write-check" {
+                        let approval = try self.decode(payload["approval"], as: MobileFolderStore.WriteApproval.self)
+                        try approval.validate(owner: scope)
+                        guard let verifyDevice else { throw MobileFolderStore.Failure.unavailable }
+                        try await verifyDevice(scope, approval.scope.deviceId, check); try check()
+                        if try !self.store.isWriteApproved(scope, id: rootId, approval: approval) {
+                            // Resume may reuse exact native consent, never request or save new consent.
+                            guard action == "write-approve" else { throw MobileFolderStore.Failure.unavailable }
+                            guard try await self.approve(grant: grant, allowTrash: approval.allowTrash == true, webView: webView) else { throw MobileFolderStore.Failure.approvalCancelled }
+                            try check(); try await verifyOwner(scope, check); try check()
                             try await verifyDevice(scope, approval.scope.deviceId, check); try check()
-                            if try !self.store.isWriteApproved(scope, id: rootId, approval: approval) {
-                                // Resume may reuse exact native consent, never request or save new consent.
-                                guard action == "write-approve" else { throw MobileFolderStore.Failure.unavailable }
-                                guard try await self.approve(grant: grant, allowTrash: approval.allowTrash == true, webView: webView) else { throw MobileFolderStore.Failure.approvalCancelled }
+                            try self.store.approveWrite(scope, grant: grant, approval: approval)
+                        }
+                        let worker = Task.detached { try MobileFolderReader.checkAccess(bookmark: grant.bookmark) }
+                        try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                        inspectedGrant = grant; inventoryDevice = approval.scope.deviceId; checkedApproval = approval
+                        result = ["rootId": rootId, "writeApproval": try JSONSerialization.jsonObject(with: JSONEncoder().encode(approval))]
+                    } else if ["trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action) {
+                        let request = try self.decode(payload["trash"], as: MobileSyncTrash.Request.self)
+                        try request.validate(owner: scope)
+                        guard request.rootId == rootId else { throw MobileFolderStore.Failure.invalid }
+                        if action == "trash" || action == "trash-restore" {
+                            let approval = try self.decode(payload["approval"], as: MobileFolderStore.WriteApproval.self)
+                            guard approval.scope == request.scope, action != "trash" || approval.allowTrash == true,
+                                  try self.store.isWriteApproved(scope, id: rootId, approval: approval) else { throw MobileFolderStore.Failure.unavailable }
+                        }
+                        let trash = self.trash
+                        if action == "trash-restore-reviewed" {
+                            let restore = try self.decode(payload["restore"], as: MobileSyncTrash.Restore.self)
+                            let pending = Task.detached { try trash.resumeRestore(request, owner: scope, bookmark: grant.bookmark, restore: restore) }
+                            let resumed = try await withTaskCancellationHandler(operation: { try await pending.value }, onCancel: { pending.cancel() })
+                            if let resumed { result = ["rootId": rootId, "restoredEntry": try JSONSerialization.jsonObject(with: JSONEncoder().encode(resumed))] }
+                            else {
+                                let review = Task.detached { try trash.reviewRestore(request, owner: scope, bookmark: grant.bookmark, restore: restore) }
+                                try await withTaskCancellationHandler(operation: { try await review.value }, onCancel: { review.cancel() })
+                                guard try await self.presentApproval(title: "Restore this \(restore.expected.kind) to \(grant.name)?",
+                                    message: "Restore \(restore.expected.path) as \(restore.path) in this selected folder on \(scope.origin.absoluteString). Existing files are never overwritten.",
+                                    button: "Restore", webView: webView) else { throw MobileFolderStore.Failure.approvalCancelled }
                                 try check(); try await verifyOwner(scope, check); try check()
-                                try await verifyDevice(scope, approval.scope.deviceId, check); try check()
-                                try self.store.approveWrite(scope, grant: grant, approval: approval)
-                            }
-                            let worker = Task.detached { try MobileFolderReader.checkAccess(bookmark: grant.bookmark) }
-                            try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                            inspectedGrant = grant; inventoryDevice = approval.scope.deviceId; checkedApproval = approval
-                            result = ["rootId": rootId, "writeApproval": try JSONSerialization.jsonObject(with: JSONEncoder().encode(approval))]
-                        } else if ["trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action) {
-                            let request = try self.decode(payload["trash"], as: MobileSyncTrash.Request.self)
-                            try request.validate(owner: scope)
-                            guard request.rootId == rootId else { throw MobileFolderStore.Failure.invalid }
-                            if action == "trash" || action == "trash-restore" {
-                                let approval = try self.decode(payload["approval"], as: MobileFolderStore.WriteApproval.self)
-                                guard approval.scope == request.scope, action != "trash" || approval.allowTrash == true,
-                                      try self.store.isWriteApproved(scope, id: rootId, approval: approval) else { throw MobileFolderStore.Failure.unavailable }
-                            }
-                            let trash = self.trash
-                            if action == "trash-restore-reviewed" {
-                                let restore = try self.decode(payload["restore"], as: MobileSyncTrash.Restore.self)
-                                let pending = Task.detached { try trash.resumeRestore(request, owner: scope, bookmark: grant.bookmark, restore: restore) }
-                                let resumed = try await withTaskCancellationHandler(operation: { try await pending.value }, onCancel: { pending.cancel() })
-                                if let resumed { result = ["rootId": rootId, "restoredEntry": try JSONSerialization.jsonObject(with: JSONEncoder().encode(resumed))] }
-                                else {
-                                    let review = Task.detached { try trash.reviewRestore(request, owner: scope, bookmark: grant.bookmark, restore: restore) }
-                                    try await withTaskCancellationHandler(operation: { try await review.value }, onCancel: { review.cancel() })
-                                    guard try await self.presentApproval(title: "Restore this \(restore.expected.kind) to \(grant.name)?",
-                                        message: "Restore \(restore.expected.path) as \(restore.path) in this selected folder on \(scope.origin.absoluteString). Existing files are never overwritten.",
-                                        button: "Restore", webView: webView) else { throw MobileFolderStore.Failure.approvalCancelled }
-                                    try check(); try await verifyOwner(scope, check); try check()
-                                    guard try self.store.grant(scope, id: rootId).bookmark == grant.bookmark else { throw MobileFolderStore.Failure.unavailable }
-                                    let worker = Task.detached { try trash.restore(request, owner: scope, bookmark: grant.bookmark, restore: restore) }
-                                    let restored = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                                    result = ["rootId": rootId, "restoredEntry": try JSONSerialization.jsonObject(with: JSONEncoder().encode(restored))]
-                                }
-                            } else if action == "trash-expected" {
-                                let worker = Task.detached { try trash.expected(request, owner: scope, bookmark: grant.bookmark) }
-                                let expected = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                                result = ["rootId": rootId, "expectedEntry": try JSONSerialization.jsonObject(with: JSONEncoder().encode(expected))]
-                            } else if action == "trash-inspect" {
-                                let worker = Task.detached { try trash.inspect(request, owner: scope, bookmark: grant.bookmark) }
-                                let retained = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                                result = ["rootId": rootId, "retainedEntry": try retained.map { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ?? NSNull()]
-                                let stateWorker = Task.detached { try trash.restoration(request, owner: scope, bookmark: grant.bookmark) }
-                                let intent = try await withTaskCancellationHandler(operation: { try await stateWorker.value }, onCancel: { stateWorker.cancel() })
-                                result["restoreIntent"] = try intent.map { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ?? NSNull()
-                            } else if action == "trash-restore" {
-                                let restore = try self.decode(payload["restore"], as: MobileSyncTrash.Restore.self)
+                                guard try self.store.grant(scope, id: rootId).bookmark == grant.bookmark else { throw MobileFolderStore.Failure.unavailable }
                                 let worker = Task.detached { try trash.restore(request, owner: scope, bookmark: grant.bookmark, restore: restore) }
                                 let restored = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                                 result = ["rootId": rootId, "restoredEntry": try JSONSerialization.jsonObject(with: JSONEncoder().encode(restored))]
-                            } else {
-                                let worker = Task.detached {
-                                    if action == "trash" { return MobileSyncTrash.Lookup(status: "complete", receipt: try trash.trash(request, owner: scope, bookmark: grant.bookmark)) }
-                                    return try trash.lookup(request, owner: scope, bookmark: grant.bookmark)
-                                }
-                                let lookup = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                                result = ["rootId": rootId, "trash": try JSONSerialization.jsonObject(with: JSONEncoder().encode(lookup))]
                             }
-                        } else if action == "publish" || action == "publication-lookup" {
-                            let request = try self.decode(payload["transfer"], as: MobileSyncStaging.Request.self)
-                            try request.validate(owner: scope)
-                            guard request.rootId == rootId else { throw MobileFolderStore.Failure.invalid }
-                            var stage: MobileSyncStaging.Stage?
-                            if action == "publish" {
-                                let approval = try self.decode(payload["approval"], as: MobileFolderStore.WriteApproval.self)
-                                guard approval.scope == request.scope, try self.store.isWriteApproved(scope, id: rootId, approval: approval) else { throw MobileFolderStore.Failure.unavailable }
-                                stage = try self.decode(payload["stage"], as: MobileSyncStaging.Stage.self)
-                            }
-                            let staged = stage, staging = self.staging
+                        } else if action == "trash-expected" {
+                            let worker = Task.detached { try trash.expected(request, owner: scope, bookmark: grant.bookmark) }
+                            let expected = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                            result = ["rootId": rootId, "expectedEntry": try JSONSerialization.jsonObject(with: JSONEncoder().encode(expected))]
+                        } else if action == "trash-inspect" {
+                            let worker = Task.detached { try trash.inspect(request, owner: scope, bookmark: grant.bookmark) }
+                            let retained = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                            result = ["rootId": rootId, "retainedEntry": try retained.map { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ?? NSNull()]
+                            let stateWorker = Task.detached { try trash.restoration(request, owner: scope, bookmark: grant.bookmark) }
+                            let intent = try await withTaskCancellationHandler(operation: { try await stateWorker.value }, onCancel: { stateWorker.cancel() })
+                            result["restoreIntent"] = try intent.map { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ?? NSNull()
+                        } else if action == "trash-restore" {
+                            let restore = try self.decode(payload["restore"], as: MobileSyncTrash.Restore.self)
+                            let worker = Task.detached { try trash.restore(request, owner: scope, bookmark: grant.bookmark, restore: restore) }
+                            let restored = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                            result = ["rootId": rootId, "restoredEntry": try JSONSerialization.jsonObject(with: JSONEncoder().encode(restored))]
+                        } else {
                             let worker = Task.detached {
-                                try MobileFolderReader.checkAccess(bookmark: grant.bookmark)
-                                if let staged {
-                                    let receipt = try staging.publish(request, owner: scope, bookmark: grant.bookmark, stage: staged)
-                                    return MobileSyncStaging.Lookup(status: "complete", receipt: receipt)
-                                }
-                                return try staging.lookup(request, owner: scope, bookmark: grant.bookmark)
+                                if action == "trash" { return MobileSyncTrash.Lookup(status: "complete", receipt: try trash.trash(request, owner: scope, bookmark: grant.bookmark)) }
+                                return try trash.lookup(request, owner: scope, bookmark: grant.bookmark)
                             }
                             let lookup = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                            result = ["rootId": rootId, "publication": try JSONSerialization.jsonObject(with: JSONEncoder().encode(lookup))]
-                        } else if action.hasPrefix("stage-") {
-                            guard let transfer = payload["transfer"] as? [String: Any] else { throw MobileFolderStore.Failure.invalid }
-                            let encoded = try JSONSerialization.data(withJSONObject: transfer)
-                            guard encoded.count <= 32_768 else { throw MobileFolderStore.Failure.limit }
-                            let request = try JSONDecoder().decode(MobileSyncStaging.Request.self, from: encoded)
-                            try request.validate(owner: scope)
-                            guard request.rootId == rootId else { throw MobileFolderStore.Failure.invalid }
-                            if action == "stage-download" {
-                                guard let cookies, let offset = Self.integer(payload["offset"]),
-                                      let length = Self.integer(payload["length"]), length > 0, length <= FileVersionExport.rangeBytes else { throw MobileFolderStore.Failure.invalid }
-                                let file = try self.decode(payload["cloudFile"], as: NativeCloudFile.self)
-                                try file.validate(source: request.operation.mutation.source)
-                                let path = try file.download.rangePath(offset: offset, length: Int(length))
-                                let current = {
-                                    try check()
-                                    guard try self.store.grant(scope, id: rootId).bookmark == grant.bookmark else { throw MobileFolderStore.Failure.unavailable }
-                                }
-                                let transport = NativeFileSession(scope: scope, cookieStore: webView.configuration.websiteDataStore.httpCookieStore,
-                                    cookies: cookies, check: current, invalidated: { [weak self] in if self?.generation == operation { self?.suspend() } })
-                                self.transport = transport
-                                try await transport.open()
-                                try await transport.require([("api.auth-me", [1,0,0]), ("api.files", [1,0,0]), ("api.attachment-content", [1,14,0])])
-                                try await file.check(using: transport)
-                                let bytes = try await transport.read(path, limit: Int(length)) {
-                                    try file.download.validateRange($0, offset: offset, length: Int(length))
-                                }
-                                guard bytes.count == Int(length) else { throw MobileFolderStore.Failure.changed }
-                                try await file.check(using: transport); try await transport.verifyOwner(); try current()
-                                let staging = self.staging
-                                let worker = Task.detached {
-                                    try MobileFolderReader.checkAccess(bookmark: grant.bookmark)
-                                    var consumed = 0
-                                    let progress = try staging.appendStream(request, owner: scope, offset: offset, length: bytes.count) { wanted in
-                                        defer { consumed += wanted }; return bytes.subdata(in: consumed..<(consumed + wanted))
-                                    }
-                                    try MobileFolderReader.checkAccess(bookmark: grant.bookmark)
-                                    return progress
-                                }
-                                let progress = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                                try current(); try await transport.verifyOwner()
-                                result = ["rootId": rootId, "staging": try JSONSerialization.jsonObject(with: JSONEncoder().encode(progress))]
-                            } else {
-                                var offset: Int64 = 0, bytes = Data()
-                                if action == "stage-append" {
-                                    guard let number = payload["offset"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
-                                          number.doubleValue.isFinite, number.doubleValue >= 0, number.doubleValue <= 9_007_199_254_740_991,
-                                          number.doubleValue.rounded() == number.doubleValue, let encodedBytes = payload["data"] as? String,
-                                          encodedBytes.utf8.count <= 87_384, let decoded = Data(base64Encoded: encodedBytes),
-                                          !decoded.isEmpty, decoded.count <= MobileFolderReader.maximumReadBytes else { throw MobileFolderStore.Failure.invalid }
-                                    offset = number.int64Value; bytes = decoded
-                                }
-                                let chunkOffset = offset, chunkBytes = bytes, staging = self.staging
-                                let worker = Task.detached {
-                                    try MobileFolderReader.checkAccess(bookmark: grant.bookmark)
-                                    let progress: MobileSyncStaging.Progress
-                                    switch action {
-                                    case "stage-begin": progress = try staging.begin(request, owner: scope)
-                                    case "stage-append": progress = try staging.append(request, owner: scope, offset: chunkOffset, bytes: chunkBytes)
-                                    default: progress = try staging.finish(request, owner: scope)
-                                    }
-                                    try MobileFolderReader.checkAccess(bookmark: grant.bookmark)
-                                    return progress
-                                }
-                                let progress = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                                result = ["rootId": rootId, "staging": try JSONSerialization.jsonObject(with: JSONEncoder().encode(progress))]
-                            }
-                        } else if let policy = payload["capturePolicy"] as? String,
-                                  ["strict-async", "backup-supported"].contains(policy),
-                                  ["scan-capture", "scan-status", "scan-cancel"].contains(action) {
-                            let isPhotos = grant.sourceKind == "photos"
-                            let allowCloudGaps = payload["allowCloudGaps"] as? Bool == true
-                            guard payload["allowCloudGaps"] == nil || (allowCloudGaps && isPhotos && action != "scan-cancel"),
-                                  policy == (isPhotos ? "strict-async" : "backup-supported"),
-                                  let device = payload["inventoryDeviceId"] as? String, !device.isEmpty, device.utf8.count <= 512,
-                                  let verifyDevice, let captureId = payload["captureId"] as? String,
-                                  UUID(uuidString: captureId) != nil, captureId == captureId.lowercased(),
-                                  payload["ignoreRules"] == nil, payload["excludedPaths"] == nil || payload["excludedPaths"] is [String]
-                            else { throw MobileFolderStore.Failure.invalid }
-                            let exclusions = try MobileFolderReader.canonicalExclusions(payload["excludedPaths"] as? [String] ?? [])
-                            guard !isPhotos || exclusions.isEmpty else { throw MobileFolderStore.Failure.invalid }
-                            try await verifyDevice(scope, device, check); try check()
-                            inventoryDevice = device; inspectedGrant = grant
-                            let inventoryScope = MobileFolderInventory.Scope(owner: scope, deviceId: isPhotos ? NativeUploadPartStaging.inventoryIdentity : device, rootId: rootId)
-                            let photos = self.photos, inventories = self.inventories
-                            let bookmark = isPhotos ? nil : grant.bookmark
-                            if let previous = self.inventoryJob, previous.scope != inventoryScope || previous.device != device {
-                                try await self.cancelInventoryCapture(previous)
-                            }
-                            let job = self.inventoryJob.flatMap { $0.id == captureId ? $0 : nil }
-                            if let job, job.bookmark != bookmark || job.exclusions != exclusions || (action != "scan-cancel" && job.allowCloudGaps != allowCloudGaps) {
-                                throw MobileFolderStore.Failure.changed
-                            }
-                            result = ["rootId": rootId, "capturePolicy": policy, "captureId": captureId, "complete": false]
-                            if payload["excludedPaths"] != nil { result["excludedPaths"] = exclusions }
-                            let lookup: @Sendable () throws -> MobileFolderInventory.BackupStatus? = {
-                                if let bookmark { return try inventories.backupStatus(inventoryScope, id: captureId, bookmark: bookmark, excludedPaths: exclusions) }
-                                return try photos.status(scope: inventoryScope, id: captureId, allowCloudGaps: allowCloudGaps).map { .init(capture: $0, state: "complete") }
-                            }
-                            if action == "scan-cancel" {
-                                if let job { try await self.cancelInventoryCapture(job) }
-                                else {
-                                    try await Task.detached {
-                                        if let bookmark {
-                                            if let old = try lookup(), old.state != "complete" {
-                                                try inventories.abandonBackup(inventoryScope, capture: .init(id: old.id, generation: old.generation, totalEntries: 0), bookmark: bookmark)
-                                            }
-                                        } else {
-                                            try photos.discard(scope: inventoryScope, capture: .init(id: captureId, generation: captureId, totalEntries: 0))
-                                        }
-                                    }.value
-                                }
-                                result["cancelled"] = true
-                            } else {
-                                var active = job
-                                let requestedDownload = try payload["photoDownloadAuthorization"].map { try self.decode($0, as: NativeUploadAuthorization.self) }
-                                guard requestedDownload == nil || (isPhotos && allowCloudGaps && action == "scan-capture") else {
-                                    throw MobileFolderStore.Failure.invalid
-                                }
-                                let saved = active == nil && self.inventoryJob == nil ? try await Task.detached(operation: lookup).value : nil
-                                if active == nil, saved?.state != "complete", action == "scan-capture" {
-                                    if let previous = self.inventoryJob { try await self.cancelInventoryCapture(previous) }
-                                    let next = InventoryCaptureJob(scope: inventoryScope, device: device, id: captureId, bookmark: bookmark, exclusions: exclusions, allowCloudGaps: allowCloudGaps,
-                                        downloadAuthorization: requestedDownload)
-                                    self.inventoryJob = next; active = next
-                                    let checkCapture = { [weak self, weak webView, weak next] in
-                                        try Task.checkCancellation()
-                                        guard let self, let next, self.inventoryJob === next, let webView,
-                                              currentRoot() == root, let url = webView.url, LopuVoiceContract.sameOrigin(url, root),
-                                              UIApplication.shared.applicationState == .active
-                                        else { throw CancellationError() }
-                                        let latest = try self.store.grant(scope, id: rootId)
-                                        guard latest.bookmark == grant.bookmark, latest.sourceKind == grant.sourceKind,
-                                              !isPhotos || photos.access() != "unavailable" else { throw MobileFolderStore.Failure.changed }
-                                    }
-                                    let authorizeCapture = {
-                                        try await verifyOwner(scope, checkCapture)
-                                        try await verifyDevice(scope, device, checkCapture)
-                                        if let auth = requestedDownload {
-                                            guard let cookies else { throw MobileFolderStore.Failure.unavailable }
-                                            try await self.verifyPhotoDownload(auth, scope: scope, rootId: rootId, deviceId: device,
-                                                webView: webView, cookies: cookies, check: checkCapture)
-                                        }
-                                    }
-                                    self.startInventoryCapture(next, check: checkCapture, authorize: authorizeCapture)
-                                }
-                                let status: MobileFolderInventory.BackupStatus
-                                if let active {
-                                    switch active.result {
-                                    case .success(let capture): status = .init(capture: capture, state: "complete", ignoredCount: active.progress.read().ignored)
-                                    case .failure(let failure) where !(failure is CancellationError): throw failure
-                                    case .failure: status = .init(capture: active.descriptor, state: "interrupted")
-                                    case nil: status = .init(capture: active.descriptor, state: "running", ignoredCount: active.progress.read().ignored)
-                                    }
-                                } else if let saved { status = saved }
-                                else {
-                                    status = .init(capture: .init(id: captureId, generation: captureId, totalEntries: 0,
-                                        coverage: "partial", consistency: "per-entry", totalSkipped: 0), state: "interrupted")
-                                }
-                                result["complete"] = status.state == "complete"
-                                if isPhotos {
-                                    result["strictCaptureState"] = status.state
-                                    result["captureGeneration"] = status.generation
-                                    result["indexedEntries"] = status.totalEntries
-                                    if allowCloudGaps {
-                                        result["cloudOriginals"] = status.totalSkipped
-                                        if let fraction = active?.progress.cloud() { result["photoDownloadFraction"] = fraction }
-                                    }
-                                    if status.state == "complete" {
-                                        let capture = MobileFolderInventory.Capture(id: status.id, generation: status.generation, totalEntries: status.totalEntries,
-                                            coverage: allowCloudGaps ? status.coverage : nil, consistency: allowCloudGaps ? status.consistency : nil,
-                                            totalSkipped: allowCloudGaps ? status.totalSkipped : nil)
-                                        result["capture"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(capture))
-                                    }
-                                } else { result["backupCapture"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(status)) }
-                            }
-                        } else if ["scan-capture", "scan-page", "scan-skips", "scan-discard"].contains(action) {
-                            guard let device = payload["inventoryDeviceId"] as? String, !device.isEmpty, device.utf8.count <= 512,
-                                  let verifyDevice else { throw MobileFolderStore.Failure.invalid }
-                            try await verifyDevice(scope, device, check); try check()
-                            inventoryDevice = device; inspectedGrant = grant
-                            let inventories = self.inventories, photos = self.photos
-                            let isPhotos = grant.sourceKind == "photos"
-                            let inventoryScope = MobileFolderInventory.Scope(owner: scope, deviceId: isPhotos ? NativeUploadPartStaging.inventoryIdentity : device, rootId: rootId)
-                            let exclusions: [String]
-                            if let supplied = payload["excludedPaths"] {
-                                guard let paths = supplied as? [String] else { throw MobileFolderStore.Failure.invalid }
-                                _ = try MobileFolderReader.canonicalExclusions(paths); exclusions = paths
-                            } else { exclusions = [] }
-                            guard !isPhotos || (exclusions.isEmpty && payload["ignoreRules"] == nil &&
-                                (payload["capturePolicy"] == nil || (action != "scan-capture" && payload["capturePolicy"] as? String == "backup-supported"))) else { throw MobileFolderStore.Failure.invalid }
-                            let id = payload["captureId"] as? String
-                            let capture = try payload["capture"].map { try JSONDecoder().decode(MobileFolderInventory.Capture.self, from: JSONSerialization.data(withJSONObject: $0)) }
-                            if let job = self.inventoryJob, job.task != nil, job.scope == inventoryScope {
-                                if action == "scan-discard", job.id == capture?.id {
-                                    try await self.cancelInventoryCapture(job, preserveCompletedBackup: false); try check()
-                                } else { throw MobileFolderStore.Failure.changed }
-                            }
-                            if let capture {
-                                guard (capture.coverage != nil) == (payload["capturePolicy"] as? String == "backup-supported") else {
-                                    throw MobileFolderStore.Failure.invalid
-                                }
-                            }
-                            let offset = payload["offset"] as? NSNumber
-                            if action == "scan-page" || action == "scan-skips" {
-                                guard let offset, CFGetTypeID(offset) != CFBooleanGetTypeID(), offset.doubleValue.isFinite,
-                                      offset.doubleValue >= 0, offset.doubleValue <= 9_007_199_254_740_991,
-                                      offset.doubleValue.rounded(.down) == offset.doubleValue else { throw MobileFolderStore.Failure.invalid }
-                            }
-                            let worker = Task.detached { () throws -> Data in
-                                if action == "scan-capture" {
-                                    guard let id else { throw MobileFolderStore.Failure.invalid }
-                                    return try JSONEncoder().encode(isPhotos ? photos.capture(scope: inventoryScope, id: id) :
-                                        inventories.capture(inventoryScope, id: id, bookmark: grant.bookmark, excludedPaths: exclusions))
-                                }
-                                guard let capture else { throw MobileFolderStore.Failure.invalid }
-                                if action == "scan-skips" {
-                                    guard capture.coverage != nil else { throw MobileFolderStore.Failure.invalid }
-                                    return try JSONEncoder().encode(isPhotos ? photos.readSkipped(scope: inventoryScope, capture: capture, offset: offset!.intValue) :
-                                        inventories.readSkipped(inventoryScope, capture: capture, bookmark: grant.bookmark, offset: offset!.intValue))
-                                }
-                                if action == "scan-page" {
-                                    return try JSONEncoder().encode(isPhotos ? photos.page(scope: inventoryScope, capture: capture, offset: offset!.intValue) :
-                                        inventories.read(inventoryScope, capture: capture, bookmark: grant.bookmark, offset: offset!.intValue))
-                                }
-                                if isPhotos { try photos.discard(scope: inventoryScope, capture: capture) }
-                                else { try inventories.discard(inventoryScope, capture: capture, bookmark: grant.bookmark) }
-                                return Data()
-                            }
-                            let data = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                            result = ["rootId": rootId, "complete": true]
-                            if action == "scan-capture", payload["excludedPaths"] != nil { result["excludedPaths"] = exclusions }
-                            if capture?.coverage != nil { result["capturePolicy"] = "backup-supported" }
-                            if action == "scan-discard" {
-                                if let job = self.inventoryJob, job.scope == inventoryScope, job.id == capture?.id { self.inventoryJob = nil }
-                                result["discarded"] = true
-                            } else { result[action == "scan-capture" ? "capture" : action == "scan-skips" ? "skippedPage" : "inventoryPage"] = try JSONSerialization.jsonObject(with: data) }
-                        } else if action == "inspect" {
-                            guard let path = payload["path"] as? String else { throw MobileFolderStore.Failure.invalid }
-                            inspectedGrant = grant
-                            let photos = self.photos
-                            let localScope = MobileFolderInventory.Scope(owner: scope, deviceId: NativeUploadPartStaging.inventoryIdentity, rootId: rootId)
-                            let worker = Task.detached { try grant.sourceKind == "photos" ? photos.inspect(scope: localScope, path: path) :
-                                MobileFolderReader.inspect(bookmark: grant.bookmark, path: path) }
-                            let entry = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                            let encoded: Any = try entry.map { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ?? NSNull()
-                            result = ["rootId": rootId, "path": path, "complete": true, "entry": encoded]
-                        } else if action == "scan" {
-                            if grant.sourceKind == "photos" { inspectedGrant = grant }
-                            let photos = self.photos
-                            let exclusions: [String]
-                            if let supplied = payload["excludedPaths"] {
-                                guard let paths = supplied as? [String] else { throw MobileFolderStore.Failure.invalid }
-                                _ = try MobileFolderReader.canonicalExclusions(paths); exclusions = paths
-                            } else { exclusions = [] }
-                            guard grant.sourceKind != "photos" || exclusions.isEmpty else { throw MobileFolderStore.Failure.invalid }
-                            let inventories = self.inventories
-                            let localScope = MobileFolderInventory.Scope(owner: scope, deviceId: NativeUploadPartStaging.inventoryIdentity, rootId: rootId)
-                            let worker = Task.detached { try grant.sourceKind == "photos" ? photos.scan(scope: localScope) : inventories.legacyScan(localScope, bookmark: grant.bookmark, excludedPaths: exclusions) }
-                            let entries = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                            var encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(entries)) as! [[String: Any]]
-                            for i in encoded.indices where encoded[i]["sha256"] == nil { encoded[i]["sha256"] = NSNull() }
-                            result = ["rootId": rootId, "complete": true, "entries": encoded]
-                            if payload["excludedPaths"] != nil { result["excludedPaths"] = exclusions }
-                        } else {
-                            guard let path = payload["path"] as? String, let version = payload["version"] as? String,
-                                  version.utf8.count <= 512, let offset = payload["offset"] as? NSNumber,
-                                  let length = payload["length"] as? NSNumber,
-                                  CFGetTypeID(offset) != CFBooleanGetTypeID(), CFGetTypeID(length) != CFBooleanGetTypeID(),
-                                  offset.doubleValue.isFinite, offset.doubleValue >= 0, offset.doubleValue <= 9_007_199_254_740_991,
-                                  offset.doubleValue.rounded() == offset.doubleValue, length.doubleValue.isFinite,
-                                  length.doubleValue.rounded() == length.doubleValue, length.doubleValue > 0,
-                                  length.doubleValue <= Double(MobileFolderReader.maximumReadBytes) else { throw MobileFolderStore.Failure.invalid }
-                            let photos = self.photos
-                            let photoScope = MobileFolderInventory.Scope(owner: scope, deviceId: NativeUploadPartStaging.inventoryIdentity, rootId: grant.id)
-                            let load = { (download: PhotoOriginalDownloadControl?) async throws -> MobileFolderReader.Chunk in
-                                let worker = Task.detached {
-                                    if grant.sourceKind == "photos" {
-                                        return try photos.read(scope: photoScope, path: path, version: version, offset: offset.int64Value,
-                                                               length: length.intValue, download: download)
-                                    }
-                                    return try MobileFolderReader.read(bookmark: grant.bookmark, path: path, version: version,
-                                                                       offset: offset.int64Value, length: length.intValue)
-                                }
-                                return try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                            }
-                            let chunk: MobileFolderReader.Chunk
-                            do { chunk = try await load(nil) }
-                            catch PhotoLibraryReader.Failure.cloudOriginal {
-                                guard let input = payload["photoDownloadAuthorization"], grant.sourceKind == "photos",
-                                      let verifyDevice, let cookies else { throw PhotoLibraryReader.Failure.cloudOriginal }
-                                let auth = try self.decode(input, as: NativeUploadAuthorization.self)
-                                try await verifyDevice(scope, auth.scope.deviceId, check)
-                                try await self.verifyPhotoDownload(auth, scope: scope, rootId: rootId, deviceId: auth.scope.deviceId,
-                                    webView: webView, cookies: cookies, check: check)
-                                guard let download = self.downloadConditions.control(for: auth) else { throw PhotoLibraryReader.Failure.cloudOriginal }
-                                chunk = try await load(download)
-                            }
-                            result = ["rootId": rootId, "path": path, "chunk": try JSONSerialization.jsonObject(with: JSONEncoder().encode(chunk))]
+                            result = ["rootId": rootId, "trash": try JSONSerialization.jsonObject(with: JSONEncoder().encode(lookup))]
                         }
+                    } else if action == "publish" || action == "publication-lookup" {
+                        let request = try self.decode(payload["transfer"], as: MobileSyncStaging.Request.self)
+                        try request.validate(owner: scope)
+                        guard request.rootId == rootId else { throw MobileFolderStore.Failure.invalid }
+                        var stage: MobileSyncStaging.Stage?
+                        if action == "publish" {
+                            let approval = try self.decode(payload["approval"], as: MobileFolderStore.WriteApproval.self)
+                            guard approval.scope == request.scope, try self.store.isWriteApproved(scope, id: rootId, approval: approval) else { throw MobileFolderStore.Failure.unavailable }
+                            stage = try self.decode(payload["stage"], as: MobileSyncStaging.Stage.self)
+                        }
+                        let staged = stage, staging = self.staging
+                        let worker = Task.detached {
+                            try MobileFolderReader.checkAccess(bookmark: grant.bookmark)
+                            if let staged {
+                                let receipt = try staging.publish(request, owner: scope, bookmark: grant.bookmark, stage: staged)
+                                return MobileSyncStaging.Lookup(status: "complete", receipt: receipt)
+                            }
+                            return try staging.lookup(request, owner: scope, bookmark: grant.bookmark)
+                        }
+                        let lookup = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                        result = ["rootId": rootId, "publication": try JSONSerialization.jsonObject(with: JSONEncoder().encode(lookup))]
+                    } else if action.hasPrefix("stage-") {
+                        guard let transfer = payload["transfer"] as? [String: Any] else { throw MobileFolderStore.Failure.invalid }
+                        let encoded = try JSONSerialization.data(withJSONObject: transfer)
+                        guard encoded.count <= 32_768 else { throw MobileFolderStore.Failure.limit }
+                        let request = try JSONDecoder().decode(MobileSyncStaging.Request.self, from: encoded)
+                        try request.validate(owner: scope)
+                        guard request.rootId == rootId else { throw MobileFolderStore.Failure.invalid }
+                        if action == "stage-download" {
+                            guard let cookies, let offset = Self.integer(payload["offset"]),
+                                  let length = Self.integer(payload["length"]), length > 0, length <= FileVersionExport.rangeBytes else { throw MobileFolderStore.Failure.invalid }
+                            let file = try self.decode(payload["cloudFile"], as: NativeCloudFile.self)
+                            try file.validate(source: request.operation.mutation.source)
+                            let path = try file.download.rangePath(offset: offset, length: Int(length))
+                            let current = {
+                                try check()
+                                guard try self.store.grant(scope, id: rootId).bookmark == grant.bookmark else { throw MobileFolderStore.Failure.unavailable }
+                            }
+                            let transport = NativeFileSession(scope: scope, cookieStore: webView.configuration.websiteDataStore.httpCookieStore,
+                                cookies: cookies, check: current, invalidated: { [weak self] in if self?.generation == operation { self?.suspend() } })
+                            self.transport = transport
+                            try await transport.open()
+                            try await transport.require([("api.auth-me", [1,0,0]), ("api.files", [1,0,0]), ("api.attachment-content", [1,14,0])])
+                            try await file.check(using: transport)
+                            let bytes = try await transport.read(path, limit: Int(length)) {
+                                try file.download.validateRange($0, offset: offset, length: Int(length))
+                            }
+                            guard bytes.count == Int(length) else { throw MobileFolderStore.Failure.changed }
+                            try await file.check(using: transport); try await transport.verifyOwner(); try current()
+                            let staging = self.staging
+                            let worker = Task.detached {
+                                try MobileFolderReader.checkAccess(bookmark: grant.bookmark)
+                                var consumed = 0
+                                let progress = try staging.appendStream(request, owner: scope, offset: offset, length: bytes.count) { wanted in
+                                    defer { consumed += wanted }; return bytes.subdata(in: consumed..<(consumed + wanted))
+                                }
+                                try MobileFolderReader.checkAccess(bookmark: grant.bookmark)
+                                return progress
+                            }
+                            let progress = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                            try current(); try await transport.verifyOwner()
+                            result = ["rootId": rootId, "staging": try JSONSerialization.jsonObject(with: JSONEncoder().encode(progress))]
+                        } else {
+                            var offset: Int64 = 0, bytes = Data()
+                            if action == "stage-append" {
+                                guard let number = payload["offset"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+                                      number.doubleValue.isFinite, number.doubleValue >= 0, number.doubleValue <= 9_007_199_254_740_991,
+                                      number.doubleValue.rounded() == number.doubleValue, let encodedBytes = payload["data"] as? String,
+                                      encodedBytes.utf8.count <= 87_384, let decoded = Data(base64Encoded: encodedBytes),
+                                      !decoded.isEmpty, decoded.count <= MobileFolderReader.maximumReadBytes else { throw MobileFolderStore.Failure.invalid }
+                                offset = number.int64Value; bytes = decoded
+                            }
+                            let chunkOffset = offset, chunkBytes = bytes, staging = self.staging
+                            let worker = Task.detached {
+                                try MobileFolderReader.checkAccess(bookmark: grant.bookmark)
+                                let progress: MobileSyncStaging.Progress
+                                switch action {
+                                case "stage-begin": progress = try staging.begin(request, owner: scope)
+                                case "stage-append": progress = try staging.append(request, owner: scope, offset: chunkOffset, bytes: chunkBytes)
+                                default: progress = try staging.finish(request, owner: scope)
+                                }
+                                try MobileFolderReader.checkAccess(bookmark: grant.bookmark)
+                                return progress
+                            }
+                            let progress = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                            result = ["rootId": rootId, "staging": try JSONSerialization.jsonObject(with: JSONEncoder().encode(progress))]
+                        }
+                    } else if let policy = payload["capturePolicy"] as? String,
+                              ["strict-async", "backup-supported"].contains(policy),
+                              ["scan-capture", "scan-status", "scan-cancel"].contains(action) {
+                        let isPhotos = grant.sourceKind == "photos"
+                        let allowCloudGaps = payload["allowCloudGaps"] as? Bool == true
+                        guard payload["allowCloudGaps"] == nil || (allowCloudGaps && isPhotos && action != "scan-cancel"),
+                              policy == (isPhotos ? "strict-async" : "backup-supported"),
+                              let device = payload["inventoryDeviceId"] as? String, !device.isEmpty, device.utf8.count <= 512,
+                              let verifyDevice, let captureId = payload["captureId"] as? String,
+                              UUID(uuidString: captureId) != nil, captureId == captureId.lowercased(),
+                              payload["ignoreRules"] == nil, payload["excludedPaths"] == nil || payload["excludedPaths"] is [String]
+                        else { throw MobileFolderStore.Failure.invalid }
+                        let exclusions = try MobileFolderReader.canonicalExclusions(payload["excludedPaths"] as? [String] ?? [])
+                        guard !isPhotos || exclusions.isEmpty else { throw MobileFolderStore.Failure.invalid }
+                        try await verifyDevice(scope, device, check); try check()
+                        inventoryDevice = device; inspectedGrant = grant
+                        let inventoryScope = MobileFolderInventory.Scope(owner: scope, deviceId: isPhotos ? NativeUploadPartStaging.inventoryIdentity : device, rootId: rootId)
+                        let photos = self.photos, inventories = self.inventories
+                        let bookmark = isPhotos ? nil : grant.bookmark
+                        if let previous = self.inventoryJob, previous.scope != inventoryScope || previous.device != device {
+                            try await self.cancelInventoryCapture(previous)
+                        }
+                        let job = self.inventoryJob.flatMap { $0.id == captureId ? $0 : nil }
+                        if let job, job.bookmark != bookmark || job.exclusions != exclusions || (action != "scan-cancel" && job.allowCloudGaps != allowCloudGaps) {
+                            throw MobileFolderStore.Failure.changed
+                        }
+                        result = ["rootId": rootId, "capturePolicy": policy, "captureId": captureId, "complete": false]
+                        if payload["excludedPaths"] != nil { result["excludedPaths"] = exclusions }
+                        let lookup: @Sendable () throws -> MobileFolderInventory.BackupStatus? = {
+                            if let bookmark { return try inventories.backupStatus(inventoryScope, id: captureId, bookmark: bookmark, excludedPaths: exclusions) }
+                            return try photos.status(scope: inventoryScope, id: captureId, allowCloudGaps: allowCloudGaps).map { .init(capture: $0, state: "complete") }
+                        }
+                        if action == "scan-cancel" {
+                            if let job { try await self.cancelInventoryCapture(job) }
+                            else {
+                                try await Task.detached {
+                                    if let bookmark {
+                                        if let old = try lookup(), old.state != "complete" {
+                                            try inventories.abandonBackup(inventoryScope, capture: .init(id: old.id, generation: old.generation, totalEntries: 0), bookmark: bookmark)
+                                        }
+                                    } else {
+                                        try photos.discard(scope: inventoryScope, capture: .init(id: captureId, generation: captureId, totalEntries: 0))
+                                    }
+                                }.value
+                            }
+                            result["cancelled"] = true
+                        } else {
+                            var active = job
+                            let requestedDownload = try payload["photoDownloadAuthorization"].map { try self.decode($0, as: NativeUploadAuthorization.self) }
+                            guard requestedDownload == nil || (isPhotos && allowCloudGaps && action == "scan-capture") else {
+                                throw MobileFolderStore.Failure.invalid
+                            }
+                            let saved = active == nil && self.inventoryJob == nil ? try await Task.detached(operation: lookup).value : nil
+                            if active == nil, saved?.state != "complete", action == "scan-capture" {
+                                if let previous = self.inventoryJob { try await self.cancelInventoryCapture(previous) }
+                                let next = InventoryCaptureJob(scope: inventoryScope, device: device, id: captureId, bookmark: bookmark, exclusions: exclusions, allowCloudGaps: allowCloudGaps,
+                                    downloadAuthorization: requestedDownload)
+                                self.inventoryJob = next; active = next
+                                let checkCapture = { [weak self, weak webView, weak next] in
+                                    try Task.checkCancellation()
+                                    guard let self, let next, self.inventoryJob === next, let webView,
+                                          currentRoot() == root, let url = webView.url, LopuVoiceContract.sameOrigin(url, root),
+                                          UIApplication.shared.applicationState == .active
+                                    else { throw CancellationError() }
+                                    let latest = try self.store.grant(scope, id: rootId)
+                                    guard latest.bookmark == grant.bookmark, latest.sourceKind == grant.sourceKind,
+                                          !isPhotos || photos.access() != "unavailable" else { throw MobileFolderStore.Failure.changed }
+                                }
+                                let authorizeCapture = {
+                                    try await verifyOwner(scope, checkCapture)
+                                    try await verifyDevice(scope, device, checkCapture)
+                                    if let auth = requestedDownload {
+                                        guard let cookies else { throw MobileFolderStore.Failure.unavailable }
+                                        try await self.verifyPhotoDownload(auth, scope: scope, rootId: rootId, deviceId: device,
+                                            webView: webView, cookies: cookies, check: checkCapture)
+                                    }
+                                }
+                                self.startInventoryCapture(next, check: checkCapture, authorize: authorizeCapture)
+                            }
+                            let status: MobileFolderInventory.BackupStatus
+                            if let active {
+                                switch active.result {
+                                case .success(let capture): status = .init(capture: capture, state: "complete", ignoredCount: active.progress.read().ignored)
+                                case .failure(let failure) where !(failure is CancellationError): throw failure
+                                case .failure: status = .init(capture: active.descriptor, state: "interrupted")
+                                case nil: status = .init(capture: active.descriptor, state: "running", ignoredCount: active.progress.read().ignored)
+                                }
+                            } else if let saved { status = saved }
+                            else {
+                                status = .init(capture: .init(id: captureId, generation: captureId, totalEntries: 0,
+                                    coverage: "partial", consistency: "per-entry", totalSkipped: 0), state: "interrupted")
+                            }
+                            result["complete"] = status.state == "complete"
+                            if isPhotos {
+                                result["strictCaptureState"] = status.state
+                                result["captureGeneration"] = status.generation
+                                result["indexedEntries"] = status.totalEntries
+                                if allowCloudGaps {
+                                    result["cloudOriginals"] = status.totalSkipped
+                                    if let fraction = active?.progress.cloud() { result["photoDownloadFraction"] = fraction }
+                                }
+                                if status.state == "complete" {
+                                    let capture = MobileFolderInventory.Capture(id: status.id, generation: status.generation, totalEntries: status.totalEntries,
+                                        coverage: allowCloudGaps ? status.coverage : nil, consistency: allowCloudGaps ? status.consistency : nil,
+                                        totalSkipped: allowCloudGaps ? status.totalSkipped : nil)
+                                    result["capture"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(capture))
+                                }
+                            } else { result["backupCapture"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(status)) }
+                        }
+                    } else if ["scan-capture", "scan-page", "scan-skips", "scan-discard"].contains(action) {
+                        guard let device = payload["inventoryDeviceId"] as? String, !device.isEmpty, device.utf8.count <= 512,
+                              let verifyDevice else { throw MobileFolderStore.Failure.invalid }
+                        try await verifyDevice(scope, device, check); try check()
+                        inventoryDevice = device; inspectedGrant = grant
+                        let inventories = self.inventories, photos = self.photos
+                        let isPhotos = grant.sourceKind == "photos"
+                        let inventoryScope = MobileFolderInventory.Scope(owner: scope, deviceId: isPhotos ? NativeUploadPartStaging.inventoryIdentity : device, rootId: rootId)
+                        let exclusions: [String]
+                        if let supplied = payload["excludedPaths"] {
+                            guard let paths = supplied as? [String] else { throw MobileFolderStore.Failure.invalid }
+                            _ = try MobileFolderReader.canonicalExclusions(paths); exclusions = paths
+                        } else { exclusions = [] }
+                        guard !isPhotos || (exclusions.isEmpty && payload["ignoreRules"] == nil &&
+                            (payload["capturePolicy"] == nil || (action != "scan-capture" && payload["capturePolicy"] as? String == "backup-supported"))) else { throw MobileFolderStore.Failure.invalid }
+                        let id = payload["captureId"] as? String
+                        let capture = try payload["capture"].map { try JSONDecoder().decode(MobileFolderInventory.Capture.self, from: JSONSerialization.data(withJSONObject: $0)) }
+                        if let job = self.inventoryJob, job.task != nil, job.scope == inventoryScope {
+                            if action == "scan-discard", job.id == capture?.id {
+                                try await self.cancelInventoryCapture(job, preserveCompletedBackup: false); try check()
+                            } else { throw MobileFolderStore.Failure.changed }
+                        }
+                        if let capture {
+                            guard (capture.coverage != nil) == (payload["capturePolicy"] as? String == "backup-supported") else {
+                                throw MobileFolderStore.Failure.invalid
+                            }
+                        }
+                        let offset = payload["offset"] as? NSNumber
+                        if action == "scan-page" || action == "scan-skips" {
+                            guard let offset, CFGetTypeID(offset) != CFBooleanGetTypeID(), offset.doubleValue.isFinite,
+                                  offset.doubleValue >= 0, offset.doubleValue <= 9_007_199_254_740_991,
+                                  offset.doubleValue.rounded(.down) == offset.doubleValue else { throw MobileFolderStore.Failure.invalid }
+                        }
+                        let worker = Task.detached { () throws -> Data in
+                            if action == "scan-capture" {
+                                guard let id else { throw MobileFolderStore.Failure.invalid }
+                                return try JSONEncoder().encode(isPhotos ? photos.capture(scope: inventoryScope, id: id) :
+                                    inventories.capture(inventoryScope, id: id, bookmark: grant.bookmark, excludedPaths: exclusions))
+                            }
+                            guard let capture else { throw MobileFolderStore.Failure.invalid }
+                            if action == "scan-skips" {
+                                guard capture.coverage != nil else { throw MobileFolderStore.Failure.invalid }
+                                return try JSONEncoder().encode(isPhotos ? photos.readSkipped(scope: inventoryScope, capture: capture, offset: offset!.intValue) :
+                                    inventories.readSkipped(inventoryScope, capture: capture, bookmark: grant.bookmark, offset: offset!.intValue))
+                            }
+                            if action == "scan-page" {
+                                return try JSONEncoder().encode(isPhotos ? photos.page(scope: inventoryScope, capture: capture, offset: offset!.intValue) :
+                                    inventories.read(inventoryScope, capture: capture, bookmark: grant.bookmark, offset: offset!.intValue))
+                            }
+                            if isPhotos { try photos.discard(scope: inventoryScope, capture: capture) }
+                            else { try inventories.discard(inventoryScope, capture: capture, bookmark: grant.bookmark) }
+                            return Data()
+                        }
+                        let data = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                        result = ["rootId": rootId, "complete": true]
+                        if action == "scan-capture", payload["excludedPaths"] != nil { result["excludedPaths"] = exclusions }
+                        if capture?.coverage != nil { result["capturePolicy"] = "backup-supported" }
+                        if action == "scan-discard" {
+                            if let job = self.inventoryJob, job.scope == inventoryScope, job.id == capture?.id { self.inventoryJob = nil }
+                            result["discarded"] = true
+                        } else { result[action == "scan-capture" ? "capture" : action == "scan-skips" ? "skippedPage" : "inventoryPage"] = try JSONSerialization.jsonObject(with: data) }
+                    } else if action == "inspect" {
+                        guard let path = payload["path"] as? String else { throw MobileFolderStore.Failure.invalid }
+                        inspectedGrant = grant
+                        let photos = self.photos
+                        let localScope = MobileFolderInventory.Scope(owner: scope, deviceId: NativeUploadPartStaging.inventoryIdentity, rootId: rootId)
+                        let worker = Task.detached { try grant.sourceKind == "photos" ? photos.inspect(scope: localScope, path: path) :
+                            MobileFolderReader.inspect(bookmark: grant.bookmark, path: path) }
+                        let entry = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                        let encoded: Any = try entry.map { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ?? NSNull()
+                        result = ["rootId": rootId, "path": path, "complete": true, "entry": encoded]
+                    } else if action == "scan" {
+                        if grant.sourceKind == "photos" { inspectedGrant = grant }
+                        let photos = self.photos
+                        let exclusions: [String]
+                        if let supplied = payload["excludedPaths"] {
+                            guard let paths = supplied as? [String] else { throw MobileFolderStore.Failure.invalid }
+                            _ = try MobileFolderReader.canonicalExclusions(paths); exclusions = paths
+                        } else { exclusions = [] }
+                        guard grant.sourceKind != "photos" || exclusions.isEmpty else { throw MobileFolderStore.Failure.invalid }
+                        let inventories = self.inventories
+                        let localScope = MobileFolderInventory.Scope(owner: scope, deviceId: NativeUploadPartStaging.inventoryIdentity, rootId: rootId)
+                        let worker = Task.detached { try grant.sourceKind == "photos" ? photos.scan(scope: localScope) : inventories.legacyScan(localScope, bookmark: grant.bookmark, excludedPaths: exclusions) }
+                        let entries = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                        var encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(entries)) as! [[String: Any]]
+                        for i in encoded.indices where encoded[i]["sha256"] == nil { encoded[i]["sha256"] = NSNull() }
+                        result = ["rootId": rootId, "complete": true, "entries": encoded]
+                        if payload["excludedPaths"] != nil { result["excludedPaths"] = exclusions }
+                    } else {
+                        guard let path = payload["path"] as? String, let version = payload["version"] as? String,
+                              version.utf8.count <= 512, let offset = payload["offset"] as? NSNumber,
+                              let length = payload["length"] as? NSNumber,
+                              CFGetTypeID(offset) != CFBooleanGetTypeID(), CFGetTypeID(length) != CFBooleanGetTypeID(),
+                              offset.doubleValue.isFinite, offset.doubleValue >= 0, offset.doubleValue <= 9_007_199_254_740_991,
+                              offset.doubleValue.rounded() == offset.doubleValue, length.doubleValue.isFinite,
+                              length.doubleValue.rounded() == length.doubleValue, length.doubleValue > 0,
+                              length.doubleValue <= Double(MobileFolderReader.maximumReadBytes) else { throw MobileFolderStore.Failure.invalid }
+                        let photos = self.photos
+                        let photoScope = MobileFolderInventory.Scope(owner: scope, deviceId: NativeUploadPartStaging.inventoryIdentity, rootId: grant.id)
+                        let load = { (download: PhotoOriginalDownloadControl?) async throws -> MobileFolderReader.Chunk in
+                            let worker = Task.detached {
+                                if grant.sourceKind == "photos" {
+                                    return try photos.read(scope: photoScope, path: path, version: version, offset: offset.int64Value,
+                                                           length: length.intValue, download: download)
+                                }
+                                return try MobileFolderReader.read(bookmark: grant.bookmark, path: path, version: version,
+                                                                   offset: offset.int64Value, length: length.intValue)
+                            }
+                            return try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                        }
+                        let chunk: MobileFolderReader.Chunk
+                        do { chunk = try await load(nil) }
+                        catch PhotoLibraryReader.Failure.cloudOriginal {
+                            guard let input = payload["photoDownloadAuthorization"], grant.sourceKind == "photos",
+                                  let verifyDevice, let cookies else { throw PhotoLibraryReader.Failure.cloudOriginal }
+                            let auth = try self.decode(input, as: NativeUploadAuthorization.self)
+                            try await verifyDevice(scope, auth.scope.deviceId, check)
+                            try await self.verifyPhotoDownload(auth, scope: scope, rootId: rootId, deviceId: auth.scope.deviceId,
+                                webView: webView, cookies: cookies, check: check)
+                            guard let download = self.downloadConditions.control(for: auth) else { throw PhotoLibraryReader.Failure.cloudOriginal }
+                            chunk = try await load(download)
+                        }
+                        result = ["rootId": rootId, "path": path, "chunk": try JSONSerialization.jsonObject(with: JSONEncoder().encode(chunk))]
                     }
                 }
-                try check(); try await verifyOwner(scope, check); try check()
-                if let inventoryDevice, let verifyDevice { try await verifyDevice(scope, inventoryDevice, check); try check() }
-                if let inspectedGrant {
-                    let current = try self.store.grant(scope, id: inspectedGrant.id)
-                    guard current.bookmark == inspectedGrant.bookmark, current.sourceKind == inspectedGrant.sourceKind,
-                          current.sourceKind != "photos" || self.photos.access() != "unavailable" else { throw MobileFolderStore.Failure.changed }
-                    if let checkedApproval {
-                        guard try self.store.isWriteApproved(scope, id: inspectedGrant.id, approval: checkedApproval) else { throw MobileFolderStore.Failure.unavailable }
-                    }
-                }
-                result["roots"] = try self.store.list(scope).map { grant -> [String: Any] in
-                    var row: [String: Any] = ["id": grant.id, "name": grant.name]
-                    if grant.sourceKind == "photos" { row["sourceKind"] = "photos"; row["photoAccess"] = self.photos.access() }
-                    else { row["publicationVersion"] = Self.publicationVersion }
-                    return row
-                }
-                reply("mobile-files-result", base.merging(result) { _, new in new })
-            } catch is CancellationError { }
-            catch let wait as NativeUploadAuthorization.Wait {
-                guard (try? check()) != nil else { return }
-                reply("mobile-files-result", base.merging(["rootId": payload["rootId"] as? String ?? "", "syncWait": wait.rawValue]) { _, new in new })
-            } catch {
-                guard (try? check()) != nil else { return }
-                let error = (error as? NativeDeferredUploadStore.Failure)?.errorDescription ?? (error as? FileUploadPartStore.Failure)?.errorDescription ?? (error as? PhotoLibraryReader.Failure)?.errorDescription ?? (error as? MobileFolderStore.Failure)?.errorDescription ?? (error as? MobileDevicePairing.Failure)?.errorDescription ?? (error as? NativeDeferredUploadClient.Failure)?.errorDescription ?? "Folder access failed. Your selections were preserved; try again."
-                reply("mobile-files-result", base.merging(["error": error]) { _, new in new })
             }
+            try check(); try await verifyOwner(scope, check); try check()
+            if let inventoryDevice, let verifyDevice { try await verifyDevice(scope, inventoryDevice, check); try check() }
+            if let inspectedGrant {
+                let current = try self.store.grant(scope, id: inspectedGrant.id)
+                guard current.bookmark == inspectedGrant.bookmark, current.sourceKind == inspectedGrant.sourceKind,
+                      current.sourceKind != "photos" || self.photos.access() != "unavailable" else { throw MobileFolderStore.Failure.changed }
+                if let checkedApproval {
+                    guard try self.store.isWriteApproved(scope, id: inspectedGrant.id, approval: checkedApproval) else { throw MobileFolderStore.Failure.unavailable }
+                }
+            }
+            result["roots"] = try self.store.list(scope).map { grant -> [String: Any] in
+                var row: [String: Any] = ["id": grant.id, "name": grant.name]
+                if grant.sourceKind == "photos" { row["sourceKind"] = "photos"; row["photoAccess"] = self.photos.access() }
+                else { row["publicationVersion"] = Self.publicationVersion }
+                return row
+            }
+            reply("mobile-files-result", base.merging(result) { _, new in new })
+        } catch is CancellationError { }
+        catch let wait as NativeUploadAuthorization.Wait {
+            guard (try? check()) != nil else { return }
+            reply("mobile-files-result", base.merging(["rootId": payload["rootId"] as? String ?? "", "syncWait": wait.rawValue]) { _, new in new })
+        } catch {
+            guard (try? check()) != nil else { return }
+            let error = Self.folderErrorMessage(error)
+            reply("mobile-files-result", base.merging(["error": error]) { _, new in new })
         }
     }
 }
