@@ -1,3 +1,4 @@
+import type { ForegroundSyncProgress } from '~/fileSync/foregroundSync';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 
 /** A shared editable summary, never inferred from a Home/name/type alias. */
@@ -17,12 +18,38 @@ export const syncFolderCardBlocks: WebpageBlock[] = [{ id: 'folder-card-summary'
 
 
 /** Cached progress is historical evidence; it cannot establish runnable access. */
-export function syncFolderActivityLabel(state: { paused: boolean; rootsReady: boolean; hasRoot: boolean; taskPaused: boolean; running: boolean }): string {
+export function syncFolderActivityLabel(state: {
+ paused: boolean; rootsReady: boolean; hasRoot: boolean; taskPaused: boolean; running: boolean;
+ progress?: (ForegroundSyncProgress & { message?: string }) | null; waiting?: boolean; failed?: boolean; stopping?: boolean; photos?: boolean;
+}): string {
  if (state.paused) return 'Paused';
  if (!state.rootsReady) return 'Checking folder access';
  if (!state.hasRoot) return 'Folder access missing';
- if (state.taskPaused) return 'Paused';
- return state.running ? 'Transfer in progress' : 'No active transfer';
+ if (state.stopping) return 'Pausing…';
+ const { progress } = state;
+ if (state.waiting) return progress?.message || 'Waiting to continue sync.';
+ if (state.failed) return 'Needs attention';
+ if (state.taskPaused) return progress?.message || 'Paused';
+ if (state.running) {
+  switch (progress?.stage) {
+   case 'checking': return 'Checking access and sync conditions…';
+   case 'scanning': return state.photos ? 'Preparing Photos backup…' : 'Checking both folders…';
+   case 'reviewing': return 'Waiting for your conflict choices.';
+   case 'verifying': return 'Verifying completed work…';
+   default: return progress?.total || progress?.totalFinal
+    ? `Transfer in progress · ${progress.confirmed} of ${progress.total} operations confirmed`
+    : 'Transfer in progress';
+  }
+ }
+ if (progress?.stage === 'complete') {
+  if (progress.coverage === 'partial') {
+   const count = progress.skipped?.toLocaleString();
+   return `Partial backup · ${count ? `${count} ${progress.skipped === 1 ? 'item needs' : 'items need'}` : 'Some items need'} review.`;
+  }
+  return 'Last transfer finished.';
+ }
+ if (progress?.stage === 'retained') return 'Both versions are saved in Timeline. This conflict remains unresolved.';
+ return 'No active transfer';
 }
 
 /** Shared quick controls remain outside the optional settings disclosure. */
