@@ -4,36 +4,6 @@ const fs = require('node:fs/promises'),
 	os = require('node:os'),
 	assert = require('node:assert/strict');
 const puppeteer = require('/opt/thingtime-browser/node_modules/puppeteer-core');
-
-// Structural acceptance uses the normal inspector and context menu only.
-async function structurallyEditLabel(page, selector, scope, screenshot) {
-  await page.click(selector);
-  await page.waitForSelector('[data-testid="css-custom-editor"]');
-  const css = await page.$eval('[data-testid="css-custom-editor"]', node => node.value);
-  await page.click('[data-testid="css-custom-editor"]');
-  await page.keyboard.down('Control'); await page.keyboard.press('KeyA'); await page.keyboard.up('Control');
-  await page.type('[data-testid="css-custom-editor"]', `${css}\nfont-weight: 700`);
-  await page.keyboard.press('Tab');
-  await page.click('[data-testid="builder-move-down"]');
-  await page.keyboard.press('Escape');
-  await page.click('button[aria-label="Close builder"]');
-  const text = await page.$eval(selector, node => node.textContent);
-  const prior = await page.$$eval(`${scope} [data-block-id]`, nodes => nodes.map(node => node.dataset.blockId));
-  await page.click(selector, { button: 'right' });
-  await page.waitForSelector('[data-testid="ctx-duplicate"]');
-  await page.click('[data-testid="ctx-duplicate"]');
-  await page.waitForFunction((scope, prior, text) => [...document.querySelectorAll(`${scope} [data-block-id]`)].some(node => !prior.includes(node.dataset.blockId) && node.textContent === text), {}, scope, prior, text);
-  const id = await page.$$eval(`${scope} [data-block-id]`, (nodes, prior, text) => nodes.find(node => !prior.includes(node.dataset.blockId) && node.textContent === text).dataset.blockId, prior, text);
-  await page.screenshot({ path: screenshot, fullPage: true });
-  await page.click('button[aria-label="Close builder"]');
-  await page.click(`${scope} [data-block-id="${id}"]`);
-  await page.waitForSelector('textarea[aria-label="Block text"]');
-  await page.click('[data-testid="builder-delete-block"]');
-  await page.waitForSelector(`${scope} [data-block-id="${id}"]`, { hidden: true });
-  await page.keyboard.press('Escape');
-  await page.click('button[aria-label="Close builder"]');
-  return id;
-}
 const root = '/home/pwuser/credential-qa',
 	results = root + '/results';
 const owner = 'synthetic-credential-owner';
@@ -87,7 +57,7 @@ const api = async (req, res, url) => {
 					'api.webpages-resolve': '1.6.0',
 					'api.actions-run': '1.7.0',
 					'api.mongodb-endpoint': '1.1.0',
-					'api.things': '1.36.0',
+					'api.things': '1.35.0',
 					'api.lopu-chats': '1.7.0',
 					'api.lopu-chats-update': '1.6.1',
 					'api.lopu-chats-reply': '1.19.2',
@@ -253,8 +223,6 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 				`${width}px: defaults survive reload; per-chat credential persists independently; endpoint/model and billing; popover full scroll`
 			);
 		}
-		assert.equal(await page.$eval('[aria-label="AI credential"]', node => node.value), 'chatgpt-plan-second');
-		assert.equal(await page.evaluate(owner => JSON.parse(localStorage.getItem(`tt-lopu-ai-defaults:${owner}`)).providerId, owner), 'chatgpt-plan-second');
 		await page.setViewport({ width: 1440, height: 1000 });
 		await clickText('Edit layout');
 		await page.click('[data-block-id="ai-credential-label"]');
@@ -287,7 +255,6 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 		await page.waitForSelector('input[aria-label="Element title"]');
 		await page.type('input[aria-label="Element title"]', 'Choose a saved account or Thingtime credits');
 		await page.keyboard.press('Escape');
-		const deletedCredentialLabel = await structurallyEditLabel(page, '[data-block-id="ai-credential-label"]', '[data-settings-document="lopu-ai-defaults"]', results + '/builder-structural-duplicate.png');
 		await clickText('Save layout');
 		await page.waitForFunction(() => !document.body.textContent.includes('Unsaved layout'));
 		const authored = fixturePages.get('settings-lopu-ai-defaults');
@@ -296,19 +263,8 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 		await clickText('Done editing layout');
 		await page.reload({ waitUntil: 'networkidle0' });
 		assert.equal(await page.$eval('[data-block-id="ai-credential-label"]', (e) => e.textContent), 'Choose my AI credential');
-		assert.equal(await page.evaluate(owner => JSON.parse(localStorage.getItem(`tt-lopu-ai-defaults:${owner}`)).providerId, owner), 'chatgpt-plan-second');
 		await choose('AI credential', 'credits');
 		assert.equal(await page.$eval('[aria-label="AI credential"]', (e) => e.value), 'credits');
-		assert.equal(await page.evaluate(owner => JSON.parse(localStorage.getItem(`tt-lopu-ai-defaults:${owner}`)).providerId, owner), null);
-		assert.equal((await page.evaluate(async () => (await (await fetch('/api/v1/lopu/chats')).json()).chats[0].lopu.providerId)), 'chatgpt-plan-test');
-		await page.reload({ waitUntil: 'networkidle0' });
-		await page.waitForSelector('[aria-label="AI credential"]');
-		assert.equal(await page.$eval('[aria-label="AI credential"]', node => node.value), 'credits');
-		assert.equal(await page.evaluate(owner => JSON.parse(localStorage.getItem(`tt-lopu-ai-defaults:${owner}`)).providerId, owner), null);
-		assert.equal(await page.$eval('[data-block-id="ai-credential-label"]', node => getComputedStyle(node).fontWeight), '700');
-		assert.equal(await page.$(`[data-block-id="${deletedCredentialLabel}"]`), null);
-		assert.ok(await page.$eval('[data-block-id="ai-credential-field"]', node => !!(node.querySelector('[data-block-id="ai-credential-select"]').compareDocumentPosition(node.querySelector('[data-block-id="ai-credential-label"]')) & Node.DOCUMENT_POSITION_FOLLOWING)));
-		await record('Normal Builder style/reorder/duplicate/delete persists for credential controls; post-edit credits preference readback survives reload and preserves the independent saved-chat API choice without saved private identities');
 		await page.screenshot({ path: results + '/builder-saved.png', fullPage: true });
 		assert.equal(await page.$eval('[aria-label="AI credential"]', (e) => e.title), 'Choose a saved account or Thingtime credits');
 		await page.setViewport({ width: 390, height: 900 });

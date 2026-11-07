@@ -54,7 +54,6 @@ import {
 	sendLopuMessage,
 	setLopuSettings,
   setLopuAiDefaults,
-  setLopuManagementDefault,
 	subscribeLopuStore,
 	takeLopuNavigation,
 	takeLopuNotices,
@@ -192,7 +191,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const messenger = useMessengerApi();
 	const lopu = useLopu();
 	const navigate = useNavigate();
-	const { settings: prefs, setEnterSends, setApplyPatches, setConfirmDeletes, setHearMeOut, setLauncher } = useLopuSettings();
+	const { settings: prefs, setEnterSends, setApplyPatches, setConfirmDeletes, setHearMeOut } = useLopuSettings();
 	const defaultContext = useLopuContextProvider();
 	const contextProvider = options.context ?? defaultContext;
 	const activeLabel = useActiveDraftLabel();
@@ -259,10 +258,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 
   // Keep the existing execution default for new chats without rewriting an
   // existing conversation. A personal plan is still forced to local execution.
-  // The store keeps the preference so a chat that never stored a placement of
-  // its own still runs where the viewer asked, instead of defaulting to local.
   React.useEffect(() => {
-    setLopuManagementDefault(prefs.management);
     if (!snapshot.activeChatId) setLopuSettings({ management: prefs.management });
   }, [userId, prefs.management, snapshot.activeChatId, snapshot.settings.providerId]);
 

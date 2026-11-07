@@ -147,9 +147,6 @@ export type LopuStoreState = {
 	vault: LopuVaultInfo | null;
 	settings: LopuChatSettings;
 	aiDefaults: LopuAiDefaults | null;
-	// the viewer's device execution-placement preference (settings.lopu.management);
-	// null until the hook reports it. Separate from a chat's own stated placement.
-	managementDefault: LopuManagement | null;
 	error: string | null;
 	notices: LopuNotice[];
 	navigateSeq: number;
@@ -200,7 +197,6 @@ const createInitialState = (): LopuStoreState => ({
 	vault: null,
 	settings: EMPTY_SETTINGS,
 	aiDefaults: null,
-	managementDefault: null,
 	error: null,
 	notices: [],
 	navigateSeq: 0,
@@ -325,28 +321,6 @@ const isAvailable = (model: AiModelPublic | undefined | null): boolean => !!mode
 // A saved pin is intent, not availability. Retain it through catalog failures,
 // revocation and removal so the server can refuse it without charging credits.
 const reconcileProviderId = (requested: string | null | undefined, _providers: LopuVaultProvider[] | null | undefined): string | null => requested || null;
-
-// Execution placement (Vercel-managed vs local) is the viewer's device
-// preference, not part of a conversation's credential choice. `aiDefaults` and
-// EMPTY_SETTINGS deliberately omit it, so every path that rebuilds settings from
-// them must refill it or the send silently falls back to local management and
-// drops the server continuation the viewer asked for. The fallback is the device
-// preference, never the chat that happened to be open before: a conversation
-// that states its own placement wins for itself and must not leak to the next.
-// The source is always named at the call site and never defaulted: a default
-// parameter also fires for an absent value, so `hydrateLopuStore` — which runs
-// while `state` still holds the previous account — would silently refill the
-// next viewer's settings from the previous one's placement.
-const keepManagement = (management: LopuManagement | null | undefined): { management?: LopuManagement } =>
-	management ? { management } : {};
-
-/** Report the device execution-placement preference (settings.lopu.management).
- * Unlike setLopuSettings this never writes to the open conversation; it only
- * supplies the fallback for chats that never stored a placement of their own. */
-export const setLopuManagementDefault = (management: LopuManagement) => {
-	if (state.managementDefault === management) return;
-	setState({ managementDefault: management, ...(!state.activeChatId && !state.settings.management ? { settings: { ...state.settings, management } } : {}) });
-};
 
 export const lopuAiDefaultsCacheKey = (ownerId: string) => `tt-lopu-ai-defaults:${ownerId}`;
 const aiDefaultsOnly = (raw: Partial<LopuAiDefaults>): LopuAiDefaults => ({
@@ -559,10 +533,7 @@ export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 		vault,
 		// Defaults belong to this account; a new chat must not inherit another chat.
     aiDefaults,
-		// Execution placement is a device preference, not a per-chat credential:
-    // it must survive hydration even when account defaults supply the AI choice.
-    managementDefault: settingsCache?.management ?? null,
-    settings: reconcileLopuSettings({ ...keepManagement(settingsCache?.management ?? null), ...(aiDefaults || settingsCache || defaults), accessMode: 'ask' }, models, defaults, null)
+		settings: reconcileLopuSettings({ ...(aiDefaults || settingsCache || defaults), accessMode: 'ask' }, models, defaults, null)
 	};
 	scheduleEmit();
 	return state;
@@ -732,9 +703,7 @@ export const selectLopuChat = (chatId: string | null, options?: { silent?: boole
 	const chat = chatId ? state.chats.find((entry) => entry.id === chatId) : undefined;
 	const fromChat = settingsFromChat(chat);
 	// Existing/legacy chats never inherit a different conversation's credential.
-  const requested = chatId
-    ? { ...keepManagement(state.managementDefault), ...EMPTY_SETTINGS, ...fromChat }
-    : { ...state.settings, ...state.aiDefaults, accessMode: 'ask' as const };
+  const requested = chatId ? { ...EMPTY_SETTINGS, ...fromChat } : { ...state.settings, ...state.aiDefaults, accessMode: 'ask' as const };
   const settings = reconcileLopuSettings(requested, state.models, state.defaults, knownVaultProviders());
 	const next = { activeChatId: chatId, settings };
 	if (options?.silent) {
@@ -749,9 +718,7 @@ export const selectLopuChat = (chatId: string | null, options?: { silent?: boole
 
 export const createLopuChat = async (args?: { title?: string }): Promise<{ ok: boolean; chat?: LopuChatSummary; error?: string }> => {
 	if (!client) return { ok: false, error: 'Lopu is not connected yet' };
-	const chosen = state.activeChatId && state.aiDefaults
-		? reconcileLopuSettings({ ...keepManagement(state.managementDefault), ...state.aiDefaults }, state.models, state.defaults, knownVaultProviders())
-		: state.settings;
+	const chosen = state.activeChatId && state.aiDefaults ? reconcileLopuSettings(state.aiDefaults, state.models, state.defaults, knownVaultProviders()) : state.settings;
 	chatWrites++;
 	try {
 		const response = await client.chats.create({
