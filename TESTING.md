@@ -7205,6 +7205,330 @@ resume unfinished Android gates only when requested.
   release acceptance. Retain Android's later-date status and original app data.
 
 
+- [ ] Admin provider checkboxes persist after reload; Allow all current models
+  updates every existing compatible row, while Auto-allow new models affects
+  future discoveries only. Individually disabled rows stay disabled after sync.
+- [ ] Desktop and 390px admin layouts: checkboxes are labeled, wrap inside the
+  provider card, and disable while a save/sync is pending. Failed saves roll back.
+- [ ] A complete paginated list adds compatible new versions and hides absent
+  models from public Lopu/shared waterfall selectors. Admin keeps retired rows.
+  An explicitly selected retired model fails without a substituted/replayed turn.
+- [ ] Empty/malformed/oversized lists, authentication failures, generic 404s,
+  quota failures and partial pagination do not erase prior availability. Cold
+  database failure does not re-enable all models. Test first-sync-before-seed.
+- [ ] Concurrent processes honor the Mongo lease and cooldown; publication is
+  atomic and an expired worker cannot overwrite a newer snapshot. A concurrent
+  admin policy edit is re-read on transaction retry. Run against a replica set.
+- [ ] Cron rejects missing/wrong credentials and HEAD/POST; response is no-store.
+  Admin manual sync rejects non-admins and is rate-limited. Daily production
+  execution requires CRON_SECRET and credential scopes (README setup).
+- [ ] Model-not-found in shared chat/musing/waterfall requests refreshes only
+  that provider; personal vault errors never mutate the shared catalogue.
+  Failed discovery is reported, with no raw credential/provider error leakage.
+
+Automated regressions: `modelSync.test.ts`, `models.test.ts`,
+`models.route.test.ts`, `vercel-config.test.mjs`; existing Lopu streaming and
+model-selection suites cover the consuming surfaces. Live provider calls remain
+separate from deterministic discovery/lease tests.
+
+- Anthropic catalogue discovery: a dedicated ANTHROPIC_MODELS_API_KEY takes precedence over the legacy API key; neither reaches inference. A 401/403 shows a redacted credential hint and preserves prior availability. Raw provider bodies and credentials never enter sync reports.
+
+## Incoming mail
+
+- [ ] Add more than one account in Settings → Email; configure IMAP, POP3 and both, TLS and required STARTTLS. Reload and edit without echoing saved passwords.
+- [ ] Toggle Cloud and Local independently, including both off. Cloud-off sync refuses on the server; local-only credentials never enter a Thingtime API request. Enabling cloud on a previously local account creates the remote revision correctly.
+- [ ] Connect the local connector with the exact origin/token. Refuse an unrelated origin, wrong token, private/reserved DNS answer, invalid certificate and plaintext downgrade. Test slow/disconnected providers without losing the cached inbox.
+- [ ] Discover folders, page older mail, and compare rendered sender, subject and body with the fixture/provider. Verify POP3 UIDL identity and dot unstuffing, IMAP UIDVALIDITY changes, and no DELE/STORE/MOVE/EXPUNGE commands.
+- [ ] `/mail` and `/email` show all accounts, All inboxes and individual folders. Create a proxy from at least two different accounts; editing/removing it leaves all source folders/messages unchanged.
+- [ ] Read previously synced mail offline. Reload with the app shell already available, navigate to a message, search cached text and confirm the offline copy survives. Large messages are visibly partial; HTML/scripts/tracking pixels do not execute or load.
+- [ ] Switch/logout during load, save and sync. No previous user's mail flashes in the next account. A changed remote hostname/username never reuses an old local password. A stale browser tab cannot overwrite newer encrypted device records.
+- [ ] Retry an uncertain save with the same id/writeId and payload; changed payload and stale revision refuse. Remove the account during sync: old completion cannot recreate its children. Verify generic Thing search/read/share and foreign-folder references refuse private mail.
+- [ ] Inspect account form, checkbox groups, proxy selection, long subjects and open message on desktop and 375 px mobile; scroll to the bottom with no horizontal overflow, clipping or hidden controls.
+
+- [ ] Local mail sync passes the real browser CSP in both dev and production policy; only the fixed connector HTTP origin is allowed. Verify after a fresh document navigation, since a cached document can retain its previous CSP.
+
+## Collapsible settings cards (2026-10-17)
+
+- [ ] At desktop and 390px, visit every personal Settings category in both the
+      full page and popup. Sections start collapsed with a title, description,
+      and available status. Expand/collapse using pointer, Enter, and Space;
+      controls stay reachable and an unsaved field survives closing/reopening.
+- [ ] Admin AI Providers, Lopu, Platform, and Access & limits contain the former
+      System controls in the matching category. Verify reload, Back, and legacy
+      `/admin/system#secure-vault` and `/admin/system#lopu-accounts` links.
+      Anonymous and non-admin visitors still see the access gate.
+- [ ] Deep-linked sections (`#secure-vault`, `#lopu-instructions`,
+      `#lopu-credits`, `#gift-invites`) open their enclosing cards automatically.
+      Unrelated sections remain collapsed. A card can still be closed afterward.
+- [ ] Expand long labels, hints, endpoint names, model descriptions and wide
+      controls at 390px and in the settings popup. Text must retain readable
+      width, controls wrap below it, and there is no horizontal page overflow.
+- [ ] Run `/scripts/settings-sections.browser.html` on local Vite: the regression
+      uses real card/row components with synthetic fields to check initial state,
+      draft preservation, nested deep links and narrow layout. It performs no
+      API writes and does not prove authenticated server mutation behavior.
+
+## Automatic iOS TestFlight and vault delivery
+
+- [ ] Run the shared FileSync package and native suite on the release runner.
+  The simulator uses its host kernel: exercise the unsupported rename-flag
+  fallback with `NativeFileDestinationTests`, retain no-follow/exclusive/swap
+  protections, and reject symlinks, occupied targets and intervening mutations.
+  Errors other than `EINVAL` must not trigger the compatibility retry.
+- [ ] Run `test:ios-release`, both capability suites and `server/utils/apiFallback.test.ts`.
+  Reject foreign repo/owner/workflow/source, PR/develop/tag events, stale/replayed
+  tokens, previews, disabled policy, oversized payloads and arbitrary environment
+  keys before disclosure; confirm all responses are private/no-store and audit
+  failures return no secrets. The release request must never follow API fallback.
+- [ ] Migrate a disposable bundle through the real admin/API flow; repeat with a
+  different bundle and verify the existing value is preserved. Ordinary admin
+  lists contain metadata only; revealing a selected item requires fresh verification.
+- [ ] Run the Python package and Ruby version-allocation regressions. A missing
+  widget executable, mismatched App Group or phone/Watch/widget build number must
+  stop publishing before upload. Inspect signed entitlements on both archive and IPA.
+- [ ] After approved rollout, verify a native main push triggers the workflow,
+  web-only pushes do not, and feature-branch manual dispatch cannot publish.
+  Include shared `apple/FileSync/**` changes in this trigger check; its source
+  and tests are part of the iOS build even when no `iOS/**` file changes.
+  Check exact App Store Connect build, internal tester availability and the real
+  iPhone Home/Lock Screen widget pickers before claiming device delivery.
+
+
+### Native mail and API relay
+
+- In Email settings, verify existing accounts retain connector mode; new desktop
+  accounts offer direct app sync and new browser/iOS accounts offer API relay.
+  Change modes and reopen the editor; cloud storage and device sync stay independent.
+- Relay without a connector: keep cloud storage off, select API relay, sync IMAP
+  and POP3, reload, read cached mail, and combine folders in a proxy inbox. Confirm
+  the API receives the password only on explicit sync, never settings storage.
+- Refuse cross-origin, wrong-owner, anonymous, scoped/service, oversized, disabled
+  or non-relay requests; rate-limit before dialing; revoked sessions suppress
+  the reply. No provider exception, password or message body appears in logs.
+- Direct desktop sync uses the bundled provider, without a localhost helper.
+  Verify top-level origin isolation, cancellation, navigation and two-request
+  concurrency; failures never fall back to the API or reveal provider errors.
+- Private desktop API proxy accepts only its pinned HTTPS endpoint and same-origin
+  loopback caller. Ordinary web deployments must refuse fallback without reading
+  or forwarding credentials. Exercise both `/mail` and `/mail/sync` boundaries.
+- Build/install the signed desktop app and iOS simulator. In the iOS drawer,
+  Mail opens the selected deployment; relay uses that session and saves the device
+  cache. Do not claim direct iOS sockets, background sync or Watch mail support.
+- Add/Edit account opens its form immediately, even though settings groups default
+  to collapsed; collapsing and reopening preserves unsaved edits.
+- Check the connection selector and explanatory text at desktop and narrow mobile
+  sizes; credentials are masked and the buttons remain reachable.
+
+
+## Gmail Google authorization
+
+- [ ] In Email settings, start Google consent without an app password. On web,
+  desktop and iOS, confirm Google opens outside embedded WebViews, then return
+  and confirm the exact selected Gmail address. The Thingtime account stays the
+  same; cancel/denial never adds an account.
+- [ ] Exercise duplicate callback/finish, wrong session/origin, account switch,
+  logout, expiry and cancellation during token exchange. Only the initiating
+  live full session can finish. An uncertain finish retry creates one account.
+- [ ] Confirm plaintext Google tokens never appear in account responses, device
+  storage, provider errors or callback HTML. Removing an account erases its saved
+  grant; disabling cloud message storage preserves authorization explicitly.
+- [ ] With device-only Gmail, sync folders/messages, reload and read offline,
+  then create a device proxy inbox. No cloud message/folder documents are written.
+  With cloud enabled, verify encrypted accounted persistence and sync/delete CAS.
+- [ ] Sync a real Google account, verify token refresh, revoked consent, denied
+  scope, labels, paging and large partial messages. Synthetic transport tests
+  alone do not establish consent-screen configuration or production verification.
+- [ ] At desktop and 390px, verify Google controls, confirmation address, errors,
+  storage disclosure and Gmail editor without password/server fields; no clipping
+  or horizontal overflow. Existing IMAP/POP3 forms and transports still work.
+- [ ] Configure separate exact development/production origins in the admin vault.
+  Missing/unlisted origin or rotated client ID fails closed without fallback.
+
+- [ ] Gmail read/unread, archive, label create/rename/apply/remove, Trash and restore
+  update both the provider and the correct cached folder copies. A concurrent
+  sync cannot restore stale state after a mutation; account removal cannot revive
+  cached rows. Unsupported permanent deletion and system-label edits refuse.
+- [ ] Compose To/Cc/Bcc, Unicode subject and text; reject header injection and
+  malformed recipients. Autosave survives reload encrypted and owner-scoped.
+  Save/reopen Google drafts and refuse stale Google draft IDs, unsupported rich
+  formatting/attachments and conflicting device edits without losing content.
+- [ ] Review sender and all recipients before explicit Send. Repeated writeIds
+  never resend; changed payloads with a reused key refuse. Simulate a lost response,
+  process interruption and provider failure after dispatch: show uncertainty and
+  require checking Gmail, without automatically creating/sending another copy.
+  Known failures before dispatch leave the composer editable. Use synthetic
+  transport for sending unless the user authorizes specific real recipients.
+
+
+### Claude public catalogue and workflow save regression — 2026-10-18
+
+- With no Anthropic API key and no inference credentials, run admin sync or the
+  authenticated cron. Compare new Claude IDs and lifecycle states with Anthropic's
+  public model status table. Verify public provenance, unknown account access,
+  preserved admission toggles, and no retirement based only on an omitted ID.
+- Exercise denied API catalogue access, malformed/empty public docs, network
+  failure and explicit retired rows. Failures retain the last good catalogue.
+- Enable a newly discovered compatible model, open AI workflow model order, and
+  verify it appears without editing the compiled base list. Disabled models stay
+  absent; conservative unknown effort/speed/pricing remain unknown/default-only.
+- Save & apply a named order, reload, and independently GET the shared order.
+  Verify the same ordered IDs persist without pressing Save model order. Force
+  the shared-settings save to fail: dialog stays open, error is visible, retry
+  updates the saved template without duplication. Cancel and Save waterfall do
+  not apply shared settings; Apply waterfall stages edits as before.
+- On desktop and 390px mobile, scroll the admin page and expanded dialog fully;
+  inspect model menus, long source labels, errors, and all footer controls.
+
+- Before isolated compiled-server acceptance, supply a local JWT secret and Mongo replica set; assert responses have no `x-thingtime-api-fallback` header before creating fixtures or changing settings.
+
+## Local API fallback safety and incident cleanup (2026-10-18)
+
+- [ ] Run `test:root-data`, `test:migrations`, `test:api-capabilities`, and the seed-fixture script tests.
+- [ ] Build Nitro with `NITRO_PRESET=node-server npm --prefix remix run build:server`; run `node remix/scripts/local-api-isolation-smoke.mjs`. Require enforced OS denial for direct IP and redirected outbound traffic before launching either server. Verify both Nitro and Vite reject registration/write/root-data requests with 503, no cookies and no fallback headers. Do not use personal credentials or production Mongo configuration.
+- [ ] On the deployed admin UI, dry-run only `cleanup-accidental-catalog-account-2026-10-18`; verify exact incident identity and idle-account counts before confirming. Check the account is absent afterward, neighboring users remain, and a second dry-run reports zero. Retain delivery/audit records.
+- [ ] Missing/invalid fallback origins, normal web servers, and NODE_ENV=test must never proxy; explicit installed-desktop HTTPS bridges retain database preconditions.
+
+- OpenAI vault import: anonymous/non-admin and cross-origin requests must fail; missing server key must create nothing. Import from AI Providers, verify the redacted OpenAI entry named `OPENAI_THINGTIME_API_KEY`, reload, retry and confirm one unchanged entry. No secret may appear in browser responses. Existing chat and credential order must remain intact.
+
+## Mac menu bar and reusable device scripts
+
+- Editable-block regression: expand a saved HTML-template Component into blocks; select the title, input, button, image and a nested repeated-card field separately. Change text/style, duplicate/reorder/delete a child, save and reload. Verify Action references and source refresh still work. Exact boolean props must preserve false; details/dialog are open in edit mode and respect their binding in view mode. Restricted editor hosts must hide disallowed block types and data sources.
+- Menu list: Show all is the default, every snapshot row appears, changing to 5 and back works, search reaches the last item, and desktop/mobile full-page scrolling has no overflow. Compare a rendered icon with its actual menu-bar item; application fallback is explicitly labelled. Missing Screen Recording never prompts from telemetry; locked snapshots contain no icons/items.
+
+- Device and approval links must open `/things`, where paired devices live.
+- Installed browser Actions must reach the selected HTTPS account API with actor
+  and database preconditions intact; changed actors and cross-origin mutations
+  fail before execution. Unconfigured web servers and vault reveal still refuse.
+
+- Install both suites privately; edit the saved Component and Action source in
+  Builder, and verify page refresh retains last-known readings.
+- On the signed installed Mac app, compare inventory program/path/PID with
+  NSRunningApplication; distinguish missing readings from zero and false.
+- Compare cumulative CPU seconds with `ps -p <pid> -o time=` on Apple Silicon
+  and Intel. Mach absolute ticks must use the host timebase, not assume nanoseconds.
+- Check partial/collecting/locked/offline/no-node/empty states, select a Mac,
+  search and paginate every item; locked snapshots must contain no inventory.
+- At desktop and 390px widths expand details, long paths, output and earlier-run
+  controls, then scroll to the bottom with no clipping or horizontal overflow.
+- Render each installed suite without a fixture-supplied page container; verify
+  the suite itself centers its content and preserves mobile side padding.
+- Run harmless printf via a paired Mac. Inspect the complete source in approval;
+  deny one request, approve another, and verify exact stdout/exit status.
+- Script runs must require fresh approval regardless of always-allow policy;
+  unpaired, locked, incompatible or unapproved envelopes must fail closed.
+- Verify time/output limits, retry identity, expiry, owner isolation and no
+  result bytes in device event history. Save output only on explicit request.
+- Save a recipe before selecting a device or entering a Run ID; then run the
+  same form with both filled. Each Action must accept exactly its declared fields.
+- Save a full 16 KiB recipe beginning with literal `$input` text; execute the
+  saved Action and verify the exact source survives input defaults and validation.
+- Save full-sized output (including UTF-8 replacement characters) and verify
+  `extended.result` retains every character while searchable metadata validates.
+- Regression: inline collection pagination/search must retain items beyond
+  10,000 while rendering only the current page and including default styles.
+- Run the isolated browser fixture and focused native/backend/capability suites;
+  smoke the built manifest before deploying and repeat the real installed path.
+- Password AutoFill desktop regression (2026-10-18): from a signed installed app, open Passwords via the sidebar and Commander search, connect AutoFill, and confirm real vault metadata loads. Exercise GET and POST private-service proxy routes through a real Nitro HTTP server; preserve query/body and reject cross-origin writes without cloning the server request as a native Request. A selected server older than api.passwords 1.2.0 must reject q search clearly before forwarding credentials/body; matching-major compatible patches must pass.
+- Commander daemon trust-boundary integration: complete every HTTP/security assertion and cleanup within the 30-second suite allowance under concurrent native builds; do not treat the default five-second unit-test timeout as a server latency contract.
+- Commander Settings titlebar: repeat maximize/restore on the real screen, including native and web double-click deliveries; verify the previous frame is restored and process headers remain aligned with values after resizing.
+- Incident account cleanup: use real signup and logout notification constructors; accept only system history tied to the exact revoked fixture session. Reject unrelated content, actors and timestamps before writes.
+
+
+## Editable private settings documents
+
+- [x] 2026-10-19: Offline desktop settings render without account/router providers. Synthetic adapter tests cover owner/origin/data-plane separation, revision conflicts, cross-window Web Lock saves, lost create responses, rejected external/native sources, and stale native-operation completion after authority changes.
+- [x] 2026-10-19: Task-owned OS-sandbox browser fixture at 1280px and 375px exercises real desktop settings/Builder with synthetic native IPC: nested legend edit/save/reload, checkbox/select/port changes, secret input clearing, authority busy reset, recovery disclosure and previous/newer workspace calls. Full scroll and screenshots show no overflow. Installed native confirmations and real account-page persistence remain separate acceptance checks. Fixture API19873/19874 only; installed API28631 and direct-IP1.1.1.1 denied.
+- [ ] Enter an isolated Mongo URI, save through the native adapter and confirm the input clears. Saved block documents, preview caches and Action history must contain no URI/token/file values. Switch account/API during an operation; stale results cannot change the new workspace or leave it busy.
+- [ ] Against the intended API, personalize a private settings page, reload it, create a competing edit in another window, and verify the conflict. Capability negotiation and expected-actor/data-plane guards must fail closed after account/backend changes. Offline recovery remains usable with the API unreachable.
+
+## ChatGPT plan connections (local/self-hosted)
+
+- [ ] In the editable ChatGPT settings layout, select and edit a nested button label,
+      repeated model option and transfer-dialog text through Builder; save and reload.
+      Verify the layout persists while private fields, OAuth URLs and transfer files
+      never enter the document, generic Action inputs or source caches. Surround the
+      host with an ordinary Action and attempt a forged nested action; both must
+      leave private fields unread. Change account/database during a pending operation:
+      fields clear, the operation signal aborts and late callbacks cannot update the
+      new scope. A rejected model change restores the saved selected option.
+      Check and uncheck a transient checkbox: each click must invoke exactly one
+      adapter callback; rejecting a controlled toggle restores its prior checked
+      state without dispatching an ordinary Action.
+
+
+- On a configured local account backend, connect a real ChatGPT account through the loopback callback, verify the account against ChatGPT, choose its discovered model, and complete a Lopu response plus one read-only tool call. Compare plan usage with ChatGPT Settings → Usage; do not infer a percentage from token counts.
+- Exercise cancellation, refusal, expired/replayed callback, account switching during exchange, same-email registrations, expired tokens, rotated refresh, missing plan consent, usage limit, unavailable model, signout and remote revocation failure. Confirm stale completions cannot save under a new owner; no tokens appear in browser storage, diagnostics, responses or normal Things exports.
+- Disconnect while a response is active; verify inference and subsequent tool calls stop. Remove or disable the selected runtime, including with a saved chat pin; verify no fallback spends API credits.
+- Inspect Settings and the Lopu provider picker at desktop and 375px, scroll to the bottom, open model selectors, test long labels and keyboard focus, and refresh/account-switch while a request is pending.
+- Verify both origin manifests advertise ai-chatgpt-plan 1.1.1, ai-models 1.8.0, lopu-chats 1.7.0, lopu-chats-update 1.6.0 and lopu-chats-reply 1.21.0 on built Nitro. On Vercel/unconfigured runtime, confirm no OAuth callback, token exchange or storage starts. An explicitly selected persistent remote API must negotiate its own manifest before proxying plan actions; changing the target during negotiation must refuse without forwarding credentials.
+
+- Enable Electron local API with its managed authenticated Mongo replica set; verify stable loopback ports, independent local account/session, persisted encrypted vault records, graceful process shutdown and restart. Missing executable, unavailable OS encryption, occupied port and invalid remote DB must not fall back to production.
+- Switch API endpoints and back; verify each endpoint retains only its own session, cached private state and credentials. Old endpoint requests must stop before restart; a delayed capability response must never authorize a different destination.
+- Generate a receiving code, move one connection, import and retry. Verify source inference is aborted before ciphertext is released, target host identity is retained, duplicate import is idempotent, wrong owner/origin/session and expired/tampered packages refuse, and a lost move response recovers the same encrypted package.
+- At desktop and 375px, expand transfer controls, inspect full receiving origin/account in confirmation, select a file and test errors. Long discovered model names must remain fully readable below the native select.
+- During a delayed manifest response, change the selected API and confirm no credentials reach the replacement. Cancel a proxied streaming reply and verify its upstream request stops.
+- Save a different desktop database without restarting, close and reopen the window, and verify the active API and browser session stay on the original database until restart. Stop the parallel development app with SIGINT/SIGTERM and verify Mongo exits before its temporary profile is removed.
+- Start reconnect, then move that account before consent completes; the late callback must not restore source credentials. Switch Thingtime accounts during receiving-code generation and verify stale transfer state and pending dialogs disappear.
+- Check long source account names, receiving origins, executable paths and all transfer/setup errors at desktop and 375px. The optional MongoDB download link must not install system packages or services automatically.
+- On a fresh Electron profile with the selected API unreachable, open the recovery screen’s desktop connection controls, enable managed local MongoDB, save and restart. Verify a real local homepage and compatible manifest without signing into the cloud; changing a broken remote endpoint must also be possible from recovery.
+- Refuse an encrypted connection move that exceeds the transfer transport envelope before cancelling reconnects, aborting inference or deleting source credentials; verify the original connection remains usable.
+
+
+### Bundled desktop MongoDB
+
+- [ ] On a fresh macOS 14+ profile without Homebrew MongoDB, enable the local API and start the included server. Verify authenticated loopback-only MongoDB and a successful API write/read, then restart and confirm the record persists.
+- [ ] Reinstall the signed app and verify local data, encrypted runtime settings and selected session survive; quit and confirm only this app-owned MongoDB child stops.
+- [ ] Existing executable selections remain selected. On macOS 13, the included server gives an actionable compatibility message while remote API mode works.
+- [ ] Corrupt cached download, missing bundled binary/source/license, wrong release and unsupported architecture fail packaging verification.
+
+- [ ] Desktop public data/federation identifiers use a per-profile keyed HMAC, never an unkeyed connection-string digest. Migrating pre-upgrade encrypted settings preserves the exact existing renderer partition, including after switching databases and returning; failure to persist the alias blocks startup.
+- Agent task pages: verify desktop centering and mobile gutters; mark a todo complete with a nonempty neighboring add-todo form, reload, and confirm only that todo changed.
+- Desktop agent task identity: switch API endpoints with matching owner/task IDs and default database identity; the second endpoint must not expose or reuse the first endpoint’s browser claim.
+- Agent general security link: open it from a task; the Things settings category and Agent browsers disclosure must open and scroll to the default policy controls. Save, reload and verify the policy; restore isolated testing after acceptance.
+
+- Desktop browser/local-runtime integration: quitting waits for browser cleanup and OAuth authority release before managed Mongo shutdown completes; repeated quits and late browser IPC cannot bypass the shared barrier. Pending saved API/database settings must not change the reported running account authority before restart.
+- Device capability growth: a fully equipped Mac (65 current capability identifiers) must publish fresh state, retain every identifier in the owner device response, and populate the menu bar Builder page. Pairing and heartbeat admission share the 128-entry bound; reject 129 entries and invalid identifiers.
+
+- ChatGPT credential management refuses `X-Thingtime-Character` overrides before storage or identity resolution; normal session-selected identities still revalidate after account changes, including OAuth callbacks and encrypted connection moves.
+
+### Owned-plan onboarding regression (2026-10-18)
+
+- With a fresh unverified local/self-hosted user, connect a plan, choose its model and select it in Lopu. Verify the picker stays usable while locked, then a new text chat and reply persist without an admin grant or Thingtime credits. Reload the chat and verify the same plan remains pinned.
+- Switch to a catalog/API-key provider and to voice: existing invitation policy still applies. Disconnect or revoke the plan and confirm no fallback billing or continuation; other-owner, scoped-token and Character-override requests must fail before writes/inference.
+- Change account while catalog or provider-save requests are pending. No eligibility hint may come from cache or the old response. A failed provider save must restore the last confirmed choice and show its error; a later successful choice must survive an older failure.
+- Run `test:chatgpt-plan`, `test:lopu-ui` and `test:api-capabilities`; the plan suite includes real create/update persistence-boundary checks with isolated storage adapters. Live installed inference and desktop/mobile picker checks remain separate acceptance evidence.
+
+## Character coordination discovery
+
+- Run `npm --prefix remix run test:characters-preflight`: real loopback HTTP must reject incompatible/missing capabilities, wrong origins, redirects, HTML/malformed manifests, application errors and timeouts; classify Cloudflare 403 separately and permit a fresh successful retry. Requests carry no credentials.
+- Run `npm --prefix remix run characters:preflight -- --origin https://thingtime.com` only on the separately authorized real-account coordination path. Confirm `CAPABILITY_READY`, selected origin, compatible version, and authentication/membership both `not_checked`. Then use the assigned Chrome session and task Character to verify private-subspace read/post/reload separately; do not treat public discovery as account acceptance.
+
+- Lopu page patches: insert, replace and setBlocks preserve a page beyond the former 120-block product cap; tests use a finite representative document rather than allocating from the unbounded compatibility constant. Existing operation validation and persistence guards remain separate.
+
+- ChatGPT plan acceptance regression (2026-10-19): keep the global Vercel-management preference enabled, select an owned plan, and send a fresh message plus a follow-up. Both must execute locally, preserve the plan pin, and never show “Nothing to update”. Repeat unchanged settings with a revoked proof and confirm refusal; ordinary providers must retain server management. The floating header must reflect the selected eligible plan while voice keeps its existing invitation gate.
+
+- Suite authority regression covers direct editable menu action/source references, not only component blocks.
+
+- Responses terminal-output regression: after response.output_item.done plus response.completed with empty output, execute the finalized read-only call once, replay encrypted reasoning and matching call_id, and show the final answer. Missing/incomplete terminal events, unfinished starts, duplicate done events and conflicting terminal arguments/namespaces must execute nothing. Synthetic real-SDK streaming suite and the installed saved-plan read-only round trip pass (installed source 1f073a3b8).
+- Editable app suites: page-level element controls and subtree source bindings reference only Actions declared by that suite; expanding a page into individual blocks must not require an opaque Component wrapper.
+
+- Mac menu inventory: run the saved read Action with icon-bearing snapshots above 64 KiB; every device and thumbnail must survive the negotiated browser result budget. Check this on the installed app and production page, not only with renderer fixtures.
+
+- Commander Thingtime login: follow `Commander/docs/TESTING.md` callback registration recovery checks for native and registered-loopback handoff, fail-closed registration/capability errors, environment binding, and persisted account identity.
+
+## MongoDB health-check connection pressure
+
+- [ ] Run repeated and concurrent health checks against the same selected
+      MongoDB target. Confirm they reuse the application client and
+      coalesce overlapping checks rather than creating a client per request.
+- [ ] Confirm health checks never close a client or pool shared by application
+      requests; application reads and writes still work after health checks.
+- [ ] With distinct home and custom database selections, verify each health
+      check uses only its selected database and never reads, writes, or reuses
+      the other database's client context. Repeat while checks overlap.
+- [ ] Verify idle application sockets retire after the configured idle timeout
+      and subsequent requests reconnect successfully. Record production recovery as
+      pending until the affected production path is independently verified.
 ### Transfer speed windows (2026-10-19)
 
 - Check each decimal bit unit and logical file/folder/inode unit independently

@@ -55,6 +55,351 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint'>): ApiEndpointDoc => 
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
+    id: 'social-card', contractVersion: '1.0.1', featureVersion: '1.0.1', group: 'root',
+    title: 'Public social card', endpoint: '/social-card', summary: 'Renders an anonymous public social preview PNG.',
+    detail: 'GET accepts a normalized local path query; the controller resolves only public home-plane metadata. It ignores custom database selection and falls back to a safe generic card. HEAD returns image headers without resolving data. No arbitrary remote image URL is accepted.',
+    auth: { mode: 'none', description: 'Anonymous public projection only.' }, methods: ['GET'],
+    steps: ['GET /social-card?path=/p/<public-id>.'], requestExamples: [{ name: 'Public preview', description: 'Render a public page preview.', method: 'GET', query: { path: '/' } }],
+    responseExamples: [{ status: 200, description: 'PNG image.', headers: { 'Content-Type': 'image/png' } }]
+  }),
+  endpoint({
+    id: 'environment-gateway', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'deployment',
+    title: 'Environment API gateway', endpoint: '/.well-known/thingtime-capabilities.json',
+    summary: 'Publishes the explicitly configured environment gateway and this deployment identity.',
+    detail: 'The origin-scoped manifest includes gateway: null for standalone or explicitly dedicated builds, or environment, origin and deploymentId metadata. The stable configured alias selects its current deployment owner. Vercel deployments default to proxying documented semantic operations only after compatible feature negotiation. An explicit deployment-only THINGTIME_MONGODB_CONNECTION_MODE=dedicated executes its own handlers and uses its configured MongoDB connection after validating the environment gateway; it never accepts gateway relays or advertises gateway ownership. A dedicated build cannot serve the canonical gateway alias. Signed one-hop relays preserve the original URL and authentication context; neither metadata nor relay signatures grant user access. Discovery failures and environment/version mismatches fail closed without a MongoDB connection. No secrets or database configuration are published.',
+    auth: { mode: 'none', description: 'Public compatibility metadata only.' }, methods: ['GET'],
+    steps: ['Configure one stable alias and separate relay secret for each intended environment.', 'Negotiate api.environment-gateway 1.0.0 and the semantic operation being forwarded.', 'Compare the alias deploymentId with the local deployment identity before database access.'],
+    requestExamples: [{ name: 'Discover gateway', description: 'Credential-free origin-scoped discovery.', method: 'GET' }],
+    responseExamples: [{ status: 200, description: 'Origin manifest with optional gateway metadata.', body: { schemaVersion: 1, origin: 'https://example.test', gateway: null } }]
+  }),
+  endpoint({
+    id: 'agent-reporting', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things',
+    title: 'Private agent task reporting', endpoint: '/api/v1/agents/reporting',
+    summary: 'Delegate a distinct task Character to an existing private saved workspace and report through its saved Actions.',
+    detail: 'POST prepare binds a stable externalTaskId to the selected origin, exact private saved pages, six workspace schemas, named reporting Actions, and an existing private subspace. It reuses the task Character and never creates replacement workspace definitions. POST get revalidates the binding and reads its private records. POST report runs a named saved Action with a UUID-v4 requestId and immutable inputs. POST coordinate creates or updates one Character-authored post in the bound private subspace with an explicit renderComponent; get includes its exact readback. The independent agents.report PAT scope does not follow from things. Operation receipts fence duplicate and ambiguous writes; replay uses the same requestId and inputs. Character/account/token liveness, private membership, saved references, and resolved operation targets are checked. No generic route proxy, owner public identity fallback, credentials, or public ownership links are returned.',
+    auth: { mode: 'session-or-bearer', description: 'Owning account session or a PAT explicitly granted agents.report; restricted audience/creation-only PATs and app tokens cannot expand their authority.' },
+    methods: ['POST'], steps: ['Negotiate api.agent-reporting 1.0.0, api.auth-characters 1.0.0 and api.agent-overview 2.0.0 at the exact selected origin.', 'Prepare once using stable task identity and exact saved workspace references.', 'Report with stable request identities and verify through get.'],
+    requestExamples: [{ name: 'Read an existing task binding', description: 'Read only the authorized task at this origin.', method: 'POST', body: { operation: 'get', origin: 'https://thingtime.example', externalTaskId: '<stable-chat-id>' } }],
+    responseExamples: [{ status: 403, description: 'The independent permission or private workspace access is missing.', body: { ok: false, error: 'Agent reporting authorization is required.' } }]
+  }),
+  endpoint({
+    id: 'agent-overview', contractVersion: '2.0.0', featureVersion: '2.0.0', group: 'things',
+    title: 'Agent project overview', endpoint: '/api/v1/agent-overview',
+    summary: 'Reads authorized project, task and agent Things as a live Builder data source.',
+    detail: 'GET accepts caller-selected schema names or IDs, view, projectId, taskId, status, q and cursor. Optional comma-separated activeStatuses, blockedStatuses and completeStatuses customize status classification; classifications are included in the cursor context. Depth is numeric and column status is raw data; labels and layout belong to saved Things. Normal responses contain hierarchy rows, kanban columns, reports, questions and measured usage. stream=1 returns server-sent snapshot events, heartbeat events and explicit access errors; reconnect to reconcile changes and deletions. Every read preserves the current session, Character, personal-token restrictions, app namespace and selected data plane. Unknown measurements remain null. Writes use the ordinary Things and saved Action APIs.',
+    auth: { mode: 'session-or-bearer', description: 'Authenticated viewer with things.read; private/no-store.' },
+    methods: ['GET'], steps: ['Negotiate api.agent-overview 2.0.0.', 'Read the selected schema-scoped work graph or connect its live stream.'],
+    requestExamples: [{ name: 'Overview', description: 'Read the installed task schema.', method: 'GET', query: { taskSchema: 'agent-tasks-task', view: 'hierarchy' } }],
+    responseExamples: [{ status: 200, description: 'Authorized overview snapshot or text/event-stream.' }, { status: 401, description: 'Authentication required.' }]
+  }),
+  endpoint({
+    id: 'mail-google-callback', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'auth', title: 'Google mail consent callback', endpoint: '/api/v1/mail/google/callback',
+    summary: 'Receive a one-use Google consent result for a pending Gmail connection.',
+    detail: 'Opaque random state, S256 PKCE, fixed registered redirect origin, ten-minute expiry and originating live session bind this callback. The external browser receives only a static completion page. Linking requires confirmation of the verified address from the originating authenticated Thingtime session. No account is linked by this callback alone. No tokens, code or state are echoed.',
+    auth: { mode: 'none', description: 'Single-use OAuth state, live originating session and PKCE; this is not a general anonymous mail API.' }, methods: ['GET'],
+    steps: ['Start google-begin through the authenticated mail endpoint.', 'Google redirects here after consent.', 'Return to Email settings to confirm the selected Gmail address.'],
+    requestExamples: [{ name: 'Consent return', description: 'Google supplies a one-use authorization code and state.', method: 'GET', query: { code: '<authorization-code>', state: '<one-use-state>' } }],
+    responseExamples: [{ status: 200, description: 'Static HTML directing the user back to Thingtime.', body: 'Google authorization received. Return to Thingtime.' }]
+  }),
+  endpoint({
+    id: 'mail-sync', contractVersion: '1.0.1', featureVersion: '1.0.1', group: 'auth', title: 'Incoming mail API relay', endpoint: '/api/v1/mail/sync',
+    summary: 'Read IMAP or POP3 into a device cache without installing a connector or saving cloud mail.',
+    notes: ['Version 1.0.1 corrects the installed desktop bridge to its explicitly selected HTTPS account endpoint. The bridge first negotiates api.mail-sync 1.0.0; other origins still cannot forward credentials.'],
+    detail: 'POST operation relay, account (including transient app password, sync.local true and sync.transport relay), protocol, optional path, cursor and discover. expectedOwnerId is required in query and body. Credentials and bounded mail pass through this server in memory; neither is saved by this endpoint. Uses the same pinned public DNS, mail-only ports, verified TLS, read-only commands, 45-second deadline and ten-message pages as cloud sync. Never forwards to another Thingtime origin. Does not require cloud vault encryption configuration. The device must opt in; direct device sync never falls back here.',
+    auth: { mode: 'session-or-bearer', description: 'Full current account session; temporary, service and scoped-token accounts refused.' }, methods: ['POST'],
+    steps: ['Choose Thingtime API relay in Email device sync settings.', 'Send one bounded sync request; retain the returned version 1 batch in your encrypted device cache.'],
+    requestExamples: [{ name: 'Relay folders', description: 'Account settings include the app password only for this request.', method: 'POST', query: { expectedOwnerId: '<account-id>' }, body: { operation: 'relay', expectedOwnerId: '<account-id>', account: '<configured account>', protocol: 'imap', discover: true } }],
+    responseExamples: [{ status: 200, description: 'Transient mail batch, no cloud record written.', body: { ok: true, ownerId: '<account-id>', version: 1, folders: [], messages: [], nextCursor: null } }]
+  }),
+  endpoint({
+    id: 'mail', contractVersion: '1.2.1', featureVersion: '1.2.1', group: 'auth', title: 'Private incoming mail', endpoint: '/api/v1/mail',
+    summary: 'Connect Gmail with Google, or IMAP and POP3 accounts and combine folders in virtual inboxes.',
+    notes: ['Version 1.2.1 corrects installed desktop forwarding of real Nitro requests without relaxing origin checks. The bridge first negotiates api.mail 1.2.0 against the selected server.'],
+    detail: 'GET pages 50 encrypted owner records by kind and cursor. All requests require expectedOwnerId in the query; POST also requires it in the body. save-account and save-inbox use an id, writeId and revision. sync discovers IMAP folders or reads ten messages with a continuation cursor; POP3 is read-only and never deletes server mail. Cloud-off password accounts cannot sync here. Gmail provider accounts use Google authorization: google-begin returns a one-use consent URL and flowId; google-status returns the verified address; google-finish requires that address and the originating live browser session; google-cancel drops pending authorization. Flows expire after ten minutes. google-relay reads Gmail into a device cache without persisting messages; sync stores messages only when cloud is enabled. Gmail uses gmail.modify consent and twenty-message pages. google-drafts reads a draft by draftId or pages metadata with cursor. google-action takes id, revision, writeId and mutation: read/unread/archive/trash/untrash with remoteId; label-add/label-remove with remoteId and custom labelId; label-create/label-rename with name and optional labelId; draft-save/send with compose {to,cc,bcc,subject,text}, draftId and current messageId for existing drafts. Send requires a saved draft and explicit UI confirmation. Protected encrypted mail-operation receipts admit each immutable action once; completed retries return the result, uncertain outcomes never replay, and pre-dispatch failures return actionOutcome not-applied. Drafts with rich formatting or attachments must be edited in Gmail. No permanent message deletion. Stored account grants are never accepted from clients. Google refresh tokens stay encrypted in the existing account vault even with cloud message storage off, and never appear in account responses. Account passwords are write-only; this storage endpoint never accepts device-only passwords. sync.transport optionally selects connector, native or relay for device sync; omitted means the legacy connector. delete leaves tombstones and removes cached account contents without modifying provider mail. Both runtimes share mail record version 1.',
+    auth: { mode: 'session-or-bearer', description: 'Full current account session; temporary, service and scoped-token accounts refused.' }, methods: ['GET', 'POST'],
+    steps: ['Sign in and configure an account in Settings → Email.', 'Sync a folder, or create a proxy inbox with owned folder ids.'],
+    requestExamples: [{ name: 'Email accounts', description: 'List owned email accounts.', method: 'GET', query: { kind: 'mail-account', expectedOwnerId: '<account-id>' } }],
+    responseExamples: [{ status: 200, description: 'Private account settings without passwords.', body: { ok: true, records: [], nextCursor: null, configured: true } }]
+  }),
+  endpoint({
+    id: 'integration-ios-release', group: 'integrations', title: 'Deliver iOS release credentials',
+    endpoint: '/api/v1/integrations/ios-release', featureVersion: '1.0.0',
+    summary: 'Purpose-scoped TestFlight credential delivery using a short-lived GitHub identity.',
+    detail: 'Production only. Verifies GitHub OIDC signature, audience, immutable repository and owner IDs, main ref, exact TestFlight workflow, source SHA, allowed event and single-use token. A vault policy enables delivery; explicit migration imports an absent Apple bundle without overwriting it. No browser session or general CI credential grants access.',
+    auth: { mode: 'bearer', description: 'GitHub Actions OIDC token with audience thingtime:ios-testflight; not a Thingtime session token.' },
+    methods: ['POST'], steps: ['Configure the iOS release policy in Admin System Secure Vault.', 'Negotiate api.integration-ios-release 1.0.0.', 'Request a fresh GitHub OIDC token and submit fetch or an explicitly enabled migration.', 'Mask returned credentials and retain them only for this job.'],
+    requestExamples: [{ name: 'Release job', description: 'One request per short-lived identity.', method: 'POST', body: { operation: 'fetch' } }],
+    responseExamples: [{ status: 403, description: 'Wrong identity.', body: { ok: false, error: 'This workflow is not authorized for iOS releases.' } }]
+  }),
+  endpoint({
+    id: 'auth-characters', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'auth', title: 'Characters', endpoint: '/api/v1/auth/characters',
+    summary: 'Create private proxy identities and select a session Character.',
+    detail: 'GET pages owner-only Characters with cursor; direct Character sessions see only their own principal. GET inspect=<characterId> discloses the owner only to administrators. POST create requires a stable UUID requestId, displayName and loginMode (switch, inherit, password). POST select sets the session default; characterId:null restores the authenticated principal. Rename and disable/enable require the owner. X-Thingtime-Character selects an owned identity per request for full sessions only. Character logins cannot become their owner. Public profiles never include ownership. Tier entitlements follow the owner; content and storage usage remain individually accounted. Subspace membership is independent.',
+    methods: ['GET', 'POST'], auth: { mode: 'session-or-bearer', description: 'Full account session; scoped credentials cannot manage Characters.' },
+    steps: ['Open Settings → Characters and choose a display name and login method.', 'Create with a stable requestId, then select a session identity or use Post as.', 'Owners manage their roster; administrators can inspect a Character ID.'],
+    requestExamples: [{ name: 'Session identity', description: 'Select an owned Character.', method: 'POST', body: { operation: 'select', characterId: '<character-id>' } }],
+    responseExamples: [{ status: 401, description: 'Authentication required.', body: { ok: false, error: 'Sign in to use Characters' } }]
+  }),
+  endpoint({
+    id: 'passwords', contractVersion: '1.6.1', featureVersion: '1.6.1', group: 'auth', title: 'Private password manager', endpoint: '/api/v1/passwords',
+    summary: 'Manage encrypted credentials using the current full account session.',
+    notes: ['The installed desktop bridge forwards real Nitro requests to the selected HTTPS endpoint; the selected endpoint and same-origin protections remain required. It negotiates the selected server before forwarding private requests, requiring api.passwords 1.2.0 for q search and 1.1.0 otherwise.'],
+    detail: 'Version 1.6.1 corrects saved website interpretation consistently in catalog domains and fill verification: unambiguous bare DNS hosts (with optional port/path) mean HTTPS, explicit HTTPS URLs retain exact scheme/port/subdomain equality, and wildcard hosts, embedded credentials, scheme-relative or backslash-ambiguous values do not authorize fill. Saved values are preserved; current browser-session verification remains required. Explicit HTTPS IP and single-label URLs retain existing behavior; HTTP fill remains unsupported. Version 1.5 adds verification-settings/status/lock/forget, encrypted entry.verificationWindow and optional verify-passkey context {purpose,rp,entryId?,origin?,requestHash?}. Default reuseRecentDeviceVerification:true with five minutes absent an explicit window; off preserves preferences but requires a fresh account-password approval and invalidates previous grants. Device trust is enrolled only by successful current-password confirmation, with finite session-bound intervals or durable Never for this account/origin/device across logout. Explicit Forget or password reset/change revokes trust; Lock ends current ceremonies but preserves Never. Each new ceremony binds purpose/RP/selected entry/request/session, and dependent passkeySession includes the same context. New fill returns only selected username/password after exact-origin matching and approved context. Settings alone never grant access. Ordinary legacy read authorization and required native OS evaluation remain; the shared boolean only requests Apple-supported recent device-unlock reuse, never a Never/long-duration OS bypass; export/rotation/admin gates do not inherit remembered approval. Version 1.4 adds POST verify-passkey with expectedOwnerId, requestId (UUID) and password. It confirms the current account password under the passkey-management rate limit, rechecks the exact live session, and returns verified:true, the requestId and a non-secret sessionBinding for one browser passkey ceremony. Every dependent catalog/read/save request carries passkeySession:{requestId,binding:sessionBinding}; the API compares its origin/account/request/session fingerprint and rechecks live revocation before returning. Failed-write retries retain that binding and require fresh password confirmation again, so replacing the session for the same owner cannot resume an older ceremony. The binding is not a bearer grant; it creates no session and reveals no token or secret. Accounts without a password receive an explicit refusal. Version 1.3 adds optional entry.icon ({kind:url,url:HTTPS} or {kind:attachment,fileId}) to save/read/export and paged list metadata. Icons require explicit user choice; no automatic URL discovery or server-side fetching occurs. URL credentials and other protocols are refused. Icon presentation is separately account-vault encrypted, so listing never unlocks field values; malformed old icon envelopes use a generic fallback. Attachments must be ready, owned password-purpose files bound to the same entry. GET pages metadata with an opaque cursor; previews=1 optionally adds only username/email subtitles for existing records through a bounded private projection, never password/OTP/signing fields. catalog fillEligible accepts only canonical website login passwords. Optional q performs a case-insensitive literal substring search of all owned titles before pagination; trim surrounding whitespace, keep q on every page, and reset the cursor when q changes. Search matching uses title metadata; optional previews decrypt only the selected page for the allowlisted username projection. POST export returns up to 50 decrypted entries per page for an explicit backup. POST catalog pages native AutoFill names, exact HTTPS domains and public passkey identifiers without secret values. POST read unlocks one owned entry through the live session; save uses a stable id, writeId and revision; delete leaves a value-free tombstone. All POST requests require expectedOwnerId. Values never enter generic Thing APIs or history. Server-assisted recovery preserves entries after password reset. Version 1.6 adds optional entries[].websiteIcon on previews=1 and POST website-icon { id, revision, expectedOwnerId }, returning private no-store sanitized PNG bytes or 204. Only saved unconcealed HTTPS URL origins are tried in order; paths, query strings, credentials and secret fields are never sent. Explicit icons override automatic icons. Every redirect and discovered icon uses public DNS validation with pinned HTTPS sockets. No third-party favicon service is used. Version 1.1 removes arbitrary editor/import size and count caps and preserves extended 1PUX data. Full-session file-start, file-parts, file-complete, file-list, file-download, file-delete and file-abort manage encrypted attachment Things by entryId. Metadata and file keys are account-vault encrypted; object storage receives authenticated ciphertext frames. Generic attachment routes refuse password-purpose objects. Private upload permission and storage accounting still apply.',
+    auth: { mode: 'session-or-bearer', description: 'Full user session only; scoped credentials and service accounts are refused.' }, methods: ['GET', 'POST'],
+    steps: ['Sign in to a full Thingtime account.', 'GET metadata, then POST read, save or delete with expectedOwnerId.'],
+    requestExamples: [{ name: 'Passwords', description: 'List owned entry metadata.', method: 'GET' }],
+    responseExamples: [{ status: 200, description: 'Private metadata.', body: { ok: true, entries: [], nextCursor: null, configured: true } }]
+  }),
+  endpoint({
+    id: 'drafts', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'things', title: 'Private drafts and templates', endpoint: '/api/v1/drafts',
+    summary: 'Autosave unfinished Things and posts to the current account; reuse post templates.',
+    detail: 'Owner-only, quota-accounted snapshots. Writes use an expected actor, revision and stable write id. Files stay private and durable until the draft is discarded or published. Templates are copied into fresh working drafts and never consumed. Generic Thing CRUD cannot access this protected kind.',
+    auth: { mode: 'session-or-bearer', description: 'Full account session; app tokens and personal access tokens are refused.' },
+    methods: ['GET', 'POST'], steps: ['GET to page through your drafts or read an exact id.', 'POST save, delete, from-post, instantiate or recover with expectedActor.'],
+    requestExamples: [{ name: 'Drafts', description: 'List private post drafts and templates.', method: 'GET', query: { surface: 'post' } }],
+    responseExamples: [{ status: 200, description: 'Private drafts.', body: { ok: true, drafts: [], nextCursor: null } }]
+  }),
+
+  endpoint({
+    id: 'builder-workspaces', contractVersion: '1.0.1', featureVersion: '1.0.1', group: 'builder',
+    title: 'Service workspaces', endpoint: '/api/v1/builder/workspaces',
+    summary: 'Folder-backed service management for builder apps, with live role and customer-scoped access.',
+    detail: 'GET reads a 250-record cursor page from one workspace (maximum 5,000 records). POST accepts initialize, save, archive, move, bindPage, configureMaps, searchAddresses and place. Initialization creates the owner Admin membership; it cannot be removed or demoted. Archive is reversible and preserves related history. Records are ordinary quota-accounted data Things, organized in native folders. Admins manage members; Employees and Lopu users manage operations; Customer and B2B members see only their linked customer, properties, jobs and visits. Every linked reference must belong to the same workspace. Updates require expectedUpdatedAt. Comments and media use the existing Thing comment/upload APIs and recheck the live workspace membership on every read. No caller-selected owner, query, route, code or credentials are accepted.',
+    auth: { mode: 'session-or-bearer', description: 'A full first-party Thingtime user session or user JWT. Scoped PAT/app credentials and custom data endpoints are not supported.' },
+    methods: ['GET', 'POST'],
+    steps: ['Negotiate api.builder-workspaces >= 1.0.1 against this origin. Google Places configuration failures return 409 with safe setup guidance; quota returns 429 and temporary provider failures return 502.', 'Initialize with a stable rootId, name and IANA timeZone; retrying resumes folder creation.', 'Save typed records with stable ids and expectedUpdatedAt on edits. Follow nextCursor until null.', 'Archive memberships to revoke access immediately, including inherited comments and media.'],
+    requestExamples: [{ name: 'Read workspace', description: 'Read records visible to the current role.', method: 'GET', query: { rootId: 'my-service-workspace' } }, { name: 'Create workspace', description: 'Create an owned folder structure.', method: 'POST', body: { operation: 'initialize', rootId: 'my-service-workspace', name: 'My service business', timeZone: 'Australia/Melbourne' } }],
+    responseExamples: [{ status: 200, description: 'Authorized workspace records.', body: { ok: true, role: 'Admin', records: [], nextCursor: null } }, { status: 409, description: 'Stale edit; reload before retrying.', body: { ok: false, error: 'This record changed. Refresh before saving your edits.' } }],
+    notes: ['tt:service-workspace is a dynamic custom audience, valid only for an owner-matched workspace record or its bound builder page. It grants read/comment, never generic shared write. Memberships are owner-private.', 'Google Maps requires a separately configured, HTTP-referrer-restricted GOOGLE_MAPS_JAVASCRIPT_API_KEY in the owner Secure Vault; this key is intentionally browser-visible to authorized workspace readers. GOOGLE_PLACES_API_KEY stays server-only and enables fixed Google Places autocomplete/detail calls. configureMaps selects an owned Vault environment, null for Ungrouped, or __auto__ for unique matching entries. Ambiguous key matches fail closed. Responses expose only the intentionally browser-visible JavaScript key; they never expose the server Places key. Place IDs are retained; Google coordinates are fetched for the map without a persistent coordinate cache.']
+  }),
+	endpoint({
+		id: 'things-actions', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things', title: 'Thing actions',
+		endpoint: '/api/v1/things/actions', methods: ['POST'],
+		summary: 'Dispatch an explicit semantic action against a Thing by ID, irrespective of its presentation.',
+		detail: 'Accepts only id and action=send-to-lopu. This first action supports owned private ready Watch recording posts and standalone audio Things. The protected recording writer re-resolves source ownership, privacy, binding, ready state and enabled processing consent. Stable jobs deduplicate requests; transcription precedes a private Lopu conversation with normal billing and sensitive-tool confirmation. This is not arbitrary crystal mutation or permission inheritance. Existing /api/v1/things CRUD remains canonical; the recordings send-to-lopu operation is a compatibility adapter to this same dispatcher. No owner, endpoint, credentials or transcript may be supplied. The response includes ownerId and the action result, not recording settings. Ambiguous failures must be reconciled in recording activity, not blindly retried.',
+		auth: { mode: 'session-or-bearer', description: 'Full first-party user session only. Temporary, service, app, device and PAT actors are rejected. Same-origin application/json, 2 KiB maximum body. Uses the shared subscription-aware lopu.recordings account rate bucket; unlimited tiers still obey all security and provider limits. Private no-store responses.' },
+		steps: ['Negotiate api.things-actions >=1.0.0 with matching major on the selected origin.', 'Select the home data source; custom data sources return 409 to prevent cross-database ID collisions.', 'Read current recording consent and explicitly confirm sending this Thing to Lopu.', 'POST the exact Thing ID and action; inspect recording activity for progress.'],
+		requestExamples: [{ name: 'Send recording Thing', description: 'Explicitly act on this recording.', method: 'POST', body: { id: 'watch-upload-your-id', action: 'send-to-lopu' } }],
+		responseExamples: [{ status: 200, description: 'Handoff queued or already requested.', body: { ok: true, ownerId: 'your-user-id', message: 'Recording queued for Lopu.' } }, { status: 403, description: 'Processor not enabled or source not eligible.', body: { ok: false, error: 'Enable recording processing first.' } }]
+	}),
+	endpoint({
+        id: 'lopu-background-tasks', contractVersion: '1.3.2', featureVersion: '1.3.2', group: 'lopu', title: 'Background AI tasks',
+        endpoint: '/api/v1/lopu/tasks', methods: ['GET', 'POST'],
+        summary: 'Observe and stop account-owned background AI requests without replaying them.',
+        detail: 'Version 1.3.2 fences deployment-pinned callbacks after gateway promotion and reconciles expired old-deployment roots on an authenticated tasks read without replaying uncertain work. Claimed executors retain their reservation until acknowledgment. Version 1.3.1 keeps explicit or saved personal-plan connections out of Vercel Workflow; their ordinary background transport still uses the canonical authenticated reply handler. Version 1.3 adds explicit management: server on chat requests. It starts a durable Workflow that checkpoints and resumes saved safe errors without a browser. Tasks expose management, rootTaskId and workflowStatus; GET also returns an opaque contextKey for origin/data-source fencing. Stop cancels the entire workflow, including scheduling gaps. A root reservation fences child admission against finalization; the conversation stays locked until each claimed executor saves its final output and acknowledges completion. Expired heartbeats alone never unlock uncertain work. An unacknowledged worker appears as needs-attention with stage Waiting for worker to stop; it cannot be bypassed by a fresh send, and a late completion finishes Stop automatically. Each step revalidates the original live session, chat membership, provider permissions and billing. Five successive recoverable failures use exponential backoff then require review; uncertain in-flight actions and confirmations are never replayed. Server management currently requires the home account database; custom database sessions must choose client management. Version 1.2 adds POST { action: "note", id, noteId, text } (up to 8000 characters, noteId 1–36 letters/digits/hyphens). It persists an idempotent membership-gated user message and returns messages plus active. It never cancels or restarts the task. Chat providers consume notes after a response/tool batch; notes arriving after the last boundary remain in history for the next reply. Negotiate this feature before opting into X-Thingtime-Background-Id on chat replies, voice replies, musings or AI completions. The header is an immutable operation ID: identical retries return the existing task with HTTP 202; different payloads return 409. X-Thingtime-Task-Owner fences account changes. Canonical handlers retain their authentication, provider, permission, quota and billing checks. A SharedWorker observes jobs while origin tabs remain; Nitro and Vercel waitUntil drain the canonical handler even after every tab closes. Version 1.1 removes the total execution deadline: a renewable worker lease detects a lost worker without stopping a healthy task. Each saved transport window retains up to 2 MiB of private output; chat checkpoints rotate windows without capping total work. GET lists up to 100 recent tasks without output; GET ?id=...&offset=0 returns a bounded 65536-character output slice, next offset and total length. The task contains responseStatus and contentType for reconstructing its response. Polling never re-executes an action. A persisted safe error may resume automatically; missing receipts or uncertain tool effects require review. POST {id,action:"stop"} requests cancellation. Alternatively requestId stops an operation before admission using an immutable cancellation marker. Task output is protected binary operational state; no provider credentials or request headers are stored. Tasks are fenced to account, browser-facing origin and selected data source. Output access expires after seven days (410); expired bytes are lazily cleared on the next task read, while the small immutable operation marker remains to prevent replay. Chat transcript access is rechecked before returning its task output.',
+        auth: { mode: 'session-or-bearer', description: 'Full first-party account only; same-origin, private no-store. Every read and cancellation rechecks identity and task scope.' },
+        steps: ['Negotiate api.lopu-background-tasks >=1.0.0 on this origin.', 'Start a supported AI request with a fresh operation ID and expected owner header.', 'Retain the accepted task ID; observe its output without resubmitting.', 'Review partial output before explicitly continuing interrupted work.'],
+        requestExamples: [{ name: 'Stop task', description: 'Stop only this owned execution.', method: 'POST', body: { id: 'lopu-background-example', action: 'stop' } }],
+        responseExamples: [{ status: 200, description: 'Owned task overview.', body: { ok: true, ownerId: 'your-user-id', tasks: [] } }, { status: 404, description: 'No task in this account and origin.', body: { ok: false, error: 'Task not found.' } }]
+    }),
+	endpoint({
+		id: 'ai-complete', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'lopu', title: 'AI connection waterfall',
+		endpoint: '/api/v1/ai/complete', methods: ['POST'],
+		summary: 'Complete text through an explicit ordered waterfall of your own Secure Vault endpoint connections.',
+		detail: 'Optional background transport: negotiate api.lopu-background-tasks 1.0.0 and send X-Thingtime-Background-Id plus X-Thingtime-Task-Owner; HTTP 202 returns an idempotent task for polling its original response. Accepts connectionIds (one to four unique owned vault IDs), prompt (1–40000 characters), and optional system (up to 8000 characters). No inline credentials, URLs, tools, owner IDs, model overrides or audio. Connections retain their own endpoint, token and model. Supports the existing Anthropic Messages, Gemini generateContent and OpenAI-compatible adapters. Validates the entire selection before external delivery, then re-resolves each owned connection immediately before use. Tries each connection once with a 20-second transport deadline and 80-second waterfall budget. Only network/timeout and HTTP 401/403/408/429/500/502/503/504/529 permit fallback; invalid configuration, malformed output, other HTTP failures and caller cancellation stop. HTTPS/host allowlisting, public DNS checks, refusal of redirects and response-size limits apply. Claude session tokens are not endpoint credentials and are rejected. This route does not implement a personal Claude Code runtime or transcription. Text goes to the selected endpoints and is not persisted by this route. All inference is billed to the selected connection owner; platform and CI credentials are never selected implicitly.',
+		auth: { mode: 'session-or-bearer', description: 'Live full first-party user account only; temporary/service accounts and scoped app/PAT/device tokens are rejected. Same-origin JSON. Protected subscription tier controls the account rate: Free/custom tiers use the configured ai.complete rule (default 20 per ten minutes), Plus 5x, Pro/PAYG unlimited. Stable account buckets survive session/IP/tier changes. Subscription or limiter outages fail closed with 503; finite quota exhaustion returns 429 with Retry-After. Provider quotas, body limits and security checks still apply.' },
+		steps: ['Create endpoint connections in Settings → Secure Vault.', 'Negotiate api.ai-complete >=1.1.0 with matching major on this origin.', 'Send their IDs in your desired fallback order with the text.', 'Inspect the chosen connectionId and redacted attempts; a configured connection is not proof of quota availability.'],
+		requestExamples: [{ name: 'Text completion', description: 'Try a second owned connection only if the first is unavailable.', method: 'POST', body: { connectionIds: ['your-primary-id', 'your-fallback-id'], prompt: 'Summarize this transcript.', system: 'Return concise notes.' } }],
+		responseExamples: [{ status: 200, description: 'Completion and safe routing trace.', body: { ok: true, text: 'Notes', connectionId: 'your-fallback-id', attempts: [{ connectionId: 'your-primary-id', outcome: 'unavailable', status: 429 }, { connectionId: 'your-fallback-id', outcome: 'succeeded' }] } }, { status: 503, description: 'All selected connections unavailable.', body: { ok: false, error: 'The selected AI connections are unavailable. Check their status and allowance.', attempts: [] } }]
+	}),
+	endpoint({
+		// 1.7.1 resolves inherited child ACLs only through their verified private parent.
+		id: 'lopu-recordings', contractVersion: '1.7.1', featureVersion: '1.7.1', group: 'lopu', title: 'Watch recording automation',
+		endpoint: '/api/v1/lopu/recordings', methods: ['GET', 'POST'],
+		summary: 'Opt in to private Watch audio transcription, generated notes/todos and daily reminders; choose a paired personal device or API providers. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
+		detail: 'Version 1.7.1 also resolves inherited attachment/comment privacy through the exact still-private owned parent, rejecting mixed ACLs and rebound children. Version 1.7 adds optional GET query transcriptAttachmentIds (1–20 comma-separated attachment IDs, deduplicated). This bounded read returns only {ok, ownerId, transcripts:[{attachmentId,text}]} and does not call providers or return settings. Sources must still be owned, private, ready and correctly bound; committed relational transcript comments must retain their owner, target and private ACL. Missing, foreign, shared, deleted and untranscribed recordings are omitted without revealing their existence. Text is assembled in checkpoint order with generated headers removed, maximum 60000 characters per file. No scratch transcripts or credentials are returned; responses are private/no-store. Normal GET/POST jobs also include attachmentId. Version 1.5 also accepts an owned private ready standalone recording Thing ID in the existing postId field for explicit queue and send-to-lopu operations. Automatic discovery remains Watch-only; standalone recording libraries are never scanned implicitly. Source attachment identity, ownership, purpose, ready state, privacy and binding are rechecked before disclosure and transactionally fenced before writes. Transcript comments target that recording Thing without changing its crystal or binding. Version 1.4 adds runtimeDeviceId (null or an owned eligible paired device), provider.mode/device/devices metadata and per-job runtimeDeviceId. Personal mode downloads audio to that device for local transcription and sends only text to its native Claude Code session; offline jobs wait without provider fallback. Explicit retry uses the current processor while preserving checkpoints. Version 1.3 adds op=send-to-lopu with postId, and handoffStatus/handoffChatId on jobs. Explicit handoff lets Lopu act on the transcript in a private conversation with normal billing and tool confirmation rules; automatic notes/todos alone still cannot execute arbitrary tools. Home-origin account feature. GET returns ownerId, settings, provider configuration availability, redacted provider choices, the newest 50 processing jobs and newest 100 recording todos. POST accepts op=settings with a partial settings object (enabled, createTodos, createNotes, dailyReminders booleans; IANA timeZone; reminderHour 0–23; transcriptionProviders and analysisProviders ordered lists of 1–4 unique connection ids), op=queue with an owned private Watch post or standalone recording Thing ID in postId, op=retry with a failed/retry/paused job id, or op=todo with an owned generated todo id and completed/reminders booleans. Connection ids must be owned Secure Vault API connections or configured/configured-anthropic platform connections, and support their stage. Defaults remain configured for both stages. OpenAI connections support transcription and analysis; Anthropic API keys support analysis only, not audio or Claude Code setup tokens. Availability/authentication/quota failures fall through the selected list once per connection, with consent checked before each attempt; malformed requests and security failures stop. GET provider choices expose id, name, provider, transcription/analysis compatibility and configured status, never tokens or endpoints. Configured is not a live quota check. Opt-in defaults off; new uploads are discovered after first setup. Queued jobs and scheduled reminders are durable and idempotent. In provider mode audio/transcript go only to selected providers; audio is limited to 24 MiB. Full transcripts become private relational comments, and generated notes/todos are quota-billed private data Things. Model output cannot invoke tools, buy anything or contact users. Completion, deletion and pausing stop reminders; local calendar dates deduplicate them across DST. Existing recordings require an explicit queue request. Retries resume saved checkpoints.',
+		auth: { mode: 'session-or-bearer', description: 'Full, live first-party account session only; app, Watch and personal scoped tokens are not account sessions. Mutation requires a non-temporary user account and same-origin JSON. Protected subscription tier controls the account mutation rate: Free/custom tiers use the configured things.write rule, Plus 5x, Pro/PAYG unlimited. The existing recordings account bucket survives tier/session/IP changes. Subscription or limiter outages fail closed with 503; finite exhaustion returns 429 with Retry-After. Provider quotas, attachment limits, privacy checks and bounded job processing remain unchanged.' },
+		steps: ['Sign in on the same domain as your Watch.', 'Version 1.4 adds nullable settings.runtimeDeviceId (default null: existing API waterfall). Select only an owned live paired session advertising recordings.personal.v1. GET provider adds mode, device and devices with id/name/online/lastSeenAt; configured means paired, not proven runtime or provider health. No credentials are returned.', 'New jobs snapshot the selected processor; changing settings pauses mismatched in-flight work. An explicit retry reassigns a paused/failed/retry job to the current processor while preserving saved transcript/content checkpoints. GET jobs include runtimeDeviceId or null.', 'Open /lopu/recordings, review the selected processor disclosure and enable automation. Personal jobs download to that device, transcribe locally, and send only text to native Claude Code. They never silently fall back to cloud credentials.', 'Upload a recording and inspect its private comments, generated Things and reminder todos. Personal workers can discover only their own account uploads even when the origin has no cron.', 'On retry, job.error identifies failures using fixed safe text; raw provider errors and signed URLs are never returned.'],
+		requestExamples: [{ name: 'Enable recordings', description: 'Opt in and select the reminder time zone.', method: 'POST', body: { op: 'settings', settings: { enabled: true, timeZone: 'Australia/Melbourne', reminderHour: 9 } } }, { name: 'Complete a todo', description: 'Stop daily reminders for this task.', method: 'POST', body: { op: 'todo', id: 'your-todo-id', completed: true } }],
+		responseExamples: [{ status: 200, description: 'Private account-scoped automation state.', body: { ok: true, ownerId: 'your-user-id', settings: { enabled: true, timeZone: 'Australia/Melbourne', reminderHour: 9 }, jobs: [], todos: [], provider: { configured: true, name: 'Configured AI provider', maxAudioBytes: 25165824 } } }, { status: 401, description: 'A full signed-in account is required.', body: { ok: false, error: 'Sign in to manage your recordings.' } }]
+	}),
+	endpoint({
+		id: 'lopu-recordings-personal', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'lopu', title: 'Personal recording worker',
+		endpoint: '/api/v1/lopu/recordings/personal', methods: ['GET', 'POST'],
+		summary: 'Outbound paired-device broker for private local transcription and native AI text processing.',
+		detail: 'Version 1.1 adds explicitly queued private standalone recording sources without changing the bounded claim/audio/result shapes. The source remains the recording Thing itself; private comments are relational children. Home-origin device API. POST JSON up to 512 KiB accepts op=claim, heartbeat with jobId/leaseId, complete with jobId/leaseId/transcript/analysis, or failed with jobId/leaseId and stage transcription|analysis|runtime. Claim returns ok and job:null when idle, or job with jobId, leaseId, audio type/bytes, optional saved transcript and organize flag. Jobs contain no owner IDs, object URLs, commands or credentials. GET with jobId/leaseId returns the authorized audio bytes, not a redirect. Audio <=24 MiB, transcript <=60000 characters, analysis <=64 Ki characters with at most 20 grounded note/todo items. Leases heartbeat every 30 seconds, expire after 90 seconds idle, and cannot exceed ten minutes. Current selected device, live paired session, consent and source privacy are checked before disclosure and transactionally fenced before content writes. Completed receipts bind exact owner/device/session/lease/result; retrying identical results does not repeat content or inference. One job per selected device; failed jobs retain that processor and never enter cloud fallback. Existing private-Thing/comment/quota rules apply. Local runtime tools are disabled: automatic organization creates private content, not arbitrary actions.',
+		auth: { mode: 'session-or-bearer', description: 'Only a live ttnode_ paired device credential advertising recordings.personal.v1, explicitly selected by its owner for recordings. Browser cookies, app tokens, CI credentials and Claude setup tokens are not accepted. Same-origin requests or originless native requests only. Account subscription rate applies: Free/custom configured things.write allowance, Plus 5x, Pro/PAYG no product request-rate cap; bounded bodies/jobs/leases still apply. Responses are private/no-store.' },
+		steps: ['Negotiate api.lopu-recordings-personal >=1.0.1 with matching major at the exact origin before sending a credential.', 'Pair the outbound worker and select it in /lopu/recordings.', 'Claim, download/transcribe locally, heartbeat, submit grounded text results, and retry only identical completion payloads after an uncertain response.', 'An identical completion still being saved returns private HTTP 503 with Retry-After: 1; retry the same payload without repeating inference. A conflicting result, revoked authority or invalid lease remains HTTP 409.'],
+		requestExamples: [{ name: 'Claim your next recording', description: 'Uses only the credential owner and selected device.', method: 'POST', body: { op: 'claim' } }],
+		responseExamples: [{ status: 200, description: 'No queued job for this device.', body: { ok: true, job: null } }, { status: 401, description: 'Pair a device first.', body: { ok: false, error: 'Pair a personal Thingtime device first.' } }]
+	}),
+	endpoint({
+		id: 'lopu-recordings-run', contractVersion: '1.6.0', featureVersion: '1.6.0', group: 'lopu', title: 'Run recording automation',
+		endpoint: '/api/v1/lopu/recordings/run', methods: ['GET', 'POST'],
+		summary: 'Protected scheduler/admin entry point for durable Watch recording jobs and due daily reminders.',
+		detail: 'Version 1.6 also drains durable account-storage recovery jobs before provider-dependent work, with lease fencing, bounded retries and a storageRecovery result containing only aggregate outcomes. Version 1.5 processes explicitly queued standalone recording Things through the same owner-selected processor, privacy fences and relational output writer. Automatic discovery remains limited to Watch posts. Version 1.4 excludes every device-assigned personal job from the hosted provider worker, including offline and expired leases. Version 1.3 adds scheduled chat messages and read-only AI updates, with separate run Things and ambiguous-run stop protection. It also runs leased one-time/repeating Lopu reminders and at-most-once recording handoffs through normal Lopu chat. Response adds scheduledReminders and handoffs counts. GET requires the exact CRON_SECRET bearer credential; POST requires a current administrator and same-origin request. Home data plane only. Bounded discovery, leased processing, private comment/Thing creation and once-per-local-day reminder delivery. Each job uses only its owner’s selected credential waterfalls, with at most four 20-second attempts per stage. The run request accepts no provider hosts, credentials, owner ids, prompts or execution commands. Retries resume checkpoints instead of duplicating content. Response contains counts and status labels only, never recordings, transcripts, credentials or account ids. providerConfigured describes the claimed job’s selected connection configuration, or the default audio connection if no job is claimed; it does not prove provider health or quota.',
+		auth: { mode: 'session-or-bearer', description: 'GET: scheduler secret only. POST: current administrator only.' },
+		steps: ['Configure CRON_SECRET and platform API keys or owner-selected Secure Vault API connections.', 'Version 1.4 excludes personally assigned recording jobs from cloud processing, including expired/offline devices. Paired personal workers process those jobs separately.', 'Vercel invokes the registered cron automatically; an administrator can POST for a bounded manual run.'],
+		requestExamples: [{ name: 'Run scheduler', description: 'Administrator-only manual run.', method: 'POST', body: {} }],
+		responseExamples: [{ status: 200, description: 'Bounded processing counts.', body: { ok: true, reminders: { sent: 0 }, recordings: { queued: 1, processed: 1, outcomes: ['done'], providerConfigured: true } } }]
+	}),
+	endpoint({
+		id: 'lopu-reminders', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'lopu', title: 'Lopu scheduled tasks',
+		endpoint: '/api/v1/lopu/reminders', methods: ['GET', 'POST'],
+		summary: 'Create, list, pause and resume your own durable one-time or repeating notifications.',
+		detail: 'GET returns ownerId and up to 100 reminders; optional thingId returns that owned scheduled-task Thing’s control receipt, up to 30 recent runs, and readable relatedThings. POST op=create accepts title (140), description (2000), at (ISO with UTC offset, now to one year), timeZone (IANA), optional everyMinutes (integer 5–525600), or five-field cron instead of at/everyMinutes. mode notification preserves the old behavior; message posts saved text; assistant produces a fresh read-only AI update using normal provider/account billing. Optional chatId selects an owned Lopu conversation; newChatEachRun starts a separate chat each occurrence; otherwise a stable destination is reused. relatedThingIds holds up to ten readable references, checked again at execution. Creates a quota-billed private data Thing and linked protected schedule transactionally; run history is separate quota-billed scheduled-task-run Things linked through targetId. POST op=set-enabled accepts id and enabled. Completed one-time schedules cannot resume. Pausing/deleting/completing stops future starts, not a run already started. The home scheduler checks every five minutes and skips missed backlogs. Ambiguous interrupted AI runs stop for owner attention rather than replay. New chat messages persist independently of notification preferences, with best-effort lopu-message alerts. Protected control state is canonical; editing the displayed Thing does not reprogram its schedule. No arbitrary executable payload is accepted.',
+		auth: { mode: 'session-or-bearer', description: 'Full live first-party user session; same-origin JSON mutations. Subscription-tier account limits; Pro/PAYG unlimited, service/security limits remain.' },
+		steps: ['Negotiate api.lopu-reminders 1.1.0 on this origin.', 'Ask Lopu to create a reminder or POST a schedule.', 'Use the returned ID and nextRunAt receipt; manage it in Settings → Notifications.'],
+		requestExamples: [{ name: 'Pause', description: 'Pause your own reminder.', method: 'POST', body: { op: 'set-enabled', id: 'your-reminder-id', enabled: false } }],
+		responseExamples: [{ status: 200, description: 'Your schedules.', body: { ok: true, ownerId: 'user-id', reminders: [] } }]
+	}),
+	endpoint({
+		id: 'notifications-test', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'notifications', title: 'Send a test notification',
+		endpoint: '/api/v1/notifications/test', methods: ['POST'],
+		summary: 'Send a fixed notification example to the signed-in account only.',
+		detail: 'POST preset quiet, normal, urgent, rich or image, with optional registered notification type (default lopu-reminder). Fixed safe title/body/rich text/image; no caller-provided content, recipient or external URL. Quiet maps to passive without sound; normal to active; urgent to time-sensitive, not Critical. Rich text and a local illustration render in Thingtime; native banners use plain text. Notification preferences are honoured. saved means durable history insertion, not proof a physical device displayed it. Response includes id or null and a status message. No email is sent.',
+		auth: { mode: 'session-or-bearer', description: 'Full live first-party user only, same-origin JSON, subscription-tier mutation limit. Scoped app/Watch credentials cannot send tests.' },
+		steps: ['Negotiate api.notifications-test 1.2.0.', 'Select a test in Settings → Notifications.', 'Inspect the optional push report (status, attempted, accepted, rejected, platform counts and sanitized reasons), then check your physical device. Apple acceptance does not prove a displayed banner.'],
+		requestExamples: [{ name: 'Urgent test', description: 'Time-sensitive sample to yourself.', method: 'POST', body: { preset: 'urgent' } }],
+		responseExamples: [{ status: 200, description: 'Muted by user settings.', body: { ok: true, saved: false, id: null, message: 'This notification is muted by your notification preferences.' } }]
+	}),
+	endpoint({
+		id: 'watch-recordings', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'devices', title: 'Send a Watch recording to Lopu',
+		endpoint: '/api/v1/watch/recordings', methods: ['POST'],
+		summary: 'Explicitly queue an owned private recording transcript for Lopu to act on.',
+		detail: 'POST op=send-to-lopu and postId after an explicit user confirmation. Requires enabled recording AI settings and ready owned private audio. Stable jobs deduplicate repeated requests. After transcription, the scheduler dispatches once into a private Lopu conversation through normal account billing, tool permissions and destructive-action confirmation checks. Ambiguous interruptions are not automatically repeated. Follow handoffStatus and handoffChatId in the recordings page. Audio is never sent to a text-only model. Does not approve sensitive actions on the user’s behalf.',
+		auth: { mode: 'session-or-bearer', description: 'Paired Watch ttnode_ credential with watch.things.create; current owner and private source checks. Subscription-tier account limit.' },
+		steps: ['Negotiate api.watch-recordings 1.0.0.', 'Long-press a saved recording and choose Send to Lopu.', 'Read the resulting conversation for receipts or confirmation requests.'],
+		requestExamples: [{ name: 'Send recording', description: 'Queue an explicit handoff.', method: 'POST', body: { op: 'send-to-lopu', postId: 'watch-upload-your-id' } }],
+		responseExamples: [{ status: 202, description: 'Accepted; processing is asynchronous.', body: { ok: true, message: 'Queued for Lopu.' } }]
+	}),
+	endpoint({
+		id: 'capabilities',
+		contractVersion: '1.2.0', featureVersion: '1.2.0',
+		group: 'platform',
+		title: 'API capabilities',
+		endpoint: '/api/v1/capabilities',
+		summary: 'Returns the origin-scoped compatibility manifest for every documented and executable Thingtime API operation.',
+		detail:
+			'Version 1.2.0 permits an explicit custom data authority on HTTP loopback for an Electron-managed local backend; production and development authorities still require HTTPS. Clients use this public manifest to negotiate supported API contracts before enabling optional features. Semantic api.* features are independently versioned; route.* features enumerate every active API route, including intentionally undocumented diagnostics. The manifest also declares the non-secret data/authentication environment and federation group for this origin, so aliases and previews can select the correct first-party authority without inferring it from a deployment URL. Additions are minor or patch changes and breaking changes receive a new major version.',
+		auth: { mode: 'none', description: 'Public deployment metadata only: never an account, connection string, credential, or other database secret.' },
+		methods: ['GET'],
+		steps: ['Fetch once per origin and honour the short cache window.', 'Compare only the feature contracts a client requires.'],
+		requestExamples: [{ name: 'Discover capabilities', description: 'Read the active API contract manifest.', method: 'GET' }],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Versioned capability manifest plus non-secret data authority.',
+				body: {
+					ok: true,
+					schemaVersion: 1,
+					features: { 'api.capabilities': '1.2.0', 'api.devices': '1.0.0' },
+					dataEnvironment: {
+						schemaVersion: 1,
+						id: 'development',
+						kind: 'development',
+						federationId: 'development',
+						authorityOrigin: 'https://dev.thingtime.com'
+					}
+				}
+			}
+		]
+	}),
+	endpoint({
+		id: 'peers',
+		contractVersion: '1.1.0',
+		group: 'platform',
+		title: 'Deployment peer discovery',
+		endpoint: '/api/v1/peers',
+		summary: 'Streams bounded, authenticated same-data-environment peer leases and accepts signed deployment announcements.',
+		detail:
+			'First-party deployments authenticate with a short-lived HMAC envelope plus an Ed25519 deployment signature. The signed envelope binds the stable public federationId, so production, development, and custom database authorities never gossip into each other. The receiver pins each public key to its canonical origin; every NDJSON event is independently signed. GET returns a capped NDJSON page rather than an all-peers array; POST announces one peer or starts a bounded bootstrap-plus-gossip sync. Peer records are relational, TTL-reaped control-plane rows and contain only public deployment origins, signing public keys, safe data-environment ids, and observed lease times.',
+		auth: { mode: 'bearer', description: 'Deployment-to-deployment HMAC headers using THINGTIME_PEER_DISCOVERY_SECRET plus an Ed25519 signature from THINGTIME_PEER_SIGNING_PRIVATE_KEY; browser and user tokens are not accepted.' },
+		methods: ['GET', 'POST'],
+		steps: ['Sign the exact method, path, timestamp and raw request body.', 'GET pages NDJSON peer events with a maximum of 50 rows.', 'POST { op: "announce", origin } or a self-signed { op: "sync" }.'],
+		requestExamples: [
+			{ name: 'Stream one page', description: 'A trusted deployment reads a bounded peer page.', method: 'GET', query: { limit: 25 } },
+			{ name: 'Announce this deployment', description: 'A trusted peer renews only its own lease.', method: 'POST', body: { op: 'announce', origin: 'https://pr-68.previews.dev.thingtime.com' } }
+		],
+		responseExamples: [{ status: 200, description: 'NDJSON peer events followed by a page-complete cursor.', headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } }],
+		notes: ['Peer discovery is unavailable unless both private deployment credentials are configured. It never exposes users, data-plane endpoints, private keys, tokens, paths, or an unbounded peer list.']
+	}),
+	endpoint({
+		id: 'peers-sync',
+		group: 'platform',
+		title: 'Advance deployment peer discovery',
+		endpoint: '/api/v1/peers/sync',
+		summary: 'Trusted scheduler-only, bounded peer gossip pass.',
+		detail:
+			'Vercel Cron invokes this production bootstrap route every five minutes with CRON_SECRET. It emits the same independently Ed25519-signed NDJSON progress records as a self-signed peer sync, advances at most one cursor page for each bounded probe set, and never returns an all-peers array. Other deployments can schedule the same route with their own CRON_SECRET.',
+		auth: { mode: 'bearer', description: 'Exact CRON_SECRET bearer only; it is a deployment scheduler endpoint, not a browser or user API.' },
+		methods: ['GET'],
+		steps: [
+			'Configure CRON_SECRET, THINGTIME_PEER_DISCOVERY_SECRET, THINGTIME_PEER_SIGNING_PRIVATE_KEY, THINGTIME_PUBLIC_ORIGIN, and THINGTIME_DATA_ENV in the deployment environment.',
+			'Let the scheduler invoke the route; do not expose its credentials to clients.'
+		],
+		requestExamples: [{ name: 'Scheduled sync', description: 'Vercel supplies the private bearer header.', method: 'GET' }],
+		responseExamples: [{ status: 200, description: 'A bounded signed NDJSON sync progression.', headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' } }],
+		notes: ['Vercel cron runs the production bootstrap. Preview and non-Vercel deployments need an equivalent trusted deploy hook or scheduler to join and keep renewing their lease.']
+	}),
+	endpoint({
+		id: 'ai-waterfalls',
+		group: 'ai',
+		title: 'Saved AI waterfalls',
+		featureVersion: '1.0.0',
+		endpoint: '/api/v1/ai/waterfalls',
+		methods: ['GET', 'POST'],
+		summary: 'List, create and update private named AI model/endpoint configurations.',
+		detail:
+			'Requires a non-temporary authenticated account and x-thingtime-expected-user matching its ID (409 on account change). GET returns up to 200 owned waterfalls ordered by updatedAt descending. POST accepts {name,config,id?,updatedAt?}; id plus the last returned updatedAt updates an owned record with compare-and-set (409 on stale edits), otherwise creates a copy. Config is version 1 with up to 256 distinct endpointId/modelId/effort/speed entries. Endpoint credentials are never accepted or returned. Personal endpoint references must belong to the caller. Library edits do not change already-applied feature snapshots. The legacy default entry is allowed in the library, but each consuming feature validates compatibility before applying. Data uses separate owner-private data Things with crystal.systemType ai-waterfall-v1, normal storage accounting and existing indexes. Maximum 160 KiB request body. No new secrets or migration required.',
+		auth: { mode: 'session', description: 'Signed-in account; library is owner-only.' },
+		steps: [
+			'Negotiate api.ai-waterfalls 1.0.0.',
+			'Send the current user ID in x-thingtime-expected-user.',
+			'GET the library; POST a named config to save or update it.'
+		],
+		requestExamples: [],
+		responseExamples: [
+			{ status: 200, description: 'Owned library.', body: { ok: true, waterfalls: [] } },
+			{ status: 409, description: 'Account changed or edit is stale.', body: { ok: false, error: 'Reload before saving.' } }
+		]
+	}),
+  endpoint({
+    id: 'admin-mongodb-connections', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'admin',
+    title: 'MongoDB connection inventory', endpoint: '/api/v1/admin/mongodb/connections', methods: ['GET'],
+    summary: 'Private, cursor-paged application-pool attribution with optional selected-home-server aggregate connection counts.',
+    detail: 'Full first-party administrator authentication is required; service accounts and scoped PAT, app and device tokens are refused. Optional expected-origin and expected-actor headers fail closed on a changed API or account. Reuses existing application clients without visiting deployments or opening diagnostic clients. Returns whitelisted runtime identity, deployment origin/branch/commit/region, home/custom purpose, CMAP application pool socket counters, observation time and freshness. Custom endpoint addresses, credentials, user identities and commands are withheld. Snapshots publish during ordinary API requests at most once a minute and expire after 24 hours; stale counts are historical observations, never a live global total. Monitoring sockets remain unmeasured; optional topology-model upper bounds use current server count and configured mode (poll up to one per server, auto/stream up to two, load-balanced zero). Optional pool retention/concurrency options explain retained sockets. Allowlisted canonical API feature usage counts requests acquiring a shared client once per source per request, never commands or users; shared sockets cannot be assigned exclusively to features. Legacy snapshots omit this evidence. External clients and old runtimes remain unenumerated. serverStatus is bounded to 1500 ms and degrades explicitly when the tier or permissions refuse it; its totals refer to the selected home server, not the whole cluster. No currentOp, connection termination, deployment warming or polling is performed. Every response is private/no-store. Page size defaults to 50, with processing batches of up to 200 and a nextCursor for all remaining sources.',
+    auth: { mode: 'session', description: 'Full authenticated Thingtime administrator; scoped credentials cannot resolve a full user.' },
+    steps: ['Negotiate api.admin-mongodb-connections >=1.1.0.', 'GET a page; follow nextCursor on demand.', 'Read freshness and coverage before interpreting any socket count.'],
+    requestExamples: [{ name: 'Read connection sources', description: 'Full first-party administrator only.', method: 'GET', query: { limit: 50 } }],
+    responseExamples: [{ status: 200, description: 'Partial, explicitly scoped observations.', body: { ok: true, inventory: { sources: [], nextCursor: null, coverage: { complete: false, notes: [] } } } }]
+  }),
+	endpoint({
+		id: 'admin-peers',
+		group: 'admin',
+		title: 'Deployment peer explorer',
+		endpoint: '/api/v1/admin/peers',
+		summary: 'Returns an administrator-only, cursor-paged diagnostic projection of locally known deployment leases.',
+		detail:
+			'Used by Developer → Deployment peers. It reuses the signed mesh cursor bounds while returning JSON only to an authenticated administrator. It never exposes HMAC material, private keys, request signatures, or a peer traversal cursor; each row contains only origin, pinned public key, lease timestamps, and a derived active or expired status.',
+		auth: { mode: 'session-or-bearer', description: 'Thingtime administrator session or bearer token.' },
+		methods: ['GET'],
+		steps: ['GET one bounded page (default 25, maximum 50).', 'Follow nextCursor deliberately when more diagnostic rows are needed.', 'Use the Developer → Deployment peers page for all-field filtering and grid, card, or list presentation.'],
+		requestExamples: [{ name: 'Read one peer page', description: 'Administrators only.', method: 'GET', query: { limit: 25 } }],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Private diagnostic peer page.',
+				body: {
+					ok: true,
+					peers: [
+						{
+							origin: 'https://thingtime.com',
+							signingPublicKey: 'base64url-spki',
+							firstSeenAt: '2026-08-24T00:00:00.000Z',
+							lastSeenAt: '2026-08-24T00:05:00.000Z',
+							expiresAt: '2026-08-24T00:15:00.000Z',
+							status: 'active'
+						}
+					],
+					nextCursor: null
+				}
+			}
+		],
+		notes: ['The browser route is intentionally separate from /api/v1/peers. It cannot participate in gossip or access a deployment signing identity.']
+	}),
+	...deviceEndpointDocs,
+  endpoint({
     id: 'docs',
     group: 'docs',
     title: 'All API docs as Markdown',

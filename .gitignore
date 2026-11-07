@@ -120,6 +120,7 @@ apple/Passwords/.build/
 apple/Passwords/.swiftpm/
 macos/ThingtimePasswords/*.xcodeproj/
 macos/ThingtimePasswords/build/
+
 # Query stamps are local even when a query targets a portable snapshot.
 graphify-out/snapshots/**/cache/last_query_stamp
 
@@ -129,6 +130,3 @@ remix/public/downloads/thingtime-passwords-extension.zip
 
 # Python bytecode from native release verification tests.
 iOS/scripts/__pycache__/
-
-# Separate linked Rust/Swift boundary acceptance products
-apple/FileSync/.build-embedded/

@@ -3,11 +3,332 @@
 This branch is **not** the application. It carries the repository's executable
 CI and nothing else:
 
-```
-.github/workflows/   the real workflow implementations
-.github/scripts/     the automation they run (promoter, contracts, changelog)
-.github/actions/     composite actions they call
-vercel.json          the Vercel Git-deployment kill-switch
+### Agent browsers and tasks
+
+ChatGPT/Codex private lifecycle reporting uses the existing saved workspace
+through the [MCP reporting gateway](docs/agent-reporting.md). Authorize the
+independent `agents.report` permission once; routine calls then reuse a distinct
+task Character, saved Actions and stable request receipts. Existing Things
+permissions are not upgraded automatically. Forks supply their own private
+workspace references and external test fixtures, with no account-specific
+definitions or credentials committed.
+
+Thingtime for Mac includes task-owned browser installs, claims and a live
+viewer, with isolated, IP-restricted and unrestricted network settings. The
+Agent work records, dashboards, schemas, components and Actions are ordinary saved
+Things authored in Thingtime. The committed `api.agent-overview` 2.0.0 code is
+a schema-parameterized read adapter; it includes no dashboard definitions.
+See the [adapter contract and fork/test setup](docs/agent-overview.md), and
+[agent browser setup, CLI and security boundaries](docs/agent-browsers.md).
+Local isolated acceptance uses Colima and the Docker CLI, disposable identities
+and an external `AGENT_OVERVIEW_AUTHORED_THINGS` JSON fixture; it requires no
+production secrets or copied personal browser profiles.
+
+### Subspace messages and embedded Things
+
+New subspaces receive a linked Messenger space and general channel automatically.
+For existing databases, run the registered `subspace-messaging-spaces` migration
+through authenticated admin migration tools after deploying this version.
+The migration is retry-safe; opening Messages also repairs a missing space.
+Use the existing Mongo replica-set setup for transactional provisioning and
+storage accounting. No new provider keys or environment secrets are required.
+Subspace membership remains authoritative for message access. Moderators can
+place accessible Things above posts or in the sidebar; each visitor still needs
+the referenced Thing's own permission.
+
+Human-facing Thing data declares `renderComponent` at its displayed data level:
+either `{ "id": "<accessible-component-id>" }` or a Component definition such as
+`{ "render": { "tag": "p", "children": ["{text}"] } }`.
+The shared `ThingView` binds editable fields directly and through the `thing`
+alias. References retain their own access checks, and display does not execute
+Component sources or Actions. Data inspection is an explicit choice. Saved
+Component and Webpage Things keep their canonical definitions. See the
+[embed rendering contract](docs/feature-map/posts-comments-and-feed.md#subspace-messages-and-embedded-things).
+
+Run `npm --prefix remix run test:subspace-messages-acceptance` for the disposable
+local API acceptance harness. Browser acceptance uses its `--ui` option and a
+task-owned browser executable via `SUBSPACE_BROWSER_EXECUTABLE`; evidence goes
+to `SUBSPACE_EVIDENCE_DIR`. The harness fails closed behind an OS network fence
+and creates synthetic accounts in its own database, without production secrets.
+
+### Password manager setup
+
+The private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).
+Use a Mongo replica set for canonical storage transactions and configure the
+usual Thingtime JWT signing keys. Set `THINGTIME_USER_VAULT_KEY=<32 random bytes
+encoded as base64url>` in ignored local env files and your deployment secret
+manager. The existing `THINGTIME_ADMIN_VAULT_KEY` is a compatibility fallback;
+reuse the already configured vault key when upgrading. Back up the vault key
+securely with your database. Replacing or losing it makes existing recovery
+wrappers unreadable; do not generate a new key on each deploy. The server-assisted
+recovery model is documented above. No provider developer accounts are required
+for storing passwords or importing TOTP setup codes.
+
+For native AutoFill, register your app and credential-provider extension bundle
+identifiers in your Apple Developer team, enable **AutoFill Credential Provider**
+for the containing app and extension, and provision the same Keychain access
+group on both. iOS uses `iOS/project.yml`, `THINGTIME_IOS_BUNDLE_IDENTIFIER` and
+`<your-ios-bundle-id>.password-provider`; macOS uses
+`macos/ThingtimePasswords/project.yml` and `com.thingtime.passwords{,.provider}`
+(change those identifiers for your fork). Both use
+`$(AppIdentifierPrefix)com.thingtime.passwords` by default; change the suffix
+consistently when forking. Accept pending Apple Developer agreements before
+requesting profiles. Keep all real signing values out of git.
+The shared session uses the data-protection Keychain on both platforms, with
+device-only accessibility and synchronization disabled. A missing or unresolved
+Keychain group fails closed; it must not fall back to the macOS legacy Keychain.
+
+`npm --prefix electron run build:resources` embeds the macOS provider. The build
+requires `THINGTIME_PASSWORD_SIGNING_IDENTITY=<Apple signing identity>` (or the
+existing `THINGTIME_NODE_SIGNING_IDENTITY`) and `APPLE_TEAM_ID=<team>`; local
+Apple Development signing can request profiles through the signed-in Xcode
+account. With a Developer ID Application identity and no profile overrides,
+the build creates an intermediate development archive and exports it through
+Xcode's Developer ID workflow; the final host and extension must match the
+requested distribution identity, timestamp, team and bundle-specific profiles.
+If Xcode reports an unregistered development Mac, deliberately opt into device
+registration with `THINGTIME_PASSWORD_REGISTER_DEVICE=1` for that build.
+For manual distribution signing, set both
+`THINGTIME_PASSWORD_HOST_PROFILE=<host profile>` and
+`THINGTIME_PASSWORD_PROVIDER_PROFILE=<extension profile>`; a partial pair fails
+before building. Unsigned builds
+compile the feature but cannot provide the system's signed credential-provider
+access. iOS Fastlane syncs a separate provider profile; its override is
+`PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER=<profile name>`. Follow
+`iOS/AGENTS.md` for API-key-based TestFlight setup, use `xcodegen generate`
+before native builds, and pass preview URLs explicitly as the
+`THINGTIME_WEB_URL=https://<your-deployment>` Xcode build setting.
+
+Users connect their current native session from Passwords and enable Thingtime
+in **Settings → General → AutoFill & Passwords**. New passkeys are created through
+that system picker; uploaded passkey handoff QR images are not imported as keys.
+
+Password attachments also require the existing private, versioned S3 setup
+(`THINGTIME_PRIVATE_S3_BUCKET=<bucket>`, `THINGTIME_PRIVATE_S3_REGION=<region>`,
+`THINGTIME_PRIVATE_S3_ROLE_ARN=<role ARN>`), signed multipart PUT/GET CORS for your
+deployment origin, and the account's private-upload permission. Names and bytes
+are encrypted before object upload; keep the same recovery key when upgrading.
+For isolated local QA, set `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=<local path>`
+and `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://localhost:<web port>`.
+This local adapter refuses deployed/Vercel environments. No new provider secrets
+are needed beyond the existing vault and private object storage configuration.
+
+Password generation needs browser WebCrypto and no external provider account.
+Generator settings are account/origin scoped; generated values remain in the
+masked draft until saved. URL icons require anonymous HTTPS CORS from the image
+host; uploads use the existing encrypted attachment configuration above. No icon
+proxy credentials or third-party favicon service are required.
+
+The drawer now has **Password manager** and a dedicated `/settings/passwords`
+category. Thingtime sign-in passkeys remain under Security. The web vault works
+on supported secure browser origins; arbitrary-site passkey creation/sign-in also
+needs an installed provider. For Chromium, run
+`npm --prefix remix run build:password-extension`, extract
+`remix/public/downloads/thingtime-passwords-extension.zip`, and use **Load unpacked**
+in an isolated Chrome/Chromium profile. Enable the extension in its popup and select
+your trusted Thingtime/fork HTTPS origin; explicit localhost/127.0.0.1 origins are
+supported for isolated local development. Reload existing relying-party tabs.
+The extension is off by default, needs no extension-specific secret, and is not a
+store release. Firefox, Safari and mobile browser integration are unverified;
+unsupported WebAuthn options and native-object requirements may require the
+browser's other provider. See [extension setup and limits](browser-extension/README.md).
+A working web vault alone does not prove passkey registration on another website.
+
+Native system AutoFill and passkey registration are implemented in the Apple
+credential provider. Install a properly signed/provisioned provider and enable
+Thingtime in the operating system's Password AutoFill settings. Registration
+starts from the destination website and may require device authentication. The
+web Passkeys guide connects through the existing native bridge when available;
+this change does not modify native packaging. Verify an actual registration and
+sign-in on the installed device before claiming provider availability. See the
+[password manager contract](docs/password-manager.md#native-password-autofill).
+
+### Unified Timeline (implementation in progress)
+
+History is available at `/history` and from a Thing's History menu. List, Cards,
+Line and Frames use the same private Timeline records and sync connection.
+The browser requires the existing Timeline replica-set setup below; no new
+secret or account-specific setup is needed. Filters currently cover the loaded
+history window. [Design integration and limits](docs/timeline-design-integration.md).
+
+**Server Action activity** uses the same private Timeline (`api.timeline` 1.16.0,
+`api.actions-run` 1.37.0). Accepted runs and redacted outcomes appear in all four
+History looks, including read-only runs. The Action inspector links to History;
+its recent input/result/trace details remain a bounded debug cache. The display
+name and numeric execution metadata are retained, never raw inputs, outputs or
+errors. Admission must save before steps run. If completion cannot be saved,
+the result explicitly reports incomplete history; do not rerun to repair it.
+A server-sealed completion is retained in the same browser outbox and retried
+after reload/reconnection. API clients retain `history.recovery` and POST
+`{command:"recover-action-outcome",recovery}` to the scoped Timeline endpoint.
+Recovery preserves the original event, obeys quota and never runs the Action.
+Browser preparation and shared read-only runs do not write account outcomes.
+No new collection, index, secret or migration is required. Run
+`TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> npm --prefix remix run
+test:timeline:action-outcomes`; optionally use the same synthetic
+`TIMELINE_TEST_ADMIN_FIXTURE` setup below for quota coverage.
+
+**Recovery signing setup for forks:** use the existing ES256 `JWT_PRIVATE_KEY`
+and matching `JWT_PUBLIC_KEY` authentication configuration, or a private,
+cryptographically random `JWT_SECRET` of at least 32 UTF-8 bytes. Set these in
+ignored local environment files or your deployment secret manager; placeholder
+values are `JWT_PRIVATE_KEY=<PEM private key>` / `JWT_PUBLIC_KEY=<PEM public key>`
+or `JWT_SECRET=<private random secret>`. Set a stable `JWT_ISSUER` for each trust
+domain. Recovery refuses the known development fallback. Without configured
+keys, ordinary admission/outcome writes still work; failed completion cannot
+produce a recoverable proof and remains explicitly incomplete. The disposable
+quota test also needs configured keys in its server process.
+
+Proofs bind the exact immutable event, issuer and public database location, have
+no expiry, and are not session credentials. Removing the signing key invalidates
+unacknowledged proofs made with it; already committed history is unaffected.
+An unverifiable local outcome stays retained with an error while unrelated edits
+can still sync. A lost execution response or process interruption before a result
+was produced cannot be reconstructed or rerun automatically.
+
+**Page + related** gathers a saved page and your connected Components, Actions,
+Data and Schemas into the same History browser (`api.timeline` 1.13.0). It follows
+the current saved composition, up to 128 Things; shared authors' histories stay
+private. Membership refreshes with the visible history, and changing a reference
+restarts paging so older edits on newly linked Things are not skipped. The
+account/origin/database-scoped local cache retains at most eight membership
+hints; canonical events still use the existing bounded IndexedDB cache and
+remote timeline. No extra credentials, collection, index or migration is needed.
+Run `TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> npm --prefix remix
+run test:timeline:related` against the guarded local replica described below.
+
+**Recover deleted Things** in History (`api.timeline` 1.14.0): select a saved
+version or its deletion, review the result, then choose **Recover Thing privately**.
+The original ID/link returns with a new private version; deletion and later history
+stay intact. A surviving owned folder is kept, otherwise recovery uses Things root.
+Recorded page components become private copies. Protected records, attached
+interactions, folder children and external files/effects need their own recovery
+flows. Large previews remain subject to the existing response budget.
+No new collection, index, secret or migration is required. Run
+`TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> npm --prefix remix run
+test:timeline:recovery` on the guarded replica. Published heads use the existing
+atomic branch/head format under Timeline; they are not editable variations.
+
+Large retained Timeline versions are split into protected relational snapshot
+parts so history cannot strand edits/deletion of an existing large Thing. No
+additional collection, index, secret or configuration is needed. Complete large
+preview and streamed restoration are still listed in the Timeline acceptance
+ledger.
+
+The shared History panel records ordinary Thing revisions and editor drafts in
+the account's private **Timeline** folder. Local IndexedDB keeps authored edits
+and a bounded cache; the database keeps the complete accepted history. Preview
+a restore or merge before applying it; restores append a version and merges ask
+for explicit choices where both sides changed the same field.
+Events and relationship links use identical relational records locally and
+remotely. Each revision/link is a separate document, with bounded history pages
+assembled on demand; Things and branches do not collect growing history arrays.
+In per-Thing History, **Branches** creates a named alternative from the selected
+version, pulls branch updates, and pushes another selected version. Each
+branch/Thing head is its own document. Pending commands survive reload and retry
+with the original identity; a conflicting push preserves both versions.
+**Merge selected version…** compares with a named branch, asks you to choose
+any overlapping fields, then saves the reviewed two-parent version locally and
+queues its branch push. A stale push keeps that version in History. Published
+content stays unchanged. **Edit branch** opens historical fields; **Open in Builder**
+opens block-based pages in the usual visual editor. Branch text, props, layout
+and page metadata use the same device-first draft events and guarded branch
+pushes. Recover drafts after reload; queued or conflicting pushes stay in History.
+New page revisions and visual drafts retain each resolved component binding in
+an individual canonical Timeline event. **Preview page** in History and branch
+Builder use those recorded definitions, including cached copies offline. Older
+versions without captures say so; **Preview current components** is an explicit
+comparison choice. Live data and Actions stay paused. Captures preserve only
+readable component definitions, not source-owner history, media bytes, runtime
+outputs or the full theme/Schema/Action dependency graph. Restoring or merging
+page content does not restore the referenced component Things. Dependency-aware
+published restore/merge and AI branch editing remain open. Named-branch merges
+now retain direct recorded components, combine independent changes, and ask
+which definition to keep for overlapping edits. Review Current branch, This
+version and Merge result before saving; missing history stays explicitly missing.
+Recorded preview requires Timeline 1.10.0; component-aware branch comparison
+requires Timeline 1.11.0; current preview uses webpages-resolve 1.5.0. No schema migration,
+additional collection, index, credential or configuration is needed.
+Named-branch comparison requires `api.timeline` 1.7.0 and a connection. Once
+reviewed, the local event and push survive reload/offline in the same existing
+stores, with no schema migration or additional setup.
+
+Forks need the existing transaction-capable Mongo replica set and completed
+storage-accounting migrations. Timeline uses the normal `getThingsCollection()`
+data plane and requires no extra credentials, provider account or collection.
+The browser needs IndexedDB on a stable origin for reload/offline recovery.
+Database version 5 adds individual branch, head and command stores while
+preserving the earlier relational event/link migration and pending drafts.
+Account, origin and custom Mongo data source each have separate local queues.
+History is private and available only to full account credentials.
+
+`api.timeline` 1.6.0 adds explicit home-history access while a custom database is
+selected. Saved themes have a **History** button, and the Timeline folder lets
+you choose **Home account** or **Selected database** without changing the active
+database. Both use the same records and scope-keyed IndexedDB stores; sessions
+that resolve to home share one upload queue. No additional runtime setup is needed.
+
+Saved theme creation, token/visibility edits and deletion also use this shared
+history (`api.timeline` 1.5.0, `api.themes` / `api.themes-delete` 1.1.0). The
+approved token snapshots remain private even for public themes and commit with
+the home-database writer/accounting when a custom data source is selected.
+They preserve historical token values rather than applying current defaults.
+No new runtime setup is needed. Dedicated theme restoration, active-theme
+selection history and legacy-theme migration coverage remain in progress.
+
+Run `npm --prefix remix run test:timeline` for the focused suite. The opt-in HTTP
+suite uses `TIMELINE_TEST_BASE=http://127.0.0.1:<isolated-api-port> npm --prefix
+remix run test:timeline:integration`. It refuses any database except the disposable
+local `timeline-rs` replica set at `127.0.0.1:20337`; it creates fixtures through
+the app API. Never use a shared or production database for these checks.
+`test:timeline:themes` uses the same guard for theme creation, unchanged saves,
+rename/move/edit ancestry, privacy and retained deletion. The quota suite below
+also checks atomic theme-save refusal and retained deletion at the ceiling.
+`test:timeline:home-scope` creates a second database on that guarded replica and
+checks concurrent history isolation, exact versions, branches and home restore
+under a custom selection, matching live Thing ids and stale read/write refusal.
+`test:timeline:visual-branch` uses the same guard for a visual page/branch
+fixture and batched component permission checks. Optionally set
+`TIMELINE_TEST_FIXTURE_PATH` to a private temporary JSON file for browser testing;
+it contains disposable sign-in credentials and must stay untracked.
+`test:timeline:branch-merge` uses the same guard for named-branch comparisons,
+canonical merged-event uploads, explicit conflicts, exact retries and stale-push
+retention. Set `TIMELINE_TEST_FIXTURE_PATH` to a private temporary file only when
+browser acceptance needs its synthetic login, and remove it afterward.
+`test:timeline:component-merge` uses the same guard for retained definitions,
+explicit choices, canonical uploads/retries, stale heads and unchanged published
+Things. No new collection, schema migration or private configuration is needed.
+`test:timeline:published-components` uses the same guarded replica for published
+restore/merge, isolated component copies, stale-preview refusal, placeholder
+preservation, exact retries and all-or-nothing storage rollback. The review
+creates private page-specific copies by default; Current shared components is an
+explicit alternative. No additional secret, service, migration or environment
+variable is required. Optional browser fixture files contain synthetic local
+credentials; keep them untracked and remove them after validation.
+The home-scope suite's private fixture file contains only synthetic local
+credentials; remove it after browser acceptance.
+
+History's **Open Thing in home** explicitly switches the selected database, then
+opens an account- and database-qualified Thing link. Thing-page caches include
+that same database identity, so switching sources cannot reuse another source's
+same-id content. `api.mongodb-endpoint` 1.1.0 exposes the public `dataPlane` key
+in root data and supports `X-Thingtime-Expected-Data-Plane` as an optional request
+precondition. It refuses stale selections with 409 and invalid keys with 400;
+it never selects a database or grants access. Updated clients negotiate this
+capability before scoped reads/writes. When this deployment uses its configured
+explicit installed-desktop API bridge, root identity and ordinary source-fenced requests use that same
+selected endpoint; the selection and precondition are forwarded for upstream enforcement.
+Existing actor-fenced commands and vault verification retain their local-origin
+requirements. No new secret or environment variable is required; use the
+existing MongoDB or fallback setup.
+
+For quota acceptance, use that same disposable replica and a dedicated local
+dev-server process. Run the following once with a new private fixture path:
+
+```sh
+TIMELINE_TEST_BASE=http://127.0.0.1:<isolated-api-port> \
+TIMELINE_TEST_ADMIN_FIXTURE=/tmp/timeline-quota-<unique-run>.json \
+npm --prefix remix run test:timeline:quota -- --prepare-admin
 ```
 
 Plus the repository's canonical AI instruction files (`AI_ALL.md`, with
