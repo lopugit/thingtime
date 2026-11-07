@@ -5372,3 +5372,171 @@ custom environment remains on https://dev.thingtime.com.
 See [Vercel deployment references](VERCEL_DEPLOYMENTS.md) for the project and
 verification receipts. Standard Actions usage for this public repository is
 subject to GitHub's current plan terms; Vercel hosting/runtime charges remain.
+
+### Saved Mapbox map applications
+
+A saved Builder app can use the `tt-mapbox` viewport and the origin-scoped
+`api.maps` 1.0.0 operations. Save your own Mapbox token in the private Thingtime
+Vault and configure its entry ID (`<owned-vault-entry-id>`) in the saved app.
+The browser map requires a public `pk` token; never put secret tokens in page
+definitions. The map SDK and CSS are staged from the pinned npm package as same-origin app assets; browser
+tile/style requests still go directly to Mapbox service origins. Configure a
+style URL from your own Mapbox Studio account.
+Autocomplete and live optimization require the corresponding provider access;
+saving selected geocodes additionally requires Mapbox Permanent Geocoding
+entitlement and its storage conditions. No new Vercel provider-key variable is
+needed. Standard Mapbox navigation output cannot be cached. See
+[editable maps and routing](docs/maps.md) for operation contracts and verification.
+
+### Storage recovery and production checks
+
+See [account storage recovery](docs/storage-recovery.md) for the 100 MiB pending
+accounting budget, the existing cron/admin recovery entry point, private
+controller setup and pre-merge/deployment/runtime verification. It reuses the
+existing home MongoDB replica set, scheduler secret and protected Vercel
+controller environment; no additional application secret is required.
+
+### Preview cleanup policy
+
+Administrators use **Admin → Preview retention** (`/admin/preview-retention`) or
+Settings → Admin to save Vercel cleanup and PR liveliness rules. **Edit layout**
+opens the existing Builder: labels, controls, descriptions, buttons and containers
+are individual editable blocks. **Save layout** persists the intended account's
+private settings webpage through the Things API, independently of **Save retention
+rules**, which updates the admin policy. Both placements reuse that same saved
+layout; live operations pause while editing. The native bundled UI negotiates
+the selected API's public manifest through the existing scoped transport; private
+policy/layout operations retain the authenticated local proxy and actor, data-plane
+and selected-origin fences. Defaults enable
+cleanup for deployments with no open PR, with zero grace; superseded active-PR
+cleanup and inactivity expiry are off. Grace periods are whole hours. Tagged
+previews count closed-PR grace from the later of creation and PR closure;
+untagged branch snapshots use creation age because historical closure time may
+be unknown. Optional open-PR inactivity uses GitHub `updated_at`, expires that
+PR's previews and suspends publishing until activity resumes; it never closes
+or edits the PR. Active builds and the newest READY current-head preview of
+each active PR remain protected when pruning superseded snapshots.
+
+The policy is a revision-guarded home settings singleton
+`Thingtime.CiPreviewRetention`. It contains no provider credentials. The
+protected controller reads it through an origin-negotiated, signed
+`/api/v1/integrations/ci/preview-retention` request using the existing
+`THINGTIME_CI_ROUTER_SECRET` bootstrap secret. For a fork, configure the same
+secret securely in its server vault/bootstrap and protected GitHub workflow;
+set `THINGTIME_GITHUB_REPOSITORY=owner/repository` and the controller's selected
+Thingtime origin. Never copy production credentials into a preview or test.
+Production, stable/gateway deployments, protected aliases and unrelated project
+resources are protected independently of these settings. Invalid or unavailable
+policy preserves deployments instead of using a stale enabled value.
+
+Roll out the product API to the selected gateway first, verify admin capability
+1.0.1, controller capability 1.0.0 and admin save/readback
+there, then roll out the protected controller
+policy consumer. An ordinary gateway-backed UI preview does not contain a new
+API; leave cleanup fail-closed until its selected origin exposes the contract.
+This changes deployed policy only after that rollout.
+
+Local acceptance for this change used the task-owned dev stack at
+`http://127.0.0.1:18210` with a disposable replica at `127.0.0.1:17343`.
+A public Funnel was intentionally not provisioned for this disposable admin
+fixture; the isolated local acceptance environment is stopped after testing.
+
+### Password confirmation/device trust checks
+
+[Password confirmation preferences](docs/password-verification-preferences.md)
+use the existing account sessions, vault encryption and protected Things; no new
+secret/environment variable or database index is required. Run
+`pnpm --dir remix run test:passwords:verification` for its disposable API replica.
+The opt-in `test:passwords:verification-ui` also requires an installed Playwright
+module (`THINGTIME_TEST_PLAYWRIGHT_MODULE=<absolute-path>/index.mjs`) and a browser
+binary cache (`PLAYWRIGHT_BROWSERS_PATH=<absolute-cache-path>` when needed). It
+uses its own synthetic sign-in, browser process/profile and loopback18090/18091,
+then closes them; never point this fixture at a personal profile or database.
+
+
+### Named auth connections
+
+In **Connections → Named auth connections**, choose a provider, give the
+connection a name, and select its allowed operations. The same external
+account can appear more than once, even with the same access, and each named
+connection has its own encrypted credential. **Reconnect** uses the same
+named ID and requires the same external account. **Remove local connection**
+retires only that local credential. It does not call provider revocation.
+
+The card separates the scopes requested from the provider, scopes the provider
+explicitly reported, and operations Thingtime permits. Choose provider
+permissions separately from allowed operations. Google account offers verified
+profile and email reads. Google Workspace service cards and Facebook can save
+explicitly selected provider permissions for future supported use. Their only
+executable operation here is saved account identity. Providers with no
+configurable permission catalog use their standard consent. See the official
+[Google scope catalog](https://developers.google.com/identity/protocols/oauth2/scopes),
+[Calendar permissions](https://developers.google.com/workspace/calendar/api/auth),
+[Drive permissions](https://developers.google.com/workspace/drive/api/guides/api-specific-auth),
+and [Meta permissions edge](https://github.com/facebook/facebook-nodejs-business-sdk/blob/main/src/objects/user.js).
+Bluesky exchanges the supplied app password for a separate session and stores
+only the session credential. Provider APIs may share grants or enforce their
+own limits. Google can invalidate older refresh tokens and its revoke endpoint
+can affect other grants in the same project. These are provider behaviors and
+do not limit how many named connections Thingtime saves.
+
+The **Use a saved connection** picker calls a fixed server operation using
+the selected ID. API clients negotiate `api.connections-named` 1.0 and
+Connections management 2.1 before using named features. Credentials and
+arbitrary provider requests are never returned or accepted by that contract.
+Existing feed connections are separate and keep their existing behavior.
+
+### Social OAuth platform vault setup
+
+Connections API 2.0 uses fixed encrypted admin-secret labels, including
+`connections-google-oauth` and `connections-facebook-oauth`. Provision or update
+the existing label through authorized platform-vault controls; do not create
+duplicate labels. Ambiguous labels fail closed. `google-mail-oauth` remains a
+separate mail integration and is not implicitly reused. Legacy provider client
+ID/secret environment variables are not a fallback.
+
+Each encrypted secret contains this JSON shape (placeholder values only):
+
+```json
+{"environments":{"production":{"origins":{"https://thingtime.com":{"clientId":"PROVIDER_CLIENT_ID","clientSecret":"PROVIDER_CLIENT_SECRET","redirectUri":"https://thingtime.com/api/v1/connections/oauth/callback"}}}}}
+```
+
+Use the deployment's explicit data-environment ID and exact selected origin.
+Register that exact callback in the provider console. Preview and local origins
+need their own entries and approved callback registrations; they cannot borrow
+production configuration. Keep the existing server vault bootstrap keys in their
+approved secret stores. Never put client secrets in client Things or source.
+
+The Google identity card requests openid/profile/email with account selection,
+offline access and PKCE. Google service cards request their own permissions.
+Facebook account linking requests public_profile only; the posts provider is a
+separate user_posts grant. Provider testing mode, eligible test accounts, app
+review and publication remain provider prerequisites. A configured card only
+proves valid vault configuration, not real provider consent or API permission.
+
+Authenticated grants are encrypted per Thingtime owner/account and saved with
+origin/environment/client binding. Reconnect migrates only the caller's legacy
+link while preserving its ID; shared legacy tokens are refused until reconnect.
+Secret rotation keeps compatible grants; changing client, callback or environment
+requires a fresh connection. Disconnect and token refresh serialize through the
+home-plane transactional account path. No provider request API is added here.
+
+### Agent provider-credential import and authentication
+
+Admin → External integrations supports selected credential files and masked
+paste; `npm --prefix remix run credentials:import -- --help` documents the
+write-only Node handoff. Both require the exact receiving origin to advertise
+`api.credentials-import` 1.0.0 (compatible 1.x). Read
+[the end-to-end agent runbook](docs/agent-credential-workflows.md) for Google
+Web application JSON, generic provider text/JSON, safe approvals, password
+AutoFill, OAuth grants, passkeys and platform-specific constraints.
+
+Fork setup uses the existing home Mongo replica set, administrator account,
+`THINGTIME_ADMIN_VAULT_KEY` bootstrap (32 random bytes encoded base64url), and
+explicit `THINGTIME_DATA_ENV`/data authority selection. Keep that irreducible
+vault-unlock key in the deployment's approved bootstrap store. Provider keys
+remain in the encrypted vault, not new Vercel environment variables. Register
+the fork's exact Connections callback with Google, download its web-client
+JSON through the provider, then import the selected file; never commit it.
+The importer does not infer arbitrary provider schemas, configure Google Mail's
+separate bundle, or bootstrap a signed-out native password bridge.

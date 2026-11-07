@@ -35,6 +35,13 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/ci/reconcile': () => import('../../../app/routes/api/v1/admin/ci/reconcile/_reconcile'),
   'v1/admin/system/environment': () => import('../../../app/routes/api/v1/admin/system/environment/_environment'),
   'v1/admin/integrations': () => import('../../../app/routes/api/v1/admin/integrations/_integrations'),
+  'v1/credentials/import/start': () => import('../../../app/routes/api/v1/credentials/import/start/_start'),
+  'v1/credentials/import/status': () => import('../../../app/routes/api/v1/credentials/import/status/_status'),
+  'v1/credentials/import/upload': () => import('../../../app/routes/api/v1/credentials/import/upload/_upload'),
+  'v1/credentials/import/inspect': () => import('../../../app/routes/api/v1/credentials/import/inspect/_inspect'),
+  'v1/credentials/import/approve': () => import('../../../app/routes/api/v1/credentials/import/approve/_approve'),
+  'v1/credentials/import/revoke': () => import('../../../app/routes/api/v1/credentials/import/revoke/_revoke'),
+  'v1/credentials/import/direct': () => import('../../../app/routes/api/v1/credentials/import/direct/_direct'),
   'v1/admin/links': () => import('../../../app/routes/api/v1/admin/links/_links'),
   'v1/admin/marketing/publications': () => import('../../../app/routes/api/v1/admin/marketing/publications/_publications'),
   'v1/admin/migrations': () => import('../../../app/routes/api/v1/admin/migrations/_migrations'),
@@ -290,6 +297,29 @@ export default defineHandler(async (event) => {
     }
 
     return jsonResponse(createApiDocPayload(doc, new URL(event.req.url).origin));
+  }
+
+  // Fixed public provider artwork is an asset of the document origin. It
+  // never reads the account, selected data plane, or fallback API.
+  if (path === 'v1/connections/provider-icon') {
+    if (method !== 'GET' && method !== 'HEAD') return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD' } });
+    const route = await routeModules['v1/connections/provider-icon']();
+    const response = normalizeResponse(await route.loader!({ request: event.req }));
+    return method === 'HEAD' ? new Response(null, { status: response.status, headers: response.headers }) : response;
+  }
+
+  // Credential bodies and one-use proofs must never reach fallback transports,
+  // generic diagnostic/action dispatch, custom data planes, or background jobs.
+  if (path.startsWith('v1/credentials/import/')) {
+    const load = routeModules[path];
+    const headers = { 'Cache-Control': 'private, no-store, max-age=0', Pragma: 'no-cache' };
+    if (!load) return jsonResponse({ ok: false, code: 'not_found', error: 'Credential import route was not found.' }, { status: 404, headers });
+    if (method !== 'POST') return jsonResponse({ ok: false, code: 'method_not_allowed', error: 'Use POST for this operation.' }, { status: 405, headers: { ...headers, Allow: 'POST' } });
+    if (shouldProxyApiToFallback(event.req) || !hasSelfHostedApiEnv()) {
+      return jsonResponse({ ok: false, code: 'unavailable', error: 'Credential import is unavailable on this Thingtime origin.' }, { status: 503, headers });
+    }
+    const route = await load();
+    return normalizeResponse(await route.action!({ request: event.req }));
   }
 
   if (shouldProxyApiToFallback(event.req)) {

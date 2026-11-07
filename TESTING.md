@@ -10664,15 +10664,427 @@ Automated: `npm --prefix remix run test:connections`, `test:api-capabilities`, `
 
 ### Main OAuth/password integration regressions (27 October 2026)
 
-- Run `test:connections-browser` and `test:passwords-browser` with the documented
-  isolated runtime image and Chromium seccomp profile. Retain the network boundary
-  report. In Builder, select the authored provider-field template from its document,
-  since template editing intentionally removes live provider fieldset instances.
-- At desktop/mobile widths, generate into the selected masked password field,
-  save a chosen icon and verify the list image against the fixture source, and
-  open/close the passkey guide without replacing the credential draft. Decode or
-  authorization failures must keep the generic list icon; changing owner aborts
-  pending icon loads and revokes their object URLs.
-- Load an older saved password layout, enter Builder, edit and discard: required
-  private-property and list-icon migrations remain active while authored labels
-  and order are preserved. No decrypted input enters saved layouts.
+- [ ] In the signed provider, a matching site's excluded saved credential shows
+  the specific already-saved explanation, no Retry and **Return to website**.
+  Expand Registration request details: requested RP, hash/handle byte lengths,
+  ES256, catalog/site/exclusion counts must match independent request evidence;
+  no IDs, handles, keys or session/account values appear. Cancel/new request clears
+  details. Test long RP and large counts in a narrow window with the return control reachable.
+- [ ] Return sends `matchedExcludedCredential` natively / `InvalidStateError` in
+  the browser to the original request; no automatic native fallback, new save or
+  password re-verification loop occurs. Browser non-exclusion network errors
+  retain retry, and a delayed old failure cannot terminate a new request.
+- [ ] Keep existing passkeys working. An absent/nonmatching exclusion does not
+  invent account-wide uniqueness; a foreign RP with the same bytes does not block.
+  Verify independent vault record IDs/readback separately from any site's support
+  for multiple discoverable credentials in one authenticator.
+- Run `swift test --package-path apple/Passwords`, focused browser passkey/ceremony
+  tests, and `pnpm --dir remix run test:passwords:record-storage` (owned disposable
+  replica, real API handlers). No existing Mongo or personal profile may be reused.
+- Compile/render the real native view with
+  `bash apple/PasswordProvider/tests/render-preview.sh --excluded --details --long-site --large-counts --width 300 --height 380`.
+  This is a synthetic view, not a credential operation. On macOS the harness
+  captures the laid-out NSHostingView; inspect the actual owned preview window
+  from top to bottom too. ImageRenderer alone omits NSScrollView contents.
+
+### Password manager tree branding (2026-11-02)
+
+- [ ] Verify the official decorative tree beside the accessible Thingtime heading in extension workspace tabs, browser approval/idle/sign-in/terminal states, vault/import/export, generator, icon picker, passkey guide, native connection, settings and native host/provider. Inspect desktop and 375px layouts, long labels, expanded details and bottom controls.
+- [ ] Existing saved default layouts gain branding without replacing edited headings, styles, IDs or custom content. Deleting the migrated mark stays deleted; authored layouts without the known heading remain unchanged. Legacy provider retry/fallback controls obey terminal conditions without restoring deleted controls.
+- Run extension unit tests (including real ZIP icon inventory) and `test:passwords`; metadata tests validate host/extension ICNS and PNG packaging. Inspect native bundle icons independently of website-controlled account/passkey icons.
+- The isolated `browser-extension/test/workspace-browser.mjs --provider-ui-origin=<fixture-origin>` path uses `remix/scripts/password-provider.browser.html`: the actual provider component, content bridge, background routing, ceremony and transient actions run against explicitly synthetic in-memory API responses. Verify excluded create hides approval/refresh/fallback and clears password input, then explicit Return delivers bound InvalidStateError and focuses the original requester. This proves that action path, not real vault/site/OS acceptance. `password-branding.browser.html` is a separate renderer-only document gallery.
+
+### Password confirmation preferences and device trust — 2026-11-03
+
+- Run `pnpm --dir remix run test:passwords` and `test:passkeys`; run
+  `pnpm --dir remix run test:passwords:verification` explicitly. The latter starts
+  its own disposable replica, uses real registration/login/password handlers,
+  synthetic credentials, and cleans up its database/processes. Verify Never
+  across logout/new login, off→on invalidation, entry Always over global Never,
+  exact selected item/origin/purpose, device Forget, and account-passkey final
+  registration versus a lock during the ceremony. Unit tests additionally pause
+  cross-session Forget, final reads/expiry and pre-insert revocation.
+- `test:passwords:verification-ui` adds the actual manager/provider components in
+  a separate Chrome process against that disposable API. Set
+  `THINGTIME_TEST_PLAYWRIGHT_MODULE=<installed-playwright>/index.mjs` and, when
+  reusing binaries, `PLAYWRIGHT_BROWSERS_PATH=<browser-binary-cache>`. It reserves
+  loopback 18090 only while running and closes its browser/server afterward.
+  Verify desktop/narrow, long and missing legacy username subtitles, complete
+  scrolling, saved preference reload, explicit Never enrollment, then a new
+  approval without another account password. This is isolated API/UI evidence,
+  not Google, production or signed OS-provider acceptance.
+- Click an entry title at 375px and check the exact entry opens in view. Open
+  again by keyboard at desktop width and check Close restores the card's focus.
+  Verify a legacy import with a hidden form field and an explicit login email
+  shows the email in the preview and catalog. Confirm protected fill agrees,
+  alternate origins still fail, and notes and descriptions are never projected.
+  Use an entry saved for `https://aws.amazon.com` on
+  `https://signin.aws.amazon.com`: the catalog should suggest it and protected
+  fill should use the same approved origin. Confirm the same explicit pair for
+  the AWS console and portal, and reject alternate ports, unrelated AWS hosts,
+  Amazon retail and lookalike domains.
+- Stall a provider catalog request, cancel its exact ID, then select a saved
+  login. A wrong ID cannot cancel; the old result cannot complete the newer
+  selection. Loading a selected login stops scanning after its entry is found.
+- In Builder, edit the global checkbox/label/dropdown independently and the saved
+  card's title/username/type/icon independently. Save/reload the layout; authored
+  text/styles/deleted controls must survive migrations. Inspect per-entry Use
+  global/Always and Security's shared control. No password/proof may enter saved
+  blocks, Action history, local settings cache or screenshots.
+- In the final signed native app, inspect the actual OS picker tree icon and
+  localized Thingtime name. Valid .icns/asset-catalog structure alone does not
+  prove picker rendering. Preserve the physical host filename and raw/localized
+  bundle-name contract. At small provider heights, scroll the full excluded
+  message and collapsed/expanded Registration request details while Return stays
+  reachable. OS user verification must still run when reuse is off, unsupported
+  or unavailable.
+
+- Password card account identification contrast: check username/email, missing-value
+  fallback and type subtitles at desktop and 375px widths in light/dark themes.
+  Measure computed foreground against the card background (normal text >=4.5:1),
+  including an existing saved default layout after reload. Long usernames must wrap
+  without overflow. Confirm each subtitle stays separately editable; exact old
+  default muted colors upgrade, while authored colors/text/styles and deleted
+  subtitle blocks survive save/reload. Extension account subtitles must also meet
+  AA on their actual light/dark card backgrounds.
+
+
+### Social OAuth vault and owner isolation
+
+- Named connections: create two profiles to the same Google account with
+  different operations and two named profiles with the same operation. Verify
+  distinct IDs and exact-provider response, no feed admission, replay refusal,
+  partial consent rejection, wrong-subject reconnect refusal, cross-owner
+  denial, selected-grant refresh and local sibling-independent removal.
+  Verify separate provider-scope and allowed-operation selection and deny a
+  scope borrowed from another provider card. Exercise declined Meta permissions
+  and an in-flight provider result released after its scope is reduced. Confirm
+  that refreshing to a different authorization snapshot and back never restores
+  an old operation result, and reconnect clears a visible result.
+  Verify named and canonical private IDs have no generic Things read path.
+  Verify the name and access blocks can be selected separately in Builder.
+  Keep provider consent and installed native acceptance separate.
+
+- Run `test:connections:oauth-tab` in isolated Chromium on desktop and phone
+  viewports. The fixture renders the real Connections page with synthetic
+  transport. Verify the original URL and page remain in place, the provider has
+  no opener, a blocked tab starts no OAuth request, and decline or completion
+  lets the original page retry or reload its authorized saved connections.
+  Close the provider tab without consenting and use **Stop waiting** to retry.
+  An unacknowledged callback tab remains available as a normal Connections
+  page. Switch accounts while the previous owner's Connections read is held,
+  then deliver the late response and sign out. Confirm no previous-owner
+  accounts or filters remain and a same-owner reload keeps its cached paint.
+  Edit the pending status and Stop waiting blocks separately in Builder,
+  save and reload, then exercise the customized control. Keep real provider
+  consent and native browser handoff acceptance separate from this fixture.
+  With a mocked desktop bridge, hold or omit the selected API origin and
+  verify no Connections API reads or sign-in control appear. Switch origins
+  and confirm the old provider readiness and saved accounts do not carry over.
+
+- Run `pnpm --dir remix run test:connections`, `test:connections:oauth` and `test:api-capabilities`.
+  `test:connections:oauth` boots its own disposable replica with clean environment,
+  real registration/admin-vault/connection Request handlers and only a synthetic
+  external Google transport. It proves real transactions and wrong-origin feed
+  refusal; it does not prove built-server routing or live Google consent.
+  After the canonical build, run `test:connections:built` to fetch both compiled
+  Vercel manifest handlers and verify JSON, origin and all seven 2.0.0 contracts.
+  Configuration tests cover missing/malformed/duplicate secrets, exact environment
+  and origin, callback changes and compatible secret rotation. Account tests
+  cover two Google identities, separate Thingtime owners, encrypted envelopes,
+  legacy-link ID preservation, reconnect/refresh races and disconnect.
+- On the intended deployed origin, connect the Google identity and Facebook
+  account cards using eligible test users. Check actual callback completion,
+  independent provider identity against the saved connection, reload, a second
+  identity, reconnect and removal. Confirm only minimal identity scopes are
+  requested; service/feed grants are separate. Check desktop/mobile catalog and
+  account states through the existing UI. Keep unconfigured and inaccessible
+  provider outcomes distinct from provider consent success.
+- Verify preview/local origin does not reuse production configuration or grants.
+  Never reuse real-account credentials in isolated fixture browsers. Passing the
+  synthetic tests does not establish real Google/Meta or installed-app acceptance.
+
+- Connections provider marks: at desktop and narrow mobile widths, scroll the
+  catalog through its last card. Compare Google, Gmail, Drive, Docs, Sheets,
+  Calendar and Facebook to their official sites. Confirm identical card icon
+  dimensions while loading and when an icon response fails, with no horizontal
+  overflow or duplicate accessible name. Check that the credential form repeats
+  the provider's mark and sign-in buttons still select the same providers. Demo
+  and generic RSS should use the local mark. No browser request should reach a
+  third-party icon host. In **Edit provider cards**, select the image, title,
+  description and Connect button separately. Verify Upload appears first and
+  that a URL override, title and button edits persist across save and reload.
+
+### Mac symlinks and collapsed connection progress — 2026-11-03
+
+- [x] Preserve opaque relative, absolute, broken, looping and non-UTF8 link targets through native scan/read and cloud metadata; distinguish an ordinary file containing the same bytes. Do not follow a link or a symlink ancestor outside the selected grant.
+- [x] Run AppleFileSync with the freshly built real Commander indexer and an explicitly selected disposable FAT volume: 133 tests passed, no skips. Exercise native links, target-encoding fallback, ordinary-file/link replacement, lost final replies, restart, interruption after displacement, concurrent writers and Trash/restore. Dispose only the owned image after checks.
+- [x] Verify actual atomic-exchange semantics using owned probe inodes before replacement. macOS msdosfs can report success for RENAME_SWAP while discarding the displaced entry. Unsupported or incorrect exchange uses a durable, exclusive two-step replacement that can temporarily leave the destination name absent; it retains the prior inode and refuses an intervening writer.
+- [x] A fallback is inert `thingtime-symbolic-link-fallback-v1` JSON with `originalKind`, exact `symbolicLink` metadata and `former-symbolic-link` tags. Automatic recognition requires a matching native receipt; an arbitrary same-shaped user file is not activated. Permission, disk-full and generic I/O errors do not silently trigger fallback.
+- [x] Desktop History Save As preserves raw link targets or an explicit portable fallback. Run `node --test electron/test/file-export.test.cjs electron/test/file-export-link-publisher.test.cjs`; the optional `THINGTIME_FILE_EXPORT_FAT_TEST_DIRECTORY` must name an owned mounted test volume. All 18 checks passed with the actual FAT fixture enabled, including full Save As, non-UTF8 encoding refusal, a renamed ancestor, immutable metadata/bytes, existing names, cancellation, account/origin changes, child disconnect and concurrent-writer preservation. On FAT, an interrupted fallback copy retains its verified private candidate and reports that the folder must be checked before retry; it never deletes an uncertain final name. The short-lived publisher pins the chosen directory as its working directory. Normal v1.0 exports remain compatible; tagged exports require fileExportVersion 1.1 and api.files 1.9.
+- [x] A real HTTP/native round trip preserves symbolic-link metadata through durable inventory and run-journal reopen, regular/link transitions with identical bytes, lost replies, process restart and Timeline restore. Links use scalar file writes; current bulk digest contracts must not admit tagged links.
+- [x] Per-connection progress uses separate exact upload/download byte totals and confirmed operation counts. Normal read-only legacy journal calls do not initiate migration. Resume migration is coalesced, paged, cancellable and fenced by revision/instance; stale file callbacks cannot increase the durable percentage or reduce unconfirmed bytes.
+- [ ] Final installed acceptance: compare native link target bytes, per-folder directions/rates, device aggregate measurements and Timeline restore with independent local/cloud evidence. Keep Home paused and DJ DODA automatic sync off. Production must advertise the required link/device-control capabilities before dependent work starts.
+
+- Signed Mac build prerequisites: verify a missing or incomplete `electron-builder` is repaired once with the exact pinned pnpm and frozen lockfile before web/native resource builds begin. A healthy install must not reinstall; failed or ineffective repair must stop immediately. `electron/test/build-dependencies.test.cjs` covers the boundary.
+### Password preview Website icons
+
+- Save two Website/URL fields: first missing/broken icon, second usable public
+  icon. Verify the second supplies the actual decoded image at desktop/narrow,
+  reload without resaving, and compare displayed bytes with the owner API image
+  response. Reorder Website fields and save; the new first usable site wins.
+- Keep an uploaded/manual icon as override; remove it and save to return to
+  automatic lookup. With no usable site, keep the tree. Edit the icon block
+  independently; deleting it must stop automatic lookups. Preserve custom help
+  text/styles through exact-old-default copy migration.
+- Concealed/secret/structured fields never participate. Preview JSON exposes only
+  the boolean hint, not Website values. Probe requests strip saved paths/queries;
+  credential-bearing URLs, private/mixed DNS, DNS failures and unsafe redirects
+  must not cause outbound private requests. Verify the socket lookup uses the
+  checked address with normal TLS identity and sends no cookies/auth/referrer.
+- Test a MIME-mislabelled SVG behind whitespace/XML/comments with external
+  file/network references. Only sanitized self-contained vectors may reach SVG
+  rendering; only admitted raster signatures may reach the raster decoder.
+- Hold a lookup, change entry revision/account/session or revoke while the
+  initial decrypted read waits: refuse stale image delivery and do not start any
+  next lookup after observed revocation. Shared same-entry requests must dedupe,
+  independent consumers must survive a peer cancellation, and old owner/origin/
+  revision caches must never paint into the new account. Ordinary1.5 operations
+  still work when automatic1.6 icon negotiation fails.
+- `test:passwords:verification-ui` adds an anonymous public-site icon case to its
+  disposable real API/isolated Chrome runner (no personal profile). Its public
+  HTTPS fixture requires normal network access; unit suites independently cover
+  deterministic failure order, safe decode and transport/session fences.
+
+- Loaded password card images must use the existing bounded PNG thumbnail wire
+  format through the ordinary editable HTML image block. Assert actual img src,
+  decoded dimensions and response-byte hash (not merely API success). Arbitrary
+  blob/data schemes remain rejected by generic saved markup; malformed signatures/dimensions and non-PNG
+  thumbnail sources are refused, and the adapter decoder rejects corrupt bytes. Browser decoding/cancellation and
+  account/origin/revision cleanup still fence transient image state.
+- In dark 375px and desktop/light views, inspect a transparent dark favicon on
+  the default light backplate. Its padded/radiused image stays 32px wide/high.
+  Reload an older saved default style, then save a custom background/padding:
+  migrate the unchanged default only and preserve the custom style on reload.
+
+### Browser extension account connection
+
+See [the account connection contract](docs/browser-extension-accounts.md) for
+the isolated real-API/browser command and the metadata-only session boundary.
+
+- Open the workspace with an existing Thingtime sign-in and no selected website.
+  Show its profile and saved accounts automatically; enable browsing and refresh
+  while leaving Autofill unavailable until a matching website is selected.
+- Start signed out, use Sign in and Add account through the inline canonical
+  account surface, then switch between two accounts and sign out of all accounts.
+  Keep the owned account route and explain that switching also changes the
+  browser's Thingtime web account. Never copy cookies or session tokens.
+- Delay account-change notifications and fail the new account's catalog request.
+  Clear the old owner's entries before showing the new profile; a same-owner
+  refresh failure may preserve its existing entries with a visible retry state.
+  Failed cold discovery must not leave a permanent loading state.
+- Lock, change the configured origin and restart the extension service worker.
+  Keep discovery, suggestions and approval admission locked until explicit Unlock.
+  Account changes must terminate pending website requests with a retryable message.
+- Use Return to Thingtime workspace from its owned popup. Focus the recorded
+  extension window only; do not select a guessed website tab. Retain the popup
+  when it is the only verified live catalog bridge, or when edits/password input
+  would be discarded. Repeat after service-worker restoration.
+- At desktop and narrow widths, scroll through all content and open the account
+  controls. In Builder, edit the heading and session notice independently, save
+  and reload. Preserve account controls, responsive layout and existing workspace
+  size/font preferences. Installed personal-profile acceptance is a separate check.
+
+### Mac strict inventory job
+
+- [ ] During a signed Mac transfer long enough to sample, open **Total Sync &
+  Backup usage**. Verify positive directional throughput while a file is still
+  running, that the configured limits do not change during refresh, and that
+  paused or completed measurements expire. Confirm Activity Manager shows one
+  **Local Sync resource usage** sampler across open placements and that hiding
+  the app or disabling the entry stops it. Keep the inputs focused while values
+  refresh, then switch account or device and check that prior values disappear.
+  A verified idle local device should describe the lack of a current
+  observation. An unavailable remote device should show its connection state.
+- [ ] Run `swift test --package-path macos/ThingtimeNode --filter MacFolderSyncDialogTests`.
+  Verify the folder chooser opens as a sheet, leaves the main actor responsive,
+  dismisses its own sheet on cancellation, and permits a second chooser.
+- [ ] In the signed Mac app, open the local folder chooser, select **Existing
+  folder**, and choose a disposable fixture. Verify the native downloads
+  approval prompt opens for that exact folder. Repeat and cancel the chooser,
+  then verify device status and folder listing still respond and the chooser
+  opens again.
+- [ ] Run `swift test --package-path macos/ThingtimeNode --filter MacFolderSyncTests`
+  and `npm --prefix remix run test:file-sync`. The native regression advances the
+  job clock beyond 270 seconds while the inventory remains private, then checks
+  that only a sealed generation can be paged. The browser protocol rejects
+  interruption, generation substitution, and partial backup coverage.
+- [ ] In the signed Mac app, run two-way sync on an isolated test folder whose
+  first scan takes longer than the previous request deadline at the configured
+  scan rate. Confirm that indexing continues, that the first verified entries
+  reconcile, and that stopping a second scan preserves both sides. Change a
+  file during the private scan and verify that no deletion is inferred from an
+  incomplete inventory.
+
+### Files browser and synced files
+
+- In an isolated account, upload a small file to a saved sync folder and a nested folder. Verify the canonical file appears in Files, has a creation event in History, and is enumerated by the sync inventory. Verify an ordinary Files upload outside a sync folder still uses the existing attachment path.
+- Download a canonical file, compare its bytes, and move it within the cloud. Verify the file ID and History survive the move. A stale selected revision or a destination name collision must leave the source intact. Verify a cross-device move trashes the cloud source only after the destination write is confirmed.
+- On desktop and mobile, open Files at the exact sync folder and verify both an existing synced file and a new upload display and open from the existing row and menu controls. A rendered row and a canonical inventory result do not establish a native cloud-to-local transfer.
+
+### Browser password autofill on multi-step sign-in pages
+
+- [ ] Run `node browser-extension/test/vault-target-browser.mjs /absolute/path/to/playwright/index.mjs`
+  with an isolated Chromium runtime. Fill the username step and the form-less
+  password step with synthetic data. Confirm Thingtime dispatches no submit.
+- [ ] While approval is pending, replace the password node with an identical
+  field or change an associated form's action to another origin. The new field
+  remains blank. Disabled, read-only, new-password and one-time-code controls
+  stay ineligible even when autocomplete has multiple tokens.
+- [ ] Open the chooser over a modal at desktop, 375px and 320px. Confirm it fits,
+  Escape closes it, and focus returns to its button. A real site sign-in and a
+  native-provider operation require separate acceptance.
+
+## Agent provider-credential import
+
+- On an isolated replica-set API, exercise the real browser approval plus Node
+  file handoff and the direct file/paste importer. Verify the exact root admin,
+  origin, environment, label, format and create/replace revision, then reload
+  metadata and compare the receipt. Use synthetic credentials only.
+- Import Google web JSON with the exact callback; refuse installed-client,
+  wrong callback and malformed files. Replace one environment/origin entry and
+  independently verify other scopes remain unchanged. Refuse stale revisions,
+  duplicate labels and foreign account/Character/bearer approvals.
+- Cancel, expire, revoke/logout and switch account during work; protected drafts
+  must clear and stale completions must not save. Test proof mismatch, replay
+  with different bytes, concurrent save/revoke, and lost initial/retry responses.
+  A committed receipt must not turn into duplicate creation or false failure.
+- Switch the approving session to a Character and back without polling in
+  between; the previous approval must remain revoked. An owner header must not
+  override persisted Character selection. Load approval inside a same-origin
+  iframe: headers and client guards must refuse its controls and requests.
+- Reconcile a lost write, intermediary HTTP 500, partial receipt and JSON-null
+  status without duplicate saves or false success. Replacement receipts must
+  match the approved credential ID, including when their other fields match.
+- CLI stdout/errors must contain only allowlisted status/metadata, including
+  base64url IDs with underscores and canonical dates; raw remote errors, bytes
+  and verifier headers never appear. Ctrl-C must close a stalled local pipe.
+- At desktop/mobile sizes, scroll fully, use keyboard file selection/review,
+  open paste/replace/approval states and verify one inline loading indicator,
+  no overflow, focus preservation and retry. Edit nested heading/control blocks
+  separately, save and reload without persisting transient secret input.
+- Verify capability discovery, all executable registrations, signed gateway
+  header integrity and refused cross-origin fallback. Run `test:credentials-import`,
+  `test:credentials-import:browser`, and after building the real
+  `test:credentials-import:acceptance`. A passed fixture does not establish a
+  real provider credential or installed device acceptance; test the consuming
+  provider operation separately on the authorized deployed account.
+## Device sync live and historical resources — 2026-11-04
+
+- [ ] Hold a native upload longer than two recorder intervals. The live and
+  historical rates come from native period measurements, never zero-at-dispatch
+  followed by all receipt bytes in one bucket. Rootless resource reads include
+  the existing scoped Electron governor without changing targets. Worker exit
+  or an old transport snapshot cannot be restamped as fresh traffic or CPU.
+- [ ] Read a long range while collecting samples and send Pause concurrently.
+  Journal writes and device controls remain responsive; cancellation/deadline
+  ends only the history read. Test viewer/device clocks both ahead and behind:
+  freshness follows receipt age, and recent windows include source-time data.
+- [ ] On a paired local Mac with no active sync, the resource panel identifies
+  local idle/paused state and never reports that remote resources are unavailable.
+  Resume an authorized test connection and compare rates with acknowledged bytes
+  over an independently timed interval; distinguish sync CPU/indexer memory from
+  whole-device readings. Pause and confirm the old nonzero rate is no longer live.
+- [ ] In a second authenticated browser, select the same device. Keep the panel
+  open across multiple ten-second status intervals: values must not disappear
+  after 2.5 seconds, saved policy must not renew a measurement's timestamp, and
+  measured CPU responses including `cpuScopes` must survive strict projection.
+- [ ] Exercise Live, 1m, 5m, 1h, 24h and custom ranges, including a window before
+  collection, sparse samples, unavailable metrics, error/retry and a paused gap.
+  Verify sample means/counts against independently recorded observations; do not
+  label sparse samples as full-period averages or interpolate missing intervals.
+- [ ] Close the dashboard during an admitted run, reopen it, then restart the
+  app and reopen the same range. Retained observations survive; no pre-update
+  history or stopped interval is fabricated. Remote history is read-only and
+  refuses an incompatible origin capability or wrong owner/device/data plane.
+- [ ] At 1440px desktop and 375px mobile, scroll top to bottom, open resource
+  targets and custom dates, use keyboard controls, and verify no clipping or
+  horizontal overflow. Background refresh and window changes preserve target
+  drafts, focus and scroll. Cold start has one accessible inline indicator;
+  cached refresh remains usable; failure offers one clear retry action.
+- [ ] In Edit layout, select nested range controls, labels and metric fields
+  independently, save and reload. Account/origin/access changes immediately clear
+  protected values and fence stale async completions, including history reads.
+
+## Shared Rust filesystem index and sync — 2026-11-04
+
+- Build from the top-level `filesystem-indexer/Cargo.toml`; run its workspace
+  tests and `apple/FileSync/test-embedded-rust.sh`. Commander, Mac Node and iOS
+  must reference this workspace directly, with no second engine source tree or
+  registry package. Verify both default and isolated `CARGO_TARGET_DIR` outputs.
+- Use disposable roots to compare a cold scan, unchanged warm scan and one-file
+  edit. Confirm unchanged content avoids hashing, new versions invalidate only
+  relevant observations, and private sync paths never appear in Commander search.
+- Interrupt before seal, mutate an early file while later files are checked,
+  revoke a grant, replace/remount the root, lose watcher coverage and restart.
+  Incomplete coverage must never become a successful empty inventory or authorize
+  propagated deletion. Restore legacy journal jobs without splicing old cursors
+  into a new Rust generation.
+- Reject a Swift output callback during a Rust write and cancel during hashing.
+  The embedded producer must terminate, release its DB/operation lease and join
+  before the native handle is destroyed; `Interrupted` must not cause an endless
+  `write_all` retry. Verify another operation can start afterward.
+- Browse early and late pages of a broad folder. Confirm pagination does not
+  replay all preceding directory walks, cancellation remains responsive, cached
+  pages remain root-authorized and a changed directory invalidates its cursor.
+- Check PhotoKit cold and warm captures, persisted original metadata reuse,
+  permission revocation and a library edit before the final page. Native Photos
+  permission still controls access; a cached digest never grants file reads.
+- Final signed Commander and Thingtime installs must embed the rebuilt helper,
+  preserve stable identity/preferences, and use the canonical shared DB. Verify
+  Desktop and `~/Thingtime` two-way synthetic byte/path/Timeline round trips,
+  Pause/Resume, restart and window-close continuation. Keep Home paused and its
+  removed grant absent. Record resource readings against OS measurements and
+  distinguish a configured target from a measured hard limit.
+- iOS archive compilation, simulator execution and physical Files/Photos grants
+  are separate evidence. Exercise only watcher guarantees the platform actually
+  provides; unavailable coverage must fail closed, not silently claim sealing.
+
+- Run the Commander daemon inventory integration with the native invalidation
+  watcher enabled. Hold the Rust search writer after it has staged 500 paths; committed
+  counts and live file, directory and app changes must remain readable. Start a
+  private backup on the same SQLite database and verify it publishes a complete
+  provisional generation while the search walk is still held. Resume search and
+  verify its final catalog publishes atomically.
+
+### Two-way transfers during initial indexing
+
+- Run `npm --prefix remix run test:file-sync`. The two-way streaming regression
+  holds both source feeds open while uploads and staged downloads confirm,
+  repeats the check for one-sided edits from a sealed baseline, and exercises
+  stale hints, conflicting edits, lost replies, cancellation, authority loss,
+  and a deletion between strict planning and checkpoint capture.
+- Run `npm --prefix remix run test:files:two-way-progress-ui` with the MCP
+  workspace's Playwright and its Chromium installed. The isolated desktop and
+  narrow viewport checks use the real progress viewer and journal, including a
+  download still active during another index frame, provisional discovery,
+  confirmed nested totals after strict planning, and the final direction label.
+- In the signed Mac app, use a disposable connection with deletion propagation
+  off and a late large file to keep the Rust scanner active. Create a small
+  local-only file and a small cloud-only file in already covered paths or new
+  source folders. Record a canonical cloud publication receipt and the native
+  download's matching bytes while the same initial scan is still unsealed.
+  Verify final strict reconciliation converges and preserves operation history.
+  Repeat Stop/resume with the same capture and operation identities. Preserve
+  existing scheduled connections, resource limits, folder grants, and user data.
+
+### Mac native download recovery
+
+- [ ] Interrupt a signed range after an earlier range has staged. Resume the same
+  operation after temporary HTTP or socket failure and verify the retained offset,
+  exact final bytes and one published file. Wrong owner, cloud revision or range
+  must remain terminal. Check the phase-only `folder-sync.log` diagnostic
+  without logging request URLs, credentials, paths, or payload bytes.
+- [ ] Close the dedicated transfer worker as a saved folder job dispatches a
+  request or reuses an idle worker. Verify the app stays open, interrupted work
+  can resume through a replacement worker, and the file publishes once.

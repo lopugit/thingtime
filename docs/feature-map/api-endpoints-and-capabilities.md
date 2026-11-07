@@ -631,14 +631,46 @@ origin before forwarding every password operation (1.3.0) and all six
 Connections operations (2.0.0), in both ordinary and forwarded-origin paths.
 
 
-Background task diagnostics use `api.lopu-background-tasks` 1.4.0 on the existing
-GET route: `id` plus `diagnostics=1` bypasses stale reconciliation and output
-retention writes. `backgroundTaskDiagnostics.ts` projects only existing root/run/
-deployment, claim, reservation, worker receipt and finalizer evidence. Every
-linked read repeats owner/data scope/chain membership and conversation access.
-Missing receipts remain unknown; reads are non-atomic and cannot certify drain.
-The Tasks Diagnostics disclosure reuses the read-only Thingtime fields inspector;
-`aiTasks.client.ts` negotiates 1.4.0 and discards late owner/source responses.
-Run the background task/client tests, both capability manifest tests, and the
-synthetic `check-lopu-task-diagnostics-browser.mjs` under OS deny-network with
-only fixture loopback port13964 allowed. No new route or index is introduced.
+Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
+the built `test:environment-gateway:acceptance` runner. See
+[the gateway runbook](../environment-api-gateway.md) for server settings,
+environment partitioning and outstanding live rollout acceptance.
+
+Named Connections management is opt-in at `api.connections`,
+`api.connections-oauth-begin`, `api.connections-oauth-callback` and
+`api.connections-unlink` 2.1. `POST /api/v1/connections/named`
+(`api.connections-named` 1.0) verifies exact actor, origin, connection ID and
+a fixed operation. Token envelopes never cross the response boundary.
+Generic Things 1.46.3 also keeps private account and named grant metadata
+behind the origin-scoped Connections API. See
+`test:connections:oauth` and `test:api-capabilities`.
+
+Connection provider artwork negotiates `api.connections-provider-icon` 1.0.0.
+`GET /api/v1/connections/provider-icon?provider=<built-in-id>` serves cached
+PNG bytes, 204 when unavailable, or 404 for an unknown provider. This public
+asset stays on the document origin without opening a data-plane connection or
+forwarding user headers to the provider. Verify both manifests and route
+registration with `test:api-capabilities` and `test:connections:built`.
+
+## Write-only credential handoff
+
+The shared `api.credentials-import` 1.0.0 contract accompanies seven registered
+`/api/v1/credentials/import/{start,status,inspect,approve,revoke,upload,direct}`
+operations, each explicitly versioned in the canonical docs registry and present
+in both generated manifests. Browser clients and `scripts/credential-import.ts`
+negotiate the selected origin. The signed home gateway binds the exact import
+headers; generic origin fallback and background dispatch are refused. Responses
+are private/no-store and project only destination metadata/status/receipts.
+See [the runbook](../agent-credential-workflows.md); run the credential, gateway
+and API-capability checks and smoke the built Nitro discovery/route family.
+## Dynamic map workspaces
+
+`api.things` 1.47.0 / `api.things-update` 1.16.0 accept editable `tt-upload` blocks.
+`api.webpages-resolve` 1.9.0 identifies the updated page contract.
+`PageActionSurface` and `webpageRuntime` support `$ui` query `scope: page`;
+`Builder/Maps/` renders custom marker text, labels, icon lists and authorized
+attachment avatars. `useWebpage` negotiates the upload save minimums.
+`GET /things` numeric summaries reuse canonical ACL-checked `listThings` pages
+through `api/utils/things/numericSummary.ts`, with exact schema/parent filters,
+no item-count cap and no partial success. Run the summary, map overlay/data,
+local UI, Webpage and capability tests plus live saved-page acceptance.

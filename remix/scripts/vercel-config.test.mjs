@@ -40,6 +40,13 @@ test('emitted Web Platform routes prevent stale compiler reuse and keep document
 		assert(cspSources(applicationHeaders.headers['Content-Security-Policy'], 'connect-src').includes(hub), `Emitted application policy must allow the FedCM authority ${hub}`);
 	}
 	assert.ok(routes.indexOf(applicationHeaders) < routes.findIndex(route => route.handle === 'filesystem'));
+	const credentialReview = routes.find(route => route.src && new RegExp(route.src).test('/credentials/import/') &&
+		route.headers?.['X-Frame-Options'] === 'DENY');
+	assert.equal(credentialReview?.continue, true);
+	assert.deepEqual(cspSources(credentialReview.headers['Content-Security-Policy'], 'frame-ancestors'), ["'none'"]);
+	assert.ok(routes.indexOf(credentialReview) > routes.indexOf(applicationHeaders));
+	assert.ok(routes.indexOf(credentialReview) < routes.findIndex(route => route.handle === 'filesystem'));
+
 	const media = routes.find(route => route.src === '^/assets/mediaWorker-[A-Za-z0-9_-]+\\.js$');
 	assert.equal(media.headers['Content-Security-Policy'], mediaWorkerCsp);
 	assert.equal(media.headers['Cross-Origin-Resource-Policy'], 'same-origin');
