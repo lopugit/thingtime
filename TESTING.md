@@ -15010,6 +15010,8 @@ the isolated real-API/browser command and the metadata-only session boundary.
       the old authority. Sign back into the same account with activity still off:
       one read-only verified status must resume retained opt-in without another
       enable/permission prompt. Hide/show the app without withdrawing authority.
+      Restore connectivity before a failed foreground check settles: retry the
+      scoped read once, without another opt-in or repeated network requests.
 - [ ] With native location bridge 1.2+, explicitly authorize Always and enable
       location history on a paired iPhone. Drive for at least 20 minutes with
       the screen locked; verify intermediate measured fixes about five minutes
