@@ -168,6 +168,32 @@ export const proxyApiRequestToFallback = async (request: Request, options: { str
   // Direct callers cannot bypass the dispatcher's policy.
   if (!shouldProxyApiToFallback(request)) return unavailableLocalApiResponse();
   const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, expectedOrigin!);
+  if (options.stripForwardedOrigin) {
+    // A bundled client and its selected server can be released independently.
+    // Negotiate the actual authority before forwarding credentials or bodies.
+    const requirements: Record<string, [string, string]> = {
+      '/api/v1/passwords': ['api.passwords', requestUrl.searchParams.has('q') ? '1.2.0' : '1.1.0'],
+      '/api/v1/mail': ['api.mail', '1.2.0'],
+      '/api/v1/mail/sync': ['api.mail-sync', '1.0.0']
+    };
+    const required = requirements[requestUrl.pathname];
+    if (required) {
+      try {
+        const response = await fetch(new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, fallbackUrl.origin), {
+          headers: { Accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(10_000)
+        });
+        const text = response.ok ? await response.text() : '';
+        if (text.length > 512 * 1024) throw new Error('Manifest too large');
+        const manifest = JSON.parse(text);
+        if (manifest.schemaVersion !== 1 || manifest.origin !== fallbackUrl.origin ||
+            !capabilitySatisfies(manifest.features?.[required[0]]?.version, required[1])) throw new Error('Incompatible manifest');
+      } catch {
+        return Response.json({ ok: false, code: 'API_CAPABILITY_INCOMPATIBLE', error: `The selected desktop server must provide ${required[0]} ${required[1]} or a compatible version. Update or reconnect that server.` }, {
+          status: 503, headers: { 'Cache-Control': 'private, no-store' }
+        });
+      }
+    }
+  }
   const headers = cloneProxyRequestHeaders(request, fallbackUrl);
   if (options.stripForwardedOrigin) {
     headers.delete('x-forwarded-host');

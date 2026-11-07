@@ -47,6 +47,14 @@ test('event handlers and script sinks stay out of the allowlist', () => {
 	}
 });
 
+test('private text addresses reach the rendered DOM without widening data attribute or script permissions', () => {
+  const markup = renderToStaticMarkup(React.createElement(HtmlThingRenderer, { node: { tag: 'span', props: { 'data-tt-private-text': 'property-label-field-0', 'data-secret': 'must-be-stripped', onClick: 'unsafe()' } } }));
+  assert.match(markup, /data-tt-private-text="property-label-field-0"/);
+  assert.doesNotMatch(markup, /must-be-stripped|onclick|unsafe/);
+  assert.equal(ALLOWED_PROPS.has('data-tt-private-text'), true);
+  assert.equal(ALLOWED_PROPS.has('pattern'), false);
+});
+
 test('authored menu triggers stay inert in previews and sanitize custom content', () => {
 	const markup = renderToStaticMarkup(React.createElement(HtmlThingRenderer, { node: {
 		tag: 'tt-menu', props: { name: 'Record options', triggerContent: { tag: 'svg', props: { onClick: 'unsafe()', viewBox: '0 0 24 24' }, children: [{ tag: 'script', children: ['unsafe()'] }, { tag: 'path', props: { d: 'M0 0L24 24' } }] } },

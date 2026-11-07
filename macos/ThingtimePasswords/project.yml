@@ -22,7 +22,9 @@ targets:
     type: application
     platform: macOS
     sources:
-      - PasswordApp.swift
+      - path: PasswordApp.swift
+      - path: PasswordSetupEditor.swift
+      - path: ../../apple/Passwords/Host/AuthenticatorSetupBridge.swift
       - path: Resources
         excludes: ["*.plist", "*.entitlements", "Thingtime.icns"]
         buildPhase: resources
@@ -41,6 +43,10 @@ targets:
         ThingtimePasswordKeychainGroup: $(THINGTIME_PASSWORD_KEYCHAIN_GROUP)
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
         LSUIElement: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.thingtime.passwords.authenticator
+            CFBundleTypeRole: Editor
+            CFBundleURLSchemes: [otpauth]
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: Thingtime
