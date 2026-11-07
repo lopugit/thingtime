@@ -3038,6 +3038,54 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Commander desktop launcher
 
+- [ ] Follow `Commander/docs/TESTING.md` arrow navigation checks in the native app: single taps move one result,
+      held Up/Down accelerate with the selected row visible, and release, focus loss, query changes or menus stop
+      the gesture immediately. Rapid taps must not collapse into one move or restart native icon requests.
+
+- [ ] Follow `Commander/docs/TESTING.md` background-index checks: real create/rename/delete events, independent search
+      during writes, correct unique enabled-source totals and full-refresh age, unplugged/removed roots across restart,
+      settings fingerprint recovery and isolated development cleanup before the signed installed-app check.
+
+- [ ] Click the launcher Settings gear with an empty query and with search results.
+      Tab to it and activate with Return/Space: only Settings opens; the selected
+      search result must not run, and the current query must not be rewritten.
+- [ ] In Activity, confirm Name/PID order remains steady across usage refreshes.
+      Exercise every Sort by/Order option, parent grouping and multiple text,
+      numeric, memory-unit and throughput-unit filters. Missing GPU/network
+      values stay unavailable; a filter with no matches shows its empty state.
+- [ ] Switch Average window through Current, 5/10/30 minutes, 1/3/6/12 hours and
+      1 day. Confirm sorting, filters and displayed usage use the same window,
+      observed history is stated honestly, and reopening/popping out shares
+      the native sample history. Validate a representative PID/name/memory
+      reading against macOS ps/Activity Monitor; do not call newly collected
+      samples a verified full-day history. Run ProcessUsageHistoryTests for
+      weighted averages, expiry, gaps and PID reuse.
+- [ ] Pop Processes out, resize it, scroll to the bottom, and toggle Keep above
+      while focusing another app. Close/reopen it and Settings in both orders.
+      Double-click each title bar twice: maximize inside the usable screen and
+      restore the exact prior frame without entering fullscreen. Verify controls
+      in the title bar do not drag/maximize the window.
+      The green button must be a zoom control; native fullscreen commands must
+      also maximize on the desktop without hiding the menu bar or Dock.
+
+- [ ] Run `corepack pnpm --dir Commander test:raycast-extension` and confirm
+      regex replacement escapes are decoded once, unsupported escapes remain
+      intact, and decoded backslashes are not decoded a second time.
+
+- [ ] In General, turn custom resize handling off and verify AppKit's standard edge resizing works. Turn it back on,
+      drag every edge and corner continuously beyond the first pixel, and reverse direction without releasing.
+      Hover/cursor updates must not interrupt the gesture; opposite edges remain anchored and minimum size holds.
+      Slowly hover along each edge and corner, pause, then move between the border and nearby content: the resize
+      cursor must remain stable throughout the same band that accepts a drag. Repeat after resizing and switching
+      compact/default modes; text selection, header buttons and result actions must retain their normal cursors
+      and input. Keep a pinned launcher non-key and repeat. Verify WindowServer targets the launcher across the
+      transparent exterior half of each resize band, including rounded corners; AppKit hitTest alone does not prove
+      OS event targeting. Run Commander's loaded-WebKit WindowServer/motion regression, including disabled-band
+      removal and central text/link cursor restoration. An endpoint-only automated drag does not establish
+      physical hover-cursor stability.
+      Begin a resize, then release the mouse, press Escape, change focus, hide, close, insert an emoji, or press
+      Return to paste from Commander’s Emoji & Symbols picker; later pointer movement must never continue resizing
+      the launcher. Relaunch and verify the selected mode persists.
 - [ ] Launch the installed `~/Applications/Commander.app`, verify the signed
       app starts its bundled Node daemon and Rust search child, then open/close
       the launcher repeatedly with the configured global shortcut. The search

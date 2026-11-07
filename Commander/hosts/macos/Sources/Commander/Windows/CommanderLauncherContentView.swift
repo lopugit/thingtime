@@ -52,8 +52,8 @@ final class CommanderLauncherContentView: NSView {
     if resizeHandles.count != regions.count {
       resizeHandles.forEach { $0.removeFromSuperview() }
       resizeHandles = regions.map { CommanderResizeHandleView(edges: $0.edges) }
-      // Native siblings above the whole WKWebView cannot be superseded by a
-      // later WebKit content-view cursor rectangle or tracking-area rebuild.
+      // Native siblings keep resize hit ownership outside WebKit's descendant
+      // tracking tree, including when its content hierarchy is rebuilt.
       resizeHandles.forEach { addSubview($0, positioned: .above, relativeTo: webView) }
     }
     for (handle, region) in zip(resizeHandles, regions) {
@@ -69,13 +69,18 @@ final class CommanderLauncherContentView: NSView {
 final class CommanderResizeHandleView: NSView {
   let edges: CommanderResizeEdges
   let resizeCursor: NSCursor
-  private var cursorTrackingArea: NSTrackingArea?
+  private var cursorTrackingAreas: [NSTrackingArea] = []
 
   init(edges: CommanderResizeEdges) {
     self.edges = edges
     resizeCursor = Self.cursor(for: edges)
     super.init(frame: .zero)
     setAccessibilityElement(false)
+    // WindowServer ignores fully transparent pixels even when AppKit hitTest
+    // finds this view. Keep the exterior half of the native resize band in the
+    // window's input surface without painting an opaque outer rectangle.
+    wantsLayer = true
+    layer?.backgroundColor = NSColor.black.withAlphaComponent(0.01).cgColor
   }
 
   @available(*, unavailable)
@@ -89,15 +94,20 @@ final class CommanderResizeHandleView: NSView {
   }
 
   override func updateTrackingAreas() {
-    if let cursorTrackingArea { removeTrackingArea(cursorTrackingArea) }
-    cursorTrackingArea = nil
+    cursorTrackingAreas.forEach { removeTrackingArea($0) }
+    cursorTrackingAreas = []
     if !isHidden {
-      let area = NSTrackingArea(
-        rect: .zero, options: [.cursorUpdate, .activeInKeyWindow, .inVisibleRect],
-        owner: self, userInfo: nil
-      )
-      addTrackingArea(area)
-      cursorTrackingArea = area
+      // cursorUpdate is entry-based and activeAlways suppresses it. Keep key
+      // window cursor updates separate from movement/entry tracking so pinned
+      // non-key panels still receive normal pointer events.
+      for options: NSTrackingArea.Options in [
+        [.cursorUpdate, .activeInKeyWindow, .inVisibleRect],
+        [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+      ] {
+        let area = NSTrackingArea(rect: .zero, options: options, owner: self, userInfo: nil)
+        addTrackingArea(area)
+        cursorTrackingAreas.append(area)
+      }
     }
     super.updateTrackingAreas()
   }

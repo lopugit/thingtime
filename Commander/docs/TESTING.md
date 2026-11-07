@@ -56,7 +56,27 @@
 - [ ] Drag the launcher by its icon/header chrome; the window follows the pointer without moving focus into the search field.
 - [ ] Drag each launcher corner and edge inward and outward in default and compact modes. Verify native resize cursors
       appear, the panel follows the pointer down to its mode-specific minimum, and content remains usable without an
-      opaque outer rectangle.
+      opaque outer rectangle. Keep the mouse held after the first small movement, cross cursor/tracking boundaries,
+      change Shift, and reverse direction: resizing must continue beyond the first pixel until release. Run the native
+      passive-event dispatch regression to cover cursor, enter/exit, framework and modifier notifications between drag
+      steps; endpoint-only automated drags do not establish that interleaved-event behavior.
+- [ ] Hover without clicking along both sides of each visible launcher border and all four corners. Pause, move along
+      the border, and cross a corner: the resize cursor must remain stable and match the direction available on drag.
+      Repeat after default/compact changes and at minimum and wide/tall window sizes. Center links, text fields,
+      header/footer controls and file dragging must retain normal input and cursors. Disable custom resize handling:
+      its native handle views must stop intercepting hits and cursors. Run the loaded-WebKit native cursor regression
+      for sibling hit ownership, system cursor selection and relayout/invalidation. Run
+      `swift test --package-path hosts/macos --filter CommanderWebViewTests/testResizeBorderWindowServerTargetingAndMotionDispatch`
+      from `Commander/`: the shown, non-key fixture must pass WindowServer targeting on the inner and outer halves
+      of every edge/corner in both modes at normal/minimum sizes, plus continued motion, central cursor restoration
+      and removal of the exterior input surface when disabled. An unavailable/occluded WindowServer fixture skips
+      that integration check explicitly. Dispatched events and endpoint drags do not substitute for physical hover
+      when automation lacks pointer movement; inspect the barely painted native band for unwanted visible edges.
+- [ ] While resizing, trigger an emoji insertion or press Return to paste from Commander’s Emoji & Symbols picker,
+      release the mouse, press Escape, change focus, hide, or close the launcher. The resize session must cancel
+      immediately, so later pointer movement cannot resize the panel. In
+      General, turn custom resize handling off and verify AppKit's standard edge resizing works; turn it back on and
+      verify Commander’s inner resize handles work again after relaunch.
 - [ ] Pin the launcher from the bottom-right window icon, focus another app, and verify the pinned window remains
       visible. Command-Space must focus the most recently used Commander window on the current display. Right-click
       the icon and choose Open New Window; verify the newly created window starts pinned even when the global default

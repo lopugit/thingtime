@@ -41,9 +41,12 @@ final class CommanderUtilityWindowTests: XCTestCase {
     let window = CommanderUtilityWindow(contentRect: NSRect(x: 120, y: 140, width: 800, height: 500), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
     let targetFrame = try XCTUnwrap(window.screen ?? NSScreen.main).visibleFrame
     XCTAssertTrue(window.collectionBehavior.contains(.fullScreenNone))
+    // A window can occupy a different display from the current key window's
+    // NSScreen.main. Match the screen selected by the real native zoom action.
+    let expectedFrame = try XCTUnwrap(window.screen ?? NSScreen.main).visibleFrame
     window.toggleFullScreen(nil)
     XCTAssertFalse(window.styleMask.contains(.fullScreen))
-    XCTAssertEqual(window.frame, targetFrame)
+    XCTAssertEqual(window.frame, expectedFrame)
     window.orderOut(nil)
   }
 

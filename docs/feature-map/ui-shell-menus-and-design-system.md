@@ -330,7 +330,17 @@ reload, other-tab writes, ledger failure/recovery, protection outcome and
 [local workspaces](../local-workspaces.md).
 
 
-## Local global/site composition
+`Commander/hosts/macos/Sources/Commander/Windows/LauncherPanelController.swift`
+owns the launcher's native edge/corner resize gesture. Passive cursor and tracking
+events must preserve that gesture; release, deliberate input and lifecycle changes
+end it. `CommanderLauncherContentView.swift` places eight native resize handles
+above WebKit; their bounded, minimally painted regions keep the transparent outer half in WindowServer's
+input surface as well as AppKit hit testing. Separate always-active movement tracking supports non-key pinned
+panels; panel motion dispatch selects the existing native handle cursor without rebuilding region geometry.
+Central content retains WebKit cursors, and disabling custom resizing hides both input and painted handles.
+`CommanderWebView.swift` supplies anchored frame geometry. Regression coverage is
+in `CommanderWebViewTests.swift`, with native hover/drag acceptance in
+`Commander/docs/TESTING.md`.
 
 `BuilderPagesList` links global editing and canonical site routes to `BuilderPage`.
 `schemas/sitePages.ts` supplies the same native-section definitions to offline
