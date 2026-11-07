@@ -22,12 +22,14 @@ try {
   const metadata = mode === 'metadata', complete = mode === 'complete' || mode === 'photos-limited', photos = mode.startsWith('photos-');
   const waiting = mode === 'photos-wifi' || mode === 'photos-icloud-wait', failed = mode === 'photos-error', partial = mode === 'photos-partial';
   const preparation = photoDownloadPreparation(mode === 'photos-fetch' ? { fraction: 0.64 } : mode === 'photos-fetch-start' ? { fraction: 0 } : undefined);
-  const running = ['live', 'growing', 'metadata', 'photos-preparing'].includes(mode) || !!preparation;
+  const running = ['live', 'growing', 'metadata', 'photos-preparing', 'photos-background-refused'].includes(mode) || !!preparation;
   const directions = {
    upload: { operations: metadata ? 1 : 2, confirmed: complete ? 2 : metadata ? 0 : 1, bytesTotal: metadata ? '0' : '1000', bytesConfirmed: complete ? '1000' : metadata ? '0' : '500' },
    download: { operations: metadata ? 0 : 1, confirmed: complete ? 1 : 0, bytesTotal: metadata ? '0' : '200', bytesConfirmed: complete ? '200' : '0' }
   };
-  const progress = photos ? { stage: partial || complete ? 'complete' : preparation ? 'transferring' : 'scanning', confirmed: 0, total: 0,
+  const refused = mode === 'photos-background-refused';
+  const progress = photos ? { stage: partial || complete ? 'complete' : preparation || refused ? 'transferring' : 'scanning', confirmed: refused ? 1 : 0, total: refused ? 3 : 0,
+    ...(refused ? { backgroundTransfer: 'foreground-only' } : {}),
     ...(partial ? { coverage: 'partial', skipped: 2 } : {}), ...(mode === 'photos-limited' ? { photoAccess: 'limited' } : {}),
     message: mode === 'photos-icloud-wait' ? 'An original is only in iCloud. Download it in Photos or explicitly allow cellular in this connection.' : waiting ? 'Waiting for Wi-Fi.' : undefined }
    : { stage: complete ? 'complete' : 'transferring', confirmed: 1, total: 3, directions, totalFinal: mode !== 'growing', direction: 'upload', bytes: 500, size: 500 };
@@ -65,6 +67,10 @@ try {
   await page.getByText('Off for this connection', { exact: true }).waitFor();
   assert.equal(await page.getByText('Measuring live speed…', { exact: true }).count(), 0);
   assert.doesNotMatch(await page.locator('article').innerText(), /0 of 0|0 \/ 0/);
+  await page.evaluate(() => window.glanceFixture.mode('photos-background-refused'));
+  await page.getByRole('status').filter({ hasText: '1 of 3 operations confirmed · Keep Thingtime open; iOS could not schedule background processing.' }).waitFor();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.screenshot({ path: join(evidence, label + '-photos-background-refused.png'), fullPage: true });
   await page.evaluate(() => window.glanceFixture.mode('photos-fetch-start'));
   const iCloud = page.getByRole('progressbar', { name: 'Downloading an original from iCloud', exact: true });
   await iCloud.waitFor();
@@ -104,5 +110,5 @@ try {
   }
   await page.screenshot({ path: join(evidence, label + '-photos-partial.png'), fullPage: true });
  }
- assert.deepEqual(errors,[]);await writeFile(join(evidence,'result.json'),JSON.stringify({passed:true,views:['desktop','mobile'],checks:['collapsed directional fields','live rates','durable-only percentages','growing totals','paused zero vs offline unknown','folder-only work','empty lane','Photos preparation and upload-only lanes','collapsed Wi-Fi wait and Photos error','partial backup coverage','iCloud original preparation','limited Photos access','full scroll overflow']},null,2));console.log('Connection glance desktop/mobile checks passed. Evidence: '+evidence);
+ assert.deepEqual(errors,[]);await writeFile(join(evidence,'result.json'),JSON.stringify({passed:true,views:['desktop','mobile'],checks:['collapsed directional fields','live rates','durable-only percentages','growing totals','paused zero vs offline unknown','folder-only work','empty lane','Photos preparation and upload-only lanes','collapsed Wi-Fi wait and Photos error','partial backup coverage','iCloud original preparation','limited Photos access','background scheduler refusal','full scroll overflow']},null,2));console.log('Connection glance desktop/mobile checks passed. Evidence: '+evidence);
 }catch(error){if(context?.pages()[0]){await context.pages()[0].screenshot({path:join(evidence,'failure.png'),fullPage:true}).catch(()=>{});console.error((await context.pages()[0].locator('body').innerText()).slice(0,3500));}throw error;}finally{await context?.close();if(server){server.close();await once(server,'close');}await rm(scratch,{recursive:true,force:true});}
