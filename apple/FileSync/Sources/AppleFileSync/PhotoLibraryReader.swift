@@ -34,14 +34,37 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     public typealias Scope = MobileFolderInventory.Scope
 
     public enum Failure: Error, LocalizedError {
-        case unavailable, changed, cloudOriginal
+        case unavailable, changed, cloudOriginal, storageFull, readFailed
         public var errorDescription: String? {
             switch self {
             case .unavailable: return "Photo access is unavailable. Choose photo access again."
             case .changed: return "The photo library changed during backup. Try again."
-            case .cloudOriginal: return "A photo original is unavailable locally. Download originals in Photos and try again."
+            case .cloudOriginal: return "Backup needs an original that is only in iCloud. Download originals in Photos, then retry this backup. Saved cloud copies and transfer progress are kept."
+            case .storageFull: return "There is not enough device storage to prepare a photo original. Free some space, then retry this backup. Saved cloud copies and transfer progress are kept."
+            case .readFailed: return "Photos could not read an original. Keep Thingtime open and retry this backup. If it still fails, check that the original opens in Photos. Saved cloud copies and transfer progress are kept."
             }
         }
+    }
+    // PhotoKit also reports cancellation, permission loss and disk errors here.
+    // Only its explicit network-required error establishes an iCloud original.
+    // Never expose NSError descriptions, asset identifiers or underlying paths.
+    static func exportFailure(_ error: Error) -> Error {
+        if error is CancellationError { return error }
+        let failure = error as NSError
+        if failure.domain == PHPhotosErrorDomain {
+            switch failure.code {
+            case PHPhotosError.Code.networkAccessRequired.rawValue: return Failure.cloudOriginal
+            case PHPhotosError.Code.userCancelled.rawValue: return CancellationError()
+            case PHPhotosError.Code.accessRestricted.rawValue, PHPhotosError.Code.accessUserDenied.rawValue:
+                return Failure.unavailable
+            case PHPhotosError.Code.notEnoughSpace.rawValue: return Failure.storageFull
+            default: return Failure.readFailed
+            }
+        }
+        if failure.domain == NSCocoaErrorDomain && failure.code == CocoaError.fileWriteOutOfSpace.rawValue {
+            return Failure.storageFull
+        }
+        return Failure.readFailed
     }
     private static let observationBatchSize = 128
     private let provider: any PhotoResourceProvider
@@ -455,8 +478,8 @@ private final class PhotoExportState: @unchecked Sendable {
     private let lock = NSLock(), file: FileHandle
     private var error: Error?, cancelled = false
     init(file: FileHandle) { self.file = file }
-    func receive(_ bytes: Data) { lock.lock(); defer { lock.unlock() }; guard !cancelled, error == nil else { return }; do { try file.write(contentsOf: bytes) } catch { self.error = error } }
-    func complete(_ error: Error?) { lock.lock(); if self.error == nil, error != nil { self.error = PhotoLibraryReader.Failure.cloudOriginal }; lock.unlock(); finished.signal() }
+    func receive(_ bytes: Data) { lock.lock(); defer { lock.unlock() }; guard !cancelled, error == nil else { return }; do { try file.write(contentsOf: bytes) } catch { self.error = PhotoLibraryReader.exportFailure(error) } }
+    func complete(_ error: Error?) { lock.lock(); if self.error == nil, let error { self.error = PhotoLibraryReader.exportFailure(error) }; lock.unlock(); finished.signal() }
     func cancel() { lock.lock(); cancelled = true; lock.unlock() }
     func result() throws { lock.lock(); defer { lock.unlock() }; if let error { throw error } }
 }

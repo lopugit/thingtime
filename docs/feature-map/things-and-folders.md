@@ -1042,6 +1042,13 @@ and deployment readiness are independently accepted. Snapshot/reference sidecars
 and plaintext-bearing encrypted hasher state stay in the independent backup store,
 never ordinary Thing crystal fields. See `docs/portable-backups.md` and TESTING.
 
+Photos installed acceptance uses `iOS/ThingtimeUITests/PhotoLibraryConsentUITests.swift`
+and `iOS/scripts/test-mobile-sync-installed.sh`: ordinary consent, same-grant
+original hashes and reopen, with storage-readiness gates and nonzero executed-test
+assertions. `nativeDeviceSyncGovernor` allows legacy connections without saved
+limits on unsupported iOS while refusing explicit device and connection limits.
+`deviceResourcePolicy.test.ts` covers that boundary; Mac enforcement is unchanged.
+
 `fileSync/configurationStart.ts` is the explicit manual Start preflight shared
 by native-host and remote controls. It rereads the exact reviewed owned revision,
 refuses retained selected drafts/identity changes, CAS-patches only paused=false,
