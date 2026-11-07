@@ -99,6 +99,11 @@ verify_derived_commit() {
     case "$changed_file" in
       graphify-out/graph.json|graphify-out/GRAPH_REPORT.md|\
       graphify-out/manifest.json|graphify-out/cost.json|\
+      graphify-out/snapshots/v1/*/graph.json|\
+      graphify-out/snapshots/v1/*/manifest.json|\
+      graphify-out/snapshots/v1/*/GRAPH_REPORT.md|\
+      graphify-out/snapshots/v1/*/cost.json|\
+      graphify-out/snapshots/v1/*/snapshot.json|\
       graphify-out/cache/semantic/*) ;;
       *) fail "Derived Graphify commit changed an unauthorized path: $changed_file" ;;
     esac
@@ -183,22 +188,12 @@ export GIT_CONFIG_KEY_1=core.fsmonitor
 export GIT_CONFIG_VALUE_1=false
 
 GRAPHIFY_VERSION="${GRAPHIFY_VERSION:-0.9.4}"
-[ -n "${ANTHROPIC_API_KEY_FALLBACK:-}" ] || unset ANTHROPIC_API_KEY_FALLBACK
-[ -n "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN_FALLBACK
-primary_anthropic_api_key="${ANTHROPIC_API_KEY:-}"
-primary_claude_code_oauth_token="${CLAUDE_CODE_OAUTH_TOKEN:-}"
-credential_slot="$(cat "$RUNNER_TEMP/lopu-claude-credential-slot" 2>/dev/null || printf 'primary')"
-case "$credential_slot" in
-  primary) ;;
-  fallback)
-    ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY_FALLBACK:-}"
-    CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}"
-    ;;
-  *)
-    echo "::warning::Invalid Lopu credential slot; Graphify will use its non-Claude fallback."
-    unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN
-    ;;
-esac
+unset ANTHROPIC_API_KEY
+if [ -s "$RUNNER_TEMP/lopu-claude-credential-token" ]; then
+  CLAUDE_CODE_OAUTH_TOKEN="$(<"$RUNNER_TEMP/lopu-claude-credential-token")"
+else
+  unset CLAUDE_CODE_OAUTH_TOKEN
+fi
 [ -n "${OPENAI_API_KEY:-}" ] || unset OPENAI_API_KEY
 [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
 [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
@@ -226,6 +221,11 @@ if (( install_status != 0 )); then
   exit 0
 fi
 export PATH="$HOME/.local/bin:$PATH"
+trusted_scripts="$(builtin cd -- "$(dirname "$0")/.." && pwd -P)"
+graphify_router="$trusted_scripts/graphify-cas.mjs"
+graphify_stager="$trusted_scripts/stage-graphify-snapshots.mjs"
+[[ -f "$graphify_router" && -f "$graphify_stager" ]] \
+  || fail "Trusted Graphify snapshot router is unavailable."
 
 select_claude_backend() {
   if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
@@ -277,7 +277,9 @@ fi
 
 # The workflow supplies only closed, validated controller outputs. Force the
 # selected provider's configured model; each provider's default sentinel
-# intentionally leaves Graphify unforced.
+# intentionally leaves Graphify unforced. A named Claude primary comes from the
+# widened Admin waterfall grammar, so it is re-validated against the closed
+# charset here before it reaches Graphify's API flag or the Claude CLI env.
 graphify_model_args=()
 case "$backend" in
   openai)
@@ -298,9 +300,14 @@ case "$backend" in
     unset GRAPHIFY_OPENAI_MODEL
     case "${PREFERRED_MODEL:-default}" in
       default) unset GRAPHIFY_CLAUDE_CLI_MODEL ;;
-      claude-fable-5|claude-opus-5)
-        graphify_model_args=(--model "$PREFERRED_MODEL")
-        export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
+      claude-*)
+        if [[ "$PREFERRED_MODEL" =~ ^claude-[a-z0-9-]{1,48}$ ]]; then
+          graphify_model_args=(--model "$PREFERRED_MODEL")
+          export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
+        else
+          echo "::warning::Unexpected preferred Claude model; Graphify will use its built-in default."
+          unset GRAPHIFY_CLAUDE_CLI_MODEL
+        fi
         ;;
       *)
         echo "::warning::Unexpected preferred Claude model; Graphify will use its built-in default."
@@ -328,9 +335,8 @@ if [ -n "$backend" ]; then
   concurrency=4
   [ "$backend" != claude-cli ] || concurrency=1
   semantic_status=0
-  graphify extract . --backend "$backend" "${graphify_model_args[@]}" \
+  node "$graphify_router" extract . --backend "$backend" "${graphify_model_args[@]}" \
     --max-concurrency "$concurrency" --api-timeout 7200 \
-    && graphify cluster-only . --no-viz --no-label \
     && graph_not_collapsed || semantic_status=$?
   assert_tool_boundary
   if (( semantic_status == 0 )); then
@@ -346,7 +352,7 @@ emit semantic "$semantic"
 
 if [ "$semantic" = none ] || [ "$semantic" = failed ]; then
   update_status=0
-  graphify update . || update_status=$?
+  node "$graphify_router" update . || update_status=$?
   assert_tool_boundary
   if (( update_status != 0 )); then
     echo "::warning::AST/text Graphify refresh failed; preserving the exact promotion-base graph."
@@ -357,17 +363,9 @@ if [ "$semantic" = none ] || [ "$semantic" = failed ]; then
 fi
 assert_tool_boundary
 
-# Stage only portable, repo-tracked Graphify outputs.
-for file in graph.json GRAPH_REPORT.md manifest.json cost.json; do
-  path="graphify-out/$file"
-  if [ -e "$path" ] || git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
-    git add -A -- "$path"
-  fi
-done
-if [ -d graphify-out/cache/semantic ] \
-   || [ -n "$(git ls-files -- 'graphify-out/cache/semantic/')" ]; then
-  git add -A -- graphify-out/cache/semantic/
-fi
+# Stage only portable immutable snapshots, additive semantic cache entries, and
+# legacy root artifacts while old branches remain in flight.
+node "$graphify_stager"
 
 if [ -n "$(git status --porcelain --untracked-files=no -- . ':(exclude)graphify-out/')" ]; then
   echo "::error::Graphify modified source files; dropping the derived refresh."
@@ -379,10 +377,8 @@ fi
 # This step owns live LLM credentials and may stage parser/LLM-influenced
 # derived bytes. Reject exact raw or base64 credential material before commit.
 needles="$RUNNER_TEMP/promotion-graphify-needles.txt"
-: >"$needles"
-for secret in "${OPENAI_API_KEY:-}" "$primary_anthropic_api_key" \
-  "$primary_claude_code_oauth_token" "${ANTHROPIC_API_KEY_FALLBACK:-}" \
-  "${CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-}"; do
+node "$GITHUB_ACTION_PATH/../../scripts/lopu-credential-vault.mjs" needles "$needles"
+for secret in "${OPENAI_API_KEY:-}"; do
   [ -n "$secret" ] || continue
   printf '%s\n' "$secret" >>"$needles"
   printf '%s' "$secret" | base64 -w0 >>"$needles"

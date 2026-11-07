@@ -1107,6 +1107,15 @@ function sourcePrHasLabel(sourcePr, name) {
   );
 }
 
+export function isReverseSyncSourcePr(sourcePr, source = CFG.source, target = CFG.target) {
+  const head = String(sourcePr?.headRefName || "");
+  if (head === target) return true;
+  // listMergedSourcePrs is already filtered to source and older callers did
+  // not request baseRefName, so an absent field still means the source base.
+  const base = sourcePr?.baseRefName || source;
+  return base === source && head === `sync/${target}-into-${source}`;
+}
+
 export function isExactPausedPromotionSnapshot(sourcePr, context, comments) {
   if (!sourcePrHasLabel(sourcePr, PROMOTION_PAUSE_LABEL)) return false;
   const marker = `<!-- thingtime-ai-promotion-paused:v1 ${context?.planHash || ""} -->`;
@@ -3068,6 +3077,30 @@ async function selfTest() {
   assert.equal(slugify("Hello, World! 42"), "hello-world-42");
   assert.equal(slugify("---"), "change");
   assert.equal(slugify("a".repeat(80)).length, 40);
+  assert.equal(
+    isReverseSyncSourcePr(
+      {
+        baseRefName: "develop",
+        headRefName: "sync/main-into-develop",
+      },
+      "develop",
+      "main",
+    ),
+    true,
+    "the automation-owned main-to-develop safety branch must never be promoted back to main",
+  );
+  assert.equal(
+    isReverseSyncSourcePr(
+      {
+        baseRefName: "develop",
+        headRefName: "codex/feature",
+      },
+      "develop",
+      "main",
+    ),
+    false,
+    "ordinary feature branches remain eligible for promotion",
+  );
   // Never-cancel replacement for the retired close-before-AI boundary: a
   // degraded lineage marks a plan for review instead of destroying the
   // promotion a human was already given.
@@ -3775,7 +3808,7 @@ function repoFlag() {
 }
 
 function listMergedSourcePrs() {
-  const fields = "number,title,body,labels,headRefName,url,mergedAt,mergeCommit,author";
+  const fields = "number,title,body,labels,headRefName,baseRefName,url,mergedAt,mergeCommit,author";
   const prs = ghJson([
     "pr", "list", ...repoFlag(),
     "--base", CFG.source, "--state", "merged",
@@ -3786,7 +3819,7 @@ function listMergedSourcePrs() {
 }
 
 function loadSourcePr(number) {
-  const fields = "number,title,body,labels,headRefName,url,mergedAt,mergeCommit,author,state";
+  const fields = "number,title,body,labels,headRefName,baseRefName,url,mergedAt,mergeCommit,author,state";
   return ghJson([
     "pr", "view", String(number), ...repoFlag(), "--json", fields,
   ]);
@@ -4906,7 +4939,10 @@ async function runPromotion(results, state) {
   const eligible = [];
   for (const pr of sourcePrs) {
     const labels = (pr.labels || []).map((l) => (l.name || "").toLowerCase());
-    if (pr.headRefName === CFG.target) continue; // sync main→develop PRs
+    // The synchronizer uses an automation-owned safety branch rather than
+    // mutating the protected target branch directly. Neither form represents
+    // a feature that should be promoted back in the opposite direction.
+    if (isReverseSyncSourcePr(pr)) continue;
     if (pr.headRefName?.startsWith("promote/")) continue;
     if (parsePromotionOf(pr.body) !== null) continue; // is itself a promotion
     if (labels.some((name) => CFG.skipLabels.includes(name))) {
@@ -5719,8 +5755,69 @@ async function runPromotion(results, state) {
 
         // Content already on main (individually promoted and back-merged, or
         // shipped via an omnibus develop → main merge) beats every promotion
-        // record — it is simply done.
+        // record — it is simply done. A conflict worker may still have left
+        // an exact empty reservation behind while that omnibus merge landed.
+        // Retire only the mechanically-proven reservation head with a lease;
+        // any resolved or user-moved branch is preserved for review.
         if (plan.inTarget) {
+          const redundantReservations = [...remoteBranches].filter((name) =>
+            name.startsWith(`promote/pr-${pr.number}-`) &&
+            promotionBranchMatches(pr, name, CFG.target)
+          );
+          for (const existingBranch of redundantReservations) {
+            const available = ensureRemoteBranchAvailable(existingBranch, process.cwd());
+            if (!available.ok) {
+              if (/couldn't find remote ref/i.test(available.error || "")) {
+                // Another exact worker or cleanup won the race after the
+                // initial ls-remote snapshot. The desired state already holds.
+                remoteBranches.delete(existingBranch);
+                continue;
+              }
+              results.warnings.push(
+                `#${pr.number} — already represented on \`${CFG.target}\`, but redundant ` +
+                `reservation \`${existingBranch}\` could not be refreshed safely: ${available.error}`,
+              );
+              continue;
+            }
+            const reservation = inspectUnresolvedPromotionReservationHead(
+              available.ref,
+              pr,
+              existingBranch,
+              process.cwd(),
+            );
+            if (!reservation.ok) {
+              results.warnings.push(
+                `#${pr.number} — preserved \`${existingBranch}\` because its live head is not an ` +
+                `exact unclaimed reservation: ${reservation.error}`,
+              );
+              continue;
+            }
+            if (!reservation.present) continue;
+            if (CFG.dryRun) {
+              results.recovered.push(
+                `(dry-run) would remove redundant exact reservation ` +
+                `\`${reservation.reservationSha}\` from \`${existingBranch}\`.`,
+              );
+              continue;
+            }
+            const removed = tryGit(
+              exactReservationDeleteArgs(existingBranch, reservation.reservationSha),
+              worktree,
+            );
+            if (!removed.ok) {
+              results.warnings.push(
+                `#${pr.number} — redundant reservation cleanup lease was refused; preserving ` +
+                `\`${existingBranch}\`: ${failureDetail(removed)}`,
+              );
+              continue;
+            }
+            remoteBranches.delete(existingBranch);
+            results.recovered.push(
+              `#${pr.number} — removed redundant exact reservation ` +
+              `\`${reservation.reservationSha}\` from \`${existingBranch}\` after its content ` +
+              `was verified on \`${CFG.target}\`.`,
+            );
+          }
           skip(pr, `merge commit already on ${CFG.target}`);
           continue;
         }

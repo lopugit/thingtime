@@ -15,6 +15,7 @@ const scripts = resolve(githubRoot, "scripts");
 const codeqlBackfillScriptPath = resolve(scripts, "codeql-open-pr-backfill.mjs");
 
 const IMPLEMENTATIONS = [
+  "commander-release.yml",
   "codeql-analysis.yml",
   "codeql-pr-handoff.yml",
   "develop-pr-preview.yml",
@@ -215,7 +216,17 @@ function assertRoutingProofContract(providerRouter) {
 const ADMIN_MODEL_ENDPOINT =
   "https://thingtime.com/api/v1/settings/pr-conflict-auto-resolver-model-waterfall";
 const ADMIN_MODEL_KEY = "Thingtime.PRConflictAutoResolverModelWaterfall";
-const ALLOWED_MODELS = ["default", "claude-fable-5", "claude-opus-5"];
+// Composed option ids (`<model>[:<effort>][:fast]`) from the expanded Admin
+// catalog. The loader stays a closed grammar: a charset that can never lead
+// with `-` or contain a space, a closed effort segment set, and a closed
+// Claude base-model pattern the CLI chain is rebuilt from.
+const ADMIN_MODEL_ID_CHARSET = "[a-z0-9][a-z0-9.:-]{0,63}";
+const ADMIN_MODEL_EFFORT_SEGMENTS = "none|minimal|low|medium|high|xhigh|max|ultra";
+const ADMIN_CLAUDE_BASE_PATTERN = "^claude-[a-z0-9-]{1,48}$";
+// Must stay identical to the promotion audit gate's own cap in
+// resolve-pr-conflicts.yml; the loader-side guard exists to fail closed
+// *before* that gate can hard-fail a finished resolution.
+const ADMIN_MODEL_ARGS_CAP = 2048;
 const AI_RUNTIME_YAML = [
   ".github/actions/lopu-agent/action.yml",
   ".github/actions/rebase-conflict-round/action.yml",
@@ -239,7 +250,13 @@ function workflowBlock(source, start, end, label) {
   return source.slice(startIndex, endIndex);
 }
 
-function assertAdminLoader(block, label) {
+// One Admin dial drives every model-backed Lopu lane, so each copy of the
+// loader must enforce the identical grammar. A copy that quietly accepts an id
+// the others reject produces a split brain — the same setting routing one lane
+// to a named model and another to `default`. Pin the grammar on every copy,
+// including the build doctor's, which emits no `primary_model` and so cannot
+// use the fuller `assertAdminLoader` below.
+function assertAdminWaterfallGrammar(block, label) {
   assert.ok(
     block.includes(ADMIN_MODEL_ENDPOINT),
     `${label}: fetches Thingtime Admin endpoint`,
@@ -248,14 +265,92 @@ function assertAdminLoader(block, label) {
     block.includes(ADMIN_MODEL_KEY),
     `${label}: validates the exact Admin setting key`,
   );
-  for (const model of ALLOWED_MODELS) {
-    assert.ok(block.includes(model), `${label}: allowlists ${model}`);
-  }
+  assert.ok(
+    block.includes(ADMIN_MODEL_ID_CHARSET),
+    `${label}: validates the closed composed-id charset`,
+  );
+  assert.ok(
+    block.includes(ADMIN_MODEL_EFFORT_SEGMENTS),
+    `${label}: parses the closed effort segment set`,
+  );
+  assert.ok(
+    block.includes(ADMIN_CLAUDE_BASE_PATTERN),
+    `${label}: rebuilds Claude models from the closed base pattern`,
+  );
+  assert.ok(
+    block.includes('. + ["default"]'),
+    `${label}: appends the default hard fallback defensively`,
+  );
+  // A repeated segment (`model:fast:fast`, `model:high:low`) must fail the
+  // whole mapping closed rather than being silently absorbed by one copy.
+  assert.ok(
+    block.includes('[ "$fast" -eq 0 ] || segments_ok=0'),
+    `${label}: rejects a repeated fast segment`,
+  );
+  assert.ok(
+    block.includes('[ -z "$effort" ] || segments_ok=0'),
+    `${label}: rejects a repeated effort segment`,
+  );
+  assert.match(
+    block,
+    /--effort \$claude_effort/u,
+    `${label}: appends the validated session effort to the model args`,
+  );
   assert.match(
     block,
     /model_args=.*>> "\$GITHUB_OUTPUT"/u,
     `${label}: exports validated model args`,
   );
+  assertAdminTransportCap(block, label);
+}
+
+// The promotion publish step rejects a `model_args` longer than
+// ADMIN_MODEL_ARGS_CAP characters, so a valid-but-oversized chain has to
+// collapse here rather than hard-fail after the resolution work is finished.
+// Widening the waterfall to 256 ids made that reachable, and the guard now
+// lives in three copies of the loader with the same split-brain risk as the
+// grammar above — so pin its cap, its ordering, and its fail-closed body.
+function assertAdminTransportCap(block, label) {
+  const guard = new RegExp(
+    `if \\[ "\\$\\{#(?:model_)?args\\}" -gt ${ADMIN_MODEL_ARGS_CAP} \\]; then\\n([\\s\\S]*?)\\n\\s*fi\\n`,
+    "u",
+  ).exec(block);
+  assert.ok(
+    guard,
+    `${label}: caps the assembled model args at the ${ADMIN_MODEL_ARGS_CAP}-character transport limit`,
+  );
+  const body = guard[1];
+  assert.match(
+    body,
+    /::warning::/u,
+    `${label}: warns when the transport cap collapses the chain`,
+  );
+  assert.match(
+    body,
+    /claude_effort="max"/u,
+    `${label}: transport-cap fallback resets the session effort`,
+  );
+  assert.match(
+    body,
+    /(?:model_)?args="--model \$\{?[a-z_]+.*--effort \$claude_effort"/u,
+    `${label}: transport-cap fallback rebuilds the chain from validated variables`,
+  );
+  // Measuring anything but the finished chain would let an oversized value
+  // through to the downstream gate, which is the failure this guard exists to
+  // prevent — so pin assembly < guard < export.
+  const assembled = block.search(
+    /(?:model_)?args="\$(?:model_)?args --effort \$claude_effort"/u,
+  );
+  const capped = block.indexOf(`-gt ${ADMIN_MODEL_ARGS_CAP}`);
+  const exported = block.search(/echo "model_args=/u);
+  assert.ok(
+    assembled >= 0 && assembled < capped && capped < exported,
+    `${label}: measures the finished chain after assembly and before export`,
+  );
+}
+
+function assertAdminLoader(block, label) {
+  assertAdminWaterfallGrammar(block, label);
   assert.match(
     block,
     /primary_model=.*>> "\$GITHUB_OUTPUT"/u,
@@ -263,7 +358,7 @@ function assertAdminLoader(block, label) {
   );
 }
 
-function assertAdminModelRouting(resolver, rebase) {
+function assertAdminModelRouting(resolver, rebase, allBranch) {
   const resolverLoader = workflowBlock(
     resolver,
     "  model_config:\n",
@@ -276,13 +371,38 @@ function assertAdminModelRouting(resolver, rebase) {
     "      - name: Isolate the real rebasing repository outside model workspace\n",
     "rebase model loader",
   );
+  const buildDoctorLoader = workflowBlock(
+    allBranch,
+    "      - name: Load the build-doctor model waterfall\n",
+    "      - name: Lopu build doctor round 1\n",
+    "build-doctor model loader",
+  );
 
   assertAdminLoader(resolverLoader, "resolver model loader");
   assertAdminLoader(rebaseLoader, "rebase model loader");
+  // The build doctor reuses the same Admin dial and hands its result to the
+  // same Claude CLI, so it is held to the same grammar even though the rest of
+  // all-branch.yml owns its bounded build-doctor policy separately.
+  assertAdminWaterfallGrammar(buildDoctorLoader, "build-doctor model loader");
   assert.doesNotMatch(
     rebaseLoader,
     /steps\.start\.outputs\.complete/u,
     "rebase model loader: runs for clean rebases so Graphify receives the Admin model",
+  );
+
+  // The loader-side cap is only useful while it matches the promotion audit
+  // gate it front-runs. If the two ever drift apart, an oversized chain is
+  // either rejected for no reason or reaches the gate the guard exists to
+  // keep it away from, so pin both ends of the shared constant.
+  assert.ok(
+    resolver.includes(`(( \${#MODEL_ARGS} <= ${ADMIN_MODEL_ARGS_CAP} ))`),
+    `promotion audit gate: enforces the same ${ADMIN_MODEL_ARGS_CAP}-character model-args cap as the loaders`,
+  );
+  assert.ok(
+    resolver.includes(
+      `value.model_args.length <= ${ADMIN_MODEL_ARGS_CAP}`,
+    ),
+    `promotion attestation replay: enforces the same ${ADMIN_MODEL_ARGS_CAP}-character model-args cap as the loaders`,
   );
 
   assert.ok(
@@ -414,13 +534,13 @@ function assertAdminModelRouting(resolver, rebase) {
   );
   assert.match(
     lopuAgent,
-    /steps\.claude_primary_failure\.outputs\.retryable == 'true'/u,
-    "fallback Claude execution is limited to classified credential or account-capacity failures",
+    /steps\.claude_1_failure\.outputs\.retryable == 'true'[\s\S]*steps\.claude_7_failure\.outputs\.retryable == 'true'/u,
+    "every later vault credential is limited to classified credential or account-capacity failures",
   );
   assert.match(
     lopuAgent,
-    /lopu-claude-credential-slot/u,
-    "the single Lopu action records the successful credential slot for exact-session continuation",
+    /lopu-claude-credential-token/u,
+    "the single Lopu action stores the selected credential for exact-session continuation",
   );
   for (const path of runtimeFiles.filter((path) => path !== ".github/actions/lopu-agent/action.yml")) {
     const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
@@ -438,11 +558,27 @@ function assertAdminModelRouting(resolver, rebase) {
   }, 0);
   assert.equal(
     claudeActionCount,
-    2,
-    "only the single Lopu action owns the ordered primary and fallback Claude invocations",
+    8,
+    "only the single Lopu action owns the bounded eight-position Claude credential waterfall",
   );
+  const credentialVaultProbe = resolver.slice(
+    resolver.indexOf("\n  verify_credential_vault:"),
+    resolver.indexOf("\n  route:"),
+  );
+  assert.match(
+    credentialVaultProbe,
+    /uses: \.\/\.github\/actions\/lopu-agent[\s\S]*--max-turns 1/u,
+    "credential-vault maintenance bounds its authentication probe to one turn",
+  );
+  const resumableRuntimeSource = (path, source) =>
+    path === ".github/workflows/resolve-pr-conflicts.yml"
+      ? source.replace(credentialVaultProbe, "")
+      : source;
   const turnBudgets = runtimeFiles.flatMap((path) => {
-    const source = readFileSync(resolve(githubRoot, "..", path), "utf8");
+    const source = resumableRuntimeSource(
+      path,
+      readFileSync(resolve(githubRoot, "..", path), "utf8"),
+    );
     return [...source.matchAll(/--max-turns\s+(\d+)/gu)].map((match) => ({
       path,
       value: Number(match[1]),
@@ -460,7 +596,10 @@ function assertAdminModelRouting(resolver, rebase) {
     );
   }
   const runtimeSource = runtimeFiles
-    .map((path) => readFileSync(resolve(githubRoot, "..", path), "utf8"))
+    .map((path) => resumableRuntimeSource(
+      path,
+      readFileSync(resolve(githubRoot, "..", path), "utf8"),
+    ))
     .join("\n");
   const lopuCallCount =
     runtimeSource.match(/uses:\s*\.\/(?:trusted\/)?\.github\/actions\/lopu-agent/gu)?.length ?? 0;
@@ -660,6 +799,36 @@ export function assertControlPlaneContract() {
     /any\(\.\[\]; \.headRefOid == \$sha\)/u,
     "an open PR owns one analysis instead of duplicating its branch push",
   );
+  // The scope pre-flight samples ownership seconds after the push, so a branch
+  // pushed first and adopted by a PR moments later still reaches the analyzer
+  // believing it owns analysis. The resulting refs/heads analysis at a live PR
+  // head makes GHAS open that PR's CodeQL check against the branch snapshot and
+  // close it `timed_out` with only one of the two configurations present.
+  assert.match(
+    codeql,
+    /- name: Initialize CodeQL[\s\S]*?- name: Confirm this push still owns the analysis[\s\S]*?- name: Analyze the triggering revision/u,
+    "the ownership re-check sits after database init, so it absorbs the whole init window before the upload",
+  );
+  assert.match(
+    codeql,
+    /- name: Confirm this push still owns the analysis\n\s+id: ownership\n\s+if: github\.event_name == 'push' && needs\.scope\.outputs\.analysis_ref == ''/u,
+    "only a branch-ref push re-checks ownership; PR and centrally dispatched runs are untouched",
+  );
+  assert.match(
+    codeql,
+    /- name: Analyze the triggering revision\n\s+if: needs\.scope\.outputs\.analysis_ref == '' && steps\.ownership\.outputs\.upload != 'false'/u,
+    "the re-check suppresses only an adopted branch upload, and its skipped empty output still analyzes every other event",
+  );
+  assert.match(
+    codeql,
+    /if open_prs="\$\(gh pr list[\s\S]*?\)"; then[\s\S]*?\n          else\n\s+echo "::warning::Could not re-confirm PR ownership/u,
+    "a transient ownership lookup keeps the prepared analysis instead of failing the CodeQL check it exists to protect",
+  );
+  assert.match(
+    codeql,
+    /^      actions: read\n      contents: read\n      packages: read\n      pull-requests: read\n      security-events: write$/mu,
+    "the analyzer reads PR ownership without gaining any write beyond its security-events upload",
+  );
   assert.match(codeql, /ADVANCED_ENABLED: \$\{\{ vars\.CODEQL_ADVANCED_ENABLED \}\}/u);
   assert.match(
     codeql,
@@ -722,7 +891,89 @@ export function assertControlPlaneContract() {
   assert.match(codeql, /base_has_pr_listener/u);
   assert.match(codeql, /git\/ref\/pull\/\$PR_NUMBER\/merge/u);
   assert.match(codeql, /git\/commits\/\$merge_sha/u);
-  assert.match(codeql, /\.\[0\] == \$base and \.\[1\] == \$head/u);
+  // The property is that the freshness check still compares the merge commit's
+  // first parent against a base and its second against the live head. Pin those
+  // two comparisons separately rather than as one adjacent phrase: the jq
+  // program is legitimately rewritten across more than one line the moment a
+  // second accepted base is added (PR #579 widens `.[0]` to also accept the
+  // live base branch tip, because `pulls/N.base.sha` and `refs/pull/N/merge`
+  // are refreshed independently and skew whenever the base advances). Pinning
+  // the single-line spelling made this contract fail on that rewrite while the
+  // property it exists to protect was fully intact — and both PRs land on this
+  // same base, so the union of the two is exactly the tree CI would run.
+  assert.match(
+    codeql,
+    /\.\[0\] == \$base/u,
+    "the merge-ref freshness check still compares the first parent against the PR base",
+  );
+  assert.match(
+    codeql,
+    /\.\[1\] == \$head/u,
+    "the merge-ref freshness check still requires the second parent to be the live head",
+  );
+  // A stale merge ref and an absent one are different facts and must stay
+  // separately recorded. The freshness check clears `merge_sha`; only a PR
+  // GitHub cannot merge clears `mergeable_pr`, and only that PR has no
+  // `pull_request` run of its own. Gating listener ownership on the cleared
+  // `merge_sha` is what sent a dispatched backfill down the exact-head
+  // fallback alongside a live `pull_request` merge-ref analysis, split one
+  // PR's two languages across two refs, and closed its aggregate CodeQL check
+  // `timed_out` (PR #557 @ bb151336, run 33624842347).
+  assert.match(
+    codeql,
+    /mergeable_pr=true/u,
+    "the analyzer scope records that GitHub published a merge ref independently of whether that ref is current",
+  );
+  assert.match(
+    codeql,
+    /if \[ "\$base_has_pr_listener" = true \] \\\n\s+&& \[ "\$mergeable_pr" = true \] \\\n\s+&& \[ "\$BACKFILL_LISTENER_OWNED" != true \]; then\n\s+analyze=false/u,
+    "a mergeable listener-owned PR is never centrally re-analyzed on its exact head beside its own pull_request run",
+  );
+  assert.doesNotMatch(
+    codeql,
+    /if \[ "\$base_has_pr_listener" = true \] \\\n\s+&& \[ -n "\$merge_sha" \]/u,
+    "listener ownership must not be decided by the freshness-cleared merge SHA",
+  );
+  // The three assertions above pin how `mergeable_pr` is read but not how it
+  // is written, and the regression that matters is a write: adding
+  // `mergeable_pr=false` beside the `merge_sha=""` in the freshness check
+  // re-collapses the two facts and reproduces #557 exactly (`analyze=true`,
+  // `ref=refs/pull/N/head` beside the live `pull_request` merge-ref run) while
+  // leaving all three green. Pin the variable's whole lifecycle instead: two
+  // assignments, in this order, and the `true` only where a well-formed
+  // published merge SHA is captured. Nothing between the lookup and the
+  // ownership gate may touch it.
+  assert.deepEqual(
+    codeql.match(/^\s*mergeable_pr=\S+$/gmu)?.map((assignment) => assignment.trim()),
+    ["mergeable_pr=false", "mergeable_pr=true"],
+    "`mergeable_pr` is initialized false and set true exactly once, so the freshness check cannot clear it",
+  );
+  assert.match(
+    codeql,
+    /merge_sha="\$candidate_merge_sha"\n\s+mergeable_pr=true$/mu,
+    "`mergeable_pr` records the published merge SHA GitHub actually returned, never an unconditional default",
+  );
+  // GitHub refreshes `refs/pull/N/merge` and `pulls/N.base.sha` independently.
+  // Requiring the cached pointer alone made a current merge ref read as stale
+  // once the base branch advanced, so the dispatched scan analyzed the exact
+  // head, Advanced Security bound the PR's aggregate CodeQL check to that
+  // branch snapshot, and the slow language landed after it had already closed
+  // `timed_out`.
+  assert.match(
+    codeql,
+    /gh api "repos\/\$REPO\/git\/ref\/heads\/\$base_ref"/u,
+    "the analyzer scope resolves the live base branch tip instead of trusting only the cached base pointer",
+  );
+  assert.match(
+    codeql,
+    /\.\[1\] == \$head\n\s+and \(\.\[0\] == \$base\n\s+or \(\$branch_base != "" and \.\[0\] == \$branch_base\)\)/u,
+    "a merge ref parented on either accepted base is current, while the live head parent stays required",
+  );
+  assert.match(
+    codeql,
+    /\[\[ "\$base_ref" =~ \^\[A-Za-z0-9\._\/-\]\+\$ \]\]/u,
+    "only a well-formed base branch name reaches the live tip lookup",
+  );
   assert.match(codeql, /analysis_ref="refs\/pull\/\$PR_NUMBER\/head"/u);
   assert.match(codeql, /code-scanning\/analyses\?ref=\$encoded_ref/u);
   assert.match(codeql, /^      security-events: read$/mu);
@@ -731,8 +982,61 @@ export function assertControlPlaneContract() {
   assert.match(codeqlBackfill, /backfill_listener_owned: "true"/u);
   assert.match(codeqlBackfill, /sort\(\(left, right\)[\s\S]*right\.updated_at/u);
   assert.match(codeqlBackfill, /ACTIVE_RUN_STATUSES/u);
-  assert.match(codeqlBackfill, /invalidMergeSnapshots/u);
+  assert.match(codeqlBackfill, /git\/ref\/pull\/\$\{number\}\/merge/u);
+  assert.match(
+    codeqlBackfill,
+    /\(parents\[0\] === baseSha \|\| \(liveBaseSha !== "" && parents\[0\] === liveBaseSha\)\)[\s\S]*parents\[1\] === headSha/u,
+    "the backfill selector accepts the same two bases as the analyzer scope and still requires the live head parent",
+  );
+  assert.match(
+    codeqlBackfill,
+    /git\/ref\/heads\/\$\{branch\}/u,
+    "the backfill selector resolves the live base branch tip once per distinct base branch",
+  );
+  assert.match(codeqlBackfill, /analysisSnapshots\.get\(number\)/u);
+  assert.doesNotMatch(
+    codeqlBackfill,
+    /pullRequest\.merge_commit_sha/u,
+    "CodeQL inventory never trusts the lagging pull-list synthetic merge SHA",
+  );
   assert.match(codeqlBackfill, /MAX_DISPATCHES must be an integer from 1 through 20/u);
+  // This helper is the one read-failure classifier outside resolve-pr-conflicts.yml,
+  // so the routing contract's "never classify transience by HTTP status alone"
+  // assertion cannot see it. Pin the same transport and truncated-body patterns
+  // here: status-only matching is what made an upstream blip fatal on the first
+  // attempt in runs 33262097171 and 33316907281.
+  assert.match(
+    codeqlBackfill,
+    /TRANSIENT_READ_FAILURE\s*=\s*\/[^\n]*\|stream error\|[^\n]*\|\[Uu\]nexpected end of JSON input\|/u,
+    "the CodeQL inventory read helper retries transport resets and truncated bodies",
+  );
+  assert.match(
+    codeqlBackfill,
+    /const transient = TRANSIENT_READ_FAILURE\.test\(failure\)\n\s*\|\| isTruncatedJsonRead\(output, error\);\n\s*if \(attempt === attempts \|\| !transient\)/u,
+    "the CodeQL inventory read helper branches on the widened classifier and the truncation test",
+  );
+  // That message pattern can only classify the half gh decodes: Go reports every
+  // short body as `unexpected end of JSON input`, but when this script decodes,
+  // V8's message is position-specific, so a body cut mid-string or mid-number
+  // says `Unterminated string in JSON at position N` and matches no message
+  // list. Pin the structural test that classifies the half this script decodes
+  // -- comparing the parse position against the length received separates a
+  // valid-but-short prefix from a corrupt payload without tracking V8's
+  // wording, which has already changed once. Its behaviour is covered by the
+  // self-test executed below, so this assertion only guards its removal.
+  assert.match(
+    codeqlBackfill,
+    /export function isTruncatedJsonRead\(text, error\)[\s\S]*at position \(\\d\+\)[\s\S]*trimEnd\(\)\.length/u,
+    "the CodeQL inventory read helper classifies a short body by parse position, not by V8 wording",
+  );
+  // The dispatch POST must keep the narrow status-only classifier: a reset
+  // proves nothing about whether GitHub already queued the scan, so replaying
+  // one could start a duplicate analysis.
+  assert.match(
+    codeqlBackfill,
+    /!TRANSIENT_HTTP_STATUS\.test\(failure\)\) \{\n\s*throw new Error\(`CodeQL dispatch for PR/u,
+    "the mutating CodeQL dispatch stays status-only and never replays on a transport reset",
+  );
   assert.doesNotMatch(
     codeqlBackfill,
     /ANTHROPIC|OPENAI|actions\/checkout/u,
@@ -786,8 +1090,8 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreview,
-    /^    if: github\.event_name != 'pull_request_target'$/mu,
-    "develop preview always schedules its trusted controller outside PR listeners",
+    /^    if: github\.event_name != 'pull_request_target' && !\(github\.event_name == 'repository_dispatch' && github\.event\.client_payload\.admin_preview == '1'\)$/mu,
+    "develop preview schedules its ordinary trusted controller outside PR listeners and keeps admin dispatches separate",
   );
   assert.doesNotMatch(
     developPreview,
@@ -799,6 +1103,69 @@ export function assertControlPlaneContract() {
     /github\.ref == 'refs\/heads\/main'/u,
     "develop preview delegates the manual branch gate to its protected environment",
   );
+  const developPreviewBuildJob = developPreview.match(/\n  build:\n[\s\S]*?\n  controller:\n/u)?.[0] ?? "";
+  const developPreviewPrepareJob = developPreview.match(/\n  prepare:\n[\s\S]*?\n  build:\n/u)?.[0] ?? "";
+  assert.match(
+    developPreviewPrepareJob,
+    /environment: vercel-develop-pr-control/u,
+    "the protected authorizer can read its environment-scoped non-secret settings",
+  );
+  assert.match(
+    developPreviewPrepareJob,
+    /issues: write[\s\S]*expected_ready_at: \$\{\{ steps\.plan\.outputs\.expected_ready_at \}\}/u,
+    "the protected authorizer can publish and preserve the expected URL and ready time before build",
+  );
+  assert.match(
+    developPreviewPrepareJob,
+    /GH_TOKEN: \$\{\{ secrets\.CONFLICT_RESOLVER_PAT \|\| github\.token \}\}/u,
+    "the protected authorizer has a stable repository-token fallback for required PR comments",
+  );
+  assert.doesNotMatch(
+    developPreviewBuildJob,
+    /environment: vercel-develop-pr-control/u,
+    "untrusted product build code does not attach to the protected publisher environment",
+  );
+  assert.match(
+    developPreviewBuildJob,
+    /name: Build exact PR bundle without secrets[\s\S]*ref: \$\{\{ needs\.prepare\.outputs\.head_sha \}\}/u,
+    "develop preview builds only the exact SHA authorized by the protected controller",
+  );
+  assert.match(
+    developPreviewBuildJob,
+    /node scripts\/vercel-build\.mjs[\s\S]*actions\/upload-artifact@[0-9a-f]{40}/u,
+    "develop preview builds Vercel output on GitHub and hands it off through a pinned artifact action",
+  );
+  assert.match(
+    developPreviewBuildJob,
+    /for attempt in 1 2 3; do[\s\S]*corepack prepare pnpm@10\.12\.1 --activate[\s\S]*Could not install pinned pnpm after three attempts/u,
+    "develop preview retries only its pinned package-manager bootstrap after transient registry failures",
+  );
+  assert.doesNotMatch(
+    developPreviewBuildJob,
+    /secrets\.|VERCEL_API_TOKEN|THINGTIME_DEVELOP_S3_CORS_PROBE_URL/u,
+    "untrusted product build code receives no preview deployment secret",
+  );
+  const developPreviewControllerJob = developPreview.match(/\n  controller:\n[\s\S]*$/u)?.[0] ?? "";
+  assert.match(
+    developPreviewControllerJob,
+    /environment: vercel-develop-pr-control[\s\S]*actions\/download-artifact@[0-9a-f]{40}/u,
+    "only the protected publisher downloads the GitHub-built artifact",
+  );
+  assert.match(
+    developPreviewControllerJob,
+    /extract-vercel-prebuilt\.py[\s\S]*vercel@59\.10\.0[\s\S]*VERCEL_PREBUILT_DIR/u,
+    "the publisher validates the untrusted archive and uses a pinned prebuilt-only Vercel CLI",
+  );
+  assert.match(
+    developPreviewControllerJob,
+    /GH_TOKEN: \$\{\{ secrets\.CONFLICT_RESOLVER_PAT \|\| github\.token \}\}/u,
+    "the protected publisher has a stable repository-token fallback for final comments and deployment receipts",
+  );
+  assert.doesNotMatch(
+    developPreviewControllerJob,
+    /checkout[\s\S]{0,240}ref: \$\{\{ needs\.prepare\.outputs\.head_sha \}\}/u,
+    "the secret-bearing publisher never checks out the product branch",
+  );
   const developPreviewController = readFileSync(
     resolve(scripts, "deploy-develop-pr-preview.mjs"),
     "utf8",
@@ -808,6 +1175,72 @@ export function assertControlPlaneContract() {
     /eventName === 'workflow_dispatch'[\s\S]*boundedInteger\(event\.inputs\?\.pr_number, 'PR number'\)/u,
     "develop preview validates the original manual PR input inside the trusted controller",
   );
+  assert.match(
+    developPreviewController,
+    /const expectedReady = expectedReadyAt\(\);[\s\S]*await publishDevelopStatus\([\s\S]*expectedReady[\s\S]*await writePrepareOutputs\(\{ shouldBuild: true, pullRequest, expectedReady \}\)/u,
+    "develop preview publishes its expected URL and estimate before releasing the build plan",
+  );
+  assert.match(
+    developPreviewController,
+    /THINGTIME_BRANCH_NAME:\s*pullRequest\.head\.ref/u,
+    "develop previews publish the exact PR branch into the runtime",
+  );
+  assert.match(
+    developPreviewController,
+    /THINGTIME_GIT_COMMIT_SHA:\s*pullRequest\.head\.sha/u,
+    "develop previews publish the exact PR SHA into the runtime",
+  );
+  const adminPreviewPrepareJob = developPreview.match(/\n  admin_prepare:\n[\s\S]*?\n  admin_build:\n/u)?.[0] ?? "";
+  const adminPreviewBuildJob = developPreview.match(/\n  admin_build:\n[\s\S]*?\n  admin_controller:\n/u)?.[0] ?? "";
+  const adminPreviewControllerJob = developPreview.match(/\n  admin_controller:\n[\s\S]*$/u)?.[0] ?? "";
+  assert.match(
+    adminPreviewPrepareJob,
+    /github\.event\.client_payload\.admin_preview == '1'[\s\S]*environment: vercel-develop-pr-control/u,
+    "admin preview dispatches are authenticated in the protected controller environment",
+  );
+  assert.doesNotMatch(
+    adminPreviewPrepareJob,
+    /VERCEL_API_TOKEN|secrets\.(?!CONFLICT_RESOLVER_PAT\b)/u,
+    "admin preview preparation may use only the existing repository automation PAT, never a Vercel or other credential",
+  );
+  assert.match(
+    adminPreviewPrepareJob,
+    /GH_TOKEN: \$\{\{ secrets\.CONFLICT_RESOLVER_PAT \|\| github\.token \}\}/u,
+    "admin preview preparation has a stable protected-token fallback for required PR comments",
+  );
+  assert.match(
+    adminPreviewBuildJob,
+    /fromJSON\(needs\.admin_prepare\.outputs\.environments\)[\s\S]*ref: \$\{\{ needs\.admin_prepare\.outputs\.head_sha \}\}[\s\S]*node scripts\/vercel-build\.mjs/u,
+    "every selected environment is built from the exact authorized SHA",
+  );
+  assert.match(
+    adminPreviewBuildJob,
+    /for attempt in 1 2 3; do[\s\S]*corepack prepare pnpm@10\.12\.1 --activate[\s\S]*Could not install pinned pnpm after three attempts/u,
+    "admin preview matrices retry only their pinned package-manager bootstrap after transient registry failures",
+  );
+  assert.doesNotMatch(
+    adminPreviewBuildJob,
+    /environment: vercel-develop-pr-control|VERCEL_API_TOKEN|secrets\./u,
+    "admin product builds receive no protected environment or Vercel credential",
+  );
+  assert.match(
+    adminPreviewControllerJob,
+    /environment: vercel-develop-pr-control[\s\S]*ref: github-actions[\s\S]*extract-vercel-prebuilt\.py[\s\S]*VERCEL_API_TOKEN: \$\{\{ secrets\.VERCEL_DEVELOP_DEPLOY_TOKEN \}\}[\s\S]*deploy-admin-pr-previews\.mjs/u,
+    "admin preview publication checks out protected code before receiving the Vercel token",
+  );
+  assert.doesNotMatch(
+    adminPreviewControllerJob,
+    /ref: \$\{\{ (?:github\.event\.client_payload|needs\.)/u,
+    "the admin publisher never checks out a product-controlled ref",
+  );
+  const adminPreviewController = readFileSync(resolve(scripts, "deploy-admin-pr-previews.mjs"), "utf8");
+  assert.match(adminPreviewController, /thingtime-ci-control\[bot\]/u, "admin dispatch requires the exact GitHub App bot identity");
+  assert.match(adminPreviewController, /thingtimeAdminPrPreview/u, "admin deployments carry a marker-scoped ownership fence");
+  assert.match(adminPreviewController, /--prebuilt/u, "admin deployments publish only GitHub-built prebuilt output");
+  assert.match(adminPreviewController, /--skip-domain/u, "admin production deploys never auto-assign production domains");
+  assert.match(adminPreviewController, /THINGTIME_BRANCH_NAME/u, "admin previews publish the exact PR branch into the runtime");
+  assert.match(adminPreviewController, /THINGTIME_GIT_COMMIT_SHA/u, "admin previews publish the exact PR SHA into the runtime");
+  assert.match(adminPreviewController, /Expected-ready times are estimates/u, "admin comments disclose estimated readiness");
 
   const providerRouter = readWorkflow("ci-provider-router.yml");
   assertRoutingProofContract(providerRouter);
@@ -904,6 +1337,11 @@ export function assertControlPlaneContract() {
   assert.doesNotMatch(controlPlaneCi, /^\s+secrets:/m);
   assert.match(
     controlPlaneCi,
+    /concurrency:\n\s+group: workflow-control-plane-ci-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}\n/u,
+    "control-plane CI supersedes only same-subject runs, so an unrelated PR cannot cancel a green run into a red check",
+  );
+  assert.match(
+    controlPlaneCi,
     /Contract advisories \(non-blocking\)/u,
     "automation contracts run in their advisory-only lane",
   );
@@ -911,6 +1349,26 @@ export function assertControlPlaneContract() {
     controlPlaneCi,
     /thingtime-control-plane-contract-advisories:v1/u,
     "automation contract warnings are surfaced through one PR comment",
+  );
+  assert.match(
+    controlPlaneCi,
+    /node --test \.github\/scripts\/rebase-related-edits\.test\.mjs/u,
+    "control-plane CI executes the real stopped-rebase related-edit verifier fixture",
+  );
+  assert.match(
+    controlPlaneCi,
+    /node --test \.github\/scripts\/resolve-canonical-instruction-type-conflicts\.test\.mjs/u,
+    "control-plane CI executes the canonical instruction type-conflict fixture",
+  );
+  assert.match(
+    controlPlaneCi,
+    /node --test \.github\/scripts\/lopu-pr-status\.test\.mjs/u,
+    "control-plane CI executes the Lopu PR status renderer and classifier fixtures",
+  );
+  assert.match(
+    controlPlaneCi,
+    /node --test \.github\/scripts\/resolve-pr-conflicts-routing-contract\.test\.mjs/u,
+    "control-plane CI executes the conflict-resolver routing step-window fixtures",
   );
 
   const omnibus = readWorkflow("promote-develop-to-main.yml");
@@ -1003,6 +1461,26 @@ export function assertControlPlaneContract() {
     /git merge-base --is-ancestor "\$EXPECTED_MAIN_SHA" "\$remote_sha"/u,
     "an already-resolved safe head containing current main is preserved",
   );
+  assert.match(
+    mainDevelopSync,
+    /id: sync_pr[\s\S]*echo "pr_number=\$existing"[\s\S]*echo "head_sha=\$CANDIDATE_SHA"/u,
+    "the standing sync PR publishes its exact identity for terminal merging",
+  );
+  assert.match(
+    mainDevelopSync,
+    /name: Check out the trusted sync merger[\s\S]*uses: actions\/checkout@[0-9a-f]{40} #[\s\S]*ref: github-actions[\s\S]*persist-credentials: false[\s\S]*sparse-checkout: \.github\/scripts\/merge-main-develop-sync-pr\.mjs/u,
+    "the terminal merger is loaded without credentials from the protected control branch",
+  );
+  assert.match(
+    mainDevelopSync,
+    /name: Merge the standing sync PR when ready[\s\S]*SYNC_PR_NUMBER: \$\{\{ steps\.sync_pr\.outputs\.pr_number \}\}[\s\S]*EXPECTED_SYNC_HEAD_SHA: \$\{\{ steps\.sync_pr\.outputs\.head_sha \}\}[\s\S]*EXPECTED_MAIN_SHA: \$\{\{ steps\.merge\.outputs\.main_sha \}\}[\s\S]*EXPECTED_DEVELOP_SHA: \$\{\{ steps\.merge\.outputs\.develop_sha \}\}[\s\S]*node workflow-control\/\.github\/scripts\/merge-main-develop-sync-pr\.mjs/u,
+    "a clean standing sync PR merges only with the workflow's exact branch snapshots",
+  );
+  assert.doesNotMatch(
+    mainDevelopSync,
+    /gh pr merge[^\n]*--auto/u,
+    "main/develop synchronization does not depend on branch-protection-only native auto-merge",
+  );
 
   const rebase = readWorkflow("rebase-pr-stacks.yml");
   const rebaseTriggers = rebase.slice(0, rebase.indexOf("\npermissions:\n"));
@@ -1033,6 +1511,11 @@ export function assertControlPlaneContract() {
   assert.doesNotMatch(rebase, /actions\/workflows\/rebase-pr-stacks\.yml\/dispatches/u);
   assert.match(
     rebase,
+    /name: Configure and begin the rebase[\s\S]*?promisor_fetch_failed\(\)[\s\S]*?could not fetch \[0-9a-f\]\{40\} from promisor remote[\s\S]*?--refetch --no-filter origin[\s\S]*?refs\/heads\/\$HEAD_REF:refs\/remotes\/origin\/\$HEAD_REF[\s\S]*?refs\/heads\/\$BASE_REF:refs\/remotes\/origin\/\$BASE_REF[\s\S]*?attempt_start \|\| status=\$\?[\s\S]*?complete-history retry still could not materialize/u,
+    "rebase workers retry a failed lazy promisor fetch once from complete exact branch histories",
+  );
+  assert.match(
+    rebase,
     /handoff:[\s\S]*?permissions:[\s\S]*?contents: write[\s\S]*?repos\/\$REPO\/dispatches/u,
     "repository-dispatch handoff receives Contents write rather than relying on Actions write",
   );
@@ -1050,6 +1533,11 @@ export function assertControlPlaneContract() {
   }
 
   const resolver = readWorkflow("resolve-pr-conflicts.yml");
+  assert.match(
+    resolver,
+    /bash trusted\/\.github\/scripts\/resolve-canonical-instruction-type-conflicts\.sh "\$base"/u,
+    "the merge resolver normalizes proven canonical instruction type conflicts before AI resolution",
+  );
   assert.match(resolver, /github\.ref_name == 'github-actions'/);
   assert.match(resolver, /ref:"github-actions"/);
   assert.doesNotMatch(resolver, /ref:"develop"/);
@@ -1067,10 +1555,25 @@ export function assertControlPlaneContract() {
   assert.match(resolver, /internal_worker: >-/);
   assert.match(resolver, /routing_proof:\$routing_proof/);
   assert.match(resolver, /routing_proof_issued_at:\$routing_proof_issued_at/);
+  assert.match(
+    resolver,
+    /remote_head="\$\(gh api "repos\/\$REPO\/git\/ref\/heads\/\$head" --jq '\.object\.sha'\)"/u,
+    "repository review publishers look up slash-containing branch refs without double-encoding them",
+  );
+  assert.doesNotMatch(
+    resolver,
+    /git\/ref\/heads\/\$\(jq[^\n]*@uri/u,
+    "repository review publishers never pass a pre-encoded branch ref through gh api",
+  );
   assert.match(resolver, /maintain_develop_promotion:/);
   assert.match(resolver, /maintain_feature_promotions:/);
   assert.match(resolver, /maintain_main_develop_sync:/);
   assert.match(resolver, /maintain_codeql_backfill:/);
+  assert.match(
+    resolver,
+    /name: Merge the verified main to develop sync PR[\s\S]*steps\.push\.outputs\.remote_state == 'published'[\s\S]*matrix\.pr\.head == 'sync\/main-into-develop'[\s\S]*matrix\.pr\.base == 'develop'[\s\S]*EXPECTED_SYNC_HEAD_SHA: \$\{\{ steps\.push\.outputs\.remote_sha \}\}[\s\S]*EXPECTED_DEVELOP_SHA: \$\{\{ matrix\.pr\.base_sha \}\}[\s\S]*git\/ref\/heads\/main[\s\S]*node trusted\/\.github\/scripts\/merge-main-develop-sync-pr\.mjs/u,
+    "the resolver terminally merges only the exact published standing main/develop sync PR",
+  );
   assert.doesNotMatch(
     resolver,
     /actions\/workflows\/promote-features-to-main\.yml\/dispatches/u,
@@ -1124,8 +1627,83 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     resolver,
-    /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql\]/u,
-    "manual all-branch and CodeQL recovery stay inside Lopu maintenance",
+    /options: \[manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql, merge-feature-stack, verify-credential-vault\]/u,
+    "manual Feature Stack, all-branch, and CodeQL recovery stay inside Lopu maintenance",
+  );
+
+  assert.match(
+    resolver,
+    /verify_credential_vault:[\s\S]*inputs\.maintenance_operation == 'verify-credential-vault'[\s\S]*ref: github-actions[\s\S]*persist-credentials: false[\s\S]*THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}[\s\S]*lopu-credential-vault\.mjs[\s\S]*stat -c '%a'[\s\S]*uses: \.\/\.github\/actions\/lopu-agent[\s\S]*prompt: Return exactly credential-ok[\s\S]*--max-turns 1[\s\S]*Live Claude authentication succeeded/u,
+    'credential-vault maintenance must fetch the ordered Thingtime bundle through the stable router secret and prove the waterfall with one live Claude turn',
+  );
+  const featureStackMerge = resolver.slice(
+    resolver.indexOf("\n  feature_stack_merge:"),
+    resolver.indexOf("\n  # Clean PRs still need a principal-engineering review."),
+  );
+  assert.doesNotMatch(
+    featureStackMerge,
+    /actions\/checkout@[\s\S]{0,160}ref: \$\{\{ matrix\.base_sha \}\}/u,
+    "privileged Feature Stack jobs never load candidate code through actions/checkout",
+  );
+  assert.match(
+    featureStackMerge,
+    /name: Check out the trusted controller[\s\S]{0,220}ref: github-actions[\s\S]{0,120}path: trusted[\s\S]{0,120}fetch-depth: 0/u,
+    "Feature Stack workflow and action code always come from the protected controller",
+  );
+  assert.match(
+    featureStackMerge,
+    /git clone --shared --no-checkout "\$GITHUB_WORKSPACE\/trusted" "\$integration"[\s\S]{0,180}remote rename origin snapshot[\s\S]{0,1200}trusted_source=.*refs\/remotes\/origin\/\$head[\s\S]{0,500}update-ref "refs\/remotes\/origin\/\$head" "\$sha"/u,
+    "candidate Git objects are admitted as data into a separate shared-object integration repository",
+  );
+  assert.match(
+    featureStackMerge,
+    /allowed-bots: "github-actions,thingtime-ci-control"/u,
+    "Feature Stack dispatches trust only GitHub Actions and Thingtime's authenticated CI control bot",
+  );
+  assert.match(
+    featureStackMerge,
+    /group: lopu-feature-stack-\$\{\{ github\.repository \}\}-\$\{\{ matrix\.target \}\}[\s\S]*queue: max[\s\S]*cancel-in-progress: false/u,
+    "admin Feature Stacks serialize per target without waiting behind unrelated Lopu fleet work",
+  );
+  assert.equal(
+    featureStackMerge.match(/working-directory: integration/gu)?.length,
+    4,
+    "the model, continuations, verifier, and publisher remain inside the isolated integration repository",
+  );
+  const featureStackProgress = resolver.slice(
+    resolver.indexOf("\n  feature_stack_progress:"),
+    resolver.indexOf("\n  # Clean PRs still need a principal-engineering review."),
+  );
+  assert.match(featureStackProgress, /needs: \[feature_stack_plan, model_config\]/u);
+  assert.match(featureStackProgress, /!cancelled\(\)[\s\S]*feature_stack_plan\.result == 'success'[\s\S]*model_config\.result == 'success'/u);
+  assert.match(featureStackProgress, /continue-on-error: true/u);
+  assert.match(featureStackProgress, /actions: read[\s\S]*contents: read/u);
+  assert.match(featureStackProgress, /ref: github-actions[\s\S]*persist-credentials: false[\s\S]*sparse-checkout: \.github\/scripts\/feature-stack-progress\.mjs/u);
+  assert.match(featureStackProgress, /THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}/u);
+  assert.match(
+    resolver,
+    /feature_stack_plan:[\s\S]*recovery: \$\{\{ steps\.validate\.outputs\.recovery \}\}[\s\S]*pulls\?state=all&head=[\s\S]*\.merged_at != null[\s\S]*expected_source_count[\s\S]*Feature Stack id:[\s\S]*grep -Fxq -- "\$expected_source"[\s\S]*git\/commits\/\$merge_commit_sha[\s\S]*compare\/\$merge_commit_sha\.\.\.\$target[\s\S]*recovery=true/u,
+    "completed Feature Stacks are recovered only from exact merged target PRs bound to the immutable source manifest whose published heads and merge commits remain on the target",
+  );
+  assert.match(
+    featureStackMerge,
+    /feature_stack_reconcile_receipt:[\s\S]*feature_stack_plan\.outputs\.recovery == 'true'[\s\S]*THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}[\s\S]*feature-stack-progress\.mjs --reconcile/u,
+    "already-merged Feature Stacks publish one trusted terminal receipt without rerunning the model",
+  );
+  assert.match(
+    featureStackMerge,
+    /feature_stack_merge:[\s\S]*feature_stack_plan\.outputs\.recovery != 'true'[\s\S]*feature_stack_progress:[\s\S]*feature_stack_plan\.outputs\.recovery != 'true'[\s\S]*feature_stack_merge_gate:[\s\S]*feature_stack_plan\.outputs\.recovery != 'true'/u,
+    "the recovery lane is mutually exclusive with merge, streaming, and gate workers",
+  );
+  assert.match(
+    featureStackProgress,
+    /pr_number=""[\s\S]*pulls\?state=all&head=[\s\S]*pulls\/\$pr_number[\s\S]*\.head\.ref[\s\S]*\.base\.ref/u,
+    "Feature Stack completion pins the published PR identity and revalidates its branches after repair pushes",
+  );
+  assert.doesNotMatch(
+    featureStackProgress,
+    /select\(\.head\.sha == \$head_sha\)/u,
+    "Feature Stack completion does not become permanently stale when the protected PR head advances",
   );
   const allBranchHandoff = resolver.slice(
     resolver.indexOf("\n  handoff_all_branch_event:"),
@@ -1165,7 +1743,7 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     resolver,
-    /Every entry must contain exactly those three keys[\s\S]{0,220}40 through 1000 characters[\s\S]{0,220}`Lopu evidence: `/u,
+    /Every entry must contain exactly those three keys[\s\S]{0,260}40 through 280 characters \(GitHub's CodeQL API limit\)[\s\S]{0,220}`Lopu evidence: `/u,
     "the model prompt states the exact trusted CodeQL disposition schema",
   );
   assert.match(
@@ -1177,6 +1755,31 @@ export function assertControlPlaneContract() {
     resolver,
     /::error::Lopu proposed an invalid CodeQL disposition schema/u,
     "a malformed optional disposition never makes the repository-wide review job red",
+  );
+  assert.doesNotMatch(
+    resolver,
+    /::error::CodeQL alert #\$alert_number was proposed more than once/u,
+    "one repository-level CodeQL alert appearing in several PR snapshots does not fail the review batch",
+  );
+  assert.match(
+    resolver,
+    /Coalescing CodeQL alert #\$alert_number across PR analysis snapshots with the same '\$proposed_reason' disposition/u,
+    "compatible CodeQL dispositions are coalesced to one repository-level write",
+  );
+  assert.match(
+    resolver,
+    /Leaving CodeQL alert #\$alert_number open because this Lopu session proposed conflicting disposition reasons/u,
+    "conflicting CodeQL dispositions fail closed per alert without failing unrelated reviews",
+  );
+  assert.match(
+    resolver,
+    /code-scanning\/alerts\/\$alert_number\/instances\?pr=\$pr_number&per_page=100/u,
+    "the isolated writer revalidates the exact reviewed PR alert instance",
+  );
+  assert.match(
+    resolver,
+    /live_base_ref=.*\.base\.ref[\s\S]*?git\/ref\/heads\/\$live_base_ref_encoded/u,
+    "the isolated writer binds dispositions to the live target branch tip instead of the PR's historical base snapshot",
   );
   const publicConcurrency = resolver.slice(
     resolver.indexOf("\nconcurrency:\n"),
@@ -1246,12 +1849,12 @@ export function assertControlPlaneContract() {
   );
   assert.equal(
     resolver.match(/steps\.push\.outputs\.remote_state == 'published'/gu)?.length,
-    2,
-    "only a live-ref-proven publication may post success or cascade a stack",
+    3,
+    "only a live-ref-proven publication may post success, merge the standing sync PR, or cascade a stack",
   );
 
   assertUserControlledMergePause(resolver, rebase);
-  assertAdminModelRouting(resolver, rebase);
+  assertAdminModelRouting(resolver, rebase, readWorkflow("all-branch.yml"));
   assertResolverLockfileRecovery(resolver);
   assertObservableLabelCleanup(rebase);
   assertBareControlPlaneTree();
@@ -1312,7 +1915,8 @@ export function assertControlPlaneContract() {
 
 // The only paths this branch may hold at its root. `.github/**` is the point of
 // the branch; `graphify-out/` is a required portable repository map and
-// `.gitattributes` preserves its generated graph merge contract. The AI
+// `.gitattributes` preserves its generated graph merge contract. `PRs/` holds
+// the required detailed notes for large control-plane changes. The AI
 // instruction trio stays because agents work here too
 // (`AGENTS.md` and `CLAUDE.md` are symlinks to `AI_ALL.md`, so all three must
 // travel together or the links dangle).
@@ -1325,6 +1929,7 @@ export const CONTROL_PLANE_ROOTS = new Set([
   "CLAUDE.md",
   "README.md",
   "CHANGELOG.md",
+  "PRs",
   "vercel.json",
   "graphify-out",
 ]);
