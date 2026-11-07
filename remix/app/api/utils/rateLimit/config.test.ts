@@ -33,6 +33,14 @@ test('the subspace write, join and report keys keep their round-2 windows', () =
 	assert.ok(RATE_LIMIT_DEFAULTS['subspaces.report'].limit < RATE_LIMIT_DEFAULTS['subspaces.write'].limit);
 });
 
+// History settings (POST /api/v1/timeline/settings) are a rare interactive
+// write like notification settings; an unregistered key would be a silent allow.
+test('history settings writes carry the same bounded window as notification settings', () => {
+	assert.deepEqual(RATE_LIMIT_DEFAULTS['timeline.settings'], { limit: 30, windowMs: 60_000, enabled: true });
+	assert.deepEqual(RATE_LIMIT_DEFAULTS['timeline.settings'], RATE_LIMIT_DEFAULTS['notifications.settings']);
+	assert.ok(RATE_LIMIT_DEFAULTS['timeline.settings'].limit < RATE_LIMIT_DEFAULTS['timeline.read'].limit);
+});
+
 test('upload policy admits two 25-file batches without an hour-long lockout', async () => {
 	const batchSize = 25;
 	const { normalizeRateLimitConfig } = await import('./config');

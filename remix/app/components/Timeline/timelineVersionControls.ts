@@ -9,15 +9,16 @@ import { TIMELINE_VERSION_NAME_MAX_CHARS } from '../../timeline/versionNames';
  * local authority also works offline. Export covers saved deletions when its
  * adapter can resolve their `before` content. */
 export type VersionControlState = { name: boolean; export: boolean; title: string };
-export function versionControlState(row: Pick<LocalTimelineRow, 'status' | 'event'>, verified: boolean, localExport = false, localNames = false): VersionControlState {
+/** `held`: the account's sync hold is on, so a pending row will not sync until the viewer resumes. */
+export function versionControlState(row: Pick<LocalTimelineRow, 'status' | 'event'>, verified: boolean, held = false): VersionControlState {
 	const { event } = row;
 	if (isClientDraftVersion(event)) {
 		const name = event.after !== null && (localNames || (verified && row.status === 'accepted'));
 		return { name, export: localExport, title: name ? (localExport ? '' : 'This authority cannot export device drafts') : event.after === null ? 'Only versions with retained content can be named' : 'Save this version locally or reconnect to name it' };
 	}
 	if (event.mode !== 'revision') return { name: false, export: false, title: 'Only saved versions can be named or exported' };
-	if (row.status !== 'accepted') return { name: false, export: false, title: 'Sync this version first' };
-	if (!verified) return { name: false, export: localExport, title: localExport ? 'Reconnect to name versions' : 'Reconnect to name or export versions' };
+	if (row.status !== 'accepted') return { name: false, export: false, title: held ? 'Resume sync to name or export this version' : 'Sync this version first' };
+	if (!verified) return { name: false, export: false, title: 'Reconnect to name or export versions' };
 	if (event.after === null) return { name: false, export: true, title: 'Only saved versions can be named' };
 	return { name: true, export: true, title: '' };
 }

@@ -33,15 +33,17 @@ export interface TimelineTransport {
 }
 
 /** One instance per signed-in origin/data-plane scope. The UI owns the live
- * subscription lifetime; no account-wide history download or global cursor. */
-export class TimelineNameCommandRefusal extends Error {}
-
+ * subscription lifetime; no account-wide history download or global cursor.
+ * The one deliberate account-wide read is the bounded Settings export `scan`,
+ * which validates like a page and writes nothing locally. `options.held` is
+ * the account sync hold, consulted at push time so every session sharing this
+ * queue (home and selected) pauses and resumes together. */
 export class TimelineSync {
 	private controller = new AbortController();
 	private pushing: Promise<number> | null = null;
 	private pages = new Map<string, Promise<TimelinePage>>();
 	private branchPages = new Map<string, Promise<TimelineBranchPage>>();
-	constructor(readonly store: TimelineLocalStore, private transport: TimelineTransport, readonly branchStore?: TimelineBranchStore, readonly noteStore?: TimelineNoteStore, readonly nameStore?: TimelineNameStore, readonly nameQueue?: TimelineNameQueue, private assertTransportAvailable: () => void = () => {}) {}
+	constructor(readonly store: TimelineLocalStore, private transport: TimelineTransport, readonly branchStore?: TimelineBranchStore, readonly noteStore?: TimelineNoteStore, readonly nameStore?: TimelineNameStore, private options: { held?: () => boolean } = {}) {}
 	stop() { this.controller.abort(); }
 	/** Fetch one pointer directly; the bounded cache is not a branch directory.
 	 * Accepting a read never acknowledges or replaces a queued push. */
@@ -66,6 +68,9 @@ export class TimelineSync {
 	}
 	private async push(): Promise<number> {
 		this.assertActive();
+		// Held: nothing leaves this device. Pending rows stay protected (prune
+		// removes only accepted, unpinned rows); lifting the hold drains in order.
+		if (this.options.held?.()) return 0;
 		let accepted = 0;
 		// Freeze commands before reading the event queue. A command authored during
 		// an upload may reference an edit that missed this pass's event snapshot;
@@ -249,6 +254,23 @@ export class TimelineSync {
 		this.pages.set(key, next); return next;
 	}
 	private async readPage(thingId: string | null, cursor: TimelineCursor = {}): Promise<TimelinePage> {
+		const { entries, notes, names, ...page } = await this.fetchPage(thingId, cursor);
+		const ids = entries.map(entry => entry.event.id);
+		this.applyNameEffects(entries);
+		await this.store.accept(entries);
+		if (notes) await this.noteStore?.accept(notes, { events: ids });
+		if (names) this.nameStore?.accept(names, { events: ids });
+		return { entries, ...page, ...(notes ? { notes } : {}), ...(names ? { names } : {}) };
+	}
+	/** Settings → Export: one validated account page, newest first, written to no
+	 * store — the cache, the name effects and the notes stay exactly as they were. */
+	async scan(cursor: { before?: number } = {}): Promise<{ entries: TimelineEntry[]; notes: TimelineNote[]; names: TimelineVersionName[]; nextBefore: number | null }> {
+		if (Object.keys(cursor).some(key => key !== 'before')) throw new Error('Invalid Timeline cursor');
+		const page = await this.fetchPage(null, cursor.before === undefined ? {} : { before: cursor.before });
+		return { entries: page.entries, notes: page.notes ?? [], names: page.names ?? [], nextBefore: page.nextBefore };
+	}
+	/** Fetch and validate one page (scope, order, continuation, notes, names) without touching any store. */
+	private async fetchPage(thingId: string | null, cursor: TimelineCursor): Promise<TimelinePage> {
 		this.assertActive();
 		if (cursor.related && (!timelineRelatedId(thingId) || ((cursor.before !== undefined || cursor.after !== undefined) && !cursor.relatedRevision)) ||
 			(cursor.relatedRevision !== undefined && (!cursor.related || !timelineRelatedRevision(cursor.relatedRevision)))) throw new Error('Invalid related history cursor');
@@ -268,6 +290,8 @@ export class TimelineSync {
 		const seen = new Set<number>();
 		let previous: number | null = null;
 		for (const entry of entries) {
+			// The store refuses foreign rows on accept; a scan never accepts, so check here for every page.
+			if (entry.event.ownerId !== this.store.scope.ownerId) throw new Error('Timeline event belongs to another account');
 			const position = entry.receipt.position;
 			if ((related ? !related.thingIds.includes(entry.event.thingId) : thingId !== null && entry.event.thingId !== thingId) || seen.has(position) ||
 				(paging.before !== undefined && position >= paging.before) || (paging.after !== undefined && position <= paging.after) ||
@@ -285,10 +309,6 @@ export class TimelineSync {
 		const ids = entries.map(entry => entry.event.id);
 		const notes = this.pageNotes(response.notes, ids);
 		const names = this.pageNames(response.names, ids);
-		await this.store.accept(entries);
-		if (notes) await this.noteStore?.accept(notes, { events: ids, readRevision:noteRevision });
-		if (names) { this.nameStore?.accept(names, { events: ids }); await this.nameQueue?.accept(names,ids,readStartedAt); }
-		await this.applyNameEffects(entries);
 		return { entries, nextBefore: response.nextBefore, nextAfter: response.nextAfter, ...(related ? { related } : {}), ...(response.reset ? { reset: true } : {}), ...(notes ? { notes } : {}), ...(names ? { names } : {}) };
 	}
 }

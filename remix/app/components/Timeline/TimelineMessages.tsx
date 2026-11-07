@@ -39,7 +39,7 @@ export function HistoryMessages({ card, compact = false, actions }: { card: Hist
 /** Mounted by scope/event identity. Notes queue locally first and sync with
  * the event; Lopu's explanation is requested directly and stored on success. */
 export function HistoryMessageComposer({ card }: { card: HistoryCard }) {
-	const { connection } = useTimelineSession(); const api = useApi(); const user = useCurrentUser();
+	const { connection, held } = useTimelineSession(); const api = useApi(); const user = useCurrentUser();
 	const { event } = card.row;
 	const localOnly = connection?.scope.dataPlane === LOCAL_TIMELINE_PLANE;
 	const waiting = localOnly ? 'Saved on this device. Waiting for local History storage.' : 'Saved on this device. This note is waiting for the next sync.';
@@ -71,8 +71,9 @@ export function HistoryMessageComposer({ card }: { card: HistoryCard }) {
 			if (!alive.current) return;
 			if (command.command === 'add-note') setValue('');
 			window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
-			if (!localOnly) { setNotice(`Saved on this device. This ${noun} will sync separately when your account is connected.`); return; }
-			if (!connection.verified) { setNotice(localOnly ? waiting : `Saved on this device. This ${noun} will sync when you reconnect.`); return; }
+			// Under the account sync hold the queue keeps the command; pushPending() would return 0 without network anyway.
+			if (held) { setNotice(`Saved on this device. Resume sync to save this ${noun} to your account.`); return; }
+			if (!connection.verified) { setNotice(`Saved on this device. This ${noun} will sync when you reconnect.`); return; }
 			await connection.sync.pushPending();
 			const remaining = (await connection.notes.queued()).find(row => row.command.operationId === command.operationId);
 			if (alive.current) {
@@ -113,7 +114,8 @@ export function HistoryMessageComposer({ card }: { card: HistoryCard }) {
 			if (!operationId) throw new Error('This note command is no longer queued.');
 			if (mode === 'retry') await connection.notes.retryRejected(operationId); else await connection.notes.dismissRejected(operationId);
 			window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
-			if (mode === 'retry' && connection.verified && localOnly) {
+			if (mode === 'retry' && held) setNotice('Saved on this device. Resume sync to save this note to your account.');
+			else if (mode === 'retry' && connection.verified) {
 				await connection.sync.pushPending();
 				const remaining = (await connection.notes.queued()).find(row => row.command.operationId === operationId);
 				if (alive.current) { setNotice(remaining ? waiting : saved); window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }
@@ -124,7 +126,7 @@ export function HistoryMessageComposer({ card }: { card: HistoryCard }) {
 	const text = normalizeTimelineNoteText(value);
 	const pendingEvent = card.row.status === 'pending';
 	const fullAccount = !!user && !user.temporary && user.accountKind === 'user';
-	const explainCaption = !fullAccount ? 'Sign in with a full account to ask Lopu' : !connection?.verified || !online ? 'Reconnect to ask Lopu' : pendingEvent ? 'Sync this change first' : '';
+	const explainCaption = !fullAccount ? 'Sign in with a full account to ask Lopu' : !connection?.verified || !online ? 'Reconnect to ask Lopu' : pendingEvent ? (held ? 'Resume sync to ask Lopu about this change' : 'Sync this change first') : '';
 	const actions = (view: HistoryNoteView) => view.failure
 		? <Flex className="history-message-actions"><Button size="xs" variant="outline" isDisabled={busy || thinking} onClick={() => void settle(view, 'retry')}>Retry</Button><Button size="xs" variant="ghost" isDisabled={busy || thinking} onClick={() => void settle(view, 'dismiss')}>Dismiss</Button></Flex>
 		: view.status === 'accepted' || (view.status === 'pending' && view.note.author === 'owner')

@@ -17,10 +17,13 @@ import { listenTimelineScopeChange, TIMELINE_CHANGED_EVENT } from './clientEvent
 import { TimelineConnectionPool, timelineConnectionForViewer, type TimelineConnection } from './connectionPool';
 import type { TimelineStorage } from './storageScope';
 import { useDataPlane } from '../hooks/useDataPlane';
+import { historyPrefs, type HistoryPrefsViewer } from './historyPrefsClient';
 
 type Connection = TimelineConnection & { verified: boolean };
-type Session = { storage: TimelineStorage; identity: string; ownerId: string | null; connection: Connection | null; error: string; retry: () => Promise<void>; redact: (error: unknown) => Promise<void> };
-const Context = React.createContext<Session>({ storage: 'selected', identity: '', ownerId: null, connection: null, error: '', retry: async () => {}, redact: async () => {} });
+/** `held` is the account sync hold (Settings → History): pending rows stay on this device until it lifts. */
+type Session = { storage: TimelineStorage; identity: string; ownerId: string | null; connection: Connection | null; error: string; held: boolean; retry: () => Promise<void>; redact: (error: unknown) => Promise<void> };
+const Context = React.createContext<Session>({ storage: 'selected', identity: '', ownerId: null, connection: null, error: '', held: false, retry: async () => {}, redact: async () => {} });
+const useHistoryHold = (ownerId: string | null | undefined) => React.useSyncExternalStore(historyPrefs.subscribe, () => !!ownerId && historyPrefs.isHeld(ownerId), () => false);
 const SelectedContext = Context;
 const ActiveContext = React.createContext<Session | null>(null);
 const HomeContext = React.createContext<Session | null>(null);
@@ -28,10 +31,11 @@ const failureMessage = (error: unknown) => error instanceof Error ? error.messag
 export const timelineAccessFailure = (error: unknown): boolean => [401, 403].includes((error as { status?: number })?.status ?? 0);
 
 function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineStorage, onDenied: (failure: unknown) => Promise<void>): Session {
-	const user = useWorkspaceUser(); const workspace = useWorkspaceScope(); const api = useApi(); const apiRef = React.useRef(api); apiRef.current = api;
-	const root = useRootUser(), offline = useOfflineWorkspace();
-	const principal = root?.id || offline?.ownerId;
-	const delegatedBy = principal && user?.id !== principal ? principal : undefined;
+	const user = useCurrentUser(); const api = useApi(); const apiRef = React.useRef(api); apiRef.current = api;
+	// Read at connect time: a temporary account never asks the settings API, and an upgrade keeps the same id.
+	const viewer: HistoryPrefsViewer = user ? { temporary: user.temporary, accountKind: user.accountKind } : null;
+	const viewerRef = React.useRef(viewer); viewerRef.current = viewer;
+	const held = useHistoryHold(user?.id);
 	const selectedPlane = useDataPlane();
 	const expectedPlane = user?.localOnly ? LOCAL_TIMELINE_PLANE : storage === 'home' ? 'home' : selectedPlane;
 	const [connection, setConnection] = React.useState<Connection | null>(null);
@@ -111,12 +115,18 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 			if (!alive || busy || !navigator.onLine || (!force && document.visibilityState === 'hidden')) return;
 			busy = true; const attempt = generation;
 			try {
+				// The hold is read inside push(); the first push after connect waits
+				// for the prefs record so a device that lost its cache cannot upload
+				// a held queue. Offline, the read settles on failure and syncing resumes.
+				void historyPrefs.load(ownerId, apiRef.current, viewerRef.current);
 				const found = await apiRef.current.v1.timeline.discover(ownerId, { storage });
 				if (!alive || attempt !== generation || !navigator.onLine) return;
 				if (found.ownerId !== ownerId || (storage === 'home' && found.dataPlane !== 'home') || typeof found.folderId !== 'string') throw new Error('Timeline account changed. Reopen your Things.');
 				const scope = { ownerId, apiOrigin: origin, dataPlane: found.dataPlane, ...(delegatedBy ? {delegatedBy} : {}) }; timelineScopeKey(scope);
 				const current = install(scope, found.folderId, true);
 				try { sessionStorage.setItem(key, JSON.stringify({ scope, folderId: found.folderId })); } catch {}
+				await historyPrefs.ready(ownerId);
+				if (!alive || attempt !== generation) return;
 				await current.sync.pushPending();
 				if (alive && attempt === generation) { setError(''); window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }
 			} catch (failure) {
@@ -136,18 +146,23 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 			if (current) install(current.scope, current.folderId, false);
 		};
 		const unlisten = storage === 'home' ? () => {} : listenTimelineScopeChange(() => { generation++; setEpoch(value => value + 1); forget(); stop(); setError(''); busy = false; void connect(true); });
-		activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').addEventListener('offline', disconnected); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').addEventListener('online', refresh); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').addEventListener('focus', refresh); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').addEventListener(TIMELINE_CHANGED_EVENT, edited);
-		const timer = activityInterval('timer:timeline/TimelineProvider:1', 'Timeline updates', refresh, 15_000); void connect(true);
-		return () => { alive = false; generation++; lease?.release(); lease = null; active.current = null; clearActivityInterval(timer); unlisten(); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').removeEventListener('offline', disconnected); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').removeEventListener('online', refresh); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').removeEventListener('focus', refresh); activityEvents(window, 'events:timeline/TimelineProvider', 'TimelineProvider').removeEventListener(TIMELINE_CHANGED_EVENT, edited); retry.current = async () => {}; redact.current = async () => {}; };
-	}, [user?.id, user?.localOnly, delegatedBy, workspace, pool, storage, onDenied, expectedPlane]);
-	const scoped = timelineConnectionForViewer(connection, workspace === 'pending' ? null : user?.id, expectedPlane, delegatedBy);
-	return { storage, identity: JSON.stringify([user?.id ?? null, delegatedBy, workspace, storage, epoch]), ownerId: user?.id ?? null, connection: scoped, error, retry: () => retry.current(), redact: failure => redact.current(failure) };
+		window.addEventListener('online', refresh); window.addEventListener('focus', refresh); window.addEventListener(TIMELINE_CHANGED_EVENT, edited);
+		const timer = setInterval(refresh, 15_000); void connect(true);
+		return () => { alive = false; generation++; lease?.release(); lease = null; active.current = null; clearInterval(timer); unlisten(); window.removeEventListener('online', refresh); window.removeEventListener('focus', refresh); window.removeEventListener(TIMELINE_CHANGED_EVENT, edited); retry.current = async () => {}; redact.current = async () => {}; };
+	}, [user?.id, pool, storage, onDenied, expectedPlane]);
+	const scoped = timelineConnectionForViewer(connection, user?.id, expectedPlane);
+	return { storage, identity: JSON.stringify([user?.id ?? null, storage, epoch]), ownerId: user?.id ?? null, connection: scoped, error, held, retry: () => retry.current(), redact: failure => redact.current(failure) };
 }
 
 /** Home and the selected database use identical records and separate scope
  * keys. Their shared pool keeps one sync queue when both resolve to home. */
 export function TimelineProvider({ children }: { children: React.ReactNode }) {
 	const api = useApi(); const apiRef = React.useRef(api); apiRef.current = api;
+	const user = useCurrentUser();
+	// Lifting the hold drains both sessions' queues at once (one shared pool,
+	// so the second push finds nothing left). Dispatched once here, not per session.
+	const held = useHistoryHold(user?.id); const wasHeld = React.useRef(held);
+	React.useEffect(() => { if (wasHeld.current && !held) window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); wasHeld.current = held; }, [held]);
 	const [pool] = React.useState(() => new TimelineConnectionPool((scope, folderId) => {
 		const connectionApi = apiRef.current;
 		const store = scopedTimelineStore(scope);
@@ -156,19 +171,16 @@ export function TimelineProvider({ children }: { children: React.ReactNode }) {
 		const names = new TimelineNameStore(scope);
 		const nameQueue = scope.dataPlane === LOCAL_TIMELINE_PLANE ? undefined : new TimelineNameQueue(scope, localTimelineBackend());
 		const sync = new TimelineSync(store, {
-			push: async (event, signal) => (await connectionApi.v1.timeline.push(scope, event, { signal })).entry,
-			recoverOutcome: async (event, proof, signal) => (await connectionApi.v1.timeline.recoverOutcome(scope, { formatVersion: 1, event, dataPlane: scope.dataPlane, proof }, { signal })).entry,
-			page: (request, signal) => connectionApi.v1.timeline.page(scope, request, { signal }),
-			branch: (command, signal) => connectionApi.v1.timeline.branch(scope, command, { signal }),
-			branchHead: (branchId, thingId, signal) => connectionApi.v1.timeline.branchHead(scope, branchId, thingId, { signal }),
-			entry: async (eventId, signal) => { const { entry, notes, names } = await connectionApi.v1.timeline.entry(scope, eventId, { signal }); return { entry, notes, names }; },
-			branches: (thingId, before, signal) => connectionApi.v1.timeline.branches(scope, thingId, before, { signal }),
-			note: (command, signal) => connectionApi.v1.timeline.note(scope, command, { signal }),
-			nameVersion: (command,signal) => connectionApi.v1.timeline.nameVersion(scope,command,{signal})
-		}, branches, notes, names, nameQueue, () => {
-			if (scope.dataPlane !== LOCAL_TIMELINE_PLANE && !navigator.onLine) throw new Error('Account History sync is paused while offline. Your changes are saved on this device.');
-		});
-		return { scope, folderId, store, branches, notes, names, nameQueue, sync };
+			push: async (event, signal) => (await apiRef.current.v1.timeline.push(scope, event, { signal })).entry,
+			recoverOutcome: async (event, proof, signal) => (await apiRef.current.v1.timeline.recoverOutcome(scope, { formatVersion: 1, event, dataPlane: scope.dataPlane, proof }, { signal })).entry,
+			page: (request, signal) => apiRef.current.v1.timeline.page(scope, request, { signal }),
+			branch: (command, signal) => apiRef.current.v1.timeline.branch(scope, command, { signal }),
+			branchHead: (branchId, thingId, signal) => apiRef.current.v1.timeline.branchHead(scope, branchId, thingId, { signal }),
+			entry: async (eventId, signal) => { const { entry, notes, names } = await apiRef.current.v1.timeline.entry(scope, eventId, { signal }); return { entry, notes, names }; },
+			branches: (thingId, before, signal) => apiRef.current.v1.timeline.branches(scope, thingId, before, { signal }),
+			note: (command, signal) => apiRef.current.v1.timeline.note(scope, command, { signal })
+		}, branches, notes, names, { held: () => historyPrefs.isHeld(scope.ownerId) });
+		return { scope, folderId, store, branches, notes, names, sync };
 	}));
 	const sessions = React.useRef<Session[]>([]);
 	const redact = React.useCallback(async (failure: unknown) => { await Promise.all(sessions.current.map(session => session.redact(failure))); }, []);

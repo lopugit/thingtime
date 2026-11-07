@@ -26,6 +26,7 @@ Maps point at the canonical sources instead of repeating them:
 | Thing context menu, PersistedThingMenu, Lopu toasts, icons, layering | [ui-shell-menus-and-design-system.md](ui-shell-menus-and-design-system.md) |
 | Sessions, register/login, account roster, admins, upload approval | [auth-accounts-and-admin.md](auth-accounts-and-admin.md) |
 | Worktrees, ports, PM2, env files, tests, Graphify, fixtures | [local-development-and-worktrees.md](local-development-and-worktrees.md) |
+| Unified Timeline: history ledger, History browser, drafts and sync, history settings, sync hold, per-Thing pause | [history-and-timeline.md](history-and-timeline.md) |
 
 ## Conventions used in every map
 

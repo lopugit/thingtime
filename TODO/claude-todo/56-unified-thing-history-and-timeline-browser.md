@@ -1,6 +1,6 @@
 # 56 — Unified Thing history and the timeline browser 🕰️
 
-**Status:** 🟡 Foundation shipped on `main` (Unified Timeline, PRs #956–#988) · design gap-close in progress (2026-10-13)
+**Status:** 🟡 Foundation shipped on `main` (Unified Timeline, PRs #956–#988) · gap-close in delivery: contextual messages shipped (PR #991, `api.timeline` 1.17.0), named versions / undo / compare with now / export shipped (PR #993, 1.18.0); History settings + entry points, server search, Frames polish and retention remain (2026-10-14)
 
 > **2026-10-13 status.** The Unified Timeline (`docs/unified-timeline.md`,
 > `/history`, `/api/v1/timeline` 1.16.0, `remix/app/timeline/*`,
@@ -13,7 +13,9 @@
 > export, server-side search/filters/day counts, History settings with
 > retention/clear/export, Frames as-of rendering, named-branch lane labels,
 > device/session grouping, entry points). Owner authorized shipping these to
-> `main` as they land. The milestones below are kept as the original spec;
+> `main` as they land. **Delivered so far:** notes, Lopu explanations and
+> system lines (PR #991); named versions, Undo this change, Compare with now
+> and version export (PR #993). The milestones below are kept as the original spec;
 > read them against the delivered foundation, not as unstarted work.
 
 **Priority:** P1 fundamental · requested 2026-09-27
