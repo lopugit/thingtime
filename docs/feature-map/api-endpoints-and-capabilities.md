@@ -9,13 +9,49 @@ must carry these versions. `accountTransport.client.ts` negotiates them;
 and canonical attachment cleanup. The durable local metadata queue now consumes these contracts; deletion
 reconciliation and ordinary account file UI wiring remain pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
 
-`api.things-interactions` 1.0.0 adds the first-party private GET/POST
-`/api/v1/things/interactions` capability: bounded membership snapshots and
-conditional desired-state writes for independent account interaction sync.
-The canonical Things helpers own revision invalidation and authorization;
-`local-workspace/accountTransport.client.ts` negotiates this capability and the
-existing data-plane fence. Route file, import map and docs registry are updated
-together. See [Things and folders](things-and-folders.md) for tests and limits.
+Environment API gateway ingress is negotiated through `api.environment-gateway`
+1.2.0 and `/.well-known/thingtime-capabilities.json`. Proxy follower discovery
+filters whole features/operations against the existing gateway authority through
+`gatewayOperations.ts`, shared with request admission; no downgrade to an owner
+version that the local runtime refuses. Missing or incompatible ownership fails
+closed. The canonical alias bootstraps local discovery; standalone/dedicated and
+verified immutable owners retain their registry. Run `test:environment-gateway`
+for the actual Nitro handler, ownership and public operation contract checks. Server deployments use
+the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by
+opt-in) with the `THINGTIME_MONGODB_CONNECTION_MODE` runtime override. Dedicated
+mode executes its own backend, advertises `gateway: null`, and refuses relay
+traffic; it does not imply an isolated database. See [the gateway runbook](../environment-api-gateway.md)
+for the audited environment mapping and pending activation evidence.
+
+Mobile device descriptors use `app/devices/platform.ts` across validation,
+projection, schemas and client types. `api.devices` 1.10.0 and
+`api.devices-pairing-claim` 1.1.0 add iOS/Android to the existing signed pairing
+protocol. Run `test:devices`, `test:schemas` and `test:api-capabilities`.
+See [mobile sync acceptance](../mobile-file-sync.md) for pending native clients.
+
+`api.devices-node-identity` 1.0.0 is a private device-token-only GET: the token
+fixes both IDs and the owned device must still exist. `api.devices-disconnect`
+1.0.0 is a full-user POST accepting only `deviceId`; `disconnectDevice.ts` revokes
+that owner's matching device sessions in the home transaction while retaining
+Things/files. Both routes use the import map and docs registry. Native
+`ThingtimeAPIClient.verifyFileSyncIdentity` negotiates the optional identity
+feature and selects the exact local credential. `device-identity.integration.mts`
+checks real signed pairing, privacy, owner-only disconnect and no claim revival.
+Character agent discovery uses `remix/scripts/character-coordination-preflight.ts`
+and the shared `capabilityContract.ts` SemVer/origin contract. Run
+`npm --prefix remix run characters:preflight -- --origin <selected-origin>` and
+`test:characters-preflight`; see [the coordination runbook](../characters.md#agent-coordination).
+This read-only client adds no route, permission or server contract. Edge refusal
+must remain distinct from missing capabilities, authentication and membership.
+
+Paired Mac inventory uses `api.devices` 1.10.0 and `api.devices-node-state`
+1.11.0 (`deviceMenuBar.ts`, native `MenuBarTelemetry.swift`). Approved Bash uses
+`api.devices-commands` / `api.devices-node-commands` 1.10.0 (`deviceScript.ts`,
+native `DeviceScript.swift`). Both extend existing routes. Optional native
+negotiation preserves compatibility with older origins; script leases require
+explicit approved envelopes. Editable suites live in `appSuites/macMenuBar.ts`
+and `appSuites/deviceScripts.ts`; scripts retain results only on explicit
+private-Thing creation. See README and TESTING for limits and acceptance.
 
 Timeline 1.18.0 adds named versions, undo and version export on the existing
 route: the POST command `name-version` (`api/utils/timeline/versionNames.ts`,
@@ -574,79 +610,29 @@ the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
 
-
-## Mapbox provider integration
-
-`POST /api/v1/maps` negotiates `api.maps` 1.0.0. `api/utils/maps/route.ts`
-uses full-account authorization, owner-scoped Vault references and operation
-rate limits; `mapbox.ts` fixes provider destinations and redacts responses.
-Register `_maps.tsx` in Nitro and the canonical docs registry. Run `test:maps`
-and `test:api-capabilities`; see [maps](../maps.md) for provider storage constraints.
-The saved Builder `tt-mapbox` viewport loads the official `mapbox-gl` npm
-distribution JavaScript and CSS staged as Vite's same-origin public assets
-(`components/Builder/Maps/mapboxSdk.ts`).
-The application CSP permits only the Mapbox service and events origins in
-`connect-src`, with its existing `blob:` worker allowance; it does not permit a
-remote Mapbox script or eval. The separate Library SDK demo keeps its own
-opaque-origin policy and CDN loader.
-
-## Storage readiness and recovery
-
-`api.storage-accounting` 1.0.0 publishes shared deferred-accounting semantics
-from the canonical shared-feature registry to both manifests.
-`api.health-nitro` 1.3.0 adds honest recovering state and source-stamp checks;
-`api.lopu-recordings-run` 1.6.0 adds aggregate storageRecovery outcomes on the
-existing protected scheduler. Both manifests derive versions from apiDocs.ts.
-The dispatcher records allowlisted storage failure codes without logging response
-bodies. See [storage recovery](../storage-recovery.md) for transactional queue,
-worker, controller gates and the scheduled production monitor.
-
-
-Connections catalog, account/list, unlink, feed, filters and OAuth begin/callback
-publish independent 2.0.0 contracts through `apiDocs.ts` and both generated
-manifests. The existing `useApi` connection methods negotiate these requirements.
-There is no new endpoint. Owner-private encrypted grants replace shared tokens;
-OAuth app configuration is exact-origin/environment scoped. Read the auth map,
-README social OAuth setup and TESTING before provider acceptance.
-## Environment gateway and index readiness
-
-The negotiated ingress contract and connection-mode policy are summarized at the
-top of this map. `app/api/utils/deployment/environmentGateway.ts` owns bounded discovery,
-admission and pool draining; `server/utils/environmentGateway.ts` validates
-origin-preserving signed relays before the normal route authorization path.
-`server/middleware/environment-gateway.ts`, the SPA fallback and capability
-handler retain local discovery/static serving while routing data operations.
-`mongodb/indexLifecycle.ts` and `indexMaintenance.mts` coordinate durable index
-readiness without blocking read-only authentication. Existing admin migration
-status/run contracts and Lopu background-task contracts carry their deliberate
-compatible patch versions in both generated manifests.
-
-Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
-the built `test:environment-gateway:acceptance` runner. See
-[the gateway runbook](../environment-api-gateway.md) for server settings,
-environment partitioning and outstanding live rollout acceptance.
-
-
-Owned theme/algorithm pagination uses the existing GET routes, shared
-`api/utils/ownedListPage.ts`, and `hooks/ownedListClient.ts`. Negotiate themes
-1.3.0 / algorithms 1.2.0; follow non-null cursors even after empty pages. Live
-pages do not authorize deletion. Canonical creation removes the old count
-ceilings while retaining byte quotas; sync 1.8.0 / 1.6.0 and things-import
-1.14.0 publish that change. Theme focus-token History uses optional v2 snapshots
-under timeline 1.23.0, preserving the frozen v1 reader. Run
-`test:owned-profiles`, `test:theme-sync`, `test:local-workspace`,
-`test:api-capabilities`, then built `test:environment-gateway:acceptance` in
-its disposable replica-set sandbox. See the local-workspace capacity checkpoint.
-Named Connections management is opt-in at `api.connections`,
-`api.connections-oauth-begin`, `api.connections-oauth-callback` and
-`api.connections-unlink` 2.1. `POST /api/v1/connections/named`
-(`api.connections-named` 1.0) verifies exact actor, origin, connection ID and
-a fixed operation. Token envelopes never cross the response boundary.
-Generic Things 1.46.3 also keeps private account and named grant metadata
-behind the origin-scoped Connections API. See
-`test:connections:oauth` and `test:api-capabilities`.
+Connections gateway clients retain all six major2 requirements. The synthetic
+`connections/gatewayOAuthFlow.test.mts` uses the signed H3 relay and actual
+OAuth/request handlers to check frontend callback, actual data-environment vault
+selection, live-session/one-use state and refresh ownership. A Connections1
+canonical backend is intentionally refused; upgrade/promote the backend before
+dependent follower actions. See the gateway runbook's Connections rollout.
 
 `test:environment-gateway:connections` additionally verifies the compiled Nitro
 OAuth/request path with a synthetic generated adapter preload and real temporary
 replica API data. It preserves the OS network boundary and normal authentication.
 Use `THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE` for a free separate test port range.
+
+
+The combined OAuth/password production integration adds uncapped data strings at
+`api.things` 1.43.0 and `api.things-update` 1.14.0, preserving main's independently
+shipped explicit renderer contracts at 1.42.0/1.13.0. Writers negotiate only the
+capability they use. Bundled desktop fallback validates the actual selected
+origin before forwarding every password operation (1.3.0) and all six
+Connections operations (2.0.0), in both ordinary and forwarded-origin paths.
+
+Saved service requests (`connections/request`) advertise `api.connections-request`
+2.0.1 in both manifest generators. Complete fixed-operation results and opaque
+pagination bodies preserve valid data without arbitrary byte ceilings; owner/rate,
+scope, DNS/redirect and cancellation checks remain required. Focused regressions:
+`connections/outboundTarget.test.ts`, `accountLibrary.test.mts` and
+`requestRoute.test.mts`, plus both capability-generator suites.

@@ -64,6 +64,26 @@ wrappers unreadable; do not generate a new key on each deploy. The server-assist
 recovery model is documented above. No provider developer accounts are required
 for storing passwords or importing TOTP setup codes.
 
+Native verification-code setup uses the `otpauth` scheme declared in the iOS and
+macOS password-host XcodeGen specs. Regenerate each project after changing the
+spec; keep the generated Info.plist scheme declarations with that change. Forks
+must configure `ThingtimeWebURL` to their own canonical HTTPS origin, provision
+the host's Keychain group and deploy the matching web editor. The companion
+opens `/passwords` in a nonpersistent WKWebView and requires normal sign-in. It
+reads only the existing native connection's destination/owner metadata; it never
+imports that connection's credential into the browser. A locked or malformed
+native destination fails closed rather than switching to the build's default.
+When there is no native connection, the explicit build origin is used.
+
+The web editor and host negotiate a separate `authenticatorSetupVersion` 1.0.0
+contract and existing `api.passwords` 1.2.0 or later in major 1. Setup is restricted
+to the home data plane. No new server endpoints, developer-service credentials
+or additional device-token grants are required. Incoming codes stay in memory
+for up to ten minutes, including during normal login, and require a deliberate
+entry choice and Save. Only TOTP `otpauth` links are registered; HOTP, authenticator
+migration and passkey pairing QR payloads are unsupported. Real OS menu/QR and
+signed-device acceptance must be checked after installing a verified release.
+
 For native AutoFill, register your app and credential-provider extension bundle
 identifiers in your Apple Developer team, enable **AutoFill Credential Provider**
 for the containing app and extension, and provision the same Keychain access
@@ -98,6 +118,22 @@ access. iOS Fastlane syncs a separate provider profile; its override is
 `iOS/AGENTS.md` for API-key-based TestFlight setup, use `xcodegen generate`
 before native builds, and pass preview URLs explicitly as the
 `THINGTIME_WEB_URL=https://<your-deployment>` Xcode build setting.
+
+The standalone macOS Thingtime Passwords companion offers **Connect Password
+AutoFill**: select the intended API origin, sign in through its private connection
+view, and explicitly connect the verified account. Main-app login and system
+provider enablement remain separate. Connection errors distinguish an absent link,
+expired authentication, unavailable server configuration, and locked or inaccessible
+Keychain storage. Correct that prerequisite and retry; no failure silently changes
+accounts, origins or credentials. The companion's explicit link is independently
+owned: automatic Electron synchronization and disconnect cannot replace or remove
+it. Use its own Disconnect control to remove that link.
+
+A pending passkey registration keeps the same credential and server write identity
+through save, readback and index retries. A retry after uncertain completion must
+not create a second key. Account/origin changes invalidate the ceremony. Verify
+signed installed-provider creation and a subsequent assertion before claiming live
+passkey support; unsigned builds and synthetic tests do not establish acceptance.
 
 Users connect their current native session from Passwords and enable Thingtime
 in **Settings → General → AutoFill & Passwords**. New passkeys are created through
@@ -978,12 +1014,32 @@ on the same document. Docs: `/docs/api` → things.
 
 ## MongoDB
 
-MongoDB powers the app status checks and database-backed API routes. Local
-development does not require MongoDB env by default: when
-`MONGODB_CONNECTION_STRING` is missing, Vite and Nitro forward same-origin API
-requests to `https://thingtime.com` with the same method, path, query, headers,
-cookies, and payload. Upstream auth cookies are rewritten for local HTTP so
-zero-env localhost login can persist through the proxy.
+Connections 2 followers require a canonical gateway already implementing the
+same major2 operation contracts. The gateway vault must select every exact
+frontend callback origin under the actual deployment data-environment ID;
+see [the rollout contract](docs/environment-api-gateway.md#connections-major2-rollout).
+A major1 preview backend is deliberately refused and does not establish live
+OAuth acceptance.
+
+MongoDB powers database-backed API routes. Incomplete local or deployed servers
+return a configuration error; they do not silently forward to production. The
+installed desktop shell has its own explicit selected-API bridge. For one active
+database/API deployment per environment, see the
+[environment gateway configuration and rollout](docs/environment-api-gateway.md).
+That runbook covers stable aliases, separate environment secrets, capability
+negotiation, `proxy` and opt-in `dedicated` connection modes, promotion/rollback
+and gradual pool draining. Vercel defaults to proxy mode; local and self-hosted
+servers without gateway settings retain direct connections. Dedicated mode
+owns its MongoDB pools but uses the configured environment database, so it does
+not imply database isolation or an Atlas tier change. The intended mapping is
+`thingtime.com`/production to production data, `dev.thingtime.com`/develop to
+development data, and ordinary PR previews to `master.previews.thingtime.com` /
+preview on development data. PR builds keep their existing custom develop
+credential scope; the publisher explicitly selects the logical preview gateway
+without exposing unrelated standard-preview settings to branch code. A recent
+configuration audit found previews and
+custom develop already share the development cluster, separate from production;
+current master support still requires separate compatibility and acceptance checks.
 
 Set these variables only when you want this checkout or deployment to serve API
 requests from its own MongoDB instead of falling back to Thingtime production:
@@ -1655,6 +1711,208 @@ When an AI key is configured, the musing endpoint uses MongoDB to allow 10
 AI-backed musings per detected IP address per rolling hour. Requests over the
 limit, or requests made while the rate-limit collection is unavailable, stream
 the preset fallback responses instead of calling an AI provider.
+
+## Third-party app connections
+
+`/connections` links external accounts (Reddit, YouTube channels, Mastodon,
+Bluesky, Lemmy, Hacker News, GitHub activity, any RSS/Atom feed, plus a
+deterministic demo provider) to a Thingtime account; `/connections/feed`
+browses them with native Thingtime comments/reactions layered on the synced
+posts, and AI feed filters ("warn for sad news" → veiled behind a Show
+button, or hidden) applied server-side.
+
+Fork-safe setup: public-content providers need no external credentials. Authenticated services additionally require an OAuth app and the encrypted account vault described below. AI-backed filter classification reuses the Lopu
+provider keys above (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) and the Admin AI
+model waterfall; without any key, classification falls back to a
+deterministic keyword heuristic so the feature keeps working. Verify a
+deployment end to end with:
+
+```sh
+pnpm --dir remix run verify:connections
+```
+
+(Real-API checks against the local Nitro port; `TT_VERIFY_LIVE=1` adds a
+live Hacker News pull.)
+
+### Multiple accounts and SSO account linking
+
+The service library at `/connections` groups each provider and its subservices
+in titled cards. Each **Add account** opens the provider in a new tab; you can
+connect several personal/work identities. Reconnecting the same identity is
+idempotent. There is no fixed connection-count limit; individual accounts can
+be removed without deleting other saved accounts. Google services request separate read permissions, so connecting
+Google identity does not grant Gmail or Drive access.
+
+Authenticated accounts have independent owner-bound AES-256-GCM ciphertext;
+public sources can still share a feed. No access token, refresh token, or raw
+provider response is returned by the account-list API. Old shared grants must
+be reconnected: they are never silently imported into another owner's vault.
+Disconnect removes the local credential and link; revoke the app in the
+provider's dashboard too if you want to withdraw the provider-side grant.
+
+Configure OAuth apps through **Admin → Integrations → Secrets** using the existing encrypted server vault. Provider secrets must not be added to Vercel variables. Each provider family has one fixed label: `connections-google-oauth` (Google identity, Google services and YouTube account), `connections-facebook-oauth` (Facebook identity/posts), or `connections-<family>-oauth` for `instagram`, `tiktok`, `reddit`, `mastodon`, `x`, `twitch`, `tumblr`, `pinterest`, `linkedin`, `spotify`, and `chatgpt`. Do not change the separate mail integration's `google-mail-oauth` record.
+
+Each secret is JSON with explicit data-environment IDs and exact origins. Example placeholders for `connections-google-oauth`:
+
+```json
+{
+  "environments": {
+    "production": {
+      "origins": {
+        "https://your-host.example.com": {
+          "clientId": "<provider-client-id>",
+          "clientSecret": "<provider-client-secret>",
+          "redirectUri": "https://your-host.example.com/api/v1/connections/oauth/callback"
+        }
+      }
+    }
+  }
+}
+```
+
+The environment ID comes from the existing `THINGTIME_DATA_ENV` bootstrap: `production`, `development`, or the stable ID in `custom:<id>` (custom environments also need `THINGTIME_DATA_AUTHORITY_ORIGIN`). Each preview, development, local and production origin needs its own explicitly approved entry under its selected environment; there is no wildcard, alias, parent-origin or cross-environment fallback. Background refresh uses the encrypted grant's persisted origin and environment. A live request must also match that origin. Missing environment, locked/unavailable vault, missing/duplicate labels, malformed values, empty required secrets and mismatched callbacks all fail closed. The catalog reports setup required and never reveals credentials. Reads coalesce only during a request, bounded by the fixed label set; the next request observes vault rotation.
+
+Register the exact callback with the provider. The optional legacy `CONNECTIONS_OAUTH_REDIRECT_BASE` setting is accepted only as an exact same-origin pin (an optional final slash is allowed); it cannot move a preview/local request to production. It is no longer required when the vault contains the callback. Public ChatGPT clients require `authMethod: "none"` and `clientSecret: ""`; confidential clients use `authMethod: "client_secret_basic"` with a nonempty secret. Hosted ChatGPT identity still requires an approved OpenAI registration. Mastodon's existing `MASTODON_INSTANCE` identifies the single supported instance; optional `YOUTUBE_API_KEY` is unrelated to OAuth account credentials.
+
+Keep only irreducible database/authentication/environment and vault-unlock bootstrap values in the deployment. Reuse the existing `THINGTIME_ADMIN_VAULT_KEY` and owner-vault/auth keys; do not rotate encryption keys during this migration. `THINGTIME_USER_VAULT_KEY` can remain an existing dedicated owner-vault bootstrap. PKCE uses the existing auth signing key unless a dedicated existing `CONNECTIONS_PKCE_SECRET` is configured.
+
+Migration/recovery: save each environment's existing credentials through the canonical vault UI before deploying this resolver; verify catalog readiness, a new consent/callback, saved-account use and refresh separately on each origin. Provider-secret environment variables are never read as a fallback, including when a vault record is invalid. Older in-flight states must restart and encrypted OAuth grants without the client/origin/environment binding must reconnect; owner data and account links are preserved. Changing client ID, callback, origin, environment or ChatGPT auth method invalidates pending flows and saved grants. Same-client secret rotation uses the current secret without discarding refresh grants. Refresh responses retain omitted scope, refresh-token and binding metadata; reconnect never carries a refresh token between different bindings. A bounded rollback is to retain the previous deployment and its original environment configuration until the new vault path passes acceptance, then remove the old provider variables. Rolling back does not establish compatibility for newly bound grants; verify the previous release's behavior before using it. Never copy credentials between environments to repair a failure.
+
+Saved credential names, keys, provider endpoint paths/model IDs and values have
+no arbitrary character or byte limits. The saved-value envelope and generic
+`data` strings preserve their complete contents; the vault and Things mutation
+routes do not impose their former request-body caps. Save clients negotiate
+`api.lopu-vault` 1.4.0, and large data writes negotiate the corresponding Things
+capability before sending. Host request capacity, available memory, account
+storage accounting and the database's physical document capacity still apply;
+this is not a promise of infinite storage. Deploy the compatible backend before
+using these clients. Protocol identifiers, URL safety checks and authorization
+validation remain in place.
+
+Credential storage uses **server-assisted account encryption**. Each user has a
+random data key in their private home-account secure record. New OAuth grants
+and Secure Vault secrets use owner/record/purpose-bound AES-256-GCM envelopes.
+Password login wraps that key with scrypt (N=32768, r=8, p=3); browser requests
+use a live-session-checked HKDF wrapper bound to their exact JWT and session.
+Session wrappers live on individual session records and are removed on revocation.
+Passkey/OTP login and account switching obtain a wrapper when first accessing a
+credential, after live session/owner checks. Existing accounts gain a password
+wrapper at their next successful password login or verification.
+
+The stable server vault key protects a recovery wrapper for authorized background
+actions and password resets. This is **not end-to-end or zero-knowledge encryption**:
+the Thingtime server can decrypt credentials. Password reset atomically rewraps
+the same data key with the new password hash, then revokes sessions; it does not
+rewrite every saved credential. Missing/corrupted key material fails closed and
+must never be replaced with a freshly generated key. Back up the configured server
+vault key with the database; do not rotate it without a recovery-wrapper migration.
+
+Legacy owner-private OAuth and Secure Vault values upgrade on use with a
+revision/credential compare-and-set so migration cannot overwrite a reconnect,
+edit or disconnect. Legacy shared OAuth grants still require reconnecting. The
+normal account list never returns keys, wrappers, tokens or decrypted values.
+
+Local disposable-database acceptance:
+`node remix/scripts/verify-vault-recovery.mjs http://localhost:<web-port>` checks
+registration, two saved accounts, password recovery, old-session revocation,
+reset replay, independent removal and logout. `verify-service-accounts.mjs`
+covers owner isolation, stale forms, concurrency and route registration.
+Keep a replica set used across QA sessions in a persistent private directory
+outside OS temporary folders (for example `$HOME/.local/share/thingtime/qa-mongo`).
+Create it with directory permissions `0700`, bind MongoDB to loopback, and use
+only that disposable URI in the local ignored env. Start the worktree through
+`npm run web-pms` and wait for `/api/v1/health/nitro` to return `ok:true` before
+running HTTP checks; the initial development-worker build can take longer than
+the PM2 startup command. If the disposable database loses files, preserve a
+stopped copy, create a fresh replica set, and recreate fixtures through the
+normal API. Reconnect real test OAuth accounts afterward. Do not apply this
+replacement procedure to a production database.
+
+See the [provider access and setup guide](docs/provider-access-setup.md) for the
+provider registrations, vault labels, consent scopes and separate acceptance gates.
+
+Google Cloud setup:
+
+1. Create or select your own project, configure its OAuth consent branding and
+   audience, and add your test Google accounts while it is in Testing mode.
+2. Create an OAuth client of type **Web application**, register the exact
+   callback below (and your local callback separately), then store its client
+   ID/secret in the `connections-google-oauth` server-vault record above.
+   Do not use a service-account key.
+3. Enable the APIs you plan to use: Drive, Gmail, Calendar, Docs, Sheets,
+   People (Contacts), and YouTube Data. Identity uses `openid profile email`;
+   each service adds only its documented readonly scope. Gmail and other
+   sensitive/restricted scopes can require Google verification before public
+   use; a Testing-mode consent grant may have a shorter refresh lifetime.
+4. Add two different Google accounts in Thingtime, return to the original tab,
+   and use **Check connection**. Decline and replay a callback as well. Google
+   authorization requests use PKCE, offline access, and explicit account choice.
+
+Meta setup: select your own app in Meta for Developers, configure Facebook
+Login and its valid OAuth redirect URI, save `clientId` and `clientSecret` in
+the `connections-facebook-oauth` server-vault record, and add test users/app roles while the app is in
+Development mode. The Facebook account card requests only `public_profile`;
+the separate Facebook posts card requests `user_posts`, which needs the applicable Meta approval for public
+use. Do not assume app-admin testing proves public availability.
+
+The **ChatGPT identity** card implements the [hosted OpenAI identity flow](https://developers.openai.com/siwc/website)
+for approved partner clients. Save `clientId`, `authMethod` (`client_secret_basic`
+or the explicitly registered `none` method), and `clientSecret` in the
+`connections-chatgpt-oauth` server-vault record. Confidential clients require a
+nonempty secret; registered public clients use an empty secret.
+Register the same exact callback below. PKCE, one-use session-bound state, and
+signature/issuer/audience/expiry/nonce checks protect the callback. The saved
+ID token is encrypted and is never sent as an API bearer token. Identity sign-in
+does not grant ChatGPT subscription or OpenAI API usage. The separate
+[open-source subscription flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
+requires a local callback and host registration; it is not implemented by this
+hosted identity adapter.
+
+OpenAI API and Claude Code cards reuse the existing Secure Vault. Multiple
+saved connections are available in Lopu's model picker. OpenAI API usage has
+separate billing. Thingtime's existing Claude runtime accepts a **Claude Code
+OAuth token**, generated with `claude setup-token`; it does not accept an
+Anthropic API key. Direct browser-based Claude account enrollment remains
+unavailable. Never import browser session cookies as provider credentials.
+
+Saved Google grants can already be reused server-side through
+`POST /api/v1/connections/request` with `{ "connectionId": "<owned-link-id>",
+"operation": "drive.list-files" }`. Supported operations are `account.profile`,
+`drive.list-files`, `gmail.list-messages`, `calendar.list-calendars`,
+`docs.get-document`, `sheets.get-spreadsheet`, and `contacts.list-contacts`.
+The document/sheet operations also require `resourceId`. Each operation checks
+the owner, provider, and granted scopes; arbitrary URLs and caller-supplied
+auth headers are not accepted. Token refresh uses a database lease plus a
+compare-and-set, so rotating grants cannot be exchanged concurrently.
+
+For list operations, keep requesting pages with the same connection and
+operation, passing `data.nextPageToken` unchanged as `pageToken`; stop when the
+provider omits it. Negotiate `api.connections-request` **1.1.0** (compatible
+major 1) at the selected origin before using pagination. Page sizes are
+processing batches, not a total-record limit. Results preserve complete text,
+arrays and object fields while redacting authentication material; they do not
+use the truncated logging representation. The fixed provider endpoint cannot
+redirect to another origin, and request cancellation reaches its transport.
+The deployment's memory/response constraints and provider timeout still apply
+to each response; document reads are a single provider response. Provider
+cursor behavior follows the official [Drive](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list),
+[Gmail](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/list),
+[Calendar](https://developers.google.com/workspace/calendar/api/v3/reference/calendarList/list)
+and [People](https://developers.google.com/people/api/rest/v1/people.connections/list)
+contracts. A rejected or expired cursor requires restarting the listing; it
+does not imply the saved authorization was removed.
+
+Register `https://<your-host>/api/v1/connections/oauth/callback` as the OAuth
+redirect URI in each provider app's settings (Meta and TikTok require https —
+a tunnel origin works for local dev). Official-API honesty notes: Meta removed
+the friends News Feed API in 2015, so the facebook provider syncs your own
+timeline posts; Instagram and TikTok expose your own media/videos, not the
+home/For You feed; the youtube-account provider syncs the latest uploads from
+your real subscriptions. The REAL algorithmic home feeds come from the
+providers whose APIs expose them: `reddit-account` (your front page),
+`mastodon-account` (your home timeline), and `bluesky-account` (your
+following timeline — connects with an app password, no developer app needed:
+the password is exchanged for a session and never stored).
 
 ## Branch automation: develop → main promotion
 
@@ -4661,7 +4919,7 @@ using DNS-only POP3 discovery; it never attempts a provider login.
 
 ### Import an existing OpenAI deployment key
 
-An admin can use **AI Providers → AI platform credentials → Import configured OpenAI key** to copy the current server’s `OPENAI_API_KEY` into the encrypted shared vault as `OPENAI_THINGTIME_API_KEY` (platform `OpenAI`). The value never travels through the browser. The operation requires capability `api.admin-ci-credentials` 3.1.0, a same-origin admin session and an already configured vault. Repeating it preserves existing entries, including disabled entries. Configure your own provider key on your own deployment; no account-specific value is bundled. The environment variable remains available to existing chat consumers; this import does not remove or rotate it.
+An admin can use **AI Providers → AI platform credentials → Import configured OpenAI key** to copy the current server’s `OPENAI_API_KEY` into the encrypted shared vault as `OPENAI_THINGTIME_API_KEY` (platform `OpenAI`). The value never travels through the browser. The operation requires capability `api.admin-ci-credentials` 3.1.1, a same-origin admin session and an already configured vault. Repeating it preserves existing entries, including disabled entries. Configure your own provider key on your own deployment; no account-specific value is bundled. The environment variable remains available to existing chat consumers; this import does not remove or rotate it.
 
 ### Paired Mac menu bar and reusable scripts
 
@@ -4759,6 +5017,95 @@ Keychain group and AutoFill entitlements provisioned for the same team.
 and provisioning contracts. `CODE_SIGNING_ALLOWED=NO` is for isolated compilation
 only and does not establish installed AutoFill or Keychain acceptance. Never
 install an unsigned helper over a working signed app.
+
+### Prepare and sign the standalone Password AutoFill companion
+
+The default `build:passwords` workflow above remains unchanged. An opt-in split
+keeps canonical Xcode package evaluation and compilation inside the enforced
+`(version 1) (allow default) (deny network*)` sandbox, then signs only the
+hash-bound fixed host/extension in a separate release operation. This is a
+trusted, reviewed source build, not an arbitrary-code isolation boundary:
+network denial does not restrict filesystem, Mach or Keychain access.
+
+Use a full reviewed Git commit, stable `/Applications/Xcode.app`, XcodeGen at
+`/opt/homebrew/bin/xcodegen`, and two existing manual Developer ID profiles in
+Xcode's supported store. For a fork, replace every placeholder below with your
+own team's public metadata and provision both fixed bundle identifiers and the
+shared `<TEAM_ID>.com.thingtime.passwords` group. Keep private keys in Keychain;
+no profile/certificate/key contents belong in shell arguments or source. A
+valid identity listing does not establish unattended signing permission.
+
+```sh
+node electron/scripts/build-native-passwords.mjs --prepare-signing \
+  --source <FULL_REVIEWED_GIT_SHA> --team <TEAM_ID> \
+  --certificate-sha1 <40_HEX_PUBLIC_CERTIFICATE_FINGERPRINT> \
+  --identity-name 'Developer ID Application: <NAME> (<TEAM_ID>)' \
+  --host-profile "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/<HOST_UUID>.provisionprofile" \
+  --provider-profile "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/<PROVIDER_UUID>.provisionprofile" \
+  --output /private/tmp/thingtime-passwords-prepare-review1
+```
+
+Output must be a new absolute directory through canonical, nonsymlink paths.
+Preparation exports only the native Git closure, preserves canonical local
+Swift-package references, compiles the production team/group into Info.plists,
+and never rewrites those compiled Info.plists. It uses a fresh private HOME,
+TMP/cache/config state, explicit nonsecret USER/LOGNAME, no inherited account,
+service, provisioning or session environment, and no automatic provisioning.
+The invocation-local `-IDEPackageSupportDisableManifestSandbox=YES` omits only
+Xcode's nested manifest sandbox; the outer network denial is unchanged. This
+shipped Xcode override is absent from public help and must be reverified after
+a toolchain change. Direct IPv4/IPv6 positive/denial controls run before and
+after; each owned process group is reaped under a shared 600-second build
+budget. SIGINT/SIGTERM cancellation terminates the active owned group, escalates
+to KILL after five seconds, reaps it and closes listeners/logs before writing a
+failure receipt; signal handlers are removed afterward. Cancellation emits no
+signing manifest. Abrupt SIGKILL/host loss cannot execute JavaScript cleanup.
+Failure retains logs and partial outputs without a signing manifest.
+
+Review `preparation-receipt.json`, `build.log`, source hashes, generated project
+hash and `manifest.json`. The manifest binds artifact, embedded profile,
+materialized entitlement and trusted-tool bytes. Preparation does not repeat
+the independent interoperability/unit checks or establish device acceptance.
+Then pass the independently reviewed manifest SHA256 explicitly:
+
+```sh
+node electron/scripts/sign-native-passwords.mjs \
+  --manifest /private/tmp/thingtime-passwords-prepare-review1/manifest.json \
+  --sha256 <REVIEWED_MANIFEST_SHA256> \
+  --output /private/tmp/thingtime-passwords-signed-review1
+```
+
+The signer rechecks profile expiry/team/app/AutoFill/certificate, compiled
+identities, artifact hashes, canonical paths and valid local identity metadata.
+It copies into fresh private staging and invokes trusted system `codesign`
+extension first, verifying that result before signing the host. Hardened runtime
+and a secure timestamp are mandatory. It rechecks each executable digest immediately before its system signing call,
+catching changes made while the other bundle was signed. After signing,
+non-executable payload/profile/entitlement bytes must remain identical. Signing
+necessarily changes Mach-O bytes; normalized post-sign executable equality is
+not checked. This contract assumes trusted system codesign is the only writer
+inside fresh private staging and does not isolate arbitrary concurrent writers
+using the same macOS account. It never executes the prepared app,
+package manifests, plugins or build hooks. Timestamping is a separate release
+operation that may contact Apple's timestamp service; no build-network policy
+is changed. Any real Keychain/user-presence prompt remains required. A failed
+signature, timestamp or final canonical verification leaves a failed receipt;
+it never falls back to ad-hoc/development signing or installs anything.
+
+The successful result is `<SIGNED_OUTPUT>/stage/Thingtime Passwords.app` plus
+`signing-receipt.json`. Before a separately reviewed standalone installation,
+record a backup and signatures/designated requirements of the existing copy;
+verify the staged and installed copies and the real provider operation. Automatic
+`codesign` requirement text can differ from Xcode's requirement even with the
+same identity and bundle IDs. Compare the actual requirements and their
+compatibility/rebuild stability; never assume unchanged permissions from a
+matching certificate name or silently call differing requirements identical. The
+packaged Electron bridge uses its nested helper, so a standalone installation
+cannot prove or update the main app's bridge. Do not replace/restart an occupied
+`Thingtime.app`. Notarization and OS/provider acceptance remain separate.
+
+Safe regression command (no Xcode, signing or credentials):
+`node --test electron/scripts/password-provider-release.test.mjs`.
 
 ### Commander-backed Mac backup indexing
 

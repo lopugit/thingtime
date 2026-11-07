@@ -33,7 +33,17 @@ const initial: PasswordEntry = {
 };
 const entries = new Map([[entryId, { entry: initial, revision: 1 }]]);
 const files = new Map([[entryId, [{ id: '33333333-3333-4333-8333-333333333333', metadata: newPasswordFile('Synthetic attachment.txt', 17) }]], [archiveId, [{ id: '44444444-4444-4444-8444-444444444444', metadata: { ...newPasswordFile('Synthetic source.txt', 9), archivePath: 'files/fixture-file___source.txt' } }]]]);
+const pendingUploads = new Map<string, { entryId: string; metadata: ReturnType<typeof newPasswordFile> }>();
 const operations: string[] = [], nativeOperations: string[] = [];
+let nativeConnectionState: 'index-synchronized' | 'linked-index-pending' | 'unknown' = 'index-synchronized';
+const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical((value as Record<string, unknown>)[key])])) : value;
+const structuredSnapshot = (entry?: PasswordEntry) => (entry?.fields || []).filter(field => field.structured).map(field => ({ label: field.label, type: field.type, value: JSON.parse(field.value) }));
+let roundTripBaseline: string | null = null, omitBackupFiles = false, captureBackup = false, downloadedBackup: Blob | null = null;
+const createObjectURL = URL.createObjectURL.bind(URL);
+URL.createObjectURL = ((value: Blob | MediaSource) => {
+  if (captureBackup && value instanceof Blob) downloadedBackup = value;
+  return createObjectURL(value);
+}) as typeof URL.createObjectURL;
 // Clipboard is a synthetic device boundary; never reaches the host clipboard.
 let copiedValue = '', clipboardReject = false, clipboardPause = false, clipboardRelease: (() => void) | null = null;
 Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value: string) => {
@@ -46,14 +56,18 @@ let layoutRevision = 0;
 let pausedOperation: string | null = null, pendingRelease: (() => void) | null = null;
 let pauseCapability = new URL(location.href).searchParams.has('pauseCapability');
 let capabilityPending: Promise<void> | null = null;
-const metadata = ([id, saved]: [string, { entry: PasswordEntry; revision: number }]) => ({ id, title: saved.entry.title, passwordType: saved.entry.passwordType, revision: saved.revision, updatedAt: '2026-10-23T00:00:00.000Z' });
+const metadata = ([id, saved]: [string, { entry: PasswordEntry; revision: number }]) => ({ id, title: saved.entry.title, passwordType: saved.entry.passwordType, revision: saved.revision, icon: saved.entry.icon, updatedAt: '2026-10-23T00:00:00.000Z' });
 window.fetch = async (input, init) => {
   const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
   init?.signal?.throwIfAborted();
   const response = (value: unknown, status = 200) => Response.json(value, { status });
+  if (url.origin === 'https://icon.fixture.test') {
+    if (url.pathname === '/broken.png') return new Response('not an image', { headers: { 'content-type': 'image/png' } });
+    return new Response(Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7XcAAAAASUVORK5CYII='), byte => byte.charCodeAt(0)), { headers: { 'content-type': 'image/png' } });
+  }
   if (url.pathname.includes('thingtime-capabilities')) {
     if (pauseCapability) { capabilityPending ??= new Promise<void>(resolve => { pendingRelease = () => { pauseCapability = false; pendingRelease = null; resolve(); }; }); await capabilityPending; init?.signal?.throwIfAborted(); }
-    return response({ schemaVersion: 1, origin: location.origin, features: Object.fromEntries(Object.entries({ 'api.passwords': '1.2.1', 'api.things': '1.36.0', 'api.webpages-resolve': '1.6.0', 'api.actions-run': '1.7.0', 'api.mongodb-endpoint': '1.1.0' }).map(([key, version]) => [key, { version }])) });
+    return response({ schemaVersion: 1, origin: location.origin, features: Object.fromEntries(Object.entries({ 'api.passwords': '1.3.0', 'api.things': '1.36.0', 'api.webpages-resolve': '1.6.0', 'api.actions-run': '1.7.0', 'api.mongodb-endpoint': '1.1.0' }).map(([key, version]) => [key, { version }])) });
   }
   if (['/api/v1/webpages/resolve', '/api/v1/things'].includes(url.pathname)) {
     const headers = new Headers(init?.headers);
@@ -80,8 +94,21 @@ window.fetch = async (input, init) => {
     if (body.operation === 'read') { const saved = entries.get(body.id); return result({ id: body.id, ...saved }); }
     if (body.operation === 'save') { const previous = entries.get(body.id); if (body.revision !== (previous?.revision || 0)) return response({ ok: false, error: 'Entry changed' }, 409); const saved = { entry: body.entry, revision: body.revision + 1 }; entries.set(body.id, saved); return result({ record: metadata([body.id, saved]) }); }
     if (body.operation === 'delete') { entries.delete(body.id); return result({}); }
-    if (body.operation === 'file-list') return result({ files: body.entryIds.flatMap((id: string) => files.get(id) || []), nextCursor: null });
+    if (body.operation === 'file-list') return result({ files: omitBackupFiles ? [] : body.entryIds.flatMap((id: string) => files.get(id) || []), nextCursor: null });
     if (body.operation === 'file-delete') { files.set(body.entryId, (files.get(body.entryId) || []).filter(file => file.id !== body.fileId)); return result({}); }
+    if (body.operation === 'file-start') {
+      const id = crypto.randomUUID();
+      pendingUploads.set(id, { entryId: body.entryId, metadata: body.metadata });
+      return result({ upload: { id, state: 'ready', partSizeBytes: 1024 * 1024 } });
+    }
+    if (body.operation === 'file-complete') {
+      const pending = pendingUploads.get(body.fileId);
+      if (!pending) return response({ ok: false, error: 'Synthetic upload is unavailable.' }, 404);
+      const file = { id: body.fileId, metadata: pending.metadata };
+      files.set(pending.entryId, [...(files.get(pending.entryId) || []), file]);
+      pendingUploads.delete(body.fileId);
+      return result({ file });
+    }
     if (body.operation === 'export') return result({ entries: Array.from(entries).map(([id, saved]) => ({ id, ...saved })), nextCursor: null });
     return response({ ok: false, error: 'Synthetic fixture does not implement this operation.' }, 400);
   }
@@ -89,7 +116,10 @@ window.fetch = async (input, init) => {
   return originalFetch(input, init);
 };
 Object.assign(window, { thingtimeDesktop: { passwordsVersion: '1.0.0', passwordProvider: async ({ action, ownerId }: { action: string; ownerId: string }) => {
-  if (ownerId !== owner) throw Error('Synthetic native owner mismatch'); nativeOperations.push(action); return { ok: true, message: `Synthetic AutoFill ${action} completed.` };
+  if (ownerId !== owner) throw Error('Synthetic native owner mismatch'); nativeOperations.push(action);
+  if (action === 'disconnect') return { ok: true, state: 'disconnected', linked: false, indexSynchronized: false };
+  if (nativeConnectionState === 'unknown') return { ok: true, message: 'Connected with synthetic private diagnostic that must not render.' };
+  return { ok: true, state: nativeConnectionState, linked: true, indexSynchronized: nativeConnectionState === 'index-synchronized' };
 } } });
 // Native transport simulation only. Real owner/URL/nonce verification is
 // separately tested in the native adapter and the actual injected JS model.
@@ -116,6 +146,7 @@ const router = createMemoryRouter([{ id: 'root', path: '*', loader: () => ({ use
 createRoot(document.getElementById('root')!).render(<ChakraProvider><RouterProvider router={router} /></ChakraProvider>);
 Object.assign(window, { passwordFixture: {
   qrFixtureUrl,
+  setNativeConnectionState: (state: typeof nativeConnectionState) => { nativeConnectionState = state; },
   offerSetup: () => { if (setupPending) return false; setupPending = { id: crypto.randomUUID(), value: `otpauth://totp/Synthetic:setup?secret=${'A'.repeat(32)}` }; if (setupScope) announceSetup(); else window.dispatchEvent(new Event('thingtime:authenticator-setup-ready')); return true; },
   setupPending: () => Boolean(setupPending),
   expireSetup: () => { const id = setupPending?.id; setupPending = null; if (id) setupMessage({ kind: 'expired', requestId: id }); return id; },
@@ -127,6 +158,21 @@ Object.assign(window, { passwordFixture: {
   pauseClipboard: () => { clipboardPause = true; },
   clipboardPending: () => clipboardRelease !== null,
   releaseClipboard: () => clipboardRelease?.(),
+  prepareStructuredRoundTrip: () => {
+    const entry = entries.get(entryId)?.entry;
+    if (!entry) return false;
+    roundTripBaseline = JSON.stringify(canonical(structuredSnapshot(entry)));
+    omitBackupFiles = true;
+    captureBackup = true;
+    downloadedBackup = null;
+    return true;
+  },
+  downloadedFile: () => downloadedBackup ? new File([downloadedBackup], 'structured-round-trip.1pux', { type: 'application/zip' }) : null,
+  structuredRoundTripPreserved: () => {
+    if (!roundTripBaseline) return false;
+    const matches = Array.from(entries.values()).map(saved => saved.entry).filter(entry => entry.title === initial.title && entry.fields.some(field => field.structured));
+    return matches.length > 1 && JSON.stringify(canonical(structuredSnapshot(matches[matches.length - 1]))) === roundTripBaseline;
+  },
   pauseNext: (operation: string) => { if (!['read', 'save'].includes(operation)) throw Error('Unsupported fixture pause'); pausedOperation = operation; },
   pending: () => pendingRelease !== null, releasePending: () => pendingRelease?.(),
   operations: () => [...operations], nativeOperations: () => [...nativeOperations],

@@ -1,6 +1,4 @@
-import { vaultWriteResponse } from './write';
-import { vaultMetadataResponse } from './metadata';
-import { json, readJsonBody, requireJsonContentType } from '~/api/http';
+import { json, requireJsonContentType } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import {
 	createUserVaultGroup,

@@ -12,33 +12,43 @@ import ThingtimePasswordCore
     @MainActor static func main() {
         if CommandLine.arguments.contains("--connect") || CommandLine.arguments.contains("--disconnect") || CommandLine.arguments.contains("--sync") || CommandLine.arguments.contains("--status") {
             let disconnect = CommandLine.arguments.contains("--disconnect")
+            let detailedStatus = CommandLine.arguments.contains("--connection-status-v1")
             Task { @MainActor in
                 do {
-                    if disconnect { PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait() }
+                    var status = PasswordConnectionStatus.disconnected
+                    if disconnect {
+                        // This CLI is the Electron lifecycle adapter. Only the
+                        // companion's own explicit Disconnect may clear its link.
+                        guard PasswordHostConnectionAuthority.canDisconnect(try PasswordSessionStore.loadIfPresent()) else {
+                            exit(PasswordConnectionStatus.disconnected.exitCode(detailed: detailedStatus))
+                        }
+                        try PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait()
+                    }
                     else {
                         // The Electron parent writes only its current first-party
                         // session through stdin. No tokens in argv, files or logs.
                         guard let data = try FileHandle.standardInput.read(upToCount: 65537), data.count <= 65536 else { throw PasswordProviderError.invalidSession }
                         let decoded = try JSONDecoder().decode(ProviderSession.self, from: data)
                         let session = try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie)
-                        if CommandLine.arguments.contains("--status") {
-                            FileHandle.standardOutput.write(try JSONEncoder().encode(PasswordConnectionStatus.current(for: session)))
-                            exit(0)
-                        }
+                        let baseline = try PasswordSessionStore.loadIfPresent()
                         if CommandLine.arguments.contains("--sync") {
-                            guard let prior = try? PasswordSessionStore.load() else { exit(0) }
-                            guard prior.origin == session.origin, prior.ownerId == session.ownerId else { PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait(); exit(0) }
+                            guard PasswordHostConnectionAuthority.canSynchronize(baseline, incoming: session) else {
+                                // An automatic sync has no authority over another
+                                // app/account connection. Leave it untouched.
+                                exit(PasswordConnectionStatus.disconnected.exitCode(detailed: detailedStatus))
+                            }
                         }
                         let catalog = try await PasswordClient(account: session).catalog()
-                        // A companion link may have changed while the network ran.
-                        guard try PasswordSessionStore.loadIfPresent() == baseline else { throw PasswordProviderError.sessionChanged }
+                        guard try PasswordSessionStore.loadIfPresent() == baseline else { throw PasswordProviderError.invalidSession }
                         try PasswordSessionStore.save(session)
                         UserDefaults.standard.removeObject(forKey: optOutKey(session))
                         LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
-                        try? await PasswordIdentityIndex.synchronize(catalog)
+                        status = try await PasswordIdentityIndex.synchronizeConnection(catalog) {
+                            guard try PasswordSessionStore.load() == session else { throw PasswordProviderError.invalidSession }
+                        }
                     }
                     DistributedNotificationCenter.default().postNotificationName(.init("com.thingtime.passwords.destination-changed"), object: nil, userInfo: nil, deliverImmediately: true)
-                    exit(0)
+                    exit(status.exitCode(detailed: detailedStatus))
                 } catch { exit(1) }
             }
             RunLoop.main.run()
@@ -51,23 +61,15 @@ import ThingtimePasswordCore
 }
 @MainActor final class PasswordAppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        let content = VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                if let url = Bundle.main.url(forResource: "ThingtimeTree", withExtension: "png"), let tree = NSImage(contentsOf: url) {
-                    Image(nsImage: tree).resizable().interpolation(.none).scaledToFit().frame(width: 40, height: 40).accessibilityHidden(true)
-                }
-                Text("Thingtime").font(.title).bold()
-            }
-            Text("Open Passwords in the Thingtime desktop app and select Connect Password AutoFill. Then enable Thingtime in System Settings → General → AutoFill & Passwords.")
-                .fixedSize(horizontal: false, vertical: true)
-            Button("Open Thingtime") {
-                if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.thingtime.desktop") { NSWorkspace.shared.openApplication(at: appURL, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil) }
-            }
-            Button("Open Password AutoFill settings") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Passwords-Settings.extension")!) }
-        }.padding(24).frame(width: 420)
-        let window = NSWindow(contentViewController: NSHostingController(rootView: content)); window.title = "Thingtime"; window.center(); window.makeKeyAndOrderFront(nil); self.window = window
-        NSApp.activate(ignoringOtherApps: true)
+    private var editor: PasswordSetupEditor?
+    private func showEditor() -> PasswordSetupEditor {
+        if let editor { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return editor }
+        let editor = PasswordSetupEditor()
+        let window = NSWindow(contentViewController: editor)
+        window.title = "Thingtime Passwords"; window.setContentSize(NSSize(width: 1000, height: 760)); window.minSize = NSSize(width: 360, height: 520)
+        window.styleMask.insert([.resizable, .miniaturizable]); window.center(); window.makeKeyAndOrderFront(nil)
+        self.editor = editor; self.window = window; NSApp.activate(ignoringOtherApps: true)
+        return editor
     }
     func applicationDidFinishLaunching(_ notification: Notification) { LSRegisterURL(Bundle.main.bundleURL as CFURL, true); _ = showEditor() }
     func application(_ application: NSApplication, open urls: [URL]) {

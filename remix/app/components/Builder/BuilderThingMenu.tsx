@@ -117,9 +117,16 @@ function BuilderThingActions({
 							isDisabled={!ownerId || busy || !!disabledReason}
 							onClick={() =>
 								void run(async () => {
-									const data = await api.v1.things.fork({ id, key: linkKey });
-									const copyId = data?.id;
-									if (!data?.ok || !copyId) throw new Error(data?.error || 'Could not duplicate this Thing');
+									await requireThingtimeCapability('api.things-fork', '1.8.0');
+									if (!active.current) return false;
+									const response = await fetch('/api/v1/things/fork', {
+										method: 'POST',
+										credentials: 'include',
+										headers: { 'Content-Type': 'application/json' },
+										body: JSON.stringify({ id, key: linkKey })
+									});
+									const data = await response.json();
+									if (!response.ok || !data.ok || !data.id) throw new Error(data.error || 'Could not duplicate this Thing');
 									if (!active.current) return false;
 									lopu({ title: 'Private duplicate created', status: 'success' });
 									onChanged?.();

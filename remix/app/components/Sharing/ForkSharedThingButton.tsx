@@ -21,8 +21,10 @@ export const ForkSharedThingButton = ({ id, linkKey, webpage = false }: { id: st
 		inFlight.current = true;
 		setBusy(true);
 		try {
-			const data = await api.v1.things.fork({ id, ...(linkKey ? { key: linkKey } : {}) });
-			if (!data?.ok || typeof data.id !== 'string' || !data.id) throw new Error(data?.error || 'Could not copy this app');
+			await requireThingtimeCapability('api.things-fork', '1.8.0');
+			const response = await fetch('/api/v1/things/fork', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...(linkKey ? { key: linkKey } : {}) }) });
+			const data = await response.json();
+			if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not copy this app');
 			lopu({ title: 'Your private copy is ready ✨', description: 'You can edit it without changing the original.', status: 'success' });
 			navigate(webpage ? `/builder?page=${encodeURIComponent(data.id)}` : `/thing/${encodeURIComponent(data.id)}`);
 		} catch (error) {
