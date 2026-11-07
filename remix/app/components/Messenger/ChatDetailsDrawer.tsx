@@ -20,12 +20,9 @@ import {
 } from '@chakra-ui/react';
 
 import { useLopu } from '../Lopu/useLopu';
-import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { chatDisplayName, memberDisplayName, type ChatMember, type ChatSummary } from './messengerTypes';
 import type { MessengerApi } from './useMessengerApi';
-import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
-import { ThingTransferControls } from '../Things/ThingTransferControls';
 
 // The conversation's control room: rename (groups: anyone, channels: admins),
 // member roster with roles/promote/demote/remove, Messenger-style nicknames
@@ -48,14 +45,11 @@ export const ChatDetailsDrawer = ({
 }) => {
   const user = useCurrentUser();
   const lopu = useLopu();
-  const transferMenuContainer = React.useRef<HTMLDivElement>(null);
   const [members, setMembers] = React.useState<ChatMember[]>(chat.members || []);
   const [name, setName] = React.useState(chat.name || '');
   const [readReceipts, setReadReceipts] = React.useState(true);
   const [addQuery, setAddQuery] = React.useState('');
-  const [addResults, setAddResults] = React.useState<
-    Array<{ id: string; username: string; displayName: string | null; temporary?: boolean }>
-  >([]);
+  const [addResults, setAddResults] = React.useState<{ id: string; username: string; displayName: string | null }[]>([]);
   const [nicknameFor, setNicknameFor] = React.useState<string | null>(null);
   const [nicknameDraft, setNicknameDraft] = React.useState('');
 
@@ -144,29 +138,11 @@ export const ChatDetailsDrawer = ({
 
   return (
     <Drawer isOpen={isOpen} onClose={onClose} placement="right" size="sm">
-      <DrawerOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} />
-      <DrawerContent
-        ref={transferMenuContainer}
-        background="var(--tt-card, #ffffff)"
-        color="var(--tt-ink, #17171c)"
-        containerProps={{ zIndex: DRAWER_MODAL_Z }}
-      >
+      <DrawerOverlay zIndex={10240} />
+      <DrawerContent zIndex={10250} background="var(--tt-card, #ffffff)" color="var(--tt-ink, #17171c)">
         <DrawerCloseButton />
         <DrawerHeader fontSize="15px">{chatDisplayName({ ...chat, members }, user?.id || null)}</DrawerHeader>
         <DrawerBody paddingBottom={8}>
-          {user?.accountKind === 'user' && myMember && ['active', 'pending'].includes(myMember.state) && (
-            <Box marginBottom={5} padding={3} borderWidth="1px" borderRadius="md" data-testid="chat-archive-transfer">
-              <Flex align="center" justify="space-between" gap={3} flexWrap="wrap">
-                <Box fontWeight={600} fontSize="sm">Private archive</Box>
-                  <ThingTransferControls id={chat.id} canCut={false} menuContainerRef={transferMenuContainer}
-                  disabledReason={chat.externalSource ? 'AI conversation archives are not supported yet.' : undefined} />
-              </Flex>
-              <Box marginTop={2} fontSize="xs" color="var(--tt-muted, #71717a)">
-                Copy or download a read-only snapshot. Importing creates a private archive in your Things;
-                it never messages anyone or changes this conversation.
-              </Box>
-            </Box>
-          )}
           {canRename ? (
             <Box marginBottom={4}>
               <Box fontSize="11px" fontWeight={700} textTransform="uppercase" color="var(--tt-muted, #9a9aa6)" marginBottom={1}>
@@ -230,7 +206,7 @@ export const ChatDetailsDrawer = ({
                     ) : null}
                   </Flex>
                   <Box fontSize="11px" color="var(--tt-muted, #9a9aa6)" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
-                    {member.profile ? getUserIdentityDetail(member.profile) : '@ghost'}
+                    @{member.profile?.username || 'ghost'}
                     {member.nickname ? ` · “${member.nickname}”` : ''}
                   </Box>
                 </Box>
@@ -313,15 +289,15 @@ export const ChatDetailsDrawer = ({
               {addResults.map((person) => (
                 <Flex key={person.id} align="center" justify="space-between" paddingY="4px" fontSize="13px">
                   <Box>
-                    {getUserDisplayName(person)}{' '}
+                    {person.displayName || person.username}{' '}
                     <Box as="span" color="var(--tt-muted, #9a9aa6)" fontSize="11px">
-                      {getUserIdentityDetail(person)}
+                      @{person.username}
                     </Box>
                   </Box>
                   <Button
                     size="xs"
                     onClick={async () => {
-                      const okRun = await run({ add: [person.id] }, `${getUserDisplayName(person)} added ✨`);
+                      const okRun = await run({ add: [person.id] }, `${person.displayName || person.username} added ✨`);
                       if (okRun) {
                         setAddQuery('');
                         setAddResults([]);

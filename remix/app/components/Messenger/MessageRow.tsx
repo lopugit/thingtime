@@ -1,68 +1,29 @@
 import React from 'react';
-import { Box, Button, Flex, Image } from '@chakra-ui/react';
-import { ThingActionMenuButton } from '../Thingtime/ContextMenu/ThingActionMenuButton';
-import { buildThingEntityMenu } from '../Thingtime/ContextMenu/thingEntityMenu';
+import { Box, Button, Flex, Image, Menu, MenuButton, MenuItem, MenuList, Portal } from '@chakra-ui/react';
 
 import { ReactionControl } from '../Feed/ReactionControl';
-import { PostAttachments } from '../Attachments/PostAttachments';
 import { timeAgo } from '../Feed/feedTypes';
 import { REACTION_EMOJIS } from '~/schemas/registry';
-import { getUserDisplayName } from '~/utils/userIdentity';
 import { CustomEmojiImage, renderTextWithEmojis } from './CustomEmojiImage';
 import { MessengerEmojiPicker } from './MessengerEmojiPicker';
-import { useEmojiPickerDraft } from '../Emoji/useEmojiPickerDraft';
 import {
   customTokenId,
-  externalSourceAvatar,
   isCustomToken,
-  isLopuAiSource,
   memberDisplayName,
   systemMessageText,
   type ChatMember,
   type ChatMessage,
   type CustomEmoji,
   type CustomEmojiMap,
-  type ExternalAiSource,
   type MessengerMode
 } from './messengerTypes';
 
 const AVATAR_SIZE = 30;
 
-const Avatar = ({
-  profile,
-  externalSource,
-  size = AVATAR_SIZE
-}: {
-  profile: ChatMessage['author'];
-  externalSource?: ExternalAiSource | null;
-  size?: number;
-}) => {
-  if (externalSource) {
-    // ChatGPT/Claude keep their brand discs; Lopu is the unicorn on a rainbow disc
-    const look = externalSourceAvatar(externalSource);
-    return (
-      <Flex
-        width={`${size}px`}
-        height={`${size}px`}
-        borderRadius="full"
-        align="center"
-        justify="center"
-        background={look.background}
-        color={look.color}
-        fontSize={`${Math.round(size * 0.48)}px`}
-        fontWeight={700}
-        flexShrink={0}
-        title={externalSource.label}
-      >
-        {look.glyph}
-      </Flex>
-    );
-  }
-  const letter = (profile ? getUserDisplayName(profile) : '?').slice(0, 1).toUpperCase();
+const Avatar = ({ profile, size = AVATAR_SIZE }: { profile: ChatMessage['author']; size?: number }) => {
+  const letter = (profile?.displayName || profile?.username || '?').slice(0, 1).toUpperCase();
   if (profile?.avatarUrl) {
-		return (
-			<Image src={profile.avatarUrl} alt={letter} width={`${size}px`} height={`${size}px`} borderRadius="full" objectFit="cover" flexShrink={0} />
-		);
+    return <Image src={profile.avatarUrl} alt={letter} width={`${size}px`} height={`${size}px`} borderRadius="full" objectFit="cover" flexShrink={0} />;
   }
   return (
     <Flex
@@ -106,7 +67,6 @@ export type MessageRowProps = {
 export const MessageRow = (props: MessageRowProps) => {
   const { message, mode, isMine, grouped, members, customEmojis, seenBy } = props;
   const [hovered, setHovered] = React.useState(false);
-  const pickerDraft = useEmojiPickerDraft(message.id);
 
   const emojiByName = React.useMemo(() => {
     const map = new Map<string, { id: string; image: string }>();
@@ -125,15 +85,7 @@ export const MessageRow = (props: MessageRowProps) => {
   }
 
   const member = members.find((m) => m.userId === message.authorId) || null;
-  const displayName = message.externalSource
-    ? message.externalSource.role === 'user'
-      ? `You · ${message.externalSource.label}`
-      : message.externalSource.authorName || message.externalSource.label
-    : member
-      ? memberDisplayName(member)
-      : message.author
-        ? getUserDisplayName(message.author)
-        : 'Someone';
+  const displayName = member ? memberDisplayName(member) : message.author?.displayName || message.author?.username || 'Someone';
   const bodyText = message.deleted ? null : renderTextWithEmojis(message.text, emojiByName, mode === 'messenger' ? 20 : 20);
 
   const reactionEntries = Object.entries(message.reactionCounts).sort((a, b) => b[1] - a[1]);
@@ -145,13 +97,8 @@ export const MessageRow = (props: MessageRowProps) => {
       <Button
         key={token}
         size="xs"
-        minHeight="22px"
-        height="auto"
+        height="22px"
         minWidth="0"
-        maxWidth="100%"
-        whiteSpace="normal"
-        aria-label={`React ${token}`}
-        aria-pressed={mine}
         paddingX="7px"
         variant="ghost"
         onClick={() => props.onReact(message, token)}
@@ -166,9 +113,9 @@ export const MessageRow = (props: MessageRowProps) => {
         {isCustomToken(token) ? (
           <CustomEmojiImage image={customEmojis[customTokenId(token)]?.image} name={customEmojis[customTokenId(token)]?.name} size={15} />
         ) : (
-          <Box as="span" minWidth={0} overflowWrap="anywhere" lineHeight={1.4}>{token}</Box>
+          <span>{token}</span>
         )}
-        <Box as="span" color="var(--tt-muted, #9a9aa6)" fontWeight={600} flexShrink={0}>
+        <Box as="span" color="var(--tt-muted, #9a9aa6)" fontWeight={600}>
           {count}
         </Box>
       </Button>
@@ -198,34 +145,26 @@ export const MessageRow = (props: MessageRowProps) => {
       <MessengerEmojiPicker
         emojis={props.pickerEmojis}
         activeTokens={message.viewerReactions}
-        query={pickerDraft.query}
-        onQueryChange={pickerDraft.setQuery}
         onPick={(token) => {
           props.onReact(message, token);
           close();
         }}
-				onUploadRequest={
-					props.onUploadEmoji
-						? () => {
-								close();
-								props.onUploadEmoji!();
-						  }
-						: undefined
-				}
+        onUploadRequest={props.onUploadEmoji ? () => { close(); props.onUploadEmoji!(); } : undefined}
       />
     </Box>
   );
 
-  // imported/live AI rows are locked; Lopu's assistant rows stay non-editable
-  // but the user may delete them (the whole conversation is theirs)
-  const sourceLocked = !!message.externalSource && !isLopuAiSource(message.externalSource);
-  const canEdit = isMine && !!props.onEdit && !message.externalSource;
-
   const toolbar = message.deleted ? null : (
-		<Flex gap={0} opacity={{ base: 1, md: hovered ? 1 : 0 }} transition="opacity 0.12s ease" align="center" flexShrink={0}>
+    <Flex
+      gap={0}
+      opacity={{ base: 1, md: hovered ? 1 : 0 }}
+      transition="opacity 0.12s ease"
+      align="center"
+      flexShrink={0}
+    >
       <ReactionControl
         trigger={
-          <Button size="xs" variant="ghost" color="var(--tt-muted, #9a9aa6)" title="React" aria-label="React to message">
+          <Button size="xs" variant="ghost" color="var(--tt-muted, #9a9aa6)" title="React">
             😀
           </Button>
         }
@@ -243,13 +182,22 @@ export const MessageRow = (props: MessageRowProps) => {
           🧵
         </Button>
       ) : null}
-      {!sourceLocked && (canEdit || props.onDelete) ? (
-        <ThingActionMenuButton identity={message.id} label="Message actions"
-          model={buildThingEntityMenu({ edit: !!canEdit, delete: !!props.onDelete })}
-          onAction={({ action }) => {
-            if (action.command === 'edit' && canEdit) props.onEdit?.(message);
-            else if (action.command === 'delete') props.onDelete?.(message);
-          }} />
+      {(isMine && props.onEdit) || props.onDelete ? (
+        <Menu isLazy placement="bottom-end">
+          <MenuButton as={Button} size="xs" variant="ghost" color="var(--tt-muted, #9a9aa6)">
+            ⋯
+          </MenuButton>
+          <Portal>
+            <MenuList zIndex={10260} minWidth="140px" fontSize="13px">
+              {isMine && props.onEdit ? <MenuItem onClick={() => props.onEdit!(message)}>✏️ Edit</MenuItem> : null}
+              {props.onDelete ? (
+                <MenuItem color="var(--tt-danger, #e5484d)" onClick={() => props.onDelete!(message)}>
+                  🗑️ Delete
+                </MenuItem>
+              ) : null}
+            </MenuList>
+          </Portal>
+        </Menu>
       ) : null}
     </Flex>
   );
@@ -266,7 +214,7 @@ export const MessageRow = (props: MessageRowProps) => {
       <Box as="span" fontWeight={600}>
         {message.replyTo.authorName || 'Someone'}
       </Box>{' '}
-			{message.replyTo.deleted ? 'Deleted message' : message.replyTo.text || (message.replyTo.attachmentCount ? '📎 Attachment' : '…')}
+      {message.replyTo.deleted ? 'Deleted message' : message.replyTo.text || '…'}
     </Box>
   ) : null;
 
@@ -296,10 +244,10 @@ export const MessageRow = (props: MessageRowProps) => {
         >
           {!isMine ? (
             <Box width={`${AVATAR_SIZE}px`} flexShrink={0}>
-              {!grouped ? <Avatar profile={member?.profile || message.author} externalSource={message.externalSource} /> : null}
+              {!grouped ? <Avatar profile={member?.profile || message.author} /> : null}
             </Box>
           ) : null}
-          <Box maxWidth="min(72%, 480px)" minWidth={0}>
+          <Box maxWidth="min(72%, 480px)">
             {!isMine && !grouped ? (
               <Box fontSize="11px" color="var(--tt-muted, #9a9aa6)" marginBottom="2px" marginLeft={2}>
                 {displayName}
@@ -317,14 +265,7 @@ export const MessageRow = (props: MessageRowProps) => {
                 overflowWrap="anywhere"
                 title={`${new Date(message.createdAt).toLocaleString()}${message.editedAt ? ' · edited' : ''}`}
               >
-								{message.deleted ? (
-									deletedBody
-								) : (
-									<Flex flexDirection="column" rowGap={message.text ? 2 : 0}>
-										<PostAttachments attachments={message.attachments} compact ariaLabel="Message attachments" />
-										{bodyText}
-									</Flex>
-								)}
+                {message.deleted ? deletedBody : bodyText}
                 {message.editedAt && !message.deleted ? (
                   <Box as="span" fontSize="10px" opacity={0.7} marginLeft={1}>
                     (edited)
@@ -332,11 +273,18 @@ export const MessageRow = (props: MessageRowProps) => {
                 ) : null}
               </Box>
               {reactionEntries.length ? (
-								<Flex position="relative" marginTop="-11px" marginX="6px" marginBottom="1px" justify={isMine ? 'flex-start' : 'flex-end'} gap="2px" wrap="wrap">
+                <Flex
+                  position="absolute"
+                  bottom="-11px"
+                  right={isMine ? 'auto' : '6px'}
+                  left={isMine ? '6px' : 'auto'}
+                  gap="2px"
+                >
                   {reactionEntries.map(reactionChip)}
                 </Flex>
               ) : null}
             </Box>
+            {reactionEntries.length ? <Box height="12px" /> : null}
           </Box>
           {toolbar}
         </Flex>
@@ -358,7 +306,7 @@ export const MessageRow = (props: MessageRowProps) => {
     >
       <Flex gap={2} align="flex-start">
         <Box width={`${AVATAR_SIZE}px`} flexShrink={0} paddingTop="2px">
-          {!grouped ? <Avatar profile={member?.profile || message.author} externalSource={message.externalSource} /> : null}
+          {!grouped ? <Avatar profile={member?.profile || message.author} /> : null}
         </Box>
         <Box flex={1} minWidth={0}>
           {!grouped ? (
@@ -366,19 +314,6 @@ export const MessageRow = (props: MessageRowProps) => {
               <Box fontWeight={700} fontSize="13.5px">
                 {displayName}
               </Box>
-              {message.externalSource ? (
-                <Box
-                  as="span"
-                  fontSize="9px"
-                  lineHeight="16px"
-                  paddingX="6px"
-                  borderRadius="var(--tt-radius-pill, 999px)"
-                  background="var(--tt-surface-alt, #f2f2f5)"
-                  color="var(--tt-muted, #777782)"
-                >
-                  {isLopuAiSource(message.externalSource) ? 'assistant' : 'imported'}
-                </Box>
-              ) : null}
               <Box fontSize="11px" color="var(--tt-faint, #b9b9c3)">
                 {timeAgo(message.createdAt)}
               </Box>
@@ -393,11 +328,6 @@ export const MessageRow = (props: MessageRowProps) => {
               </Box>
             ) : null}
           </Box>
-					{!message.deleted && message.attachments.length ? (
-						<Box marginTop={message.text ? 2 : 0} maxWidth="560px">
-							<PostAttachments attachments={message.attachments} compact ariaLabel="Message attachments" />
-						</Box>
-					) : null}
           {reactionEntries.length ? (
             <Flex gap="4px" marginTop="4px" wrap="wrap">
               {reactionEntries.map(reactionChip)}

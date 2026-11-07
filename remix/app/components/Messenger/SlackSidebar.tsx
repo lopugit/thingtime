@@ -1,8 +1,7 @@
 import React from 'react';
 import { Box, Button, Flex, Menu, MenuButton, MenuItem, MenuList, Portal } from '@chakra-ui/react';
 
-import { spaceDirectMessages } from './conversationVisibility';
-import { chatDisplayName, isLopuAiSource, type ChatSummary, type Community } from './messengerTypes';
+import { chatDisplayName, type ChatSummary, type Community } from './messengerTypes';
 
 const UnreadBadge = ({ count }: { count: number }) =>
   count > 0 ? (
@@ -132,15 +131,16 @@ export type SlackSidebarProps = {
 };
 
 // Slack-mode sidebar: community switcher rail at the top, then the active
-// community's sections with their channels, then only its own DMs/groups. Channels support right-click rename; sections rename via
+// community's sections with their channels, then DMs/groups shared with
+// messenger mode. Channels support right-click rename; sections rename via
 // their own context menu.
 export const SlackSidebar = (props: SlackSidebarProps) => {
   const active = props.communities.find((c) => c.id === props.activeCommunityId) || props.communities[0] || null;
   const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
 
   const channels = props.chats.filter((c) => c.chatType === 'channel' && c.communityId === active?.id);
-  const dms = spaceDirectMessages(props.chats, active?.id ?? null);
-  const isAdmin = !active?.externalSource && (active?.myRole === 'owner' || active?.myRole === 'admin');
+  const dms = props.chats.filter((c) => c.chatType !== 'channel');
+  const isAdmin = active?.myRole === 'owner' || active?.myRole === 'admin';
 
   const sectionsWithChannels: { id: string | null; name: string; channels: ChatSummary[] }[] = React.useMemo(() => {
     const sections = active?.sections || [];
@@ -214,14 +214,8 @@ export const SlackSidebar = (props: SlackSidebarProps) => {
                 </MenuButton>
                 <Portal>
                   <MenuList zIndex={10260} fontSize="13px">
-                    {active.externalSource ? (
-                      <MenuItem isDisabled>✦ Managed by {active.externalSource.label}</MenuItem>
-                    ) : (
-                      <>
-                        <MenuItem onClick={props.onInvitePeople}>💌 Invite people</MenuItem>
-                        <MenuItem onClick={props.onBrowseChannels}>🔭 Browse channels</MenuItem>
-                      </>
-                    )}
+                    <MenuItem onClick={props.onInvitePeople}>💌 Invite people</MenuItem>
+                    <MenuItem onClick={props.onBrowseChannels}>🔭 Browse channels</MenuItem>
                     {isAdmin ? <MenuItem onClick={props.onCreateSection}>📁 New section</MenuItem> : null}
                     {isAdmin ? <MenuItem onClick={props.onCommunitySettings}>🛠️ Community settings</MenuItem> : null}
                   </MenuList>
@@ -268,14 +262,10 @@ export const SlackSidebar = (props: SlackSidebarProps) => {
                         active={chat.id === props.selectedChatId}
                         unread={chat.unreadCount}
                         onClick={() => props.onSelectChat(chat)}
-                        contextActions={chat.externalSource ? [] : [{ id: 'rename', label: '✏️ Rename channel' }]}
-                        onContextAction={
-                          chat.externalSource
-                            ? undefined
-                            : (action) => {
-                                if (action === 'rename') props.onRenameChat(chat);
-                              }
-                        }
+                        contextActions={[{ id: 'rename', label: '✏️ Rename channel' }]}
+                        onContextAction={(action) => {
+                          if (action === 'rename') props.onRenameChat(chat);
+                        }}
                       >
                         <Box as="span" color="var(--tt-muted, #9a9aa6)" marginRight={1}>
                           #
@@ -286,11 +276,9 @@ export const SlackSidebar = (props: SlackSidebarProps) => {
                   : null}
               </Box>
             ))}
-            {!active.externalSource ? (
-              <Button size="xs" variant="ghost" color="var(--tt-muted, #9a9aa6)" onClick={() => props.onCreateChannel(null)}>
-                ➕ Add channel
-              </Button>
-            ) : null}
+            <Button size="xs" variant="ghost" color="var(--tt-muted, #9a9aa6)" onClick={() => props.onCreateChannel(null)}>
+              ➕ Add channel
+            </Button>
           </>
         ) : (
           <Box padding={3} fontSize="13px" color="var(--tt-muted, #9a9aa6)" whiteSpace="normal">
@@ -322,7 +310,7 @@ export const SlackSidebar = (props: SlackSidebarProps) => {
               unread={chat.unreadCount}
               onClick={() => props.onSelectChat(chat)}
             >
-              {isLopuAiSource(chat.externalSource) ? '🦄 ' : chat.chatType === 'group' ? '👥 ' : ''}
+              {chat.chatType === 'group' ? '👥 ' : ''}
               {chatDisplayName(chat, props.viewerId)}
             </RowButton>
           ))}

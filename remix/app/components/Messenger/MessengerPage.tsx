@@ -1,15 +1,12 @@
-import { subscribeBackgroundRefresh } from '~/hooks/backgroundRefresh';
 import React from 'react';
-import { Box, Button, Checkbox, Flex } from '@chakra-ui/react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Box, Button, Flex } from '@chakra-ui/react';
+import { useNavigate, useSearchParams } from 'react-router';
 
-import { LopuChatView } from '../Lopu/LopuChatView';
 import { useLopu } from '../Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useIsMobileViewport } from '../Nav/Drawer/useDrawer';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { ChatDetailsDrawer } from './ChatDetailsDrawer';
-import { AiConnectionsModal } from './AiConnectionsModal';
 import { ChatView } from './ChatView';
 import { InboxSidebar } from './InboxSidebar';
 import {
@@ -24,9 +21,16 @@ import {
 } from './MessengerModals';
 import { RequestsView } from './RequestsView';
 import { SlackSidebar } from './SlackSidebar';
-import { MESSENGER_REFRESH_EVENT, modeKey, readChatList, readCommunities, writeChatList, writeCommunities, writeUnread } from './messengerCache';
-import { chatDisplayName, isLopuAiSource, type ChatSummary, type Community, type MessengerMode } from './messengerTypes';
-import { messengerVisibleChats, showLopuChatsKey } from './conversationVisibility';
+import {
+  MESSENGER_REFRESH_EVENT,
+  modeKey,
+  readChatList,
+  readCommunities,
+  writeChatList,
+  writeCommunities,
+  writeUnread
+} from './messengerCache';
+import type { ChatSummary, Community, MessengerMode } from './messengerTypes';
 import { useMessengerApi } from './useMessengerApi';
 
 const LIST_POLL_MS = 15_000;
@@ -45,15 +49,9 @@ export const MessengerPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-	const [mode, setMode] = React.useState<MessengerMode>(() => (readLocalCache<MessengerMode>(modeKey(userId)) === 'slack' ? 'slack' : 'messenger'));
-  const [lopuPreference, setLopuPreference] = React.useState(() => ({
-    userId,
-    show: readLocalCache<boolean>(showLopuChatsKey(userId)) === true
-  }));
-  // Resolve the current account before rendering, including account switches.
-  const showLopuChats = lopuPreference.userId === userId
-    ? lopuPreference.show
-    : readLocalCache<boolean>(showLopuChatsKey(userId)) === true;
+  const [mode, setMode] = React.useState<MessengerMode>(
+    () => (readLocalCache<MessengerMode>(modeKey(userId)) === 'slack' ? 'slack' : 'messenger')
+  );
   const [chats, setChats] = React.useState<ChatSummary[]>(() => readChatList(userId));
   const [communities, setCommunities] = React.useState<Community[]>(() => readCommunities(userId));
   const [requestsCount, setRequestsCount] = React.useState(0);
@@ -61,7 +59,6 @@ export const MessengerPage = () => {
   const [activeCommunityId, setActiveCommunityId] = React.useState<string | null>(null);
   const [showRequests, setShowRequests] = React.useState(searchParams.get('view') === 'requests');
   const [detailsOpen, setDetailsOpen] = React.useState(false);
-  const [aiConnectionsOpen, setAiConnectionsOpen] = React.useState(false);
   const [inputRequest, setInputRequest] = React.useState<InputModalRequest | null>(null);
   const [modal, setModal] = React.useState<
     | { kind: 'new-dm' }
@@ -73,8 +70,6 @@ export const MessengerPage = () => {
     | { kind: 'invite' }
     | null
   >(null);
-
-  const visibleChats = messengerVisibleChats(chats, showLopuChats);
 
   const selectedChat = chats.find((c) => c.id === selectedChatId) || null;
   const activeCommunity = communities.find((c) => c.id === activeCommunityId) || communities[0] || null;
@@ -102,20 +97,22 @@ export const MessengerPage = () => {
   }, [api, navigate, userId]);
 
   React.useEffect(() => {
-    let pending = false;
-    const poll = async () => {
-      if (pending) return;
-      pending = true;
-      try { await refresh(); } finally { pending = false; }
+    void refresh();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refresh();
+    }, LIST_POLL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refresh();
     };
-    const unsubscribe = subscribeBackgroundRefresh(`messenger-list:${userId}`, poll, LIST_POLL_MS);
-    const onRefreshEvent = () => { void poll(); };
+    const onRefreshEvent = () => void refresh();
+    document.addEventListener('visibilitychange', onVisible);
     window.addEventListener(MESSENGER_REFRESH_EVENT, onRefreshEvent);
     return () => {
-      unsubscribe();
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener(MESSENGER_REFRESH_EVENT, onRefreshEvent);
     };
-  }, [refresh, userId]);
+  }, [refresh]);
 
   // deep links stay shareable: ?chat= opens a conversation, ?view=requests
   // (the drawer's Requests entry) opens the requests pane
@@ -139,7 +136,6 @@ export const MessengerPage = () => {
 
   const switchMode = (next: MessengerMode) => {
     setMode(next);
-    if (next === 'slack' && selectedChat?.communityId !== activeCommunity?.id) selectChat(null);
     writeLocalCache(modeKey(userId), next);
   };
 
@@ -154,7 +150,13 @@ export const MessengerPage = () => {
   };
 
   const modeToggle = (
-		<Flex background="var(--tt-surface-alt, #f2f2f5)" borderRadius="var(--tt-radius-pill, 999px)" padding="3px" gap={0} flexShrink={0}>
+    <Flex
+      background="var(--tt-surface-alt, #f2f2f5)"
+      borderRadius="var(--tt-radius-pill, 999px)"
+      padding="3px"
+      gap={0}
+      flexShrink={0}
+    >
       {(
         [
           ['slack', '🏛️ Spaces'],
@@ -179,16 +181,12 @@ export const MessengerPage = () => {
     </Flex>
   );
 
-	const sidebar =
-		mode === 'slack' ? (
+  const sidebar = mode === 'slack' ? (
     <SlackSidebar
       communities={communities}
       activeCommunityId={activeCommunity?.id || null}
-      onSelectCommunity={(id) => {
-        setActiveCommunityId(id);
-        if (selectedChat?.communityId !== id) selectChat(null);
-      }}
-      chats={visibleChats}
+      onSelectCommunity={(id) => setActiveCommunityId(id)}
+      chats={chats}
       viewerId={userId}
       selectedChatId={selectedChatId}
       onSelectChat={selectChat}
@@ -247,7 +245,7 @@ export const MessengerPage = () => {
   ) : (
     <InboxSidebar
       api={api}
-      chats={visibleChats}
+      chats={chats}
       viewerId={userId}
       selectedChatId={selectedChatId}
       requestsCount={requestsCount}
@@ -272,27 +270,6 @@ export const MessengerPage = () => {
       }}
       onChanged={() => void refresh()}
     />
-  ) : selectedChat && isLopuAiSource(selectedChat.externalSource) ? (
-    // a Lopu conversation IS the assistant chat: the same streamed view as
-    // /lopu, minus its conversation list (this page's sidebar is that list)
-    <Flex direction="column" height="100%" minWidth={0}>
-      <Flex align="center" gap={2} paddingX={3} paddingY={2} borderBottom="1px solid var(--tt-border-light, #f3f3f5)" flexShrink={0}>
-        {isMobile ? (
-          <Button size="sm" variant="ghost" onClick={() => selectChat(null)} aria-label="Back">
-            ←
-          </Button>
-        ) : null}
-        <Box minWidth={0} flex={1} fontWeight={700} fontSize="15px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
-          🦄 {chatDisplayName(selectedChat, userId)}
-        </Box>
-        <Button as={Link} to={`/lopu/${encodeURIComponent(selectedChat.id)}`} size="xs" variant="ghost" title="Open in Lopu" aria-label="Open in Lopu">
-          ⤢
-        </Button>
-      </Flex>
-      <Box flex={1} minHeight={0}>
-        <LopuChatView chatId={selectedChat.id} showConversations={false} />
-      </Box>
-    </Flex>
   ) : selectedChat ? (
     <ChatView
       key={selectedChat.id}
@@ -346,36 +323,9 @@ export const MessengerPage = () => {
             borderRight={{ md: '1px solid var(--tt-border-light, #f3f3f5)' }}
             minHeight={0}
           >
-						<Flex align="center" justify="center" padding={2} borderBottom="1px solid var(--tt-border-light, #f3f3f5)" position="relative">
+            <Flex align="center" justify="center" padding={2} borderBottom="1px solid var(--tt-border-light, #f3f3f5)">
               {modeToggle}
-              <Button
-                size="xs"
-                variant="ghost"
-                position="absolute"
-                right={2}
-                borderRadius="var(--tt-radius-pill, 999px)"
-                onClick={() => setAiConnectionsOpen(true)}
-                aria-label="Connect AI apps"
-                title="Connect ChatGPT and Claude"
-              >
-                ✦ AI
-              </Button>
             </Flex>
-            <Box paddingX={3} paddingY={2} borderBottom="1px solid var(--tt-border-light, #f3f3f5)">
-              <Checkbox
-                size="md"
-                colorScheme="purple"
-                sx={{ '& .chakra-checkbox__control': { borderColor: 'var(--tt-muted, #9a9aa6)' }, '& .chakra-checkbox__label': { fontSize: '13px' } }}
-                isChecked={showLopuChats}
-                onChange={(event) => {
-                  const show = event.target.checked;
-                  setLopuPreference({ userId, show });
-                  writeLocalCache(showLopuChatsKey(userId), show);
-                }}
-              >
-                Show Lopu chats
-              </Checkbox>
-            </Box>
             <Box flex={1} minHeight={0}>
               {sidebar}
             </Box>
@@ -433,13 +383,6 @@ export const MessengerPage = () => {
       />
       <InvitePeopleModal isOpen={modal?.kind === 'invite'} onClose={() => setModal(null)} api={api} community={activeCommunity} />
       <InputModal request={inputRequest} onClose={() => setInputRequest(null)} />
-      <AiConnectionsModal
-        isOpen={aiConnectionsOpen}
-        onClose={() => setAiConnectionsOpen(false)}
-        api={api}
-				chats={chats}
-		onSynced={refresh}
-      />
       {selectedChat ? (
         <ChatDetailsDrawer
           isOpen={detailsOpen}

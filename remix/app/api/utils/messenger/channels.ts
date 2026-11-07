@@ -1,4 +1,3 @@
-import { activeSubspaceMemberCounts, linkedSubspaceId } from './subspaceAccess';
 // The channel directory of one community: everything the viewer is in plus
 // every public channel they could join (private channels stay invisible to
 // non-members — existence is part of the secret).
@@ -50,19 +49,10 @@ export const listCommunityChannels = async (viewerId: string, communityId: unkno
       : []
   ]);
   const joined = new Set(myMemberships.map((m: any) => String(m.targetId)));
-	const countById = new Map<string, number>(counts.map((c: any) => [String(c._id), Number(c.count) || 0] as const));
-  const subspaceId = linkedSubspaceId(community);
-  if (subspaceId) {
-    const counts = await activeSubspaceMemberCounts(things, [subspaceId]);
-    for (const doc of channelDocs) if (doc.crystal?.subspaceDefault === true) {
-      countById.set(String(doc.shareId), counts.get(subspaceId) || 0);
-      joined.add(String(doc.shareId));
-    }
-  }
+  const countById = new Map(counts.map((c: any) => [String(c._id), c.count]));
   const channels = channelDocs
     .filter((doc: any) => joined.has(doc.shareId) || (doc.crystal?.channelVisibility || 'public') === 'public')
-		.map(
-			(doc: any): CommunityChannel => ({
+    .map((doc: any): CommunityChannel => ({
       id: doc.shareId,
       name: doc.crystal?.name ?? null,
       topic: doc.crystal?.topic ?? null,
@@ -71,7 +61,6 @@ export const listCommunityChannels = async (viewerId: string, communityId: unkno
       memberCount: countById.get(doc.shareId) || 0,
       joined: joined.has(doc.shareId),
       createdAt: new Date(doc.createdAt).toISOString()
-			})
-		);
+    }));
   return { ok: true, channels };
 };

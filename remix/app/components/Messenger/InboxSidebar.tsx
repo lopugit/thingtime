@@ -2,52 +2,21 @@ import React from 'react';
 import { Box, Button, Flex, Image, Input } from '@chakra-ui/react';
 
 import { timeAgo } from '../Feed/feedTypes';
-import { chatDisplayName, externalSourceAvatar, memberDisplayName, type ChatSummary, type MessengerProfile } from './messengerTypes';
+import { chatDisplayName, memberDisplayName, type ChatSummary, type MessengerProfile } from './messengerTypes';
 import type { MessengerApi } from './useMessengerApi';
-import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
 const StackedAvatars = ({ chat, viewerId }: { chat: ChatSummary; viewerId: string | null }) => {
-  if (chat.externalSource) {
-    // ChatGPT/Claude keep their brand discs; Lopu is the unicorn on a rainbow disc
-    const look = externalSourceAvatar(chat.externalSource);
-    return (
-      <Flex
-        width="42px"
-        height="42px"
-        borderRadius="full"
-        align="center"
-        justify="center"
-        background={look.background}
-        color={look.color}
-        fontSize="20px"
-        fontWeight={700}
-        flexShrink={0}
-        title={chat.externalSource.label}
-      >
-        {look.glyph}
-      </Flex>
-    );
-  }
   const others = (chat.members || []).filter((m) => m.userId !== viewerId);
   const shown = others.slice(0, 2);
   if (!shown.length) {
     return (
-			<Flex
-				width="42px"
-				height="42px"
-				borderRadius="full"
-				align="center"
-				justify="center"
-				background="var(--tt-surface-alt, #f2f2f5)"
-				fontSize="18px"
-				flexShrink={0}
-			>
+      <Flex width="42px" height="42px" borderRadius="full" align="center" justify="center" background="var(--tt-surface-alt, #f2f2f5)" fontSize="18px" flexShrink={0}>
         {chat.chatType === 'channel' ? '#' : '💬'}
       </Flex>
     );
   }
   const avatar = (profile: MessengerProfile | null, size: number, offset?: boolean) => {
-    const letter = profile ? getUserDisplayName(profile).slice(0, 1).toUpperCase() : '?';
+    const letter = (profile?.displayName || profile?.username || '?').slice(0, 1).toUpperCase();
     const common: any = {
       width: `${size}px`,
       height: `${size}px`,
@@ -100,9 +69,7 @@ export type InboxSidebarProps = {
 // conversations newest-first with unread emphasis — the FB Messenger shape.
 export const InboxSidebar = (props: InboxSidebarProps) => {
   const [query, setQuery] = React.useState('');
-  const [results, setResults] = React.useState<
-    Array<{ id: string; username: string; displayName: string | null; temporary?: boolean; avatarUrl: string | null }>
-  >([]);
+  const [results, setResults] = React.useState<{ id: string; username: string; displayName: string | null; avatarUrl: string | null }[]>([]);
   const seqRef = React.useRef(0);
 
   React.useEffect(() => {
@@ -166,26 +133,13 @@ export const InboxSidebar = (props: InboxSidebarProps) => {
                 props.onStartDm(person);
               }}
             >
-							<Flex
-								width="28px"
-								height="28px"
-								borderRadius="full"
-								align="center"
-								justify="center"
-								background="var(--tt-surface-alt, #f2f2f5)"
-								overflow="hidden"
-								flexShrink={0}
-							>
-								{person.avatarUrl ? (
-									<Image src={person.avatarUrl} width="28px" height="28px" objectFit="cover" />
-								) : (
-									getUserDisplayName(person).slice(0, 1).toUpperCase()
-								)}
+              <Flex width="28px" height="28px" borderRadius="full" align="center" justify="center" background="var(--tt-surface-alt, #f2f2f5)" overflow="hidden" flexShrink={0}>
+                {person.avatarUrl ? <Image src={person.avatarUrl} width="28px" height="28px" objectFit="cover" /> : (person.displayName || person.username).slice(0, 1).toUpperCase()}
               </Flex>
               <Box fontSize="13px">
-                <Box fontWeight={600}>{getUserDisplayName(person)}</Box>
+                <Box fontWeight={600}>{person.displayName || person.username}</Box>
                 <Box color="var(--tt-muted, #9a9aa6)" fontSize="11px">
-                  {getUserIdentityDetail(person)}
+                  @{person.username}
                 </Box>
               </Box>
             </Flex>
@@ -206,31 +160,14 @@ export const InboxSidebar = (props: InboxSidebarProps) => {
           _hover={{ background: 'var(--tt-surface-hover, #f7f7f9)' }}
           onClick={props.onOpenRequests}
         >
-					<Flex
-						width="42px"
-						height="42px"
-						borderRadius="full"
-						align="center"
-						justify="center"
-						background="var(--tt-surface-alt, #f2f2f5)"
-						fontSize="18px"
-						flexShrink={0}
-					>
+          <Flex width="42px" height="42px" borderRadius="full" align="center" justify="center" background="var(--tt-surface-alt, #f2f2f5)" fontSize="18px" flexShrink={0}>
             💌
           </Flex>
           <Box flex={1} fontSize="13.5px" fontWeight={600}>
             Message requests
           </Box>
           {props.requestsCount > 0 ? (
-						<Box
-							background="var(--tt-accent, #a855f7)"
-							color="white"
-							fontSize="10px"
-							fontWeight={700}
-							borderRadius="var(--tt-radius-pill, 999px)"
-							paddingX="6px"
-							paddingY="1px"
-						>
+            <Box background="var(--tt-accent, #a855f7)" color="white" fontSize="10px" fontWeight={700} borderRadius="var(--tt-radius-pill, 999px)" paddingX="6px" paddingY="1px">
               {props.requestsCount}
             </Box>
           ) : null}
@@ -240,12 +177,8 @@ export const InboxSidebar = (props: InboxSidebarProps) => {
           const unread = chat.unreadCount > 0;
           const last = chat.lastMessage;
           const lastAuthor =
-            last?.externalSource?.role === 'user'
+            last && last.authorId === props.viewerId
               ? 'You'
-              : last?.externalSource
-                ? last.externalSource.authorName || last.externalSource.label
-                : last && last.authorId === props.viewerId
-                  ? 'You'
               : last
                 ? memberDisplayName((chat.members || []).find((m) => m.userId === last.authorId)) || last.authorName || ''
                 : '';
@@ -254,7 +187,7 @@ export const InboxSidebar = (props: InboxSidebarProps) => {
               ? 'Message deleted'
               : last.systemType
                 ? '· activity ·'
-							: `${lastAuthor ? `${lastAuthor}: ` : ''}${last.text || (last.attachmentCount ? '📎 Attachment' : '…')}`
+                : `${lastAuthor ? `${lastAuthor}: ` : ''}${last.text || '…'}`
             : 'Say hi 👋';
           return (
             <Flex
@@ -275,7 +208,14 @@ export const InboxSidebar = (props: InboxSidebarProps) => {
               <StackedAvatars chat={chat} viewerId={props.viewerId} />
               <Box flex={1} minWidth={0}>
                 <Flex align="baseline" gap={2}>
-									<Box fontSize="13.5px" fontWeight={unread ? 800 : 600} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" flex={1}>
+                  <Box
+                    fontSize="13.5px"
+                    fontWeight={unread ? 800 : 600}
+                    overflow="hidden"
+                    textOverflow="ellipsis"
+                    whiteSpace="nowrap"
+                    flex={1}
+                  >
                     {chat.chatType === 'group' && !chat.name ? '👥 ' : ''}
                     {chatDisplayName(chat, props.viewerId)}
                   </Box>

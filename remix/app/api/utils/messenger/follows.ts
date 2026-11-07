@@ -1,26 +1,17 @@
 // The follow graph: one `follow` thing per (follower, followee) edge, unique
-// via the shared protected uniqueKeys index. Deliberately minimal — it exists to
+// via crystal.followKey (partial index). Deliberately minimal — it exists to
 // power the messenger request buckets (follower vs unknown) and to be the
 // graph the acl circle entries (tt:userFriends…) can plug into later.
-// Follow edges are identity state shared by Messenger, profile/social reads,
-// notifications, and ACL decisions. They must never follow a caller-selected
-// data-plane override: a custom Mongo endpoint cannot forge or hide identity.
-import { getHomeThingsCollection as getThingsCollection } from '../mongodb/collections';
-import { relationshipLookupFilter } from '../mongodb/relationshipLookup';
+import { getThingsCollection } from '../mongodb/collections';
 import { findUserById, findUserByUsername, toPublicProfile } from '../auth/users';
 import type { Fail} from './shared';
 import { fail, followKey, newThingDoc } from './shared';
-import {
-	HOME_MESSENGER_STORAGE_OPTIONS,
-	deleteMessengerThings,
-	insertMessengerThing
-} from './storage';
 
 export const isFollowing = async (followerId: string, followeeId: string): Promise<boolean> => {
   if (!followerId || !followeeId || followerId === followeeId) return false;
   const things = await getThingsCollection();
   const doc = await things.findOne(
-    { thingtime: 'follow', ...await relationshipLookupFilter('followKey', followKey(followerId, followeeId), { home: true }) } as any,
+    { thingtime: 'follow', 'crystal.followKey': followKey(followerId, followeeId) } as any,
     { projection: { shareId: 1 } }
   );
   return !!doc;
@@ -34,7 +25,7 @@ export const followingSet = async (viewerId: string, userIds: string[]): Promise
   const things = await getThingsCollection();
   const keys = ids.map((id) => followKey(viewerId, id));
   const docs = await things
-    .find({ thingtime: 'follow', ...await relationshipLookupFilter('followKey', keys, { home: true }) } as any, { projection: { targetId: 1 } })
+    .find({ thingtime: 'follow', 'crystal.followKey': { $in: keys } } as any, { projection: { targetId: 1 } })
     .toArray();
   return new Set(docs.map((d: any) => String(d.targetId)));
 };
@@ -47,7 +38,7 @@ export const followersOfSet = async (candidateIds: string[], targetId: string): 
   const things = await getThingsCollection();
   const keys = ids.map((id) => followKey(id, targetId));
   const docs = await things
-    .find({ thingtime: 'follow', ...await relationshipLookupFilter('followKey', keys, { home: true }) } as any, { projection: { ownerId: 1 } })
+    .find({ thingtime: 'follow', 'crystal.followKey': { $in: keys } } as any, { projection: { ownerId: 1 } })
     .toArray();
   return new Set(docs.map((d: any) => String(d.ownerId)));
 };
@@ -76,9 +67,7 @@ export const followStatus = async (viewerId: string, input: { userId?: unknown; 
   return { ok: true, user: toPublicProfile(target), following, followsYou, followerCount, followingCount };
 };
 
-export type ToggleFollowResult =
-  | Fail
-  | { ok: true; following: boolean; created: boolean; user: ReturnType<typeof toPublicProfile> };
+export type ToggleFollowResult = Fail | { ok: true; following: boolean; user: ReturnType<typeof toPublicProfile> };
 
 export const toggleFollow = async (
   viewerId: string,
@@ -92,20 +81,14 @@ export const toggleFollow = async (
   const things = await getThingsCollection();
   const key = followKey(viewerId, targetId);
   if (!wantFollow) {
-    await deleteMessengerThings(things, { thingtime: 'follow', ...await relationshipLookupFilter('followKey', key, { home: true }) } as any, HOME_MESSENGER_STORAGE_OPTIONS);
-    return { ok: true, following: false, created: false, user: toPublicProfile(target) };
+    await things.deleteMany({ thingtime: 'follow', 'crystal.followKey': key } as any);
+    return { ok: true, following: false, user: toPublicProfile(target) };
   }
-  let created = false;
   try {
-    await insertMessengerThing(
-			things,
-			newThingDoc('follow', { ownerId: viewerId, targetId, crystal: { followKey: key } }) as any,
-			HOME_MESSENGER_STORAGE_OPTIONS
-		);
-    created = true;
+    await things.insertOne(newThingDoc('follow', { ownerId: viewerId, targetId, crystal: { followKey: key } }) as any);
   } catch (err: any) {
     // duplicate = already following (race) — toggle-on is idempotent
     if (err?.code !== 11000) throw err;
   }
-  return { ok: true, following: true, created, user: toPublicProfile(target) };
+  return { ok: true, following: true, user: toPublicProfile(target) };
 };
