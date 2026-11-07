@@ -683,62 +683,74 @@ placeholder:
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
 
-## Admin access
+## Email Delivery
 
-Schema-version migrations (`/api/v1/admin/migrations*`), the migrations panel on
-`/schemas`, the admin panel, and raw database diagnostics are admin-gated. A
-user is an admin when their user doc has `meta.admin: true` (promote/demote via
-the admin panel or `POST /api/v1/admin/set-admin`) or their username is in the
-bootstrap env allowlist:
+Thingtime stores outbound email attempts in MongoDB and sends through a
+pluggable provider. Local development defaults to `console`, which logs the
+message and records it in `email_messages` without delivering mail. Production
+should use Amazon SES through the SES API.
 
-```sh
-ADMIN_USERNAMES="your-username,another-admin"
-```
-
-Env-allowlisted usernames are a permanent override (they can't be demoted from
-the UI, so there's always a way back in) and are reserved at registration so
-nobody can squat an admin username before you register it.
-
-Admins get the `/admin` dashboard (also under the drawer's Account section):
-Users, Apps, Tiers, CI Control, and System management. CI Control presents the
-feature/branch/PR/Actions/deployment topology and signed status history, with
-allowlisted reconciliation and retry controls. The Tiers tab manages protected,
-versioned `subscription-tier` Things in separate Live, Draft / not live, and
-Archived sections. Admins can create a tier or draft a new revision, edit its
-name, tagline, banner, currency, daily/weekly/monthly/yearly prices, six
-computed-or-custom percentage-saved comparisons, Editor.js inclusions, and
-quota defaults, then publish or archive without deleting history. User and app
-assignments pin the exact immutable revision and quota snapshot, so later tier
-changes never silently rewrite an existing customer's plan. The dashboard also
-supports per-field quota overrides (`null` = unlimited), platform-level app
-suspension, and many-to-many ownership links (assign accounts to an owner so
-one login can switch into its service accounts without credentials, and assign
-apps to co-managers).
-
-App owners and linked co-managers use `/apps/manage` to see the app's measured
-aggregate usage and choose among the current live tier cards (the bootstrapped
-catalog starts with Free 5 GiB, Plus 25 GiB, Pro 100 GiB, and metered PAYG).
-Cards show the configured banner, renewal prices, savings, and Editor.js
-inclusions; selection sends both the stable tier id and exact live revision id.
-Managers can also change the inherited per-app-user cap (50 MiB by default) and
-assign or reset custom caps for one or many app users. The app Thing is the
-aggregate ledger; protected relational `app-storage` Things hold per-user usage
-and optional sub-tiers, so neither generic app editing nor an end user can
-rewrite the accounting rows.
-
-The live verification suites need a disposable local database. The app-storage
-suite is deliberately local-URL-only; the admin suite needs an env-admin's
-credentials (placeholders — use your own throwaway admin):
+Set these variables in `remix/.env` for local SES testing and in Vercel project
+environment variables for deployed previews/production:
 
 ```sh
-node remix/scripts/verify-app-storage.mjs http://127.0.0.1:10000
+THINGTIME_EMAIL_PROVIDER="ses"
+AWS_SES_REGION="ap-southeast-2"
+AWS_SES_ACCESS_KEY_ID="<iam-access-key-id>"
+AWS_SES_SECRET_ACCESS_KEY="<iam-secret-access-key>"
+THINGTIME_EMAIL_TRANSACTIONAL_FROM="Thingtime <no-reply@thingtime.com>"
+THINGTIME_EMAIL_NEWSLETTER_FROM="Thingtime Updates <community@thingtime.com>"
+THINGTIME_EMAIL_REPLY_TO="support@thingtime.com"
+AWS_SES_CONFIGURATION_SET="thingtime"
+THINGTIME_EMAIL_FAIL_CLOSED="false"
+SES_SANDBOX="1"
+THINGTIME_EMAIL_TEST_RECIPIENT="support@thingtime.com"
 ```
 
-```sh
-TT_VERIFY_ADMIN_USER="your-admin-username" \
-TT_VERIFY_ADMIN_PASS="your-admin-password" \
-node remix/scripts/verify-admin-subscriptions.mjs http://127.0.0.1:10000
-```
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION` also work; the
+`AWS_SES_*` names are preferred when the deployment has other AWS integrations.
+Do not create SES SMTP credentials for the app path. The server uses the SES API
+and needs an IAM access key with permission to call `ses:SendEmail` for the
+verified identities it sends from.
+
+`SES_SANDBOX=1` tells the `/tests` page to wait at least one second before each
+email-sending check so local sandbox tests respect the SES one-message-per-second
+limit. `THINGTIME_EMAIL_TEST_RECIPIENT` is the base inbox used by the email tests;
+the test harness generates plus aliases such as
+`support+signup-<timestamp>@thingtime.com`.
+
+Recommended DNS and SES setup:
+
+- Keep Google Workspace as the MX provider for human inboxes such as
+  `hello@thingtime.com` and `support@thingtime.com`.
+- Verify separate SES domain identities for transactional and newsletter mail,
+  for example `auth.thingtime.com` and `news.thingtime.com`.
+- Publish the SES DKIM records, a custom MAIL FROM/SPF record if configured,
+  and a DMARC policy for the sending domains.
+- Put signup verification, email OTP, password reset, and product
+  notifications on the transactional domain.
+- Put bulk/newsletter mail on the newsletter domain to isolate sender
+  reputation.
+
+MongoDB collections created by the app:
+
+- `email_messages` records every send attempt and its final status.
+- `email_events` stores provider delivery/bounce/complaint events when event
+  ingestion is wired.
+- `email_templates` is reserved for editable template metadata.
+- `email_subscriptions`, `email_suppression_list`, and `email_unsubscribes`
+  drive newsletter consent and suppression.
+- `email_identities` is reserved for verified sender/domain metadata.
+
+Current auth signup and service-account verification emails use this pipeline
+through `sendVerificationEmail`. Use `sendEmailOtp` for future email code
+flows, and `sendNewsletterEmail` for newsletter sends.
+
+The long-term provider-independent roadmap lives in
+[`docs/email-owned-architecture.md`](docs/email-owned-architecture.md). Keep
+future SES, queue, inbound, self-hosted SMTP, and sender-reputation work aligned
+with that architecture so Thingtime can move delivery providers without changing
+feature callers.
 
 ## Auth and Lopu AI
 
