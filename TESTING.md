@@ -9128,6 +9128,9 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Apple widgets and Control Centre
 
+- [ ] Widgets platform sources (2026-11-06): run `node --test macos/ThingtimeWidgets/script/release-contract.test.mjs`. The macOS target must exclude the iOS-only Chat Activity client, controller and snapshot while retaining shared Lopu voice/recording sources; the iOS app and Chat Activity tests must still include their sources.
+- [ ] Native source-selection acceptance: run `xcodegen generate --spec macos/ThingtimeWidgets/project.yml`, then the Widgets workflow's unsigned arm64 macOS `xcodebuild test` with `THINGTIME_WIDGET_GROUP=group.com.thingtime.widgets.tests.per-endpoint`. Regenerate the iOS project and run the `Thingtime` scheme's iOS Simulator build-for-testing. Portable source-selection checks do not establish either native compile result, signing or notarization acceptance.
+
 - [ ] Widgets release/Recovery: verify the main-only workflow runs tests before importing secrets and publishes both Widgets and matching Recovery ZIPs after notarization/extraction checks. In Recovery select Thingtime Widgets; verify architecture filtering, isolated cache, download verification, install/launch and rollback without touching another app. Reject mismatched bundle IDs and never accept development signing as a production release.
 
 - [ ] Per-widget Mac endpoints: pin two widgets to different saved, authenticated servers, including Things with identical IDs. Verify the picker lists only the chosen server’s Things, each dashboard/Thing/action link opens that server, and changing the companion’s active endpoint does not change pinned widgets. Remove/disconnect one server and confirm its content clears without affecting the other. Verify unconfigured widgets still follow the active endpoint and turning content sharing off clears every endpoint.
@@ -15186,6 +15189,11 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 ### First-party backup workspace and durable dispatch
 
+- The builtin schema projection contract must pin `backup-job` and
+  `backup-job-event` to empty public fields while preserving protected generic
+  read/write/export refusals. Run `builtinSchemaProjection.test.ts` and the
+  protected coordinator cases in `backupJobs.test.mts`.
+
 - Run the catalog/path and dispatch regressions: duplicate basenames in distinct
   nested folders, 75-level retained ancestry across fresh units, corrupt sidecars,
   revocation, stale first-page jobs, transient authority outages across two
@@ -15232,3 +15240,20 @@ the isolated real-API/browser command and the metadata-only session boundary.
   compare native `scan-changes` counts and first-file startup attribution with
   its retained baseline. Unit fixtures do not prove installed startup speed;
   preserve native watcher, uncached admission and current authorization checks.
+
+
+### Two-way startup compound path observation (2026-11-07)
+
+- On a negotiated Mac access 1.21.0 host, prepare an early candidate and its
+  immediate parent through one `observe-path` request. Confirm two fresh native
+  identity calls total, complete ordered observations and unchanged policy.
+- Change saved settings before dispatch; revoke identity/grant, cancel, expire
+  a queued request, or change network/charging during the request. Refuse the
+  observation and retain original operation IDs; no effect may use stale data.
+- On an older host retain strict separate context/inspection. Compare the
+  matched synthetic healthy/recovery fixture's real first upload body,
+  scan-to-first-read, native request count and union admission waits. Keep
+  5,000,000 B/s scan/transfer and 15% CPU unchanged; verify all byte hashes,
+  recovery receipts, no duplicate effects and strict checkpoint convergence.
+  Fixture evidence does not establish personal-folder or installed-GUI transfer
+  acceptance. Never add grants, resume Home or touch personal files for this test.

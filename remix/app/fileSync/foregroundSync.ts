@@ -57,6 +57,7 @@ export type ForegroundSyncInput = {
 	authorizeDevice(): Promise<void>;
 	/** Fresh native composite request; preserves the same authorization boundary. */
 	authorizeContext?(): Promise<SyncConditions>;
+	observeLocal?(path: string, parent: string, saved: SavedFileSyncConfiguration): Promise<{ conditions: SyncConditions; entries: (SyncEntry | null)[] }>;
 	/** Trusted native adapter: IO authenticates independently; mutation policy stays fresh. Source construction performs no IO. */
 	nativeOperationGuards?: true;
 	/** Explicit negotiated bounded operation, never inferred from cloud metadata. */

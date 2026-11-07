@@ -5,8 +5,8 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.20.0"
-    private static let supportedActions: Set<String> = ["validate-folder-batch", "upload-batch", "upload-single", "resources", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
+    public static let version = "1.21.0"
+    private static let supportedActions: Set<String> = ["validate-folder-batch", "upload-batch", "upload-single", "resources", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "observe-path", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
@@ -35,6 +35,14 @@ public final class MacFolderSync {
         let resourceLimits: SyncResourceLimits?; let resourceScope: String?
         let deviceResourceLimits: DeviceSyncResourcePolicy?
         let remainingMs: Int?
+        let observation: PathObservationPolicy?
+    }
+    private struct PathObservationPolicy: Codable, Sendable {
+        let version: Int
+        let network: String
+        let chargingOnly: Bool
+        let configurationId: String
+        let configurationRevision: String
     }
     private let origin: URL
     private let store: MobileFolderStore
@@ -444,6 +452,14 @@ public final class MacFolderSync {
         let isBatch = { if case .object(let fields) = payload { return [JSONValue.string("upload-batch"), .string("validate-folder-batch")].contains(fields["action"] ?? .null) }; return false }()
         guard encoded.count <= (isBatch ? 600_000 : 131_072) else { throw MobileFolderStore.Failure.limit }
         let r = try JSONDecoder().decode(Request.self, from: encoded)
+        if r.action == "observe-path" {
+            guard let observation = r.observation, observation.version == 1,
+                  ["wifi", "any"].contains(observation.network),
+                  !observation.configurationId.isEmpty, observation.configurationId.utf8.count <= 200,
+                  !observation.configurationRevision.isEmpty, observation.configurationRevision.utf8.count <= 128,
+                  let remaining = r.remainingMs, (1...30_000).contains(remaining), let path = r.path else { throw MobileFolderStore.Failure.invalid }
+            try MobileFolderReader.validatePath(path)
+        } else if r.observation != nil { throw MobileFolderStore.Failure.invalid }
         if let limits = r.resourceLimits {
             try limits.validate()
             guard !limits.isEmpty, let scope = r.resourceScope, !scope.isEmpty, scope.utf8.count <= 512 else { throw MobileFolderStore.Failure.invalid }
@@ -488,7 +504,7 @@ public final class MacFolderSync {
         }
         if r.action == "validate-folder-batch" {
             guard encoded.count <= 524_288, let remaining = r.remainingMs, (1...180_000).contains(remaining) else { throw MobileFolderStore.Failure.invalid }
-        } else if r.remainingMs != nil { throw MobileFolderStore.Failure.invalid }
+        } else if r.action != "observe-path", r.remainingMs != nil { throw MobileFolderStore.Failure.invalid }
         if r.action != "scan-cancel" {
             if let job = backupJob, job.progress.status().state == "running", job.scope.owner.ownerId == r.ownerId, job.scope.deviceId == r.deviceId, job.scope.rootId == r.rootId {
                 guard job.resourceLimits == r.resourceLimits else { throw MobileFolderStore.Failure.changed }
@@ -549,7 +565,7 @@ public final class MacFolderSync {
             (["stage-finish", "publish"].contains(r.action) && r.resourceLimits?.cpuPercent != nil)
         let timeout = Task {
             if governedPayload { return }
-            try await Task.sleep(for: .milliseconds(r.action == "validate-folder-batch" ? (r.remainingMs ?? 0) : (isBatch ? 180_000 : 270_000)))
+            try await Task.sleep(for: .milliseconds(["validate-folder-batch", "observe-path"].contains(r.action) ? (r.remainingMs ?? 0) : (isBatch ? 180_000 : 270_000)))
             if resourceControl { if resourceRequest?.id == r.requestId { resourceRequest?.task.cancel() } }
             else if waiting { if streamWaiter?.id == r.requestId { streamWaiter?.task.cancel(); streamJob?.wake.signal() } }
             else if active?.id == r.requestId { suspendRequest() }
@@ -781,7 +797,7 @@ public final class MacFolderSync {
                 else {
                 let staging = staging, photos = photos
                 let photoScope = PhotoLibraryReader.Scope(owner: owner, deviceId: r.deviceId, rootId: root)
-                guard grant.sourceKind != "photos" || ["scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-discard", "inspect", "read", "read-range"].contains(r.action) else {
+                guard grant.sourceKind != "photos" || ["scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-discard", "inspect", "observe-path", "read", "read-range"].contains(r.action) else {
                     throw MobileFolderStore.Failure.invalid
                 }
                 if grant.sourceKind == "photos" {
@@ -935,6 +951,41 @@ public final class MacFolderSync {
                         if let policy = r.capturePolicy { result["capturePolicy"] = .string(policy) }
                         result["complete"] = .bool(result["scanFailure"] == nil)
                     }
+                } else if r.action == "observe-path" {
+                    guard let path = r.path, let policy = r.observation, let remaining = r.remainingMs,
+                          grant.sourceKind == nil else { throw MobileFolderStore.Failure.invalid }
+                    let bookmark = grant.bookmark
+                    func currentObservation() throws {
+                        try Task.checkCancellation()
+                        let current = try store.grant(owner, id: root), status = conditions()
+                        guard current.bookmark == bookmark, current.sourceKind == nil,
+                              ProcessInfo.processInfo.systemUptime - started < Double(remaining) / 1000,
+                              ["wifi", "cellular", "ethernet"].contains(status.network),
+                              policy.network != "wifi" || status.network == "wifi",
+                              !policy.chargingOnly || status.charging == true else { throw MobileFolderStore.Failure.changed }
+                        try MobileFolderReader.checkAccess(bookmark: bookmark)
+                    }
+                    let parent = path.split(separator: "/").dropLast().joined(separator: "/")
+                    var entries: [JSONValue] = []
+                    for observedPath in parent.isEmpty ? [path] : [path, parent] {
+                        try currentObservation()
+                        do {
+                            let entry = try await worker { try MobileFolderReader.inspect(bookmark: bookmark, path: observedPath) }
+                            try currentObservation()
+                            entries.append(try entry.map { try value($0) } ?? .null)
+                        } catch is CancellationError { throw CancellationError() }
+                        catch {
+                            // An unavailable point observation is never scoped absence.
+                            // Still finish the fresh policy/identity reply checks.
+                            try currentObservation()
+                            result["observationUnavailable"] = .bool(true)
+                            entries.removeAll(); break
+                        }
+                    }
+                    try currentObservation(); inspectedGrant = grant
+                    result["path"] = .string(path); result["complete"] = .bool(result["observationUnavailable"] == nil)
+                    result["observedEntries"] = .array(entries); result["observation"] = try value(policy)
+                    result["conditions"] = try value(conditions())
                 } else if r.action == "inspect" {
                     guard let path = r.path else { throw MobileFolderStore.Failure.invalid }
                     if grant.sourceKind != "photos" { inspectedGrant = grant }
@@ -1035,6 +1086,15 @@ public final class MacFolderSync {
         if let exclusions = r.excludedPaths { result["excludedPaths"] = try value(exclusions) }
         else if r.capturePolicy == "backup-supported" || r.capturePolicy == "strict-async" { result["excludedPaths"] = .array([]) }
         try await authorized(r)
+        if r.action == "observe-path" {
+            guard let policy = r.observation, let remaining = r.remainingMs else { throw MobileFolderStore.Failure.invalid }
+            let status = conditions()
+            guard ProcessInfo.processInfo.systemUptime - started < Double(remaining) / 1000,
+                  ["wifi", "cellular", "ethernet"].contains(status.network),
+                  policy.network != "wifi" || status.network == "wifi",
+                  !policy.chargingOnly || status.charging == true else { throw MobileFolderStore.Failure.changed }
+            result["conditions"] = try value(status)
+        }
         if r.action == "validate-folder-batch" {
             guard let remaining = r.remainingMs, ProcessInfo.processInfo.systemUptime - started < Double(remaining) / 1000,
                   let raw = r.batch else { throw MobileFolderStore.Failure.changed }

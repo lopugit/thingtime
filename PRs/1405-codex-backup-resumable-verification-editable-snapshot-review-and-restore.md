@@ -28,3 +28,9 @@ Unverified: deployed Workflow/cron, genuine S3 provisioning/recovery and install
 acceptance. Original ordinary Timeline history remains archived rather than
 imported; whole-account readiness is false. Local cadence does not establish
 hosted scheduling or large-provider latency acceptance.
+
+
+Release follow-up (2026-11-07): integrated fresh main and retained both additive
+changelog sections. The three CI schema failures were missing pinned empty-field
+projections for the two protected coordinator schemas; their runtime protection
+and schema write gates remain unchanged. Focused schema projection: 134 passed.

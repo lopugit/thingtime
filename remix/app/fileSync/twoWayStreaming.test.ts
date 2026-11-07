@@ -734,3 +734,27 @@ test('guard negotiation changing during journal ancestry cannot bypass policy be
     assert.equal(await x.checkpoints().current(), null);
     x.f.journal().close();
 });
+
+
+test('negotiated two-way preparation uses compound observations while later transfer guards remain active', { timeout: 10000 }, async () => {
+ const x = await fixture(), uploaded = deferred(), downloaded = deferred();
+ const remote = await x.putCloud('download.bin', [5, 6, 7]);
+ const inspect = x.input.inspectLocal!; let compounds = 0, scalarReads = 0;
+ x.input.nativeOperationGuards = true;
+ x.input.observeLocal = async (path, parent, saved) => {
+  compounds++; assert.equal(saved.updatedAt, twoWay.updatedAt);
+  const entries = [await inspect(path)]; if (parent) entries.push(await inspect(parent));
+  return { conditions: { network: 'wifi', charging: true }, entries };
+ };
+ x.input.inspectLocal = async path => { scalarReads++; return inspect(path); };
+ x.feeds([x.f.entry()], [remote], Promise.all([uploaded.promise, downloaded.promise]).then(() => {}));
+ x.input.transfer = activity => {
+  if ('kind' in activity && activity.kind === 'file') (activity.direction === 'upload' ? uploaded : downloaded).resolve();
+ };
+ try {
+  await x.run();
+  assert.ok(compounds >= 2); assert.ok(scalarReads > 0);
+  assert.equal(x.f.publications(), 1); assert.equal(x.receipts.size, 1);
+  assert.ok(await x.checkpoints().current());
+ } finally { x.f.journal().close(); }
+});

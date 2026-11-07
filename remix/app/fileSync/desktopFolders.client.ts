@@ -10,7 +10,7 @@ import {
 	supportsFolderAccess,
 	supportsNativeResourceLimits,
 	supportsNativeAuthorizationContext,
-	supportsNativePathInspection,
+	supportsNativePathInspection, supportsNativePathObservation,
 	supportsNativeInventoryPages,
 	supportsNativeUploadBatches,
 	supportsNativeFolderBatches,
@@ -235,6 +235,7 @@ export async function createDesktopFolderHost(input: {
 			if (['scan-capture', 'scan-page', 'scan-discard'].includes(request.action) && !supportsNativeInventoryPages(context.capabilities))
 				throw Error('Inventory pages require an updated Mac app.');
 			if (request.action === 'validate-folder-batch' && (!supportsNativeFolderBatches(context.capabilities) || !capabilitySatisfies(context.apiCapabilities.features['api.file-sync-batches']?.version, '1.1.0'))) throw Error('Folder metadata batches require a compatible native host and server.');
+			if (request.action === 'observe-path' && !supportsNativePathObservation(context.capabilities)) throw Error('Update Thingtime Desktop for compound path observations.');
 			if (request.action === 'inspect' && !supportsNativePathInspection(context.capabilities)) throw Error('Update Thingtime Desktop to inspect individual sync paths.');
 			if (request.action === 'upload-batch' && (!supportsNativeUploadBatches(context.capabilities) ||
 				!capabilitySatisfies(context.apiCapabilities.features['api.file-sync-batches']?.version, '1.0.0')))
