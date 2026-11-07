@@ -18,7 +18,12 @@ export function startMobileDeviceIdentity(environment: IdentityEnvironment) {
 	let verified = false;
 	let withdrawn = false;
 	let pending: AbortController | undefined;
-	const cancel = () => { pending?.abort(); pending = undefined; };
+	let recheckOnReconnect = false;
+	const cancel = () => {
+		pending?.abort();
+		pending = undefined;
+		recheckOnReconnect = false;
+	};
 	const withdraw = () => {
 		cancel();
 		verified = false;
@@ -39,16 +44,31 @@ export function startMobileDeviceIdentity(environment: IdentityEnvironment) {
 				else verified = true;
 			},
 			() => { /* Retry only after an identity/readiness/foreground/network event. */ }
-		).finally(() => { if (pending === controller) pending = undefined; });
+		).finally(() => {
+			if (pending !== controller) return;
+			pending = undefined;
+			const recheck = recheckOnReconnect;
+			recheckOnReconnect = false;
+			if (recheck && !verified) refresh();
+		});
 	};
 	const foreground = () => { verified = false; refresh(); };
+	const reconnect = () => {
+		// Network recovery can arrive before the old, failed request settles.
+		// Coalesce it into one fresh same-scope read after that request finishes.
+		if (pending && environment.current() && environment.document.visibilityState === 'visible') {
+			recheckOnReconnect = true;
+		}
+		foreground();
+	};
 	const visibility = () => {
 		if (environment.document.visibilityState !== 'visible') { cancel(); verified = false; }
 		else foreground();
 	};
 	const unsubscribe = environment.subscribe(refresh);
-	const events = ['focus', 'pageshow', 'online', nativeBridgeReadyEvent];
+	const events = ['focus', 'pageshow', nativeBridgeReadyEvent];
 	for (const name of events) environment.window.addEventListener(name, foreground);
+	environment.window.addEventListener('online', reconnect);
 	environment.document.addEventListener('visibilitychange', visibility);
 	// StrictMode's discarded mount must not start a native verification.
 	queueMicrotask(refresh);
@@ -60,6 +80,7 @@ export function startMobileDeviceIdentity(environment: IdentityEnvironment) {
 			unsubscribe();
 			withdraw();
 			for (const name of events) environment.window.removeEventListener(name, foreground);
+			environment.window.removeEventListener('online', reconnect);
 			environment.document.removeEventListener('visibilitychange', visibility);
 		}
 	};

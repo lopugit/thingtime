@@ -4,7 +4,7 @@ export type MobileLocationStatus = {
 	authorization: 'always' | 'when-in-use' | 'denied' | 'restricted' | 'not-requested';
 	precision: 'precise' | 'approximate';
 	backgroundAvailable: boolean;
-	collectionMode: 'significant-change';
+	collectionMode: 'significant-change' | 'standard';
 	notificationAuthorization?: 'allowed' | 'quiet' | 'denied' | 'not-requested';
 };
 export type MobileLocationAction = 'status' | 'enable' | 'disable' | 'request-permission' | 'open-settings' | 'request-notification-permission';
@@ -52,7 +52,7 @@ export function parseMobileLocationResult(
 		authorization: result.authorization as MobileLocationStatus['authorization'],
 		precision: result.precision as MobileLocationStatus['precision'],
 		backgroundAvailable: result.backgroundAvailable,
-		collectionMode: 'significant-change',
+		collectionMode: result.samplingMode === 'standard' ? 'standard' : result.collectionMode,
 		...(['allowed', 'quiet', 'denied', 'not-requested'].includes(String(result.notificationAuthorization))
 			? { notificationAuthorization: result.notificationAuthorization as MobileLocationStatus['notificationAuthorization'] } : {})
 	};

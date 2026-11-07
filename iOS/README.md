@@ -61,16 +61,22 @@ read WebView cookies, create a pairing or broaden Keychain accessibility.
 
 ## Device location history
 
-Location history is off until the owning device user enables it. The native
-`deviceLocationVersion` 1.1.0 bridge adds immediate scoped authorization suspension, fencing pending verification while preserving consent for a verified same-account return. The web adapter requires mobile 1.1; desktop location and HTTP observation/alert features retain their independent versions. This bridge uses explicit permission actions; launch,
-status checks and background restoration never show an authorization prompt.
-While-in-use authorization supports a foreground fix. **Always** authorization
-permits low-power significant-change updates and supported background relaunch;
-this is not a fixed-rate GPS recorder or an always-awake service. Apple's
-[significant-change service](https://developer.apple.com/documentation/corelocation/cllocationmanager/startmonitoringsignificantlocationchanges())
-and system Background App Refresh policy determine delivery. The app preserves
-Core Location measurement time, horizontal accuracy and approximate/precise
-permission status; it never substitutes IP geolocation or invented coordinates.
+Location history is off until the owning device user enables it. The web adapter
+accepts the legacy significant-change status from native `deviceLocationVersion`
+1.1 and the standard-update status from 1.2. Both versions fence authorization
+by owner and origin; launch, status checks and background restoration never
+prompt for permission. **While Using the App** supports a foreground fix.
+**Always** enables standard Core Location updates in the background once
+collection is enabled. The app targets one actual fix per five minutes when
+iOS supplies fixes, independent of the Filesync schedule. It persists the last
+recorded time so restart, retry and cached callbacks do not flood history.
+This setting does not wake iOS on a fixed timer. Core Location and system
+policies determine availability; gaps can occur with poor reception, force
+quit or system suspension. A separate [significant-change
+monitor](https://developer.apple.com/documentation/corelocation/cllocationmanager/startmonitoringsignificantlocationchanges())
+supports eligible system relaunches. Standard updates use more battery than
+significant-change monitoring alone. The app preserves the measurement time,
+reported horizontal accuracy and approximate/precise permission status.
 
 Each offline observation is a separate protected local file. Retries keep its
 original ID, timestamp and collection generation. The app negotiates
@@ -81,8 +87,7 @@ collection stop the old binding. Authentication rechecks preserve the scoped
 opt-in and offline observations while durably withdrawing background authority;
 only verification of the same owner and origin resumes that saved preference.
 An unverified background relaunch cannot upload it. The server retains previously saved history
-according to the owner's retention setting; **Never** is the default retention,
-not permission to collect without opting in. This adapter reports the iPhone's
+according to the owner's retention setting; **Keep indefinitely** retains history until you delete it or choose a finite retention period. This adapter reports the iPhone's
 location only; it does not claim a paired Watch's location.
 
 The device descriptor sends the public `hw.machine` model identifier. It never

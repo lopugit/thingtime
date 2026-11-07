@@ -9,13 +9,13 @@ import UIKit
 private final class LocationDriverFixture: MobileLocationDriving {
     var authorization: CLAuthorizationStatus = .authorizedAlways
     var fullAccuracy = false
-    var significantChangesAvailable = true
     var received: (([CLLocation]) -> Void)?
     var authorizationChanged: (() -> Void)?
     var starts: [Bool] = [], permissionRequests: [Bool] = []
+    var stops = 0
     func requestPermission(always: Bool) { permissionRequests.append(always) }
     func start(background: Bool) { starts.append(background) }
-    func stop() { }
+    func stop() { stops += 1 }
 }
 
 @MainActor
@@ -81,6 +81,76 @@ final class MobileDeviceLocationTests: XCTestCase {
         fail = false; coordinator.flush()
         for _ in 0..<10 { await Task.yield() }
         XCTAssertEqual(received.count, 2); XCTAssertEqual(received.first, received.last); XCTAssertNil(saved)
+    }
+    func testLocationCadenceSurvivesOfflineAndSameCollectionRelaunch() async throws {
+        let driver = LocationDriverFixture()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let outbox = MobileDeviceLocationOutbox(root: directory)
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        var clock = start
+        var saved: MobileDeviceLocation.Binding?
+        let coordinator = MobileDeviceLocation(driver: driver, outbox: outbox, load: { saved }, save: { saved = $0 }, now: { clock }) { _, _, _ in
+            throw URLError(.notConnectedToInternet)
+        }
+        coordinator.activate()
+        try coordinator.enable(scope, collectionId: collectionId)
+        clock = start.addingTimeInterval(301)
+        driver.received?([
+            fix(timestamp: start.addingTimeInterval(300)),
+            fix(timestamp: start.addingTimeInterval(-1)), // stale pre-consent cache
+            fix(timestamp: start.addingTimeInterval(299)), // inside first sample interval
+            fix(timestamp: start),
+            fix(timestamp: start)
+        ])
+        XCTAssertEqual(saved?.lastObservationAt, start.addingTimeInterval(300))
+        coordinator.suspendAuthorization()
+        try coordinator.enable(scope, collectionId: collectionId) // repeat must preserve queue/watermark
+        XCTAssertNotNil(try outbox.next(scope: scope))
+        XCTAssertEqual(saved?.lastObservationAt, start.addingTimeInterval(300))
+        coordinator.suspendAuthorization()
+        var delivered: [Date] = []
+        let resumedDriver = LocationDriverFixture()
+        let persisted = try JSONEncoder().encode(XCTUnwrap(saved))
+        saved = try JSONDecoder().decode(MobileDeviceLocation.Binding.self, from: persisted)
+        let resumed = MobileDeviceLocation(driver: resumedDriver, outbox: outbox, load: { saved }, save: { saved = $0 }, now: { clock }) { observation, _, check in
+            try check(); delivered.append(observation.observedAt)
+        }
+        resumed.activate()
+        XCTAssertTrue(resumedDriver.starts.isEmpty, "Revoked foreground authority cannot be restored by a background launch")
+        resumed.verified(scope)
+        clock = start.addingTimeInterval(600)
+        resumedDriver.received?([fix(timestamp: start.addingTimeInterval(599)), fix(timestamp: clock)])
+        try await resumed.flushAndWait(check: {})
+        XCTAssertEqual(delivered.sorted(), [start, start.addingTimeInterval(300), start.addingTimeInterval(600)])
+        XCTAssertNil(try outbox.next(scope: scope))
+    }
+    func testPermissionDowngradeWhileBackgroundedStopsAndFencesLocation() async throws {
+        let driver = LocationDriverFixture()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let outbox = MobileDeviceLocationOutbox(root: directory)
+        var active = true
+        let coordinator = MobileDeviceLocation(driver: driver, outbox: outbox, load: { nil }, save: { _ in }, appIsActive: { active }) { _, _, _ in
+            XCTFail("A background When in Use fix must not upload")
+        }
+        coordinator.activate()
+        try coordinator.enable(scope, collectionId: collectionId)
+        let previousStops = driver.stops
+        active = false; driver.authorization = .authorizedWhenInUse
+        driver.authorizationChanged?()
+        driver.received?([fix()])
+        try await coordinator.flushAndWait(check: {})
+        XCTAssertGreaterThan(driver.stops, previousStops)
+        XCTAssertNil(try outbox.next(scope: scope))
+        XCTAssertEqual(coordinator.status["backgroundAvailable"] as? Bool, false)
+        XCTAssertEqual(coordinator.status["collectionMode"] as? String, "significant-change")
+        XCTAssertEqual(coordinator.status["samplingMode"] as? String, "standard")
+        XCTAssertEqual(driver.starts, [true])
+        active = true
+        coordinator.verified(scope)
+        XCTAssertEqual(driver.starts, [true, false])
+        XCTAssertTrue(driver.permissionRequests.isEmpty)
     }
     func testTransportNegotiatesNodeContractAndFencesCollectionWithoutCookies() async throws {
         let observation = try XCTUnwrap(MobileDeviceLocationObservation(location: fix(), fullAccuracy: false, collectionId: collectionId))
@@ -193,15 +263,19 @@ final class MobileDeviceLocationTests: XCTestCase {
         let coordinator = MobileDeviceLocation(driver: driver, outbox: .init(root: directory), load: { saved }, save: { saved = $0 }) { _, _, _ in }
         coordinator.activate()
         var completeVerification: CheckedContinuation<Void, Never>?
-        let bridge = MobileDeviceLocationBridge(location: coordinator, verify: { _, _, _, _ in
+        let bridge = MobileDeviceLocationBridge(location: coordinator, appIsActive: { true }, verify: { _, _, _, _ in
             await withCheckedContinuation { completeVerification = $0 }
         })
-        let web = WKWebView()
-        web.loadHTMLString("<html><body>Identity fixture</body></html>", baseURL: scope.origin)
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        let web = WKWebView(frame: .zero, configuration: configuration)
+        let fixtureURL = scope.origin.appendingPathComponent("location-identity-fixture")
+        web.loadHTMLString("<html><body>Identity fixture</body></html>", baseURL: fixtureURL)
         for _ in 0..<200 {
-            if web.url == scope.origin, UIApplication.shared.applicationState == .active { break }
+            if !web.isLoading, web.url == fixtureURL { break }
             try await Task.sleep(nanoseconds: 10_000_000)
         }
+        XCTAssertEqual(web.url, fixtureURL)
         func send(_ action: String, owner: String) {
             bridge.handle(["payload": ["requestId": UUID().uuidString, "ownerId": owner, "action": action]],
                 webView: web, root: scope.origin, currentRoot: { self.scope.origin }, cookies: { values, _ in values }, reply: { _, _ in })

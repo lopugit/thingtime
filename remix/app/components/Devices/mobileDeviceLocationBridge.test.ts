@@ -20,6 +20,7 @@ test('location collection requires explicit native capability', () => {
 	assert.equal(supportsMobileLocation(bridge), false);
 	assert.equal(supportsMobileLocation({ ...bridge, deviceLocationVersion: '1.0.0' }), false);
 	assert.equal(supportsMobileLocation({ ...bridge, deviceLocationVersion: '1.1.0' }), true);
+	assert.equal(supportsMobileLocation({ ...bridge, deviceLocationVersion: '1.2.0' }), true);
 	assert.equal(supportsMobileLocation({ ...bridge, deviceLocationVersion: '2.0.0' }), false);
 	assert.equal(supportsMobileLocation({ ...bridge, platform: 'android', deviceLocationVersion: '1.1.0' }), false);
 });
@@ -32,6 +33,8 @@ test('location results bind operation owner and origin and expose only status', 
 		backgroundAvailable: true,
 		collectionMode: 'significant-change'
 	});
+	assert.equal(parseMobileLocationResult(reply({ samplingMode: 'standard' }), expected)?.collectionMode, 'standard');
+	assert.throws(() => parseMobileLocationResult(reply({ collectionMode: 'invented' }), expected));
 	assert.throws(() => parseMobileLocationResult(reply({ authorization: 'invented' }), expected));
 	assert.throws(() => parseMobileLocationResult(reply({ error: 'Native location unavailable' }), expected));
 });
