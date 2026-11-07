@@ -10,9 +10,9 @@ final class RecoveryStore: ObservableObject {
     @Published private(set) var desktopBundles: [CachedBundle] = []
     @Published private(set) var commanderBundles: [CachedBundle] = []
     @Published private(set) var commanderReleases: [RecoveryRelease] = []
-    @Published var selectedProduct = RecoveryProduct(rawValue: UserDefaults.standard.string(forKey: "recovery.selectedProduct") ?? "") ?? .electron {
+    @Published var selectedProduct: RecoveryProduct = .electron {
         didSet {
-            UserDefaults.standard.set(selectedProduct.rawValue, forKey: "recovery.selectedProduct")
+            if !usesIsolatedHome { UserDefaults.standard.set(selectedProduct.rawValue, forKey: "recovery.selectedProduct") }
             notice = nil
         }
     }
@@ -25,11 +25,19 @@ final class RecoveryStore: ObservableObject {
     @Published var errorMessage: String?
     @Published var notice: String?
 
-    let paths = RecoveryPaths()
+    let paths: RecoveryPaths
+    let usesIsolatedHome: Bool
     private let catalog = GitHubReleaseCatalog()
     private var installerNotice: String?
 
     init() {
+        let fixtureHome = ProcessInfo.processInfo.environment["THINGTIME_RECOVERY_INTEGRATION_HOME"]
+            .flatMap { $0.hasPrefix("/") ? URL(fileURLWithPath: $0) : nil }
+        usesIsolatedHome = fixtureHome != nil
+        paths = RecoveryPaths(homeDirectory: fixtureHome ?? FileManager.default.homeDirectoryForCurrentUser)
+        if !usesIsolatedHome {
+            selectedProduct = RecoveryProduct(rawValue: UserDefaults.standard.string(forKey: "recovery.selectedProduct") ?? "") ?? .electron
+        }
         reloadCaches()
         if let result = RecoveryInstallNotice.consume(paths: paths) {
             installerNotice = result.message
@@ -105,6 +113,7 @@ final class RecoveryStore: ObservableObject {
     }
 
     func downloadAndInstall(_ release: RecoveryRelease, component: RecoveryComponent) async {
+        guard allowAppHandoff() else { return }
         // Use only this download's verified result, never a previously selected
         // or most-recent cache entry. cache's busy flag is cleared before handoff.
         guard let bundle = await cache(release, component: component) else { return }
@@ -193,6 +202,7 @@ final class RecoveryStore: ObservableObject {
     }
 
     private func handoff(action: RecoveryInstallAction, bundle: CachedBundle) {
+        guard allowAppHandoff() else { return }
         guard !isCaching else { return }
         do {
             let plan = RecoveryInstallPlan(action: action, cacheRoot: paths.cacheRoot(for: bundle.component), sourceApp: bundle.appURL, waitForPID: ProcessInfo.processInfo.processIdentifier)
@@ -215,6 +225,14 @@ final class RecoveryStore: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func allowAppHandoff() -> Bool {
+        guard !usesIsolatedHome else {
+            errorMessage = "App installation and launching cached apps are disabled in this isolated test session. The installer helper uses the real user home; fixture caches and AI integrations remain available."
+            return false
+        }
+        return true
     }
 
     private func cache(for component: RecoveryComponent) -> RecoveryCache {

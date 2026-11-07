@@ -8,7 +8,8 @@ let package = Package(
     products: [
         .library(name: "ThingtimeRecoveryCore", targets: ["ThingtimeRecoveryCore"]),
         .executable(name: "ThingtimeRecovery", targets: ["ThingtimeRecovery"]),
-        .executable(name: "ThingtimeRecoveryInstaller", targets: ["ThingtimeRecoveryInstaller"])
+        .executable(name: "ThingtimeRecoveryInstaller", targets: ["ThingtimeRecoveryInstaller"]),
+        .executable(name: "ThingtimeIntegrationManager", targets: ["ThingtimeIntegrationManager"])
     ],
     targets: [
         .target(
@@ -35,6 +36,11 @@ let package = Package(
             name: "ThingtimeRecoveryCoreTests",
             dependencies: ["ThingtimeRecoveryCore", "ThingtimeRecovery"],
             path: "Tests/ThingtimeRecoveryCoreTests"
+        ),
+        .executableTarget(
+            name: "ThingtimeIntegrationManager",
+            dependencies: ["ThingtimeRecoveryCore"],
+            path: "App/IntegrationManager"
         )
     ],
     swiftLanguageModes: [.v5]

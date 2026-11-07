@@ -175,11 +175,15 @@ public struct RecoveryReleaseAsset: Hashable {
     public let downloadURL: URL
     public let name: String
     public let size: Int64?
+    public let id: Int?
+    public let updatedAt: String?
 
-    public init(downloadURL: URL, name: String, size: Int64?) {
+    public init(downloadURL: URL, name: String, size: Int64?, id: Int? = nil, updatedAt: String? = nil) {
         self.downloadURL = downloadURL
         self.name = name
         self.size = size
+        self.id = id
+        self.updatedAt = updatedAt
     }
 }
 
