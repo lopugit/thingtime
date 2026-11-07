@@ -45,6 +45,7 @@
     "test:files:mac-fixture-transport": "node --import tsx --test scripts/mac-fixture-transport.test.mjs scripts/mac-fixture-host.test.mts scripts/mac-fixture-http-observer.test.mjs scripts/mac-fixture-tls.test.mjs",
     "test:files:two-way-progress-ui": "node scripts/test-two-way-progress-ui.mjs",
     "test:files:ios-lifecycle": "node scripts/test-ios-sync-lifecycle.mjs",
+    "test:files:transfer-admissions": "node --import tsx scripts/test-file-sync-transfer-admissions.mts",
     "test:files:desktop-lifecycle": "node scripts/test-desktop-sync-lifecycle.mjs",
     "test:file-sync": "node --import tsx --test app/fileSync/*.test.ts && node --experimental-test-module-mocks --import tsx --test app/fileSync/*.test.mts",
     "test:device-sync:browser": "node scripts/test-remote-device-sync-ui.mjs",
