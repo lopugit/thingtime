@@ -12202,6 +12202,14 @@ transfer, whole-account snapshots or production deployment.
 
 ### iOS deferred Photos transfers
 
+- [ ] Interrupt an iPhone Photos backup after one cloud receipt and a second
+  accepted write whose reply is lost. Save another cloud destination on the
+  same Photos connection and tap Retry transfer. Confirm on cellular that it
+  waits for Wi-Fi without scanning or uploading. On Wi-Fi, verify the old
+  folder and revisions stay intact, any matching original in the new folder
+  keeps its revision, and only missing originals are copied there. Reopen and
+  verify no duplicate transfers. Run `photoDestinationRecovery.test.ts` for
+  both persisted journal formats, including Stop and lost cleanup/reopen.
 - [ ] Keep the selected connection Wi-Fi only. On cellular, verify a Wi-Fi wait
   before Photos preparation and no upload payload. Return to Wi-Fi and verify
   transfer without modifying the setting. Check explicit cellular opt-in and

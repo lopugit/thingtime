@@ -1,3 +1,7 @@
+import { openSyncJournal, syncScopeKey } from '../app/fileSync/journal.client';
+import { writeStampedCache } from '../app/hooks/localCache';
+import { nativeBridgeMessageEvent } from '../app/utils/nativeBridge';
+import type { FileSyncConfiguration } from '../app/fileSync/configuration';
 import { rootIdentity } from '../app/utils/rootIdentity';
 import { deviceFolderIdentity, resolveDeviceFolders } from '../app/fileSync/deviceFolders';
 import React, { StrictMode } from 'react';
@@ -19,8 +23,12 @@ const fixtureCapabilities = (origin: string) => ({ schemaVersion: 1, origin, fea
 const params = new URLSearchParams(location.search);
 const ownerId = params.get('owner') || 'remote-sync-owner', deviceId = params.get('device') || 'remote-sync-mac';
 const databaseKey = 'remote-sync-fixture-rows' + (params.size ? ':' + JSON.stringify([ownerId, deviceId]) : '');
-const configuration = { configurationVersion: 1, name: 'Documents backup', deviceId, localRootId: 'local-documents',
- remoteFolderId: 'cloud-documents', mode: 'backup', paused: params.has('paused'), propagateDeletes: false, network: 'any', chargingOnly: false, excludedPaths: [] };
+const photoRecovery = params.has('photoRecovery'), photosRoot = '4d3c4fd6-6232-4b07-9c9d-3bfd3550437a';
+const photoRoots = [{ id: photosRoot, name: 'Photo Library', sourceKind: 'photos' as const, photoAccess: 'full' as const }];
+const configuration: FileSyncConfiguration = { configurationVersion: 1, name: photoRecovery ? 'iPhone Photos' : 'Documents backup',
+ deviceId, localRootId: photoRecovery ? photosRoot : 'local-documents', ...(photoRecovery ? { sourceKind: 'photos' as const } : {}),
+ remoteFolderId: photoRecovery ? 'fixture-folder-0' : 'cloud-documents', mode: 'backup', paused: params.has('paused'), propagateDeletes: false,
+ network: photoRecovery ? 'wifi' : 'any', chargingOnly: false, excludedPaths: [] };
 let rows: any[] = JSON.parse(localStorage.getItem(databaseKey) || 'null') ?? [
  { id: 'cloud-documents', thingtime: ['folder'], author: { id: ownerId }, acl: ['tt:user'], crystal: { name: 'Cloud documents' } },
  ...Array.from({ length: 15 }, (_, index) => ({ id: `fixture-folder-${index}`, thingtime: ['folder'], author: { id: ownerId }, acl: ['tt:user'], crystal: { name: `Folder ${String(index).padStart(2, '0')}` } })),
@@ -30,6 +38,45 @@ let rows: any[] = JSON.parse(localStorage.getItem(databaseKey) || 'null') ?? [
  { id: 'other-device-sync', thingtime: ['file-sync'], author: { id: ownerId }, acl: ['tt:user'], updatedAt: '2026-10-23T00:00:00.000Z', crystal: { ...configuration, name: 'Other device private sync', deviceId: 'another-device' } },
  { id: 'other-owner-sync', thingtime: ['file-sync'], author: { id: 'another-owner' }, acl: ['tt:user'], updatedAt: '2026-10-23T00:00:00.000Z', crystal: { ...configuration, name: 'Other owner private sync' } }
 ];
+const photoScope = { origin: location.origin, ownerId, dataPlane: 'home', deviceId, rootId: 'documents-sync' };
+const photoEvents: Array<{ type: string; rootId?: string; configurationId?: string; deviceId?: string; jobId?: string }> = [];
+const readPhotoJob = async () => {
+ const journal = await openSyncJournal();
+ try { return await journal.jobs({ scope: photoScope, currentScope: () => photoScope }).read(); }
+ finally { journal.close(); }
+};
+let oldPhotoEpoch: string | undefined;
+if (photoRecovery) {
+ const journal = await openSyncJournal();
+ try {
+  const jobs = journal.jobs({ scope: photoScope, currentScope: () => photoScope });
+  const previous = await jobs.admit({ id: photoScope.rootId, updatedAt: '2026-10-22T00:00:00.000Z',
+   configuration: { ...configuration, remoteFolderId: 'cloud-documents' } }, 'previous-photos-job');
+  oldPhotoEpoch = crypto.randomUUID(); await jobs.photoQueue(previous, oldPhotoEpoch);
+ } finally { journal.close(); }
+ writeStampedCache('tt:sync-progress:' + syncScopeKey(photoScope), { stage: 'checking', confirmed: 0, total: 0,
+  message: 'An unfinished sync job belongs to different settings. Restore its settings before retrying.' });
+ window.thingtimeNativeBridge = { platform: 'ios', isNativeWebView: true, version: '1.0.0',
+  devicePairingVersion: '1.0.0', fileAccessVersion: '1.8.0', fileUploadVersion: '1.5.0',
+  fileStagingVersion: '1.2.0', filePublicationVersion: '1.2.0',
+  postMessage: async message => {
+   const { requestId, ownerId: owner, origin, action, rootId, configurationId, deviceId: device } = message.payload as Record<string, string>;
+   if (owner !== ownerId || origin !== location.origin) throw Error('Unexpected native scope');
+   if (action === 'suspend') return;
+   const reply = (type: string, payload: object) => window.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, {
+    detail: { type, payload: { requestId, ownerId: owner, origin, ...payload } } }));
+   if (message.type === 'mobile-device' && action === 'status') {
+    reply('mobile-device-result', { state: 'paired', deviceId }); return;
+   }
+   photoEvents.push({ type: action, rootId, configurationId, deviceId: device,
+    ...(action === 'cancel-deferred-upload' ? { jobId: (await readPhotoJob())?.id } : {}) });
+   if (action === 'list') reply('mobile-files-result', { roots: photoRoots });
+   else if (action === 'cancel-deferred-upload') reply('mobile-files-result', { roots: [], cancelled: true, rootId, configurationId });
+   else if (action === 'conditions') reply('mobile-files-result', { roots: [], conditions: { network: 'cellular', charging: false } });
+   else reply('mobile-files-result', { error: 'No scan or upload may run on cellular.' });
+  }
+ };
+}
 const initialStatus = (): RemoteSyncStatus => ({ version: 1, deviceId, observedAt: new Date().toISOString(),
  roots: [{ id: 'local-documents', name: 'Documents on Mac', sourcePath: '/Users/example/Documents on Mac' }], rootsReady: true, capabilities: { platform: params.has('iosResources') ? 'ios' : 'macos', fileAccessVersion: '1.16.0', ...(params.has('iosResources') ? {} : { fileResourceLimitsVersion: '1.1.0' }), fileTrashVersion: '1.2.0', fileVersionsVersion: '1.0.0', fileStagingVersion: '1.0.0', filePublicationVersion: '1.2.0' }, jobs: [], task: null, resourceUsage: { deviceResourceLimits: { transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 }, resources: { version: 1, cpuPercent: 3, cpuStatus: 'measured', effectiveTransferConcurrency: 1, effectiveIndexingConcurrency: 1, currentUploadBytesPerSecond: 1000, currentDownloadBytesPerSecond: 2000, scanBytesPerSecond: 3000, memoryBytes: 1048576, measuredAt: Date.now() } } });
 let status = initialStatus(), offline = true, failure: string | null = null, writes = 0, holdNextStart = false;
@@ -56,6 +103,7 @@ Object.assign(window, { remoteSyncFixture: {
  changeElsewhere() { const row = rows.find(r => r.id === 'documents-sync'); row.updatedAt = new Date().toISOString(); row.crystal.name = 'Changed on another browser'; },
  state: () => structuredClone({ rows, status, commands, writes, priorities, resumeWrites, folderRequests, folderManifests, route: router.state.location, identityPending: rootIdentity.read().pending, pendingStartRequests: [...heldStarts].filter(requestId => replies.get(requestId)?.status === 'processing') }),
  reset() { localStorage.clear(); },
+ photoRecovery: async () => ({ events: photoEvents, job: await readPhotoJob(), oldPhotoEpoch }),
 } });
 window.fetch = async (input, init) => {
  init?.signal?.throwIfAborted();
@@ -130,11 +178,17 @@ window.fetch = async (input, init) => {
   replies.set(requestId, reply);
   return json(reply);
  }
+ if (photoRecovery && url.pathname === '/api/v1/files') {
+  const folderId = url.searchParams.get('folderId');
+  if (folderId !== configuration.remoteFolderId || (init?.method || 'GET') !== 'GET') throw Error('Unexpected Photos folder request');
+  photoEvents.push({ type: 'destination', rootId: folderId });
+  return json({ ok: true, folder: { id: folderId, revision: 'r1', name: 'iPhone', folderId: null } });
+ }
  if (url.pathname !== '/api/v1/things') throw Error('Unexpected fixture request: ' + url.pathname);
  const method = init?.method || 'GET';
  if (method === 'GET') {
   const id = url.searchParams.get('id');
-  if (id) { if (resumeFault === 'identity' && id === 'documents-sync') { resumeFault = null; rootIdentity.changed(); } const thing = rows.find(row => row.id === id); return json(thing ? { ok: true, thing } : { ok: false, error: 'Not found' }, thing ? 200 : 404); }
+  if (id) { if (photoRecovery && id === photoScope.rootId) photoEvents.push({ type: 'configuration' }); if (resumeFault === 'identity' && id === 'documents-sync') { resumeFault = null; rootIdentity.changed(); } const thing = rows.find(row => row.id === id); return json(thing ? { ok: true, thing } : { ok: false, error: 'Not found' }, thing ? 200 : 404); }
   return json({ ok: true, things: rows.filter(row => row.thingtime.includes(url.searchParams.get('thingtime'))), nextCursor: null });
  }
  const body = JSON.parse(String(init?.body));
@@ -158,5 +212,5 @@ const nativeFixtureHost = {
  fetch: window.fetch.bind(window), requireCapability: requireThingtimeCapability, assertCurrent() {}
 };
 const router = createMemoryRouter([{ id: 'root', path: '/', loader: () => ({ user: { id: ownerId, accountKind: 'user' }, dataPlane: 'home' }),
- element: <ChakraProvider><Box maxW="1000px" mx="auto" p={4}>{params.has('native') ? <MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={initialStatus().roots} host={nativeFixtureHost} /> : <DeviceSyncPanel ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={[]} ownedDeviceIds={[deviceId]} />}<SyncFolderCard title="Editable folder preview" path="/Sample/Folder" description="Synthetic shared card" stats="No transfer started" scopeKey="fixture-shared-card"><p>Folder details preview</p></SyncFolderCard></Box></ChakraProvider> }, { path: '/things', element: <h1>Folder opened</h1> }]);
+ element: <ChakraProvider><Box maxW="1000px" mx="auto" p={4}>{photoRecovery ? <MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={photoRoots} /> : params.has('native') ? <MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={initialStatus().roots} host={nativeFixtureHost} /> : <DeviceSyncPanel ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={[]} ownedDeviceIds={[deviceId]} />}<SyncFolderCard title="Editable folder preview" path="/Sample/Folder" description="Synthetic shared card" stats="No transfer started" scopeKey="fixture-shared-card"><p>Folder details preview</p></SyncFolderCard></Box></ChakraProvider> }, { path: '/things', element: <h1>Folder opened</h1> }]);
 createRoot(document.getElementById('root')!).render(<StrictMode><RouterProvider router={router} /></StrictMode>);

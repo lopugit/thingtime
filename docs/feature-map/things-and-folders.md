@@ -1059,6 +1059,15 @@ admission and queues a bounded set of already planned originals in
 See the [iOS runbook](../../iOS/README.md#deferred-photos-transfers) and the
 iOS deferred Photos checklist for installed and physical acceptance.
 
+Explicit iOS Start/Retry can recover a changed Photos cloud destination for
+the same authorized grant and deletion-free backup policy. After verifying the
+saved revision, device access and new folder, it disarms the old native queue,
+then atomically archives the old operation/review pointers and admits a fresh
+job. The new folder is planned from current observations, with a new native
+Photos queue epoch. The old cloud copies and their history stay where they
+were, and the normal Wi-Fi and power gates still apply. Verify the real
+legacy/paged runner boundary with `photoDestinationRecovery.test.ts`.
+
 Photos installed acceptance uses `iOS/ThingtimeUITests/PhotoLibraryConsentUITests.swift`
 and `iOS/scripts/test-mobile-sync-installed.sh`: ordinary consent, same-grant
 original hashes and reopen, with storage-readiness gates and nonzero executed-test

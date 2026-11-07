@@ -27,11 +27,38 @@ try {
  const origin = `http://127.0.0.1:${server.address().port}`;
  browser = await createRequire(join(root, '../MCP/package.json'))('playwright').chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : process.platform === 'linux' ? { executablePath: '/usr/bin/chromium' } : {}) });
  for (const [label, width, height] of [['desktop', 1440, 1000], ['phone', 390, 844]]) {
-  for (const scenario of ['success', 'cas', 'uncertain', 'draft', 'identity', 'ios-managed']) {
+  for (const scenario of process.env.TT_PHOTO_DESTINATION_TEST ? ['photo-destination'] :
+   ['success', 'cas', 'uncertain', 'draft', 'identity', 'ios-managed', 'photo-destination']) {
    const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
    await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
    const page = await context.newPage(); page.setDefaultTimeout(12_000); page.on('pageerror', error => errors.push(error.message));
    try {
+    if (scenario === 'photo-destination') {
+     await page.goto(origin + '/?photoRecovery=1');
+     const card = page.locator('article').filter({ has: page.getByRole('heading', { name: 'iPhone Photos', exact: true }) });
+     await card.getByText(/An unfinished sync job belongs to different settings/).waitFor();
+     await card.getByRole('button', { name: 'Retry transfer', exact: true }).click();
+     await card.getByText(/Waiting for Wi-Fi\. Connect to Wi-Fi to continue/).first().waitFor();
+     const { events, job, oldPhotoEpoch } = await page.evaluate(() => window.remoteSyncFixture.photoRecovery());
+     const cancel = events.findIndex(event => event.type === 'cancel-deferred-upload');
+     const waiting = events.findIndex(event => event.type === 'conditions');
+     assert.ok(cancel > 0 && waiting > cancel);
+     assert.deepEqual(events[cancel], { type: 'cancel-deferred-upload', rootId: '4d3c4fd6-6232-4b07-9c9d-3bfd3550437a',
+      configurationId: 'documents-sync', deviceId: 'remote-sync-mac', jobId: 'previous-photos-job' });
+     assert.ok(events.slice(0, cancel).some(event => event.type === 'destination'));
+     assert.ok(events.slice(cancel + 1, waiting).some(event => event.type === 'configuration'));
+     assert.ok(events.every(event => ['list', 'configuration', 'destination', 'cancel-deferred-upload', 'conditions'].includes(event.type)));
+     assert.notEqual(job.id, 'previous-photos-job');
+     assert.ok(job.photoQueueEpoch && job.photoQueueEpoch !== oldPhotoEpoch);
+     assert.equal(job.reviewed.configuration.remoteFolderId, 'fixture-folder-0');
+     assert.equal(job.reviewed.configuration.network, 'wifi');
+     assert.equal(job.reviewed.configuration.paused, false);
+     await page.screenshot({ path: join(evidence, `${label}-${scenario}.png`), fullPage: true });
+     await page.evaluate(async () => { for (let y=0; y<document.documentElement.scrollHeight; y+=innerHeight) { scrollTo(0,y); await new Promise(requestAnimationFrame); } });
+     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+     results.push({ viewport: label, scenario, passed: true });
+     continue;
+    }
     await page.goto(origin + '/?paused=1' + (scenario === 'ios-managed' ? '&iosResources=1' : ''));
     await page.locator('summary').filter({ hasText: 'Manage sync connections' }).click();
     await page.getByRole('button', { name: 'Refresh device', exact: true }).waitFor();
