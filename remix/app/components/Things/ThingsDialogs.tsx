@@ -1,5 +1,3 @@
-import { useLocalApiView } from '~/local-workspace/LocalApiView';
-import { useDataPlane } from '~/hooks/useDataPlane';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
@@ -20,32 +18,25 @@ import {
 } from '@chakra-ui/react';
 
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { RenderThing } from '~/components/Kinds';
 import { ThingView } from '~/components/Thingtime/ThingView';
-import { ThingComments } from './ThingComments';
 
-import { FolderTree } from './FolderTree';
-import { TRANSFER_DIALOG_Z } from './transferLayers';
-import type { FolderTreeProps } from './FolderTree';
+import { FolderTree, FolderTreeProps } from './FolderTree';
 import {
+  ThingsThing,
   VISIBILITY_META,
+  circleOf,
+  composeAcl,
   formatWhen,
   isFolder,
+  personGrantsOf,
   primaryKindOf,
   thingDisplayName,
   thingIcon,
-  thingShareLink
+  thingLink
 } from './thingsCore';
-import type { ThingsThing } from './thingsCore';
 
 const modalCard = {
-  containerProps: { zIndex: TRANSFER_DIALOG_Z },
-  width: 'calc(100% - 32px)',
-  marginX: 0,
-  maxHeight: 'calc(100dvh - 48px)',
-  overflowY: 'auto',
   background: 'var(--tt-card, #ffffff)',
   border: '1px solid var(--tt-border, #ececef)',
   borderRadius: 'var(--tt-radius-lg, 16px)'
@@ -86,7 +77,7 @@ export const NewFolderDialog = ({
 
   return (
     <Modal initialFocusRef={inputRef} isOpen={isOpen} onClose={onClose} size="sm">
-      <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />
+      <ModalOverlay />
       <ModalContent {...modalCard}>
         <ModalHeader fontSize="16px">New folder 📁</ModalHeader>
         <ModalCloseButton />
@@ -122,7 +113,7 @@ export const NewFolderDialog = ({
 };
 
 // ---------------------------------------------------------------------------
-// Rename — shared display title for every writable Thing
+// Rename (folders / data / schema things — kinds whose crystal carries a name)
 
 export const RenameDialog = ({
   thing,
@@ -139,7 +130,7 @@ export const RenameDialog = ({
 
   useEffect(() => {
     if (thing) {
-      setName(thingDisplayName(thing));
+      setName(typeof thing.crystal?.name === 'string' ? thing.crystal.name : thingDisplayName(thing));
       setBusy(false);
     }
   }, [thing]);
@@ -154,7 +145,7 @@ export const RenameDialog = ({
 
   return (
     <Modal initialFocusRef={inputRef} isOpen={!!thing} onClose={onClose} size="sm">
-      <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />
+      <ModalOverlay />
       <ModalContent {...modalCard}>
         <ModalHeader fontSize="16px">Rename ✏️</ModalHeader>
         <ModalCloseButton />
@@ -164,8 +155,6 @@ export const RenameDialog = ({
             onKeyDown={(event) => event.key === 'Enter' && submit()}
             ref={inputRef}
             value={name}
-            maxLength={120}
-            aria-label="Thing title"
           />
         </ModalBody>
         <ModalFooter gap={2}>
@@ -219,7 +208,7 @@ export const MoveDialog = ({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="sm">
-      <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />
+      <ModalOverlay />
       <ModalContent {...modalCard}>
         <ModalHeader fontSize="16px">Move {count === 1 ? '1 thing' : `${count} things`} to… 📁</ModalHeader>
         <ModalCloseButton />
@@ -264,54 +253,69 @@ export const ShareDialog = ({
 }) => {
   const api = useApi();
   const lopu = useLopu();
+  const apiRef = useRef(api);
+  apiRef.current = api;
 
   const single = things.length === 1 ? things[0] : null;
   const folderCount = things.filter(isFolder).length;
-  const [acl, setAcl] = useState<string[]>(['tt:user']);
+  const [circle, setCircle] = useState('private');
+  const [people, setPeople] = useState<string[]>([]);
+  const [personQuery, setPersonQuery] = useState('');
+  const [personResults, setPersonResults] = useState<{ username: string; displayName: string | null }[]>([]);
   const [recursive, setRecursive] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!things.length) return;
-    setAcl(things[0].acl.includes('tt:inherit') ? ['tt:user'] : things[0].acl);
+    const first = things[0];
+    const initial = circleOf(first.acl);
+    setCircle(initial === 'inherit' ? 'private' : initial);
+    setPeople(single ? personGrantsOf(first.acl) : []);
+    setPersonQuery('');
+    setPersonResults([]);
     setRecursive(false);
     setBusy(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [things.map((thing) => thing.id).join(',')]);
+
+  // debounced people search
+  useEffect(() => {
+    const q = personQuery.trim();
+    if (!q) {
+      setPersonResults([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const resp = await apiRef.current.v1.profile.search({ q, limit: 6 });
+        if (!cancelled) setPersonResults(resp?.users || []);
+      } catch {
+        if (!cancelled) setPersonResults([]);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [personQuery]);
 
   const inheritLocked = useMemo(() => things.filter((thing) => thing.acl.includes('tt:inherit')), [things]);
 
   const submit = async () => {
     if (busy) return;
     setBusy(true);
-    const ok = await onApply(acl, recursive && folderCount > 0);
-    if (ok && single && acl.includes('tt:hidden')) {
-      try {
-        const response: any = await api.v1.things.get({ id: single.id });
-        const updated = response?.thing || response?.things?.[0];
-        if (updated?.linkKey) await copyThingLink({ ...single, acl: updated.acl || acl, linkKey: updated.linkKey });
-      } catch {
-        lopu({
-          title: 'Audience saved — reopen Share to copy the link',
-          description: 'The hidden link is ready, but the clipboard was unavailable.',
-          status: 'info'
-        });
-      }
-    }
+    const ok = await onApply(composeAcl(circle, people), recursive && folderCount > 0);
     setBusy(false);
     if (ok) onClose();
   };
 
-  const copyThingLink = async (thing: ThingsThing) => {
-    const url = `${window.location.origin}${thingShareLink(thing)}`;
+  const copyLink = async () => {
+    if (!single) return;
+    const url = `${window.location.origin}${thingLink(single)}`;
     try {
       await navigator.clipboard.writeText(url);
-      lopu({
-        title: thing.acl.includes('tt:hidden') ? 'Secret link copied 🕵️' : 'Link copied 🔗',
-        description: url,
-        status: 'success',
-        duration: 6000
-      });
+      lopu({ title: 'Link copied 🔗', description: url, status: 'success', duration: 6000 });
     } catch {
       lopu({ title: 'Couldn’t copy the link', description: url, status: 'error' });
     }
@@ -319,7 +323,7 @@ export const ShareDialog = ({
 
   return (
     <Modal isOpen={!!things.length} onClose={onClose} size="md">
-      <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />
+      <ModalOverlay />
       <ModalContent {...modalCard}>
         <ModalHeader fontSize="16px">
           Share {single ? `“${thingDisplayName(single)}”` : `${things.length} things`} 🌐
@@ -327,7 +331,85 @@ export const ShareDialog = ({
         <ModalCloseButton />
         <ModalBody>
           <Flex direction="column" gap={4}>
-            <ThingAudienceControl acl={acl} onChange={setAcl} testId="things-share-audience" />
+            <Box>
+              <Text color="var(--tt-muted, #9a9aa6)" fontSize="12px" marginBottom={1}>
+                Audience
+              </Text>
+              <Select onChange={(event) => setCircle(event.target.value)} size="sm" value={circle}>
+                {['public', 'friends', 'family', 'private'].map((value) => (
+                  <option key={value} value={value}>
+                    {VISIBILITY_META[value].icon} {VISIBILITY_META[value].label}
+                  </option>
+                ))}
+              </Select>
+            </Box>
+            <Box>
+              <Text color="var(--tt-muted, #9a9aa6)" fontSize="12px" marginBottom={1}>
+                Share with specific people
+              </Text>
+              <Input
+                onChange={(event) => setPersonQuery(event.target.value)}
+                placeholder="Search people by name…"
+                size="sm"
+                value={personQuery}
+              />
+              {personResults.length > 0 && (
+                <Box border="1px solid var(--tt-border, #ececef)" borderRadius="10px" marginTop={1} overflow="hidden">
+                  {personResults.map((person) => (
+                    <Flex
+                      key={person.username}
+                      _hover={{ background: 'var(--tt-surface, #fafafb)' }}
+                      cursor="pointer"
+                      gap={2}
+                      onClick={() => {
+                        setPeople((prev) => (prev.includes(person.username) ? prev : [...prev, person.username]));
+                        setPersonQuery('');
+                        setPersonResults([]);
+                      }}
+                      paddingX={3}
+                      paddingY={2}
+                    >
+                      <Text fontSize="13px" fontWeight={500}>
+                        {person.displayName || person.username}
+                      </Text>
+                      <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
+                        @{person.username}
+                      </Text>
+                    </Flex>
+                  ))}
+                </Box>
+              )}
+              <Flex flexWrap="wrap" gap={2} marginTop={2}>
+                {people.map((username) => (
+                  <Flex
+                    key={username}
+                    alignItems="center"
+                    background="var(--tt-surface, #fafafb)"
+                    border="1px solid var(--tt-border, #ececef)"
+                    borderRadius="999px"
+                    gap={1}
+                    paddingX={2}
+                    paddingY="2px"
+                  >
+                    <Text fontSize="12px">@{username}</Text>
+                    <Box
+                      as="button"
+                      color="var(--tt-muted, #9a9aa6)"
+                      fontSize="12px"
+                      onClick={() => setPeople((prev) => prev.filter((entry) => entry !== username))}
+                      type="button"
+                    >
+                      ✕
+                    </Box>
+                  </Flex>
+                ))}
+                {!people.length && (
+                  <Text color="var(--tt-faint, #b6b6c0)" fontSize="12px">
+                    No direct grants — the audience circle decides who sees {things.length === 1 ? 'it' : 'them'}.
+                  </Text>
+                )}
+              </Flex>
+            </Box>
             {folderCount > 0 && (
               <Box>
                 <Checkbox
@@ -356,15 +438,15 @@ export const ShareDialog = ({
         </ModalBody>
         <ModalFooter gap={2}>
           {single && (
-            <Button marginRight="auto" onClick={() => copyThingLink(single)} size="sm" variant="outline">
-              {single.acl.includes('tt:hidden') ? '🕵️ Copy secret link' : '🔗 Copy link'}
+            <Button marginRight="auto" onClick={copyLink} size="sm" variant="outline">
+              🔗 Copy link
             </Button>
           )}
           <Button onClick={onClose} size="sm" variant="ghost">
             Cancel
           </Button>
           <Button colorScheme="pink" isLoading={busy} onClick={submit} size="sm">
-            {single && acl.includes('tt:hidden') ? 'Apply & copy link' : 'Apply'}
+            Apply
           </Button>
         </ModalFooter>
       </ModalContent>
@@ -402,7 +484,7 @@ export const DeleteConfirmDialog = ({
 
   return (
     <Modal isOpen={!!things.length} onClose={onClose} size="sm">
-      <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />
+      <ModalOverlay />
       <ModalContent {...modalCard}>
         <ModalHeader fontSize="16px">Delete {things.length === 1 ? '1 thing' : `${things.length} things`}? 🗑️</ModalHeader>
         <ModalCloseButton />
@@ -445,16 +527,7 @@ export const PreviewModal = ({
   thing: ThingsThing | null;
   onClose: () => void;
   onAction: (thing: ThingsThing, action: 'rename' | 'move' | 'share' | 'delete') => void;
-}) => {
-  const viewer = useCurrentUser();
-  // Ownership IS the trust boundary for the interactive render below. This
-  // modal opens on ANY thing the viewer can read — the ?preview=<id> deep link
-  // resolves foreign public things too — so a component authored by someone
-  // else must render INERT here, exactly like the feed/search surfaces. The
-  // check lives inside the modal rather than at the call site so a future
-  // caller cannot forget it.
-  const untrusted = !!thing && (!viewer?.id || thing.author?.id !== viewer.id);
-  return (
+}) => (
   <Modal isOpen={!!thing} onClose={onClose} size="lg">
     <ModalOverlay />
     {thing && (
@@ -477,20 +550,8 @@ export const PreviewModal = ({
               ))}
             </Flex>
             <Box border="1px solid var(--tt-border, #ececef)" borderRadius="12px" overflow="hidden" padding={3}>
-              {thing.thingtime.includes('component') ? (
-                // the interactive surface for component instances: the kind
-                // renderer resolves the template AND its ttAction wrapper
-                // handles clicks (grid previews stay pointerEvents:none)
-                <RenderThing
-                  context={{ size: 'full', untrusted }}
-                  fallback={<ThingView compact thing={thing.crystal} />}
-                  thing={thing as unknown as Record<string, unknown>}
-                />
-              ) : (
-                <ThingView compact thing={thing.crystal} />
-              )}
+              <ThingView compact thing={thing.crystal} />
             </Box>
-            <ThingComments thingId={thing.id} />
           </Flex>
         </ModalBody>
         <ModalFooter flexWrap="wrap" gap={2}>
@@ -510,5 +571,4 @@ export const PreviewModal = ({
       </ModalContent>
     )}
   </Modal>
-  );
-};
+);

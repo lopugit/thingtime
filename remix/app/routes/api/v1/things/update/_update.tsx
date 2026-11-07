@@ -24,40 +24,16 @@ export const action = async ({ request }: { request: Request }) => {
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
 
-  {
-    const limit = await enforceRateLimit(request, actor.kind === 'app' ? 'appData.write' : user.accountKind === 'service' ? 'things.write.service' : 'things.write', actor.kind === 'app' ? actor.rateIdentity : `user:${user.id}`);
-    if (!limit.allowed) {
-      const init = rateLimitedResponseInit(limit);
-      return json(
-        { ok: false, error: 'Writing too fast — take a breather 🌸' },
-        { ...init, headers: { ...init.headers, ...cors } }
-      );
-    }
-  }
-
-  // Preserve user data without an application byte cap. Hosting and MongoDB
-  // enforce their physical capacities; the CORS/authentication gates stay intact.
-  const body: any = await readJsonBodyWithCors(request, Infinity, cors);
-  const result = await updateThing(
-    viewerOf(user, actorPat(actor)),
-    body?.id,
-    {
-      thingtime: body?.thingtime,
-      crystal: body?.crystal,
-      extended: body?.extended,
-      acl: body?.acl,
-      visibility: body?.visibility,
-      tags: body?.tags,
-      tokenAcl: body?.tokenAcl,
-      // folderId only when present — undefined means "leave it filed where it is"
-      ...(body && typeof body === 'object' && 'folderId' in body ? { folderId: body.folderId } : {})
-    },
-    {
-      replaceCrystal: body?.replaceCrystal === true,
-      expectedUpdatedAt: body?.expectedUpdatedAt
-    },
-    app
-  );
+  const body: any = await readJsonBody(request, 768 * 1024);
+  const result = await updateThing({ id: user.id, username: user.username }, body?.id, {
+    crystal: body?.crystal,
+    extended: body?.extended,
+    acl: body?.acl,
+    visibility: body?.visibility,
+    tags: body?.tags,
+    // folderId only when present — undefined means "leave it filed where it is"
+    ...(body && typeof body === 'object' && 'folderId' in body ? { folderId: body.folderId } : {})
+  });
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
