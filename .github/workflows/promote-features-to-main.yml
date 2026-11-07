@@ -1,0 +1,264 @@
+# Promote develop → main as reviewable per-feature PRs (with stacks).
+#
+# The develop branch is the integration branch: feature PRs merge there first.
+# This workflow watches develop and turns every merged feature PR into its own
+# promotion PR against main, so each feature gets a second, release-focused
+# review before it ships. Concretely, for each PR merged into develop that has
+# not reached main yet, it:
+# - directly replays only verified, non-CI-sensitive patches;
+# - quarantines every verified `.github/**` patch before historical replay,
+#   handing its immutable plan to the protected trusted worker, which creates
+#   a bot-authored `[skip ci]` content commit and a review-gated checkpoint;
+# - stops before any reservation, branch, AI worker, or promotion PR when the
+#   historical patch cannot be proven present at current `develop`; and
+# - opens a promotion PR targeting main (labelled `promotion`, body carries a
+#   `<!-- promotion-of: <n> -->` marker that makes every run idempotent).
+#
+# Stacks: PRs that belong to one central feature are promoted as a stacked
+# chain in the order they merged into develop — the first promotion PR targets
+# main, the second targets the first promotion branch, and so on. Group
+# membership comes from (first match wins):
+#   1. `Promotion-Group: <key>` line (or `<!-- promotion-group: <key> -->`)
+#      in the source PR body,
+#   2. a `stack:<key>` / `group:<key>` / `feature:<key>` label,
+#   3. a `feature/<key>/...` or `feat/<key>/...` head branch,
+#   4. a conventional-commit title scope like `feat(<key>): ...`.
+# Review stacks bottom-up and delete each promotion branch on merge so GitHub
+# retargets the next PR; a maintenance pass here also retargets open stack
+# members whose base promotion PR has merged, as a backstop.
+#
+# Coexists with "Promote develop to main" (promote-develop-to-main.yml, the
+# standing all-or-nothing PR whose head is `develop`): use a per-feature
+# promotion PR to review and ship one change on its own, or merge the omnibus
+# PR when everything on develop is deemed mergeable and shipping it all at
+# once is easier. The two never fight — an omnibus merge makes every source
+# merge commit an ancestor of main, so the next scan here skips them all, and
+# open promotion PRs whose diff has become empty are closed automatically
+# (their branches deleted once nothing stacks on them).
+#
+# Opt-outs and overrides:
+# - label a develop PR `no-promote` (or `skip-promotion`) to keep it out of
+#   the per-feature train entirely;
+# - close a promotion PR without merging to reject that change for main — it
+#   is never recreated unless you reopen it;
+# - conflicts are reserved at the exact base and resolved automatically by the
+#   protected worker; only dependent members of that stack wait for its PR.
+#
+# Relationship to the other branch automation:
+# - "Sync main into develop" back-merges main after promotions land, which is
+#   what makes later cherry-picks come out empty (= already shipped) instead
+#   of duplicated.
+# - The protected worker also handles verified clean review-gated replays, so
+#   executable workflow content cannot run before review. Historical intent
+#   that cannot be proven on current develop is blocked before replay entirely.
+#
+# This implementation lives on protected `github-actions`. Thin product-branch
+# listeners invoke it with `workflow_call`; its own schedule/dispatch also run
+# from the protected control plane.
+#
+# Token notes (same trade-off documented in sync-main-into-develop.yml):
+# - Since GitHub's June 2026 behavior change, GITHUB_TOKEN-authored opened,
+#   synchronize, and reopened pull_request events create approval-required
+#   workflow runs; PAT/App-authored PR events can start those runs immediately.
+# - A workflow-capable PROMOTION_PAT remains required for the quarantined
+#   `[skip ci]` content push when the exact patch changes
+#   `.github/workflows/**`. SYNC_BRANCHES_PAT and CONFLICT_RESOLVER_PAT are
+#   honoured as fallbacks when they carry the same required scope.
+
+name: Promote features to main
+
+on:
+  workflow_call:
+    inputs:
+      dry_run:
+        description: "Plan only — no branches, PRs, comments, closes, or retargets"
+        type: boolean
+        default: false
+      lookback:
+        description: "How many recently merged develop PRs to scan (max 100)"
+        type: string
+        default: "50"
+      execution_provider:
+        description: "Internal: hosted compute selected by Thingtime CI Control"
+        required: false
+        default: "github-actions"
+        type: string
+      runner_label:
+        description: "Internal: unique Vercel Sandbox self-hosted runner label"
+        required: false
+        default: ""
+        type: string
+      control_dispatch_id:
+        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
+        required: false
+        default: ""
+        type: string
+  push:
+    branches: [develop]
+  schedule:
+    - cron: "43 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Plan only — no branches, PRs, comments, closes, or retargets"
+        type: boolean
+        default: false
+      lookback:
+        description: "How many recently merged develop PRs to scan (max 100)"
+        required: false
+        default: "50"
+      # The reverse lane (owner request, 2026-08-12): one source, one target,
+      # per dispatch. Defaults preserve the standing develop → main lane for
+      # every push/schedule/listener run; a manual dispatch may promote
+      # main-only CI work onto the control plane with
+      # source_branch=main target_branch=github-actions
+      # require_path_prefix=.github/ — the prefix guard keeps app-wide PRs
+      # (e.g. a merged develop → main promotion) out of a CI-scoped lane.
+      source_branch:
+        description: "Branch whose merged PRs are promoted (default develop)"
+        required: false
+        default: ""
+        type: string
+      target_branch:
+        description: "Branch the promotion PRs target (default main)"
+        required: false
+        default: ""
+        type: string
+      require_path_prefix:
+        description: "Comma-separated path prefixes; PRs touching anything outside them are skipped on this lane"
+        required: false
+        default: ""
+        type: string
+      execution_provider:
+        description: "Internal: hosted compute selected by Thingtime CI Control"
+        required: false
+        default: "github-actions"
+        type: choice
+        options: [github-actions, vercel-sandbox]
+      runner_label:
+        description: "Internal: unique Vercel Sandbox self-hosted runner label"
+        required: false
+        default: ""
+        type: string
+      control_dispatch_id:
+        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: promote-features-to-main
+  cancel-in-progress: false
+
+jobs:
+  route:
+    uses: ./.github/workflows/ci-provider-router.yml
+    with:
+      workflow: promote-features
+      execution_provider: ${{ inputs.execution_provider || 'github-actions' }}
+      runner_label: ${{ inputs.runner_label || '' }}
+      control_dispatch_id: ${{ inputs.control_dispatch_id || '' }}
+      dry_run: ${{ inputs.dry_run || false }}
+      lookback: ${{ inputs.lookback || '50' }}
+    secrets: inherit
+
+  promote:
+    needs: route
+    if: needs.route.outputs.execute == 'true'
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PROMOTION_PAT || secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
+
+      - name: Check out trusted automation support
+        uses: actions/checkout@v4
+        with:
+          ref: github-actions
+          path: workflow-control
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Script and orphaned-history self-tests
+        run: node workflow-control/.github/scripts/promote-features-to-main.mjs --self-test
+
+      - name: Promote merged develop PRs to main
+        env:
+          GH_TOKEN: ${{ secrets.PROMOTION_PAT || secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          # The protected resolver accepts promotion handoffs only from
+          # github-actions[bot]. Keep this token separate from the PAT used for
+          # branch and PR writes.
+          ACTIONS_TOKEN: ${{ github.token }}
+          SOURCE_BRANCH: ${{ inputs.source_branch || 'develop' }}
+          TARGET_BRANCH: ${{ inputs.target_branch || 'main' }}
+          REQUIRE_PATH_PREFIXES: ${{ inputs.require_path_prefix || '' }}
+          # Additional promotion targets, comma-separated. One merged source PR
+          # can owe changes to more than one branch — #211 converts `main` to
+          # thin listeners AND carries the implementation those listeners call,
+          # which may only live on `github-actions` — and each target listed
+          # here gets its own pass, branch, and promotion PR. Left EMPTY by
+          # default: switching it on makes every eligible merged PR fan out to a
+          # second promotion PR, which is a deliberate operational decision, not
+          # something to inherit silently. Set it through the repository
+          # variable to enable (for example `github-actions`).
+          TARGET_BRANCHES: ${{ vars.PROMOTION_TARGET_BRANCHES || '' }}
+          LOOKBACK: ${{ inputs.lookback || '50' }}
+          MAX_NEW_PRS: "10"
+          REQUIRE_LABEL: ""
+          SKIP_LABELS: "no-promote,skip-promotion"
+          GROUP_FROM_TITLE_SCOPE: "true"
+          GROUP_FROM_BRANCH_PREFIX: "true"
+          COMMENT_ON_SOURCE: "true"
+          PROMOTION_LABEL: "promotion"
+          DRY_RUN: ${{ inputs.dry_run == true && '1' || '' }}
+        run: node workflow-control/.github/scripts/promote-features-to-main.mjs
+
+  # Additional promotion lanes (owner request, 2026-08-12): after every
+  # default develop→main run, fan out the CI lanes so main-only and
+  # develop-only .github/** work flows onto the control plane automatically.
+  # Lane runs carry source/target inputs, so their own lanes job skips —
+  # no cascade. The shared concurrency group serializes the queue.
+  lanes:
+    name: Fan out the CI promotion lanes
+    needs: promote
+    if: >-
+      needs.promote.result == 'success'
+      && inputs.source_branch == ''
+      && inputs.target_branch == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch the CI lanes at the control plane
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run == true && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          for lane in "main github-actions" "develop github-actions"; do
+            read -r source target <<<"$lane"
+            jq -n --arg source "$source" --arg target "$target" --argjson dry "$DRY_RUN" '
+              {ref:"github-actions", inputs:{
+                dry_run:$dry, lookback:"50",
+                source_branch:$source, target_branch:$target,
+                require_path_prefix:".github/"}}' \
+              | gh api --method POST \
+                  "repos/$REPO/actions/workflows/promote-features-to-main.yml/dispatches" \
+                  --input -
+            echo "Dispatched the $source -> $target lane."
+          done
