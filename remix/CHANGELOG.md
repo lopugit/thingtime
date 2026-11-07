@@ -145,6 +145,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-07: Compose an editable account backup workspace with protected durable
+  snapshot/review/restore jobs, independent immutable storage, exact-T inventory,
+  retained file history/annotations and canonical ordinary graph creation.
+  Verify real isolated HTTP/Chrome desktop/mobile, shared destination picker,
+  Builder persistence and interruption recovery. Deployed Workflow/S3 and
+  whole-account acceptance remain open. See
+  [the scoped implementation note](../PRs/1405-codex-backup-resumable-verification-editable-snapshot-review-and-restore.md).
+  **Codex (AI)**
+
 - 2026-11-06: Exclude iOS-only Chat Activity sources from the macOS Widgets
   target while retaining shared Lopu voice and recording support. Add a
   source-selection regression that preserves iOS app and test coverage.

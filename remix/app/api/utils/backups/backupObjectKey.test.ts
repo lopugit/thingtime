@@ -9,8 +9,8 @@ import { openLocalBackupStore } from './localBackupStore';
 
 test('shared provider allowlist permits only generated immutable restore review keys', async () => {
 	const id = randomUUID(), root = `restore-plans/${id}`;
-	for (const key of [`${root}/header.json`, `${root}/sealed.json`, `${root}/pages/0.json`, `${root}/pages/128.json`]) assert.doesNotThrow(() => assertBackupObjectKey(key));
-	for (const suffix of ['complete.json', '../header.json', 'pages/-1.json', 'pages/01.json', 'pages/0.json/extra', 'pages/0/bytes', 'credentials.json'])
+	for (const key of [`${root}/header.json`, `${root}/sealed.json`, `${root}/pages/0.json`, `${root}/pages/128.json`, `${root}/references/nodes/${"a".repeat(64)}`, `${root}/references/bundles/${"b".repeat(64)}/0.json`, `${root}/references/blobs/${"c".repeat(64)}/0`]) assert.doesNotThrow(() => assertBackupObjectKey(key));
+	for (const suffix of ['complete.json', '../header.json', 'pages/-1.json', 'pages/01.json', 'pages/0.json/extra', 'pages/0/bytes', 'credentials.json', 'references/nodes/not-a-hash', 'references/bundles/'+ 'a'.repeat(64)+'/../0.json', 'references/blobs/'+ 'a'.repeat(64)+'/01'])
 		assert.throws(() => assertBackupObjectKey(`${root}/${suffix}`));
 	assert.throws(() => assertBackupObjectKey('restore-plans/------------------------------------/header.json'));
 	const directory = await mkdtemp(join(tmpdir(), 'thingtime-restore-key-'));

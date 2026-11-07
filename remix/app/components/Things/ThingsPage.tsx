@@ -202,9 +202,11 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 
   const folderId = searchParams.get('folder') || null;
   const previewParam = searchParams.get('preview') || null;
-	const deviceParam = searchParams.get('device') || null;
+	// Embedded destination pickers retain their containing page URL, but must
+	// browse folders rather than recursively render that page's device view.
+	const deviceParam = locationPicker ? null : searchParams.get('device') || null;
 	const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
-	const deviceView = deviceViewMode(searchParams);
+	const deviceView = locationPicker ? null : deviceViewMode(searchParams);
   const currentKey = folderKeyOf(folderId);
 
   const archive = useAttachmentArchive();
