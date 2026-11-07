@@ -15280,6 +15280,11 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - [ ] Negotiate `api.devices` 1.16.0 and `api.devices-folders` 1.0.0 on the
   selected origin. GET root references before upload without creating folders;
   Show Folder opens an existing normal folder while the device is offline.
+- [ ] In the bundled desktop renderer, open **Show Folder** from the device and
+  its Things context menu. Confirm it negotiates with the selected API and opens
+  an existing folder read-only when the origins differ. Change the selected API
+  while the first read is in flight. Confirm the old result does not create or
+  open a folder.
 - [ ] On new native and remote drafts, show `Device / Files / Photo Library`
   (or selected source label), Change and searchable/paginated private paths.
   Another owned device is selectable before any completed upload. Save uses

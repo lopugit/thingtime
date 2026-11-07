@@ -408,6 +408,19 @@ export const getElectronBridge = () => {
 	return window.thingtimeDesktop;
 };
 
+/** Bind a selected account endpoint to the renderer that asked for it. */
+export function selectedDesktopApiOrigin(rendererOrigin: string, info: Pick<ThingtimeDesktopInfo, 'contentOrigin' | 'apiOrigin'>): string | null {
+ if (info.contentOrigin !== rendererOrigin || !info.apiOrigin) return null;
+ try {
+  const selected = new URL(info.apiOrigin);
+  const loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(selected.hostname) || selected.hostname.endsWith('.localhost');
+  if (selected.href !== `${selected.origin}/` || (selected.protocol !== 'https:' && !(selected.protocol === 'http:' && loopback))) return null;
+  return selected.origin;
+ } catch {
+  return null;
+ }
+}
+
 export const getElectronSettingUrl = (thingtime: any, sessionHash?: string | null) => {
 	if (!sessionHash) {
 		return '';
