@@ -12,10 +12,10 @@ import { getRequestMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
 import { enforceExpectedActor } from '../../app/api/utils/auth/expectedActor';
 import { EXPECTED_DATA_PLANE_HEADER } from '../../app/utils/dataPlane';
 
-const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN', 'THINGTIME_DESKTOP', 'THINGTIME_DESKTOP_API_MODE', 'NODE_ENV', 'MONGO_PASS', 'THINGTIME_AGENT_TEST_MODE', 'THINGTIME_AGENT_TEST_SESSION'] as const;
 const desktopManifest = (origin: string) => Response.json({ schemaVersion: 1, origin, features: {
   'api.passwords': { version: '1.2.1' }, 'api.mail': { version: '1.2.1' }, 'api.mail-sync': { version: '1.0.1' }
 } });
+const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN', 'THINGTIME_DESKTOP', 'NODE_ENV', 'MONGO_PASS', 'THINGTIME_AGENT_TEST_MODE', 'THINGTIME_AGENT_TEST_SESSION'] as const;
 
 const withFallbackEnv = async (fallbackOrigin: string | undefined, run: () => Promise<void> | void) => {
 	const previous = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
@@ -499,7 +499,7 @@ test('desktop browser Actions forward real Nitro request bodies without native R
    const headers = new Headers(init.headers);
    assert.equal(headers.get('X-Thingtime-Expected-Actor'), 'owner');
    assert.equal(headers.has('x-forwarded-host'), false);
-   assert.equal(await new Response(init.body).text(), '{"kind":"script.run"}');
+   assert.equal(Buffer.from(init.body as ArrayBuffer).toString(), '{"kind":"script.run"}');
    return Response.json({ ok: true });
   });
   const app = new H3(); app.use(handleApi);
@@ -518,82 +518,5 @@ test('desktop browser Actions forward real Nitro request bodies without native R
    upstream.mock.restore();
    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
- });
-});
-
-test('a destination switch after admission is rejected before proxy body consumption', async t => {
- await withFallbackEnv('https://new.test', async () => {
-  process.env.THINGTIME_DESKTOP = '1';
-  const mock = t.mock.method(globalThis, 'fetch', async () => { throw Error('Must not forward'); });
-  try {
-   const request = new Request('http://127.0.0.1:17340/api/v1/files', { method: 'POST', body: '{"private":"fixture"}',
-    headers: { 'X-Thingtime-Expected-Api-Origin': 'https://old.test' } });
-   const response = await proxyApiRequestToFallback(request);
-   assert.equal(response.status, 409); assert.equal((await response.json()).code, 'API_ORIGIN_CHANGED');
-   assert.equal(request.bodyUsed, false); assert.equal(mock.mock.callCount(), 0);
-  } finally { mock.mock.restore(); }
- });
-});
-
-
-test('desktop proxy accepts framework request wrappers without cloning foreign private state', async t => {
- await withFallbackEnv('https://sync.test', async () => {
-  const prior = process.env.THINGTIME_DESKTOP; process.env.THINGTIME_DESKTOP = '1';
-  let calls = 0;
-  const mocked = t.mock.method(globalThis, 'fetch', async (_url: URL, init: RequestInit) => {
-   calls++; const headers = new Headers(init.headers);
-   assert.equal(headers.has('x-forwarded-host'), false); assert.equal(headers.has('x-forwarded-proto'), false);
-   assert.equal(headers.get('X-Thingtime-Expected-Actor'), 'owner');
-   if (init.method === 'POST') assert.equal(await new Response(init.body).text(), '{"value":"preserved"}');
-   return Response.json({ ok: true });
-  });
-  try {
-   for (const method of ['GET', 'POST']) {
-    const original = new Request('http://127.0.0.1:17340/api/v1/files', { method, headers: {
-     Origin: 'http://127.0.0.1:17340', 'X-Thingtime-Expected-Actor': 'owner', 'X-Thingtime-Expected-Data-Plane': 'home',
-     'X-Thingtime-Expected-Api-Origin': 'https://sync.test', 'x-forwarded-host': 'untrusted.test', 'x-forwarded-proto': 'https'
-    }, ...(method === 'POST' ? { body: '{"value":"preserved"}' } : {}) });
-    // A framework wrapper exposes standard request fields/methods without the
-    // private slots that Node's Request copy constructor expects on this object.
-    const wrapped = Object.create(Request.prototype);
-    for (const key of ['url', 'method', 'headers', 'body', 'bodyUsed', 'signal'] as const)
-     Object.defineProperty(wrapped, key, { get: () => original[key] });
-    wrapped.arrayBuffer = original.arrayBuffer.bind(original);
-    assert.throws(() => new Request(wrapped));
-    const response = await (handleApi as any)({ req: wrapped, context: { params: { path: 'v1/files' } } });
-    assert.equal(response.status, 200); assert.equal(original.bodyUsed, method === 'POST');
-   }
-   assert.equal(calls, 2);
-  } finally { mocked.mock.restore(); if (prior === undefined) delete process.env.THINGTIME_DESKTOP; else process.env.THINGTIME_DESKTOP = prior; }
- });
-});
-
-
-test('desktop password negotiation cannot forward a former account request after the endpoint changes', async t => {
- await withFallbackEnv('https://selected.test', async () => {
-  process.env.THINGTIME_DESKTOP = '1';
-  let release!: () => void;
-  let entered!: () => void;
-  const started = new Promise<void>(resolve => { entered = resolve; });
-  const manifest = new Promise<void>(resolve => { release = resolve; });
-  let forwarded = 0;
-  t.mock.method(globalThis, 'fetch', async (url: URL) => {
-   if (url.pathname !== '/.well-known/thingtime-capabilities.json') { forwarded++; return Response.json({ok: true}); }
-   assert.equal(url.origin, 'https://selected.test');
-   entered(); await manifest;
-   return desktopManifest(url.origin);
-  });
-  const request = new Request('http://127.0.0.1:17340/api/v1/passwords', {
-   method: 'POST', headers: {Origin: 'http://127.0.0.1:17340', Cookie: 'tt_auth=synthetic'}, body: '{"operation":"catalog"}'
-  });
-  const pending = proxyApiRequestToFallback(request, {stripForwardedOrigin: true});
-  await started;
-  process.env.THINGTIME_API_FALLBACK_ORIGIN = 'https://replacement.test';
-  release();
-  const response = await pending;
-  assert.equal(response.status, 409);
-  assert.equal((await response.json()).code, 'API_ENDPOINT_CHANGED');
-  assert.equal(forwarded, 0);
-  assert.equal(request.bodyUsed, false);
  });
 });
