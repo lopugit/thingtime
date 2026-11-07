@@ -5,7 +5,6 @@ import UIKit
 protocol MobileLocationDriving: AnyObject {
     var authorization: CLAuthorizationStatus { get }
     var fullAccuracy: Bool { get }
-    var significantChangesAvailable: Bool { get }
     var received: (([CLLocation]) -> Void)? { get set }
     var authorizationChanged: (() -> Void)? { get set }
     func requestPermission(always: Bool)
@@ -15,29 +14,60 @@ protocol MobileLocationDriving: AnyObject {
 
 @MainActor
 private final class SystemMobileLocationDriver: NSObject, MobileLocationDriving, @preconcurrency CLLocationManagerDelegate {
-    let manager = CLLocationManager()
+    private let manager = CLLocationManager()
+    private let relaunchManager = CLLocationManager()
     private var backgroundActive = false
     var received: (([CLLocation]) -> Void)?
     var authorizationChanged: (() -> Void)?
     var authorization: CLAuthorizationStatus { manager.authorizationStatus }
     var fullAccuracy: Bool { manager.accuracyAuthorization == .fullAccuracy }
-    var significantChangesAvailable: Bool { CLLocationManager.significantLocationChangeMonitoringAvailable() }
-    override init() { super.init(); manager.delegate = self }
+    override init() {
+        super.init()
+        manager.delegate = self
+        relaunchManager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+        manager.distanceFilter = kCLDistanceFilterNone
+        manager.activityType = .other
+    }
     func requestPermission(always: Bool) {
         if always { manager.requestAlwaysAuthorization() }
         else { manager.requestWhenInUseAuthorization() }
     }
     func start(background: Bool) {
         if background {
-            if !backgroundActive { manager.startMonitoringSignificantLocationChanges(); backgroundActive = true }
+            guard !backgroundActive else { return }
+            backgroundActive = true
+            manager.allowsBackgroundLocationUpdates = true
+            // Opted-in history needs regular real fixes even after a stop in travel.
+            manager.pausesLocationUpdatesAutomatically = false
+            manager.startUpdatingLocation()
+            // Standard updates do not relaunch a terminated app. Retain this
+            // separate low-power monitor so iOS can wake us on eligible movement.
+            if CLLocationManager.significantLocationChangeMonitoringAvailable() {
+                relaunchManager.startMonitoringSignificantLocationChanges()
+            }
         } else {
-            if backgroundActive { manager.stopMonitoringSignificantLocationChanges(); backgroundActive = false }
+            if backgroundActive { stop() }
             manager.requestLocation()
         }
     }
-    func stop() { manager.stopMonitoringSignificantLocationChanges(); manager.stopUpdatingLocation(); backgroundActive = false }
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) { received?(locations) }
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) { authorizationChanged?() }
+    func stop() {
+        backgroundActive = false
+        relaunchManager.stopMonitoringSignificantLocationChanges()
+        manager.stopUpdatingLocation()
+        manager.allowsBackgroundLocationUpdates = false
+    }
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        if manager === relaunchManager {
+            // This service may immediately replay a cached event. Standard
+            // updates supply regular fixes; retain a fresh wake-up fix if needed.
+            guard backgroundActive else { return }
+        }
+        received?(locations)
+    }
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        if manager === self.manager { authorizationChanged?() }
+    }
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         // Failure is not a position. A later location event or explicit foreground
         // request may retry; no fabricated coordinate or polling loop is emitted.
@@ -48,27 +78,36 @@ private final class SystemMobileLocationDriver: NSObject, MobileLocationDriving,
 final class MobileDeviceLocation {
     typealias Scope = MobileDevicePairing.Scope
     static let shared = MobileDeviceLocation()
+    // A sampling target, not a wake-up timer. Never manufacture absent fixes.
+    static let sampleInterval: TimeInterval = 5 * 60
     static let authorizationChangedNotification = Notification.Name("ThingtimeMobileLocationAuthorizationChanged")
     struct Binding: Codable, Equatable {
         let scope: Scope
         let collectionId: String
         var backgroundAuthorized: Bool
-        init(scope: Scope, collectionId: String, backgroundAuthorized: Bool = true) {
+        var enabledAt: Date?
+        var lastObservationAt: Date?
+        init(scope: Scope, collectionId: String, backgroundAuthorized: Bool = true, enabledAt: Date? = nil) {
             self.scope = scope; self.collectionId = collectionId; self.backgroundAuthorized = backgroundAuthorized
+            self.enabledAt = enabledAt
         }
-        private enum CodingKeys: CodingKey { case scope, collectionId, backgroundAuthorized }
+        private enum CodingKeys: CodingKey { case scope, collectionId, backgroundAuthorized, enabledAt, lastObservationAt }
         init(from decoder: Decoder) throws {
             let values = try decoder.container(keyedBy: CodingKeys.self)
             scope = try values.decode(Scope.self, forKey: .scope)
             collectionId = try values.decode(String.self, forKey: .collectionId)
             // Older/partial preferences never imply fresh background authority.
             backgroundAuthorized = try values.decodeIfPresent(Bool.self, forKey: .backgroundAuthorized) ?? false
+            enabledAt = try values.decodeIfPresent(Date.self, forKey: .enabledAt)
+            lastObservationAt = try values.decodeIfPresent(Date.self, forKey: .lastObservationAt)
         }
     }
     private let driver: MobileLocationDriving
     private let outbox: MobileDeviceLocationOutbox
     private let load: () -> Binding?
     private let save: (Binding?) -> Void
+    private let now: () -> Date
+    private let appIsActive: () -> Bool
     private let send: (MobileDeviceLocationObservation, Scope, @escaping () throws -> Void) async throws -> Void
     private var binding: Binding?
     private var scope: Scope? { binding?.scope }
@@ -94,9 +133,10 @@ final class MobileDeviceLocation {
         }, send: { observation, scope, check in try await transport.send(observation, scope: scope, check: check) })
     }
     init(driver: MobileLocationDriving, outbox: MobileDeviceLocationOutbox, load: @escaping () -> Binding?,
-         save: @escaping (Binding?) -> Void,
+         save: @escaping (Binding?) -> Void, now: @escaping () -> Date = Date.init,
+         appIsActive: @escaping () -> Bool = { UIApplication.shared.applicationState == .active },
          send: @escaping (MobileDeviceLocationObservation, Scope, @escaping () throws -> Void) async throws -> Void) {
-        self.driver = driver; self.outbox = outbox; self.load = load; self.save = save; self.send = send
+        self.driver = driver; self.outbox = outbox; self.load = load; self.save = save; self.now = now; self.appIsActive = appIsActive; self.send = send
         driver.received = { [weak self] locations in self?.receive(locations) }
         driver.authorizationChanged = { [weak self] in
             self?.reconcile()
@@ -130,8 +170,12 @@ final class MobileDeviceLocation {
     /// paired-device verification. It never grants Core Location permission.
     func enable(_ selected: Scope, collectionId: String) throws {
         guard UUID(uuidString: collectionId) != nil else { throw MobileDevicePairing.Failure.invalid }
-        let newBinding = Binding(scope: selected, collectionId: collectionId)
-        if let old = scope, binding != newBinding { disable(matching: old) }
+        if binding?.scope == selected, binding?.collectionId == collectionId {
+            verified(selected)
+            return
+        }
+        if let old = scope { disable(matching: old) }
+        let newBinding = Binding(scope: selected, collectionId: collectionId, enabledAt: now())
         binding = newBinding; save(newBinding); paused = false; error = nil; reconcile()
     }
     func disable(matching selected: Scope? = nil) {
@@ -141,7 +185,7 @@ final class MobileDeviceLocation {
         if let old { do { try outbox.clear(scope: old) } catch { self.error = "Saved location cleanup is pending. Retry when this device is unlocked." } }
     }
     func requestPermission(always: Bool) {
-        guard UIApplication.shared.applicationState == .active else { return }
+        guard appIsActive() else { return }
         driver.requestPermission(always: always)
     }
     var status: [String: Any] {
@@ -155,8 +199,9 @@ final class MobileDeviceLocation {
         }
         var result: [String: Any] = ["enabled": scope != nil, "authorization": authorization,
             "precision": driver.fullAccuracy ? "precise" : "approximate",
-            "backgroundAvailable": driver.significantChangesAvailable && driver.authorization == .authorizedAlways,
-            "collectionMode": "significant-change"]
+            "backgroundAvailable": driver.authorization == .authorizedAlways,
+            // Keep the existing relaunch mode readable by 1.1 web clients.
+            "collectionMode": "significant-change", "samplingMode": "standard"]
         if let error { result["error"] = error }
         return result
     }
@@ -168,27 +213,44 @@ final class MobileDeviceLocation {
         }
         return result
     }
+    private var canUseLocation: Bool {
+        driver.authorization == .authorizedAlways || (driver.authorization == .authorizedWhenInUse && appIsActive())
+    }
     private func reconcile() {
         guard scope != nil, binding?.backgroundAuthorized == true, !paused else { driver.stop(); return }
-        if driver.authorization == .authorizedAlways, driver.significantChangesAvailable { driver.start(background: true) }
-        else if driver.authorization == .authorizedWhenInUse, UIApplication.shared.applicationState == .active { driver.start(background: false) }
-        else if [.denied, .restricted].contains(driver.authorization) {
+        guard canUseLocation else {
             driver.stop()
             generation = UUID(); work?.cancel(); work = nil
+            return
         }
+        driver.start(background: driver.authorization == .authorizedAlways)
         flush()
     }
     private func receive(_ locations: [CLLocation]) {
-        guard !paused, binding?.backgroundAuthorized == true, let scope, let collectionId = binding?.collectionId, [.authorizedAlways, .authorizedWhenInUse].contains(driver.authorization) else { return }
-        guard driver.authorization == .authorizedAlways || UIApplication.shared.applicationState == .active else { return }
+        guard !paused, var binding, binding.backgroundAuthorized, canUseLocation else { return }
+        let receivedAt = now()
+        var queued = false
         do {
-            for location in locations {
-                if let observation = MobileDeviceLocationObservation(location: location, fullAccuracy: driver.fullAccuracy, collectionId: collectionId) {
-                    try outbox.append(observation, scope: scope)
-                }
+            for location in locations.sorted(by: { $0.timestamp < $1.timestamp }) {
+                let observedAt = location.timestamp
+                // Cached fixes must never predate an explicit new collection grant.
+                if let enabledAt = binding.enabledAt, observedAt < enabledAt { continue }
+                // Older installations have no stored watermark. Avoid importing an
+                // arbitrary cached initial fix when upgrading their active grant.
+                if binding.enabledAt == nil, binding.lastObservationAt == nil,
+                   observedAt < receivedAt.addingTimeInterval(-Self.sampleInterval) { continue }
+                if let last = binding.lastObservationAt, observedAt.timeIntervalSince(last) < Self.sampleInterval { continue }
+                guard let observation = MobileDeviceLocationObservation(location: location, fullAccuracy: driver.fullAccuracy,
+                    collectionId: binding.collectionId, now: receivedAt) else { continue }
+                try outbox.append(observation, scope: binding.scope)
+                queued = true
+                binding.lastObservationAt = observation.observedAt
+                self.binding = binding
+                save(binding)
             }
-            flush()
         } catch { self.error = "Location could not be saved securely. Free local storage or unlock this device and retry." }
+        // High-frequency Core Location callbacks do not drive network retries.
+        if queued { flush() }
     }
     func flushAndWait(check: @escaping () throws -> Void) async throws {
         flush(check: check)
@@ -196,7 +258,7 @@ final class MobileDeviceLocation {
         try check()
     }
     func flush(check externalCheck: @escaping () throws -> Void = {}) {
-        guard !paused, binding?.backgroundAuthorized == true, let selected = scope, work == nil, [.authorizedAlways, .authorizedWhenInUse].contains(driver.authorization) else { return }
+        guard !paused, binding?.backgroundAuthorized == true, let selected = scope, work == nil, canUseLocation else { return }
         let operation = generation
         work = Task { [weak self] in
             guard let self else { return }
@@ -204,8 +266,7 @@ final class MobileDeviceLocation {
             let check = { [weak self] in
                 try Task.checkCancellation(); try externalCheck()
                 guard self?.paused == false, self?.binding?.backgroundAuthorized == true, self?.generation == operation, self?.scope == selected,
-                      let authorization = self?.driver.authorization,
-                      [.authorizedAlways, .authorizedWhenInUse].contains(authorization) else { throw CancellationError() }
+                      self?.canUseLocation == true else { throw CancellationError() }
             }
             do {
                 // Resource batch only: queued history has no product item cap.

@@ -41,15 +41,18 @@ test('ordinary visibility hiding aborts a status wait without withdrawing backgr
 		f.document.visibilityState = 'visible'; f.document.dispatchEvent(new Event('visibilitychange'));
 		for (const name of ['focus', 'pageshow', 'online', nativeBridgeReadyEvent]) f.window.dispatchEvent(new Event(name));
 		assert.equal(f.requests.length, 2, 'Coalesce foreground/readiness events while verification is pending');
-		f.requests[1].resolve(); await settle(); assert.equal(f.withdrawals(), 0);
+		f.requests[1].resolve(); await settle();
+		assert.equal(f.requests.length, 2, 'A successful read satisfies reconnect without an extra request');
+		assert.equal(f.withdrawals(), 0);
 	} finally { f.identity.stop(); }
 });
 test('logout/origin boundaries fence old completions and unmount removes every old callback', async () => {
 	const f = fixture(); await settle();
+	f.window.dispatchEvent(new Event('online'));
 	f.current(false); assert.equal(f.requests[0].signal.aborted, true); assert.equal(f.withdrawals(), 1);
 	f.current(true); assert.equal(f.requests.length, 2);
-	f.requests[0].resolve(); await settle();
-	assert.equal(f.requests.length, 2, 'Old status cannot replace the newer identity verification');
+	f.requests[0].reject(); await settle();
+	assert.equal(f.requests.length, 2, 'The old account’s reconnect event cannot replace the newer identity verification');
 	f.identity.stop(); f.identity.stop();
 	assert.equal(f.requests[1].signal.aborted, true); assert.equal(f.withdrawals(), 2);
 	f.requests[1].resolve(); f.current(true);
@@ -67,5 +70,19 @@ test('StrictMode discarded mount never verifies and late capability readiness re
 		assert.equal(f.requests.length, 1, 'No polling/retry loop belongs to identity verification');
 		f.window.dispatchEvent(new Event('online')); assert.equal(f.requests.length, 2);
 		f.requests[1].resolve(); await settle();
+	} finally { f.identity.stop(); }
+});
+test('one reconnect during failed verification triggers one fresh scoped read', async () => {
+	const f = fixture();
+	try {
+		await settle(); assert.equal(f.requests.length, 1);
+		f.window.dispatchEvent(new Event('online'));
+		f.window.dispatchEvent(new Event('online'));
+		assert.equal(f.requests.length, 1, 'Wait for the old verification to settle');
+		f.requests[0].reject(); await settle();
+		assert.equal(f.requests.length, 2, 'Connectivity returned; retry the read without another opt-in');
+		assert.equal(f.withdrawals(), 0);
+		f.requests[1].reject(); await settle();
+		assert.equal(f.requests.length, 2, 'A failed retry never starts a polling loop');
 	} finally { f.identity.stop(); }
 });
