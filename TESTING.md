@@ -3016,6 +3016,13 @@ email whose link points at the attacker.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] Paired File Sync transfer admission: run `test:files:transfer-admissions`
+      against a disposable replica and built Nitro per the
+      [transfer admission runbook](docs/file-sync-transfer-admissions.md). Verify
+      two independently admitted transfers, provider checksum refusal, duplicate
+      completion, exact origin/pairing, configuration and destination changes,
+      revocation, expiry and foreground re-admission on the original upload.
+
 - [ ] Local attachment storage stand-in (PR: developer-experience follow-ups):
       with `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=.local-attachments` in
       `remix/.env` and the dev stack restarted, run

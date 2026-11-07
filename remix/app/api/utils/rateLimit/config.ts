@@ -27,6 +27,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'attachments.start': { limit: 60, windowMs: 60_000, enabled: true },
   'attachments.parts': { limit: 600, windowMs: 60_000, enabled: true },
   'attachments.complete': { limit: 60, windowMs: 60_000, enabled: true },
+  'files.sync-transfer-admit': { limit: 120, windowMs: 60_000, enabled: true },
   'attachments.delete': { limit: 120, windowMs: 60_000, enabled: true },
   // owner title/description edits (POST /api/v1/attachments/annotate) — small
   // crystal-only writes, same shape as delete

@@ -1,5 +1,12 @@
 # Attachments and media
 
+Paired-device background staging uses the existing private file reservation and
+multipart provider. `files/transferAdmissions.ts` verifies the browser session,
+exact pairing, saved configuration and private destination. It only authorizes
+signing parts and verifying the bytes of that one reservation; Files publication
+still requires the canonical foreground write. See the [transfer admission
+contract and fixture](../file-sync-transfer-admissions.md).
+
 The shared `MobileFolderInventoryTests` use macOS strict capture and iOS's
 explicit supported backup mode for persisted paging/integrity assertions.
 The real embedded iOS transport must advertise no strict watcher coverage and

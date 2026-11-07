@@ -6302,6 +6302,25 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
 	}),
 	endpoint({
+		id: 'file-sync-transfer-admissions', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'attachments',
+		title: 'Resume an admitted file transfer on a paired device', endpoint: '/api/v1/files/sync-transfer-admissions',
+		summary: 'Authorize one previously reserved private File Sync upload for a paired device.',
+		detail: 'A non-secret admission ID identifies a fixed authorization record. It grants no authority on its own. The existing paired device credential cannot start, redirect, publish or delete uploads, use the ordinary Files/Things endpoints, or act as the owner session.',
+		auth: { mode: 'session-or-bearer', description: 'The owning browser session admits and may revoke. The exact paired device credential may sign parts, complete or revoke only its own admission.' },
+		methods: ['POST'],
+		steps: [
+			'Negotiate api.file-sync-transfer-admissions 1.0.0 on the selected account origin. In the owning browser session, reserve a positive-size attachment with purpose=file, a stable requestId and exact fileSyncOrigin from the reviewed run.',
+			'POST action=admit with uploadId, requestId, configurationId, configurationRevision (saved updatedAt), deviceId, localRootId, grantRevision (SHA-256 of the current native grant identity), sourceVersion, sizeBytes and fingerprint:{partSizeBytes,partCount,sha256}. The fingerprint is SHA-256 of the concatenated binary part SHA-256 values. Exact retries under the same issuing session return the same admissionId and expiresAt. Changed input cannot retarget an existing admission.',
+			'With the paired device credential POST action=parts, admissionId and parts:[{partNumber,checksumSha256}] (canonical Base64). Use returned short-lived URLs in memory. Each URL binds the reservation, part number, checksum and byte length. When the file is one part, the server verifies the approved fingerprint before signing. For multiple parts the complete request verifies the concatenated provider checksums before the provider finalizes, without requiring a second scan or full checksum list at admission.',
+			'POST action=complete with admissionId to finalize exactly those bytes as an unbound attachment. A lost reply can be retried under the same admission; verified exact-version bytes return the same attachment. This does not publish a File or create a Timeline receipt. The foreground owner session must reconcile and conditionally publish through the existing Files API.',
+			'POST action=revoke with admissionId using the issuing browser session or exact paired device credential. Revocation stops new URLs and receipts. Already-issued checksum, length and reservation-bound URLs can last at most two minutes. An in-flight completion already inside storage or persistence may leave an owner-private unbound attachment for foreground reconciliation; it cannot publish a File or return a revoked device receipt. The client must also stop on native grant or source revision changes.',
+			'The lease ends at the earliest of the upload reservation, live owner credential/session, paired session or 24 hours; ordinary retry never extends it. If the original reservation is still pending, the foreground owner may explicitly admit the same source/operation again with replacesAdmissionId identifying the exact revoked or expired admission and the current configuration revision. An exact owner admit without that ID can recover it from 410 code=admission_renewal_required, then retry explicitly. Replacement returns a new ID; stale IDs cannot resume or revoke it. A lost replacement reply returns the same new ID on exact retry. Reconcile existing bytes and Files receipts before replacing an expired reservation.',
+			'Every dependent request revalidates the original browser session, exact pairing, saved private configuration/revision and private destination ancestry at the actual origin. The route fails closed on custom data planes and cannot forward the credential to a fallback origin.'
+		],
+		requestExamples: [{ name: 'Recover a completion', description: 'Retry with the same paired device credential and admission ID.', method: 'POST', body: { action: 'complete', admissionId: 'upload-admission_' + '1'.repeat(64) + '.' + '2'.repeat(32) } }],
+		responseExamples: [{ status: 410, description: 'The authorization expired or was revoked.', body: { ok: false, error: 'Transfer admission expired or was revoked' } }]
+	}),
+	endpoint({
     // 1.2: config3 resource ceilings bind distinct v2 digest domains; legacy digests remain unchanged.
     id: 'file-sync-batches', contractVersion: '1.3.0', featureVersion: '1.3.0', group: 'attachments', title: 'Upload bounded small-file batches',
     endpoint: '/api/v1/files/batches', summary: 'Prepare, verify and commit independent original file operations with fresh session authority.',
