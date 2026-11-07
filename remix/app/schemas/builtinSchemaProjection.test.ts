@@ -21,6 +21,8 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   file: ['name', 'trashed', 'content', 'symbolicLink'],
   'password-manager-entry': ['title', 'passwordType', 'icon', 'fields'],
   'password-verification-device': [], // Private device proofs never enter the public crystal projection.
+  'backup-job': [], // Coordinator authority is never public schema data.
+  'backup-job-event': [],
   draft: [], // Private snapshots never enter the public schema projection.
   "timeline-snapshot-part": [],
   "timeline-branch": ["name"],

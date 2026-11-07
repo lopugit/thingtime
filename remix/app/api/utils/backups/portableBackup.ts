@@ -9,6 +9,7 @@ import {
 	BACKUP_PAGE_BYTES,
 	BACKUP_METADATA_BYTES,
 	backupId,
+	backupDigest,
 	backupJson,
 	parseBackupHeader,
 	parseBackupItem,
@@ -285,6 +286,143 @@ async function retainedChunk(store: BackupObjectStore, range: BackupRange): Prom
 	const bytes = await store.read(`chunks/${range.sha256}`, BACKUP_CHUNK_BYTES);
 	if (!bytes || bytes.byteLength !== range.length || digest(bytes) !== range.sha256) throw Error('Retained backup bytes are missing or corrupt');
 	return bytes;
+}
+
+export type BackupWorkerItemRef = { planPage: number; pageHash: string; itemIndex: number };
+/** Bounded reads for a durable coordinator. The expected plan/seal digests and
+ * page-chain cursor come from its protected admission, never a browser claim.
+ * This view performs no full traversal, creates no SQLite scratch and grants no
+ * restore authority. The coordinator must exhaust and validate cross-page
+ * order/count/coverage and canonical seal hashing before recording completion. */
+export async function openBackupWorkerView(store: BackupObjectStore, id: string, access: BackupAccess,
+	pins: { planHash: string; sealHash: string | null }) {
+	const { planHash, sealHash } = pins;
+	if (!backupDigest(planHash) || !(sealHash === null || backupDigest(sealHash))) throw Error('Invalid worker backup pins');
+	const guard = async () => {
+		const current = await openPlan(store, id, access);
+		if (digest(backupJson(current.plan)) !== planHash) throw Error('The admitted backup plan changed');
+		if (sealHash !== null) {
+			const seal = parseBackupSeal(await readJson(store, `${current.root}/complete.json`, BACKUP_METADATA_BYTES));
+			const { manifestHash: _, chunks: _chunks, ...sealedPlan } = seal;
+			if (digest(backupJson(seal)) !== sealHash || backupJson(sealedPlan) !== backupJson(current.plan)) throw Error('The admitted backup seal changed');
+		}
+		await check(access, current.header);
+		return current;
+	};
+	const initial = await guard(), plan = Object.freeze(initial.plan);
+	const loadPlanPage = async (ordinal: number, expectedHash: string) => {
+		if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal >= plan.pages || !backupDigest(expectedHash)) throw Error('Invalid worker page cursor');
+		const page = parseBackupPage(await readJson(store, `${initial.root}/plan/${ordinal}.json`));
+		if (page.snapshotId !== id || page.ordinal !== ordinal || digest(backupJson(page)) !== expectedHash) throw Error('The admitted backup page changed');
+		for (let i = 0; i < page.items.length; i++) {
+			if (page.items[i].ordinal >= plan.items || (i && (page.items[i].ordinal !== page.items[i - 1].ordinal + 1 || page.items[i].thingId <= page.items[i - 1].thingId)))
+				throw Error('Backup page inventory is unordered or repeats an item');
+		}
+		return page;
+	};
+	const loadRangePage = async (input: BackupWorkerItemRef, ordinal: number, offset: number, expectedHash?: string) => {
+		const ref = { ...input };
+		if (!Number.isSafeInteger(ref.itemIndex) || ref.itemIndex < 0 || !Number.isSafeInteger(ordinal) || ordinal < 0 || !Number.isSafeInteger(offset) || offset < 0 ||
+			(expectedHash !== undefined && !backupDigest(expectedHash))) throw Error('Invalid worker range cursor');
+		const item = (await loadPlanPage(ref.planPage, ref.pageHash)).items[ref.itemIndex];
+		if (!item?.content || offset >= item.content.size) throw Error('The worker item has no remaining retained bytes');
+		const ranges = validateRanges(await readJson(store, `${initial.root}/ranges/${item.ordinal}/${ordinal}.json`, BACKUP_METADATA_BYTES), id, item, ordinal, offset);
+		const pageHash = digest(backupJson(ranges.page));
+		if (expectedHash !== undefined && pageHash !== expectedHash) throw Error('The admitted backup range page changed');
+		return { item, ...ranges, pageHash };
+	};
+	return {
+		plan,
+		version: digest(backupJson({ planHash, sealHash })),
+		assertCurrent: async () => { await guard(); },
+		async readPlanPage(ordinal: number, expectedHash: string) {
+			await guard(); const page = await loadPlanPage(ordinal, expectedHash); await guard(); return page;
+		},
+		/** Forward continuation validates each preceding hash and terminal head.
+		 * Completion must exhaust this chain; an intermediate page is no seal. */
+		async readNextPlanPage(ordinal: number, previousHash: string | null) {
+			await guard();
+			if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal >= plan.pages ||
+				(ordinal === 0 ? previousHash !== null : !backupDigest(previousHash))) throw Error('Invalid forward plan cursor');
+			const page = parseBackupPage(await readJson(store, `${initial.root}/plan/${ordinal}.json`)), pageHash = digest(backupJson(page));
+			await loadPlanPage(ordinal, pageHash);
+			if (page.previous !== previousHash || (ordinal === 0 && page.items[0]?.ordinal !== 0) ||
+				(ordinal === plan.pages - 1 && (pageHash !== plan.headHash || page.items.at(-1)?.ordinal !== plan.items - 1)))
+				throw Error('Backup forward page chain changed');
+			if (ordinal > 0) {
+				const prior = await loadPlanPage(ordinal - 1, previousHash!);
+				if (page.items[0].ordinal !== prior.items.at(-1)!.ordinal + 1 || page.items[0].thingId <= prior.items.at(-1)!.thingId)
+					throw Error('Backup cross-page inventory changed');
+			}
+			await guard(); return { page, pageHash };
+		},
+		async readRangePage(input: BackupWorkerItemRef, ordinal: number, offset: number, expectedHash?: string) {
+			const ref = { ...input }; await guard(); const page = await loadRangePage(ref, ordinal, offset, expectedHash); await guard(); return page;
+		},
+		async readChunk(input: BackupWorkerItemRef, ordinal: number, offset: number, pageHash: string, rangeIndex: number) {
+			const ref = { ...input };
+			if (!Number.isSafeInteger(rangeIndex) || rangeIndex < 0) throw Error('Invalid worker chunk cursor');
+			await guard();
+			const ranges = await loadRangePage(ref, ordinal, offset, pageHash), range = ranges.page.ranges[rangeIndex];
+			if (!range) throw Error('The admitted backup chunk changed');
+			const bytes = await retainedChunk(store, range);
+			// Recheck exact range metadata and authority after the asynchronous
+			// provider read; a prior seal is never evidence of the current bytes.
+			await loadRangePage(ref, ordinal, offset, pageHash); await guard();
+			return { bytes, range };
+		}
+	};
+}
+
+/** One independently durable capture unit for an already admitted frozen plan.
+ * A range receipt means captured, never fingerprint-verified or backup-sealed.
+ * Replay reads the immutable receipt; source bytes need not still be online.
+ * Missing/corrupt retained chunks are detected by the separate verification
+ * phase before completion. No live source or filesystem selector is persisted. */
+export async function captureBackupRangePage(store: BackupObjectStore, id: string, access: BackupAccess,
+	pins: { planHash: string; sealHash: null }, proof: BackupWorkerItemRef,
+	cursor: { ordinal: number; offset: number }, source: BackupSource, options: { maxChunks?: number } = {}) {
+	pins = { ...pins }; proof = { ...proof }; cursor = { ...cursor };
+	const maxChunks = options.maxChunks ?? 1;
+	if (pins.sealHash !== null || !Number.isSafeInteger(maxChunks) || maxChunks < 1 || maxChunks > BACKUP_PAGE_ITEMS ||
+		!Number.isSafeInteger(cursor.ordinal) || cursor.ordinal < 0 || !Number.isSafeInteger(cursor.offset) || cursor.offset < 0)
+		throw Error('Invalid capture work unit');
+	const view = await openBackupWorkerView(store, id, access, pins), item = (await view.readPlanPage(proof.planPage, proof.pageHash)).items[proof.itemIndex];
+	if (!Number.isSafeInteger(proof.itemIndex) || proof.itemIndex < 0 || !item) throw Error('Invalid capture item');
+	if (!item.content || item.content.size === 0) {
+		if (cursor.ordinal !== 0 || cursor.offset !== 0) throw Error('Empty capture cursor changed');
+		return { done: true, nextOffset: 0, nextOrdinal: 0, pageHash: null, copiedBytes: '0', reusedBytes: '0' };
+	}
+	if (cursor.offset >= item.content.size || cursor.offset % BACKUP_CHUNK_BYTES !== 0) throw Error('Capture cursor changed');
+	const chunksBefore = cursor.offset / BACKUP_CHUNK_BYTES;
+	if (cursor.ordinal < Math.ceil(chunksBefore / BACKUP_PAGE_ITEMS) || cursor.ordinal > chunksBefore) throw Error('Capture range-page order changed');
+	const key = `${prefix(id)}/ranges/${item.ordinal}/${cursor.ordinal}.json`, existing = await readJson(store, key, BACKUP_METADATA_BYTES);
+	if (existing !== null) {
+		const result = validateRanges(existing, id, item, cursor.ordinal, cursor.offset);
+		await view.assertCurrent();
+		return { done: result.offset === item.content.size, nextOffset: result.offset, nextOrdinal: cursor.ordinal + 1,
+			pageHash: digest(backupJson(result.page)), copiedBytes: '0', reusedBytes: String(result.offset - cursor.offset) };
+	}
+	if (await store.read(`${prefix(id)}/complete.json`, BACKUP_METADATA_BYTES)) throw Error('A sealed capture cannot be repaired from a live source');
+	let offset = cursor.offset;
+	const ranges: BackupRange[] = [];
+	while (offset < item.content.size && ranges.length < maxChunks) {
+		await check(access);
+		const length = Math.min(BACKUP_CHUNK_BYTES, item.content.size - offset), bytes = await source.read(item, offset, length, access.signal);
+		await check(access);
+		if (!(bytes instanceof Uint8Array) || bytes.length !== length) throw Error('Backup source returned an incomplete range');
+		const range = { offset, length, sha256: digest(bytes) };
+		await store.put(`chunks/${range.sha256}`, bytes); await check(access);
+		await retainedChunk(store, range); await check(access);
+		ranges.push(range); offset += length;
+	}
+	const page = parseBackupRangePage({ format: BACKUP_FORMAT, snapshotId: id, item: item.ordinal, ordinal: cursor.ordinal, ranges });
+	await check(access); await store.put(key, utf8.encode(backupJson(page))); await view.assertCurrent();
+	const readback = validateRanges(await readJson(store, key, BACKUP_METADATA_BYTES), id, item, cursor.ordinal, cursor.offset);
+	if (backupJson(readback.page) !== backupJson(page)) throw Error('Captured range durable readback changed');
+	await view.assertCurrent();
+	return { done: offset === item.content.size, nextOffset: offset, nextOrdinal: cursor.ordinal + 1,
+		pageHash: digest(backupJson(page)), copiedBytes: String(offset - cursor.offset), reusedBytes: '0' };
 }
 
 /** Long-running native/worker capture, with bounded memory and durable range

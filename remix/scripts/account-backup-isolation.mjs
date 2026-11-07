@@ -17,9 +17,9 @@ export function isolatedAccountBackupProcess(command, args, options, port, inbou
 
 /** Prove the OS denies forbidden connections, including redirects and direct
  * IPs. An application-level request interceptor or test label is not the gate. */
-export async function verifyAccountBackupIsolation(port, env) {
+export async function verifyAccountBackupIsolation(port, env, deniedPort = port + 2) {
+	assert.ok(Number.isInteger(deniedPort) && deniedPort > 1024 && deniedPort < 65535 && deniedPort !== port);
 	let deniedRequests = 0;
-	const deniedPort = port + 2;
 	const denied = createServer((_request, response) => {
 		deniedRequests++;
 		response.end('must never be reached');

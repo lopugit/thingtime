@@ -9,7 +9,7 @@ import { backupThingJson, parseBackupThingSnapshot, readBackupThingStream } from
 import { BACKUP_DRAFT_BYTES, backupDraftJson, parseBackupDraft } from './draftRecords';
 import { BACKUP_THEME_BYTES } from './themeSnapshots';
 import { BACKUP_ACCOUNT_BYTES } from './accountSnapshots';
-import { BACKUP_TIMELINE_RECORD_BYTES, parseBackupTimelineRecord, timelineBackupJson, backupTimelineIdentity } from './timelineRecords';
+import { BACKUP_TIMELINE_RECORD_BYTES, parseBackupTimelineRecord, parseInlineBackupTimelineRecord, timelineBackupJson, backupTimelineIdentity } from './timelineRecords';
 import { backupAttachmentItemContent, parseBackupAttachment } from './attachmentRecords';
 import { parseCloudFile } from '../../../fileSync/cloudFile';
 import { backupJson } from '../../../backups/manifest';
@@ -32,6 +32,10 @@ const wrappers: Record<string, number> = {
 export async function readAccountRestoreRecord(item: BackupItem, ranges: AsyncIterable<Range>, ownerId: string, check: () => void = () => {}): Promise<RestoreSourceRecord | null> {
 	check();
 	const adapter = item.snapshot.adapter;
+	if (adapter === 'backup-timeline-record' && item.snapshot.version === 2) {
+		const value = parseInlineBackupTimelineRecord(item, ownerId);
+		return { family: 'timeline', kinds: [value.kind], crystal: {}, value };
+	}
 	if (adapter === 'backup-thing-content' && item.snapshot.version === 2) {
 		const snapshot = await readBackupThingStream(item, (async function* () { for await (const range of ranges) { check(); yield await range.read(); } })(), check);
 		const value = snapshot.value as any;

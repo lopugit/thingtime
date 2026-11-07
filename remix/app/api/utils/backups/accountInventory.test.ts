@@ -22,7 +22,24 @@ import { randomUUID, createHash } from 'node:crypto';
 import { createAccountInventoryProducer } from './accountInventory';
 import { captureBackup, sealBackup, openBackupItem, type BackupObjectStore } from './portableBackup';
 
-function fixture(count = 300) {
+test('supported-content selection records managed/control exclusions without exporting their envelopes', async () => {
+	const f = fixture(1, 'supported-content');
+	for (const kind of ['backup-job', 'backup-job-event', 'device']) f.source.push({ shareId: `excluded-${kind}`, ownerId: 'owner', thingtime: [kind],
+		crystal: { privateControl: 'NEVER_EXPORT_CONTROL' }, secure: 'NEVER_EXPORT_CONTROL', backupSessionReference: 'NEVER_EXPORT_CONTROL' });
+	await f.run();
+	const items = Array.from({ length: f.json('plan.json').pages }, (_, i) => f.json(`plan/${i}.json`).items).flat();
+	for (const kind of ['backup-job', 'backup-job-event', 'device']) {
+		const item = items.find(item => item.thingId === `excluded-${kind}`);
+		assert.equal(item.snapshot.adapter, 'backup-source-exclusion'); assert.equal(item.snapshot.version, 2); assert.equal(item.content, null);
+		assert.deepEqual(item.snapshot.value, { family: kind, reason: kind === 'device' ? 'unsupported-managed-adapter' : 'live-worker-authority' });
+	}
+	assert.match(f.json('header.json').coverage.description, /Explicit supported-content selection/);
+	for (const bytes of f.objects.values()) assert.ok(!Buffer.from(bytes).toString().includes('NEVER_EXPORT_CONTROL'));
+	const strict = fixture(0); strict.source.push({ shareId: 'job', ownerId: 'owner', thingtime: ['backup-job'], secure: 'NEVER_EXPORT_CONTROL' });
+	await strict.run(); assert.equal(strict.json('plan/0.json').items[0].snapshot.value.reason, 'live-worker-authority');
+});
+
+function fixture(count = 300, selection: 'strict-account' | 'supported-content' = 'strict-account') {
 	const source: any[] = Array.from({ length: count }, (_, n) => ({
 		shareId: `thing-${String(n).padStart(4, '0')}`,
 		ownerId: 'owner',
@@ -143,7 +160,7 @@ function fixture(count = 300) {
 				state.ended++;
 			}
 		}
-	});
+	}, { selection });
 	const id = randomUUID();
 	const json = (key: string) => JSON.parse(Buffer.from(objects.get(`snapshots/${id}/${key}`)!).toString());
 	return {

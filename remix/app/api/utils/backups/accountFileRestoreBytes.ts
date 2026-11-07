@@ -11,6 +11,7 @@ import type { FingerprintSource } from '../../../fileSync/contentFingerprint';
 import type { BackupAccess, BackupObjectStore } from './portableBackup';
 import { openAccountBackupFile, openAccountBackupFileVersion } from './accountFileRecovery';
 import type { AccountFileRestoreStage } from './accountFileRestore';
+export { advanceAccountFileRestoreBytes, type FileRestoreBytesState, type FileRestoreByteStepInput } from './accountFileRestoreByteSteps';
 
 /** Worker-only protected temporary staging. The backup iterator must finish its
  * full fingerprint verification before any upload is started. Uploads use the

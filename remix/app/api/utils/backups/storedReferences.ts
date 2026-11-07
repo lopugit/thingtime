@@ -42,9 +42,12 @@ export type BackupReferenceIssue = { sourceId: string; code: 'unresolved-owned-o
 export type BackupReferenceCoverage = { census: 'owned-home-content'; referenceDomain: 'ordinary-composition-and-account-selections'; discovery: 'complete' | 'unsupported'; resolution: 'closed' | 'unresolved'; unresolved: number; unsupported: number; excluded: number; wholeAccountReady: false };
 export const BACKUP_REFERENCE_COVERAGE_ADAPTER = 'backup-reference-coverage';
 export const BACKUP_SOURCE_EXCLUSION_ADAPTER = 'backup-source-exclusion';
-export function parseBackupSourceExclusion(snapshot: TimelineSnapshot): { family: 'subscription'; reason: 'live-entitlement-authority' } {
+export function parseBackupSourceExclusion(snapshot: TimelineSnapshot): { family: string; reason: 'live-entitlement-authority' | 'live-worker-authority' | 'unsupported-managed-adapter' } {
 	const value = snapshot.value as any;
-	if (snapshot.adapter !== BACKUP_SOURCE_EXCLUSION_ADAPTER || snapshot.version !== 1 || !value || Object.keys(value).sort().join(',') !== 'family,reason' || value.family !== 'subscription' || value.reason !== 'live-entitlement-authority') throw Error('Invalid backup source exclusion');
+	const legacy = snapshot.version === 1 && value?.family === 'subscription' && value?.reason === 'live-entitlement-authority';
+	const selected = snapshot.version === 2 && value && typeof value.family === 'string' && /^[a-z][a-z0-9-]*(?:\+[a-z][a-z0-9-]*)*$/.test(value.family) &&
+		(value.reason === 'unsupported-managed-adapter' || (['backup-job', 'backup-job-event'].includes(value.family) && value.reason === 'live-worker-authority'));
+	if (snapshot.adapter !== BACKUP_SOURCE_EXCLUSION_ADAPTER || !value || Object.keys(value).sort().join(',') !== 'family,reason' || (!legacy && !selected)) throw Error('Invalid backup source exclusion');
 	return value;
 }
 export type BackupReferenceEvidence = { coverage: BackupReferenceCoverage; issues: BackupReferenceIssue[]; page: number };

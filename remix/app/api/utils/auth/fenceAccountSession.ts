@@ -5,6 +5,7 @@ import { StorageMutationError } from '../storage/storageCore';
 import { getAuthToken } from './authCookie';
 import { getCurrentUser, isFullAccountSessionPurpose } from './getCurrentUser';
 import { verifyJwt } from './jwt';
+import { internalAccountSession } from './internalAccountSession';
 
 /** Trusted home-plane composition only. The actual session write conflicts
  * with revocation, deletion and Character-selection changes. A no-op read or
@@ -13,20 +14,26 @@ import { verifyJwt } from './jwt';
 export async function fenceAccountSession(request: Request, ownerId: string, session: any) {
 	if (!session?.inTransaction() || isCustomMongoEndpointActive()) throw Error('Account session fencing requires the home content transaction');
 	const fail = (): never => { throw new StorageMutationError(401, 'storage_conflict', 'The authenticated account or session changed'); };
-	const token = await getAuthToken(request);
-	const claims = token && await verifyJwt(token);
+	const internal = internalAccountSession(request);
+	const token = !internal && await getAuthToken(request);
+	const claims = internal ? { sub: internal.reference.ownerId, jti: internal.reference.jti } : token && await verifyJwt(token);
 	const user = claims && await getCurrentUser(request);
 	// The initial contract supports the authenticated principal itself. A
 	// Character or scoped credential must use a separately verified contract.
 	if (!claims || claims.sub !== ownerId || user?.id !== ownerId) return fail();
+	if (internal && new URL(request.url).origin !== internal.reference.origin) return fail();
 	const sessions = await getSessionsCollection();
 	const current = await sessions.findOne({ jti: claims.jti, userId: ownerId }, { session });
 	const now = new Date();
 	if (!current || current.revokedAt || !isFullAccountSessionPurpose(current.purpose) ||
+		(internal && current.meta?.activeCharacterId != null && current.meta.activeCharacterId !== ownerId) ||
 		(current.expiresAt && new Date(current.expiresAt).getTime() <= now.getTime())) return fail();
 	const result = await sessions.updateOne({ jti: claims.jti, userId: ownerId, revokedAt: null,
 		$or: [{ expiresAt: null }, { expiresAt: { $gt: now } }] },
 		{ $set: { accountMutationFence: randomUUID() } }, { session });
 	if (result.matchedCount !== 1 || result.modifiedCount !== 1) return fail();
+	// Same transaction as the actual write. Lease changes, cancellation and
+	// session revocation conflict even when either happens after an earlier read.
+	if (internal) await internal.fence(session);
 	return user;
 }
