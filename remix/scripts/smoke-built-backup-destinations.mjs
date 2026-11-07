@@ -25,6 +25,12 @@ if (process.argv[2] === '--worker') {
 		assert.equal(manifestResponse.status, 200); assert.match(manifestResponse.headers.get('content-type'), /application\/json/);
 		const manifest = await manifestResponse.json();
 		assert.equal(manifest.origin, origin); assert.equal(manifest.features['api.backup-destinations'].version, '1.0.0');
+		assert.equal(manifest.features['api.backup-workspace'].version, '1.0.0');
+		assert.equal(manifest.features['api.backup-dispatch'].version, '1.0.0');
+		assert.equal(manifest.features['api.timeline'].version, '1.19.3');
+		assert.equal(manifest.features['api.things'].version, '1.52.1');
+		assert.equal(manifest.features['api.things-export'].version, '1.16.1');
+		assert.equal(manifest.features['api.things-bulk'].version, '1.7.2');
 		assert.ok(manifest.operations.some(op => op.path === '/api/v1/backups/destinations' && op.methods.join(',') === 'GET'));
 		const sourceResponse = await get('/api/v1/capabilities');
 		assert.equal(sourceResponse.status, 200);
@@ -35,7 +41,10 @@ if (process.argv[2] === '--worker') {
 		const denied = await get('/api/v1/backups/destinations');
 		assert.equal(denied.status, 401); assert.match(denied.headers.get('cache-control'), /private.*no-store/);
 		assert.deepEqual(await denied.json(), { ok: false, error: 'Unauthorized' });
-		console.log(JSON.stringify({ builtBackupDestinationProof: true, adapter: 'compiled-node_middleware',
+		const workspace=await get('/api/v1/backups/workspace');assert.equal(workspace.status,401);assert.match(workspace.headers.get('cache-control'),/private.*no-store/);
+		const dispatch=await get('/api/v1/backups/run');assert.equal(dispatch.status,401);assert.match(dispatch.headers.get('cache-control'),/private.*no-store/);
+		for(const path of ['/api/v1/backups/workspace-docs','/api/v1/backups/run-docs']){const docs=await get(path);assert.equal(docs.status,200);assert.match(docs.headers.get('content-type'),/application\/json/);}
+		console.log(JSON.stringify({ builtBackupWorkspaceProof:true,builtBackupDispatchProof:true,builtBackupDestinationProof: true, adapter: 'compiled-node_middleware',
 			manifestVersion: '1.0.0', docsRegistered: true, unauthenticatedStatus: 401,
 			privateVaultRead: false, providerNetwork: false, authenticatedProviderAcceptance: false }));
 	} finally { server.closeAllConnections(); if (server.listening) await new Promise(done => server.close(done)); }

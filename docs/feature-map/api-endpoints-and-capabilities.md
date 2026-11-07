@@ -832,3 +832,23 @@ versions from `apiDocs.ts`. Trusted transaction composition and audit labels are
 internal options, never new accepted HTTP fields; public retained-version input
 and upload approval remain unchanged. Run `test:api-capabilities`, the backup
 contract test, canonical build/output smoke and `test:backups:file-restore`.
+
+
+Backup dispatch recovery is `/api/v1/backups/run` (`api.backup-dispatch` 1.0.0),
+registered in the docs registry, Nitro import map and existing Vercel cron config.
+GET uses the existing scheduler secret; POST uses full same-origin administrator
+permission and no selectors/payload. `backupDispatch.server.ts` reserves opaque
+attempt IDs before SDK start; `backupJobs.ts` keeps original-session and
+transaction/lease fences. No browser call can supply a Workflow run ID, store
+address, original session or runnable intent. Source configuration and compiled
+routing are not deployed scheduler/provider evidence; see TESTING and README.
+
+The first-party `/api/v1/backups/workspace` contract (`api.backup-workspace`
+1.0.0) provides catalog, sealed snapshot pages, durable job progress and completed
+review reads, plus fixed snapshot/review/restore/control commands. Its route,
+Nitro map, `useApi` wrappers and explicit requirements share the DTO in
+`app/backups/workspace.ts`. Saved source paths come from a bounded worker catalog
+stage over retained exact-timestamp descriptors. Browser reads never obtain
+provider configuration, session references, execution leases or writable intents.
+See the first-party backup workspace checklist in TESTING for real HTTP/Builder
+acceptance and the separate deployed scheduler/provider gates.
