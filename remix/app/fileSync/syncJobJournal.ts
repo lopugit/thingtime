@@ -28,6 +28,8 @@ export type SyncJob = {
 	strictCaptureId?: string;
 	nativeCaptureGeneration?: string;
 	nativeCaptureRestarts?: number;
+	/** One resumable ordering pass over the current authorized Photos membership. */
+	photoQueueEpoch?: string;
 	/** A committed import prefix belongs to this exact admission and purpose. */
 	localImport?: { purpose: 'initial' | 'review'; inventory: InventoryIdentity };
 };
@@ -85,6 +87,9 @@ function validate(value: SyncJob): SyncJob {
 			!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(value.strictCaptureId))) ||
 		(value.nativeCaptureGeneration !== undefined && (!value.nativeCaptureId || typeof value.nativeCaptureGeneration !== 'string' || !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(value.nativeCaptureGeneration))) ||
 		(value.nativeCaptureRestarts !== undefined && (!value.nativeCaptureGeneration || !Number.isSafeInteger(value.nativeCaptureRestarts) || value.nativeCaptureRestarts < 0 || value.nativeCaptureRestarts > 1)) ||
+		(value.photoQueueEpoch !== undefined && (typeof value.photoQueueEpoch !== 'string' ||
+			!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(value.photoQueueEpoch) ||
+			value.reviewed?.configuration.sourceKind !== 'photos' || value.reviewed?.configuration.mode !== 'backup')) ||
 		typeof value.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value.id) ||
 		JSON.stringify(canonical(value.reviewed, value.scope)) !== JSON.stringify(value.reviewed))
 		throw Error('Invalid saved sync job.');
@@ -138,6 +143,11 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 			const retryAt = now + Math.round(Math.max(SYNC_RETRY_DELAY_MS, Math.min(SYNC_RETRY_MAX_MS, delay)));
 			if (!Number.isSafeInteger(retryAt)) throw Error('Invalid sync retry deadline.');
 			return { ...current, retryAt };
+		}),
+		photoQueue: (expected: SyncJob, epoch: string | null) => change(expected, current => {
+			if (current.state !== 'runnable' || current.reviewed.configuration.sourceKind !== 'photos') return null;
+			const { photoQueueEpoch: _old, ...rest } = current;
+			return epoch === null ? rest : { ...rest, photoQueueEpoch: epoch };
 		}),
 		beginImport: (expected: SyncJob, purpose: 'initial' | 'review', inventory: InventoryIdentity) => change(expected, current => {
 			if (current.state !== 'runnable') return null;
@@ -199,6 +209,7 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 					const job = validate({ version: 1, key: bound.key, id: unfinished && !policyChanged ? previous.id : id,
 						revision: (previous?.revision ?? 0) + 1, scope: bound.scope, reviewed, state: 'runnable',
 						...(repeat === undefined ? {} : { intervalMs: repeat }),
+						...(unfinished && previous.photoQueueEpoch && JSON.stringify(previous.reviewed) === JSON.stringify(reviewed) ? { photoQueueEpoch: previous.photoQueueEpoch } : {}),
 						...(unfinished && !policyChanged && previous.localImport && JSON.stringify(previous.reviewed) === JSON.stringify(reviewed) ? { localImport: previous.localImport } : {}),
 						...(unfinished && !policyChanged && previous.nativeCaptureId && JSON.stringify(previous.reviewed) === JSON.stringify(reviewed) ? { nativeCaptureId: previous.nativeCaptureId, ...(previous.nativeCaptureGeneration ? { nativeCaptureGeneration: previous.nativeCaptureGeneration, nativeCaptureRestarts: previous.state === 'runnable' ? previous.nativeCaptureRestarts ?? 0 : 0 } : {}) } : {}) });
 					const count = store.index('account').count(accountRange());
@@ -228,7 +239,7 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 			if (current.state !== 'runnable') return null;
 			if (current.strictCaptureId) throw Error('Strict inventory cleanup has not been confirmed.');
 			if (!Number.isSafeInteger(now) || now < 0) throw Error('Invalid sync completion time.');
-			const { retryAt: _retry, nativeCaptureId: _capture, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, localImport: _import, ...rest } = current;
+			const { retryAt: _retry, nativeCaptureId: _capture, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, localImport: _import, photoQueueEpoch: _photoQueue, ...rest } = current;
 			return current.intervalMs === undefined ? { ...rest, state: 'complete' } :
 				{ ...rest, state: 'scheduled', nextRunAt: now + current.intervalMs };
 		}),

@@ -30,6 +30,7 @@ export type ForegroundSyncProgress = {
 	message?: string;
 	waiting?: boolean;
 	photoDownload?: { fraction: number };
+	photoQueue?: { pending: number; unavailable: number };
 	photoAccess?: 'full' | 'limited';
 	backgroundTransfer?: 'queued' | 'foreground-only';
 	directions?: import('./directionalProgress').SyncDirectionalTotals;

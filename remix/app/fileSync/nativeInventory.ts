@@ -5,9 +5,22 @@ import { canonicalNativeScanExclusions, isNativeScanExcluded } from './nativeSca
 import { validSyncEntry, validSyncPath, type SyncEntry, type SyncPolicy } from './reconcile';
 import type { FolderRequest, FolderResult } from './mobileFolders.client';
 
-export type NativeBackupCapture = { id: string; generation: string; totalEntries: number; coverage: 'full' | 'partial'; consistency: 'per-entry'; totalSkipped: number };
+export type NativePhotoQueueBatch = { epoch: string; id: string; assetKeys: string[]; pending: number; unavailable: number };
+export type NativePhotoQueueApproval = {
+	request: { epoch: string; configurationId: string; configurationRevision: string }; authorization: FileSyncApproval;
+};
+export type NativeBackupCapture = { id: string; generation: string; totalEntries: number; coverage: 'full' | 'partial'; consistency: 'per-entry'; totalSkipped: number; photoQueue?: NativePhotoQueueBatch };
+export const nativePhotoAssetKey = (path: string) => /^[a-f0-9]{64}(?=-)/.exec(path)?.[0];
+export const isNativePhotoAssetKey = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+export function parseNativePhotoQueueBatch(value: unknown): NativePhotoQueueBatch {
+	const q = value as NativePhotoQueueBatch;
+	if (!q || typeof q.epoch !== 'string' || !uuid.test(q.epoch.toLowerCase()) || typeof q.id !== 'string' || !uuid.test(q.id.toLowerCase()) ||
+		!Array.isArray(q.assetKeys) || q.assetKeys.length > 4 || !q.assetKeys.every(isNativePhotoAssetKey) || new Set(q.assetKeys).size !== q.assetKeys.length ||
+		![q.pending, q.unavailable].every(n => Number.isSafeInteger(n) && n >= 0)) throw Error('Invalid native Photos queue batch.');
+	return { epoch: q.epoch.toLowerCase(), id: q.id.toLowerCase(), assetKeys: [...q.assetKeys], pending: q.pending, unavailable: q.unavailable };
+}
 export type NativeBackupStatus = NativeBackupCapture & { state: 'running' | 'complete' | 'interrupted' };
-export type NativeInventoryCapture = { id: string; generation: string; totalEntries: number } & Partial<Pick<NativeBackupCapture, 'coverage' | 'consistency' | 'totalSkipped'>>;
+export type NativeInventoryCapture = { id: string; generation: string; totalEntries: number } & Partial<Pick<NativeBackupCapture, 'coverage' | 'consistency' | 'totalSkipped' | 'photoQueue'>>;
 export type NativeScanSkip = { ordinal: number; path: string | null; reason: 'cloud-original' | 'symlink' | 'special' | 'fifo' | 'socket' | 'device' | 'unreadable' | 'changed' | 'invalid-path' | 'duplicate-identity' | 'path-collision'; scope: 'entry' | 'subtree' | 'root' };
 export type NativeSkippedPage = { capture: NativeBackupCapture; offset: number; skipped: NativeScanSkip[]; nextOffset: number | null; totalSkipped: number };
 export type NativeIndexProgress = Pick<NativeBackupStatus, 'state' | 'coverage' | 'consistency' | 'totalEntries' | 'totalSkipped'>;
@@ -32,7 +45,10 @@ export function parseNativeBackupCapture(value: unknown): NativeBackupCapture {
 	if (!c || !['full', 'partial'].includes(c.coverage) || c.consistency !== 'per-entry' || !Number.isSafeInteger(c.totalSkipped) || c.totalSkipped < 0 ||
 		(c.coverage === 'full' && c.totalSkipped !== 0) || (c.coverage === 'partial' && c.totalSkipped === 0)) throw Error('Invalid backup coverage.');
 	const { id, generation, totalEntries } = parseNativeInventoryCaptureBase(c);
-	return { id, generation, totalEntries, coverage: c.coverage, consistency: c.consistency, totalSkipped: c.totalSkipped };
+	const photoQueue = c.photoQueue === undefined ? undefined : parseNativePhotoQueueBatch(c.photoQueue);
+	if (photoQueue && (photoQueue.unavailable < c.totalSkipped || (!photoQueue.assetKeys.length && (totalEntries || c.totalSkipped || photoQueue.pending))))
+		throw Error('Invalid native Photos queue coverage.');
+	return { id, generation, totalEntries, coverage: c.coverage, consistency: c.consistency, totalSkipped: c.totalSkipped, ...(photoQueue ? { photoQueue } : {}) };
 }
 export function parseNativeBackupStatus(value: unknown): NativeBackupStatus {
 	const c = value as NativeBackupStatus;
@@ -60,7 +76,10 @@ export function parseNativeSkippedPage(value: unknown, capture: NativeBackupCapt
 	const next = offset + p.skipped.length;
 	if (next > expected.totalSkipped || (!p.skipped.length && (offset !== 0 || expected.totalSkipped !== 0)) ||
 		p.nextOffset !== (next === expected.totalSkipped ? null : next)) throw Error('Native skipped inventory is incomplete.');
-	const result = { capture: expected, offset, skipped: p.skipped.map((s, i) => parseNativeScanSkip(s, offset + i)), nextOffset: p.nextOffset, totalSkipped: expected.totalSkipped };
+	const skipped = p.skipped.map((s, i) => parseNativeScanSkip(s, offset + i));
+	if (expected.photoQueue && skipped.some(row => row.reason !== 'cloud-original' || !row.path || row.path.includes('/') ||
+		!expected.photoQueue!.assetKeys.includes(nativePhotoAssetKey(row.path) ?? ''))) throw Error('Native Photos queue returned a gap outside the current batch.');
+	const result = { capture: expected, offset, skipped, nextOffset: p.nextOffset, totalSkipped: expected.totalSkipped };
 	if (new TextEncoder().encode(JSON.stringify(result)).length > 512 * 1024) throw Error('Native skipped inventory exceeds its byte bound.');
 	return result;
 }
@@ -89,7 +108,7 @@ function parseNativeInventoryCaptureBase(value: unknown): { id: string; generati
 }
 export function parseNativeInventoryCapture(value: unknown): NativeInventoryCapture {
 	const c = value as NativeInventoryCapture;
-	return c && ['coverage', 'consistency', 'totalSkipped'].some(key => key in c) ? parseNativeBackupCapture(c) : parseNativeInventoryCaptureBase(c);
+	return c && ['coverage', 'consistency', 'totalSkipped', 'photoQueue'].some(key => key in c) ? parseNativeBackupCapture(c) : parseNativeInventoryCaptureBase(c);
 }
 export function parseNativeInventoryPage(value: unknown, capture: NativeInventoryCapture, offset: number, pageSize?: number): NativeInventoryPage {
 	const maximum = nativeInventoryPageSize(pageSize);
@@ -97,6 +116,8 @@ export function parseNativeInventoryPage(value: unknown, capture: NativeInventor
 	if (!p || JSON.stringify(parseNativeInventoryCapture(p.capture)) !== JSON.stringify(expected) ||
 		!Number.isSafeInteger(offset) || offset < 0 || p.offset !== offset || !Array.isArray(p.entries) || p.entries.length > maximum ||
 		p.entries.some(entry => !validSyncEntry(entry))) throw Error('Native inventory page changed.');
+	if (expected.photoQueue && p.entries.some(entry => entry.kind !== 'file' || entry.path.includes('/') || !expected.photoQueue!.assetKeys.includes(nativePhotoAssetKey(entry.path) ?? '')))
+		throw Error('Native Photos queue returned an asset outside the current batch.');
 	const next = offset + p.entries.length;
 	if (next > expected.totalEntries || (!p.entries.length && (offset !== 0 || expected.totalEntries !== 0)) ||
 		p.nextOffset !== (next === expected.totalEntries ? null : next)) throw Error('Native inventory page is incomplete.');
@@ -109,7 +130,9 @@ export function parseNativeInventoryPage(value: unknown, capture: NativeInventor
  * never become an empty scan; the caller seals its journal after the final count. */
 export async function* readNativeInventory(input: {
 	ownerId: string; deviceId: string; rootId: string; signal: AbortSignal; excludedPaths?: string[]; ignoreRules?: string;
-	backupPolicy?: SyncPolicy; photoGapPolicy?: SyncPolicy; photoDownloadAuthorization?: FileSyncApproval; strictAsync?: boolean; captureId?: string; pageSize?: number; onProgress?(progress: NativeIndexProgress): void; onStrictProgress?(indexed: number, cloudOriginals?: number, photoDownloadFraction?: number): void;
+	backupPolicy?: SyncPolicy; photoGapPolicy?: SyncPolicy; photoDownloadAuthorization?: FileSyncApproval;
+	photoQueueApproval?: NativePhotoQueueApproval; onPhotoBatch?(batch: NativePhotoQueueBatch): void;
+	strictAsync?: boolean; captureId?: string; pageSize?: number; onProgress?(progress: NativeIndexProgress): void; onStrictProgress?(indexed: number, cloudOriginals?: number, photoDownloadFraction?: number): void;
 	/** Called only after fresh native authorization pins a complete descriptor. */
 	resume?(capture: NativeBackupCapture): Promise<NativeInventoryResume>;
 	/** The caller discards this backup source after its durable journal handoff. */
@@ -160,7 +183,9 @@ export async function* readNativeInventory(input: {
 			assertBackupCapturePolicy(input.photoGapPolicy);
 			if (!input.strictAsync || input.backupPolicy || exclusions.length || ignoreRules) throw Error('Invalid photo gap policy.');
 		}
-		const photoGaps = input.photoGapPolicy ? { allowCloudGaps: true as const } : {};
+		if (input.photoQueueApproval && !input.photoGapPolicy) throw Error('Photos queue requires negotiated Photos coverage.');
+		const photoGaps = input.photoGapPolicy ? { allowCloudGaps: true as const,
+			...(input.photoQueueApproval ? { photoQueueApproval: input.photoQueueApproval } : {}) } : {};
 		if (input.photoDownloadAuthorization && (!input.photoGapPolicy || input.photoDownloadAuthorization.configuration.network !== 'any'))
 			throw Error('PhotoKit download is not authorized by the connection.');
 		if (input.backupPolicy && input.strictAsync) throw Error('Native capture policies cannot be combined.');
@@ -211,6 +236,8 @@ export async function* readNativeInventory(input: {
 			}
 		} else { capture = parseNativeInventoryCapture(begin.capture); if (capture.coverage !== undefined) throw Error('Partial inventory requires the negotiated backup policy.'); }
 		if (capture.id !== captureId) throw Error('Native capture identity changed.');
+		if (capture.photoQueue?.epoch !== input.photoQueueApproval?.request.epoch) throw Error('Native Photos queue identity changed.');
+		if (capture.photoQueue) input.onPhotoBatch?.(capture.photoQueue);
 		if (capture.coverage !== undefined) {
 			const continuation = input.resume ? parseNativeInventoryResume(await input.resume(structuredClone(capture as NativeBackupCapture)), capture as NativeBackupCapture) : undefined;
 			signal.throwIfAborted();
