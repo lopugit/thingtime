@@ -15010,6 +15010,14 @@ the isolated real-API/browser command and the metadata-only session boundary.
       the old authority. Sign back into the same account with activity still off:
       one read-only verified status must resume retained opt-in without another
       enable/permission prompt. Hide/show the app without withdrawing authority.
+- [ ] With native location bridge 1.2+, explicitly authorize Always and enable
+      location history on a paired iPhone. Drive for at least 20 minutes with
+      the screen locked; verify intermediate measured fixes about five minutes
+      apart when iOS has fixes. Stop and resume driving, lose and regain
+      connectivity, and compare observed versus received times. The outbox
+      must keep original times and IDs. Downgrade to While Using the App and
+      repeat with the screen locked; no background fixes may be collected.
+      Force quit and poor reception can leave gaps; no synthetic points.
 - [ ] Send a target-device message/default tone and an approved uploaded MP3.
       Verify original bytes, exact prepared derivative, target isolation,
       cancellation and lease expiry. Lose replies and retry the same request:

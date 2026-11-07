@@ -4,11 +4,12 @@ import WebKit
 
 @MainActor
 final class MobileDeviceLocationBridge {
-    static let script = WKUserScript(source: "window.thingtimeNativeBridge.deviceLocationVersion = '1.1.0';",
+    static let script = WKUserScript(source: "window.thingtimeNativeBridge.deviceLocationVersion = '1.2.0';",
                                      injectionTime: .atDocumentStart, forMainFrameOnly: true)
     typealias Verification = (MobileDevicePairing.Scope, WKWebView, @escaping ([HTTPCookie], URL) -> [HTTPCookie], @escaping () throws -> Void) async throws -> Void
     private let location: MobileDeviceLocation
     private let verify: Verification
+    private let appIsActive: () -> Bool
     private var task: Task<Void, Never>?
     private var generation = UUID()
     private var pendingScope: MobileDevicePairing.Scope?
@@ -23,8 +24,10 @@ final class MobileDeviceLocationBridge {
             try await verifier.verifyDevice(scope, deviceId: device, webView: webView, cookies: cookies, check: check)
         })
     }
-    init(location: MobileDeviceLocation, verify: @escaping Verification) {
-        self.location = location; self.verify = verify
+    init(location: MobileDeviceLocation,
+         appIsActive: @escaping () -> Bool = { UIApplication.shared.applicationState == .active },
+         verify: @escaping Verification) {
+        self.location = location; self.appIsActive = appIsActive; self.verify = verify
         for name in [MobileDeviceLocation.authorizationChangedNotification, UIScene.didActivateNotification] {
             observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.statusChanged?() }
@@ -62,9 +65,9 @@ final class MobileDeviceLocationBridge {
             guard self?.generation == operation, let current = webView?.url, currentRoot() == root,
                   LopuVoiceContract.sameOrigin(current, root) else { throw CancellationError() }
         }
-        let check = {
+        let check = { [appIsActive] in
             try identityCheck()
-            guard UIApplication.shared.applicationState == .active else { throw CancellationError() }
+            guard appIsActive() else { throw CancellationError() }
         }
         task = Task { [weak self] in
             guard let self else { return }
