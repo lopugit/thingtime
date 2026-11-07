@@ -1,6 +1,5 @@
 import AppKit
 import UniformTypeIdentifiers
-import UserNotifications
 import WebKit
 
 private struct BridgeRequest: Decodable {
@@ -24,45 +23,11 @@ private enum JSONValue: Decodable {
 
   var string: String? { if case .string(let value) = self { value } else { nil } }
   var bool: Bool? { if case .bool(let value) = self { value } else { nil } }
-  var pid: pid_t? {
-    guard case .number(let value) = self,
-          value.isFinite,
-          value.rounded() == value,
-          value > 1,
-          value <= Double(Int32.max) else { return nil }
-    return pid_t(value)
-  }
   var object: [String: JSONValue]? { if case .object(let value) = self { value } else { nil } }
-  var array: [JSONValue]? { if case .array(let value) = self { value } else { nil } }
-}
-
-/// Submits application launches to Launch Services without waiting for its XPC reply on
-/// Commander's main actor. Launch Services can occasionally take an unbounded time to
-/// resolve a handler, but that must never make the launcher stop responding.
-@MainActor
-final class CommanderApplicationOpener {
-  typealias OpenURL = (URL, NSWorkspace.OpenConfiguration, @escaping @Sendable (NSRunningApplication?, Error?) -> Void) -> Void
-
-  private let openURL: OpenURL
-
-  init(openURL: @escaping OpenURL = { url, configuration, completionHandler in
-    NSWorkspace.shared.open(url, configuration: configuration, completionHandler: completionHandler)
-  }) {
-    self.openURL = openURL
-  }
-
-  func submit(_ url: URL) {
-    let configuration = NSWorkspace.OpenConfiguration()
-    configuration.activates = true
-    openURL(url, configuration) { _, error in
-      guard let error else { return }
-      NSLog("Commander could not complete an application launch: \(error.localizedDescription)")
-    }
-  }
 }
 
 @MainActor
-final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotificationCenterDelegate {
+final class CommanderNativeBridge: NSObject, WKScriptMessageHandler {
   private static let maximumMessageBytes = 1024 * 1024
   private let keychain: KeychainStore
   private let loginItem: LaunchAtLoginService
@@ -70,25 +35,18 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
   private let nativeToken: String
   private let showLauncher: () -> Void
   private let hideLauncher: () -> Void
-  private let dismissLauncher: () -> Void
   private let launcherState: () throws -> [String: Any]
   private let updateLauncherPin: (Bool) throws -> [String: Any]
   private let openNewLauncherWindow: () throws -> [String: Any]
   private let commandHotKeyReady: (String) -> Void
   private let pasteClipboard: (String, Bool) async -> [String: Any]
   private let pasteTargetName: () -> String?
-  private let showProcesses: () -> Void
   private let showSettings: (CommanderSettingsTab?) -> Void
   private let updateHotKeys: (String?, [String: String]?) throws -> Void
   private let updateMenuBar: (Bool) -> Void
   private let updateWindowMode: (String) throws -> Void
-  private let updateCustomWindowResizeHandling: (Bool) -> Void
   private let updateWindowPinning: (Bool, Bool, Bool) -> Void
   private let metrics: SystemMetricsService
-  private let applicationResponsiveness: ApplicationResponsivenessService
-  private let applicationOpener: CommanderApplicationOpener
-  private let unresponsiveApplicationController: UnresponsiveApplicationController
-  private let fileIconRequests = CommanderFileIconRequestQueue()
   weak var webView: WKWebView?
 
   init(
@@ -97,7 +55,6 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     loginItem: LaunchAtLoginService,
     showLauncher: @escaping () -> Void,
     hideLauncher: @escaping () -> Void,
-    dismissLauncher: (() -> Void)? = nil,
     launcherState: @escaping () throws -> [String: Any] = {
       ["windowId": "default", "pinned": false, "pinningEnabled": false]
     },
@@ -116,11 +73,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     updateHotKeys: @escaping (String?, [String: String]?) throws -> Void,
     updateMenuBar: @escaping (Bool) -> Void,
     updateWindowMode: @escaping (String) throws -> Void,
-    updateCustomWindowResizeHandling: @escaping (Bool) -> Void = { _ in },
-    updateWindowPinning: @escaping (Bool, Bool, Bool) -> Void = { _, _, _ in },
-    applicationOpener: CommanderApplicationOpener = CommanderApplicationOpener(),
-    sharedMetrics: SystemMetricsService? = nil,
-    showProcesses: @escaping () -> Void = {}
+    updateWindowPinning: @escaping (Bool, Bool, Bool) -> Void = { _, _, _ in }
   ) {
     self.daemonURL = URL(string: ready.url)!
     self.nativeToken = ready.nativeToken
@@ -128,7 +81,6 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     self.loginItem = loginItem
     self.showLauncher = showLauncher
     self.hideLauncher = hideLauncher
-    self.dismissLauncher = dismissLauncher ?? hideLauncher
     self.launcherState = launcherState
     self.updateLauncherPin = updateLauncherPin
     self.openNewLauncherWindow = openNewLauncherWindow
@@ -136,24 +88,11 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     self.pasteClipboard = pasteClipboard
     self.pasteTargetName = pasteTargetName
     self.showSettings = showSettings
-    self.showProcesses = showProcesses
     self.updateHotKeys = updateHotKeys
     self.updateMenuBar = updateMenuBar
     self.updateWindowMode = updateWindowMode
-    self.updateCustomWindowResizeHandling = updateCustomWindowResizeHandling
     self.updateWindowPinning = updateWindowPinning
-    self.applicationOpener = applicationOpener
-    let applicationResponsiveness = sharedMetrics?.applicationResponsiveness ?? ApplicationResponsivenessService()
-    self.applicationResponsiveness = applicationResponsiveness
-    self.metrics = sharedMetrics ?? SystemMetricsService(
-      daemonPID: ready.pid,
-      applicationResponsiveness: applicationResponsiveness
-    )
-    self.unresponsiveApplicationController = UnresponsiveApplicationController(
-      responsiveness: applicationResponsiveness,
-      submitLaunch: { applicationOpener.submit($0) }
-    )
-    super.init()
+    self.metrics = SystemMetricsService(daemonPID: ready.pid)
   }
 
   func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -196,11 +135,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
       return
     }
     reply(id: requestID, ok: true, result: nil, error: nil)
-    if event.clickCount == 2, let utility = window as? CommanderUtilityWindow {
-      utility.zoom(nil)
-    } else {
-      window.performDrag(with: event)
-    }
+    window.performDrag(with: event)
   }
 
   private func beginFileDrag(_ request: BridgeRequest) {
@@ -229,13 +164,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     do {
       let result: Any?
       switch request.method {
-      case "launcher.hide":
-        if request.params?["restorePreviousApplication"]?.bool == true {
-          dismissLauncher()
-        } else {
-          hideLauncher()
-        }
-        result = nil
+      case "launcher.hide": hideLauncher(); result = nil
       case "launcher.show": showLauncher(); result = nil
       case "launcher.state": result = try launcherState()
       case "launcher.pin":
@@ -262,15 +191,9 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
       case "application.open":
         guard let raw = request.params?["path"]?.string else { throw BridgeError.missing("path") }
         guard let url = URL(string: raw), url.scheme != nil || raw.hasPrefix("/") else { throw BridgeError.invalidURL }
-        applicationOpener.submit(url.scheme != nil ? url : URL(fileURLWithPath: raw))
-        result = ["submitted": true]
-      case "application.control":
-        guard let pid = request.params?["pid"]?.pid,
-              let actionName = request.params?["action"]?.string,
-              let action = ApplicationControlAction(rawValue: actionName) else {
-          throw BridgeError.invalidApplicationControl
-        }
-        result = try unresponsiveApplicationController.perform(pid: pid, action: action)
+        if url.scheme != nil { NSWorkspace.shared.open(url) }
+        else { NSWorkspace.shared.open(URL(fileURLWithPath: raw)) }
+        result = nil
       case "application.pasteTarget":
         result = pasteTargetName().map { ["name": $0] } ?? [:]
       case "filesystem.reveal":
@@ -278,7 +201,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: raw)]); result = nil
       case "filesystem.icon":
         guard let path = request.params?["path"]?.string else { throw BridgeError.missing("path") }
-        result = ["dataUrl": try await fileIconRequests.dataURL(for: path)]
+        result = ["dataUrl": try CommanderWebView.fileIconDataURL(for: path)]
       case "filesystem.copy":
         guard let path = request.params?["path"]?.string else { throw BridgeError.missing("path") }
         let url = try CommanderWebView.validatedFileURL(for: path)
@@ -306,38 +229,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
         }
         try FileManager.default.removeItem(at: url)
         result = ["deleted": true]
-      case "system.metrics":
-        let seconds = request.params?["averageSeconds"]
-        let value: Int
-        if let seconds {
-          guard case .number(let raw) = seconds, raw.isFinite,
-                ProcessUsageHistory.windows.contains(Int(exactly: raw) ?? -1) else { throw BridgeError.missing("valid averageSeconds") }
-          value = Int(raw)
-        } else { value = 0 }
-        result = metrics.snapshot(averageSeconds: value)
-      case "processes.open": showProcesses(); result = nil
-      case "window.toggleMaximize":
-        guard let window = webView?.window as? CommanderUtilityWindow else { throw BridgeError.missing("utility window") }
-        window.zoom(nil); result = nil
-      case "window.state", "window.keepAbove":
-        guard let window = webView?.window as? CommanderUtilityWindow else { throw BridgeError.missing("utility window") }
-        if request.method == "window.keepAbove" {
-          guard let enabled = request.params?["enabled"]?.bool else { throw BridgeError.missing("enabled") }
-          window.level = enabled ? .floating : .normal
-        }
-        result = ["keepAbove": window.level == .floating]
-      case "permission.fullDiskAccess": result = ["granted": FullDiskAccessService.isGranted]
-      case "notification.show":
-        guard let id = request.params?["id"]?.string,
-              let title = request.params?["title"]?.string,
-              let body = request.params?["body"]?.string,
-              !id.isEmpty,
-              id.count <= 256,
-              !title.isEmpty,
-              title.count <= 160,
-              body.count <= 1_024 else { throw BridgeError.invalidNotification }
-        try await showNotification(id: id, title: title, body: body)
-        result = ["shown": true]
+      case "system.metrics": result = metrics.snapshot()
       case "clipboard.write":
         guard let text = request.params?["text"]?.string else { throw BridgeError.missing("text") }
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string); result = nil
@@ -372,7 +264,6 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
         try loginItem.update(enabled: openAtLogin)
         updateMenuBar(showMenuBarIcon)
         try updateWindowMode(windowMode)
-        updateCustomWindowResizeHandling(request.params?["useCustomWindowResizeHandling"]?.bool ?? true)
         updateWindowPinning(pinningEnabled, defaultPinned, focusRecentOnCurrentDisplay)
         try updateHotKeys(shortcut, commandShortcuts)
         result = ["applied": true]
@@ -391,24 +282,6 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
       case "credential.delete":
         let key = try credentialKey(request)
         try keychain.delete(issuer: key.issuer, clientID: key.clientID, accountID: key.accountID); result = nil
-      case "credential.environments":
-        guard let values = request.params?["accountIds"]?.array,
-              !values.isEmpty,
-              values.count <= 64 else { throw BridgeError.missing("accountIds") }
-        let accountIDs = try Set(values.map { value -> String in
-          guard let accountID = value.string,
-                !accountID.isEmpty,
-                accountID.count <= 256 else { throw BridgeError.missing("accountIds") }
-          return accountID
-        })
-        let environments = try keychain.environments(for: accountIDs)
-        result = ["environments": environments.map { environment in
-          [
-            "accountId": environment.accountID,
-            "baseUrl": environment.issuer,
-            "clientId": environment.clientID,
-          ]
-        }]
       default: throw BridgeError.unknownMethod(request.method)
       }
       reply(id: request.id, ok: true, result: result, error: nil)
@@ -424,33 +297,6 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
           let accountID = request.params?["accountId"]?.string,
           !issuer.isEmpty, !clientID.isEmpty, !accountID.isEmpty else { throw BridgeError.missing("issuer/clientId/accountId") }
     return (issuer, clientID, accountID)
-  }
-
-  nonisolated func userNotificationCenter(
-    _ center: UNUserNotificationCenter,
-    willPresent notification: UNNotification,
-    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
-  ) {
-    completionHandler([.banner, .sound])
-  }
-
-  private func showNotification(id: String, title: String, body: String) async throws {
-    let center = UNUserNotificationCenter.current()
-    center.delegate = self
-    var settings = await center.notificationSettings()
-    if settings.authorizationStatus == .notDetermined {
-      let granted = try await center.requestAuthorization(options: [.alert, .sound])
-      guard granted else { throw BridgeError.notificationsDenied }
-      settings = await center.notificationSettings()
-    }
-    guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
-      throw BridgeError.notificationsDenied
-    }
-    let content = UNMutableNotificationContent()
-    content.title = title
-    content.body = body
-    content.sound = .default
-    try await center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
   }
 
   private func decodeCommandShortcuts(_ value: JSONValue?) throws -> [String: String] {
@@ -538,88 +384,14 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
   }
 }
 
-/// Finder icon lookup and PNG encoding use AppKit, so they must remain on the
-/// main actor. Cache and coalesce by canonical path, then admit just one
-/// AppKit render per run-loop turn. This keeps every result row eligible for a
-/// real Finder icon without turning a broad search into a main-thread burst.
-@MainActor
-final class CommanderFileIconRequestQueue {
-  private static let maximumCachedIcons = 512
-  private static let maximumCachedIconBytes = 24 * 1024 * 1024
-
-  private let renderer: (String) throws -> String
-  private let cache = NSCache<NSString, NSString>()
-  private var jobs: [String] = []
-  private var waiters: [String: [CheckedContinuation<String, Error>]] = [:]
-  private var scheduled = false
-
-  init(renderer: ((String) throws -> String)? = nil) {
-    self.renderer = renderer ?? { path in
-      try CommanderWebView.fileIconDataURL(for: path)
-    }
-    cache.countLimit = Self.maximumCachedIcons
-    cache.totalCostLimit = Self.maximumCachedIconBytes
-  }
-
-  func dataURL(for path: String) async throws -> String {
-    let canonicalPath = try CommanderWebView.validatedFileURL(for: path).standardizedFileURL.path
-    let cacheKey = canonicalPath as NSString
-    if let cached = cache.object(forKey: cacheKey) {
-      return cached as String
-    }
-    return try await withCheckedThrowingContinuation { continuation in
-      if waiters[canonicalPath] != nil {
-        waiters[canonicalPath]?.append(continuation)
-      } else {
-        waiters[canonicalPath] = [continuation]
-        jobs.append(canonicalPath)
-      }
-      scheduleNext()
-    }
-  }
-
-  private func scheduleNext() {
-    guard !scheduled, !jobs.isEmpty else { return }
-    scheduled = true
-    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(8)) { [weak self] in
-      self?.renderNext()
-    }
-  }
-
-  private func renderNext() {
-    guard !jobs.isEmpty else {
-      scheduled = false
-      return
-    }
-    let path = jobs.removeFirst()
-    let continuations = waiters.removeValue(forKey: path) ?? []
-    scheduled = false
-    do {
-      let dataURL = try renderer(path)
-      cache.setObject(
-        dataURL as NSString,
-        forKey: path as NSString,
-        cost: dataURL.lengthOfBytes(using: .utf8)
-      )
-      continuations.forEach { $0.resume(returning: dataURL) }
-    } catch {
-      continuations.forEach { $0.resume(throwing: error) }
-    }
-    scheduleNext()
-  }
-}
-
 private enum BridgeError: LocalizedError {
-  case missing(String), invalidURL, invalidSettingsTab(String), invalidCommandShortcuts, invalidNotification, invalidApplicationControl, notificationsDenied, unknownMethod(String), credentialMissing, invalidDaemonResponse, responseTooLarge, pasteboardWrite, daemon(String)
+  case missing(String), invalidURL, invalidSettingsTab(String), invalidCommandShortcuts, unknownMethod(String), credentialMissing, invalidDaemonResponse, responseTooLarge, pasteboardWrite, daemon(String)
   var errorDescription: String? {
     switch self {
     case .missing(let key): "Native request is missing \(key)."
     case .invalidURL: "The requested URL is invalid."
     case .invalidSettingsTab(let tab): "Unsupported Commander settings tab: \(tab)"
     case .invalidCommandShortcuts: "The command shortcut map is invalid."
-    case .invalidNotification: "The notification details are invalid."
-    case .invalidApplicationControl: "The application control request is invalid."
-    case .notificationsDenied: "Commander notifications are disabled in macOS Settings."
     case .unknownMethod(let method): "Unknown native method: \(method)"
     case .credentialMissing: "No saved credential exists for this account."
     case .invalidDaemonResponse: "The Commander service returned an invalid response."

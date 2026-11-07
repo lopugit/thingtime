@@ -1,32 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import {
-  COMMANDER_THINGTIME_ENVIRONMENTS,
-  type CommanderAccount,
-  type CommanderSettings,
-} from '@commander/protocol';
+import { useEffect, useState } from 'react';
+import type { CommanderAccount, CommanderSettings } from '@commander/protocol';
 import { Check, Cloud, LogIn, RefreshCw, Trash2, UserRound } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { nativeRequest } from '../lib/nativeBridge.js';
-
-function environmentLabel(account: CommanderAccount, settings: CommanderSettings): string {
-  const environment = account.environment;
-  if (!environment) return 'Environment unavailable';
-
-  const known = [
-    ...COMMANDER_THINGTIME_ENVIRONMENTS,
-    ...settings.thingtimeCustomEnvironments,
-  ].find(
-    (candidate) =>
-      candidate.baseUrl === environment.baseUrl && candidate.clientId === environment.clientId,
-  );
-  if (known) return known.name;
-
-  try {
-    return `Custom · ${new URL(environment.baseUrl).hostname}`;
-  } catch {
-    return 'Custom environment';
-  }
-}
 
 export function AccountSettings({
   accounts: initialAccounts,
@@ -41,29 +17,8 @@ export function AccountSettings({
 }) {
   const [accounts, setAccounts] = useState(initialAccounts);
   const [message, setMessage] = useState<string | null>(null);
-  const reconciledAccountSignature = useRef<string | null>(null);
   const active = accounts.find((account) => account.id === settings.activeAccountId);
   useEffect(() => setAccounts(initialAccounts), [initialAccounts]);
-
-  useEffect(() => {
-    const accountIds = [...new Set(initialAccounts.map((account) => account.id))].sort();
-    const signature = accountIds.join('\u0000');
-    if (!signature || reconciledAccountSignature.current === signature) return;
-    reconciledAccountSignature.current = signature;
-    void (async () => {
-      try {
-        const native = await nativeRequest<{
-          environments?: Array<{ accountId: string; baseUrl: string; clientId: string }>;
-        }>('credential.environments', { accountIds });
-        if (!native?.environments?.length) return;
-        const reconciled = await api.reconcileAccountEnvironments(native.environments);
-        setAccounts(reconciled.accounts);
-        await onRefresh();
-      } catch {
-        // A missing/locked Keychain must not block account settings.
-      }
-    })();
-  }, [initialAccounts, onRefresh]);
 
   const login = async () => {
     try {
@@ -98,28 +53,18 @@ export function AccountSettings({
 
   const switchTo = async (account: CommanderAccount) => {
     await api.switchAccount(account.id);
-    onSettings({
-      ...settings,
-      activeAccountId: account.id,
-      ...(account.environment
-        ? {
-            thingtimeBaseUrl: account.environment.baseUrl,
-            thingtimeClientId: account.environment.clientId,
-          }
-        : {}),
-    });
+    onSettings({ ...settings, activeAccountId: account.id });
     await onRefresh();
     setMessage(`Switched to @${account.username}`);
   };
 
   const remove = async (account: CommanderAccount) => {
     await api.removeAccount(account.id);
-    if (account.environment)
-      await nativeRequest('credential.delete', {
-        accountId: account.id,
-        issuer: account.environment.baseUrl,
-        clientId: account.environment.clientId,
-      });
+    await nativeRequest('credential.delete', {
+      accountId: account.id,
+      issuer: settings.thingtimeBaseUrl,
+      clientId: settings.thingtimeClientId,
+    });
     const next = accounts.filter((item) => item.id !== account.id);
     setAccounts(next);
     if (settings.activeAccountId === account.id)
@@ -145,11 +90,7 @@ export function AccountSettings({
         </span>
         <div>
           <h2>{active?.displayName ?? 'Thingtime Account'}</h2>
-          <p>
-            {active
-              ? `@${active.username} · ${environmentLabel(active, settings)}`
-              : 'Sign in to sync Commander everywhere.'}
-          </p>
+          <p>{active ? `@${active.username}` : 'Sign in to sync Commander everywhere.'}</p>
         </div>
         <button className="primary-button" type="button" onClick={() => void login()}>
           <LogIn /> Add account
@@ -180,7 +121,6 @@ export function AccountSettings({
               <span className="account-copy">
                 <strong>{account.displayName ?? account.username}</strong>
                 <small>@{account.username}</small>
-                <span className="account-environment">{environmentLabel(account, settings)}</span>
               </span>
               {account.id === settings.activeAccountId ? (
                 <span className="active-account">

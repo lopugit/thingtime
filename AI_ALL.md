@@ -710,35 +710,9 @@ points, not the individual files.
 
 ## Browser and UI validation
 
-### Configurable images and files
-
-- Every configurable or customizable image/file usage across Thingtime must use the shared upload-first pattern: offer an upload picker as the primary control and an optional **Use URL instead** button that reveals a URL field. Reuse the shared media/upload components; do not introduce URL-only settings. Preserve previews, replacement/removal, progress, retry, and unsaved drafts. Use canonical server-validated attachment purposes, target/slot authorization, moderation, quota accounting, and cleanup; a pasted URL remains a validated fallback and must never bypass these boundaries.
-
 ### Feature customization defaults
 
 - Every new user-facing feature or meaningful product addition must include a reasonably chosen settings surface for the behaviors users are likely to want to customize. Choose safe, useful defaults; avoid exposing implementation-only knobs; preserve existing preferences through migrations; and document what each control changes. If a feature genuinely has no meaningful user choice, no setting is required.
-
-### Seamless inline loading
-
-- Use one subtle inline loading icon, animation, or progress bar beside the
-  affected control or content region. Never stack or repeat visible loading
-  messages for the same operation, or replace a usable screen with loading
-  text, a blocking spinner, or a skeleton.
-- Keep existing content, search results, input, focus, and scroll position
-  usable during same-account background refreshes. On a true cold start,
-  reserve the content's layout and show only the single inline indicator;
-  do not flash empty-result messages before loading finishes. Clear protected
-  content immediately when its account, origin, authorization, or lock state
-  changes.
-- Give the indicator an accessible status label and appropriate busy semantics
-  without duplicate screen-reader announcements. Respect reduced motion, avoid
-  flicker and layout shifts, and replace a failed or stalled load with one
-  clear inline error and a working retry action.
-- Apply this across pages, extensions, popups, dialogs, cards, lists, and
-  controls. Verify cold start, cached refresh, searching while loading, empty,
-  error/retry, and identity changes before declaring the flow complete.
-
-### Rendered interaction verification
 
 - For rendered browser validation in Codex Desktop, prefer the in-app Browser first when it is available. If localhost is blocked there, or the user explicitly asks for Chrome, use the Codex Chrome tab control workflow (`chrome:control-chrome`) before falling back to standalone Playwright. Keep Chrome checks read-only unless the user requested an action, and do not inspect cookies, local storage, passwords, or profile data.
 - Before finishing a PR, run the manual checklists in `TESTING.md` for every
