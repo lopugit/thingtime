@@ -214,11 +214,7 @@ const AlgorithmManagerContent = () => {
   // "try my feed brain 🧠" (claude-todo/10): first click flips the algorithm to
   // shared and copies the /feed?algorithm=<id> link; while shared, one click
   // re-copies and a separate action stops sharing. The algorithm doc itself
-  // stays private and is never readable directly — but branching COPIES its
-  // learned weights into the brancher's own algorithm, where they surface as
-  // that copy's topInterests. Sharing therefore discloses the trained profile
-  // to anyone holding the link, and the copy stands on its own after an
-  // unshare. Say so plainly below: this is the owner's consent moment.
+  // stays private — shared only lets link-holders branch their own copy.
   const shareLinkFor = (algorithm: PublicAlgorithm) => `${window.location.origin}/feed?algorithm=${algorithm.id}`;
 
   const handleShare = async (algorithm: PublicAlgorithm) => {
@@ -234,8 +230,7 @@ const AlgorithmManagerContent = () => {
         await navigator.clipboard.writeText(url);
         lopu({
           title: 'Feed brain share link copied 🧠🔗',
-          description:
-            'Anyone with the link can branch their own copy, which carries your learned interests over. Your algorithm stays private and keeps training on its own — stop sharing any time, though copies already branched stay theirs.',
+          description: 'Anyone with the link can branch their own copy — your algorithm and its training stay private.',
           status: 'success',
           duration: 8000
         });
@@ -243,7 +238,7 @@ const AlgorithmManagerContent = () => {
         lopu({ title: 'Sharing is on — copy the link', description: url, status: 'info' });
       }
     } catch (err: any) {
-      lopu({ title: 'Share failed 😔', description: err?.error || err?.message || 'Please try again in a moment.', status: 'error' });
+      lopu({ title: 'Share failed 😔', description: err?.error || 'Please try again in a moment.', status: 'error' });
     } finally {
       setBusyId(null);
     }
@@ -257,7 +252,7 @@ const AlgorithmManagerContent = () => {
       setAlgorithms((prev) => prev.map((item) => (item.id === algorithm.id ? resp.algorithm : item)));
       lopu({ title: 'Sharing stopped 🚪', description: 'Existing links no longer resolve.', status: 'success', duration: 5000 });
     } catch (err: any) {
-      lopu({ title: 'Could not stop sharing 😔', description: err?.error || err?.message || 'Please try again in a moment.', status: 'error' });
+      lopu({ title: 'Could not stop sharing 😔', description: err?.error || 'Please try again in a moment.', status: 'error' });
     } finally {
       setBusyId(null);
     }
@@ -467,6 +462,27 @@ const AlgorithmManagerContent = () => {
                 >
                   {algorithm.shared ? 'Copy link 🧠🔗' : 'Share 🧠'}
                 </Button>}
+                {algorithm.shared && (
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    color="var(--tt-muted, #9a9aa6)"
+                    isLoading={busyId === `${algorithm.id}:share`}
+                    onClick={() => handleUnshare(algorithm)}
+                    title="Stop sharing — existing links stop resolving"
+                  >
+                    Unshare 🚪
+                  </Button>
+                )}
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  isLoading={busyId === `${algorithm.id}:share`}
+                  onClick={() => handleShare(algorithm)}
+                  title={algorithm.shared ? 'Copy the share link again' : 'Turn on sharing and copy the link'}
+                >
+                  {algorithm.shared ? 'Copy link 🧠🔗' : 'Share 🧠'}
+                </Button>
                 {algorithm.shared && (
                   <Button
                     size="xs"
