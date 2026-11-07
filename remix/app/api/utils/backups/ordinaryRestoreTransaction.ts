@@ -274,28 +274,33 @@ const advanceChain = (chain: string, recordHash: string) => hash([chain, recordH
  * disposable indexing is never resume authority. Each effect and its counter
  * increment commit with the corresponding canonical mutation.
  */
-export async function executeResumableOrdinaryRestore(
-	request: Request,
-	input: OrdinaryRestoreReview,
-	records: () => AsyncIterable<OrdinaryRestoreCreation>,
-	options: { signal?: AbortSignal; afterCheckpoint?: (phase: 'intent' | 'effect' | 'verified' | 'complete', ordinal: number) => Promise<void> } = {}
-) {
+/** Current home-plane ownership and revision, read under the same session/job
+ * fence used by publication. Public projections are not namespace authority. */
+export async function assertOrdinaryRestoreDestination(request: Request, destination: AccountRestoreDestination) {
+ if (isCustomMongoEndpointActive() || new URL(request.url).origin !== destination.scope.apiOrigin) conflict('Restore destination origin changed');
+ await withHomeMongoTransaction(async session => {
+  await fenceAccountSession(request, destination.scope.ownerId, session);
+  const root = await (await getHomeThingsCollection()).findOne({ shareId: destination.rootId, ownerId: destination.scope.ownerId, ...folderThingMatch() }, { session });
+  if (!root || root.appId != null || root.sandbox != null || root.sandboxSpace != null || root.crystal?.trashed || !Array.isArray(root.acl) || root.acl.length !== 1 || root.acl[0] !== 'tt:user' || root.timelineHeadId !== destination.rootRevision)
+   conflict('The reviewed destination revision or ownership changed');
+ });
+}
+
+/** One canonical transaction unit for an independently certified immutable
+ * graph. Server coordinators must finish closure/remapping certification before
+ * calling this helper. It never scans a graph, opens SQLite, accepts public
+ * input, or treats a source receipt as destination authorization. The original
+ * session/job fence is acquired by fenceAccountSession in EVERY transaction.
+ * Canonical single-shot and bounded workers share these same mutations. */
+export async function openReviewedOrdinaryRestoreWriter(request: Request, input: OrdinaryRestoreReview, signal?: AbortSignal) {
 	const review = validateReview(input), destination = review.destination, ownerId = destination.scope.ownerId;
 	if (isCustomMongoEndpointActive() || new URL(request.url).origin !== destination.scope.apiOrigin)
 		throw Error('Selected restore requires the exact home-plane destination origin');
 	if ((await getCurrentUser(request))?.id !== ownerId) throw new StorageMutationError(401, 'storage_conflict', 'The authenticated account or session changed');
-	const accepted = await readCompletedCreation(request, review);
-	if (accepted) return accepted;
-	const graph = await preflightGraph(review, records, options.signal);
 	const binding = hash(review), completionEventId = 'restore-graph-' + hash([ownerId, review.operationId]);
 	const things = await getHomeThingsCollection();
 	const hold: ContentExecutionHold = { version: 1, operationId: review.operationId, completionEventId, rootId: destination.rootId, binding };
 	const effectId = (kind: string, sourceId: string) => 'restore-' + kind + '-' + hash([ownerId, review.operationId, sourceId]);
-	const valueFor = (record: OrdinaryRestoreCreation, ordinal: number) => {
-		const pinned = graph.db.prepare('SELECT recordHash FROM creations WHERE sourceId=? AND ordinal=? AND targetId=?').get(record.sourceId, ordinal, record.input.shareId as string) as any;
-		if (!pinned || pinned.recordHash !== hash(record)) conflict('A reviewed creation changed after preflight');
-		return { binding, ordinal, recordHash: pinned.recordHash as string, sourceId: record.sourceId, targetId: record.input.shareId as string, family: 'ordinary' };
-	};
 	const readReceipt = async (id: string, adapter: string, value: unknown, session: any) => {
 		const prior = (await readTimelineEntries(things, ownerId, [id], session))[0]?.event;
 		if (!prior) return false;
@@ -335,120 +340,125 @@ export async function executeResumableOrdinaryRestore(
 			...folderThingMatch() }, { $set: set }, { session });
 		if (saved.modifiedCount !== 1) conflict('The reviewed destination changed before checkpoint publication');
 	};
-	try {
-		// Completion is immutable historical acceptance; current owner/session
-		// still apply, while later user edits must not be overwritten on retry.
-		const completed = await withHomeMongoTransaction(async session => {
-			await fenceAccountSession(request, ownerId, session);
-			await rootAndCheckpoint(session, true);
-			return readReceipt(completionEventId, ADAPTER, { binding, count: review.count }, session);
-		});
-		if (completed) return { replayed: true, eventId: completionEventId, count: review.count };
-		await withHomeMongoTransaction(async session => {
-			await fenceAccountSession(request, ownerId, session);
-			const { root, checkpoint } = await rootAndCheckpoint(session);
-			const admissionId = ordinaryRestoreAdmissionId(ownerId, review.operationId);
-			if (await readReceipt(admissionId, 'reviewed-creation-admission', { review }, session)) {
-				if (!root.creationCheckpoint || root.creationCheckpoint.binding !== binding) conflict('The durable creation admission lost its checkpoint');
-				return;
-			}
-			if (checkpoint.planned || checkpoint.applied) conflict('The original creation admission is unavailable');
-			// Persist the small immutable review itself, not just its digest. A
-			// fresh worker can recover it through the ordinary owner Timeline API.
-			await append(admissionId, 'reviewed-creation-admission', { review }, session);
-			await saveCheckpoint(checkpoint, session);
-			options.signal?.throwIfAborted();
-		});
-		let ordinal = 0, chain = initialChain;
-		for await (const record of records()) {
-			options.signal?.throwIfAborted();
-			const value = valueFor(record, ordinal), id = effectId('intent', record.sourceId);
-			chain = advanceChain(chain, value.recordHash);
-			await withHomeMongoTransaction(async session => {
-				await fenceAccountSession(request, ownerId, session);
-				const { checkpoint } = await rootAndCheckpoint(session);
-				if (await readReceipt(id, 'reviewed-creation-intent', value, session)) {
-					if (checkpoint.planned <= ordinal) conflict('A durable intent is missing its atomic checkpoint');
+	const checked = async <T>(work: (session: any) => Promise<T>) => withHomeMongoTransaction(async session => {
+		signal?.throwIfAborted(); await fenceAccountSession(request, ownerId, session);
+		const result = await work(session); signal?.throwIfAborted(); return result;
+	});
+	const valueFor = (record: OrdinaryRestoreCreation, ordinal: number) => {
+		if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal >= review.count ||
+			record.input.shareId !== ordinaryRestoreTargetId(review, record.sourceId)) conflict('The certified creation identity changed');
+		return { binding, ordinal, recordHash: hash(record), sourceId: record.sourceId, targetId: record.input.shareId as string, family: 'ordinary' };
+	};
+	return {
+		review, binding, completionEventId,
+		completed: () => readCompletedCreation(request, review),
+		async admit() {
+			return checked(async session => {
+				const { root, checkpoint } = await rootAndCheckpoint(session);
+				const admissionId = ordinaryRestoreAdmissionId(ownerId, review.operationId);
+				if (await readReceipt(admissionId, 'reviewed-creation-admission', { review }, session)) {
+					if (!root.creationCheckpoint || root.creationCheckpoint.binding !== binding) conflict('The durable creation admission lost its checkpoint');
 					return;
 				}
-				if (checkpoint.phase !== 'planning' || checkpoint.planned !== ordinal) conflict('Creation intent order changed');
-				await append(id, 'reviewed-creation-intent', value, session);
-				await saveCheckpoint({ ...checkpoint, planned: ordinal + 1, chain }, session);
-				options.signal?.throwIfAborted();
+				if (checkpoint.planned || checkpoint.applied) conflict('The original creation admission is unavailable');
+				await append(admissionId, 'reviewed-creation-admission', { review }, session);
+				await saveCheckpoint(checkpoint, session);
 			});
-			await options.afterCheckpoint?.('intent', ordinal);
-			ordinal++;
-		}
-		if (ordinal !== review.count) conflict('The selected creation inventory changed');
-		await withHomeMongoTransaction(async session => {
-			await fenceAccountSession(request, ownerId, session);
-			const { checkpoint } = await rootAndCheckpoint(session);
-			if (checkpoint.planned !== review.count || checkpoint.chain !== chain) conflict('The complete reviewed intent chain is unavailable');
-			if (checkpoint.phase === 'planning') await saveCheckpoint({ ...checkpoint, phase: 'restoring' }, session);
-		});
-		ordinal = 0;
-		for await (const record of records()) {
-			options.signal?.throwIfAborted();
+		},
+		async intent(record: OrdinaryRestoreCreation, ordinal: number, previousChain: string) {
+			const value = valueFor(record, ordinal), chain = advanceChain(previousChain, value.recordHash);
+			await checked(async session => {
+				const { checkpoint } = await rootAndCheckpoint(session);
+				if (await readReceipt(effectId('intent', record.sourceId), 'reviewed-creation-intent', value, session)) {
+					if (checkpoint.planned <= ordinal) conflict('A durable intent is missing its atomic checkpoint'); return;
+				}
+				if (checkpoint.phase !== 'planning' || checkpoint.planned !== ordinal || checkpoint.chain !== previousChain) conflict('Creation intent order changed');
+				await append(effectId('intent', record.sourceId), 'reviewed-creation-intent', value, session);
+				await saveCheckpoint({ ...checkpoint, planned: ordinal + 1, chain }, session);
+			});
+			return chain;
+		},
+		async beginEffects(chain: string) {
+			await checked(async session => {
+				const { checkpoint } = await rootAndCheckpoint(session);
+				if (checkpoint.planned !== review.count || checkpoint.chain !== chain) conflict('The complete reviewed intent chain is unavailable');
+				if (checkpoint.phase === 'planning') await saveCheckpoint({ ...checkpoint, phase: 'restoring' }, session);
+			});
+		},
+		async apply(record: OrdinaryRestoreCreation, ordinal: number) {
 			const value = valueFor(record, ordinal), id = effectId('applied', record.sourceId);
 			let effects: (() => Promise<void>)[] = [];
-			await withHomeMongoTransaction(async session => {
+			await checked(async session => {
 				effects = [];
 				const viewer = await fenceAccountSession(request, ownerId, session);
 				const { checkpoint } = await rootAndCheckpoint(session);
 				if (!await readReceipt(effectId('intent', record.sourceId), 'reviewed-creation-intent', value, session)) conflict('The reviewed command intent is unavailable');
 				if (await readReceipt(id, 'reviewed-creation-effect', value, session)) {
-					if (checkpoint.applied <= ordinal) conflict('A durable effect is missing its atomic checkpoint');
-					return;
+					if (checkpoint.applied <= ordinal) conflict('A durable effect is missing its atomic checkpoint'); return;
 				}
 				if (checkpoint.phase !== 'restoring' || checkpoint.applied !== ordinal) conflict('Creation effect order changed');
 				const result = await createThing(ownerId, { ...record.input, acl: ['tt:user'] }, viewer, null, {
-					transaction: { session, afterCommit: effect => effects.push(effect) },
-					executionHold: hold,
+					transaction: { session, afterCommit: effect => effects.push(effect) }, executionHold: hold,
 					timelineCapture: { id: 'restore-created-' + hash([review.operationId, record.sourceId]), operationId: review.operationId,
 						actorId: ownerId, source: 'api', now: new Date(), label: 'Restored selected content' }
 				});
 				if (isFail(result)) throw new StorageMutationError(result.status, 'storage_conflict', result.error);
 				await append(id, 'reviewed-creation-effect', value, session);
 				await saveCheckpoint({ ...checkpoint, applied: ordinal + 1 }, session);
-				options.signal?.throwIfAborted();
 			});
 			for (const effect of effects) await effect();
-			await options.afterCheckpoint?.('effect', ordinal);
-			ordinal++;
-		}
-		options.signal?.throwIfAborted();
-		const beforeVerification = await withHomeMongoTransaction(async session => {
-			await fenceAccountSession(request, ownerId, session);
-			return (await rootAndCheckpoint(session)).checkpoint.contentEpoch ?? 0;
-		});
-		if (!Number.isSafeInteger(beforeVerification) || beforeVerification < 0) conflict('Invalid creation content fence');
-		// Read current content after every effect, preserving owner edits while
-		// refusing missing/moved dependencies or newly broken executable closure.
-		// Only one current Thing is materialized at a time; the index is scratch.
-		const currentRecords = async function* (): AsyncGenerator<OrdinaryRestoreCreation> {
-			for (const row of graph.db.prepare('SELECT sourceId,targetId FROM creations ORDER BY ordinal').iterate()) {
-				options.signal?.throwIfAborted();
-				const doc = await things.findOne({ shareId: row.targetId, ownerId });
+		},
+		async epoch() {
+			const epoch = await checked(async session => (await rootAndCheckpoint(session)).checkpoint.contentEpoch ?? 0);
+			if (!Number.isSafeInteger(epoch) || epoch < 0) conflict('Invalid creation content fence'); return epoch;
+		},
+		async current(sourceId: string) {
+			return checked(async session => {
+				await rootAndCheckpoint(session);
+				const doc = await things.findOne({ shareId: ordinaryRestoreTargetId(review, sourceId), ownerId }, { session });
 				if (!doc || doc.appId != null || doc.sandbox != null || doc.sandboxSpace != null) conflict('Restored content was removed or changed ownership before completion');
-				yield { sourceId: row.sourceId as string, input: { shareId: doc.shareId, thingtime: doc.thingtime,
-					crystal: doc.crystal, extended: doc.extended ?? null, tags: doc.tags ?? [], acl: doc.acl, folderId: doc.folderId ?? null, geo: doc.geo ?? null } };
-			}
-		};
+				return { sourceId, input: { shareId: doc.shareId, thingtime: doc.thingtime, crystal: doc.crystal,
+					extended: doc.extended ?? null, tags: doc.tags ?? [], acl: doc.acl, folderId: doc.folderId ?? null, geo: doc.geo ?? null } } as OrdinaryRestoreCreation;
+			});
+		},
+		async complete(epoch: number, chain: string) {
+			await checked(async session => {
+				const { checkpoint } = await rootAndCheckpoint(session);
+				if (checkpoint.phase !== 'restoring' || checkpoint.planned !== review.count || checkpoint.applied !== review.count || checkpoint.chain !== chain)
+					conflict('The durable creation effect set is incomplete');
+				if ((checkpoint.contentEpoch ?? 0) !== epoch) conflict('Restored content changed during final verification');
+				await append(completionEventId, ADAPTER, { binding, count: review.count }, session);
+				await saveCheckpoint({ ...checkpoint, phase: 'complete' }, session);
+			});
+			return { replayed: false, eventId: completionEventId, count: review.count };
+		}
+	};
+}
+
+export async function executeResumableOrdinaryRestore(
+	request: Request, input: OrdinaryRestoreReview, records: () => AsyncIterable<OrdinaryRestoreCreation>,
+	options: { signal?: AbortSignal; afterCheckpoint?: (phase: 'intent' | 'effect' | 'verified' | 'complete', ordinal: number) => Promise<void> } = {}
+) {
+	const writer = await openReviewedOrdinaryRestoreWriter(request, input, options.signal), review = writer.review;
+	const completed = await writer.completed(); if (completed) return completed;
+	const graph = await preflightGraph(review, records, options.signal);
+	const validate = (record: OrdinaryRestoreCreation, ordinal: number) => {
+		const pin = graph.db.prepare('SELECT recordHash FROM creations WHERE sourceId=? AND ordinal=? AND targetId=?').get(record.sourceId, ordinal, record.input.shareId as string) as any;
+		if (!pin || pin.recordHash !== hash(record)) conflict('A reviewed creation changed after preflight');
+	};
+	try {
+		await writer.admit();
+		let ordinal = 0, chain = initialChain;
+		for await (const record of records()) { options.signal?.throwIfAborted(); validate(record, ordinal); chain = await writer.intent(record, ordinal, chain); await options.afterCheckpoint?.('intent', ordinal); ordinal++; }
+		if (ordinal !== review.count) conflict('The selected creation inventory changed');
+		await writer.beginEffects(chain);
+		ordinal = 0;
+		for await (const record of records()) { options.signal?.throwIfAborted(); validate(record, ordinal); await writer.apply(record, ordinal); await options.afterCheckpoint?.('effect', ordinal); ordinal++; }
+		const epoch = await writer.epoch();
+		const currentRecords = async function* () { for (const row of graph.db.prepare('SELECT sourceId FROM creations ORDER BY ordinal').iterate()) yield await writer.current(String(row.sourceId)); };
 		const currentReview = { ...review, ...await ordinaryRestoreGraphHash(currentRecords()) };
-		const currentGraph = await preflightGraph(currentReview, currentRecords, options.signal);
-		await currentGraph.close();
+		const currentGraph = await preflightGraph(currentReview, currentRecords, options.signal); await currentGraph.close();
 		await options.afterCheckpoint?.('verified', ordinal);
-		await withHomeMongoTransaction(async session => {
-			await fenceAccountSession(request, ownerId, session);
-			const { checkpoint } = await rootAndCheckpoint(session);
-			if (checkpoint.phase !== 'restoring' || checkpoint.planned !== review.count || checkpoint.applied !== review.count || checkpoint.chain !== chain)
-				conflict('The durable creation effect set is incomplete');
-			if ((checkpoint.contentEpoch ?? 0) !== beforeVerification) conflict('Restored content changed during final verification');
-			await append(completionEventId, ADAPTER, { binding, count: review.count }, session);
-			await saveCheckpoint({ ...checkpoint, phase: 'complete' }, session);
-			options.signal?.throwIfAborted();
-		});
-		await options.afterCheckpoint?.('complete', ordinal);
-		return { replayed: false, eventId: completionEventId, count: review.count };
+		const result = await writer.complete(epoch, chain); await options.afterCheckpoint?.('complete', ordinal); return result;
 	} finally { await graph.close(); }
 }

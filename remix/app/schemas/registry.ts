@@ -4286,6 +4286,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-observation-cleanup', 'device-s
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  'backup-job', 'backup-job-event',
   STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
   'agent-reporting-binding', 'agent-reporting-operation',
   'file',
@@ -4496,6 +4497,13 @@ const waitlistThingSchema: ThingtimeSchema = {
 };
 
 export const thingtimeSchemas: ThingtimeSchema[] = [
+  ...['backup-job', 'backup-job-event'].map(id => ({
+    id, version: 1, kind: 'crystal' as const, collection: null,
+    title: id === 'backup-job' ? 'Protected backup job' : 'Protected backup transition',
+    summary: 'Private durable backup coordinator control record.',
+    detail: 'Dedicated home-plane coordinator only. Original session references, immutable selectors, leases, fixed scalar cursors and opaque encrypted hash-checkpoint references never pass through generic Things reads, writes, exports, sharing, bulk operations or Actions. Transition history is relational, never a growing root array. This schema does not expose an execution endpoint.',
+    createdVia: 'Trusted backup Workflow coordinator', fields: [], example: {}
+  })),
   ...['mail-account', 'mail-folder', 'mail-message', 'mail-inbox', 'mail-operation'].map(id => ({
     id, version: 1, kind: 'crystal' as const, collection: null, title: id.replace('mail-', 'Mail '),
     summary: 'Private encrypted mail record.', detail: 'Owned mail records use the same versioned model in the cloud, browser and local connector. Credentials and message content are encrypted. Proxy inboxes contain folder references only. Generic Thing reads, writes and sharing cannot access these records.',

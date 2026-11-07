@@ -7000,3 +7000,25 @@ and first-vault loss, preserves nested folder metadata and file history, and
 checks current/historical bytes, interruption and authority races. This is an
 internal selected-file worker, not a new public restore UI or complete account
 restore. See [the contract](docs/portable-backups.md#reviewed-account-file-publication--6-november-2026).
+
+
+### Durable backup dispatch setup
+
+The supported Vercel scheduler calls `/api/v1/backups/run` every five minutes.
+It reuses the deployment's existing `CRON_SECRET` bootstrap credential; do not
+copy it into the application vault, a job Thing, command arguments or client.
+No new provider credential or permanently running supervisor is required.
+The route negotiates `api.backup-dispatch` 1.0.0 and accepts no selectors or user
+payload. An authenticated same-origin full administrator can invoke the same
+bounded maintenance pass with POST `{}`. The normal activity/error/request
+reporting covers the registered route; its response exposes aggregate counts.
+
+Protected admission is the durable outbox. Request-attached background dispatch
+reduces latency, while the scheduler recovers a request/process disappearing
+before startup. Reserved attempt IDs and original-session/generation checks fence
+late old initialization, pause/cancel and uncertain startup. SDK acceptance,
+Workflow execution, independent storage verification and selected restore
+completion are separate outcomes. A configured cron or declared capability does
+not prove the selected deployment actually ran it; verify real scheduling before
+claiming the complete workflow ready. Independent storage setup remains in
+[backup destinations](docs/backup-destinations.md).

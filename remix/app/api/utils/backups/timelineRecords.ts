@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { parseBackupItem, type BackupItem } from '../../../backups/manifest';
+import { timelineScopeKey } from '../../../timeline/contract';
 import { copyBoundedJson, type JsonValue } from '../../../utils/boundedJson';
 import {
 	TIMELINE_EVENT_KIND,
@@ -211,10 +213,21 @@ export function timelineBackupRecordFromDoc(doc: any): BackupTimelineRecord {
 	return record;
 }
 export async function retainTimelineBackupRecord(store: BackupObjectStore, snapshotId: string, ordinal: number, doc: any, access: BackupAccess) {
+	const ownerId = doc.ownerId, thingId = doc.shareId, scopeKey = timelineScopeKey(access.scope);
+	const check = () => { access.signal?.throwIfAborted(); if (doc.ownerId !== ownerId || doc.shareId !== thingId || ownerId !== access.scope.ownerId || timelineScopeKey(access.scope) !== scopeKey) throw Error('Timeline backup identity changed'); };
+	check(); await access.authorize(); check();
 	const record = timelineBackupRecordFromDoc(doc),
 		text = timelineBackupJson(record),
 		sha256 = createHash('sha256').update(text).digest('hex');
 	if (backupTimelineIdentity(record).ownerId !== access.scope.ownerId) throw Error('Timeline backup owner changed');
+	// Explicit adapter v2 keeps canonical small records inside the already
+	// bounded manifest item. Deep/large records retain the exact v1 payload
+	// representation; no source record is rejected to fit this optimization.
+	let inline: BackupItem | undefined;
+	try { inline = parseBackupItem({ ordinal, thingId, revision: 'snapshot-' + sha256,
+		snapshot: { adapter: BACKUP_TIMELINE_RECORD_ADAPTER, version: 2, value: { kind: record.kind, sha256, record } }, content: null }); }
+	catch { /* retain the established v1 byte-stream representation */ }
+	if (inline) { await access.authorize(); check(); return inline; }
 	return retainBackupPayload(
 		store,
 		snapshotId,
@@ -228,6 +241,19 @@ export async function retainTimelineBackupRecord(store: BackupObjectStore, snaps
 		access
 	);
 }
+/** Inline adapter version is separate from the retained v1 descriptor. The
+ * canonical record SHA and owner/Thing identity are checked by every reader. */
+export function parseInlineBackupTimelineRecord(input: BackupItem, ownerId: string): BackupTimelineRecord {
+ const item = parseBackupItem(input), descriptor = item.snapshot.value as any;
+ if (item.snapshot.adapter !== BACKUP_TIMELINE_RECORD_ADAPTER || item.snapshot.version !== 2 || item.content !== null)
+  throw Error('Invalid inline Timeline descriptor');
+ exact(descriptor,['kind','sha256','record']);
+ const record=parseBackupTimelineRecord(descriptor.record), identity=backupTimelineIdentity(record), text=timelineBackupJson(record);
+ if (!isAccountTimelineKind(descriptor.kind) || record.kind!==descriptor.kind ||
+  createHash('sha256').update(text).digest('hex')!==descriptor.sha256 || item.revision!=='snapshot-'+descriptor.sha256 ||
+  identity.ownerId!==ownerId || identity.thingId!==item.thingId) throw Error('Inline Timeline identity or digest changed');
+ return record;
+}
 /** Reads a verified offline copy. This does not authorize replay of server
  * receipts or replace current Timeline state; import still needs a reviewed writer. */
 export async function openBackupTimelineRecord(
@@ -237,6 +263,7 @@ export async function openBackupTimelineRecord(
 	access: BackupAccess
 ): Promise<BackupTimelineRecord> {
 	const { item, ranges } = await openBackupItem(store, snapshotId, thingId, access);
+	if (item.snapshot.adapter === BACKUP_TIMELINE_RECORD_ADAPTER && item.snapshot.version === 2) return parseInlineBackupTimelineRecord(item, access.scope.ownerId);
 	const descriptor = item.snapshot.value as any;
 	exact(descriptor, ['kind', 'sha256']);
 	if (

@@ -9,8 +9,8 @@ test('reviewed creation and inert-preview clients negotiate published semantic c
 	const source = createApiCapabilitiesManifest(), runtime = thingtimeCapabilityManifest(origin);
 	assert.equal(runtime.origin, origin);
 	for (const [feature, minimum] of Object.entries({ ...CONTENT_CREATION_REQUIREMENTS, ...CONTENT_EXECUTION_READ_REQUIREMENTS })) {
-		assert.equal(source.features[feature], minimum);
-		assert.equal(runtime.features[feature]?.version, minimum);
+		assert.ok(capabilitySatisfies(source.features[feature], minimum), feature);
+		assert.ok(capabilitySatisfies(runtime.features[feature]?.version ?? '', minimum), feature);
 		const [major, minor, patch] = minimum.split('.').map(Number);
 		assert.equal(capabilitySatisfies(`${major}.${minor}.${patch + 1}`, minimum), true);
 		assert.equal(capabilitySatisfies(`${major + 1}.0.0`, minimum), false);
