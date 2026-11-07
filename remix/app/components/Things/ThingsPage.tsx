@@ -477,11 +477,7 @@ export const ThingsPage = () => {
         navigateToFolder(thing.id);
         return;
       }
-      if (thing.thingtime.includes('post')) {
-        navigate(`/post/${thing.id}`);
-        return;
-      }
-      setPreviewThing(thing);
+      navigate(thingOpenHref(thing, 'things', user?.id));
     },
     [navigate, navigateToFolder]
   );

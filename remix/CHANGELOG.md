@@ -145,20 +145,1062 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-14 — **Claude (AI)**: History settings. New `api.timeline-settings`
-  1.0.0 (`GET`/`POST /api/v1/timeline/settings`; `api.timeline` stays 1.18.0)
-  stores the account-wide sync hold, the retention choice (stored only —
-  nothing is deleted yet) and the per-Thing draft-capture pause list on the
-  user Thing's protected `secure.meta.historyPrefs` blob through a
-  home-pinned, injectable `createHistoryPrefsStore` (`users.ts`; pause/resume
-  are deltas merged inside the `secureVersion` CAS write, 200-id cap, 64 KiB
-  body cap, `timeline.settings` 30/min, 503 + `Retry-After: 1` on contention).
-  Shared contract `remix/app/timeline/historyPrefs.ts`; Settings → History
-  category, `pause-history`/`resume-history` verbs, Thing-page and editor
-  History entry points, bounded client export. Pausing stops client draft
-  capture in the Builder page and definition editors only; saved versions
-  keep recording. Docs: `docs/unified-timeline.md` (2026-10-14 section),
-  `docs/feature-map/history-and-timeline.md`.
+- 2026-11-03: Give saved password card account/type subtitles the readable card foreground, preserving individually editable layouts and custom colors while upgrading the prior default subtitle color. — Codex (AI)
+
+- 2026-11-03: Add the browser password workspace with account previews, explicit autofill, local QR scanning and exact popup return; shared timed/Never confirmation preferences and per-entry overrides; supported native verification reuse and tree/provider branding. OS-required verification remains enforced. [Release details](../PRs/1309-codex-password-verification-preferences-password-workspace.md). — Codex (AI).
+
+- 2026-11-03: Group the admin MongoDB overview by deployment, separating observed in-use/idle connections from modeled monitoring and handshake overhead. Explain warm runtimes, pool retention and cumulative API-feature use through editable details; preserve custom layouts and unknown telemetry. See [connection inventory](../docs/mongodb-connections.md) and [PR 1307 verification](../PRs/1307-codex-mongodb-deployment-overview-explain-mongodb-connections-by-deployment-and-api-feature.md). **Codex (AI)**
+
+- 2026-11-02: Reuse the official Thingtime tree across password manager, browser extension and native host/provider surfaces; preserve editable saved layouts, package extension 0.2.1 icons and native 1.0.7/build 8 resources, and cover actual excluded-registration return routing in isolated Chrome. Website-controlled passkey artwork remains independent. [Details](../PRs/codex-passkey-registration-save-tree-branding.md). **Codex (AI)**
+
+- 2026-11-02: Explain site-declined duplicate passkey registrations with terminal native/browser recovery, preserve existing keys, expose safe native request counts, and recheck site exclusions before retained-key retries. Verify independent encrypted same-account record storage through disposable real API handlers.
+
+- 2026-11-02: Add editable admin MongoDB connection-source cards, canonical-client pool telemetry, private expiring runtime snapshots, explicit freshness and optional database-reported totals. Keep incomplete attribution visible and reuse existing clients without polling other deployments. [PR 1300 verification](../PRs/1300-codex-mongodb-connection-inventory-admin-connection-attribution.md). **Codex (AI)**
+
+- 2026-11-02: Expand the browser extension into a resizable, single-window workspace with Overview, Requests, Config and Help; persist opening size/text preferences and bind diagnostics to the toolbar-selected document with stale-read fencing.
+
+- 2026-10-30: Add retained, distinctly named Thingtime development app workspaces with independent dependencies, encrypted profiles, managed local replicas and process ownership. Development stays separate from the stable installed app; see [PR details](../PRs/codex-mongo-preview-cleanup-preview-retention.md#retained-development-app--30-october-2026). **Codex (AI)**
+
+- 2026-10-30: Add individually editable, private saved Builder blocks for shared Admin preview-retention and PR-liveliness sections with revision-guarded saves, explicit capability negotiation and signed fresh controller policy reads. Preserve deployments on unavailable policy; product gateway rollout precedes controller rollout. Shared Builder overlay chrome keeps floating launch buttons off inspector inputs and restores them on close. Native capability discovery targets the selected API and immediate remounts discard aborted negotiations without weakening origin checks. Preserve the review-bot stored-policy error correction with admin capability 1.0.1. Supported lazy WASM initialization restores Nitro startup while retaining real engine asset URLs. [Details](../PRs/codex-mongo-preview-cleanup-preview-retention.md). **Codex (AI)**
+
+
+- 2026-10-29: Restore Add for long custom emoji combinations, retain unfinished
+  reaction-picker input after dismissal, and append nine recent choices to the
+  quick reaction popup. Reuse shared validation and account-scoped reaction
+  history with responsive wrapping and real API/browser regression coverage.
+  [PR #1290 delivery notes](../PRs/1290-codex-emoji-picker-drafts-recents--fix-custom-emoji-add-drafts-and-recents.md).
+  **Codex (AI)**
+
+- 2026-10-29 — **Codex (AI)**: Add a transactional 100 MiB pending-accounting budget for trusted unlimited accounts, durable leased recovery, source-aware release health and structured storage incident logs. Add pre-merge, production alias and scheduled runtime checks through the protected controller. See [storage recovery](../docs/storage-recovery.md). Details: [PR #1289](../PRs/1289-storage-ledger-release-guard.md).
+
+- 2026-10-29: Restore the original browser tab before explicit native passkey fallback starts WebAuthn; approval-page cancellation returns consistently while background opt-out/cancellation stays non-disruptive.
+
+- 2026-10-29: Restore successful browser passkey approvals to the exact requesting tab/window before the site handles its response.
+
+- 2026-10-29: Add privacy-safe browser passkey hook diagnostics and native empty-request site/count details to identify missed Thingtime routing without changing permissions or credential matching.
+
+- 2026-10-29: Restore repeated child insertion in populated Builder parents,
+  add above/below/left/right insertion, and replace overlapping nested title
+  chips with a shared ancestor breadcrumb. Add an editable block-structure
+  dialog whose page/parent/block views select the real inspector target.
+  [Implementation and acceptance](../PRs/1284-codex-builder-nested-blocks-fix-nested-builder-insertion-and-add-block-structure-navigation.md).
+  **Codex (AI)**
+
+- 2026-10-29: Identify Builder-authored Things through the existing schema array, open owned Builder Things in their editors, and add shared Open in Builder / Open live page menu actions while preserving view/share links and ordinary Thing navigation. [PR 1280 details](../PRs/1280-codex-builder-thing-navigation-open-builder-things-in-their-editors.md). — Codex (AI)
+- 2026-10-29: Localize the native AutoFill host name as Thingtime while preserving its installed filename and identity; verify bundled localization rather than raw plist branding alone.
+
+- 2026-10-29: Unify native and optional browser-provider display naming as Thingtime, verify matching branded bundles, and present native macOS passkey setup and discovery before optional browser interception.
+
+- 2026-10-29: Recover native Password AutoFill linking for an enabled provider, preserve explicit disconnect and independent account links, explain local HTTPS requirements, and install matching standalone/nested companions.
+
+- 2026-10-29: Restore shared Apple file publication and recovery on older host
+  kernels while retaining path, symlink, identity and content protections.
+  Cover the unsupported rename-flag retry and include FileSync changes in
+  automatic iOS releases. [Release evidence](../PRs/1272-codex-ios-all-share-types-add-ios-share-destination.md).
+  **Codex (AI)**
+
+- 2026-10-29: Split the historical-file export test fixture into typed JSON
+  sections so Xcode 26.2 can check it without exhausting expression inference.
+  Preserve the fingerprint bytes and all five export regressions. **Codex (AI)**
+
+- 2026-10-29: Type native upload progress expectations explicitly as 64-bit byte
+  counts so the Xcode 26.2 TestFlight regression build compiles. The existing
+  ordered-progress assertion remains intact. **Codex (AI)**
+
+- 2026-10-29: Add the native iOS Thingtime share destination for source-provided
+  text, links, media, documents, folders and custom types, with local atomic
+  batches, cancellation and retry. Include the extension in TestFlight signing
+  and archive verification, and add real system-sheet byte checks. Native
+  installation is required; a web deployment cannot add the destination.
+  [Verification and delivery boundaries](../PRs/1272-codex-ios-all-share-types-add-ios-share-destination.md).
+  **Codex (AI)**
+
+- 2026-10-28: Add private MCP task reporting with an independent delegation
+  permission, distinct task Characters, saved workspace Actions, guarded retries
+  and exact record readback. Existing Things connections require explicit
+  reporting authorization. See [setup and acceptance](../docs/agent-reporting.md).
+  [Validation and delivery boundaries](../PRs/1270-codex-mcp-private-reporting-private-agent-task-reporting.md).
+  **Codex (AI)**
+
+- 2026-10-28: Extend editable Mapbox viewports with cursor-paged favourite and route sources, numbered route stops, query selection and route-scoped transient geometry. Expose current runtime fields to ordinary page blocks so persistent maps can sit outside draft-resetting source panels. Saved app definitions remain private Things. **Codex (AI)**
+
+- 2026-10-28: Restore saved Action buttons and row form submissions in expanded editable Builder collections. The live page uses the canonical delegated Action handler once per gesture; Builder edit mode remains inert. **Codex (AI)**
+
+- 2026-10-28: Restore saved Action data in live collections after expanding Components into editable Builder blocks; collection controls remain inert while editing. **Codex (AI)**
+
+- 2026-10-28: Resize saved Mapbox maps when their containing Builder layout changes, including the Thingtime drawer opening and closing. The canvas now follows the map region without reloading tiles or persisting route results. **Codex (AI)**
+
+- 2026-10-28: Serve the saved Builder map's official Mapbox GL JS npm distribution and CSS as same-origin assets, and permit only Mapbox service and events connections in the strict application CSP. Add production CSP regression checks after live SDK loading was blocked. Provider-backed map rendering still needs deployed-origin acceptance. **Codex (AI)**
+
+- 2026-10-28: Add owner-scoped Mapbox address lookup and route optimization plus an editable map viewport for saved Builder apps. Credentials stay in Vault; navigation results remain transient under provider terms. Live app acceptance pending. [Details](../PRs/1260-codex-thingtime-route-planner-support-editable-mapbox-route-planner-apps.md). **Codex (AI)**
+
+- 2026-10-27: Native Password AutoFill now reports safe progress and recovery categories, retains registration identity across retries, fences stale requests and reads complete paginated catalogs. Display the macOS provider as Thingtime without changing credential-store identities; add isolated native build overrides, a shared editable Connect/Disconnect control backed by read-only device status, and automatic device verification after OS-picker selection. Real GitHub creation was user-confirmed; installed status controls and the final automatic-start provider remain separate acceptance. [Details](../PRs/1258-codex-native-passkey-repair-20261027-fix-native-passkey-recovery-and-thingtime-provider-naming.md). **Codex (AI)**
+
+- 2026-10-27: Add Password manager navigation/settings and an opt-in Chromium
+  passkey extension with editable website approval, fresh password verification,
+  origin/RP fences and durable vault readback. Document fork-safe ZIP setup and
+  real-data regression checks; Firefox, Safari, mobile and native-provider
+  acceptance remain separate. **Codex (AI)**
+
+- 2026-10-27: Add native desktop View menu zoom and focused-window Command/Control `+`/`=`/`-`/`0` shortcuts, sharing one zoom path while preserving text editing and preventing duplicate menu/renderer handling. Add focused and real Electron host regressions. [Validation and delivery](../PRs/1253-mac-dev-production-policy.md). **Codex (AI)**
+
+- 2026-10-27: Update Mac development delivery guidance to retain a separate development app for testing and usage, and gate stable Thingtime installation on a newer version containing a Mac feature merged into `main`. **Codex (AI)**
+
+- 2026-10-27: Admit the reviewed Darwin kernel-group verification fix and bounded trusted failure diagnostics for the native compile runner. Preserve default inert preflight, immutable pinning, network denial, and separate hosted/native acceptance gates. **Codex (AI)**
+
+- 2026-10-27: Pin the native compile listener to the independently reviewed process-lifecycle repair: verified numeric identity drops, bounded watchdog readiness, separate denial-probe deadlines, and readable failure evidence. Hosted preflight and full native acceptance remain open. **Codex (AI)**
+
+- 2026-10-27: Default the owner-gated native compile listener to an inert isolation preflight and require an explicit mode choice for candidate compilation. Keep immutable controller pinning and record hosted transport/denial/cleanup gates separately from native and installed-device acceptance. **Codex (AI)**
+
+- 2026-10-26: Preserve explicit saved or embedded render Components when typed Posts and comments are created or edited. Honor the outer declaration in nested Post embeds, negotiate the additive write contracts, and cover real typed-Post repair/readback in feed and sidebar acceptance. Existing saved content still needs an explicit renderer assigned. **Codex (AI)**
+
+- 2026-10-26: Add a contextual **➕ Add +** row to both drawer lists and support arbitrary-depth nested menus in the existing lower section. Preserve ancestor navigation, editable saved templates and existing links; expose parent selection and sibling ordering in drawer settings. **Codex (AI)**
+- 2026-10-26: Let initial and foreground resource refreshes reach a local API
+  even when the browser reports offline. Subspace embeds now get their first
+  request without weakening network isolation; offline background polling stays
+  paused. Regression and related suites pass 779 tests. [Verification](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
+- 2026-10-26: Configure production, develop and shared preview gateway targets;
+  verify their origin-scoped manifests and root-data routes while preserving
+  existing aliases and credentials. Integrate the canonical Thing renderer
+  from main for subspace embeds. Verify dedicated branch reads and rejection of
+  incoming gateway relays; identify the exact-origin allowlist correction needed
+  for ordinary PR aliases. [Rollout and verification](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
+- 2026-10-26: Replace the legacy UUID hook's insecure random source with Web Crypto while preserving its mount-time lifecycle. The main delivery includes only the owned zero-baseline changes from PR 1228. **Codex (AI)**
+- 2026-10-26: Render data Things through an explicit saved Component pointer or
+  embedded Component definition, with an opt-in data inspector and independent
+  Component access checks. Keep type aliases out of explicit renderer selection
+  and document the authoring contract in global and repository AI guidance.
+  Preserve native child controls inside transient Action layouts and prevent
+  hidden content containers retaining horizontal scroll after data inspection.
+  [Verification and limits](../PRs/1227-thing-render-components.md). **Codex (AI)**
+- 2026-10-26 — **Codex (AI)**: Add editable password generation with configurable
+  rules and source-linked presets, encrypted entry-icon metadata with upload/URL
+  controls, and a native passkey setup guide. Password capability is 1.3.0;
+  isolated generator, icon and HTTP checks cover the new boundaries.
+  [PR #1231 details](../PRs/1231-codex-password-generator-passkeys-add-editable-password-generation-entry-icons-and-passkey-setup.md).
+
+
+- 2026-10-26: Match custom drawer links and the final inline **➕ Add +** row to Thingtime navigation. Move menu layout editing into Settings and save the editable menu template as a private webpage Thing while retaining legacy device layouts. [Details](../PRs/1226-codex-drawer-renderable-row-match-the-final-add-drawer-row.md). **Codex (AI)**
+- 2026-10-26: Align shared native selects with Thingtime surfaces and radii; replace the black focus outline with a contrasting pink border and soft pink-to-violet glow. Theme Studio can customize both glow colours, softness and strength, including no glow. Add isolated desktop/mobile, light/dark and theme-editor save/reload coverage. **Codex (AI)**
+- 2026-10-26: Integrate the reviewed environment gateway and dedicated connection policy into develop while preserving newer develop changes. Built sandboxed API acceptance and contract tests pass; canonical-owner activation remains pending. [PR #1224 details](../PRs/1224-codex-gateway-develop-integration-environment-gateways-and-dedicated-policy.md). **Codex (AI)**
+
+- 2026-10-26: Add the server-only `THINGTIME_MONGODB_CONNECTION_MODE` override for `proxy` or opt-in `dedicated` MongoDB connections, with a branch-bundled default. Document the audited preview/develop database relationship, proposed gateway mapping and gradual pool draining; publisher implementation, gateway activation and live acceptance remain pending. [PR 1223 details](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
+- 2026-10-26: Eliminate existing TypeScript and ESLint errors, enforce a zero-error TypeScript baseline, and reject invalid compiler runs or baseline increases. Repair shared helper typing and behavior, complete unavailable MongoDB health responses, and emit parser-safe generated font data. [Static analysis audit](../docs/static-analysis-baselines.md); [validation and review boundary](../PRs/1228-codex-typescript-zero-baseline-fix-remaining-typescript-errors.md). **Codex (AI)**
+- 2026-10-26: Open Things, files and devices with one click; retain modifier/checkbox selection and add hover/focus action controls across browsing layouts and the folder tree. Added isolated real-API browser acceptance with file-byte verification. [Details](../PRs/1230-codex-things-single-click-open-things-and-files-with-one-click.md). — Codex (AI)
+
+- 2026-10-26: Forward public social cards and generated docs through the local Vite proxy; verify root docs GET/POST through the actual Vite server as well as built Nitro. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
+
+- 2026-10-26: Add explicit per-environment API gateway ownership, signed origin-preserving forwarding, safe pool draining and bounded shared index-plan readiness. Branch frontends use the selected environment backend; live alias acceptance remains pending, and older preview deployments may age out naturally. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
+
+- 2026-10-26: Add custom drawer links and attached Things, an Add + popup with
+  emoji/title/tooltip fields, and drawer settings management. Compose the new
+  controls from editable Builder blocks and reuse Commander search. Save, edit
+  and remove await durable device storage; retain drafts on failure.
+  [PR 1219 details](../PRs/1219-custom-drawer-items-links-and-commander-attachments.md). **Codex (AI)**
+
+- 2026-10-23: Add reusable local-media processing and individually editable Builder intrinsic controls. Compressor Pages and Components are authored directly as saved Things; retain the legacy suite. [Details](../PRs/1164-general-media-compressor-local-images-and-immediate-file-controls.md). **Codex (AI)**
+
+- 2026-10-23: Build Vercel production, custom environments and previews on GitHub
+  Actions, upload only prebuilt output, and disable native source builds. Keep
+  protected publisher credentials separate from product compilation.
+
+- 2026-10-23: Limit PR 1164 to reusable local-media and editable Builder primitives. Author compressor Pages/Components directly as saved Things; retain the legacy suite and fix capability-compatible file-sync assertions.
+
+### 2026-10-22 — General local compressor
+
+[PR 1164 validation and release notes](../PRs/1164-general-media-compressor-local-images-and-immediate-file-controls.md)
+
+- Add local image compression with bundled WASM codecs, transparency/animation safeguards and truthful size receipts alongside WebCodecs video compression.
+- Show file selection on load, keep the selected file while settings change, and support individually editable Builder elements authored directly as saved Things.
+- Version intrinsic media storage/resolve contracts and extend the isolated desktop/mobile browser regression; scope WebAssembly compilation permission to the network-disabled media worker.
+- 2026-10-23: Make the existing sync change-storm regression observe its trailing
+  read instead of racing a five-millisecond timer under CI load. **Codex (AI)**
+
+- 2026-10-23: Preserve the GitHub Actions prebuilt-only deployment migration on develop so future promotions keep native Vercel source builds disabled. See [PR #1206](https://github.com/lopugit/thingtime/pull/1206). **Codex (AI)**
+
+- 2026-10-22: Move device sync configuration off Things home into a dedicated
+  device page; keep storage attachments and parent-linked records out of root,
+  retain recovery/search access, and preserve private upload provenance before
+  bytes are transferred. Add editable activity controls with durable teardown,
+  quiet refresh, and measured Electron resource totals. Parent-path isolated
+  acceptance passed; installed/deployed verification is pending. [Details](../PRs/1089-codex-device-activity-library-fix-device-sync-placement-generated-parent-paths-and-activity-controls.md). **Codex (AI)**
+
+- 2026-10-22: Add a dedicated editable device sync overview, device double-click/keyboard navigation to saved cloud roots, and collapsed defaults in both device settings presentations. Real-account acceptance pending. [Details](../PRs/1088-codex-device-sync-browser-add-dedicated-device-sync-ui-and-browse-saved-device-files.md). **Codex (AI)**
+
+- 2026-10-21: Add closed upload-batch failure counts to rotated local diagnostics and show negotiated folder-batch/reservation observations through the existing editable readiness status. No retry, authority, receipt or scheduling changes; historical member codes remain unknown. [Details](../PRs/1084-codex-sync-recovery-diagnostics-expose-closed-sync-recovery-diagnostics.md). **Codex (AI)**
+
+- 2026-10-21: Add negotiated parent-first folder metadata batches, refresh immediate parent index stamps on child changes, and retain explicit new target intents when proven-unpublished parents are superseded. Original IDs, unknown-write recovery, canonical placement locks and fresh authority/source fences remain intact. Installed throughput remains unverified. [Details](../PRs/1083-codex-sync-folder-batches-batch-guarded-folder-metadata-before-dependent-uploads.md). **Codex (AI)**
+
+- 2026-10-21: Add negotiated bounded small-file upload batches across durable preparation, original-ID reservations, native source validation and canonical per-file receipts, plus scan-only transient identity recovery. Controlled amplification reduction is verified; practical installed throughput remains unverified. See [PR 1081](../PRs/1081-codex-sync-small-file-batches-batch-independent-small-file-uploads.md). — Codex (AI)
+
+- 2026-10-21: Replace fixed native identity completion spacing with a conservative FIFO burst/rolling budget while preserving every fresh auth/source fence and shared server cooldown. Controlled scheduling improves; installed throughput remains unverified. See [PR 1080](../PRs/1080-codex-sync-identity-budget-allow-bounded-bursts-of-fresh-native-identity-checks.md). — Codex (AI)
+
+- 2026-10-21: Add bounded closed host phase timings and distinguish native identity admission from HTTP duration. Best-effort asynchronous diagnostics preserve all transfer/auth/source/receipt behavior; installed bottleneck evidence remains pending. See [PR 1079](../PRs/1079-codex-sync-phase-timing-measure-closed-native-sync-request-phases.md). — Codex (AI)
+
+- 2026-10-21: Show supported upload-priority readiness through existing saved progress: trusted adapter gate, preference revision, legacy proof cursor and last checked candidate/blocker. Individually editable labels preserve custom progress layouts; scheduling/migration and installed Home cause remain unchanged/unverified. See [PR 1078](../PRs/1078-codex-sync-priority-readiness-show-saved-upload-priority-readiness.md). — Codex (AI)
+
+- 2026-10-21: Expose exact completed-PUT payload samples through Mac upload 1.1.0 and share conservative fresh identity admission/cooldowns across native sync callers. Trackers recover per-direction coverage without counting retained offsets and label acknowledgment-based updates; installed speed accuracy and practical throughput remain unverified. See [PR 1077](../PRs/1077-codex-sync-payload-telemetry-measure-native-payload-speed-and-pace-fresh-identity-checks.md). — Codex (AI)
+
+- 2026-10-21: Prepare eligible saved upload priorities ahead of ordinary durable index rows while preserving ancestry, reserved receipts and contiguous watermarks. Journal v13 migrates legacy normalized keys in independent bounded pages; ordinary uploads continue during migration. Installed priority acceptance and native live-speed telemetry remain incomplete. See [PR 1076](../PRs/1076-codex-sync-priority-preparation-prepare-saved-upload-priorities-before-ordinary-indexed-input.md). — Codex (AI)
+
+- 2026-10-21: Remove redundant read-only native sync preparation guards, combine Mac context/roots/conditions and retain every mutation/source/receipt fence. Controlled streaming calls drop 184→72 HTTP and 40→13 native RPCs; installed throughput remains unverified. File-access 1.12.0 and closed identity timing/cooldown diagnostics support acceptance. See [PR 1075](../PRs/1075-codex-sync-operation-amplification-reduce-read-only-native-sync-preflight-overhead.md). — Codex (AI)
+
+- 2026-10-21: Reduce repeated full-bundle verification and native streaming RPC overhead while retaining fresh child/parent authentication, bounded journal chunks and restart cursors. Mac file-access 1.11.1 fixes full response byte accounting; installed throughput acceptance remains pending. See [PR 1074](../PRs/1074-codex-sync-throughput-reduce-native-verification-and-feed-overhead.md). — Codex (AI)
+
+- 2026-10-20: Create empty attachments with a conditional PUT before HEAD verification, preserving the object-only S3 role, immutable recovery and integrity checks. Upload-start/completion advertise compatible PATCH corrections; live saved-job acceptance remains open. See [PR 1073](../PRs/1073-codex-sync-empty-object-finalization-create-empty-objects-without-listbucket.md). — Codex (AI)
+
+- 2026-10-20: Preserve exact native identity retry markers across Electron error serialization, resume only known native transport interruptions, and retain closed cloud status/code/proxy reasons in the sync UI. Persist redacted folder-request diagnostics beside signer logs. Installed automatic retry and sustained uploads remain pending; see [PR verification note](../PRs/1072-codex-sync-native-failure-recovery-preserve-native-sync-retries-across-electron-ipc.md). — Codex (AI)
+
+- 2026-10-20: Add server-only attachment completion diagnostics with fixed stages and closed error class/code/status fields, preserving HTTP responses and finalization leases. No error messages, paths, IDs or provider request IDs are logged by this diagnostic. Continued upload recovery remains open; see [diagnostic verification](../PRs/1071-codex-attachment-finalization-diagnostics-log-safe-attachment-completion-stages.md). — Codex (AI)
+
+- 2026-10-20: Resume exact nonempty file upload requests interrupted during finalization through the original fenced lease and object version. Back off only for three explicit retryable upload lease/settling codes; retain other conflicts with bounded, fixed diagnostics. `api.attachment-uploads` advances to 1.6.1. Installed upload-start 409 cause and recovery remain unverified. — Codex (AI)
+
+- 2026-10-20: Keep transient cloud sync HTTP 408/429/5xx failures resumable with original operation receipts. Persist a bounded retry deadline across restarts and noisy wake events; keep permission, identity, integrity and explicit Stop behavior unchanged. Signed installed recovery remains pending. — Codex (AI)
+
+- 2026-10-20: Preserve the final verified native roots in desktop upload receipts (fileUploadVersion 1.0.1), so production response parsers accept completed parts. Extend native/HTTP regression through the desktop host and real client parser/source adapter; installed cloud completion and downloaded-byte acceptance remain pending. — Codex (AI)
+
+- 2026-10-20: Revalidate Mac upload sources with valid positive-length EOF reads instead of rejected zero-length requests. Verify the full part helper against actual native reads/stream framing and HTTP bytes, including source changes before/after PUT. Signed installed byte acceptance remains pending. — Codex (AI)
+
+- 2026-10-20: Pin the desktop upload-signing POST Origin to the trusted local window, preserving the proxy's mutation fence. Add bounded, redacted signer phase/status diagnostics and a real loopback guard regression; signed installed byte acceptance remains pending. See [PR 1065](../PRs/1065-codex-desktop-sync-signer-origin-preserve-the-trusted-desktop-origin-when-signing-sync-upload-parts.md). — Codex (AI)
+
+- 2026-10-20: Add the checksum-locked desktop part-upload adapter so bundled loopback origins use host uploads instead of browser S3 PUTs rejected by CORS. Keep source/version, scope, checksums, finalization and receipt checks; no browser security or bucket access changes. Signed installed byte acceptance remains pending; see [PR 1064](../PRs/1064-codex-desktop-sync-upload-transport-upload-mac-sync-parts-through-the-scoped-desktop-host.md). — Codex (AI)
+
+- 2026-10-20: Give renderer index long-polls a separate queue so conditions and file reads continue; preserve independent native indexing when request authorization is canceled. Keep real authority loss fail-closed and add privacy-tested interruption/slow-request diagnostics. Installed payload acceptance remains open; see [PR 1063](../PRs/1063-codex-sync-indexer-recovery-preserve-streaming-indexing-when-identity-requests-are-canceled.md). — Codex (AI)
+
+- 2026-10-20: Stream eligible one-way file transfers from the durable native index while traversal continues, retaining version receipts and revision-aware wake-ups. Show concurrent indexing/transfer progress and growing totals in editable blocks. Native concurrency, cloud changes and signed installed acceptance remain under verification. — Codex (AI)
+
+- 2026-10-20: Bound file-sync startup cleanup to one page and drain obsolete journal data after successful transfer/checkpoint publication, preventing old preparation rows from delaying the first upload. Added backlog and interrupted-checkpoint regressions; installed acceptance pending. — Codex (AI)
+
+- 2026-10-20: Initialize cached sync-screen lifetime guards before child reads,
+  so upload priorities load automatically on first mount and StrictMode remount.
+  Keep late work fenced after removal. Reuse bounded ignore-rule results during
+  planning and skip a new conflict-review scan only when a complete, instance-bound
+  initial-upload plan proves there can be no conflicts. Existing drafts and all
+  transfer durability checks remain intact. Signed installed acceptance is
+  pending. — Codex (AI)
+
+- 2026-10-20: Add persistent device upload priorities with editable path ordering
+  and file-tree Upload next controls. Preserve in-flight operations and receipts
+  across priority changes/restarts, and keep parent-first uploads and safe Trash
+  order. Regression checks retain `.git` objects and worktree metadata under
+  dependency ignores. Skip redundant ancestor work for sealed first uploads to
+  an empty destination, preserving excluded-parent protection and pinned-input
+  migration checks. Installed priority and complete-backup acceptance remain
+  pending. See [PR1059](../PRs/1059-codex-sync-upload-priorities-add-upload-priorities-and-accelerate-initial-backups.md). — Codex (AI)
+
+- 2026-10-20: Read bounded inventory, plan and operation pages in bulk while
+  preserving stored-key, ancestry, byte/count, scope and cancellation checks.
+  Deduplicate sibling ancestor work and show the actual preparation phase and
+  counts before uploads. Signed home-upload acceptance remains open; see
+  [PR1058 verification](../PRs/1058-sync-inventory-page-reads-batch-file-sync-preparation.md). — Codex (AI)
+
+- 2026-10-20: Batch bounded cloud-binding metadata and parent-operation reads
+  before large file-sync uploads. Keep exact capture/account/path checks,
+  active-run admission and revision-guarded commits while avoiding separate
+  database transactions for every file lookup. — Codex (AI)
+
+- 2026-10-20: Resume Mac backup imports from committed entry, skip and validation
+  cursors after reconnect or app restart. Bind the retained import to its exact
+  reviewed job and preserve it through cleanup until a durable plan owns it.
+  Existing matching native captures can adopt their already imported prefix.
+  Installed recovery and first payload acceptance remain pending. See
+  [PR1056 verification](../PRs/1056-sync-import-resume-resume-mac-backup-imports.md). — Codex (AI)
+
+- 2026-10-20: Preserve automatic file-sync admission when normal desktop Quit
+  cancels an in-flight folder request before renderer shutdown. The host refuses
+  new work and retains a fixed lifecycle wait through IPC; actual authority
+  refusals remain terminal. Signed installed Quit/reopen resumed the saved
+  five-minute job without Start or Retry; first payload acceptance remains open. — Codex (AI)
+
+- 2026-10-20 — Codex (AI): Preserve redacted desktop verification retries through
+  IPC and sealed inventory imports; keep the automatic interval on an explicit
+  retry after attention, while retaining explicit Stop behavior.
+
+
+- 2026-10-20: Add negotiated, byte-bounded Mac inventory batches to reduce the
+  handoff after Commander indexing. Retain canonical journal pages and saved
+  captures through transient import failures; installed throughput acceptance
+  remains pending. — Codex (AI)
+
+- PR1052 implementation, validation and coverage details: [Commander backup indexer](../PRs/1052-commander-backup-indexer-reuse-commander-rust-indexing.md).
+
+- 2026-10-20: Reuse Commander’s Rust indexer for Mac backup traversal and parallel
+  content fingerprints, preserving saved Git-ignore rules and the canonical
+  inventory. Keep captures through transient identity verification failures while
+  retaining authorization and revocation gates. Signed installed home-upload
+  acceptance is pending. — Codex (AI)
+
+
+- 2026-10-19: Keep resumed file-sync indexing distinct from missing folder access and paused transfer counters. Reduce native status polling to leave room for authenticated device traffic; every native request retains live authorization. Add redacted native interruption categories to distinguish storage, network and identity failures; full-home scan restart diagnosis remains open. — Codex (AI)
+
+- 2026-10-19 · Codex (AI): Keep Stop available for unfinished one-time sync jobs, including attention after a failed scan. The editable automation panel now explains how to stop an earlier job before applying changed ignore rules; existing policy and operation-journal fences remain intact.
+
+- 2026-10-19 — **Codex (AI)**: Add resumable Mac home-backup indexing, durable skipped-item coverage, Gitignore-style sync rules and automatic reconnect recovery. Supported files can be backed up without following links or reading live sockets; incomplete coverage stays explicit. Installed home-folder acceptance and link restoration remain pending. See [PR #1049 verification](../PRs/1049-home-backup-indexing-resumable-partial-captures.md).
+
+- 2026-10-19 — **Codex (AI)**: Integrate the current-main file-sync contracts into PR #1047, preserve both reusable framework paths, and advance live-source creation negotiation to `api.things` 1.37.0 so prior 1.36.0 origins remain incompatible with that addition.
+
+- 2026-10-19 — **Codex (AI)**: Add the reusable schema-parameterized agent work-graph read adapter (`api.agent-overview` 2.0.0) with ACL-checked paging, live streaming, and optional status classification. Dashboard pages and write flows are authored as saved Things; current Builder acceptance remains pending. [PR #1047 verification](../PRs/1047-agent-overview-builder-editable-live-agent-manager.md).
+
+- 2026-10-19 — **Codex (AI)**: Document the adapter's breaking response shape,
+  capability negotiation, unknown measurements, external authored-Thing fixture,
+  and pending live acceptance in the fork-safe runbook and manual checklist.
+  See [the adapter guide](../docs/agent-overview.md).
+- 2026-10-19 — Connection-pressure mitigation: reuse the application MongoDB
+  client for health checks, coalesce concurrent checks, and retire idle sockets.
+  Production recovery pending; the observed alert does not establish causation.
+  [PR #1048 details](../PRs/1048-subspace-production-acceptance-and-mongodb-health-pooling.md).
+- 2026-10-19 — **Codex (AI)**: Prepare the current-main file-sync release with reviewed home exclusions, editable hierarchical progress and saved transfer-speed windows; preserve current account/runtime protections and installed AutoFill integration. Completed speed counters now say Complete. Validation and release gates: [PR #1046](../PRs/1046-codex-file-sync-release-recoverable-file-sync-home-backups-and-live-progress.md).
+
+- Commander login verification and API contract details: [PR #1044](../PRs/1044-commander-login-callback-fix-commander-thingtime-login-callback-registration.md).
+
+- 2026-10-19 — **Codex (AI)**: Check Commander OAuth capabilities and callback registration before browser login; recover an unregistered native callback through the explicitly registered loopback callback and bind PKCE attempts to their original server, app and redirect.
+
+- 2026-10-19 — **Codex (AI)**: Integrate mobile file-sync contracts with main: preserve Character, password, runtime and streaming guards; version device and pairing-claim additions as 1.13/1.2 without collision; bind the selected runtime and legacy renderer port through the owned middleware socket while retaining origin history. Renderer port acceptance: 18/18 focused tests. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Added editable saved upload/download speed trackers, independent averaging windows and decimal bit/logical-entry units. Bounded per-run history excludes retained offsets and recovered confirmations; native adapters without byte telemetry remain explicit. Isolated Builder and transport checks pass; release and real home upload remain open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Add a paused home-folder backup preset, native
+  pre-traversal exclusions, and an editable two-step sync hierarchy with
+  cumulative file/folder progress. Completed journal results remain readable
+  without reviving write authority. Isolated UI/native verification and live
+  release gates are tracked in [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-19: Added an independent S3 replica provider and resumable upload/download
+  worker for the existing portable backup format, with private credential handoff,
+  bounded progress and kill/resume/source-loss protocol checks. Fixed SDK mutation
+  of caller credentials and fenced account changes during credential resolution.
+  Live cloud and native backup UI acceptance remain open. See
+  [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md). — Codex (AI)
+
+
+- 2026-10-19 — **Codex (AI)**: Repair the iOS sync test host by retaining real
+  scene-backed WebViews and diagnosing foreground/origin prerequisites. All 66
+  selected iOS 27 simulator checks pass; physical-device rerun remains open.
+  Production guards are unchanged. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-19 — **Codex (AI)**: Whole-tree restore now uses bounded private disk
+  indexes and streamed CLI review output, removing the old 10,001-item/32-MiB
+  memory limit while retaining v1 review hashes and recoverable receipts.
+  See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-19 — **Codex (AI):** Selected-folder backups now consume bounded Files
+  inventory pages and validate/order them with private SQLite scratch storage.
+  Existing sealed plans and byte resume stay compatible; large whole-tree restore
+  and cloud-scale acceptance remain open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI):** Share app-owned file sync and durable recovery
+  between Mac and capable iOS hosts. Files navigation keeps runs alive; foreground
+  recovery preserves user Stop and fences hidden work at native lease expiry.
+  Physical iOS lifecycle acceptance remains open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-19 — **Codex (AI)**: iOS publication 1.2.0 adds saved-consent checks
+  without prompting, per-folder publication capabilities and final device/grant
+  revalidation. Added native and shared regressions; iOS durable execution remains
+  open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Mac connections gain editable automatic-sync
+  interval/Start/Stop blocks, durable recurring admissions and composed window
+  retention. Stop also fences completion races. Shared and isolated browser
+  regressions cover scheduling, process restart and Builder save/reload;
+  installed acceptance remains open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Mac sync now persists explicit job admission,
+  resumes unfinished work from the app shell with existing native consent, and
+  retains Stop across relaunch. Isolated Chromium process-restart acceptance
+  recovers an accepted write without replay; installed/reboot checks remain open.
+  See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-19 — **Codex (AI)**: Move explicit Mac sync runs out of the Files
+  screen, reconnect live progress/review on return, and keep an active window
+  hidden on Close. Fix reattachment behind long scans and cancellation render
+  errors; automatic relaunch scheduling and installed acceptance remain open.
+  See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Mac sync can check exact saved folder approval
+  without prompting, including after native restart; capable clients recheck
+  before new writes. Whole-folder workers remain in progress. See
+  [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Verified paged Mac sync and reply-loss recovery with 10,003 real native/cloud paths, full upload/download hashes and an unchanged repeat. Shared file-sync checks pass 291 tests; installed providers, persistent workers and million-file acceptance remain open. See [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — Seek the remaining retired sync metadata before each bounded cleanup page, avoiding repeated deleted-prefix traversal on large reruns; retain transaction rollback and active-baseline guards.
+
+- 2026-10-19 — **Codex (AI)**: Stream Mac/iOS destination alias checks so wide folders can publish downloads and recover Trash. Gate the complete paged runner on patched native contracts; retain limits for older adapters. Add API-provisioned large-root acceptance. Details: [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#wide-native-destination-checks--2026-10-19).
+
+- 2026-10-19: Add reproducible isolated Mac paged-sync/API acceptance, including saved conflict choices, native restart recovery and exact byte verification. Installed UI and scale remain open; see [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Mac/iOS conflict reviews now use durable paged
+  choices and individual editable Builder blocks, with private account layouts
+  and the selected desktop API transport. Isolated UI restart/save/reload,
+  desktop/mobile scrolling and explicit review outcomes pass. Installed native
+  acceptance remains open. [PR 1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Foreground conflict reviews now retain sealed choices across interrupted scans/imports and validate fresh conflicts in bounded pages before execution. Streaming retention hashes preserve existing Ignore receipts. The editable Builder adapter and installed acceptance remain open; Android stays deferred. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Add bounded durable conflict-review drafts, per-row
+  revision checks, restart recovery, fresh-plan handoff and bounded cleanup.
+  Twelve focused regressions and a Chromium process-restart fixture cover the
+  storage contract; foreground/Builder integration and installed acceptance remain
+  open. See [PR 1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: `api.files` 1.6.0 streams wide-folder path
+  observations through bounded anonymous scratch storage, preserving late
+  ambiguity/private-access checks and reclaiming storage after process death.
+  Clients negotiate the new capability; regression and isolated handler coverage
+  include >10,000 siblings, found/absent paths and logout refusal. Installed
+  acceptance and the foreground combined-plan cap remain open. See
+  [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19 — **Codex (AI)**: Mac/iOS cloud inventories stream bounded pages from
+  one Mongo snapshot (`api.files` 1.5.0). Incomplete streams and invalid ancestry
+  cannot publish checkpoints. Added isolated real-handler and browser checks;
+  installed acceptance and the live 10,000-path cap remain open. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Mac/iOS foreground sync imports sealed native
+  folder observations in bounded pages, retaining source/device/grant checks
+  and complete checkpoint publication. Large-root cloud paging and installed
+  acceptance remain open; Android is deferred. Details and validation:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#native-paged-folder-captures--2026-10-18).
+
+
+- 2026-10-18 — **Codex (AI)**: Mac session-lock checks now read session state
+  without enumerating Bluetooth or other hardware. Explicit telemetry fixtures
+  keep controller/recovery tests independent of the host's privacy permissions;
+  the full native suite passes (160 passed, one opt-in hardware test skipped).
+  Signed installed-app acceptance remains separate. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#mac-session-checks-and-test-isolation--2026-10-18).
+
+- 2026-10-18 — **Codex (AI)**: Mac/iOS foreground sync can verify a selected
+  path without hashing the whole root for every operation. Native contracts
+  negotiate exact observations and recheck owner/grant access before replying;
+  explicit absence stays distinct from errors. Shared/native/browser checks pass;
+  installed acceptance and stable large-root scan producers remain open. Android
+  stays deferred. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#native-single-path-verification--2026-10-18).
+
+
+- 2026-10-18 — **Codex (AI)**: Bound foreground sync metadata growth with resumable
+  journal cleanup. Preserve active transfers, current baselines, reader pins and
+  retained conflict receipts; refuse identity reuse during partial deletion.
+  Repeated desktop/iOS fixture runs maintain steady storage counts and cleanup
+  survives a browser-process restart. Android remains deferred.
+  [Details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#bounded-foreground-journal-cleanup--2026-10-18).
+
+- 2026-10-18 — **Codex (AI)**: Connect Mac/iOS foreground controls to paged sync
+  recovery, durable conflict choices and checkpoint publication. Repeated Ignore
+  reuses retained-version receipts; interrupted post-run scans restart with fresh
+  generations. Shared approval checks and legacy recovery remain in place. Desktop
+  and phone browser fixtures pass; installed acceptance, stable paged producers
+  and worker integration remain open. Android stays deferred.
+  [Details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#macios-foreground-paged-recovery--2026-10-18).
+
+- 2026-10-18 — **Codex (AI)**: PR #1002 retains cloud metadata with paged
+  inventories and prepares immutable cloud destinations/native Trash receipt
+  links before execution. Indexed bindings reuse the existing guarded transport;
+  interrupted preparation and lost publication replies resume with original IDs.
+  Isolated Chromium verified 270 generated downloads across two process restarts.
+  Live scan/lifecycle integration and installed Mac/iOS acceptance remain open;
+  Android stays deferred. [Details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#paged-cloud-operation-bindings--2026-10-18).
+
+
+- 2026-10-18 — **Codex (AI)**: Add resumable paged sync checkpoint publication,
+  exact inventory-instance retention and post-copy edit preservation. Bounded
+  merges survive interruption between baseline copies and browser restarts;
+  stale retries cannot replace newer checkpoints. The shared suite passes 208
+  checks; the existing TypeScript baseline remains. Native/cloud adapter rollout
+  is still open and Android deferred. See the
+  [PR #1002 ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#resumable-paged-checkpoint-handoff--2026-10-18).
+
+
+- 2026-10-18 — **Codex (AI)**: Added resumable paged sync operation storage and
+  execution using shared ordering, receipt checks and root locks. Chromium
+  verified 10,001 generated operations across two restarts, including a lost
+  reply with no repeated accepted effect. Native/cloud paging and checkpoint
+  integration remain open; the live scan cap is unchanged. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#durable-paged-operation-recovery--2026-10-18).
+
+- 2026-10-18 — **Codex (AI)**: Add resumable paged sync planning to the existing journal, with pinned inventory inputs, whole-union validation, shared conflict/deletion policy, bounded decisions and a Unicode cursor correction. Browser proof survives two process restarts; native/cloud execution integration and Android remain open/deferred. See the [PR #1002 ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#resumable-paged-reconciliation--2026-10-18).
+
+
+- 2026-10-18 — **Codex (AI)**: Add durable paged inventory observations to the
+  existing sync journal, with atomic retry/collision checks and restartable
+  validation before reads. The 100,000-path storage regression passes; native
+  scanning and planner integration remain open, with the live 10,000-path limit
+  unchanged. Android stays deferred. [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Validate account profile snapshots against real
+  signup/settings handlers on an isolated replica, concurrent updates,
+  independent copies and current-writer restoration. Share the authorized
+  account reader with inventory and use the existing exact-ID index. Enforce
+  loopback-only OS network isolation for the fixture. Whole-account
+  and product restore gates remain open. [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Retain approved account profile content and private
+  preferences in independent snapshots, with exact profile-media checks and
+  explicit credential/security exclusions. Offline recovery and refusal tests
+  pass; live account API capture/restore remains open. [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Saved themes join independent account snapshots
+  through the canonical Timeline format, with exact partial-token and chunked
+  recovery after source loss. Preserve unfinished Android OS continuation in the
+  PR as deferred work. Validation and remaining scope: [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-18 — **Codex (AI)**: Android retains bounded, verified native upload
+  parts across uncertain replies and process restart, while rechecking current
+  authorization/source and preserving canonical sync/Timeline identities.
+  Added installed two-process recovery acceptance; background scheduling remains
+  pending. [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Android native multipart uploads now use the
+  existing sync identities, reviewed connection and Timeline handoff with bounded
+  private part staging and no bulk bytes in the WebView. Foreground only;
+  scheduling and durable native resume remain open. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Extend internal account snapshots to saved drafts,
+  templates, deletion tombstones and large canonical Thing content, with exact
+  owned-media checks, bounded chunk retention and independent offline recovery.
+  Real Mongo source-loss proof covers 357 records; whole-account jobs/UI and
+  remaining managed families are still pending. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#draft-and-large-content-snapshot-coverage--2026-10-18).
+
+
+- 2026-10-18 — **Codex (AI)**: Capture ready attachment bytes and validate file
+  history references in account snapshots. Offline readers recover current,
+  earlier and retained-conflict versions from the independent vault. Full account
+  restore remains open; existing storage setup and evidence are documented in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Retain canonical Timeline history, including large
+  snapshots, in the existing portable backup chunks at the account inventory's
+  database timestamp. Verified independent-copy reads after source and first-vault
+  removal; full account restore remains in progress. Setup and evidence:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Add iOS 26+ continued-processing lifecycle for
+  user-started file uploads, exact native acknowledgement and foreground Timeline
+  handoff. Refused OS tasks retain foreground behavior. Simulator background
+  acceptance was declined; physical-device completion remains unverified. Setup
+  and checks: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: iOS upload 1.2 moves multipart orchestration
+  and attachment completion into a native job with live configuration, pairing
+  and network/power checks; the shared runner still verifies stored bytes and
+  publishes canonical Timeline history. Foreground-only; background acceptance
+  remains pending. See the [PR #1002 evidence ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: iOS upload retries retain verified native parts
+  across app-process exits under the original owner/grant/upload identity.
+  Document cache bounds, source reauthorization, fresh-process tests and the
+  remaining background-worker boundary in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18: Add Mac photo backup source selection and read-only original-resource
+  streaming through the existing sync/Timeline pipeline. Document native permission
+  packaging and synthetic-provider versus installed-library acceptance in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-18 — **Codex (AI)**: iOS uploads now send file-backed native multipart
+  parts with pinned API identity, signed storage requests and final fingerprint
+  verification. Installed photo backup verified 18.9 MB without bulk WebView
+  reads. OS-dialog cancellation now settles pending device checks promptly.
+  Setup, storage limits and evidence are recorded in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: iOS foreground photo backup now reads local
+  PhotoKit originals through shared, permission-checked Apple storage and the
+  existing backup/Timeline pipeline. Photo sources remain read-only in native
+  and shared recovery controls. Installed simulator acceptance verified original
+  bytes, new-photo discovery and cloud retention after device deletion. Native
+  setup, limits and remaining coverage are documented in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Add Android original-photo backup through native
+  photo permission and folder selection, with editable backup-only connections
+  and cloud copies retained after device deletion. Verify 71 installed Android
+  tests, original-byte download hashes and responsive access messaging. Large
+  libraries, background transfer and Apple Photos remain open. See the
+  [PR #1002 ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Android offline folders can browse versions kept
+  during replacement and restore an independent copy with native confirmation,
+  preserving exact retry intent through reload. Schema migration, 67 installed
+  Android tests and 390px/1280px controls verified. Local history remains outside
+  independent backups. See the [PR #1002 ledger](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Verify installed Android planner deletion across
+  a lost reply and WebView reload, original operation replay, reviewed tree
+  restoration, exact bytes and Android Files visibility. Stream operator
+  readiness prompts from the acceptance runner so folder selection does not
+  race initial bridge checks. Earlier emulator timeouts and physical-device
+  coverage remain open. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Add installed Android planner deletion/recovery
+  acceptance with a lost committed reply, WebView reload and durable operation
+  identity checks. Document the local emulator graphics recovery workflow and
+  keep physical-device and whole-account backup coverage explicit.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add Android offline-folder recoverable deletion
+  and reviewed restoration using the existing catalog and shared recovery UI.
+  Atomic receipts survive lost replies without overwriting later edits; separate
+  deletion consent and grant checks protect every commit. Generic providers and
+  independent device-loss backups remain outside this checkpoint.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Wire approved Mac/iOS foreground deletions to
+  recoverable native Trash with child-receipt parent stamps. Add paged device
+  recovery, separate native restore consent and restart-safe restore intents.
+  Android, regrant recovery and whole-account backup coverage remain open.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Fresh cloud path observations now protect native
+  downloads from moved ancestors and replaced path identities. Files 1.4.0
+  distinguishes explicit absence from unavailable roots and failed reads; new
+  runs retain their cloud root. Local deletion propagation remains gated.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add Apple native recoverable Trash primitives,
+  separate deletion consent, immutable receipt recovery and exclusive restore.
+  Verify process interruptions and real Mac/API restart/revocation, plus iOS
+  simulator bridges. Automatic local deletion, Android support and recovery UI
+  remain pending. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add an internal paged account inventory using one
+  MongoDB snapshot and canonical Timeline metadata. Refuse unsupported managed
+  families, expired snapshots and incomplete plans. Verify concurrent mutations
+  on a disposable replica and keep the new owner/ID index out of the full legacy
+  index plan. Whole-account backup UI and managed-family export remain pending.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Mac folder access checks the selected server's
+  identity capability before native dispatch and explains an unsupported server
+  without suggesting broken pairing. Native IPC errors are replaced with bounded
+  user guidance. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add Mac History Save As with bounded, verified
+  retained-version downloads and native destination selection. Fix Electron's
+  middleware build serving HTML for startup assets and account-bound proxy
+  requests failing Node’s Request copy constructor; extend restart acceptance
+  to verify packaged JS/CSS. Native fixture coverage and remaining installed
+  acceptance are recorded in [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add reviewed full selected-tree restore to portable
+  backups, with empty-folder preservation, durable range recovery and protection
+  for existing/user-edited output. Process-exit and real API/CLI restore pass;
+  native/account-wide restoration remains unfinished. [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#reviewed-backup-tree-restore--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Connect selected cloud-folder capture/resume to the
+  portable backup vault, preserving empty folders and exact retained bytes after
+  live Trash. Real API/CLI and 17 MiB acceptance pass; whole-account snapshots and
+  native/cloud job controls remain unfinished. [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#cloud-folder-backup-worker--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Add portable backup manifests, independently retained
+  chunks, resumable copy and offline verification/restore tooling. Source-loss
+  and real API range acceptance pass; complete account snapshots and product
+  controls remain unfinished. [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#portable-backup-foundation--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Add “Save versions and ignore” to file conflict
+  review, with muted content-ID guidance and durable Timeline capture that keeps
+  both live files unchanged. Lost-response/source-loss recovery passes real
+  storage checks; installed capture and whole backups remain open.
+  [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#durable-conflict-capture--2026-10-17).
+
+- 2026-10-17: Files API 1.3 retains alternate uploaded versions in Timeline without
+  publishing them over the live file. Exact replay, concurrent publication and
+  restore pass real storage acceptance. Conflict capture UI and whole backups
+  remain unfinished. [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#alternate-version-retention--2026-10-17).
+
+
+- 2026-10-17 — **Codex (AI)**: Verified iOS History save/cancel and restore with
+  independently checked retained bytes after sharing native range transport.
+  Installed acceptance now observes real replies across WebView reloads; isolated
+  simulator/PM2 recovery and remaining snapshot scope are recorded in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: iOS cloud downloads now transfer bounded binary
+  ranges directly into native staging, sharing authenticated transport with
+  History export and cancelling active work after session changes. Installed
+  simulator download/replacement/repeat checks passed with zero base64 appends.
+  Details and remaining scope: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17: Android native access 1.4 streams verified upload ranges through acknowledged binary WebView frames, preserving older-host compatibility and scoped source checks. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add iOS History exports through Files with verified ranges, temporary destination access, exclusive collision naming and saved-byte readback. Installed simulator checks also verify restore cancellation and retained versions. See [PR #1002 iOS acceptance](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#ios-historical-file-exports--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Add Android History Save As with verified exact-version ranges, system destination selection, provider readback and cancellation fences. See [PR #1002 export acceptance](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#android-historical-file-exports--2026-10-17).
+
+
+- 2026-10-17 — **Codex (AI)**: File History restore controls now survive React
+  StrictMode effect replay; retained revisions show their filenames and remain
+  visible in Files/search filters. Added opt-in installed Android History
+  acceptance alongside the shared browser regression. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add retained file versions to Timeline with
+  content IDs, authorized downloads, reviewed restores that retain current names
+  and folders, and durable exact-operation retry. Conflicts link to home History.
+  Real byte/API and browser checks pass after managed dev-stack readiness.
+  Validation and remaining native scope are recorded in the
+  [PR #1002 note](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add paginated file conflict review to shared sync
+  controls. Explicit version choices recheck both folders and settings before
+  entering the existing recoverable transfer journal; stale reviews preserve both
+  copies. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Android staging 1.1 negotiates bounded binary
+  WebView download frames with one durable checkpoint per range, retaining
+  identity, native-grant, replay and cancellation checks. Older WebViews keep
+  the chunk path. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+- 2026-10-17 — **Codex (AI)**: Verify renewed Android native consent after saved
+  sync settings change. Cancel and approved retry preserve complete cloud
+  inventories, native identities and byte hashes; the installed two-way/Files
+  sequence, 26 JVM checks, build and lint pass. Document process-scoped live
+  acceptance prompts. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Fixed iOS foreground sync failing with WebKit's
+  `Window.fetch` receiver error after native approval. The mobile transport now
+  calls through Window, and the editor fixture enforces that constraint.
+  Installed simulator acceptance verified mixed uploads/downloads with full
+  byte hashes. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Mac staging 1.1 streams downloaded ranges through
+  binary Electron/helper input and bounded XPC pulls, retaining flushed range
+  checkpoints and explicit publication approval. Real upload/download acceptance
+  recovered a lost staging reply across native restart without replay. Mobile
+  streaming and installed acceptance remain open. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Mac file access 1.2 streams bounded upload-source
+  ranges across acknowledged XPC frames and binary Electron IPC, preserving
+  live authorization, source-version checks and cancellation. Verified real
+  multipart upload/recovery and isolated XPC/Electron transport; download/mobile
+  streaming and installed acceptance remain open. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Start sync HTTP deadlines after native authorization, fixing unsent upload timeouts during valid cooldowns. Preserve per-mutation authorization, caller cancellation, captured bodies and network limits. A real 62-second preflight and all 105 shared checks pass; streaming and installed acceptance remain open. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Verify real Mac adapter/cloud sync across lost replies, native restart and independent edits. Fix a reproduced native identity 429 by honoring one bounded Retry-After while rechecking cancellation and the exact credential; identity stays uncached. Real acceptance and 23 focused native tests pass; signed installed acceptance and streaming throughput remain open. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Preserve Desktop sync journals and editor drafts across app restarts with one durable loopback origin per profile and an owned Nitro middleware socket. Occupied ports and invalid address records stop startup without changing stored state. Four isolated Electron launches verify IDs, receipt recovery, completion baseline, drafts and collision recovery; signed native transfer acceptance remains open. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Connect the Mac folder adapter to the shared Things/Settings sync controls. Electron independently checks the current account, paired device and selected server; the desktop proxy pins owner/home/origin before forwarding bounded sync requests. Add native network/power conditions and isolated Chromium/renderer regression checks. Signed installed transfers, restart persistence and streaming remain release gates. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add the Mac local folder adapter with paired
+  identity checks and native consent, plus private identity and owner-only device
+  disconnect APIs. Verify real loopback pairing/revocation and preserve history
+  and files; document native test-host and pending Electron/installed boundaries.
+  [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Share the Apple native folder reader, grant store
+  and recoverable publication core between iOS and macOS builds. Preserve iOS
+  storage identity, add platform-specific bookmark handling and verify actual
+  process-exit recovery on both platforms. Mac host integration remains pending.
+  [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Enable approved two-way foreground folder sync
+  through the shared runner and native adapters. Installed Android acceptance
+  verifies mixed uploads/downloads, independent replacements, repeated convergence
+  and Files visibility; shared recovery/conflict tests and fork-safe runbooks
+  cover the new mode. Background and full cross-device delivery remain pending.
+  [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Android foreground cloud downloads now negotiate
+  offline-folder capabilities and exact-connection native consent, preserving
+  generic SAF read-only behavior. Pinned sync reads bypass the media cache and
+  HTTP errors retain their status. Added installed-app byte/consent acceptance
+  and fork-safe runbooks. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add native Android offline-folder creation and
+  explicit read-only Android Files exposure, with stable document IDs, bounded
+  indexed listings and private catalog migration. Verify the installed picker,
+  nested file bytes and OS permission gate; document reproducible acceptance.
+  Android cloud download integration remains pending. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add the Android offline-folder publication
+  backend with verified immutable bytes, atomic conditional entry/receipt
+  transactions and retained replacements. Verify three real process-exit
+  recovery scenarios and shared native receipt compatibility; document
+  fork-safe checks. Android Files and download UI integration remain pending.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add Android native write approval with exact
+  folder re-selection, account/configuration binding and shared OS grant
+  cleanup. Verify cancellation, real Files write permission, retry and
+  re-selection invalidation in the installed Android app; document the SAF
+  publication limit and fork-safe acceptance steps. Android downloads remain
+  disabled pending safe publication. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Add Android private resumable download staging
+  using the shared mobile contract, bounded verified chunks and durable progress.
+  Verify real process-exit recovery and native response compatibility; document
+  the reproducible emulator checks. Android selected-folder publication and
+  background synchronization remain in progress. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Verified installed iOS cloud downloads, retained
+  replacement bytes and real process-exit recovery; added opt-in fixture/runbook
+  tooling. Serialize mobile pairing checks so polling cannot interrupt transfer
+  setup, and distinguish cancelled native approval from unavailable folders.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add approved foreground iOS downloads to the
+  existing sync connection controls, with native scoped consent, verified
+  same-volume publication, retained displaced files and durable receipt recovery.
+  Unsupported providers and uncertain local races remain pending safely;
+  Android/Mac publication and full installed-app acceptance remain open. See
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: iOS can receive resumable file chunks into
+  private native staging, with durable acknowledgements, immutable operation
+  checks and full fingerprint verification. Simulator byte/WebKit bridge tests
+  pass and the rebuilt app is installed. Publication into selected folders and
+  download controls remain pending. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Attachment-content 1.14.0 provides bounded,
+  exact-version downloads beyond the browser cache limit. Download operations
+  reuse the durable sync executor with verified staging and native receipt
+  recovery; a real 17 MiB range/hash acceptance passes. Native destination
+  publishers and download controls remain pending. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Android foreground uploads use bounded scoped
+  chunk proofs to avoid rehashing whole files per read, with full native
+  verification before file publication and on ready-upload retries. Byte-count,
+  same-stamp mutation and real provider-descriptor tests pass; optional system
+  picker/upload acceptance is documented separately. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Mobile connections can start, stop and retry
+  foreground upload/backup runs with native connectivity/charging checks,
+  retained progress and recoverable completion baselines. Real local API/storage
+  acceptance covers lost replies and checkpoint failure followed by a local edit;
+  native background/download/Photos work remains pending. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Nested cloud uploads now create ordinary folders
+  through the canonical Things/Timeline writer, pin parent IDs before transfers
+  and recover lost creation replies without duplicate trees. Real local byte
+  acceptance covers folder and multipart/file-commit interruptions. Native workers
+  and directory deletion remain open. [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Added complete private cloud folder inventories
+  through Files 1.1.0, with snapshot consistency, bounded reads and fail-closed
+  path/account checks. Real local API/storage acceptance covers nested folders,
+  exact file fingerprints and ambiguous-name refusal. Native sync workers remain
+  pending. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Mobile device cards now create/edit private sync
+  connections with complete local drafts, fixed-ID lost-response recovery,
+  stale-edit comparison and fresh folder checks. Desktop/mobile browser and
+  real API recovery checks pass; native transfer workers remain pending.
+  [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Persist editable file-sync connections through
+  ordinary private-by-default Things, with bounded direction, pause, network,
+  charging and exclusion preferences. Configured planning checks local approval
+  and protects excluded descendants from ancestor deletion. Real API guarded
+  edit/readback acceptance passes; native workers and connection UI remain open.
+  [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Android now shares the mobile folder-access
+  controls with native read-only tree grants, encrypted scoped references and
+  verified provider scans/reads. Native/provider and installed bridge tests pass;
+  system-picker acceptance and persistent transfers remain pending.
+  [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Added iOS Files folder selection, private native
+  grants, bounded verified scans/reads and responsive access controls. Native
+  tests and browser fixture checks cover source bytes, isolation and failures;
+  persistent transfers and signed-in picker acceptance remain pending.
+  [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17: Connected prepared sync runs to real cloud upload/replacement and
+  Trash, with pinned durable destinations, exact retry identities, byte checks
+  and account/database guards. Real interruption and lost-response acceptance
+  passed; native workers and production sync UI remain pending. See [PR #1002
+  notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Stable cloud file revisions use canonical
+  attachments, quota accounting and Timeline in one guarded transaction.
+  Exact retry receipts, retained versions, Trash/restore and folder integration
+  passed real local API acceptance. Native workers and product controls remain
+  in progress. [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Mobile sync content integrity: expose authorized,
+  exact-version multipart fingerprints through attachment-content 1.13.0 and
+  compare them with bounded local hashing. Real local multipart upload/download,
+  replay and deletion checks pass. Native sync workers and conditional file
+  replacement remain in progress. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: Added the Android native shell and device pairing
+  through the shared Things controls, with Keystore-encrypted recovery and
+  origin/account fencing. Debug build, lint, protocol and real API/emulator
+  acceptance passed; fork setup and native inset checks are documented. File
+  and Photos workers remain pending. [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-17 — **Codex (AI)**: iOS now advertises native device pairing, with
+  Things/Settings controls, account/origin-scoped Keychain recovery and bounded
+  foreground presence. Verified real local API pairing/readback and simulator
+  installation; Android and file/Photos workers remain pending. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Added iOS/Android device descriptor contracts
+  and safe projections, plus file-sync reconciliation, conditional execution
+  and a durable browser operation journal. Native pairing, folder/photo
+  workers and product integration remain in progress; see the
+  [acceptance ledger](../docs/mobile-file-sync.md) and
+  [PR #1002 verification note](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+- 2026-10-19: Give the editable Mac menu inventory Action an explicit 8 MiB browser response budget so real icon-bearing device snapshots load instead of failing at the 64 KiB default.
+
+- 2026-10-19 — **Codex (AI)**: Installed ChatGPT-plan acceptance passed fresh text, same-chat follow-up, a read-only Things tool roundtrip and saved model/conversation/Builder layout persistence; retain local execution placement and idempotent settings updates. [PR #1034 evidence](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
+
+- 2026-10-19 — **Codex (AI)**: Desktop connection, local runtime and session recovery now use editable Builder documents with offline persistence, private account webpage adapters, revision/origin fences and transient native controls. Focused persistence/SSR tests, isolated desktop/mobile fixtures and installed account-owned Builder edit-save-reload checks pass.
+
+- 2026-10-18 — Integrate Characters and CPU telemetry main updates; fence ChatGPT credential management to the current session identity so request overrides cannot survive a later Character switch. Publish the compatible `api.ai-chatgpt-plan` 1.1.1 correction.
+
+- 2026-10-18 — Integrate the merged agent-browser manager with ChatGPT runtime packaging, isolated proxy guards and supervised desktop restart. Both MongoDB and browser resources remain required in new builds. [PR #1034 validation](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
+
+- 2026-10-18 — Replace public desktop database connection-string hashes with keyed identifiers while preserving pre-upgrade renderer sessions through an encrypted migration alias.
+
+- 2026-10-18 — Desktop builds now include pinned MongoDB Community Server, source and notices for optional local execution; fresh profiles need no separate database install, while existing selections/data are preserved. Session recovery and installed acceptance remain in progress in [PR #1034](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
+
+- 2026-10-18 — **Codex (AI)**: Add ChatGPT plan consent and Lopu execution, optional Electron local API/authenticated MongoDB setup, encrypted connection moves between self-hosted runtimes, and isolated endpoint sessions with pinned streaming proxy requests. [Scope and validation](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
+
+- 2026-10-19 — **Codex (AI)**: Add individually editable bound Builder elements, list templates and conditions; migrate Mac menu bar composition, default its pagination to Show all, and include scoped icon thumbnails. Acceptance and deployment tracking: [PR 1042](../PRs/1042-menu-bar-editable-blocks.md).
+- 2026-10-18 — **Codex (AI)**: Add supported Character coordination preflight using the canonical origin-scoped manifest, distinguish Cloudflare discovery refusal from account/capability failures, and cover failure/retry behavior through real HTTP. See [the runbook](../docs/characters.md#agent-coordination).
+
+
+- 2026-10-18 — **Codex (AI)**: Convert Mac menu bar process CPU counters with the host Mach timebase. Apple Silicon readings now agree with macOS CPU seconds; regression coverage compares the collector conversion with independent `getrusage` readings.
+- 2026-10-18 — **Codex (AI)**: Add privately owned Characters with independent logins, inherited tier entitlements, session identity selection and Post as controls for posts/comments. Preserve principal account switching and independent private-subspace membership; add isolated real-API/browser acceptance. Capture early editor input during initialization. See [PR 1039 verification](../PRs/1039-characters-private-proxy-accounts.md).
+
+- 2026-10-18 — **Codex (AI)**: Give installed Device scripts pages a centered, padded Builder container. Remove fixture-provided layout so browser acceptance catches missing page spacing.
+
+- 2026-10-18 — **Codex (AI)**: Add editable agent tasks, todos and progress,
+  a Mac browser manager with task claims/live viewing, verified Chrome/Chromium
+  copies, device/task network controls and a private full-app container runtime.
+  Isolated authentication/database configuration refuses production fallback.
+  Packaged-container builds replace Mac-native libraries with verified Linux
+  dependencies and fail installation on binary/version mismatches.
+  Setup is documented in [the agent browser runbook](../docs/agent-browsers.md);
+  verification and fixes are recorded in [PR #1033](../PRs/1033-agent-browser-space-isolated-agent-browsers-and-task-management.md).
+
+- 2026-10-18 — **Codex (AI)**: Restore the existing password-title search, pagination and api.passwords 1.2.0 contract accidentally removed by the menu-bar merge. Preserve all menu-bar and script functionality.
+
+- 2026-10-18 — **Codex (AI)**: Fix installed desktop browser Actions through the
+  selected account endpoint while retaining actor, database and origin checks;
+  correct paired-device Builder links to Things. [PR 1031 notes](../PRs/1031-mac-menu-bar-paired-device-builder-tools.md).
+
+- 2026-10-18 — **Codex (AI)**: Add editable Mac menu bar and Device scripts
+  Builder suites, private menu telemetry, freshly approved paired-Mac Bash
+  commands, bounded result reads and explicit private-Thing/recipe saving.
+  Negotiate versioned device capabilities and include collection styles with
+  full inline search/pagination. Add isolated desktop/mobile acceptance tooling.
+  [Details and verification](../PRs/1031-mac-menu-bar-paired-device-builder-tools.md).
+- 2026-10-18 — **Codex (AI)**: Commander launcher Settings gear, stable process ordering, typed filters and sampled averaging windows, a resizable Processes pop-out with Keep above, and Settings maximize/restore. [PR #1030](../PRs/1030-commander-window-controls-settings-and-process-monitor.md).
+- 2026-10-18: Password title search now filters the whole private vault before pagination (`api.passwords` 1.2.0), cancels stale searches, and distinguishes no matches from request failure. Added HTTP pagination/owner-isolation and capability regressions.
+- 2026-10-18 — **Codex (AI)**: Document the reusable video compressor as a
+  Builder use case, including editable definitions, local encoding, saved
+  presets and verified output. Record the completed media workflow separately
+  from the still-paused standards catalogue backlog.
+
+
+- 2026-10-18: Fix incident cleanup to recognize the automatic logout history entry, bound to the revoked test session; retain strict content and actor checks. Production dry-run caught this mismatch before any deletion.
+
+
+- 2026-10-18 — **Codex (AI)**: Remove implicit production API forwarding from
+  Vite and Nitro; missing local database/signing settings now fail closed before
+  handlers or DB warmup. Restrict fixture destinations and redirects, add an OS
+  isolated server smoke, and provide guarded admin cleanup for the accidental
+  catalog acceptance account, with atomic identity/activity checks and dry-run.
+  Details: [PR #1025](../PRs/1025-local-fallback-safety-prevent-production-test-data.md).
+
+
+- Claude catalogue/workflow persistence validation: [PR #1016 notes](../PRs/1016-claude-catalog-workflow-keyless-claude-model-sync.md).
+
+- 2026-10-18: Add a create-only admin import of the configured OpenAI key into the shared AI credential vault without exposing the value.
+- 2026-10-18 — **Codex (AI)**: Add reusable local video pipelines and a Builder
+  media-tools suite with editable saved layouts/settings, WebCodecs encoding,
+  cancellation, progress, previews and downloads. Secure-host workers preserve
+  the opaque preview sandbox and deny network access. Lopu now receives shared
+  framework-discovery guidance. Suite installation requires capability 1.4.0;
+  browser acceptance verifies real MP4/WebM outputs and responsive layout.
+  [PR 1024 validation](../PRs/1024-media-pipeline-reusable-local-video-compression.md).
+
+- 2026-10-17 — **Codex (AI)**: Stream complete 1PUX imports, preserve source data and rich fields, and add encrypted password attachments and file-inclusive backups. Remove arbitrary import/editor caps and document fork-safe storage setup. [PR #1015 validation](../PRs/1015-codex-password-import-fix-preserve-complete-1pux-imports-and-encrypted-password-attachments.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add Gmail connection through Google OAuth, encrypted
+  refresh authorization and Gmail API sync/actions with independent device/cloud
+  message storage, labels, Trash, encrypted draft autosave and explicit sending.
+  Durable receipts prevent replaying uncertain sends. Consent uses the system
+  browser on iOS and desktop; setup is
+  exact-origin vault configuration with documented Google verification requirements.
+  Document isolated native build caches after concurrent signing-stage collisions.
+  [PR #1014 details](../PRs/1014-codex-gmail-oauth-google-login-and-gmail-actions.md).
+
+- 2026-10-17: Add explicit browser mail relay without cloud persistence, bundled desktop direct mail sync, and an iOS Mail shortcut. Preserve transport choice and credential origin boundaries; document native build and relay setup. [PR #1013 details](../PRs/1013-codex-mail-native-relay-native-desktop-mail-sync-and-browser-api-relay.md).
+
+- 2026-10-17 — **Codex (AI)**: Prepare incoming mail PR #1009 for the authorized main promotion, preserving the current Settings sections and rerunning the mail/settings checks after integration.
+
+- 2026-10-17 — **Codex (AI)**: Add private incoming-mail accounts, read-only IMAP/POP3 adapters, `/mail` and `/email`, combined and proxy inboxes, independent cloud/local sync, encrypted offline records and a paired loopback connector. Include its exact origin in the shared CSP. Setup is in README; [PR #1009 notes](../PRs/1009-codex-mail-provider-incoming-mail-accounts-proxy-inboxes-cloud-local-sync.md) record verification and remaining acceptance.
+
+- 2026-10-17: Split admin System settings into AI Providers, Lopu, Platform,
+  and Access & limits. Shared settings cards start collapsed, show descriptions
+  and status summaries, preserve drafts, and open for legacy deep links. Labels
+  and controls wrap without squeezing helper text into a narrow column. Details:
+  [PR #1008](../PRs/1008-codex-settings-cards-split-system-settings-into-focused-tabs-and-collapsible-cards.md). — **Codex (AI)**
+
+- 2026-10-17 — **Codex (AI)**: Fix Astra replies rejected by Chat Completions tool/reasoning compatibility. The shared model registry now routes GPT-6 Astra native tools through Responses, publishes its supported reasoning levels and pricing, and preserves provider-default or selected reasoning across tool hops. Both API manifests advertise reply 1.19.3 and catalogue 1.5.1.
+
+- 2026-10-17: Add automatic native-main TestFlight publishing, version allocation, pre-upload widget/signature checks and exact-build processing verification. Add production-only GitHub OIDC delivery and create-only Apple credential migration through the shared admin vault; see [PR #1006 validation and rollout](../PRs/1006-codex-ios-testflight-vault--automatic-ios-testflight-publishing.md).
+
+- 2026-10-17 — **Codex (AI)**: Support a separate Anthropic Models API credential for catalogue discovery when Claude OAuth cannot list models. Keep replies on Claude Code OAuth and show redacted HTTP failure reasons in admin sync reports.
+
+- 2026-10-17 — **Codex (AI)**: Daily provider model inventory sync, bounded
+  model-not-available recovery and admin manual refresh. Retired models leave
+  Lopu/shared selectors; per-provider allow-all and auto-allow-new checkboxes
+  preserve individual choices. Includes Fable 5.1, transactional publication,
+  complete-list validation and fork-safe cron setup in README.
+  Details: [PR #1004](../PRs/1004-codex-provider-model-sync--sync-available-provider-models-and-admin-allow-controls.md).
+
+
+- 2026-10-16 — **Codex (AI)**: Raise Lopu model/settings popup positioners above the floating window and mobile scrim; bound long popup bodies to the viewport so their controls remain scrollable.
+
+- 2026-10-16 — **Codex (AI)**: Keep fresh Lopu chats ready to send while unrelated background tasks run; scope busy checks and Stop to the selected conversation.
+
+- 2026-10-16 — **Codex (AI)**: Post creation, editing, rich comments and plain
+  comments/replies no longer await account draft sync or cleanup. Completed
+  drafts retire locally immediately; late saves cannot overwrite the next
+  composer, and uncertain post retries keep their frozen identity. Verified
+  private post/reload and mobile comment/reply against a disposable local API
+  account with draft requests blocked; no production account data changed.
+  Details: [PR #999](../PRs/999-codex-independent-post-draft-saving--fix-posting-blocked-by-draft-saving-failures.md).
+
+- 2026-10-15 — **Codex (AI)**: Add isolated no-login native draft previews and the stdio MCP `thingtime_render_and_export` tool, reusing canonical transfers, schema validation and native renderers. Return bounded JSON/PNG artifacts with diagnostics, rejecting transparent CSS Color 4 text and zero-size fonts; keep Actions, account data, assets and publishing unavailable. Local clean-browser and disposable importer verification: [PR #998 evidence](../PRs/998-codex-anonymous-render-export--no-login-native-draft-rendering.md).
+
+
+- 2026-10-15 — **Codex (AI)**: Add a private password library using reusable
+  Thing field mods, account/session encryption and server-assisted recovery,
+  TOTP QR imports and capture cleanup, and 1Password/Chrome/Apple import/export.
+  Reject internal Action principals at the vault boundary even when they carry
+  an Authorization header.
+  Keep native providers in a separate release so Apple provisioning does not
+  block the web vault or existing native packaging. Correct managed worktree
+  port identity and prune non-target image binaries from Vercel functions.
+  [Setup and security model](../docs/password-manager.md); [PR #997 validation](../PRs/997-codex-password-manager-web--encrypted-web-password-manager.md).
 
 - 2026-10-13 — **Claude (AI)**: Unified Timeline named versions, undo this
   change, compare with now and version export (`api.timeline` 1.18.0): new
@@ -2926,6 +3968,1982 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   account, or secret is exposed. — Codex (AI), 2026-08-24
 
 ### Added
+
+- **Feature Stacks are now reusable, unlimited control-plane workflows.** Admin
+  CI Control can save and edit multiple stacks, run a one-feature stack, select
+  any number of live features and targets, see per-target PR progress, and use
+  a default-on branch router that keeps `github-actions`, `main`, and `develop`
+  sources in compatible lanes. The protected controller receives a v2 immutable
+  plan and filters it to one target-specific source manifest before Lopu merges.
+  PR statuses now use a Vercel-style multi-select; System model-order entries
+  edit in place; and the encrypted credential waterfall accepts built-in or
+  custom AI platform labels while GitHub keeps using the single stable router
+  secret. [Detailed PR #498 notes](../PRs/498-codex-feature-stack-saved-workflows--saved-multi-target-feature-stacks.md).
+  — Codex (AI), 2026-08-31
+
+- **Admin CI Control now owns Lopu’s ordered Claude account vault.** Admins can
+  add, name, rotate, enable, remove, and reorder up to eight write-only Claude
+  Code OAuth tokens. Thingtime encrypts values with AES-256-GCM, exposes only
+  redacted metadata to browsers, and delivers the ordered enabled bundle to a
+  fresh replay-protected HMAC-authenticated controller run. Lopu masks the
+  bundle, keeps it only for that run, and walks the array on classified account
+  capacity/credential failures, removing the need for one GitHub secret name
+  per Claude account. — Codex (AI), 2026-08-31
+
+- **Admin CI Control now batches features as a verified multi-target Feature
+  Stack.** Admins can preserve an ordered 2–20 PR selection, choose one or two
+  live target branches, and dispatch once. The server snapshots exact live
+  same-repository heads; the protected Lopu controller sequentially combines
+  them per target, restricts AI edits to Git-reported conflicts, verifies merge
+  topology and bytes, and opens branch-protected auto-merge PRs. The new
+  origin-scoped API capability manifest advertises the additive dispatch
+  contract as `api.admin-ci-dispatch` 1.1.0. Detailed validation notes:
+  [PR #487 (`develop`)](../PRs/487-codex-feature-stack-merge-control-add-verified-multi-target-feature-stacks.md)
+  and [PR #489 (`main` promotion)](../PRs/489-codex-feature-stack-main-add-verified-multi-target-feature-stacks.md).
+  — Codex (AI), 2026-08-30
+
+- **Thingtime’s MCP initialization now supplies connector-wide interaction
+  instructions.** ChatGPT receives the account-selection, token-safety, and
+  confirmed-mutation contract before tools are called; the additive MCP feature
+  advances to `1.1.0`. — Codex (AI), 2026-08-26
+- **Thingtime ChatGPT/Codex MCP connector.** A public OAuth 2.1 + S256 PKCE
+  streamable-HTTP MCP gateway now connects multiple named, allowlisted
+  Thingtime API endpoints through encrypted, scoped and revocable PATs. The
+  bridge token cannot act as a Thingtime account session; tools are restricted
+  to account management plus Things reads and explicitly confirmed writes.
+  Protected-resource/auth-server discovery, an origin-scoped capability
+  manifest, API docs, and the distributable plugin package live together so
+  clients can negotiate the contract rather than route-probing. — Codex (AI),
+  2026-08-25
+- **Admin external integrations**: `/admin` now exposes a dedicated
+  **External integrations** tab for a write-only AES-256-GCM secret vault,
+  saved HTTPS endpoint policies, and a bounded redacted audit trail. The
+  provider proxy enforces selected read / create-only / write permissions;
+  Vercel create-only environment writes check for an existing value before
+  POST and never use PATCH/upsert. Setup: `README.md` “Admin integration vault
+  and policy proxy”. — Codex (AI), 2026-08-24
+
+### Security
+
+- **ChatGPT connections now survive secure refreshes without splitting account
+  state.** The optional `offline_access` scope issues one-time rotating refresh
+  credentials alongside the 30-day MCP bridge token. Every access and refresh
+  credential references one encrypted, origin-bound connection session, so an
+  account switch or final disconnect applies consistently across renewals; a
+  final disconnect revokes the connection and all of its bridge credentials.
+  The OAuth and connections capability features advance to `1.1.0`. — Codex
+  (AI), 2026-08-26
+- **ChatGPT tool annotations now match their actual effects.** Public-content
+  writes are marked as open-world actions, only irreversible writes retain the
+  destructive hint, and the MCP semantic feature advances to `1.0.2` for
+  review-safe metadata scanning. — Codex (AI), 2026-08-26
+- **ChatGPT now discovers OAuth before invoking protected tools.** The MCP
+  catalog publishes standard per-tool OAuth metadata while returning no account
+  data, protected calls emit the model-readable OAuth challenge ChatGPT uses to
+  link an account, and bridge sessions are bound to the exact MCP origin that
+  issued them. — Codex (AI), 2026-08-26
+- **Passkey app links join the relationship-uniqueness family.** `passkey-app-link`
+  shipped in #323 with its own kind-blind `crystal.linkKey` unique index —
+  authored while #320/#325/#326 were retiring exactly that pattern. A
+  free-form data crystal could take the slot (blocking a passkey's linked-app
+  record) or, worse, hold a DUPLICATE of it, which fails the whole boot-time
+  index battery on E11000 and takes registration/login down with it. Dedupe
+  now rides the server-only root `uniqueKeys` namespace
+  (`linkKey:<passkeyId>:<appKey>`, stamped through the shared
+  `relationshipUniqueKeys` helper), the per-login upsert matches on that same
+  stamped value (served by the existing `uniqueKeys` index, with a crystal-path
+  fallback until legacy rows are backfilled), and the unique index is retired
+  outright — no replacement lookup index needed, one less index on the busiest
+  collection. The existing `backfill-relationship-unique-keys` migration is
+  map-driven, so re-running it stamps legacy rows. Regression-pinned in
+  `verify-passkeys.mjs` (47 checks). — Claude (AI), 2026-08-25
+
+### Changed
+
+- **Graphify output is now conflict-free and content-addressed**: a repository
+  wrapper fingerprints the source tree without generated output, serializes
+  writers, validates Graphify's atomic graph/manifest/report set, and publishes
+  immutable snapshots whose identical artifacts deduplicate and whose valid
+  variants coexist. Mutable semantic-cache entries are also promoted into
+  immutable input-key/content-hash variants. Ignored root symlinks preserve ordinary query compatibility;
+  committed hooks select/build snapshots without committing or pushing, and
+  Lopu can regenerate a post-merge snapshot instead of line-merging generated
+  JSON. [PR #436 details](../PRs/436-codex-graphify-snapshot-routing--make-graphify-output-conflict-free.md).
+  — Codex (AI), 2026-08-27
+- **ChatGPT OAuth client registration now accepts the stable Client ID Metadata
+  Document.** The connector permits ChatGPT's current `oauth/client.json`
+  client identifier, while retaining the previous fixed identifier for existing
+  developer-mode connections. — Codex (AI), 2026-08-26
+- **The develop Lopu listener exposes the complete maintenance contract**:
+  manual recovery now includes the protected controller's bounded
+  `backfill-codeql` operation alongside PR management, promotions, branch sync,
+  and the wildcard-all build. The caller contract and operational checklist
+  pin this menu so product-branch listeners cannot silently drift behind the
+  single `github-actions` implementation. — Codex (AI), 2026-08-26
+- **The wildcard `all`-branch workflow is folded into the one public Lopu
+  manager**: product branches no longer retain a separate all-branch listener.
+  Develop/main pushes, the full PR lifecycle including draft and close, the
+  hourly backstop, and manual `build-all` recovery all route through **Lopu PR
+  manager** to the protected reusable doctor. — Codex (AI), 2026-08-25
+- **The last duplicate public PR-maintenance Actions are retired on develop**:
+  promotion, main/develop synchronization, merge cascades, and rebase-stack
+  repository events all enter through the one visible Lopu PR manager. The
+  protected rebase engine remains implementation-only on `github-actions`;
+  develop no longer carries a second rebase listener that could duplicate
+  detection or cancellation ownership. — Codex (AI), 2026-08-25
+- **Lopu CodeQL target events now use the metadata-only handoff they describe**:
+  the default-branch listener sends PR number and exact head SHA through the
+  protected handoff, while only the separate unprivileged dispatch invokes the
+  analyzer. This prevents duplicate target-context base scans and the red
+  cancelled analyzer checks they could leave behind. — Codex (AI), 2026-08-25
+- **Lopu now receives every PR-head lifecycle update from the default branch**:
+  `pull_request_target` includes synchronize, ready-for-review, and edited
+  events, so old PR branches and non-default targets no longer depend on
+  carrying a current push listener themselves. The develop caller is also
+  aligned with the current principal-manager contract for comments, failed
+  checks, promotion/maintenance inputs, and the separately fenced CodeQL
+  disposition permission. The protected controller still deduplicates
+  immutable snapshots and admits at most one model-backed Lopu worker per
+  repository. — Codex (AI), 2026-08-25
+- **CodeQL keeps normal PR checks while covering arbitrary targets**: the thin
+  listener now calls separate protected workflows for unprivileged analysis
+  and the metadata-only `pull_request_target` handoff. Ordinary PR tokens no
+  longer fail workflow validation by inheriting the handoff's
+  `actions: write` request; normal PRs retain their branch-protection contexts,
+  while older target branches still receive exact-ref analysis through the
+  trusted dispatch hop. — Codex (AI), 2026-08-25
+- **Lopu CodeQL now covers every PR target and branch**: an unfiltered PR
+  listener, all-branch push listener, scheduled backstop, and protected reusable
+  implementation replace default-branch-only scanning. A metadata-only
+  default-branch target event also dispatches exact-ref analysis for PRs whose
+  target predates the listener, without checking out code or exposing AI
+  credentials in the privileged run. Targets that already carry a listener
+  keep the normal PR check as owner; older targets use their merge ref, with a
+  head-ref fallback when the merge ref is missing or its parents are stale.
+  Live-state fences and existing two-language snapshots reject stale or
+  duplicate work, and Lopu accepts immutable head or merge-ref findings only
+  after revalidating both the reviewed head and base revisions. The README
+  documents the ordered default-setup-to-advanced-setup activation and its two
+  repository variables, one of which prevents expected pre-activation upload
+  failures.
+  — Codex (AI), 2026-08-25
+- **Signed Desktop PR releases now use the protected `github-actions` control
+  plane**: this branch contains only a `pull_request_target`/manual listener;
+  the owner-and-label gate, immutable PR-SHA checkout, unsigned verification,
+  signing, notarization, and prerelease publishing remain in the reusable
+  implementation. — Codex (AI), 2026-08-24
+- **Paired-Mac display mode selections now persist**: resolution and refresh
+  changes use Core Graphics' permanent display-configuration transaction rather
+  than an app-lifetime mode setter, matching the existing layout and mirroring
+  persistence. The desktop endpoint probe now requires the matching `api.devices`
+  `^1.6.0` contract before activating controls. The closed command shape, fresh
+  approval boundary, and advertised-mode validation are unchanged. — Codex (AI),
+  2026-08-24
+
+### Added
+
+- **Account birthday as private state with an exact `profile.birthday` scope**:
+  the birthday is a plain `YYYY-MM-DD` calendar date stored in the user thing's
+  secure blob (`meta.birthday`), editable from Settings, and excluded from
+  `PublicProfile` — other users and the public profile projection never see it.
+  Apps receive it from `/api/v1/oauth/userinfo` only under the literal
+  `profile.birthday` scope: it is marked `exact`, so a plain `profile` grant —
+  including every legacy token — never silently covers it.
+  `/api/v1/oauth/scopes` is now CORS-open so platforms can feature-detect the
+  scope before opening the popup. Details in
+  [`PRs/180-claude-user-birthday-scope--account-birthday-private-field-exact-scope.md`](../PRs/180-claude-user-birthday-scope--account-birthday-private-field-exact-scope.md).
+  — Claude (AI), 2026-08-24
+- **Unlimited AI workflow model waterfall**: Admin → System's model order now
+  accepts any number of unique entries from a 33-model Claude + OpenAI
+  catalog, each with a per-entry reasoning-effort tier and normal/fast mode
+  (composed ids `<model>[:<effort>][:fast]`; reads drop unknown entries
+  instead of collapsing; direct Anthropic/OpenAI features resolve their own
+  provider's first entry). Lopu musings budget for the reasoning those entries
+  now pay for — the OpenAI call uses `max_completion_tokens` (the deprecated
+  `max_tokens` is rejected by o-series/GPT-5) and a provider that streams no
+  text falls through instead of rendering a blank musing. The github-actions
+  control plane still fail-closes to `["default"]` for non-legacy entries until
+  its closed grammar is widened
+  (see [PR #388 note](../PRs/388-claude-fallback-model-selection-0281b1--unlimited-ai-model-waterfall-claude-openai-catalog.md)).
+  — Claude (AI), 2026-08-24
+- **Commander GitHub release control plane**: main-branch Commander changes
+  now route to a native macOS release workflow that publishes a versioned app
+  archive and checksum; its base version is intentionally bumped in a reviewed
+  Commander change while GitHub run metadata supplies each unique build number.
+  — Codex (AI), 2026-08-23
+
+- **Explicit UNSIGNED desktop-release fallback**: the owner-approved PR release
+  worker now publishes an ad-hoc-only Electron and Recovery pair when all six
+  Developer ID/notarization secrets are absent. Their SemVer, asset names,
+  GitHub title, and notes all say UNSIGNED; a partial secret configuration
+  stops the build. Recovery visibly separates them from verified releases and,
+  after acknowledgement, can cache, launch, or atomically install one while
+  warning that macOS may require Privacy & Security → Open Anyway. — Codex
+  (AI), 2026-08-24
+
+- **Admin deployment peer explorer**: **Dev → Deployment peers** now presents
+  locally known signed mesh leases in grid, card, and list views, with a
+  property-aware search selector and deliberate cursor paging. The browser
+  uses a separate private admin projection; HMAC material, private keys,
+  request signatures, and gossip cursors remain inaccessible to clients. —
+  Codex (AI), 2026-08-24
+
+- **Independent native rollback launcher for Thingtime Desktop**: the signed
+  `Thingtime Recovery.app` now has its own SwiftUI version browser, a separately
+  signed installer helper, its own companion release ZIP, and a self-update
+  path. It shares the durable desktop cache at
+  `~/Library/Application Support/com.thingtime.desktop/release-cache` while
+  keeping recovery-launcher copies separate. It caches only verified bundle
+  identifiers and same-team signatures, closes a running desktop before an
+  atomic install, preserves the replaced bundle, and rejects a stale or
+  malformed GitHub asset without changing the installed app. Its companion
+  asset is supplied by the dedicated protected-release control plane. — Codex
+  (AI), 2026-08-24
+
+- **Signed Desktop PR releases and recovery-first version switching**: an
+  owner-approved, same-repository PR carrying the `desktop-release` label can
+  now publish a Developer ID-signed, notarized GitHub prerelease whose SemVer
+  identifies its PR, normalized branch, and exact commit. Desktop Settings now
+  fetches/searches the GitHub release catalog, caches only verified signed
+  macOS ZIP bundles, lets a person launch or atomically install a cached
+  version, and preserves the current production app as a fallback before every
+  switch. The cache is bounded to twelve explicit recovery bundles, never
+  silently installs, and remains revealable in Finder if a later UI is broken.
+  — Codex (AI), 2026-08-24
+- **Desktop recovery updater hardening**: GitHub release discovery now follows
+  every API Link page instead of stopping at a fixed history cap, rejects
+  redirect hops outside GitHub release storage, repairs stale cache metadata
+  before applying its twelve-bundle limit, and removes a partial cache copy on
+  failed verification. Recovery launches now hand off after the current app
+  exits, preventing two cached/installed versions from sharing one local
+  profile at once; cached recovery choices remain visible and usable if GitHub
+  is offline. — Codex (AI), 2026-08-24
+
+- **Approval-gated remote pointer and keyboard controls for paired Macs**:
+  the desktop node now accepts a closed, capability-gated set of screen-relative
+  pointer moves/clicks/scrolls, bounded text entry, and allowlisted keyboard
+  shortcuts. Every command needs a fresh approval and macOS Accessibility
+  permission; the node does not request Input Monitoring, Full Disk Access,
+  root, clipboard, keylogging, event taps, shell execution, or arbitrary
+  scripting. Quartz enqueueing stays journalled as `needs-review` rather than
+  pretending that a target app accepted the input. The paired-device contract
+  is now `1.8.0`; live screen pixels remain intentionally unimplemented until a
+  privacy-preserving peer-to-peer transport is selected. — Codex (AI),
+  2026-08-24
+
+- **Consented media app and Chrome YouTube volume controls for paired Macs**:
+  Apple Music and Spotify now expose their own bounded 0–100% volume settings
+  alongside fixed playback controls. Chrome can set the active direct
+  YouTube/YouTube Music audio/video element volume through one fixed Apple
+  Event after the Mac user grants Automation and enables Chrome’s **Allow
+  JavaScript from Apple Events** setting. These commands always require fresh
+  approval, reject scripts, URLs, selectors, browser/profile data and unknown
+  input, and do not collect media metadata or page data. Cross-origin embeds
+  and generic browser media remain intentionally unavailable. Paired-device
+  API contracts are now `1.7.0`. — Codex (AI), 2026-08-24
+
+- **User-reviewed global availability policy proposals for paired Macs**:
+  AirDrop and camera availability now have separate capability-gated commands
+  that accept only a boolean and always require a fresh approval. Each command
+  writes one fixed local configuration profile and opens macOS’s profile-review
+  flow; macOS installation remains a separate local choice. The profiles never
+  create MDM enrollment, carry arbitrary payload content, or alter per-app
+  camera TCC grants. Paired-device API contracts are now `1.5.0`. — Codex (AI), 2026-08-24
+
+- **Approval-gated persistent idle timers for paired Macs**: the node now
+  reads and can set the documented IOKit display-idle, system-sleep, and
+  disk-spindown timers from Never (0) through 180 minutes. Every change
+  requires a fresh approval and verifies the observed value after macOS
+  applies it; no power profile, arbitrary `pmset` key, or shell input is
+  accepted. Paired-device API contracts are now `1.4.0`. — Codex (AI), 2026-08-24
+
+- **Scoped Spotify playback controls for paired Macs**: the node now reports
+  only whether Spotify is installed/running and accepts only fixed play,
+  pause, previous, and next actions. Each command requires a fresh approval
+  and macOS Automation consent, accepts no script, app, queue, track, library,
+  or history input, and remains `needs-review` until the next observation.
+  Paired-device API contracts are now `1.3.0`. — Codex (AI), 2026-08-24
+
+- **Advanced paired-computer display, hardware, and lifecycle controls**:
+  paired Macs now advertise capability-gated per-display
+  mode/resolution/refresh, brightness, layout, mirroring and read-only HDR;
+  default printer, preferred camera, paired Bluetooth device, existing VPN,
+  and keep-awake controls; plus always-fresh-approved restart, shutdown, and
+  logout. The device drawer groups the new controls in **Displays & system
+  hardware**. Terminal lifecycle effects reconcile as `needs-review` after
+  reconnect; no arbitrary scripts or shell input is accepted. Details:
+  `PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md`.
+  — Codex (AI), 2026-08-24
+
+- **Scoped Apple Music and power-status controls for paired Macs**: the node
+  now reports Low Power Mode and whether Apple Music is installed/running.
+  Apple Music exposes only fixed play, pause, previous, and next actions;
+  each needs a fresh approval plus macOS Automation consent, accepts no script,
+  app, queue, track, library, or history input, and remains `needs-review`
+  until the next observation. HDR and Low Power Mode remain read-only; Focus,
+  AirDrop, Bluetooth radio power, camera privacy, and global media playback
+  remain absent because macOS provides no supported scoped setter. Paired-device
+  API contracts are now `1.2.0`. Details:
+  `PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md`.
+  — Codex (AI), 2026-08-24
+
+- **Categorized safe machine controls in the paired-computer drawer**: everyday
+  volume, mute, brightness, and application focus controls remain immediately
+  available; advanced Audio & routing, Network & connectivity, Power,
+  permissions, and diagnostics begin collapsed per computer. Audio routes use
+  menus, each running app has a contextual More menu, and the Applications
+  heading provides a separate global-actions menu. Wi-Fi permits only a
+  saved/open SSID (never a password); Force quit always creates an explicit
+  approval because it can discard unsaved work; and Sleep uses the existing
+  approval policy. — Codex (AI), 2026-08-23
+
+- **/branding redesigned as a full brand-resources page**: full-width
+  Meta-style sections per logo variant with whitespace-trimmed previews and a
+  minimalist custom exporter (PNG/SVG, any width, per-side pixel padding,
+  optional background); pre-generated PNG ladders (10px → 10000px) + SVGs
+  committed under `remix/public/branding/generated/` via the new
+  `npm run branding-assets` (zero-dep deterministic PNG encoder), lazy-loaded
+  for Google-image indexing; generated press-kit suite (OG cards, banners,
+  wallpapers, tiles, confetti pattern); palette + usage sections; Asset
+  library JSON dump removed. Details:
+  `PRs/129-claude-todo08-branding-svg-png-s1--branding-brand-resources-redesign.md`.
+  — Claude (AI), 2026-08-22
+- **`all` branch AI build doctor**: the Build all branch workflow now runs the
+  union build after every input-changed rebuild and, when textually-clean
+  merges collide semantically (duplicate helpers declared by two PRs), repairs
+  the branch with up to three guarded, edit-files-only Claude rounds — the
+  conflict resolver's action pin, model waterfall, and credential-scan
+  posture — committing replayable fixups on `all` itself and re-verifying the
+  build mechanically. Live-fired locally against the real 64-PR union: four
+  collision layers healed to a green build, and the fixups replayed cleanly
+  onto the next rebuild. — Claude (AI), 2026-08-19
+- **`all` wildcard branch automation**: new **Build all branch** control-plane
+  workflow — thin listener `.github/workflows/all-branch.yml` on product
+  branches, implementation plus `build-all-branch.mjs` builder on the
+  protected `github-actions` branch — that deterministically rebuilds the
+  generated `all` branch: `develop` + `main` + every open non-fork PR (stacked
+  branch → branch PRs included, `no-all` label opts out) merged newest-wins
+  with theirs-biased auto-resolution, force-pushed only when the resulting
+  tree actually changes, with an `ALL_BRANCH.md` manifest on the branch
+  recording every merge and skip. See README “Branch automation: the `all`
+  wildcard branch”. — Claude (AI), 2026-08-18
+
+### Performance
+
+- **Collection→things migration batches each phase per page (PR #69 review, c16)**:
+  `collectionToThingsMigration.run` processed legacy docs one-by-one with 3-4
+  sequential Mongo round trips each (upsert claim, twin re-read, fresh legacy
+  read, optional replace, delete) plus a growing `$nin` page filter — migrating
+  ~50k accounts cost ~150-200k serial round trips inside a single admin request
+  (timeout territory). The CLAIM phase of each ~200-doc page is now batched: one
+  unordered `bulkWrite` of `$setOnInsert` upserts (deterministic-shareId specs)
+  classified via `upsertedIds`, one `shareId` `$in` re-read for the genuine
+  check, a batched `findExistingMany` lookup for the uuid-shareId waitlist path,
+  and one legacy `_id` `$in` fresh read — those steps drop from O(docs) to
+  O(pages). The CONSUME phase's *mutations* deliberately stay per-doc: a
+  conversion receipt may only certify a delete that verifiably landed, so each
+  survivor still costs its own lease re-assert, exact-snapshot `deleteOne`, and
+  receipt write (plus a CAS `replaceOne` on the repair path). Net effect is
+  roughly halved round trips — about 3 per migrated doc instead of 6-7 — not a
+  per-page constant; batching the guarded delete would require a different
+  receipt protocol and is left as follow-up. Every guard is preserved verbatim: the updatedAt data-loss guard
+  still leaves a raced legacy doc for the next run, and collisions /
+  foreign-held ids / malformed docs still fall back to per-doc skip.
+  Validated with a dry-run + real run against seeded legacy users (3 pages), the
+  race-guard rebuild path, foreign-collision skip, waitlist dedup, and idempotent
+  re-runs — Claude (AI), 2026-07-18.
+  Follow-up: the batched BUILD phase now runs each `spec.toThing` through
+  `conversionBuildOutcomes`, restoring the per-doc `try/catch` the per-doc loop
+  had. A legacy `users` row whose `emailVerificationRequiredBy` is truthy but
+  unparseable makes `buildUserSecure` raise `RangeError: Invalid time value`
+  rather than returning `{ ok: false }`; in a bare page loop that escapes `run()`
+  before the row reaches `skippedIds`, so every re-run re-reads the same page and
+  aborts identically — one corrupt document wedges the whole migration instead of
+  costing it a single skip. Pinned by a regression test — Lopu (AI), 2026-08-29.
+  Follow-up: the consume phase's conversion-receipt LOOKUP is now batched too. It
+  had been grouped with the mutations that must stay per-doc, but it is a pure
+  read keyed only on `(collection, source._id)` — the same key for a page-query
+  snapshot and its re-read — so one `key: { $in: [...] }` query against the
+  unique `settings.key` index resolves a whole page. The freshness comparison
+  (`conversionReceiptCovers`) stays per-document, run against the exact snapshot
+  being judged, and receipts are only ever upserted, so a page-old snapshot can
+  miss a receipt a concurrent runner just wrote but can never invent one — a miss
+  falls through to the stricter semantic-equality path. Measured against a
+  throwaway mongod with server-side profiling: receipt reads drop 250 → 2 over a
+  250-doc/2-page `users-to-things` run, with every other operation count and the
+  full report identical — Lopu (AI), 2026-08-30.
+  [PR #74 details](../PRs/74-claude-batch-collection-things-migration--batch-collection-to-things-migration-per-page.md).
+
+### Fixed
+
+- **Lopu is the sole wildcard-union listener**: the legacy public **Build all
+  branch** workflow is retired from the product branch. PR lifecycle, branch
+  push, manual, and hourly union-build signals now enter the default-branch
+  **Lopu PR manager**, whose protected maintenance namespace preserves the
+  active build and coalesces only obsolete not-yet-started snapshots. The
+  listener contract now rejects any reintroduction of the competing workflow.
+  — Codex (AI), 2026-08-27
+- **CI Control repository maintenance now dispatches the unified Lopu
+  workflow**: existing rebase, feature-promotion, standing-promotion, and sync
+  operation keys translate to typed `Lopu PR manager` inputs instead of naming
+  retired workflow files. Rebase cascade and promotion dry-run/lookback values
+  remain intact for GitHub-hosted and Vercel-routed runs. The last product
+  rebase listener is removed; exact stack workers enter Lopu and then invoke
+  the protected `workflow_call`-only engine. — Codex (AI), 2026-08-25
+- **The default-branch all-builder listener no longer cancels its protected
+  worker before the durable queue starts**: `main` now matches `develop` by
+  leaving concurrency ownership entirely to the `github-actions`
+  implementation. Bursty PR/push events therefore remain queued instead of
+  cancelling an in-flight all-branch rebuild at the caller boundary. — Codex
+  (AI), 2026-08-25
+- **Lopu is the only automatic promotion and branch-sync entrypoint**: the
+  three product-branch workflows that separately promoted develop, promoted
+  features, and synchronized main into develop are removed. Their protected
+  implementations are non-cancelling reusable jobs inside **Lopu PR manager**;
+  develop pushes, main pushes, the six-hour backstop, and explicit
+  `maintenance_operation` recovery now all enter through that one workflow.
+  — Codex (AI), 2026-08-25
+- **One automatic Lopu owns merge, stale-branch, rebase, and stack work**: the
+  legacy rebase listener is now an internal `repository_dispatch` handoff only,
+  so a branch push cannot spawn a competing standalone rebase run that gets
+  cancelled when the unified manager starts its embedded rebase lane. Manual
+  recovery also goes through **Lopu PR manager**. — Codex (AI), 2026-08-25
+- **Lopu's default-branch listener can start every repository-manager lane**:
+  the thin reusable-workflow caller now grants the maximum `security-events`
+  permission required by its isolated CodeQL reader/writer jobs. GitHub no
+  longer rejects `check_run`, comment, push, or scheduled Lopu runs before any
+  job is created, while the model review job remains read-only and alert
+  dispositions stay in the separately fenced writer. — Codex (AI), 2026-08-25
+- **CodeQL promotion remains valid when release-listener work overlaps**: the
+  main promotion now keeps one Electron release-listener contract block rather
+  than combining two independently valid additions into duplicate JavaScript
+  declarations. — Codex (AI), 2026-08-25
+- **Commander launch and verification remain responsive when Launch Services stalls**:
+  application launches now submit asynchronously instead of blocking the native UI
+  thread, and the signed build verifier terminates only its own stuck launch helper
+  after the installed Commander host is confirmed running. — Codex (AI), 2026-08-25
+- **Build all branch listener can dispatch its control-plane worker**: the
+  reusable workflow's push handoff requires `actions: write`; the main listener
+  now grants that inherited permission instead of failing at workflow startup.
+  — Codex (AI), 2026-08-24
+- **PR #299 Messenger membership durability**: unordered batched member writes
+  now treat duplicate-key failures as benign only when the Mongo driver reports
+  no accompanying write-concern failure. The check covers the current driver's
+  concern-only and result-level error shapes and fails closed when the result
+  cannot be inspected. — Codex (AI), 2026-08-24
+
+- **Signed-release MCP gate handles closed local connector pipes**: the JSONL
+  transport now treats a child-process `EPIPE` as an unavailable connector and
+  fails pending work closed, rather than allowing Node to throw an unhandled
+  stream error during teardown. — Codex (AI), 2026-08-24
+
+- **Signed-release native gate no longer relies on wall-clock scheduling**:
+  the long-running lease-heartbeat test now waits for its three intended
+  renewals before completing dispatch, then verifies renewal stops. This keeps
+  the behavior under test intact while eliminating macOS runner timing flakes.
+  — Codex (AI), 2026-08-24
+
+- **Signed-release native checks now build across macOS SDK overlays**: printer
+  identifiers and names are converted through the Core Foundation Get-rule
+  bridge, rather than force-cast from one SDK-specific declaration. The
+  release gate now works whether Core Printing imports these values as Swift,
+  Core Foundation, or unmanaged Core Foundation strings. — Codex (AI),
+  2026-08-24
+
+- **Deployment peer discovery is bounded and gossip-based**: authenticated
+  first-party deployments now maintain one relational, TTL-reaped peer lease
+  per origin. `/api/v1/peers` streams cursor-paginated NDJSON instead of an
+  all-peers array; a self-signed sync announces to production then probes a
+  capped breadth-first peer set. HMAC binds method, path, timestamp, and raw
+  body; each peer identity and streamed result has an Ed25519 public signature
+  which is pinned to its origin. Anonymous, expired, tampered,
+  non-first-party, key-rotated, and unbounded requests fail closed. — Codex
+  (AI), 2026-08-24
+  The production bootstrap advances its bounded traversal with a five-minute
+  `CRON_SECRET`-protected Vercel schedule; other deployments can use the
+  documented scheduler endpoint. — Codex (AI), 2026-08-24
+
+- **Every API operation now advertises a compatibility contract**:
+  `/api/v1/capabilities` is generated from the canonical API-doc registry and
+  active runtime route map. It publishes a semantic `api.<endpoint-id>`
+  contract for each documented operation plus discoverable `route.*` entries
+  for every executable route. Desktop clients negotiate their required range
+  before using a selected deployment,
+  while older deployments retain the narrow devices-route fallback during the
+  rollout. — Codex (AI), 2026-08-23
+
+- **Desktop API endpoint compatibility is now explicit and fail-safe**: the
+  packaged app validates both the selected deployment's computers route and
+  its own bundled loopback proxy target on startup, endpoint changes, and a
+  non-blocking Settings retry. A preview that is still deploying now stays
+  visibly selected but is marked incompatible rather than looking like a
+  production fallback; Thingtime desktop will not reconfigure or restart its
+  managed node against that endpoint until both checks pass. — Codex (AI),
+  2026-08-23
+
+- **Per-computer device-drawer layout and browser navigation alignment**: each
+  paired machine now remembers its own collapsed/expanded details sections and
+  last chosen panel width locally, without storing device state or content. The
+  browser nav now shares the drawer trigger's 52px/36px control grid, and the
+  Commander search button remains available in ordinary web browsers as well
+  as Electron. — Codex (AI), 2026-08-23
+
+- **Paired-computer actions now default to Always allow**: the paired-account
+  badge uses a soft green success treatment, and each account/computer drawer
+  now offers a durable **Always allow / Ask every time / Deny** preference.
+  Existing pairs read as Always allow without a migration. The server enforces
+  the selected mode before creating a command, while pairing, capability,
+  freshness, locked-session, and macOS privacy checks remain fail-closed in
+  every mode. — Codex (AI), 2026-08-23
+
+- **Device drawer drag now changes its visible width**: resize handling now uses
+  one window-level pointer stream, preventing Chromium's compatibility
+  `mousedown` from replacing the active pointer id. The desktop drawer width
+  also explicitly outranks Chakra's inline `width: 100%`, so the rendered panel
+  edge moves with the accessible splitter value. The same slim edge is now
+  draggable on mobile instead of forcing a fixed full-width panel, with a
+  mobile-safe 280px minimum; the oversized dotted grip has been removed while
+  its generous invisible hit target remains. — Codex (AI), 2026-08-23
+- **Storage-accounting migrations retain protected attachment fields**: the
+  pending census and real whole-account backfill now read the complete stored
+  attachment object envelope before calculating canonical bytes, preventing
+  legitimate preview uploads from stopping migration with
+  `InvalidAttachmentStorageEnvelopeError`. — Codex (AI), 2026-08-23
+
+- **Interactive, resizable device details drawer**: the close control and panel
+  surface are now explicit Electron `no-drag` regions, so the 44px X remains
+  clickable even where the native title-bar drag band crosses the drawer.
+  Desktop users now get an always-visible grip and a generous 24px hit area
+  wholly inside the drawer's left edge, which can be dragged between bounded
+  viewport-safe widths (or adjusted with arrow keys). Node, observed state,
+  applications, connectors, screen, approvals, and command activity can each
+  be collapsed independently. Mobile keeps the existing full-width drawer. —
+  Codex (AI), 2026-08-22
+
+- **Paired-node optimistic status, clickable device drawers, offline deep-link
+  reloads, and launch restart**: background node checks now preserve the last
+  paired badge and all known-good controls, adding only a tiny green activity
+  indicator while each real action owns its own pending state. Chakra drawer
+  portal stacking now keeps device and chat panels above their dimming overlay.
+  Nitro bundles the React index shell as a server asset so Cmd+R on `/things`
+  remains local and returns the app instead of a build-placeholder 503.
+  Electron desktop settings default **Auto-start node on Thingtime launch** on;
+  app launch revives only a previously approved managed LaunchAgent and never
+  silently installs a never-enabled node. — Codex (AI), 2026-08-22
+
+- **Desktop pairing response reconciliation and Thingtime Node identity**: the
+  manually signed helper now stores its encrypted pairing vault in the
+  traditional macOS login Keychain instead of requesting the provisioning-only
+  Data Protection Keychain access group that failed with
+  `errSecMissingEntitlement`. Local Keychain failures are definitive and
+  actionable rather than being mislabeled as an unconfirmed server response.
+  The signed node now retries an ambiguous prepare/complete response up to three
+  times inside the original locally approved operation, replaying only the
+  exact key-bound signed claim so a committed response loss does not surface as
+  a false failure or require another confirmation. If every bounded attempt is
+  still uncertain, `/things` immediately refreshes into the durable **Resume
+  pairing** state with actionable copy. The embedded node helper now declares a
+  distinct RGBA macOS app icon that makes the four Thingtime canopy/trunk
+  squares smaller and more widely spaced, joined through pixel relays to a
+  central pink/red mesh square. — Codex
+  (AI), 2026-08-22
+
+- **Electron now always renders its packaged Thingtime build**: API/deployment
+  selection no longer replaces the desktop window with `thingtime.com` or a
+  preview website. The bundled loopback UI remains authoritative and proxies
+  only account/API traffic to the selected origin; that normalized API URL and
+  label now survive relaunches, reinstalls, and build-profile ID changes. Local
+  Vite and packaged Nitro use the same validated HTTPS/loopback fallback target,
+  while an unavailable API can no longer prevent the offline interface from
+  starting. — Codex (AI), 2026-08-22
+
+- **Multi-account desktop pairing and native menu polish**: one Mac now retains
+  up to 32 independently scoped Thingtime account credentials and runs an
+  isolated command/live-sync loop for each, while an account can continue to
+  pair any number of computers. Pair links remain single-use; endpoint drift is
+  rejected with an actionable origin-specific error instead of a generic toast.
+  Fresh installs default to the pink four-square menu-bar artwork, the full
+  wordmark is a tightly cropped 86x16 raster (eliminating SVG join seams), and
+  the native menu consistently says Thingtime with separate Restart and real
+  Quit commands. The Electron titlebar now restores drawer/history controls on
+  first paint and places notifications immediately after the account control.
+  — Codex (AI), 2026-08-22
+
+- **Electron titlebar, notification, and drawer interaction boundaries**: the
+  draggable region now stops at the 52px desktop titlebar instead of extending
+  through the inactive Commander over Lopu notifications. Notification text is
+  selectable and its close control has a 28px target; Electron places Back and
+  Forward between the drawer and home controls and moves the account to the end
+  of the left icon row, followed by notifications. Hovered/pinned drawers remain below those controls, use
+  an even 10px hover-surface gutter, and no longer add excess top menu padding.
+  — Codex (AI), 2026-08-22
+
+- **Desktop node endpoint, permissions, relaunch, and identity follow-up**:
+  Electron now stores a local list of named API origins, seeds the build's PR
+  preview, probes `/api/v1/devices` before switching, and moves the renderer,
+  LaunchAgent, Keychain, and journals to the same deployment scope. Explicit
+  native permission requests refresh TCC preflight, the KeepAlive helper
+  suppresses duplicate LaunchServices relaunches, and pairing confirmations
+  allow normal human response time. The menu bar is an image-only selectable
+  Thingtime tree/wordmark (including pink and private custom artwork), while
+  the Electron bundle uses adaptive light/dark Icon Composer artwork. — Codex
+  (AI), 2026-08-21
+
+- **Third-party connections: a viral external post could grow without bound,
+  and leaked who else was reading it** (PR #295). A synced `external-post`
+  carried its source membership as an embedded root `sourceIds` array plus, for
+  personal-timeline providers, one `tt:extacct/<accountId>` ACL entry per
+  sourcing account. Because personal providers give each user their own
+  external account, "per source" meant *per user*: a post that surfaced in
+  10k home timelines accumulated 10k array elements and 10k ACL entries on one
+  document — monotonic growth toward Mongo's 16 MB cap on exactly the hottest
+  documents, a whole-document rewrite on every sync, and a privacy leak, since
+  `toPublicPosts` projects `acl` verbatim, so every reader received the
+  external-account ids of everyone else who sourced the post. Membership is now
+  relational per FUNDAMENTALS §3: one `external-post-source` thing per (post,
+  sourcing account), a canonical root-`targetId` child of the post,
+  `uniqueKeys`-deduped, with the post's publish time denormalized onto the row
+  so the connections feed pages membership directly on the existing
+  `(thingtime, parentId, createdAt, shareId)` index (the sourcing account is
+  the row's root `parentId` — the Things index budget is at its ceiling, so
+  connections adds no index of its own). The post's own
+  ACL is now a CONSTANT — `tt:all` for public providers, `tt:extsourced` for
+  personal ones — resolved live against the reader's links, so it names no
+  account, discloses nothing, and never grows. Unlinking still revokes
+  instantly (links, not materialized grants, are the authorization truth), and
+  retiring an account's last link now drains its membership rows instead of
+  leaving dead index entries. Legacy rows keep resolving through the
+  compatibility path; the admin `relational-external-post-sources` migration
+  converts them (drilled end-to-end: 20/20, including that a legacy post stays
+  visible to its member both before and after, and that a re-run is a no-op).
+  `verify:connections` is now 94/94. — Claude (AI), 2026-08-21
+
+- **Media layout selections now reach the Things API**: the shared client API
+  transport preserves `mediaLayout` for post creation and rich comments, so a
+  Rows/Grid preview no longer silently reopens as Auto after save. — Codex
+  (AI), 2026-08-21
+
+- **Develop staging domain kept on the protected branch during PR previews**:
+  `dev.thingtime.com` remains bound exclusively to the literal `develop` Git
+  branch (`gitBranch: develop`, with no custom-environment binding). The
+  `develop` Vercel Custom Environment is reserved for isolated PR deployments
+  and owns no stable domain, so a controller-created preview cannot advance the
+  signed-in staging origin. — Codex (AI), 2026-08-21
+
+- **Stable develop alias advances only to an exact native develop build**: the
+  protected controller fences the current GitHub `develop` SHA, Vercel project,
+  repository, custom environment, native non-PR Git source, READY state, and
+  post-assignment domain binding before moving `dev.thingtime.com`. Merged PRs
+  wait boundedly for their build, while scheduled reconciliation provides an
+  idempotent recovery path. — Codex (AI), 2026-08-21
+
+- **PR #321 legacy detected-type backfill preserves media annotations**:
+  re-detecting a pre-#319 opaque attachment now changes only its server-owned
+  type fields and retains #312's owner-authored title/description exactly;
+  malformed annotation metadata fails closed instead of being erased. — Codex
+  (AI), 2026-08-21
+- **PR #312 media integration hardening**: attachment annotation now preserves
+  server-owned magic-byte `detectedContentType`, Auto layout removes the
+  optional `mediaLayout` key, and media-card permalinks consistently use
+  `/media/:id`. Internal repost/quote controls stay hidden on media Things
+  until attachment-target shares have a non-empty renderer. Gallery layout
+  numbers and span keys are now strict rather than coercible/prototype-shaped,
+  annotation accepts only its documented request fields, and media cards label
+  their audience as inherited instead of incorrectly falling back to Public.
+  — Codex (AI), 2026-08-21
+- **Build-all push handoff permission boundary**: the thin product-branch
+  listener now grants `actions: write`, allowing the protected reusable
+  workflow's push-only handoff to dispatch its supported-event worker instead
+  of being rejected by GitHub before any job starts. The caller contract pins
+  the required grant. — Codex (AI), 2026-08-21
+- **Desktop mesh node and connector stay alive independently of Electron**:
+  LaunchAgent generation now emits valid property-list `<key>` fields and
+  registration no longer performs an unconditional immediate kickstart. The
+  connector reads its long-lived pipe incrementally through `AsyncBytes`, with
+  a generation guard preventing stale canceled readers from tearing down a
+  replacement process; pending approvals also survive reload through only
+  their privacy-safe opaque/redacted projection. The final installed-app proof
+  replaced the old managed node once, kept the launchd node and connector alive
+  for more than two minutes and after Electron Cmd+Q, and reported one launchd
+  run with no exit. — Codex (AI), 2026-08-19
+- **CSP blocked attachment uploads on header-serving deployments**: the
+  application Content-Security-Policy's `connect-src` never allowed the
+  private S3 bucket origin, so on any surface that serves the CSP header
+  (`pr-*.previews.dev.thingtime.com`, `dev.thingtime.com`, staging — and
+  production once the policy ships) the composer's direct-to-S3 part PUT was
+  killed by the browser and every upload failed with "The file could not
+  reach storage. Check your connection and retry." (`*.vercel.app` previews
+  carry no CSP header, which is why uploads kept working there.) `csp.mjs`
+  now derives the exact bucket origin from
+  `THINGTIME_PRIVATE_S3_BUCKET`/`_REGION` at build time, with a regional
+  `*.s3.<region>.amazonaws.com` wildcard fallback when the env is absent.
+  Verified via S3 preflight (bucket CORS already allowed the preview origins
+  — only the page policy blocked the connection). — Claude (AI), 2026-08-19
+- **Cross-tab persisted Thingtime state (PR #92)**: same-origin tabs now share
+  each successfully applied path-level write through one
+  `BroadcastChannel('thingtime')`, reusing the active safe Thingtime codec and
+  existing mutation queue. Remote writes skip the local undo timeline and
+  cannot echo; root `timemachine` metadata stays tab-local while ordinary paths
+  restored by undo/redo still converge. The debounced latest-revision
+  LocalForage autosave remains the only persistence path. This prevents a stale
+  open tab's next full-tree save from silently reverting newer drawer,
+  Commander, Content, or preference changes made elsewhere. See the
+  [PR #92 implementation note](../PRs/92-claude-cross-tab-thingtime-sync-s4--cross-tab-sync-for-persisted-thingtime-state.md).
+  — Claude (AI), 2026-08-20
+- **Cross-tab sync excludes view chrome (PR #92 review)**: writes that describe
+  what is open and focused in the current viewport — `settings.drawer.open` and
+  `settings.commander.<id>.commanderActive` — now pass `{ tabLocal: true }` to
+  `setThingtime`, which suppresses only the broadcast. Because `commanderId` is
+  a literal shared by every tab, broadcasting them let one tab toggle another's
+  palette and drawer; closing the palette in one tab ran the peer's toggle
+  effect, which clears its input under the default `clearCommanderOnToggle`,
+  destroying a query being typed there. All of it is still persisted, so a
+  reload restores it as before, and drawer width/direction/ordering and the
+  Commander's own preferences keep syncing. — Lopu (AI), 2026-08-30
+- **Cross-tab sync also excludes the drawer's selected section (PR #92 review)**:
+  `settings.drawer.selectedItem` now passes `{ tabLocal: true }` too. It is not a
+  preference — `DrawerContent` writes it from the current tab's `pathname`, so
+  two tabs on two routes hold two legitimately correct selections. Broadcasting
+  it swapped a peer's drawer to a section that peer was not on, and nothing there
+  restored it: the pathname-sync effect re-runs only on
+  `pathname`/`open`/`variant`/`loading` — none of which a remote write touches —
+  and returns early while that peer's drawer is closed. Still persisted, so each
+  tab's reload restores the section it last chose. The call-site guard test now
+  covers `open` and `selectedItem` together. — Lopu (AI), 2026-08-30
+- **Cross-tab sync excludes the editor's open-config handoff (PR #92 review)**:
+  both `settings.editor.openConfig` writes — the drawer's set and `EditorSplit`'s
+  consuming clear — now pass `{ tabLocal: true }`. An earlier note called this key
+  harmless because it is only read on mount; that was wrong. `openedConfigRef` is
+  a per-mount latch and the effect re-runs on the value, so a tab already on
+  `/editor` that had not yet consumed an intent would apply a *remote* config over
+  its own open windows. The key is a handoff to the writing tab's next navigation
+  (when the editor is already mounted the drawer uses the tab-local events bus
+  instead). Clearing had to be suppressed too, or consuming one tab's intent would
+  erase an intent another tab had not navigated to yet. — Lopu (AI), 2026-08-30
+- **Cross-tab sync excludes the DevKit form prefills (PR #92 review)**: both
+  `devKit.registerPrefill` and `devKit.loginPrefill` now pass `{ tabLocal: true }`.
+  A prefill fills the form in front of *that* DevKit, and `root.tsx` renders
+  DevKit for every session (not dev-only). `Login`/`Register` consume it from an
+  effect keyed on `_ts` — a fresh `Date.now()` per click, so it always re-fires —
+  meaning one click replaced the username/email/password a peer tab had typed
+  into its own form and called `setPasswordVisible(true)` there. Still persisted,
+  so the same DevKit still prefills after a reload. — Lopu (AI), 2026-08-30
+- **A broadcast failure can no longer discard a local write (PR #92 review)**:
+  `flushSetThingtimeQueue` published inside the callback whose return value *is*
+  the new state, and `drainThingtimeMutationQueue` drops any update whose apply
+  throws — so a throw on the publish path would have silently rolled back a write
+  that had already applied. The channel catches internally today, so this was not
+  a live defect; the publish is now contained in its own `try` so that stays true
+  independently of the transport. Sync is best-effort, the local write is not.
+  — Lopu (AI), 2026-08-30
+- **The composer's spent-draft clear is tab-local too (PR #92 review)**: the
+  post-submit `setThingtime('tmp.<draftSessionId>', {})` was the one half of the
+  `tmp` branch still on the wire — its sibling seed had already been made
+  `tabLocal`. `draftSessionId` is minted per mount, so the key names the writing
+  tab's own composer session and no peer owns one: it could not destroy a peer
+  draft, but it did land a foreign `s<hex>` branch in every other tab, which that
+  tab then persisted in its next full-tree autosave and displayed under `tt.tmp`
+  in the tree editor until its own next composer mount pruned it. Local clear and
+  persistence are unchanged; only the broadcast is suppressed. The composer guard
+  test now asserts the seed and the clear together so the pair cannot drift again.
+  — Lopu (AI), 2026-08-30
+- **iOS build 14 TestFlight delivery**: rebuilt the production native shell
+  with the drawer and media-capture fixes, verified the signed IPA metadata and
+  privacy descriptions, and published build 14 for internal TestFlight testing.
+  — Codex (AI), 2026-08-18
+
+### Performance
+
+- **PR #299 performance audit — findings, notes and fixes**: full ten-dimension
+  audit of the codebase with every finding adversarially verified against the
+  real source (74 raw → 63 confirmed, 11 refuted); see
+  `PRs/299-claude-thingtime-performance-optimization-55ea95-performance-audit-findings-notes-and-fixes.md`
+  for the complete record. Landed this round: route-level code splitting plus
+  removal of the never-rendered FontAwesome solid set, taking the entry chunk
+  from 1,165 KB to 168 KB gzipped (−86%); `resolveSessionUser` now resolves
+  session, user and subscription concurrently, turning three sequential Mongo
+  round trips into one on every authenticated request; `useRecentReactions`
+  shares a single fetch across all consumers (8 → 1 identical requests per page,
+  ~40 → 1 on a 20-post feed); chat-member writes batch into one `insertMany`
+  (50 → 1 round trips per add); `toPublicPosts` overlaps attachment and profile
+  resolution; and the notifications bell no longer polls hidden tabs.
+  — Claude (AI), 2026-08-18
+- **PR #299 performance audit, round two**: content-hashed `/assets/` now ship
+  `immutable` caching (index.html's ~80 eagerly-referenced chunks stopped costing
+  a conditional GET per repeat visit, restoring the zero-network disk-cache
+  path); the comment permalink's ancestor ACL checks share one batched lookup
+  (was n + n(n-1)/2 sequential round trips at nesting depth n); search result
+  pages use the same batched walk; a partial index backs the unread-notification
+  badge so the count no longer fetches every notification a user ever received;
+  `buildSummaryContext` resolves in 3 dependency stages instead of 6 serial ones;
+  the messenger access gate resolves chat and membership together; and the
+  `/api/docs` render cache is LRU-bounded (it was keyed by the caller-controlled
+  Host header). — Claude (AI), 2026-08-18
+- **PR #299 performance audit, round three**: `resolveRelated`'s child reads are
+  projected (dropping each comment's `extended` sidecar, up to 512KB per doc)
+  and the reply aggregate projects before `$group`, removing a 100MB
+  `$group`-cap failure mode on large threads; a `{kind, createdAt, shareId}`
+  index gives the dual-era post match a sortable v1 branch, so the feed stops
+  fetching every visible post and sorting in memory; a sparse `shareOfId` index
+  turns the live share-count aggregation from a full collection scan into an
+  indexed lookup on every feed page, post read and reaction toggle; chat member
+  existence checks batch into two queries; and the feed's post row is memoized
+  so `PostCard`'s `React.memo` actually hits. — Claude (AI), 2026-08-18
+- **PR #299 independent review**: every push was re-reviewed by a second
+  session (verification record in the PR note's "Review record" section);
+  no invalid changes found. One hardening landed from review:
+  `insertChatMembers` rethrows bulk write-concern failures instead of
+  swallowing them with the benign duplicate-key races, matching the old
+  per-id `insertOne` semantics. The `readAt: null` partial-index spec was
+  confirmed against the production cluster's MongoDB 8.0.1.
+  — Claude (AI), 2026-08-18
+- **PR #299 follow-up review**: `resolveRelated`'s narrow child projection now
+  retains `crystal.mediaLayout`, so rich comments keep their selected Rows/Grid
+  layout across feed, profile, and permalink reloads instead of silently
+  falling back to masonry. A focused projection-contract regression test covers
+  every direct-comment and eagerly shipped reply-level use of that field.
+  — Codex (AI), 2026-08-24
+
+### Added
+
+- **Open Graph / Twitter cards for shared links**: the Nitro page catch-all
+  (`server/routes/[...].ts`) now injects per-request social meta into the SPA
+  shell's new `tt-social-meta` head block (`remix/index.html`), built by
+  `app/api/utils/meta/socialMeta.ts` — `/post/:id` gets author + text/poll
+  tags with the first image attachment (public `tt:all` posts only; private or
+  missing posts fail closed to the generic site block), `/profile/:username`
+  gets displayName/bio/avatar tags, and every other page gets site defaults
+  with request-derived absolute URLs. Deployment wiring:
+  `scripts/patch-vercel-output.mjs` routes the two permalink patterns to the
+  Nitro `__server` function (everything else stays on the static shell),
+  `scripts/verify-vercel-output.mjs` asserts that routing, and
+  `nitro.config.ts` gained an explicit `assets:shell` server-assets mount
+  because nitro 3's default `assets:server` mount no longer resolves to
+  `server/assets`. Note: the shell handler always answers 200 — h3 2.x treats
+  a 404 middleware Response as "unhandled" and would fall through to the raw
+  source template. Verification recipe lives in `TESTING.md` ("Social meta /
+  link unfurls"). — Claude (AI), 2026-08-19
+
+- **Login with Thingtime anywhere (federated hints + SSO handoff + FedCM).**
+  Three layers, all powered by the browser's own sessions — never a central
+  session store. (1) _Federated hint resolution_: `/api/v1/auth/account-hints`
+  now reports foreign-database origins as `unresolved`, and the client fans
+  out to each origin's new `/account-hints/resolve` (CORS restricted to the
+  Thingtime family, credentialed, read-only) so every environment vouches
+  only for its own sessions. (2) _Cross-origin session handoff_: a signed-in
+  surface mints a 2-minute, aud-bound, single-use code
+  (`POST /api/v1/auth/sso-handoff`) that a Thingtime deployment OUTSIDE the
+  cookie family (immutable `*.vercel.app` previews) redeems at its own
+  `POST /api/v1/auth/sso-session` for a first-class session — replay revokes
+  the session (theft signal), different-environment redemption fails closed;
+  the `/authorize?self=1` popup ("Continue to <host>?") and a
+  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) _FedCM
+  identity provider_: `/.well-known/web-identity` + config/accounts/
+  client-metadata/assertion endpoints let Chromium render its native
+  "Continue as…" sheet on any domain from the switcher roster
+  (`Sec-Fetch-Dest: webidentity` enforced, roster ownership re-checked,
+  assertion mints handoff codes for Thingtime-self or baseline app tokens for
+  registered clients). E2E: `remix/scripts/verify-federated-login.mjs` — 31
+  checks against two stacks on separate mongods, including the full
+  FedCM→assertion→session loop. — Claude (AI), 2026-08-19
+
+- **Passkeys (WebAuthn) + cross-deployment auto-login.** Full passkey support:
+  password-confirmed registration (`POST /api/v1/auth/passkeys/register-options`
+  → `/register`), usernameless discoverable login (`/login-options` → `/login`,
+  bypasses email-OTP by design, sessions carry `meta.method: "passkey"`), and a
+  Settings → Security manager (nicknames, descriptions, provider names derived
+  from authenticator AAGUIDs, created/last-used dates, linked apps, revoke +
+  delete, both password-confirmed). rpID is `thingtime.com` for every
+  `*.thingtime.com` deployment so one passkey works on production, dev, and
+  previews; conditional-UI autofill (`autocomplete="username webauthn"` +
+  `mediation: conditional`) surfaces the native iCloud Keychain / 1Password
+  popups on the login form. Credentials are protected `passkey` things (secure
+  blob + uniqueKeys, HOME collection — a `tt_mongo` override can never capture
+  or plant credentials); usage records are `passkey-app-link` child things.
+  Auto-login: every sign-in writes a `{rosterId, origin}` pointer into the
+  `Domain=.thingtime.com` `tt_hints` cookie; `GET /api/v1/auth/account-hints`
+  resolves pointers live (same roster/session chokepoints as the switcher) so
+  signed-out visitors get a "Continue as…" popup listing accounts with live
+  sessions on other deployments — picking one still requires that account's
+  password or passkey. E2E-verified by `remix/scripts/verify-passkeys.mjs`, a
+  software WebAuthn authenticator (P-256 + CBOR) driving the real API (44
+  checks). — Claude (AI), 2026-08-19
+
+- **Admin AI-moderation settings + free omni text moderation (2026-08-19,
+  Claude (AI))**: `/admin` → Moderation gains an "AI moderation settings"
+  card choosing the provider per surface — media uploads (default / tiered /
+  free openai-only / claude / off) and post/comment text (default / free
+  openai / off) — stored under `Thingtime.ModerationSettings` and overriding
+  the env default. New text pipeline: post/comment/share `crystal.text` is
+  screened by the free omni endpoint on create and on edit; block-worthy
+  categories quarantine the thing (hidden from feeds/threads/search via
+  `canView` + thread loading), other flags queue an advisory `moderationFlag`
+  with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
+  and its stamps are final for the pipeline. A new hourly cron
+  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute 29) retries text moderation lost to mid-flight process deaths or provider
+  outages and drains off-era backlog for free, plus the standard attachment
+  sweep; the admin sweep button runs both batches and the tab shows the text
+  backlog count. Post creation adds a hybrid sync gate: the free omni screen
+  races `TT_TEXT_SCREEN_BUDGET_MS` (default 600ms, `0` disables) before the
+  insert so flagged posts are born stamped (blocked content never renders,
+  even briefly), while timeouts/outages produce owner-private pending posts
+  for the async pipeline — moderation can never break posting; a per-instance circuit breaker
+  (3 failures → open, 60s cooldown) skips the omni call during confirmed
+  outages. Fail-closed (owner decision 2026-08-19): when no sync verdict is
+  obtainable while the surface is on, posts are born PENDING — owner-private
+  until the async queue / hourly cron screens and releases them (creation
+  notifications fire at release); `TT_TEXT_SCREEN_BUDGET_MS=0` becomes
+  async-release mode, and the off sweep releases stranded pending docs. Screening now covers ALL omni-judgeable post content in one
+  combined free request: prose + listing text + tags + legacy external image
+  URLs (`crystal.images`, cap 8), closing the unmoderated URL-photos gap.
+- **`all` branch AI build doctor**: the Build all branch workflow now runs the
+  union build after every input-changed rebuild and, when textually-clean
+  merges collide semantically (duplicate helpers declared by two PRs), repairs
+  the branch with up to three guarded, edit-files-only Claude rounds — the
+  conflict resolver's action pin, model waterfall, and credential-scan
+  posture — committing replayable fixups on `all` itself and re-verifying the
+  build mechanically. Live-fired locally against the real 64-PR union: four
+  collision layers healed to a green build, and the fixups replayed cleanly
+  onto the next rebuild. — Claude (AI), 2026-08-19
+- **`all` wildcard branch automation**: new **Build all branch** control-plane
+  workflow — thin listener `.github/workflows/all-branch.yml` on product
+  branches, implementation plus `build-all-branch.mjs` builder on the
+  protected `github-actions` branch — that deterministically rebuilds the
+  generated `all` branch: `develop` + `main` + every open non-fork PR (stacked
+  branch → branch PRs included, `no-all` label opts out) merged newest-wins
+  with theirs-biased auto-resolution, force-pushed only when the resulting
+  tree actually changes, with an `ALL_BRANCH.md` manifest on the branch
+  recording every merge and skip. See README “Branch automation: the `all`
+  wildcard branch”. — Claude (AI), 2026-08-18
+- **Free omni-moderation first-pass gate (2026-08-19, Claude (AI))**: the
+  moderation pipeline gains a tiered `openai+claude` provider — OpenAI's free
+  `omni-moderation-latest` endpoint screens every image first; clean images
+  stamp `clear` at $0 and only flagged/borderline images escalate to the paid
+  Claude vision call (fail-safes: omni outage → straight to Claude; Claude
+  outage → omni-flagged images stamp `nsfw`/blur instead of pending). New env:
+  `OPENAI_API_KEY` reused for the screen, optional
+  `TT_MODERATION_ESCALATION_SCORE` (default 0.2);
+  `THINGTIME_MODERATION_PROVIDER` accepts `openai+claude` (alias `tiered`) and
+  standalone `openai`, and the unset default picks the tiered pipeline when
+  both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
+  (PR #308 note has details).
+
+- **Connections: real SSO account linking + virtual YouTube subscriptions.**
+  OAuth begin/callback endpoints (state = short-lived signed JWT bound to the
+  starting session; token responses sealed in the external-account secure
+  BinData blob, refreshed near expiry) with config-gated SSO providers:
+  Facebook (`FACEBOOK_APP_ID/SECRET`), Instagram (`INSTAGRAM_APP_ID/SECRET`),
+  TikTok (`TIKTOK_CLIENT_KEY/SECRET`), and YouTube account via Google
+  (`GOOGLE_CLIENT_ID/SECRET` — syncs your real subscriptions). Plus the
+  Thingtime-managed **virtual YouTube subscription list** (ytsubber-style):
+  per-user multi-channel list with add/remove + channel name search
+  (`YOUTUBE_API_KEY`/`GOOGLE_API_KEY`; ids/URLs/@handles keyless via RSS),
+  merged uploads feed. External posts now carry a root `sourceIds` array (one
+  video through many sources stays ONE post with unified comments) and the
+  feed deepens on scroll (`deepen=1`, per-account depth cap). Redirect origin
+  pin: `CONNECTIONS_OAUTH_REDIRECT_BASE`. `verify:connections` now 64 checks.
+  — Claude (AI), 2026-08-18
+
+- **Third-party app connections** (`/connections`, `/connections/feed`, API
+  family `/api/v1/connections/*`): link external accounts (Reddit, YouTube,
+  Mastodon, Bluesky, Lemmy, Hacker News, GitHub, generic RSS/Atom, and a
+  deterministic demo personal-algorithm provider) to a Thingtime account —
+  one external account is linkable from MULTIPLE Thingtime accounts
+  (deterministic shared `external-account` things). Feeds sync idempotently
+  into `external-post` things (reserved `ext-` shareId namespace, CI-style
+  not-older upserts, per-account cooldown), so native Thingtime comments and
+  reactions attach by `targetId` and `/post/:id` permalinks resolve with the
+  third-party author. AI feed filters ("warn for sad news" → veil + Show
+  button, or hide) classify feeds server-side via the shared Lopu provider
+  waterfall (`generateAiCompletion` in `musing.ts`) with cached per-revision
+  verdicts and a deterministic keyword fallback when no AI key is set.
+  E2E: `pnpm --dir remix run verify:connections` (45 checks; +2 live with
+  `TT_VERIFY_LIVE=1`). — Claude (AI), 2026-08-17
+
+### Security
+
+- **Crystal namespace reopened after structural uniqueness migration**: once
+  phase 1 has replaced every relationship crystal-path unique index and the
+  relationship `uniqueKeys` backfill has converged, free-form data may again
+  use `followKey`, `friendKey`, `memberKey`, `dmKey`, `inviteCode`,
+  `emojiKey`, and `voteKey`. Those values enter no platform unique index;
+  system dedupe remains exclusively in protected server-owned `uniqueKeys`.
+  — Codex (AI), 2026-08-21
+
+- **Relationship uniqueness is structural across all reserved key families**:
+  follow, friend, member, DM, invite, emoji, and vote dedupe now rides the
+  protected root `uniqueKeys` namespace. Boot-time index convergence replaces
+  every kind-blind crystal-path unique index with a non-unique lookup, and the
+  idempotent backfill stamps legacy relationship docs while only reporting
+  suspicious free-form data. The vote family is migrated as security
+  substrate without shipping the deferred polls product; boot convergence also
+  removes the superseded `crystal.follow` marker index that no current writer
+  uses. — Codex (AI), 2026-08-21
+
+- **Moderation reconciliation and pending-media quarantine**: replayed the
+  NSFW/TOS pipeline onto the singular public/private/all upload-permission
+  model with no legacy one-boolean gate dependency. Attachment completion now
+  atomically records `pending`; pending and blocked media are absent from
+  public projections/content routes while owner/admin evidence access and
+  bounded sweep recovery remain available. Generic Things writes cannot forge
+  root moderation state or moderation-flag control Things, and deterministic
+  flag-id collisions leave ordinary user Things untouched for operator
+  review. — Codex (AI), 2026-08-21
+
+- **Relationship uniqueness is structural across all reserved key families**:
+  follow, friend, member, DM, invite, emoji, and vote dedupe now rides the
+  protected root `uniqueKeys` namespace. Boot-time index convergence replaces
+  every kind-blind crystal-path unique index with a non-unique lookup, and the
+  idempotent backfill stamps legacy relationship docs while only reporting
+  suspicious free-form data. The vote family is migrated as security
+  substrate without shipping the deferred polls product; boot convergence also
+  removes the superseded `crystal.follow` marker index that no current writer
+  uses. — Codex (AI), 2026-08-21
+
+- **Canonical scoped-upload UX reconciliation**: every attachment picker now
+  reads the existing public/private approval booleans directly and shows a
+  purpose-specific approval card when its scope is withheld. The obsolete
+  one-boolean upload alias is not retained. Revoking a scope disables new file
+  starts without hiding finish, retry, or cleanup controls for a draft already
+  in progress. — Codex (AI), 2026-08-21
+
+- **Upload approval now has public / private / all scopes**: the
+  signup-permissions gate is split into two independent tri-state flags —
+  `meta.publicUploads` (post/comment/custom-emoji attachments) and the new
+  `meta.privateUploads` (message attachments + own profile media) — both
+  stamped `false` at registration and both privileged meta keys. The upload
+  start gate is purpose-aware (`403 public_uploads_not_approved` /
+  `private_uploads_not_approved`), `POST /api/v1/admin/users/public-uploads`
+  accepts `scope: 'public' | 'private' | 'all'` (default `public`, wire-
+  compatible), and the /admin Users tab's control becomes an Approve menu with
+  per-scope and enable/withhold-all actions plus per-scope pending flags.
+  Grandfathering and the admin bypass are unchanged. — Claude (AI), 2026-08-18
+
+- **New signups no longer receive public upload permissions**: accounts created
+  from this change forward start with `meta.publicUploads: false`, and verifying
+  the email address no longer grants uploads. `POST /api/v1/attachments/uploads`
+  fails closed with `403 public_uploads_not_approved` until an administrator
+  enables the account, so no upload is reserved and no MPU is opened. Once a new
+  account verifies its email, an `admin.new_user` notification carrying the
+  account details goes to `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default
+  `admin@thingtime.com`), and the **/admin → Users** tab gained an Uploads
+  column, a pending-approval banner, and a per-user Enable/Withhold toggle
+  backed by `POST /api/v1/admin/users/public-uploads`. The flag is tri-state:
+  accounts predating the change have no flag and keep uploading, so no data
+  migration is required, and administrators bypass the gate entirely.
+  — Claude (AI), 2026-08-18
+
+### Added
+
+- **NSFW/TOS media moderation pipeline**: uploaded images are analyzed
+  asynchronously after `complete` (provider-pluggable: Claude API vision via
+  `THINGTIME_MODERATION_PROVIDER=claude`, deterministic `test` provider, or
+  `off`), stamping a protected `moderation` root field on the attachment
+  thing. NSFW media renders behind a heavy blur + red wash with a centered
+  NSFW badge and "Show Anyway" reveal; TOS/illegal verdicts quarantine the
+  media (dropped from public payloads, content route 404s for non-admins)
+  and log a `moderationFlag` thing. New `/admin` → Moderation tab reviews
+  flags (Clear/NSFW/Block overrides, audit-stamped) and runs a bounded
+  analysis sweep via `GET/POST /api/v1/admin/moderation`. See the
+  [PR #308 implementation notes](../PRs/308-claude-nsfw-tos-media-moderation--nsfw-tos-media-moderation-pipeline.md).
+  — Claude (AI), 2026-08-18
+
+- **Components library (/components) + 2800-component catalog**: new
+  first-class `component` thing kind (arg-templated render trees drawn through
+  the sanitising allowlist renderers), a /components browse page with a live
+  args tester, a hidden per-card Schema expander, and "Save version" (stores
+  the tester snapshot as a user-owned component thing). The platform catalog —
+  2800 components styled after Ant Design, Bootstrap, MUI, shadcn/ui,
+  Untitled UI, daisyUI, React Flow, and the Thingtime house style — lives in
+  its own public repo
+  [lopugit/thingtime-components](https://github.com/lopugit/thingtime-components)
+  as a `components-db/` folder database (deterministic generator under
+  `scripts/components-db/`) and seeds into the dev DB as system things via the
+  admin `POST /api/v1/admin/components/seed` endpoint (idempotent,
+  self-healing, `component-` shareId prefix reserved). Drawer: Schemas moved
+  out of Search into its own top-level item, Components added beside it.
+  Verification: `remix/scripts/verify-components.mjs` (30 checks) + the new
+  Components checklist in `TESTING.md`. Follow-up in the same PR: component
+  families — the library renditions of one functional component share a
+  crystal `familyKey` and collapse into ONE card with a designs
+  click-through (server `group=family` aggregation + `family=` roster
+  fetch, client-side collapse for text search), and every family gets its
+  own deep-linked page at `/components/<key>` with a `/docs` twin the
+  cards' Docs buttons open. The catalog kept growing meanwhile
+  (tranche 2: 70 archetypes / 350 families / 2800 components seeded, every
+  one tagged "Made by Fable 5 Ultracode" and surfaced as tag chips on cards
+  and detail pages). — Claude (AI), 2026-08-17
+
+### Fixed
+
+- **PR #99 final security reconciliation**: the current Thingtime serializer
+  now treats persisted state strictly as data—functions are omitted on write,
+  every legacy function tag is removed without compilation, code-defined
+  defaults refill runtime behavior, and graph-aware repair preserves circular
+  aliases. Explicit Date tags and data-first legacy handling stop repeated
+  hydration from changing ordinary text. The strict app CSP now loads preview
+  freshness from external `/tt-preview-freshness.js`, while active Commander
+  assignments parse data literals without `eval`. Registration preserves the
+  existing shared limiter (10 per 15 minutes) and adds only the shared 16 KiB
+  streaming body cap. — Codex (AI), 2026-08-18
+- **Posts, Messenger, and persistent device mirrors share the exact account
+  quota**: every user-owned Messenger row—including chats, messages,
+  communities, memberships, follows, and imported AI history—now carries the
+  canonical content-byte stamp and changes the subscription ledger in the same
+  Mongo transaction as its write. Persistent protected device mirror rows use
+  the same accounted-Thing admission path. Attachments remain separately
+  metered by their protected object-backed Things, while transient command and
+  event delivery is count/byte bounded and TTL-expiring. Storage accounting v2
+  forces the idempotent whole-account backfill to recount legacy posts and
+  Messenger content; identical AI re-imports add zero bytes, and quota failures
+  roll back related container/membership, send, delete, invite, and section
+  mutations rather than leaving partial or unmetered rows. See the
+  [PR #68 implementation notes](../PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md).
+  — Codex (AI), 2026-08-19
+- **Native iOS drawer and media capture**: the iOS WebView now uses the same
+  fixed drawer trigger as mobile web, so opening the drawer keeps its close
+  control inside the panel instead of translating it with the top nav. The
+  generated app Info.plist now declares camera, microphone, and photo-library
+  purpose strings so WebKit's Take Photo or Video flow requests permission
+  instead of terminating the app. — Codex (AI), 2026-08-17
+- **Develop preview exact-SHA rebuilds**: repository-root Vercel ignore logic
+  now lets the controller build an already-previewed commit in the isolated
+  `develop` Custom Environment instead of canceling it as a duplicate, while
+  the thin `github-actions` control plane remains excluded before every other
+  rule. — Codex (AI), 2026-08-17
+- **Manual develop-preview recovery reaches its controller**: the thin `main`
+  listener now converts `workflow_dispatch`'s string PR number to the numeric
+  input required by the protected reusable workflow. Manual recovery no longer
+  fails before GitHub can create a controller job, and the caller contract now
+  locks that typed boundary. — Codex (AI), 2026-08-17
+- **Vercel status in custom environments**: deployment status now checks
+  Vercel's system environment and custom target independently, so the
+  Preview-backed `develop` target keeps `/api/v1/vercel/status`, `/status`, and
+  the footer status enabled without a dashboard override. The API and root-data
+  paths now share one tested feature gate. — Codex (AI), 2026-08-17
+- **Accurate attachment quota recovery**: upload preparation now preserves
+  bounded storage failure codes through the API and distinguishes a full
+  account tier from missing environment configuration, temporary private
+  storage outages, and storage-accounting reconciliation. Every shared media
+  picker uses the current account allowance as a safe fallback and tells users
+  to delete stored media or upgrade their tier instead of incorrectly claiming
+  that uploads are unavailable in the environment. File-row errors now span
+  the available width on narrow screens instead of being squeezed between the
+  preview and action controls. Unexpected server, ledger, proxy, and provider
+  detail remains hidden. See the
+  [PR #237 implementation notes](../PRs/237-codex-conversation-media-attachments--add-media-attachments-across-conversations.md).
+  — Codex (AI), 2026-08-11
+
+### Added
+
+- **Thingtime desktop mesh nodes and live AI sessions**: a signed, persistent
+  macOS node now pairs to a user account, mirrors bounded device/app/permission
+  state into protected `/things` device views, leases an exact allowlist of
+  idempotent commands, and keeps remote mutations behind lock, capability, and
+  approval gates. Messenger distinguishes imported history from live sessions:
+  the native Codex app-server connector lists/reads/creates chats, queues or
+  steers messages, interrupts turns, forwards safe visible deltas, and brokers
+  approvals; semantic Accessibility connectors for ChatGPT and Claude expose
+  only already-visible user/assistant chat content and require one-time approval
+  for mutation. Completed visible messages become quota-accounted relational
+  Messenger rows while transient stream/control events expire separately.
+  Electron embeds the same-team signed node and bounded runtime; local paths,
+  credentials, cookies, hidden reasoning, and tool arguments/results never
+  enter Thingtime. A gated view-only ScreenCaptureKit primitive is included,
+  but the UI remains explicitly unavailable until a real peer media transport
+  is installed. The current delivery checkpoint proves the byte-identical local
+  Apple Development package/install and that its launchd node plus connector
+  survive Electron Cmd+Q; authenticated pairing and TCC-protected real-operation
+  acceptance remain open. The stale protected workflow still requires its
+  Developer ID/notarization patch before production. See the
+  [PR #68 implementation notes](../PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md).
+  — Codex (AI), 2026-08-19
+- **Native iOS per-branch deployment history**: the Vercel deployments API now
+  preserves its existing latest-per-branch response while optionally returning
+  a bounded newest-first history for each branch. The native Web destination
+  drawer presents that history as a second disclosure level, marks the most
+  recent ready deployment as `Last successful` when a newer build is queued,
+  and keeps every specific deployment URL directly selectable. Signed iOS
+  build 15 targets the matching branch preview and is available to internal
+  TestFlight testers. — Codex (AI), 2026-08-18
+- **ChatGPT and Claude desktop history in Messenger**: the Electron app now
+  discovers local ChatGPT Work/Codex sessions plus the main and Thingtime
+  Claude desktop profiles, accepts official ChatGPT/Claude JSON or ZIP exports,
+  and streams bounded normalized batches through a narrow preload bridge into
+  the authenticated Messenger API. Projects map to Spaces, conversations to
+  chats/channels, and provider messages to read-only relational rows with
+  owner-scoped idempotency keys, native source badges, progress UI, and no
+  credential, cookie, hidden-reasoning, tool-traffic, or raw-path exposure.
+  Users can react, thread, and reply inside Thingtime without posting back to
+  the provider. See the
+  [PR #68 implementation notes](../PRs/68-codex-thingtime-mcp-desktop-connectors--add-consent-first-thingtime-mcp-desktop-chat-bridge.md).
+  — Codex (AI), 2026-08-17
+- **Recoverable first-session Things space**: a fresh browser can land on
+  `/things` and immediately receive the real Things UI through a rate-limited
+  temporary user Thing, bounded subscription, normal browser session, and
+  account-switcher roster entry. The pre-paint bootstrap is idempotent,
+  preserves existing signed-in users, retains ordinary ACL/quota enforcement,
+  and leaves login/register reachable so the browser can add another account
+  without discarding its temporary space. Temporary sessions now retain the
+  standard logged-out `Login` navigation while every visible identity surface
+  presents `Anonymous` and `Login to claim`, never the generated guest handle
+  or placeholder email. — Codex (AI), 2026-08-12
+- **Per-automation GitHub/Vercel compute routing**: Admin → CI Control can now
+  keep each supported automation on GitHub-hosted runners or move its expensive
+  work to an ephemeral Vercel Sandbox with one toggle. A signed, idempotent
+  provider route starts a durable Vercel Workflow, registers a uniquely labelled
+  self-hosted runner, dispatches the exact protected `github-actions` workflow,
+  projects its status history, and removes the runner/Sandbox afterward. Native
+  trigger routing fails over to GitHub compute when the external path is not
+  configured or is unavailable; Docker-backed Web CI and native Electron builds
+  remain explicitly GitHub-only. Fork-safe App permissions, secrets, bootstrap,
+  first-Reconcile behavior, and regression checks are documented in
+  README/TESTING. — Codex (AI), 2026-08-10
+- **Conversation media, file attachments, and S3 custom reactions**: rich
+  comments and replies now use the same gallery-style linked-media and private
+  upload UI as posts, while DMs, groups, requests, community channels, inline
+  replies, and Slack-style threads can send image, video, audio, or generic
+  files—including attachment-only messages. Stable owner-scoped request ids,
+  atomic purpose/target binding, exact lost-response reconciliation, inherited
+  comment ACLs, current-chat membership checks, nested cascade cleanup, and
+  exact-version deletion keep storage private and tier accounting fail-closed.
+  Custom reaction emoji now bind quota-accounted GIF/PNG/JPEG/WebP uploads
+  instead of accepting new inline base64 payloads; legacy emoji remain
+  read-compatible. See the
+  [PR #237 implementation notes](../PRs/237-codex-conversation-media-attachments--add-media-attachments-across-conversations.md).
+  — Codex (AI), 2026-08-10
+- **Gallery-style post and profile media**: post photo links now use responsive
+  preview tiles with stable multi-line URL add, deduplication, credential-free
+  http(s) validation, and no-referrer previews, while private image/video/file
+  uploads use a Facebook-like `🏞️ Add Media` tile without removing the
+  quota-saving URL option. Avatar and banner editors in both Profile and
+  Settings can now upload safe raster images through the same private,
+  checksummed S3 pipeline or retain an external URL. Profile attachment purpose
+  and slot are server-owned; ready media binds to the exact owner/user slot in
+  the profile transaction, renders through the stable same-origin content
+  route, and old bytes remain billed until exact-version cleanup. Ordinary PR
+  Previews now explain that private storage is unavailable there without
+  exposing provider errors; the develop Custom Environment remains the secure
+  positive upload target. See the
+  [PR #232 implementation notes](../PRs/232-codex-media-gallery-profile-attachments--add-media-galleries-and-managed-profile-attachments.md).
+  — Codex (AI), 2026-08-09
+- **Isolated develop S3 attachment environment**: `dev.thingtime.com` now maps
+  to a branch-tracked Vercel Custom Environment named `develop`, with its own
+  private bucket, exact-subject OIDC role, dev-origin-only CORS, Sensitive S3
+  variables, and cleanup secret. Generic feature previews receive no attachment
+  configuration and their shared Preview OIDC identity cannot assume the
+  develop role. Because Vercel Cron runs Production only, a one-purpose AWS
+  EventBridge API Destination is configured to invoke develop cleanup hourly;
+  its first successful invocation and the positive upload/delete smoke wait for
+  this PR's routes to be deployed to `develop`. Production bucket configuration,
+  variables, and objects remain unchanged; its role gained the required
+  `s3:PutObjectTagging` action used by Thingtime's tagged multipart start. —
+  Codex (AI), 2026-08-09
+- **Private S3 post attachments with exact tier accounting**: posts can upload
+  images, video, audio, and generic files directly through checksummed multipart
+  S3 uploads without exposing AWS credentials or public objects. Protected
+  relational attachment Things reserve verified object bytes against the same
+  transactional account storage ledger as Mongo content, stable authorized
+  content routes replace persisted presigned URLs, and unsafe active content is
+  forced to download. S3 VersionIds keep sniff/tag/read/delete pinned to the
+  exact verified object version before quota refund, stable client request ids
+  make ambiguous upload starts idempotent, and an hourly bounded cron safely
+  retries expired or crash-interrupted cleanup behind a lifecycle-backed,
+  two-pass multipart settlement fence. Production uses an exact-subject Vercel
+  OIDC role and server-only `THINGTIME_PRIVATE_*` configuration; comments and
+  messenger/thread surfaces remain intentionally unchanged in this post-only
+  scope. See the
+  [PR #201 implementation notes](../PRs/201-codex-s3-post-attachments--add-private-s3-post-attachments-with-tier-accounting.md).
+  — Codex (AI), 2026-08-09
+- **One GitHub Actions control plane + Admin CI dashboard**: executable CI,
+  promotion, sync, release, rebase, and AI conflict-resolution behavior now
+  lives on the protected `github-actions` branch. `main`/`develop` retain only
+  GitHub-required trigger/input/permission callers pinned to that branch, with
+  a regression contract that rejects runner steps or local Actions scripts.
+  Admin → CI Control renders cached feature/branch/PR/run/deployment/preview
+  topology, signed GitHub/Vercel webhook freshness, relational status history,
+  GitHub App reconciliation, and allowlisted audited dispatch controls across
+  desktop and mobile. All current projections and append-only events are
+  protected, system-owned, non-billable Things. Fork-safe App/webhook setup and
+  failure-preserving verification are documented in README/TESTING. Reconcile
+  pagination covers repositories with more than 100 branches, and administrator
+  dispatches can enter only through the reviewed `develop`/`main` listeners. —
+  Codex (AI), 2026-08-09
+
+### Fixed
+
+- **Repository-root Vercel builds preserve the app's pnpm pin and function
+  aliases**: the root package now declares pnpm 10.12.1 to match Remix, so
+  Corepack cannot select Vercel's newer global pnpm before entering the nested
+  workspace. Output promotion preserves Nitro's relative function symlinks,
+  keeping route aliases inside the root artifact instead of pointing back into
+  `remix/.vercel/output`. The deployment contract covers both invariants. —
+  Codex (AI), 2026-08-17
+- **Vercel builds now start at the repository root without deploying the thin
+  CI branch**: root `vercel.json` installs only the Remix workspace, a tested
+  wrapper preserves the existing Vite/Nitro verification before staging the
+  Build Output API artifact at root `.vercel/output`, and the attachment-cleanup
+  and weekly-summary crons now live in that same root config. Both config and the
+  ignored-build decision exclude `github-actions`. The matching control-plane
+  config disables Git deployments for that branch and its descendants. Setup
+  and live verification steps are recorded in README, TESTING, and
+  VERCEL_DEPLOYMENTS. — Codex (AI), 2026-08-17
+- **Root bootstrap no longer exposes server secrets**: browser-visible loader
+  configuration is now built from an explicit status-origin allowlist instead
+  of every `THINGTIME_*` variable, and `/api/root-data` is private, no-store,
+  and cookie-varying. Regression coverage seeds representative CI, webhook, and
+  email HMAC values and proves none cross the server/client boundary. — Codex
+  (AI), 2026-08-17
+
+- **Thin Web CI promotion no longer blocks on topology contracts**: the stale
+  product-branch copy of the develop-preview controller was removed, the two
+  workflow/topology contract commands were removed from the required unit-test
+  aggregate, and the thin Web CI listener now delegates PR-warning permission
+  to the protected non-blocking advisory job. Real product unit tests, build,
+  typecheck diagnostics, API tests, and security checks remain unchanged.
+  — Codex (AI), 2026-08-17
+
+- **Mobile Safari Feed controls receive their click and focus events**: the
+  global Commander no longer changes Thingtime state from a document-level
+  `touchend` before Safari can synthesize the touched control's click. Its
+  click-away behavior now waits for `click` / `focusin` and is a no-op while
+  Commander is already closed. Editor.js also restores contenteditable focus
+  synchronously on a genuine touch release, so the Feed composer opens, accepts
+  typing, and leaves adjacent buttons and native inputs interactive in retained
+  account sessions. — Codex (AI), 2026-08-15
+
+- **A legacy Lopu browser snapshot is repaired before Feed becomes
+  interactive**: Thingtime hydration now reports and removes invalid saved
+  functions, commits the repaired snapshot before completing the first load,
+  and never persists the provider's live root `set` / `get` React closures.
+  Nested user data with those names is preserved. This removes the one-load
+  poisoned-state window that could make “What's on your mind?” and adjacent
+  inputs appear inert until another tab or reload. — Codex (AI), 2026-08-15
+
+- **Legacy Thingtime function state no longer disables interactive editors**:
+  persisted anonymous, arrow, named, method, and scoped functions now revive
+  only after Flatted has reconstructed their complete object graph. The parser
+  also removes the old saved no-op recovery function so current defaults can
+  repair poisoned browser state instead of carrying it into Feed composer and
+  other input sessions. — Codex (AI), 2026-08-15
+
+- **Safari-restored Vercel previews now force a real HTML navigation before the
+  app can remain inert**: an inline Vite preview freshness bootstrap runs before
+  the React application graph, refreshes every preview restored from Safari's
+  back/forward page cache, and permits one guarded recovery after a same-build
+  asset runtime error. Generated Vercel routes now return the SPA HTML shell
+  with `private, no-store` browser headers while leaving versioned assets on the
+  filesystem path. — Codex (AI), 2026-08-14
+
+- **Commander History now links searches to the commands they launched**:
+  each local search session renders its term plus replayable, de-duplicated
+  commands, ordered with the newest executed command first and its search term
+  next as a separate full-width top-level result. The compact History view
+  keeps the newest eight sessions while Show More expands up to 50 retained sessions, including
+  migrated string-only history from earlier builds. The complete legacy
+  Raycast extension also moved under `Commander/extensions/raycast/`, keeping
+  its image tools and real Open Commander command in Commander's extension tree. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-17
+- **Commander now ships ready for Thingtime sign-in and paints only its
+  rounded launcher surface**: its public production client ID is built in,
+  legacy blank settings migrate automatically, and the native WebKit canvas is
+  transparent and compositor-masked behind the intentional card and shadow.
+  Its windows are draggable, Option-modified physical keys now record as real
+  global shortcuts, and a built-in Raycast-shaped Commander extension now
+  separates whole-app Close Commander, Close Commander Window, and Open
+  Commander lifecycle commands. Every floating-window reopen starts with an
+  empty query while device-local recent searches remain first in a persistent
+  History section, and the existing Raycast extension can relaunch Commander
+  through its own no-view Open Commander command. Command-A now selects the
+  complete focused launcher query even though the accessory host has no
+  conventional Edit menu. Local verification can also explicitly request
+  ad-hoc signing when the configured development key is locked, while
+  release/default builds still require the stable Apple Development identity.
+  See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-14
+
+- **Stale Vercel preview tabs recover their interactions after a redeploy**:
+  preview-only startup logic compares the loaded hashed Vite entry asset with
+  the branch alias's current HTML on load, foreground, and focus, then reloads
+  only when the alias has moved. A tab holding the pre-fix Things bundle can no
+  longer remain visually rendered but inert after the repaired deployment is
+  available; production-domain behavior is unchanged. — Codex (AI), 2026-08-13
+
+- **Things kind grouping no longer crashes populated spaces**: Group by Kind
+  now reads section icons from the canonical Thing icon registry instead of a
+  removed local binding, with a populated-group runtime regression test in the
+  required unit suite. — Codex (AI), 2026-08-12
+
+- **Hosted development isolation docs now match the shared Preview runtime**:
+  the runbook records verified `dev.thingtime.com` DNS/ownership/HTTPS and the
+  distinct development-versus-Production Atlas/JWT/S3 planes while clarifying
+  that generic Preview intentionally shares development MongoDB, JWT, cron,
+  and private-S3 configuration. It also documents URI-authoritative MongoDB
+  usernames and the live health checks for the canonical `thingtime` database
+  without storing credentials. The runbook now records the restored
+  branch-scoped `dev.thingtime.com` binding and explains how to verify the
+  healthy Cloudflare-to-Vercel ACME delegation in the authoritative DNS
+  referral instead of mistaking empty recursive short output for a missing
+  record. It separates that corrected live domain state from the #188
+  default-branch listener promotion, which merged on 2026-08-17 and put the
+  thin listener on `main`. — Codex (AI), 2026-08-12
+
+- **The Thingtime AI preference now reaches the remaining Claude runtime**:
+  Lopu musings resolve their Anthropic model from the current Admin waterfall
+  on every Claude attempt, just like conflict resolution, rebase repair, and
+  semantic Graphify. Named Admin choices override the old environment model;
+  the explicit `default` sentinel safely delegates to `LOPU_CLAUDE_MODEL`, and
+  the independent OpenAI fallback retains its provider-valid model. Focused
+  tests prevent warm runtimes from pinning an earlier Admin choice. — Codex
+  (AI), 2026-08-12
+
+- **iOS Vercel destination history is usable at full length**: the native Web
+  destination drawer now keeps its controls pinned above a lazy vertical list,
+  shows scroll indicators when content exceeds the viewport, and reserves the
+  swipe-to-close gesture for predominantly horizontal drags so vertical row
+  scrolling remains responsive. TestFlight build 13 includes the fix. — Codex
+  (AI), 2026-08-10
+- **Develop PR preview DNS publication now tests the live path**: externally
+  managed wildcard DNS can remain labelled `misconfigured` by Vercel while the
+  required Cloudflare CNAME, delegated ACME validation, and wildcard TLS are
+  healthy. The executable controller and reusable workflow now live on the
+  protected `github-actions` control plane behind a thin product-branch
+  listener. The controller verifies the actual probe CNAME against Vercel's
+  recommended target, verifies the assigned alias over HTTPS, and no
+  longer claims generic Preview is credential-free when it intentionally uses
+  the shared development runtime. The runbook also records the controller's
+  team-scoped token boundary accurately. See the
+  [PR #233 engineering note](../PRs/233-codex-fix-develop-preview-dns-gate.md)
+  and paired [control-plane PR #239](https://github.com/lopugit/thingtime/pull/239).
+  — Codex (AI), 2026-08-10
+- **Vercel's universal image now boots and tears down GitHub runners reliably**:
+  ephemeral CI setup runs GitHub's version-matched dependency installer,
+  provides the conventional `/dev/fd` link required by Bash process
+  substitution, and establishes a provisional cleanup handle immediately after
+  Sandbox creation. ICU or later bootstrap failures can no longer strand an
+  offline runner/Sandbox, and the same exact cleanup is preserved after a
+  registered job succeeds or fails. Three live canaries proved registration,
+  App-authored protected-workflow re-entry, GitHub fallback, successful Vercel
+  execution, and final resource deletion. — Codex (AI), 2026-08-10
+- **Vercel CI readiness now fails closed across UI, API, and routing**: Admin →
+  CI Control no longer reports a runner ready merely because the page is hosted
+  by Vercel. One server-derived capability now requires the GitHub App id,
+  installation id and private key, provider-router secret, and Vercel runtime
+  identity; the badge names incomplete setup, the dropdown stays disabled, and
+  direct policy writes receive an authored 409 while existing automation keeps
+  its safe GitHub fallback. Focused tests also cover runner identity, job
+  completion/failure summaries, and configuration drift. — Codex (AI),
+  2026-08-10
+- **Develop-preview automation no longer breaks product-branch CI**: the
+  develop-preview listener now delegates to the protected `github-actions`
+  implementation, and the thin workflow-caller contract rejects every local
+  Actions script on product branches. — Codex (AI), 2026-08-10
+- **Required Web CI checks no longer strand non-Remix pull requests**: the
+  stable product-branch listener is now path-filter-free and grants only the
+  read access needed by the protected classifier, which always starts and
+  classifies the complete changed-file list. The control plane assigns both
+  existing `control-plane /` check names to either the real build/API jobs or
+  lightweight no-op companions, without changing their ruleset identity; the
+  historical build label stays stable even though typecheck growth is
+  warning-only. Incomplete or unavailable changed-file listings safely run the
+  full suite instead of stranding the required names. See the
+  [PR #222 engineering note](../PRs/222-codex-typecheck-ratchet-warning-main-ci-make-typecheck-ratchet-warning-only.md).
+  — Codex (AI), 2026-08-10
+- **Proxied private-media mutations preserve same-origin protection**:
+  attachment and avatar/banner writes now compare browser origins with the
+  trusted forwarded public host and protocol, so local and reverse-proxied
+  requests no longer fail against the internal Nitro origin while mismatched
+  and explicitly cross-site requests still fail closed. Invalid external
+  profile-image URLs also expose their error state to assistive technology. —
+  Codex (AI), 2026-08-10
+- **Attachment parent refresh preserves deployment and workflow boundaries**:
+  the hourly attachment cleanup and weekly notification digest each appear
+  exactly once in `vercel.json`, with an automated uniqueness contract that
+  prevents duplicate-cron deployment rejection. Product branches also retain
+  only the secret-free develop-preview listener; the privileged controller
+  implementation remains owned by the protected default-branch control plane.
+  See the
+  [PR #201 implementation notes](../PRs/201-codex-s3-post-attachments--add-private-s3-post-attachments-with-tier-accounting.md).
+  — Codex (AI), 2026-08-10
+- **Worktree lint and formatting dependencies now self-heal completely**:
+  validation startup probes detect incomplete transitive pnpm links even when
+  every direct package looks installed, retry once with a forced relink, and
+  verify ESLint plus the now-direct Prettier CLI before reporting the checkout
+  ready. — Codex (AI), 2026-08-10
+- **Creation-time promotion conflicts are resolved automatically**: when a
+  selected `develop` feature cannot be replayed cleanly onto its promotion base,
+  the protected per-feature promoter first positively proves its historical
+  patch is still effective at the current `develop` tip, then reserves the
+  deterministic branch and hands the immutable source/base plan to a bot-only
+  worker on the fixed `github-actions` control plane. The thin `develop`
+  listener grants the Actions permission needed for that dispatch without
+  restoring executable workflow behavior to product branches. The
+  secret-bearing provider router stays on GitHub-hosted compute and accepts only
+  authenticated, validated downstream runner metadata; promotion-plan handoffs
+  bypass external provider routing until that boundary supports the same
+  immutable plan envelope. The worker re-derives live authority, resolves only
+  mechanically proven conflict paths, treats `graphify-out/**` as derived
+  target-side output, publishes with an exact lease, opens the promotion PR, and
+  resumes dependent stack members automatically. The result
+  is labelled for review and receives evidence naming the resolver run,
+  immutable SHAs, and AI-edited paths; unchanged failed snapshots pause
+  visibly instead of requiring undocumented manual cherry-picks or repeatedly
+  spending model budget. Bot attestations, exact leases, durable stale-snapshot
+  retirement, and idempotent checkpoint/metadata recovery make retries
+  converge across API ambiguity, worker crashes, base movement, or duplicate
+  comments. A recoverable historical patch that current `develop` classifies as
+  removed or ambiguous now blocks visibly before any reservation, branch,
+  immutable promotion plan, AI worker, or promotion PR is created. Only later
+  members of its dependent promotion group wait; unrelated groups continue
+  independently. A later run can proceed only after freshly proving the patch
+  effective and creating a new verified plan; no blocked state is upgraded in
+  place. Missing objects, unreadable patches, operational Git failures, and
+  worker classification mismatches likewise stop before publication. See the
+  [PR #213 engineering note](../PRs/213-codex-auto-resolve-promotion-conflicts-automatically-resolve-promotion-creation-conflicts.md).
+  Conflict-free and AI-resolved verified-source promotions that touch
+  `.github/**` still share the same bot-authored `[skip ci]` content commit and
+  `GITHUB_TOKEN` review checkpoint, so promoted workflow changes cannot execute
+  merely from the branch push that creates their review PR. Removed or ambiguous
+  historical patches never reach that gate because no branch or PR is created.
+  — Codex (AI), 2026-08-10
+- **Generic Vercel Preview now mirrors the shared development runtime**: all 26
+  variables currently assigned to `develop` also target Preview, while the six
+  existing Preview-only filesystem/CI/webhook settings remain. The development
+  S3 role now trusts the generic `environment:preview` OIDC subject and the
+  development bucket permits Thingtime's generated Vercel Preview origins;
+  production MongoDB/JWT/S3 and the production S3 role remain excluded. The
+  trusted controller is retained for stable `*.previews.dev.thingtime.com`
+  aliases, exact-SHA status, and cleanup. See the
+  [PR #212 engineering note](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
+  — Codex (AI), 2026-08-10
+- **Develop and production preview hostnames are now separated**: the trusted
+  `develop` controller uses `*.previews.dev.thingtime.com`, with its protected
+  GitHub variable, detached Vercel wildcard, DNS/ACME delegation, TLS, and S3
+  CORS aligned to that origin. `*.previews.thingtime.com` is reserved for a
+  separate future production-preview controller, while ordinary Vercel
+  previews retain the development role but never the production role. See the
+  [PR #212 engineering note](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
+  — Codex (AI), 2026-08-10
+- **Develop-preview activation runbook now matches the live control plane**:
+  documents the no-bypass `main` ruleset, automatic no-reviewer cleanup,
+  installed team-scoped 90-day Vercel token and exact-bucket CORS-probe
+  secret, narrowed develop/production runtime scope, and authoritative/public
+  resolver verification of the wildcard CNAME. The narrow ACME NS delegation,
+  exact-bucket CORS, `main` merge, and end-to-end gates remain. Independent
+  CODEOWNER approval is recorded as optional future hardening once a second
+  trusted collaborator exists. See the
+  [PR #212 engineering note](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
+  — Codex (AI), 2026-08-10
+- **Every live AI conflict/rebase path now follows the current Thingtime Admin
+  model order**: merge resolution, all rebase rounds, and their semantic
+  Graphify refreshes share the validated primary model instead of letting the
+  refresh silently fall back to Sonnet. The public setting endpoint now reads
+  the home-DB singleton on every request (retaining last-known-good only for a
+  real database outage), so a successful Admin reorder is visible immediately
+  across warm serverless instances. Source contracts cover the delegated
+  product-branch callers and inventory every control-plane AI workflow/action,
+  rejecting new unbound runtimes or obsolete hard-coded models. The deleted
+  legacy GitHub workflow registration was also disabled.
+  — Codex (AI), 2026-08-10
+- **PR conflict resolver model selection follows Thingtime Admin**: the
+  protected `github-actions` resolver controller loads the public, allowlisted
+  model waterfall instead of hardcoding Opus 4.8, safely falling back to the
+  Claude default if the setting is unavailable or malformed. The change was
+  authored on PR #54, but that branch's `.github/workflows/` snapshot has since
+  been collapsed back to the trigger-only listener, so the live implementation
+  is on `github-actions` only. — Codex (AI), 2026-08-10
+- **The complete Actions control plane is ready for atomic promotion to
+  `main`**: the mutually dependent workflow fixes from source PRs #192, #193,
+  #194, #190, #199, #206, #207, and #208 are replayed together so the default
+  branch never runs an obsolete intermediate resolver, rebaser, or feature
+  promoter revision. The seven action workflow/script files exactly match the
+  current `develop` versions. See the
+  [PR #210 engineering note](../PRs/210-promote-actions-control-plane-rollup.md).
+  — Codex (AI), 2026-08-09
+- **Promotion self-test and empty-pick handling are runner-safe**: the
+  per-feature promoter's orphaned-history fixture now configures its own Git
+  author identity instead of depending on runner account defaults. Failed
+  cherry-picks are classified from sequencer and index state rather than broad
+  error-message words, so an operational failure such as `empty ident name`
+  is aborted and reported instead of being mistaken for an empty patch and
+  silently skipped. A genuine already-applied cherry-pick still advances the
+  sequencer safely. See the
+  [PR #207 engineering note](../PRs/207-codex-fix-promoter-empty-pick-detection-distinguish-empty-promotion-cherry-picks-safely.md).
+  — Codex (AI), 2026-08-09
+- **Automatic rebasing is now restricted to genuine PR stacks**: the stack
+  detector still identifies a member only when its base targets another open
+  PR head or another open PR targets its head, but automatic scans no longer
+  override that topology for standalone PRs whose combined diff merges cleanly
+  while individual commits are not replayable. Those standalone branches are
+  left untouched instead of being force-rebased or ping-ponging after a merge
+  resolver update. Shared topology and ownership expressions are rechecked at
+  detection, worker validation, post-replay validation, pre-push validation,
+  and failure cleanup; an inline truth-table regression guard covers
+  standalone, stack, opt-out, and explicit exact-PR retry cases. — Codex (AI),
+  2026-08-09
+- **Per-feature promotion survives rewritten historical merge commits and
+  isolated failures**: the `develop` → `main` promoter now verifies every
+  source merge object, fetches unreachable historical merges by exact SHA,
+  distinguishes a normal non-ancestor result from a Git inspection error, and
+  requires original ancestry or both patch-equivalent history and current-tip
+  effect verification before an old change may be promoted. Later reverts and
+  removed aggregate ranges are classified instead of being mistaken for
+  current source; PR #213 visibly blocks removed or ambiguous recoverable cases
+  before any reservation, branch, worker, or promotion PR, while unrecoverable
+  authority still fails closed. It records structured per-PR blocks instead of
+  aborting the batch. A failed standalone feature no longer prevents later
+  independent promotions; a failed stack member still defers only its
+  dependent members. Group-local
+  exceptions are contained through the remaining groups before failing the
+  run, the partial summary is always published, reused promotion branches are
+  freshly fetched and checked against an exactly reconstructed source tree and
+  expected PR base before stacking, every external OPEN link is validated back
+  to `main`, every genuinely earlier CLOSED predecessor is checked, and
+  `MAX_NEW_PRS` applies to branch reuse too. A local-Git regression test
+  reproduces the force-rewritten-history failure before proving full-parent
+  recovery. Promotion-marker lookup also scans up to 1,000 PRs so older records
+  remain idempotent as the repository grows. See the
+  [PR #206 engineering note](../PRs/206-codex-harden-feature-promoter-keep-feature-promotion-running-across-historical-git-failures.md).
+  — Codex (AI), 2026-08-09
+- **Conflict resolution now uses a fixed `develop` control plane**: every
+  external event and human manual run is detector-only, then dispatches each
+  selected PR number to the resolver workflow revision on `develop`; only a
+  validated bot-originated internal handoff on that ref may load the model or
+  resolve. Manual selection now accepts an exact PR number or a PR base/head,
+  fails visibly when nothing open matches, reports when no merge worker is
+  needed, and carries explicit retry intent through the trusted hop. Direct
+  stack cascades use the same per-PR Actions dispatch instead of loading
+  secret-bearing resolver YAML from the repository default branch. This closes
+  the recurring `develop`-target/default-`main` workflow split once promoted;
+  the older workflow already on `main` remains a one-time bootstrap limitation
+  until this revision reaches it. See the
+  [PR #190 repair note](../PRs/190-claude-github-action-pr-promotion-c65173-per-feature-develop-main-promotion-prs-with-stacks.md).
+  — Codex (AI), 2026-08-09
+- **Conflict resolver no longer mistakes promotion PRs for giant stacks**:
+  `no-ai-rebase` PRs now break stack-topology edges, so the standing
+  `develop` → `main` promotion PR cannot divert every feature PR targeting
+  `develop` away from merge-based conflict resolution. The rebase detector's
+  bottom-up ordering also loads repository-wide JSON from `RUNNER_TEMP`
+  instead of command-line `--argjson` values, preventing the observed
+  `jq: Argument list too long` detector crash as the open-PR graph grows. —
+  Codex (AI), 2026-08-09
+- **Password-confirmed reveal for protected Thing diagnostics**: new migration
+  diagnostics use a backward-compatible v2 secure envelope that keeps a bounded
+  set of MongoDB ObjectIds supplied by explicitly authored server-side error
+  context behind numbered redaction
+  references. The ordinary diagnostic response exposes descriptors only;
+  credentials, tokens, URLs, private keys, query identifiers, and ambiguous
+  24-hex values remain irreversible. `/thing/:id` now offers a reusable Reveal
+  modal that verifies the current password on every lookup, keeps only one value
+  transiently in memory, and clears it on hide, account/Thing change, navigation,
+  or tab backgrounding. The closed-codec reveal endpoint rejects arbitrary
+  secure fields and cross-origin/non-JSON browser posts, returns private no-store
+  responses, and has a non-configurable fail-closed five-request/15-minute
+  confirmation ceiling. Existing v1 diagnostics remain readable without reveal values. — Codex
+  (AI), 2026-08-09
+- **Builtin schemas no longer block whole-account storage accounting**:
+  reserved system-owned `schema-*` Things are now seeded with the server-owned
+  `storageClass: "control"` stamp, existing genuine seeds missing that stamp
+  surface as pending and self-repair, and the account-storage orchestrator runs
+  the schema seed prerequisite before scanning billable content. Community and
+  user-authored schemas remain billable. — Codex (AI), 2026-08-09
+- **Conflict detection waits out GitHub and says so when it stands aside**:
+  the merge resolver's detector polled mergeability for only ~80 seconds
+  after a base push, but GitHub's verdicts can take ~6 minutes to settle —
+  observed on PR #190, where the develop push that created the conflict ran
+  detection while the PR still read UNKNOWN, so nothing was handed off, no
+  comment appeared, and the conflict sat silent until the scheduled sweep.
+  Detection now re-queries until every scanned PR has a verdict or a time
+  budget runs out (`MERGEABLE_POLL_SECONDS`, default 500s, with
+  `MERGEABLE_POLL_INTERVAL` between re-queries; detect timeout raised to 15
+  minutes), and the detect job now upserts a status comment on any PR it must
+  leave alone — conflicting fork PRs it cannot push to, and PRs whose
+  mergeability never settled — so detector silence always means "nothing
+  needed doing", never "nobody looked". Conflicts that are handed off keep
+  announcing themselves through the existing "Auto-resolve running" comment;
+  the rebase workflow already polls its verdicts round-robin and is
+  unchanged. Also restored the "AI PR and stack rebase conflict resolution"
+  changelog bullet's opening line, dropped by the AI resolution of a previous
+  merge. — Claude (AI), 2026-08-08
+- **Contextual reaction/migration errors + storage migration upsert repair**:
+  Lopu can no longer render a lone 🌧️ when Nitro replaces an unhandled server
+  exception with boolean `error: true`; fetch failures now become typed,
+  action-aware errors, one-shot toasts reject non-string runtime values, and
+  failed reaction writes distinguish known rejection from an ambiguous
+  network/5xx outcome (refetching server truth instead of blindly reversing a
+  possibly committed toggle). Reaction and migration routes preserve authored
+  failures and turn unknown exceptions into safe class/code summaries without
+  leaking stacks or database details publicly. Failed real admin migrations now
+  capture a bounded, secret-scrubbed diagnostic after releasing their lease,
+  store it as an expiring owner-only, non-billable control Thing, and link the
+  Lopu toast to its readable `/thing/:id` view; failed dry runs never create a
+  diagnostic Thing and show the full redacted detail in a long-lived scrollable
+  toast. If diagnostic persistence is unavailable, real runs use that same
+  private inline fallback without masking the original status or outcome.
+  Structured login/account-switcher failure
+  fields remain intact, malformed successful mutation responses are reconciled
+  as commit-unknown, server-marked reaction rejections roll back without a
+  redundant read, and late reaction truth merges only reaction fields so it
+  cannot overwrite newer comments or shares. Migration invariants now use a
+  closed operator-safe message catalogue with private record ids confined to
+  server logs. The three storage backfills are unblocked:
+  their shared app-counter ensure path no longer puts `$expr` in an upsert
+  predicate (MongoDB code 224); it upserts by the deterministic reserved
+  `shareId` and still validates the complete protected envelope before trusting
+  either a new or existing ledger. — Codex (AI), 2026-08-08
+- **Conflict detection waits out GitHub and says so when it stands aside**:
+  the merge resolver's detector polled mergeability for only ~80 seconds
+  after a base push, but GitHub's verdicts can take ~6 minutes to settle —
+  observed on PR #190, where the develop push that created the conflict ran
+  detection while the PR still read UNKNOWN, so nothing was handed off, no
+  comment appeared, and the conflict sat silent until the scheduled sweep.
+  Detection now re-queries until every scanned PR has a verdict or a time
+  budget runs out (`MERGEABLE_POLL_SECONDS`, default 500s, with
+  `MERGEABLE_POLL_INTERVAL` between re-queries; detect timeout raised to 15
+  minutes), and the detect job now upserts a status comment on any PR it must
+  leave alone — conflicting fork PRs it cannot push to, and PRs whose
+  mergeability never settled — so detector silence always means "nothing
+  needed doing", never "nobody looked". Conflicts that are handed off keep
+  announcing themselves through the existing "Auto-resolve running" comment;
+  the rebase workflow already polls its verdicts round-robin and is
+  unchanged. Also restored the "AI PR and stack rebase conflict resolution"
+  changelog bullet's opening line, dropped by the AI resolution of a previous
+  merge. — Claude (AI), 2026-08-08
+
+- **`withMongoTransaction` ReferenceError + Web CI transaction support**: the
+  AI-resolved merge that landed on main via PR #158 left `withMongoTransaction`
+  calling the removed `getClientCached()`, 500-ing every transactional write
+  (registration's subscription-ledger seed, service-account creation,
+  verification emails — Web CI's API suite red on main). The transaction client
+  now mirrors the collection getters: `withMongoTransaction` follows the ACTIVE
+  data plane (like `getCollection`) and the new `withHomeMongoTransaction` is
+  pinned home (like `getHomeCollection`) for the protected home-plane callers
+  (themes, algorithms, apps, registration). Web CI's `mongo:7` service is
+  replaced by a docker-run **single-node replica set** (standalone mongod
+  rejects transactions with IllegalOperation, and there is deliberately no
+  non-transactional fallback), so the transactional paths are now genuinely
+  exercised in CI — local runbook note: transactional flows need an
+  RS-enabled local mongod too (`mongod --replSet …` + one-time
+  `rs.initiate(...)` with an explicit `127.0.0.1` member host). The two strict
+  `[401]` auth-guard API tests now send truly anonymous requests (new
+  `anonymous` test flag honored by both the /tests page and the headless
+  runner) instead of inheriting the suite's shared session cookie. Full suite:
+  307/307 against a local single-node RS. Both auto-resolver workflows also
+  now post an upserted "resolution/rebase running, expected finish ~time"
+  PR comment before starting, so reviewers who catch the conflict window
+  aren't left guessing. — Claude (AI), 2026-08-08
+- **Mixed-plane transactions resolved — ledgers have one true plane**: user
+  subscription/billing objects (`subscriptions.ts`, `userStorage.ts`,
+  `tierCatalogStore.ts`) are now HOME-pinned like users/sessions, and account
+  storage meters HOME-hosted bytes only — active-plane writers (`things.ts`
+  create/update/delete, `appData.ts` set/delete) skip account accounting and
+  content stamps when a data-plane endpoint override is live (bytes on a
+  user's own MongoDB are not Thingtime storage; app ledgers still
+  self-account on the active plane). Registration/service-account creation
+  now succeed with an override active: identity + ledger land home, verified
+  live (register + posts with/without `x-tt-mongo-url` against two dbs on
+  one RS mongod — home ledger read exactly the home post's bytes; the
+  override post carried no stamps and moved no ledger). Local runbook:
+  boot now probes transaction support and prints the exact single-node-RS
+  conversion + `rs.initiate` commands when the connected mongod is
+  standalone (`warnIfTransactionsUnsupported`), `/api/v1/mongodb/status`
+  reports `replicaSet`, and the brew `mongod.conf` replica-set stanza is
+  staged locally (takes effect on the next sudo mongod restart +
+  one-time initiate). — Claude (AI), 2026-08-08
+
+### Security
+
+- **Service-account provisioning is now rate limited and input-capped**
+  (TODO #7 / `claude-todo/09` A3, the last open item of the three): the public
+  `POST /api/v1/auth/service-account` route previously accepted unlimited
+  anonymous requests, each minting a non-expiring bearer token + a 5 GiB
+  storage-allowance account. It now enforces the shared Mongo-backed limiter
+  fail-closed per IP (`auth.serviceAccount`, default 10 / 15 min,
+  admin-editable), caps the request body at 16 KiB via `readJsonBody`, and
+  whitelists provisioning fields instead of spreading the raw body (privileged
+  meta is already stripped at the `createUserAccount` chokepoint —
+  defense-in-depth). API docs and `/tests` coverage updated; the sibling
+  raw-results/populate lockdowns from the same TODO shipped earlier —
+  Claude (AI), 2026-07-21.
+
+### Added
+
+- **Installed-app Login with Thingtime via loopback + S256 PKCE**: native
+  desktop clients can now reuse the existing consent screen without exposing an
+  app token to a WebView or custom URL scheme. The first-party page issues a
+  signed five-minute `oauth-code` session to an exact registered
+  `127.0.0.1`/`[::1]` callback; `/api/v1/oauth/token` atomically consumes it
+  with the original verifier and returns the existing 30-day, revocable,
+  namespace-fenced app token. OAuth codes are explicitly barred from all
+  full-account auth paths, and loopback validation, PKCE, callback construction,
+  API docs, and manual replay/mismatch checks are covered. See the
+  [PR #263 engineering note](../PRs/263-codex-commander-cross-platform--add-cross-platform-commander-launcher.md).
+  — Codex (AI), 2026-08-12
+
+- **Trusted `develop`-target PR deployment controller**: same-repository,
+  trusted-author PRs targeting `develop` can now be deployed through a
+  secret-free `pull_request_target` dispatcher and provenance-checked
+  default-branch `repository_dispatch` controller to the exact Vercel `develop`
+  Custom Environment. Neither GitHub job executes PR-head code, the detector
+  never receives the Vercel token, and generic Preview access was not broadened
+  when the controller was introduced (it was deliberately broadened later as
+  recorded above); the approved Vercel build intentionally receives the shared
+  develop runtime configuration. An explicit trusted-actor plus live write/admin permission
+  gate protects the dedicated GitHub Environment secret. Each PR gets a
+  marker-updated status comment, transient GitHub Deployment, and dedicated
+  alias under `*.previews.dev.thingtime.com`; SHA revalidation, marker-scoped
+  supersession/close cleanup, six-hour reconciliation, and bounded manual
+  recovery prevent stale builds from retaining aliases or shared develop
+  credentials. The fork-safe runbook keeps
+  `dev.thingtime.com` bound to the literal `develop` branch, stores the exact
+  Custom Environment ID only in a private GitHub variable, documents minimal
+  wildcard S3 CORS/DNS, and calls out that eligible PRs intentionally share the
+  same development data plane rather than receiving isolated sandboxes. — Codex
+  (AI), 2026-08-09. [Detailed PR #212 runbook](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
+- **Promotion PR rebase protection (`no-ai-rebase`)**: the promotion workflow
+  now creates the standing develop → main PR with — and re-applies on every
+  develop push — the `no-ai-rebase` label (env `PROMOTION_PR_LABELS`, creating
+  the repo label if missing; the AI workflows honored it but nothing had ever
+  created it). The AI rebase workflow skips labeled PRs, so develop — an
+  integration branch whose history IS its merge commits — is never flattened
+  again (the 2026-08-08 develop rebase destroyed merge-subject and SHA↔PR
+  attribution, the changelog's primary signals). The merge-based conflict
+  resolver explicitly keeps ownership of `no-ai-rebase` PRs and levels
+  develop with main via history-preserving merge commits, the repo's house
+  style. Label state is read via REST (search-backed listings lag) and stray
+  removals self-heal on the next develop push. — Claude (AI), 2026-08-08
+- **Promotion PR changelog**: the **Promote develop to main** workflow now
+  maintains an at-a-glance changelog on the standing promotion PR. A new
+  `.github/scripts/promotion-pr-changelog.mjs` resolves the first-parent spine
+  of `main..develop` to the merged develop-based PRs it carries (merge/squash
+  subjects, then content matching against recently merged PRs — merge SHA, PR
+  title, and the PRs' own commit subjects, which survives AI rebases of
+  develop — then the commit-association API), rewrites a marker-delimited
+  section of the PR description with a PR table (title, author, source branch,
+  merge date), `no-promote` label warnings re-verified via REST, and collapsed
+  direct commits, and posts short delta comments when PRs enter or leave the
+  promotion window. State is derived from the PR body itself; re-runs on the
+  same develop SHA are byte-identical no-ops. Supports `DRY_RUN=1` and
+  `--self-test`. — Claude (AI), 2026-08-08
+
+- **Per-feature develop → main promotion PRs (with stacks)**: a new **Promote
+  features to main** workflow (`promote-features-to-main.yml`) joins the
+  standing all-or-nothing **Promote develop to main** omnibus PR (#186) as a
+  granular release train. It scans PRs merged into `develop`, cherry-picks
+  each unshipped one onto its own `promote/pr-<n>-<slug>` branch cut from
+  `main`, and opens a per-feature promotion PR for release review; PRs sharing
+  a feature group (`Promotion-Group:` body line, `stack:`/`group:`/`feature:`
+  label, `feature/<key>/...` branch, or `feat(<key>):` title scope) become a
+  stacked chain in merge order, with automatic retargeting as earlier members
+  merge. The two trains coexist: merge individual promotion PRs for granular
+  review, or merge the omnibus PR when everything on develop is mergeable —
+  promotion PRs whose diff becomes empty afterwards are closed automatically
+  as redundant (branches deleted once nothing stacks on them). `no-promote`
+  skips a source PR; closing a promotion PR rejects that change for `main`
+  permanently; cherry-pick conflicts stop the affected group and the job
+  summary prints exact manual-promotion commands. Runs on pushes to `develop`,
+  a 6-hourly schedule, and manual dispatch with a dry-run mode.
+  — Claude (AI), 2026-08-08
+
+- **AI PR and stack rebase conflict resolution**: a separate **Rebase PRs and
+  stacks (AI)** workflow evaluates every same-repository PR regardless of base
+  branch. Standalone PRs that merge cleanly but cannot rebase and stack members
+  needing a history update are rebase-owned, while standalone merge conflicts
+  remain disjointly owned by **Resolve PR conflicts (AI)**. It replays standalone heads onto
+  their bases and stacks root-to-leaf with bounded, file-only Claude conflict
+  rounds and trusted Git verification. Push/open/reopen triggers plus a
+  scheduled all-PR backstop feed the trusted dispatch path, while manual
+  dispatch can target one PR or scan the repository. The merge resolver now
+  has its own staggered all-PR backstop and exact live-ref snapshot, pre-push
+  revalidation, lease, publication classification, and `ai-merge-paused`
+  retry-loop guard. Global merge scans use true GraphQL pagination, while
+  rebase verdicts poll round-robin and stack traversal supports 64 levels.
+  Both pause labels are bound to strict bot-authored owner/ref/SHA/topology
+  snapshots; queued retries re-prove ownership before deleting a specific stale
+  hold, publication requires pauses to be absent, and post-push cleanup
+  preserves newer-snapshot holds. `ai-rebase-in-progress` is the only hard
+  mutex.
+  Claude sees only regular conflict-file copies in a
+  repo-less scratch directory; the real checkout, Git state, exact trusted
+  action, and credentials remain outside its workspace. Exact force-with-lease
+  prevents concurrent work from being overwritten; fork, default, and
+  protected branches are refused; `no-ai-rebase` opts out; and failures add
+  `ai-rebase-paused` instead of retrying forever. Parent barriers preserve
+  root-to-leaf ordering, orphaned run locks recover after 90 minutes, and web
+  rewrites explicitly dispatch Web CI for the new SHA. The existing merge
+  resolver now routes stack members deterministically, pins its runner actions,
+  and avoids checkout's spurious `/dev/null` Git-config annotation. See the
+  [PR #183 implementation notes](../PRs/183-codex-ai-rebase-stack-resolver--add-automatic-ai-rebase-support-for-pr-stacks.md).
+  — Codex (AI), 2026-08-08
+
+- **Stable Vercel domain for the `develop` branch**: the Thingtime project now
+  assigns `dev.thingtime.com` to `develop` as a branch-specific Preview
+  domain, matching the existing staging pattern while preserving the
+  branch-scoped Preview secrets already used by develop deployments. The
+  deployment runbook now records the required Cloudflare DNS-only CNAME and
+  ownership-verification flow. This original assignment was superseded on
+  2026-08-09 by the isolated `develop` Custom Environment recorded above. —
+  Codex (AI), 2026-08-07
+
+- **Typed queries across every admin workspace**: Users, Apps, Tiers, rate
+  limits, and the administrator roster now share an all-field free-text,
+  filter, and deterministic-sort interface. It handles nested/list fields,
+  created-day ranges, tiers and immutable versions, quotas/usage/counts,
+  lifecycle state, pricing/discounts/inclusion text, and booleans. User/app
+  APIs use private, no-store 200-row keyset pages, and the UI drains the full
+  directory before applying computed/nested filters instead of silently
+  filtering only the newest page. User/app rows now expose created time, while
+  hidden rate-limit edits remain intact. — Codex (AI),
+  2026-08-05
+
+- **Versioned subscription-tier admin + customer cards**: `/admin` now has a
+  Tiers workspace with separate Live, Draft / not live, and Archived sections.
+  Admins can create tiers and immutable revisions; edit names, taglines,
+  banners, four renewal prices, six annualized computed-or-custom savings,
+  Editor.js inclusions, metering, and quota defaults; then publish/archive with
+  confirmation while preserving every historical revision. The public
+  `/api/v1/tiers`, admin `/api/v1/admin/tiers`, subscription editor, and app
+  storage manager all use exact tier version ids. Each revision freezes its
+  pricing/discounts, and assignments freeze the tier name, version, metering,
+  and quota snapshot so later catalog changes cannot move existing customers.
+  Includes standalone-Mongo-safe
+  publish recovery, protected `subscription-*` ids, default-tier safeguards,
+  dynamic customer cards, schemas/indexes/docs/tests, and legacy v1 pinning. —
+  Codex (AI), 2026-08-05
+
+- **App-owner storage subscriptions + app-user sub-tiers**: `/apps/manage`
+  lets a registering owner or linked co-manager inspect measured whole-app
+  usage, switch the aggregate plan (Free 5 GiB, Plus 25 GiB, Pro 100 GiB,
+  metered PAYG), change the inherited per-user cap (50 MiB by default), and
+  assign/reset one or up to 200 selected app users to custom caps. App tier +
+  aggregate allowance/usage now live atomically on the app Thing; protected
+  relational `app-storage` Things hold user usage and optional overrides, with
+  guarded writes enforcing both ceilings and clamping every user cap to the
+  whole-app total. Includes owner/co-manager API, privacy-gated usernames,
+  responsive manager UI, schema/index/migration updates, API/embed docs, and a
+  30-check local-only live suite. This supersedes the earlier app→end-user-tier
+  fallback from the stacked admin-manager change. — Codex (AI), 2026-08-05
+
+- **Per-channel notification toggles + SES notification emails**: Settings →
+  Notifications is now a per-type × per-channel switch matrix — Push (the
+  bell/in-app channel, stored as the original flat pref keys so existing prefs
+  keep working) and Email (new nested `email`/`masters` keys in the same
+  secure-blob pref object), each with a master switch. Activity notifications
+  (friend requests/accepts, new followers, comments, replies, reactions,
+  shares; posts-from-followed/friends email opt-in) now also send SES emails on
+  the new `notification` email stream — fire-and-forget from the same emits,
+  verified addresses only, ≤10/recipient/hour throttle, manage +
+  one-click-unsubscribe links in every footer (HMAC-tokened
+  `GET /api/v1/notifications/email/unsubscribe`). A weekly summary digest
+  (email-only type, Vercel cron `remix/vercel.json` →
+  `GET /api/v1/notifications/email/weekly-summary` with `CRON_SECRET` bearer or
+  admin session, six-day idempotency lookback, dry-run mode) recaps followers,
+  requests, comments, replies, reactions, shares, post views and posts. New
+  env: `THINGTIME_EMAIL_NOTIFICATIONS_FROM`, `THINGTIME_EMAIL_UNSUB_SECRET`
+  (optional), `CRON_SECRET`, `APP_URL` (email links) — see README “Notification
+  emails”. — Claude (AI), 2026-08-03
 
 - **Followers + friends, notifications, and public post view stats**: one-way
   follows and approval-based friendships (`follow`/`friend` protected things,
