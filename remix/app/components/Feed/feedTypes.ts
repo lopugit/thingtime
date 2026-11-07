@@ -172,16 +172,6 @@ export type PublicPost = {
   // impressions/avgDwellMs secondary — see api/utils/things/views.ts
   viewCount?: number;
   viewStats?: { impressions: number; avgDwellMs: number };
-  // poll posts only: live per-option vote counts + the viewer's own vote
-  pollVotes?: PublicPollVotes;
-  // logged-in viewers only: has the viewer saved this post to their library?
-  // (absent for anonymous projections — the bookmark button hides with it)
-  viewerSaved?: boolean;
-  // free-form extended JSON; connections posts carry `extended.external`
-  // (provider, url, original author, stats) — see api/utils/connections
-  extended?: Record<string, any> | null;
-  // connections feed only: the viewer's AI feed-filter matches for this post
-  feedFilterMatches?: FeedFilterMatch[];
   createdAt: string;
 };
 
