@@ -3,7 +3,7 @@ import test from 'node:test';
 import { findBlock } from '../Builder/webpageBlocks';
 import { settingsDocumentBlocks } from '../Settings/settingsDocument';
 import { resolveBlockProps } from '../Builder/templateBlocks';
-import { photoDownloadPreparation, syncFolderCardBlocks, syncFolderActivityLabel, withSyncFolderQuickBlocks } from './syncFolderCardBlocks';
+import { photoDownloadPreparation, photoQueueDisplay, syncFolderCardBlocks, syncFolderActivityLabel, withSyncFolderQuickBlocks } from './syncFolderCardBlocks';
 import { remoteSyncBlocks, remoteSyncDisclosureBlocks } from './remoteSyncBlocks';
 
 test('generic folder summaries expose separate editable fields and a typed expansion control', () => {
@@ -84,4 +84,24 @@ test('refused background scheduling tells the user to keep the app open without 
  const progress = { stage: 'transferring' as const, confirmed: 1, total: 3, backgroundTransfer: 'foreground-only' as const };
  assert.equal(syncFolderActivityLabel({ ...state, progress }),
   'Transfer in progress · 1 of 3 operations confirmed · Keep Thingtime open; iOS could not schedule background processing.');
+});
+
+test('a completed batch does not close a Photos queue with pending or unavailable originals', () => {
+ const state = { paused: false, rootsReady: true, hasRoot: true, taskPaused: false, running: false, photos: true };
+ const progress = { stage: 'complete' as const, confirmed: 2, total: 2, photoAccess: 'limited' as const };
+ assert.equal(syncFolderActivityLabel({ ...state, progress: { ...progress, photoQueue: { pending: 1, unavailable: 0 } } }), 'More Photos originals are queued.');
+ assert.equal(syncFolderActivityLabel({ ...state, progress: { ...progress, photoQueue: { pending: 0, unavailable: 1 } } }), 'Partial backup · some originals are unavailable.');
+ assert.equal(syncFolderActivityLabel({ ...state, progress: { ...progress, photoQueue: { pending: 0, unavailable: 0 } } }), 'Selected photos backed up.');
+ assert.equal(syncFolderActivityLabel({ ...state, running: true, progress: { ...progress, stage: 'transferring', photoQueue: { pending: 5, unavailable: 0 } } }),
+  'Uploading this batch · 2 of 2 operations confirmed');
+});
+
+test('photo queue counts are distinct editable blocks and only render observed positive counts', () => {
+ assert.deepEqual(photoQueueDisplay({ pending: 1, unavailable: 2 }), {
+  order: 'Photos queue · newest first', pending: '1 original pending', unavailable: '2 originals unavailable'
+ });
+ assert.equal(photoQueueDisplay({ pending: 0, unavailable: 0 })?.unavailable, '');
+ assert.equal(photoQueueDisplay({ pending: -1, unavailable: 2 }), undefined);
+ const migrated = settingsDocumentBlocks(withSyncFolderQuickBlocks(syncFolderCardBlocks));
+ for (const id of ['order', 'pending', 'unavailable']) assert.ok(findBlock(migrated, 'folder-card-photo-queue-' + id));
 });

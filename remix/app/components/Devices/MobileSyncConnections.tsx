@@ -3,7 +3,7 @@ import { prepareExplicitSyncStart } from '~/fileSync/configurationStart';
 import { SyncDestinationControl } from './SyncDestinationControl';
 import { syncConnectionGlance } from '~/fileSync/connectionGlance';
 import { SyncConditionsWait } from '~/fileSync/foregroundSyncContext';
-import { photoDownloadPreparation, syncFolderActivityLabel } from './syncFolderCardBlocks';
+import { photoDownloadPreparation, photoQueueDisplay, syncFolderActivityLabel, type PhotoQueueProgress } from './syncFolderCardBlocks';
 import type { TransferSpeedDraftState } from './TransferSpeedTrackers';
 import { SyncEditorPlacement } from './SyncEditorPlacement';
 import type { UploadPriorityDraftState } from './SyncUploadPriorities';
@@ -96,9 +96,7 @@ export function MobileSyncConnections({ ownerId, deviceId, roots, rootsReady = t
 		/>
 	);
 }
-type ConnectionProgress = ForegroundSyncProgress & {
- message?: string; waiting?: boolean; photoDownload?: { fraction: number }; photoAccess?: 'full' | 'limited';
-};
+type ConnectionProgress = ForegroundSyncProgress & { photoQueue?: PhotoQueueProgress };
 
 function Connections({
 	scope,
@@ -690,6 +688,7 @@ function Connections({
 				const nativeRoot = roots.find((root) => root.id === saved.configuration.localRootId);
 				const photos = saved.configuration.sourceKind === 'photos' || nativeRoot?.sourceKind === 'photos';
 				const preparation = photos && running && !waiting && !task?.stopping ? photoDownloadPreparation(progress?.photoDownload) : undefined;
+				const photoQueue = photos && rootsReady && nativeRoot ? photoQueueDisplay(progress?.photoQueue) : undefined;
 				const downloading = saved.configuration.mode === 'download';
 				const twoWay = saved.configuration.mode === 'two-way';
 				const wifiWait = waiting && saved.configuration.network === 'wifi' &&
@@ -734,6 +733,7 @@ function Connections({
                         destination={folders.find(folder => folder.id === saved.configuration.remoteFolderId)?.path || 'Cloud destination unavailable · refresh folders'}
                         error={runError || ''}
                         preparation={preparation}
+                        photoQueue={photoQueue}
                         quickAction={{ label: actionLabel,
                             disabled: running ? !!task?.stopping : !allowed || busy || retainedDrafts.current.has(saved.id) || !ready,
                             run: () => { if (running) { if (task?.active) return pauseNativeSyncJob(task.scope, generation).catch(cause => setError(cause instanceof Error ? cause.message : 'Pause could not be saved.')); controller.current?.abort(); } else transfer(saved); }

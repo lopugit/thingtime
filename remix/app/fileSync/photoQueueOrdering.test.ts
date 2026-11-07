@@ -1,0 +1,79 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { streamingFileFixture } from './streamingFile.fixture';
+import { saved } from './foregroundSync.fixture';
+import { runPagedForegroundCloudSync } from './pagedForegroundSync';
+import { runNativePhotoQueue } from './photoBackupPasses';
+import type { ForegroundSyncProgress } from './foregroundSync';
+import type { NativePhotoQueueBatch } from './nativeInventory';
+
+const completed: ForegroundSyncProgress = { stage: 'complete', total: 0, confirmed: 0 };
+const epoch = '01234567-0000-0000-0000-0123456789ab';
+const batch = (assets: string[], pending = 0, unavailable = 0): NativePhotoQueueBatch =>
+	({ epoch, id: crypto.randomUUID(), assetKeys: assets, pending, unavailable });
+
+test('queue observes a new photo after the previously last upload and finishes only after a fresh empty batch', async () => {
+	const last = batch(['f'.repeat(64)]);
+	const arrival = batch(['e'.repeat(64)]);
+	const empty = batch([], 0, 1);
+	const next = [last, arrival, empty], acknowledged: string[] = [];
+	const result = await runNativePhotoQueue(async () => ({ progress: completed, photoQueue: next.shift() }),
+		async row => { acknowledged.push(row.id); }, () => {}, epoch);
+	assert.deepEqual(acknowledged, [last.id, arrival.id, empty.id]);
+	assert.equal(result.photoQueue?.unavailable, 1);
+});
+
+test('obsolete batch is never acknowledged and repeated obsolete selection stops for retry', async () => {
+	const old = batch(['f'.repeat(64)], 1), latest = batch(['e'.repeat(64)]), empty = batch([]);
+	const next = [{ photoQueue: old, replacedPhotoBatch: true }, { photoQueue: latest }, { photoQueue: empty }];
+	const acknowledged: string[] = [];
+	await runNativePhotoQueue(async () => ({ progress: completed, ...next.shift() }),
+		async row => { acknowledged.push(row.id); }, () => {}, epoch);
+	assert.deepEqual(acknowledged, [latest.id, empty.id]);
+	await assert.rejects(runNativePhotoQueue(async () => ({ progress: completed, photoQueue: old, replacedPhotoBatch: true }),
+		async () => { assert.fail('A superseded batch must not be acknowledged'); }, () => {}, epoch), /selection changed again/i);
+	await assert.rejects(runNativePhotoQueue(async () => ({ progress: completed, photoQueue: batch(['1'.repeat(64)]), replacedPhotoBatch: true }),
+		async () => { assert.fail('Distinct obsolete batches also must not be acknowledged'); }, () => {}, epoch), /selection changed again/i);
+});
+
+test('canonical publication follows Photos asset rank, preserves companion group and retains receipts when a source changes', async () => {
+	const f = await streamingFileFixture(), input = f.input;
+	const newest = 'f'.repeat(64), deleted = 'e'.repeat(64), older = '1'.repeat(64);
+	const entries = [
+		{ ...f.entry(), path: newest + '-0-photo.jpg', id: 'photo' },
+		{ ...f.entry(), path: newest + '-1-companion.mov', id: 'companion' },
+		{ ...f.entry(), path: deleted + '-0-deleted.jpg', id: 'deleted' },
+		{ ...f.entry(), path: older + '-0-older.jpg', id: 'older' }
+	];
+	const current = () => entries.filter(row => f.publications() === 0 || row.id !== 'deleted');
+	const latestBatch = batch([newest, deleted, older]);
+	const photos = { ...saved, configuration: { ...saved.configuration, sourceKind: 'photos' as const } };
+	const readConfiguration = input.readConfiguration;
+	input.readConfiguration = async () => ({ ...(await readConfiguration() as object), crystal: photos.configuration });
+	input.inspectLocal = async path => structuredClone(current().find(row => row.path === path) ?? null);
+	input.inventory = async () => ({
+		version: 1 as const, complete: true as const, rootId: 'cloud-root', rootRevision: 'fixture-root',
+		nodes: [...f.files.values()].map(file => ({ kind: 'file' as const, path: file.name, id: file.id,
+			folderId: file.folderId, revision: file.revision, file }))
+	});
+	input.scanLocalPages = async function* (options) {
+		const id = crypto.randomUUID(), rows = options?.observationPurpose === 'checkpoint' ? current() : entries;
+		const capture = { id, generation: id, totalEntries: rows.length, totalSkipped: 0,
+			coverage: 'full' as const, consistency: 'per-entry' as const, photoQueue: latestBatch };
+		yield { generation: id, ordinal: 0, entries: [], backupCapture: capture,
+			skippedPage: { capture, offset: 0, totalSkipped: 0, nextOffset: null, skipped: [] } };
+		yield { generation: id, ordinal: 0, entries: [...rows].sort((a, b) => a.path.localeCompare(b.path)),
+			totalEntries: rows.length, backupCapture: capture };
+	};
+	try {
+		const result = await runPagedForegroundCloudSync(photos, f.scope, input, new AbortController().signal);
+		assert.ok('spec' in result);
+		assert.equal(result.progress.photoSourceChanged, true);
+		assert.equal(result.progress.confirmed, 3);
+		assert.deepEqual([...f.files.values()].map(file => file.name), [entries[0].path, entries[1].path, entries[3].path]);
+		assert.equal(f.puts(), 3);
+		const head = await f.journal().pagedCheckpoints({ scope: f.scope, currentScope: input.currentScope }).current();
+		assert.ok(head);
+		assert.equal((await f.journal().inventory({ scope: f.scope, currentScope: input.currentScope }).read(head.baseline.local)).totalEntries, 3);
+	} finally { f.journal().close(); }
+});

@@ -20,21 +20,25 @@ public struct MobileFolderInventory: Sendable {
         public let coverage: String?
         public let consistency: String?
         public let totalSkipped: Int?
-        public init(id: String, generation: String, totalEntries: Int, coverage: String? = nil, consistency: String? = nil, totalSkipped: Int? = nil) {
+        public let photoQueue: PhotoBackupQueueBatch?
+        public init(id: String, generation: String, totalEntries: Int, coverage: String? = nil, consistency: String? = nil, totalSkipped: Int? = nil,
+                    photoQueue: PhotoBackupQueueBatch? = nil) {
             self.id = id; self.generation = generation; self.totalEntries = totalEntries
-            self.coverage = coverage; self.consistency = consistency; self.totalSkipped = totalSkipped
+            self.coverage = coverage; self.consistency = consistency; self.totalSkipped = totalSkipped; self.photoQueue = photoQueue
         }
     }
     public struct BackupStatus: Encodable, Sendable {
         public let id: String; public let generation: String; public let state: String
         public let coverage: String; public let consistency = "per-entry"
         public let totalEntries: Int; public let totalSkipped: Int
+        public let photoQueue: PhotoBackupQueueBatch?
         /// Count of pruned entries/subtree roots, never unseen descendants.
         public let ignoredCount: Int
         public init(capture: Capture, state: String, ignoredCount: Int = 0) {
             id = capture.id; generation = capture.generation; self.state = state
             coverage = state == "complete" ? (capture.coverage ?? "partial") : "partial"
             totalEntries = capture.totalEntries; totalSkipped = capture.totalSkipped ?? 0; self.ignoredCount = ignoredCount
+            photoQueue = capture.photoQueue
         }
     }
     public struct Skipped: Codable, Sendable {
