@@ -288,8 +288,9 @@ private struct ProviderView: View {
     }
     override func prepareInterface(forPasskeyRegistration registrationRequest: any ASCredentialRequest) {
         guard let request = registrationRequest as? ASPasskeyCredentialRequest, let identity = request.credentialIdentity as? ASPasskeyCredentialIdentity else { cancel(.failed); return }
-        epoch = UUID(); task?.cancel(); authentication?.invalidate(); authentication = nil; pendingRegistration = nil
-        model.busy = false
+        // A superseded task no longer owns the epoch, so it can never clear busy
+        // again; leave it set and every new choice stays permanently disabled.
+        epoch = UUID(); task?.cancel(); authentication?.invalidate(); authentication = nil; pendingRegistration = nil; model.busy = false
         model.title = "Save a passkey in Thingtime"
         model.message = "\(identity.userName) · \(identity.relyingPartyIdentifier)"
         registrationStart.prepare()
@@ -316,28 +317,6 @@ private struct ProviderView: View {
             let session = try PasswordSessionStore.load(), client = PasswordClient(account: session)
             if let priorSession = self.registrationSession {
                 try session.requireUnchanged(from: priorSession)
-            }
-            try await self.authenticate(current, session: session)
-            self.show(.vault)
-            let catalog = try await client.catalog(); try self.verify(current, session: session)
-            let summary = PasskeyRegistrationPolicy.summary(relyingParty: identity.relyingPartyIdentifier,
-                userHandleBytes: identity.userHandle.count, clientDataHashBytes: request.clientDataHash.count,
-                supportsES256: request.supportedAlgorithms.contains(.ES256), excludedCredentialIDs: excluded, catalog: catalog)
-            self.model.registrationSummary = summary
-            try PasskeyRegistrationPolicy.requireNoExcludedCredential(summary)
-            // Retain the immutable payload and idempotency identity until this
-            // system request ends, including a timeout after the server commits.
-            if self.registrationAttempt == nil {
-                self.registrationAttempt = try PasskeyRegistrationAttempt(relyingParty: identity.relyingPartyIdentifier, userHandle: identity.userHandle, username: identity.userName)
-                self.registrationSession = session
-            }
-            guard let attempt = self.registrationAttempt else { throw PasswordProviderError.unavailable }
-            let key = attempt.key, id = attempt.recordID
-            if !self.registrationAcknowledged {
-                self.show(.saving)
-                _ = try await client.save(key.entry, id: id, writeId: attempt.writeID)
-                try self.verify(current, session: session)
-                self.registrationAcknowledged = true
             }
             if self.pendingRegistration == nil {
                 self.pendingRegistration = PendingPasskeyRegistration(key: try PasskeyMaterial(relyingParty: identity.relyingPartyIdentifier, userHandle: identity.userHandle, username: identity.userName), session: session)

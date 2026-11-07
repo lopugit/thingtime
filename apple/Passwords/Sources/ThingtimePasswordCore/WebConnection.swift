@@ -10,7 +10,7 @@ public enum PasswordWebConnectionAuthority {
             return $0.name == "tt_auth" && (host == domain || host.hasSuffix("." + domain))
         }
         guard candidates.count == 1, let cookie = candidates.first,
-              cookie.domain.lowercased() == host,
+              cookie.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".")) == host,
               cookie.path == "/", cookie.isSecure, cookie.isHTTPOnly,
               cookie.expiresDate.map({ $0 > now }) ?? true else { throw PasswordProviderError.invalidSession }
         let header = "tt_auth=\(cookie.value)"
@@ -23,7 +23,7 @@ public enum PasswordWebConnectionAuthority {
               let owner = body["ownerId"] as? String, !owner.isEmpty else { throw PasswordProviderError.invalidResponse }
         guard expectedOwner == nil || owner == expectedOwner else { throw PasswordProviderError.accountMismatch }
         guard configured else { throw PasswordProviderError.notConfigured }
-        return try ProviderSession(origin: origin, ownerId: owner, cookie: cookie, companionConnectionID: UUID().uuidString.lowercased())
+        return try ProviderSession(origin: origin, ownerId: owner, cookie: cookie)
     }
 }
 
@@ -41,17 +41,5 @@ public enum PasswordWebConnectionAuthority {
     /// No suspension between the final authority check and protected save.
     public func commit(_ captured: UUID, verifyAuthority: () async throws -> Void, save: () throws -> Void) async throws {
         try verify(captured); try await verifyAuthority(); try verify(captured); try save()
-    }
-}
-
-/// The CLI serves Electron lifecycle calls. Independent companion connections
-/// are changed only by their own explicit native Connect/Disconnect controls.
-public enum PasswordHostConnectionAuthority {
-    public static func canDisconnect(_ prior: ProviderSession?) -> Bool {
-        prior?.companionConnectionID == nil
-    }
-    public static func canSynchronize(_ prior: ProviderSession?, incoming: ProviderSession) -> Bool {
-        guard let prior else { return false }
-        return prior.companionConnectionID == nil && prior.origin == incoming.origin && prior.ownerId == incoming.ownerId
     }
 }
