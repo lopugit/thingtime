@@ -7,7 +7,7 @@ import { parseNativeFolderBatchResult } from './folderBatch';
 import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './streamingIndex';
 import { parseNativeUploadBatchResult, UPLOAD_BATCH_FILE_BYTES } from './uploadBatch';
 import { canonicalIgnoreRules, createSyncIgnorePolicy } from './syncIgnore';
-import { nativeInventoryPageSize, parseNativeBackupStatus, parseNativeSkippedPage, parseNativeInventoryCapture, parseNativeInventoryPage, type NativeBackupStatus, type NativeBackupCapture, type NativeSkippedPage, type NativeInventoryCapture, type NativeInventoryPage } from './nativeInventory';
+import { nativeInventoryPageSize, parseNativeBackupStatus, parseNativeSkippedPage, parseNativeInventoryCapture, parseNativeInventoryPage, type NativeBackupStatus, type NativeBackupCapture, type NativePhotoQueueApproval, type NativeSkippedPage, type NativeInventoryCapture, type NativeInventoryPage } from './nativeInventory';
 import { canonicalNativeScanExclusions, isNativeScanExcluded } from './nativeScanExclusions';
 import { trackNativeUploadBackground } from './nativeUploadBackground';
 import { parseFileSyncConfiguration } from './configuration';
@@ -66,8 +66,9 @@ export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePol
 	| { action: 'scan-stream'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; ignoreRules?: string; capturePolicy: 'one-way-supported' }
 	| { action: 'scan-stream-finish'; rootId: string; inventoryDeviceId: string; captureId: string; afterSequence: number; excludedPaths?: string[]; ignoreRules?: string; capturePolicy: 'one-way-supported' }
 	| { action: 'scan-changes'; rootId: string; inventoryDeviceId: string; captureId: string; afterSequence: number; pageSize?: number; waitMilliseconds?: number; excludedPaths?: string[]; ignoreRules?: string; capturePolicy: 'one-way-supported' }
-	| { action: 'scan-capture'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; ignoreRules?: string; capturePolicy?: 'backup-supported' | 'strict-async'; allowCloudGaps?: true; photoDownloadAuthorization?: FileSyncApproval }
-	| { action: 'scan-status' | 'scan-cancel'; rootId: string; inventoryDeviceId: string; captureId: string; capturePolicy: 'backup-supported' | 'one-way-supported' | 'strict-async'; excludedPaths?: string[]; ignoreRules?: string; allowCloudGaps?: true }
+	| { action: 'scan-capture'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; ignoreRules?: string; capturePolicy?: 'backup-supported' | 'strict-async'; allowCloudGaps?: true; photoDownloadAuthorization?: FileSyncApproval; photoQueueApproval?: NativePhotoQueueApproval }
+	| { action: 'scan-status' | 'scan-cancel'; rootId: string; inventoryDeviceId: string; captureId: string; capturePolicy: 'backup-supported' | 'one-way-supported' | 'strict-async'; excludedPaths?: string[]; ignoreRules?: string; allowCloudGaps?: true; photoQueueApproval?: NativePhotoQueueApproval }
+	| { action: 'photo-queue-finish'; rootId: string; photoBatchId: string; photoQueueApproval: NativePhotoQueueApproval }
 	| { action: 'scan-skips'; rootId: string; inventoryDeviceId: string; capture: NativeBackupCapture; offset: number; pageSize?: number; ignoreRules?: string; capturePolicy: 'backup-supported' }
 	| { action: 'scan-page'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; offset: number; pageSize?: number; ignoreRules?: string; capturePolicy?: 'backup-supported' }
 	| { action: 'scan-discard'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; ignoreRules?: string; capturePolicy?: 'backup-supported' }
@@ -193,6 +194,8 @@ export const supportsNativePhotoCloudGaps = (bridge: FolderCapabilities | undefi
 	bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.6.0');
 export const supportsNativePhotoCloudFetch = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.7.0');
+export const supportsNativePhotoQueue = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.8.0');
 /** Exclusions are pruned before opening native files or descending directories. */
 export const supportsNativeScanExclusions = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
 	const minimum = bridge?.platform === 'macos' ? 6 : bridge?.platform === 'ios' ? 4 : undefined;
@@ -228,6 +231,14 @@ export const supportsNativeStreamingIndex = (bridge: FolderCapabilities | undefi
 export const supportsNativeStreamingBatches = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsNativeStreamingIndex(bridge) && (Number(bridge!.fileAccessVersion!.split('.')[1]) > 11 || Number(bridge!.fileAccessVersion!.split('.')[2]) >= 1);
 export function assertNativeScanExclusions(request: FolderRequest, bridge: FolderCapabilities | undefined) {
+	if ('photoQueueApproval' in request && request.photoQueueApproval !== undefined) {
+		const { request: queue, authorization } = request.photoQueueApproval;
+		if (!supportsNativePhotoQueue(bridge) || !queue || authorization?.configuration?.sourceKind !== 'photos' ||
+			authorization.configuration.mode !== 'backup' || queue.configurationId !== authorization.id ||
+			queue.configurationRevision !== authorization.updatedAt ||
+			!(request.action === 'photo-queue-finish' || ((request.action === 'scan-capture' || request.action === 'scan-status') &&
+				request.allowCloudGaps && request.capturePolicy === 'strict-async'))) throw Error('Native Photos queue is unavailable.');
+	}
 	if ('photoDownloadAuthorization' in request && request.photoDownloadAuthorization !== undefined) {
 		const auth = request.photoDownloadAuthorization;
 		if (!supportsNativePhotoCloudFetch(bridge) || auth.configuration?.sourceKind !== 'photos' ||
@@ -377,7 +388,7 @@ export function parseMobileFolderResult(
 		payload = message?.payload;
 	if (message?.type !== 'mobile-files-result' || !payload || Object.entries(expected).some(([key, value]) => payload[key] !== value)) return null;
 	if (payload.syncWait !== undefined) {
-		if (!['upload-file', 'defer-upload', 'scan-capture', 'scan-status', 'read'].includes(request.action) || !('rootId' in request) || payload.rootId !== request.rootId || payload.error !== undefined ||
+		if (!['upload-file', 'defer-upload', 'scan-capture', 'scan-status', 'read', 'photo-queue-finish'].includes(request.action) || !('rootId' in request) || payload.rootId !== request.rootId || payload.error !== undefined ||
 			!['wifi', 'network', 'offline', 'charging'].includes(payload.syncWait)) throw Error('Invalid native sync wait.');
 		throw new SyncConditionsWait(payload.syncWait);
 	}
@@ -679,6 +690,9 @@ export function parseMobileFolderResult(
 		verifyScanExclusions(request, payload.excludedPaths);
 		result.changesPage = parseNativeIndexChangesPage(payload.changesPage, request.captureId, 'afterSequence' in request ? request.afterSequence : 0, request.action === 'scan-changes' ? request.pageSize : undefined);
 		if (request.action === 'scan-cancel') { if (!['interrupted', 'complete'].includes(result.changesPage.state)) throw Error('Native streaming cancellation was not confirmed.'); result.cancelled = true; }
+	} else if (request.action === 'photo-queue-finish') {
+		if (payload.rootId !== request.rootId || payload.photoQueueFinished !== request.photoBatchId)
+			throw Error('The native Photos batch acknowledgement changed.');
 	} else if ((request.action === 'scan-capture' || request.action === 'scan-status' || request.action === 'scan-cancel') && request.capturePolicy === 'strict-async') {
 		if (payload.rootId !== request.rootId || payload.capturePolicy !== 'strict-async' || payload.captureId !== request.captureId ||
 			payload.backupCapture !== undefined || payload.entries !== undefined || payload.inventoryPage !== undefined)

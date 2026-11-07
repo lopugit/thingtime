@@ -19,14 +19,14 @@ import { createSyncTaskRuntime, cancelSyncForActivity } from './syncTaskRuntime'
 import { createSyncStopCleanup } from './syncStopCleanup';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from './journal.client';
 import { runPagedForegroundCloudSync } from './pagedForegroundSync';
-import { readNativeInventory, NATIVE_INVENTORY_BATCH_ENTRIES, NativeInventoryRetryWait, type LocalInventoryPage, type NativeBackupCapture } from './nativeInventory';
+import { readNativeInventory, parseNativePhotoQueueBatch, NATIVE_INVENTORY_BATCH_ENTRIES, NativeInventoryRetryWait, type LocalInventoryPage, type NativeBackupCapture, type NativePhotoQueueApproval, type NativePhotoQueueBatch } from './nativeInventory';
 import type { ForegroundSyncInput, ForegroundSyncProgress } from './foregroundSync';
 import type { InventoryIdentity } from './inventoryJournal';
 import { readCloudFolderInventoryPages } from './cloudInventoryPages.client';
 import { readCloudFolderInventory } from './cloudInventory.client';
-import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits } from './mobileFolders.client';
+import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
-import { runPhotoBackupPasses } from './photoBackupPasses';
+import { runNativePhotoQueue, runPhotoBackupPasses } from './photoBackupPasses';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
 import { createConflictReviewController } from './conflictReviewController';
 import type { PagedConflictReviewResult } from './pagedForegroundReview';
@@ -170,6 +170,11 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			};
 			const photoDownloadApproval = () => photoSource && reviewed.configuration.sourceKind === 'photos' && reviewed.configuration.network === 'any' && supportsNativePhotoCloudFetch(capabilities)
 				? { ...reviewed, scope: binding } : undefined;
+			const photoQueueApproval = (): NativePhotoQueueApproval | undefined => photoSource && strictAsync && job?.photoQueueEpoch &&
+				supportsNativePhotoQueue(capabilities) ? { request: { epoch: job.photoQueueEpoch, configurationId: reviewed.id, configurationRevision: reviewed.updatedAt },
+					authorization: { ...reviewed, scope: binding } } : undefined;
+			let lastPhotoQueue: ForegroundSyncProgress['photoQueue'];
+			let observedPhotoBatch: NativePhotoQueueBatch | undefined;
 			let capturedSource: NativeBackupCapture | undefined;
 			const releaseLocalImport = async (inventory: InventoryIdentity) => {
 				if (!job?.localImport || JSON.stringify(job.localImport.inventory) !== JSON.stringify(inventory)) return;
@@ -209,6 +214,8 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					for await (const page of readNativeInventory({ ownerId: binding.ownerId, deviceId: binding.deviceId, rootId: reviewed.configuration.localRootId,
 						...(photoSource && supportsNativePhotoCloudGaps(capabilities) ? {
 							photoGapPolicy: reviewed.configuration,
+							photoQueueApproval: photoQueueApproval(),
+							onPhotoBatch: batch => { observedPhotoBatch = batch; lastPhotoQueue = { pending: batch.pending, unavailable: batch.unavailable }; },
 							photoDownloadAuthorization: downloadCloudForPlan && options?.observationPurpose !== 'checkpoint' ? photoDownloadApproval() : undefined
 						} : {}),
 						excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}), signal, request, ...options, ...(captureId ? { strictAsync, captureId,
@@ -245,8 +252,10 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			const publish = (progress: Parameters<typeof update>[0]['progress']) => {
 				check(); if (!progress) return;
 				progress = { ...progress, statisticsObservedAt: Date.now(), ...(photoAccess ? { photoAccess } : {}),
+					...(lastPhotoQueue && !progress.photoQueue ? { photoQueue: lastPhotoQueue } : {}),
 					...(deferredCount > 0 && deferredScheduled !== undefined ? { backgroundTransfer: deferredScheduled ? 'queued' as const : 'foreground-only' as const } : {}),
-					...(photoAccess === 'limited' && progress.stage === 'complete' && progress.coverage !== 'partial' ?
+					...(photoAccess === 'limited' && progress.stage === 'complete' && progress.coverage !== 'partial' &&
+						!progress.photoQueue?.pending && !progress.photoQueue?.unavailable ?
 						{ message: 'Selected photos backed up. Thingtime has limited Photos access.' } : {}) };
 				if (resources) progress = { ...progress, resources: nativeResources ?? resources.status() };
 				update({ progress });
@@ -287,6 +296,12 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				if (!job) return; // A stopped/completed/replaced discovery is never replayed.
 				if (stopRequested) await jobs!.transition(job, 'paused');
 				check();
+				if (photoSource && strictAsync && supportsNativePhotoQueue(capabilities) && !job.photoQueueEpoch) {
+					const savedQueue = await jobs!.photoQueue(job, crypto.randomUUID()); check();
+					if (!savedQueue) throw Error('The sync job changed before Photos preparation.');
+					job = savedQueue;
+				}
+
 				// Use the same admitted device/origin, and fence by account
 				// generation without the run's abort so Stop can record its end.
 				const historyJournal = journal!.deviceHistory({ scope: binding, assertCurrent: checkIdentity });
@@ -308,9 +323,10 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 						deferredUploads = { queued: (count, scheduled) => { deferredCount = count; if (scheduled !== undefined) deferredScheduled = scheduled; } };
 					} catch { check(); } // Older origins retain ordinary foreground uploads.
 				}
-				const finishedProgress = await runPhotoBackupPasses(async downloadCloud => {
+				const executePass = async (downloadCloud: boolean) => {
 					downloadCloudForPlan = downloadCloud;
-					await runPagedForegroundCloudSync(reviewed, binding, {
+					observedPhotoBatch = undefined;
+					const result = await runPagedForegroundCloudSync(reviewed, binding, {
 						currentScope, localTarget, journal: journal!, runtime, progress: publish, ...(deferredUploads ? { deferredUploads } : {}),
 						...(host.uploadBatch ? { uploadBatch: host.uploadBatch } : {}),
 						...(host.folderBatch ? { folderBatch: host.folderBatch } : {}),
@@ -390,10 +406,34 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 							update({ legacyReview: { conflicts, apply: finish, retain: () => finish({ action: 'retain' }), cancel: () => finish() } });
 						})
 					}, signal);
-					return nativeSyncTasks.read()?.progress;
-				}, check, () => photoDownloadApproval() !== undefined);
-				if (photoSource && finishedProgress?.stage === 'complete' && finishedProgress.coverage === 'partial' && finishedProgress.skipped) {
-					const count = finishedProgress.skipped;
+					const photoQueue = result && 'photoQueue' in result && result.photoQueue !== undefined ? parseNativePhotoQueueBatch(result.photoQueue) : undefined;
+					const observed = observedPhotoBatch as NativePhotoQueueBatch | undefined;
+					const reported = nativeSyncTasks.read()?.progress;
+					const verified = result && 'progress' in result && result.progress.phase === 'complete';
+					// Nonempty batches still say verifying in the card until a
+					// fresh empty selection; the durable checkpoint can advance.
+					const progress = photoQueue && verified && reported ? { ...reported, stage: 'complete' as const } : reported;
+					return { progress, photoQueue, replacedPhotoBatch: !!(photoQueue && ((observed && observed.id !== photoQueue.id) ||
+						(result && 'progress' in result && result.progress.photoSourceChanged))) };
+				};
+				const queueApproval = photoQueueApproval();
+				const queuedResult = queueApproval ? await runNativePhotoQueue(
+					() => executePass(true),
+					async batch => {
+						await request(binding.ownerId, { action: 'photo-queue-finish', rootId: reviewed.configuration.localRootId,
+							photoBatchId: batch.id, photoQueueApproval: queueApproval }, signal);
+					}, check, queueApproval.request.epoch
+				) : undefined;
+				const finishedProgress = queuedResult?.progress ?? (queueApproval ? undefined :
+					await runPhotoBackupPasses(async downloadCloud => (await executePass(downloadCloud)).progress,
+						check, () => photoDownloadApproval() !== undefined));
+				const count = queuedResult?.photoQueue?.unavailable ?? (finishedProgress?.coverage === 'partial' ? finishedProgress.skipped : undefined);
+				if (photoSource && finishedProgress?.stage === 'complete' && count) {
+					if (queueApproval) {
+						const savedQueue = await jobs!.photoQueue(job, null); check();
+						if (!savedQueue) throw Error('The sync job changed before the unavailable originals could be scheduled for retry.');
+						job = savedQueue;
+					}
 					const action = reviewed.configuration.network === 'wifi' ?
 						'Download the remaining originals in Photos, or explicitly allow cellular in this connection to let Thingtime fetch them.' :
 						'Thingtime will retry. You can also download the remaining originals in Photos.';

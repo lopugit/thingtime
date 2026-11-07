@@ -12214,6 +12214,14 @@ transfer, whole-account snapshots or production deployment.
   exact incomplete original remains retryable. Under limited Photos access,
   verify only the authorized resources are counted and no full-library
   completion is shown. Wi-Fi-only never starts a PhotoKit network fetch.
+- [ ] Verify the newest PhotoKit capture dates are attempted first in the same
+  queue for local and iCloud originals, with Live Photo companions kept together.
+  Insert a newer asset during the final nonempty batch; the fresh terminal
+  observation must see it. Delete or edit an unconfirmed selected asset and
+  verify exact prior receipts stay intact. Leave an original unavailable across
+  terminal verification, then make the same version local and retry. Run the
+  installed fixture with `THINGTIME_PHOTO_EXPECT_NEWEST=1` and verify the
+  first native admissions match independently read PhotoKit metadata.
 - [ ] With ordinary Photos consent and an isolated replica, run
   `THINGTIME_PHOTO_DEFERRED_TEST=1` through the installed acceptance harness.
   Hold the first WebView upload, expire native processing after a confirmed
@@ -13049,6 +13057,9 @@ separate from deterministic discovery/lease tests.
 
 ## Automatic iOS TestFlight and vault delivery
 
+- [ ] Before merging an iOS change, require the exact TestFlight Xcode
+  `native-pr-compile` job. It compiles the app and tests without signing;
+  passing a newer local Swift compiler does not cover this gate.
 - [ ] Run the shared FileSync package and native suite on the release runner.
   The simulator uses its host kernel: exercise the unsupported rename-flag
   fallback with `NativeFileDestinationTests`, retain no-follow/exclusive/swap

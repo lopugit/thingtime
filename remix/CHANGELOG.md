@@ -145,6 +145,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-07: Back up iOS Photos in capture-date order through one queue for
+  local and iCloud originals, with companion resources kept together. **Codex (AI)**
+
 - 2026-11-07: Keep Wi-Fi-only Photos backups in a clear wait state, identify
   iCloud-only originals separately, and queue already prepared originals for
   iOS background processing. The original foreground sync publishes verified

@@ -1046,6 +1046,12 @@ iOS Photos uses `PhotoLibraryReader` and the Rust capture's gap ledger. File
 access 1.6.0 keeps iCloud-only resources explicitly incomplete while transferring
 available originals. File access 1.7.0 can fetch an exact iCloud original
 only with the saved explicit cellular allowance and live power/device checks.
+File access 1.8.0 uses `PhotoBackupQueue` for one date-ordered queue of asset
+groups. The Rust indexer seals selected originals and exact iCloud gaps;
+untouched assets need no synthetic gap rows. After the initial checkpoint,
+`pagedForegroundSync` reads only the scoped paths needed for the next batch
+and merges its verified pairs into the existing baseline. Native batch
+acknowledgement checks the exact cloud original fingerprints.
 Native upload 1.5.0 negotiates the origin's scoped transfer
 admission and queues a bounded set of already planned originals in
 `NativeDeferredUpload`. `BGProcessingTask` can finish those attachments;

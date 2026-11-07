@@ -10,24 +10,48 @@ public struct PhotoResource: Equatable, Sendable {
     public let index: Int
     public let name: String
     public let revision: String
+    public let capturedAt: Date?
+    public let modifiedAt: Date?
     let identity: String
     public let path: String
-    public init(asset: String, index: Int, name: String, revision: String) {
+    public init(asset: String, index: Int, name: String, revision: String, capturedAt: Date? = nil, modifiedAt: Date? = nil) {
         self.asset = asset; self.index = index; self.name = name; self.revision = revision
+        self.capturedAt = capturedAt; self.modifiedAt = modifiedAt
         identity = PhotoLibraryReader.hash(Data((asset + ":" + String(index)).utf8))
         let assetHash = PhotoLibraryReader.hash(Data(asset.utf8))
         let safe = String(name.unicodeScalars.map { CharacterSet.controlCharacters.contains($0) || $0.properties.generalCategory == .format || $0 == "/" || $0 == "\\" ? "_" : String($0) }.prefix(80).joined())
         path = "\(assetHash)-\(index)-\(safe.isEmpty ? "resource" : safe)"
     }
 }
+/// Select the order by asset before opening any original bytes. Every original
+/// and companion of the same asset stays together; opaque paths do not change.
+enum PhotoBackupAssetOrder {
+    static func groups(_ resources: [PhotoResource]) -> [[PhotoResource]] {
+        Dictionary(grouping: resources, by: \.asset).values
+            .map { $0.sorted { $0.index < $1.index } }
+            .sorted { left, right in
+                let a = left[0], b = right[0]
+                let aDate = a.capturedAt ?? a.modifiedAt ?? .distantPast
+                let bDate = b.capturedAt ?? b.modifiedAt ?? .distantPast
+                if aDate != bDate { return aDate > bDate }
+                let aModified = a.modifiedAt ?? .distantPast
+                let bModified = b.modifiedAt ?? .distantPast
+                if aModified != bModified { return aModified > bModified }
+                return a.asset.utf8.lexicographicallyPrecedes(b.asset.utf8)
+            }
+    }
+}
 public protocol PhotoResourceProvider: Sendable {
     func access() -> String
     func inventory() throws -> [PhotoResource]
+    /// Nil means the provider does not promise change notifications.
+    func membershipStamp() -> UInt64?
     func validate(_ resource: PhotoResource) throws
     func write(_ resource: PhotoResource, to url: URL) throws
     func download(_ resource: PhotoResource, to url: URL, control: PhotoOriginalDownloadControl) throws
 }
 public extension PhotoResourceProvider {
+    func membershipStamp() -> UInt64? { nil }
     func download(_ resource: PhotoResource, to url: URL, control: PhotoOriginalDownloadControl) throws {
         throw PhotoLibraryReader.Failure.cloudOriginal
     }
@@ -90,9 +114,19 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     private let client: RustInventoryClient?
     private let lock = NSLock()
     private var directory: URL?
+    private struct Snapshot {
+        let revision: String
+        let orderRevision: String
+        let resources: [PhotoResource]
+    }
+    private var queueSnapshot: (stamp: UInt64, access: String, value: Snapshot)?
+    private var queue: (scope: Scope, value: PhotoBackupQueue)?
+    private let queueDirectory: URL?
     private var membership: (scope: Scope, revision: String?, resources: [String: PhotoResource])?
     private var cached: (scope: Scope, resource: PhotoResource, entry: MobileFolderReader.Entry, native: MobileFolderReader.Entry, bookmark: Data)?
-    public init(provider: any PhotoResourceProvider = SystemPhotoResources(), transport: (any RustInventoryTransport)? = nil) {
+    public init(provider: any PhotoResourceProvider = SystemPhotoResources(), transport: (any RustInventoryTransport)? = nil,
+                queueDirectory: URL? = nil) {
+        self.queueDirectory = queueDirectory
         self.provider = provider
         #if os(macOS)
         let selected = transport ?? RustProcessInventoryTransport.bundledHelper.map { RustProcessInventoryTransport(helper: $0) }
@@ -280,7 +314,7 @@ public final class PhotoLibraryReader: @unchecked Sendable {
             ?? membership.flatMap { $0.scope == scope ? $0.resources[path] : nil }
         if let hint {
             do { try provider.validate(hint); return hint }
-            catch { try require() }
+            catch { queueSnapshot = nil; try require() }
         }
         // A stale hint does not prove absence. Only a live PhotoKit enumeration
         // can establish that a selected resource was removed or its grant changed.
@@ -290,20 +324,76 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         return membership?.resources[path]
     }
 
-    private func snapshot() throws -> (revision: String, resources: [PhotoResource]) {
+    private func snapshot(reuseForQueue: Bool = false) throws -> Snapshot {
         try require()
+        let access = provider.access(), stamp = reuseForQueue ? provider.membershipStamp() : nil
+        if let stamp, let cached = queueSnapshot, cached.stamp == stamp, cached.access == access { return cached.value }
         let resources = try provider.inventory().sorted { $0.path.utf8.lexicographicallyPrecedes($1.path.utf8) }
-        var digest = SHA256(), previous: String?
+        var digest = SHA256(), ordering = SHA256(), previous: String?
         for resource in resources {
             try Task.checkCancellation()
             guard resource.path != previous else { throw Failure.changed }
             previous = resource.path
             for value in [resource.path, resource.identity, resource.revision] {
-                digest.update(data: Data(SHA256.hash(data: Data(value.utf8))))
+                let data = Data(SHA256.hash(data: Data(value.utf8)))
+                digest.update(data: data); ordering.update(data: data)
+            }
+            if reuseForQueue {
+                for value in [resource.capturedAt, resource.modifiedAt] {
+                    ordering.update(data: Data(SHA256.hash(data: Data(String(value?.timeIntervalSince1970 ?? -.infinity).utf8))))
+                }
             }
         }
         try require()
-        return (digest.finalize().map { String(format: "%02x", $0) }.joined(), resources)
+        guard access == provider.access(), stamp == (reuseForQueue ? provider.membershipStamp() : nil) else { throw Failure.changed }
+        let result = Snapshot(revision: digest.finalize().map { String(format: "%02x", $0) }.joined(),
+            orderRevision: ordering.finalize().map { String(format: "%02x", $0) }.joined(), resources: resources)
+        if let stamp { queueSnapshot = (stamp, access, result) }
+        return result
+    }
+
+    private func queueStore(scope: Scope, request: PhotoBackupQueueRequest) throws -> PhotoBackupQueue {
+        if let queue, queue.scope == scope, queue.value.request == request { return queue.value }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let binding = try encoder.encode(scope) + encoder.encode([request.configurationId, request.configurationRevision])
+        let base = try queueDirectory ?? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true).appendingPathComponent("PhotoBackupQueue", isDirectory: true)
+        var namespace = base.appendingPathComponent(Self.hash(binding), isDirectory: true)
+        try FileManager.default.createDirectory(at: namespace, withIntermediateDirectories: true)
+        var values = URLResourceValues(); values.isExcludedFromBackup = true
+        try? namespace.setResourceValues(values)
+        PhotoBackupQueue.pruneFinishedEpochs(in: namespace, protecting: request.epoch)
+        let directory = namespace.appendingPathComponent(request.epoch.uuidString.lowercased(), isDirectory: true)
+        let store = PhotoBackupQueue(directory: directory, request: request)
+        queue = (scope, store)
+        return store
+    }
+
+    private func batchSnapshot(scope: Scope, store: PhotoBackupQueue, replaceStale: Bool = false) throws -> (Snapshot, PhotoBackupQueue.Work) {
+        let library = try snapshot(reuseForQueue: true)
+        let work = try store.select(revision: library.orderRevision, resources: library.resources, replaceStale: replaceStale)
+        let revision = Self.hash(Data((work.selection.id.uuidString + work.selection.stamps.map(\.version).joined()).utf8))
+        return (.init(revision: revision, orderRevision: revision, resources: work.assets.flatMap(\.resources)), work)
+    }
+
+    private func capturedSnapshot(scope: Scope, batch: PhotoBackupQueueBatch?) throws -> Snapshot {
+        guard let batch else { return try snapshot() }
+        guard let queue, queue.scope == scope, queue.value.request.epoch == batch.epoch else { throw Failure.changed }
+        let (source, work) = try batchSnapshot(scope: scope, store: queue.value)
+        guard work.descriptor == batch else { throw Failure.changed }
+        return source
+    }
+
+    public func queueBatchEntries(scope: Scope, request: PhotoBackupQueueRequest, batchId: UUID) throws -> [MobileFolderReader.Entry] {
+        lock.lock(); defer { lock.unlock() }
+        try require()
+        return try queueStore(scope: scope, request: request).entriesForVerification(batchId)
+    }
+
+    public func finishQueueBatch(scope: Scope, request: PhotoBackupQueueRequest, batchId: UUID) throws {
+        lock.lock(); defer { lock.unlock() }
+        try require()
+        try queueStore(scope: scope, request: request).finish(batchId)
     }
 
     public func capture(scope: Scope, id: String) throws -> MobileFolderInventory.Capture {
@@ -320,12 +410,16 @@ public final class PhotoLibraryReader: @unchecked Sendable {
 
     public func prepareCapture(scope: Scope, id: String, generation: String, allowCloudGaps: Bool,
                                download: PhotoOriginalDownloadControl? = nil, maximumCloudDownloads: Int? = nil,
-                               progress: (Int, Int) -> Void = { _, _ in }, authorize: () throws -> Void = {}) throws -> MobileFolderInventory.Capture {
+                               queueRequest: PhotoBackupQueueRequest? = nil, progress: (Int, Int) -> Void = { _, _ in }, authorize: () throws -> Void = {}) throws -> MobileFolderInventory.Capture {
         lock.lock(); defer { lock.unlock() }
         guard UUID(uuidString: id) != nil, id.lowercased() == generation.lowercased() else { throw MobileFolderStore.Failure.invalid }
         let client = try requireClient(), generation = generation.lowercased()
         try authorize()
-        let start = try snapshot()
+        guard queueRequest == nil || allowCloudGaps else { throw Failure.changed }
+        let batchStore = try queueRequest.map { try queueStore(scope: scope, request: $0) }
+        let batch = try batchStore.map { try batchSnapshot(scope: scope, store: $0, replaceStale: true) }
+        let start = try batch?.0 ?? snapshot()
+        var batchStatus = batch?.1.descriptor
         var began = false
         do {
             let prepared: RustInventoryClient.Status = try client.run("beginPhotoCapture", scope: scope, generation: generation,
@@ -336,33 +430,40 @@ public final class PhotoLibraryReader: @unchecked Sendable {
             }
             began = true
             var indexed = prepared.entryCount, skipped = prepared.gapCount, cloudDownloads = 0
+            let retainedGaps = Set(batch?.1.selection.attempts?.flatMap(\.unavailable) ?? [])
+            var batchGaps = Set<String>(), batchEntries: [MobileFolderReader.Entry] = []
             if prepared.coverage == "scanning" {
                 // An interrupted async job is discarded before a new capture starts.
                 guard indexed == 0, skipped == 0 else { throw Failure.changed }
                 for startIndex in stride(from: 0, to: start.resources.count, by: Self.observationBatchSize) {
                     let end = min(start.resources.count, startIndex + Self.observationBatchSize)
                     let resources = start.resources[startIndex..<end]
-                    var gaps = Set<String>()
-                    let entries = try scanEntries(resources, scope: scope, authorize: authorize, allowCloudGaps: allowCloudGaps, download: download, beginDownload: {
-                            if let maximumCloudDownloads, cloudDownloads >= maximumCloudDownloads { return false }
+                    var gaps = Set(resources.map(\.path).filter(retainedGaps.contains))
+                    skipped += gaps.count
+                    let eligible = resources.filter { !retainedGaps.contains($0.path) }
+                    let entries = try scanEntries(eligible[...], scope: scope, authorize: authorize, allowCloudGaps: allowCloudGaps, download: download, beginDownload: {
+                            if batch == nil, let maximumCloudDownloads, cloudDownloads >= maximumCloudDownloads { return false }
                             cloudDownloads += 1
                             return true
                         }, cloudGap: { resource in
                             gaps.insert(resource.path); skipped += 1; progress(indexed, skipped)
                         }) { indexed += 1; progress(indexed, skipped) }
                     if !entries.isEmpty {
+                        if batch != nil { batchEntries += entries }
                         let _: RustInventoryClient.Status = try client.run("appendPhotoCapture", scope: scope,
                             generation: generation, fields: ["resources": resources.filter { !gaps.contains($0.path) }.map(resourceKey)])
                     }
                     if !gaps.isEmpty {
+                        batchGaps.formUnion(gaps)
                         let _: RustInventoryClient.Status = try client.run("appendPhotoCloudGaps", scope: scope,
                             generation: generation, fields: ["paths": gaps.sorted()])
                     }
                 }
+                if let batchStore, let batch { batchStatus = try batchStore.prepare(batch.1, unavailable: batchGaps, entries: batchEntries) }
             }
             try authorize(); try require()
             guard indexed + skipped == start.resources.count, allowCloudGaps || skipped == 0 else { throw Failure.changed }
-            return Self.descriptor(id: generation, entries: indexed, gaps: skipped, allowCloudGaps: allowCloudGaps)
+            return Self.descriptor(id: generation, entries: indexed, gaps: skipped, allowCloudGaps: allowCloudGaps, queue: batchStatus)
         } catch {
             clear(); membership = nil
             if began {
@@ -372,16 +473,18 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         }
     }
 
-    private static func descriptor(id: String, entries: Int, gaps: Int, allowCloudGaps: Bool) -> MobileFolderInventory.Capture {
+    private static func descriptor(id: String, entries: Int, gaps: Int, allowCloudGaps: Bool,
+                                   queue: PhotoBackupQueueBatch? = nil) -> MobileFolderInventory.Capture {
         .init(id: id, generation: id, totalEntries: entries, coverage: allowCloudGaps ? (gaps == 0 ? "full" : "partial") : nil,
-              consistency: allowCloudGaps ? "per-entry" : nil, totalSkipped: allowCloudGaps ? gaps : nil)
+              consistency: allowCloudGaps ? "per-entry" : nil, totalSkipped: allowCloudGaps ? gaps : nil, photoQueue: queue)
     }
 
     private func checkCapture(_ capture: MobileFolderInventory.Capture, status: RustInventoryClient.Status) throws {
         guard UUID(uuidString: capture.id) != nil, capture.id == capture.generation, status.mode == "photo",
               status.generation == capture.generation, status.entryCount >= 0, status.gapCount >= 0,
               status.entryCount <= Int.max - status.gapCount,
-              capture == Self.descriptor(id: capture.id, entries: status.entryCount, gaps: status.gapCount, allowCloudGaps: capture.coverage != nil),
+              capture == Self.descriptor(id: capture.id, entries: status.entryCount, gaps: status.gapCount,
+                                         allowCloudGaps: capture.coverage != nil, queue: capture.photoQueue),
               capture.coverage != nil || status.gapCount == 0 else { throw Failure.changed }
     }
 
@@ -390,7 +493,7 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         try require()
         let client = try requireClient()
         let status: RustInventoryClient.Status? = try client.run("status", scope: scope, generation: capture.generation)
-        let current = try snapshot()
+        let current = try capturedSnapshot(scope: scope, batch: capture.photoQueue)
         guard let status else { throw Failure.changed }
         try checkCapture(capture, status: status)
         guard status.rootVersion == current.revision, status.entryCount + status.gapCount == current.resources.count else { throw Failure.changed }
@@ -403,15 +506,18 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         return capture
     }
 
-    public func status(scope: Scope, id: String, allowCloudGaps: Bool = false) throws -> MobileFolderInventory.Capture? {
+    public func status(scope: Scope, id: String, allowCloudGaps: Bool = false,
+                       queueRequest: PhotoBackupQueueRequest? = nil) throws -> MobileFolderInventory.Capture? {
         try require()
         guard UUID(uuidString: id) != nil else { throw MobileFolderStore.Failure.invalid }
         let generation = id.lowercased()
         let value: RustInventoryClient.Status? = try requireClient().run("status", scope: scope, generation: generation)
         guard let value, value.mode == "photo", value.coverage == "sealed", value.generation == generation else { return nil }
         lock.lock(); defer { lock.unlock() }
-        let current = try snapshot()
-        let capture = Self.descriptor(id: generation, entries: value.entryCount, gaps: value.gapCount, allowCloudGaps: allowCloudGaps)
+        let batch = try queueRequest.map { try batchSnapshot(scope: scope, store: queueStore(scope: scope, request: $0)) }
+        let current = try batch?.0 ?? snapshot()
+        let capture = Self.descriptor(id: generation, entries: value.entryCount, gaps: value.gapCount,
+                                      allowCloudGaps: allowCloudGaps, queue: batch?.1.descriptor)
         try checkCapture(capture, status: value)
         guard current.revision == value.rootVersion, current.resources.count == value.entryCount + value.gapCount else { throw Failure.changed }
         return capture
@@ -428,7 +534,7 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         guard let value, value.coverage == "sealed" else { throw Failure.changed }
         try checkCapture(capture, status: value)
         if membership?.scope != scope || membership?.revision != value.rootVersion {
-            let current = try snapshot()
+            let current = try capturedSnapshot(scope: scope, batch: capture.photoQueue)
             guard current.revision == value.rootVersion, current.resources.count == value.entryCount + value.gapCount else { throw Failure.changed }
             try remember(current.resources, scope: scope, revision: current.revision)
         }
@@ -467,7 +573,7 @@ public final class PhotoLibraryReader: @unchecked Sendable {
             let next = offset + page.entries.count
             guard page.nextOffset == (next < capture.totalEntries ? next : nil) else { throw Failure.changed }
             if membership?.scope != scope || membership?.revision != page.rootVersion || page.nextOffset == nil {
-                let current = try snapshot()
+                let current = try capturedSnapshot(scope: scope, batch: capture.photoQueue)
                 guard current.revision == page.rootVersion, current.resources.count == status.entryCount + status.gapCount else { throw Failure.changed }
                 try remember(current.resources, scope: scope, revision: current.revision)
             }
@@ -529,8 +635,28 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     }
 }
 
+private final class PhotoMembershipChanges: NSObject, PHPhotoLibraryChangeObserver, @unchecked Sendable {
+    static let shared = PhotoMembershipChanges()
+    private let lock = NSLock()
+    private var revision: UInt64 = 0
+    private var tracked: PHFetchResult<PHAsset>?
+    override init() { super.init(); PHPhotoLibrary.shared().register(self) }
+    deinit { PHPhotoLibrary.shared().unregisterChangeObserver(self) }
+    func track(_ assets: PHFetchResult<PHAsset>) { lock.lock(); defer { lock.unlock() }; tracked = assets }
+    func photoLibraryDidChange(_ changeInstance: PHChange) {
+        lock.lock(); defer { lock.unlock() }
+        guard let tracked else { revision &+= 1; return }
+        guard let changes = changeInstance.changeDetails(for: tracked) else { return }
+        self.tracked = changes.fetchResultAfterChanges
+        if !changes.hasIncrementalChanges || !changes.insertedObjects.isEmpty || !changes.removedObjects.isEmpty ||
+            !changes.changedObjects.isEmpty || changes.hasMoves { revision &+= 1 }
+    }
+    func stamp() -> UInt64 { lock.lock(); defer { lock.unlock() }; return revision }
+}
+
 public struct SystemPhotoResources: PhotoResourceProvider {
     public init() {}
+    public func membershipStamp() -> UInt64? { PhotoMembershipChanges.shared.stamp() }
     public func access() -> String {
         switch PHPhotoLibrary.authorizationStatus(for: .readWrite) {
         case .authorized: return "full"
@@ -544,13 +670,17 @@ public struct SystemPhotoResources: PhotoResourceProvider {
         guard !rows.isEmpty else { throw PhotoLibraryReader.Failure.unavailable }
         let descriptions = rows.map { "\($0.type.rawValue):\($0.originalFilename):\($0.uniformTypeIdentifier)" }.joined(separator: "\n")
         let revision = PhotoLibraryReader.hash(Data((asset.localIdentifier + ":" + String(asset.modificationDate?.timeIntervalSince1970 ?? -1) + ":" + descriptions).utf8))
-        return rows.enumerated().map { (.init(asset: asset.localIdentifier, index: $0.offset, name: $0.element.originalFilename, revision: revision), $0.element) }
+        return rows.enumerated().map {
+            (.init(asset: asset.localIdentifier, index: $0.offset, name: $0.element.originalFilename, revision: revision,
+                   capturedAt: asset.creationDate, modifiedAt: asset.modificationDate), $0.element)
+        }
     }
     public func inventory() throws -> [PhotoResource] {
         try require(); let options = PHFetchOptions()
         options.includeHiddenAssets = true; options.includeAllBurstAssets = true
         options.predicate = NSPredicate(format: "mediaType == %d OR mediaType == %d", PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue)
         let assets = PHAsset.fetchAssets(with: options)
+        PhotoMembershipChanges.shared.track(assets)
         var result: [PhotoResource] = []
         for index in 0..<assets.count {
             try require(); result += try resources(assets.object(at: index)).map(\.0)

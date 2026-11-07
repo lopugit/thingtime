@@ -472,8 +472,8 @@ access includes hidden and burst assets exposed by PhotoKit. Original bytes can
 include embedded location metadata. Albums, captions, favorites and other Photos
 database metadata are not yet a portable library restoration contract.
 
-Paged iOS scans validate the complete accessible PhotoKit membership before
-sealing the current inventory. One original is exported at a time into private
+Paged iOS scans validate the accessible PhotoKit source before sealing its
+observations. One original is exported at a time into private
 temporary storage; the device needs enough free space for the largest original
 plus one upload part. Older inline clients have a bounded response envelope.
 The native adapter keeps completed observations across retry.
@@ -488,12 +488,18 @@ connection explicitly allows cellular, after exact owner, device, grant, network
 and charging checks. PhotoKit has no public Wi-Fi-only transport switch, so a
 Wi-Fi-only connection keeps missing originals pending and asks to download them
 in Photos or review the connection's network choice. No setting changes
-automatically. Thingtime first publishes the locally available originals, then
-fetches at most four cloud originals per preparation pass and automatically
-continues while the remaining count falls. This is a working batch, not a library
-limit. Each pass verifies and publishes through the normal file journal.
-Locally available original preparation still precedes its first planned upload. The shared reader
-also supports Mac, where the existing strict behavior remains in effect.
+automatically. File access 1.8.0 uses one newest-first queue: PhotoKit capture
+date orders each asset and its original resources and companions, with stable
+modification and identity tie breaks. A working batch contains up to four assets.
+An unavailable newer original is recorded and remains incomplete; it does not
+silently disappear or turn into an older local-first phase. A fresh membership
+check between batches lets newer arrivals preempt the remaining backlog.
+The Rust indexer reuses exact original observations and seals only the selected
+batch. The same file journal verifies and publishes each batch, and the native
+queue checks the published cloud fingerprints before advancing. Recent and
+interrupted queue outcomes survive retry; exhausted older epochs are cleaned
+up without deleting source photos or cloud files. The shared reader also supports
+Mac, where the existing strict behavior remains in effect.
 
 Forks need the existing `NSPhotoLibraryUsageDescription` entry in `project.yml`,
 then `xcodegen generate`. No photo-service credentials or private configuration

@@ -1,4 +1,4 @@
-import { executeSyncOperation, type SyncExecutionPort } from './execute';
+import { executeSyncOperation, SyncObservationChangedError, type SyncExecutionPort } from './execute';
 import { withSyncRootLock } from './journal.client';
 import { type PagedRunJournal, type PagedRunProgress, type PagedRunSpec } from './pagedRunJournal';
 import { sameSyncScope, type SyncScope } from './reconcile';
@@ -12,7 +12,7 @@ export async function executePagedSyncRun(value: PagedRunSpec, savedScope: SyncS
 
 /** The foreground caller already owns the root lock across scans and review. */
 export async function executePreparedPagedSyncRun(value: PagedRunSpec, savedScope: SyncScope, journal: PagedRunJournal,
-	port: Omit<SyncExecutionPort, 'persist'>, options: { signal?: AbortSignal; changed?: (p: PagedRunProgress) => void; prepare?: (operation: import('./execute').SyncOperation) => Promise<void>; confirmed?: (operation: import('./execute').SyncOperation) => void } = {}) {
+	port: Omit<SyncExecutionPort, 'persist'>, options: { signal?: AbortSignal; changed?: (p: PagedRunProgress) => void; prepare?: (operation: import('./execute').SyncOperation) => Promise<void>; confirmed?: (operation: import('./execute').SyncOperation) => void; omitted?: (operation: import('./execute').SyncOperation) => void } = {}) {
 	const spec = structuredClone(value), scope = structuredClone(savedScope);
 	const check = () => {
 		options.signal?.throwIfAborted();
@@ -23,7 +23,16 @@ export async function executePreparedPagedSyncRun(value: PagedRunSpec, savedScop
 		const operation = await journal.claimNext(spec); check();
 		if (!operation) throw Error('Sync run has no next operation.');
 		await options.prepare?.(operation); check();
-		const receipt = await executeSyncOperation(operation, scope, port, options.signal); check();
+		let receipt: Awaited<ReturnType<typeof executeSyncOperation>>;
+		try { receipt = await executeSyncOperation(operation, scope, port, options.signal); }
+		catch (error) {
+			check();
+			if (!spec.photoAssetOrder || !(error instanceof SyncObservationChangedError) || !error.sourceChanged) throw error;
+			state = await journal.omitChangedPhotoSource(spec, operation); check();
+			options.omitted?.(operation); options.changed?.(state);
+			continue;
+		}
+		check();
 		state = await journal.confirm(spec, receipt); check(); options.changed?.(state);
 		port.confirmed?.(operation, receipt); options.confirmed?.(operation);
 	}

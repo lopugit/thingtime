@@ -177,3 +177,57 @@ test('an approved root change clears only the old baseline head and refuses an a
 	await f.checkpoints.changeRoots('new-local', spec.remoteFolderId); assert.equal(await f.checkpoints.current(), null);
 	assert.equal((await f.inventory.read(old!.baseline.local)).totalEntries, 1); f.journal.close();
 });
+
+test('sparse Photos checkpoint retains an exact confirmed original omitted by a refreshed batch and commits paired baseline generations atomically', async () => {
+	const f = await fixture();
+	const initial = runSpec('initial'), initialSpec = checkpointSpec(initial);
+	const retained = file('b'.repeat(64) + '-1.HEIC');
+	await seed(f, initial, [retained], [retained]);
+	await scanAfter(f, initialSpec, await finish(f, initial, [retained], [retained]));
+	await f.checkpoints.build(initialSpec);
+	const previous = (await f.checkpoints.current())!;
+	const active = runSpec('photo-batch');
+	active.plan.policy = { mode: 'backup', propagateDeletes: false };
+	active.plan.photoBaselineInstance = previous.instance;
+	active.photoAssetOrder = ['a'.repeat(64)];
+	active.configuration = { configurationVersion: 1, name: 'Photos', deviceId: scope.deviceId, localRootId: initialSpec.localRootId,
+		remoteFolderId: initialSpec.remoteFolderId, sourceKind: 'photos', mode: 'backup', paused: false, propagateDeletes: false,
+		network: 'wifi', chargingOnly: false, excludedPaths: [] };
+	const spec = { ...checkpointSpec(active), photoBaseline: previous };
+	const sent = file('a'.repeat(64) + '-1.HEIC');
+	await seed(f, active, [sent]);
+	const after = await finish(f, active, [sent], []);
+	const draft = await f.checkpoints.begin(spec);
+	const generation = crypto.randomUUID(), captureIdentity = { id: generation, generation, totalEntries: 0, coverage: 'full' as const,
+		totalSkipped: 0, consistency: 'per-entry' as const, photoQueue: { epoch: crypto.randomUUID(), id: crypto.randomUUID(), assetKeys: [], pending: 0, unavailable: 0 } };
+	await f.inventory.setCoverage(draft.after.local, captureIdentity, active.plan.policy);
+	await capture(f, draft.after.local, []);
+	await capture(f, draft.after.remote, after.remote);
+	const put = IDBObjectStore.prototype.put;
+	let failed = false;
+	IDBObjectStore.prototype.put = function(value, key) {
+		if (!failed && this.name === 'inventory-entries' && Array.isArray(key) && key[1] === previous.baseline.remote.id && key[2] === sent.path.toLowerCase()) {
+			failed = true;
+			throw Error('Simulated failure before publishing the second replica');
+		}
+		return put.call(this, value, key);
+	};
+	try {
+		await assert.rejects(f.checkpoints.build(spec), /Simulated failure/);
+		assert.equal(failed, true);
+		assert.deepEqual(await f.checkpoints.current(), previous);
+		assert.deepEqual(await all(f, previous.baseline.local), [retained]);
+		assert.deepEqual(await all(f, previous.baseline.remote), [retained]);
+	} finally { IDBObjectStore.prototype.put = put; }
+	try {
+		const published = await f.checkpoints.build(spec);
+		const next = (await f.checkpoints.current())!;
+		assert.deepEqual(published.baseline, next.baseline);
+		assert.deepEqual((await f.checkpoints.build(spec)).baseline, next.baseline);
+		assert.equal(next.baseline.local.id, previous.baseline.local.id, 'reuse the previous rows rather than rewriting them');
+		assert.notEqual(next.baseline.local.generation, previous.baseline.local.generation);
+		assert.deepEqual(await all(f, next.baseline.local), [sent, retained]);
+		assert.deepEqual(await all(f, next.baseline.remote), [...after.remote, retained]);
+		await assert.rejects(f.inventory.entriesForPaths(previous.baseline.local, [retained.path]), /generation changed/);
+	} finally { f.journal.close(); }
+});

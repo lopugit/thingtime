@@ -85,18 +85,23 @@ final class PhotoBackupInstalledTests: XCTestCase {
         let prior = try store.list(scope).first { $0.sourceKind == "photos" }
         let uiAutomation = env["THINGTIME_PHOTO_UI_AUTOMATION"] == "1"
         let deferredProof = env["THINGTIME_PHOTO_DEFERRED_TEST"] == "1"
+        let orderedProof = env["THINGTIME_PHOTO_EXPECT_NEWEST"] == "1"
         let resumeReceipt = env["THINGTIME_PHOTO_REOPEN_RECEIPT"].flatMap { Data($0.utf8) }
         let uiVerified = uiAutomation && env["THINGTIME_PHOTO_PREPARE_ONLY"] != "1"
         guard prior == nil || prior?.id == env["THINGTIME_PHOTO_RESUME_GRANT"] || uiAutomation else { throw XCTSkip("Preserve existing photo grant \(prior?.id ?? "unknown") unless its exact disposable-test ID is supplied") }
         web.configuration.userContentController.addUserScript(WKUserScript(source: """
         window.__photoDocument=performance.timeOrigin;
         window.__nativeUploadStarted=null;window.__nativeUploadStats={files:0,parts:0,bytes:0,legacy:0};window.__photoScans=0;
-        window.__photoDeferredHeld=false;
+        window.__photoDeferredHeld=false;window.__photoDeferredPaths=[];
         const testHold=\(deferredProof ? "true" : "false");
         const photoOriginalPost=window.thingtimeNativeBridge.postMessage;
         window.thingtimeNativeBridge.postMessage=function(m){
           if(m.type==='mobile-files'){
             if(['scan','scan-capture'].includes(m.payload?.action))window.__photoScans++;
+            if(m.payload?.action==='defer-upload'){
+              const path=m.payload.upload?.source?.path;
+              if(path&&!window.__photoDeferredPaths.includes(path))window.__photoDeferredPaths.push(path);
+            }
             if(m.payload?.action==='upload-file'){
               if(testHold&&!sessionStorage.getItem('tt-photo-deferred-proof-released')){window.__photoDeferredHeld=true;return;}
               window.__nativeUploadStats.files++;
@@ -203,6 +208,28 @@ final class PhotoBackupInstalledTests: XCTestCase {
             let queued = try checkpoint.load().filter { $0.scope == scope && $0.request.authorization.id == connection && $0.armed && !$0.ready }
             XCTAssertGreaterThanOrEqual(queued.count, 2)
             guard queued.count >= 2 else { throw CancellationError() }
+            if orderedProof {
+                let library = try provider.inventory()
+                let groups = Dictionary(grouping: library, by: \.asset).values.map { $0.sorted { $0.index < $1.index } }
+                let ordered = groups.sorted { first, second in
+                    let a = first[0], b = second[0]
+                    let dateA = a.capturedAt ?? a.modifiedAt ?? .distantPast, dateB = b.capturedAt ?? b.modifiedAt ?? .distantPast
+                    if dateA != dateB { return dateA > dateB }
+                    let modifiedA = a.modifiedAt ?? .distantPast, modifiedB = b.modifiedAt ?? .distantPast
+                    return modifiedA != modifiedB ? modifiedA > modifiedB : a.asset.utf8.lexicographicallyPrecedes(b.asset.utf8)
+                }
+                let expectedAssets = Set(ordered.prefix(4).compactMap { $0.first?.asset })
+                let queuedPaths = Set(queued.map(\.request.source.path))
+                let actualAssets = Set(library.filter { queuedPaths.contains($0.path) }.map(\.asset))
+                XCTAssertEqual(actualAssets, expectedAssets)
+                let requestValue = try await web.evaluateJavaScript("window.__photoDeferredPaths")
+                let requests = try XCTUnwrap(requestValue as? [String])
+                let byPath = Dictionary(uniqueKeysWithValues: library.map { ($0.path, $0.asset) })
+                let actualOrder = requests.compactMap { byPath[$0] }.reduce(into: [String]()) { if $0.last != $1 { $0.append($1) } }
+                XCTAssertEqual(actualOrder.count, 4)
+                XCTAssertEqual(actualOrder, ordered.prefix(4).compactMap { $0.first?.asset })
+                print("IOS_PHOTO_DATE_ORDER_PASS: first batch follows native capture dates and companion groups")
+            }
             let before = try await cloudNodes()
             XCTAssertTrue(before.isEmpty, "Queuing file bytes must not publish Timeline")
             // Simulate system delivery without calling the WebView upload path.
