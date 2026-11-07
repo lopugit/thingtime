@@ -1,0 +1,63 @@
+✖ native anonymous linked gallery import preserves mixed order offline (41712.46776ms)
+✖ native account linked gallery import preserves mixed order offline and recovers a lost link receipt privately (47201.241529ms)
+✔ native anonymous URL composer drafts and templates keep independent links through offline posting (33211.724449ms)
+✖ native account URL composer drafts and templates keep independent links through offline posting (55952.914902ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 1
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 178738.793184
+
+✖ failing tests:
+
+test at app/local-workspace/linkedGallery.browser.test.ts:2:1461
+✖ native anonymous linked gallery import preserves mixed order offline (41712.46776ms)
+  locator.click: Timeout 25000ms exceeded.
+  Call log:
+    - waiting for locator('a[href="/things?folder=local-b9057e41-a608-4a84-860e-325bc7a60bd5"]').first()
+  
+      at exportFolder (/workspace/thingtime/remix/app/local-workspace/linkedGallery.browser.test.ts:109:24)
+      at async TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/linkedGallery.browser.test.ts:167:17) {
+    name: 'TimeoutError',
+    log: [ `  - waiting for locator('a[href="/things?folder=local-b9057e41-a608-4a84-860e-325bc7a60bd5"]').first()` ]
+  }
+
+test at app/local-workspace/linkedGallery.browser.test.ts:2:1461
+✖ native account linked gallery import preserves mixed order offline and recovers a lost link receipt privately (47201.241529ms)
+  locator.click: Timeout 25000ms exceeded.
+  Call log:
+    - waiting for locator('a[href="/things?folder=0e8f31bc-5ca7-4e5c-954a-a04c87b7ef4e"]').first()
+  
+      at exportFolder (/workspace/thingtime/remix/app/local-workspace/linkedGallery.browser.test.ts:109:24)
+      at async TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/linkedGallery.browser.test.ts:167:17) {
+    name: 'TimeoutError',
+    log: [ `  - waiting for locator('a[href="/things?folder=0e8f31bc-5ca7-4e5c-954a-a04c87b7ef4e"]').first()` ]
+  }
+
+test at app/local-workspace/linkedGallery.browser.test.ts:2:19260
+✖ native account URL composer drafts and templates keep independent links through offline posting (55952.914902ms)
+  locator.click: Timeout 25000ms exceeded.
+  Call log:
+    - waiting for getByRole('button', { name: 'Load drafts & templates', exact: true })
+      - locator resolved to <button disabled type="button" class="chakra-button cha-1ofxk9a">Load drafts & templates</button>
+    - attempting click action
+      2 × waiting for element to be visible, enabled and stable
+        - element is not enabled
+      - retrying click action
+      - waiting 20ms
+      2 × waiting for element to be visible, enabled and stable
+        - element is not enabled
+      - retrying click action
+        - waiting 100ms
+      45 × waiting for element to be visible, enabled and stable
+         - element is not enabled
+       - retrying click action
+         - waiting 500ms
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/linkedGallery.browser.test.ts:372:84) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('button', { name: 'Load drafts & templates', exact: true })", '    - locator resolved to <button disabled type="button" class="chakra-button cha-1ofxk9a">Load drafts & templates</button>', '  - attempting click action', '    2 × waiting for element to be visible, enabled and stable', '      - element is not enabled', '    - retrying click action', '    - waiting 20ms', '    2 × waiting for element to be visible, enabled and stable', '      - element is not enabled', '    - retrying click action', '      - waiting 100ms', '    45 × waiting for element to be visible, enabled and stable', '       - element is not enabled', '     - retrying click action', '       - waiting 500ms' ]
+  }

@@ -1,0 +1,19 @@
+{
+  "jobId": "9996645b-6679-475e-bd72-7da00ab8e8fe",
+  "startedAt": "2026-10-27T01:39:54.116Z",
+  "deadline": "2026-10-27T01:49:54.117Z",
+  "status": "deadline-no-headroom",
+  "samples": 12,
+  "emptySamples": 0,
+  "completedAt": "2026-10-27T01:49:54.118Z",
+  "runCount": 0,
+  "lastSample": {
+    "at": "2026-10-27T01:49:51.482Z",
+    "otherRuntimeCount": 1,
+    "memoryUsage": "1.009 GiB of 2 GiB",
+    "scope": "Other task runtime; identity omitted. No takeover or mutation."
+  },
+  "ownedRuntimeStarted": false,
+  "browserAcceptanceRun": false,
+  "sharedServiceOrVMChanged": false
+}

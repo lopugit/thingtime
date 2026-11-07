@@ -1,0 +1,15 @@
+{
+  "hashes": {
+    "remix/app/components/Attachments/AudioAttachmentPlayer.tsx": "9a8f50ad91efe8c594f97c4d55ac1847e8a754d81b0807520eaf837d5c57b1cf",
+    "remix/app/components/Attachments/audioPlaybackCache.ts": "b19b7f41f537839987d48d8d8b3a3e8f321197c409c8b0e972affc96cb866f8f",
+    "remix/app/components/Attachments/audioPlaybackCache.test.ts": "381fad2dfdc2be615c99038219f4577a448327ce095bbe02fbf6b99bf77e0da8",
+    "remix/app/components/Attachments/AudioAttachmentPlayer.browser.test.ts": "c790d3c700e7a8d10eb5c06f2e07779f8f94ed304a738df17ffbf18dd5954cd0",
+    "tmp/continuation/audio-player.test.mjs": "2a24ca42a0e6a1a0ad8e997db405120e474d988d442a64920b64daa9c8e375a9"
+  },
+  "verification": {
+    "cacheTests": 12,
+    "playbackRuntimeTests": 4,
+    "eslint": "pass"
+  },
+  "native": "not yet run"
+}

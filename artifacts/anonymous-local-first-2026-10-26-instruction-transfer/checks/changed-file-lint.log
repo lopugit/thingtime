@@ -1,0 +1,26 @@
+⚠️ REMIX FUTURE CHANGE: The `@remix-run/eslint-config` package is deprecated and will not be included in React Router v7.  We recommend moving towards a streamlined ESLint config such as the ones included in the Remix templates. See https://github.com/remix-run/remix/blob/v2/templates/remix/.eslintrc.cjs.
+
+/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/api/utils/lopu/chat.streaming.test.mts
+   598:66   warning  Unnecessary escape character: \"                                                                          no-useless-escape
+  1019:86   warning  Function declared in a loop contains unsafe references to variable(s) 'toolCalls'                         no-loop-func
+  1035:82   warning  Function declared in a loop contains unsafe references to variable(s) 'toolCalls'                         no-loop-func
+  1054:90   warning  Function declared in a loop contains unsafe references to variable(s) 'toolCalls'                         no-loop-func
+  1106:167  warning  Function declared in a loop contains unsafe references to variable(s) 'toolCalls'                         no-loop-func
+  1195:124  warning  Function declared in a loop contains unsafe references to variable(s) 'toolCalls'                         no-loop-func
+  1244:91   warning  Function declared in a loop contains unsafe references to variable(s) 'toolCalls'                         no-loop-func
+  1371:80   warning  Function declared in a loop contains unsafe references to variable(s) 'toolCalls'                         no-loop-func
+  1407:157  warning  Function declared in a loop contains unsafe references to variable(s) 'promptSettings', 'promptSettings'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/api/utils/things/things.ts
+  3947:78  warning  Unexpected control character(s) in regular expression: \x00, \x1f                             no-control-regex
+  5782:30  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  5782:73  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+
+/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/hooks/useApi.tsx
+  163:10  warning  React Hook useCallback has a missing dependency: 'getJson'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/schemas/registry.ts
+  5734:83  warning  Script URL is a form of eval  no-script-url
+
+✖ 14 problems (0 errors, 14 warnings)
+

@@ -1,0 +1,38 @@
+{
+  "results": [
+    {
+      "target": "app/components/Feed/PostComposer.tsx",
+      "map": "ThingDrafts-6vRlUpzb.js.map",
+      "matches": true,
+      "sourceSha256": "91962bd61eebb78dccb9160418a6a436de9dba560b63d593b7e2199a2d3a05c7"
+    },
+    {
+      "target": "app/drafts/useWorkspaceDraft.ts",
+      "map": "ThingDrafts-6vRlUpzb.js.map",
+      "matches": true,
+      "sourceSha256": "f720b47261e017536d46b34b051e50dd82be6bbde24b82fa59b58b75f92c201b"
+    },
+    {
+      "target": "app/local-workspace/accountPosts.ts",
+      "map": "accountApi.client-CNucGHUY.js.map",
+      "matches": true,
+      "sourceSha256": "914d2d24cc27870d7005f1298b6908d795b5f6811ebcfa43d0d9cde5dd0aa74b"
+    },
+    {
+      "target": "app/local-workspace/accountDraftClient.client.ts",
+      "map": "accountApi.client-CNucGHUY.js.map",
+      "matches": true,
+      "sourceSha256": "a10fc354a25c9dc33a33ca8d7ecb9615c5cc12e934e9003b378361f7a08532cb"
+    },
+    {
+      "target": "app/local-workspace/accountApi.client.ts",
+      "map": "accountApi.client-CNucGHUY.js.map",
+      "matches": true,
+      "sourceSha256": "6d5397b43283a49bcf00b20fac5fed16ac88bccc029f3a86a105439bb3a716dc"
+    }
+  ],
+  "missing": [],
+  "testSource": "remix/app/local-workspace/accountDraftSync.browser.test.ts",
+  "testSha256": "8bae79202671fabeb749afb0fae41f662b64d36ef71a80cf8cd43a50e274f2f9",
+  "application": "Existing sanitized remix/.output; all five relevant composer/draft/post sources match embedded browser source maps exactly; no app rebuild or installation."
+}

@@ -1,0 +1,8 @@
+{
+  "archiveSha256": "0a847337609cd760c3188d784375f57a2d1eadb495ccad86b1c2799429d3a0d5",
+  "manifestHash": "102a7fb53351ac1af52014c64f74ae72470658bcef2830e11ba6920b2ab022c4",
+  "assetCount": 265,
+  "expectedBytes": 23869784,
+  "badAssets": [],
+  "boundary": "archive bytes only; no HTTP status, SW registration, controller or live CacheStorage telemetry was captured in attempt4"
+}

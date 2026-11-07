@@ -1,0 +1,114 @@
+{
+  "error": "TimeoutError: locator.press: Timeout 5000ms exceeded.\nCall log:\n  - waiting for locator('#lopu-instructions').getByLabel('Instruction 1', { exact: true })\n    - locator resolved to <textarea aria-label=\"Instruction 1\" class=\"chakra-textarea cha-9et9zf\" placeholder=\"For example: Use Australian English.\">Native capacity fixture — 日本語 🌟 \"quoted\" \\ exact …</textarea>\n  - elementHandle.press(\"Control+V\")\n",
+  "phase": "12000-hard-line native paste and undo",
+  "checks": [
+    "offline normal settings save and cold reload retain exact Unicode and disabled rows",
+    "server commits before a lost reply; newer local save completes while reply is held; read acknowledgement avoids duplicate replay",
+    "explicit device conflict choice preserves the reviewed revision and exact content",
+    "explicit account conflict choice preserves the reviewed revision and exact content"
+  ],
+  "errors": [],
+  "offlineWrites": [],
+  "instructionRequests": [
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 276
+    },
+    {
+      "method": "POST",
+      "bytes": 48966
+    },
+    {
+      "method": "POST",
+      "bytes": 48958
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 276
+    },
+    {
+      "method": "POST",
+      "bytes": 13879
+    },
+    {
+      "method": "POST",
+      "bytes": 162
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 310
+    },
+    {
+      "method": "POST",
+      "bytes": 48966
+    },
+    {
+      "method": "POST",
+      "bytes": 48958
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 310
+    },
+    {
+      "method": "POST",
+      "bytes": 13925
+    },
+    {
+      "method": "POST",
+      "bytes": 162
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 300
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    }
+  ],
+  "writes": 13,
+  "screenshotCaptured": false,
+  "bodyReadable": false,
+  "body": null
+}

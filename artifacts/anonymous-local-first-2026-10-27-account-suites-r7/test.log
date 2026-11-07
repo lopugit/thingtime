@@ -1,0 +1,91 @@
+Current package ready; running suites-ui
+Egress check 203.0.113.1: ENETUNREACH
+Egress check ::ffff:203.0.113.1: ENETUNREACH
+Egress check 2001:db8::1: ENETUNREACH
+Egress check blocked.invalid: EAI_AGAIN
+Checking backend redirect
+Launching isolated browser
+Browser ready
+Browser egress denied http://203.0.113.1/
+Browser egress denied http://[::ffff:203.0.113.1]/
+Browser egress denied http://[2001:db8::1]/
+Browser egress denied http://blocked.invalid/
+Browser egress denied http://127.0.0.1:18725/
+Closing network-proof browser
+Closing network-proof server
+{"interfaces":["loopback"],"denied":[{"host":"203.0.113.1","code":"ENETUNREACH"},{"host":"::ffff:203.0.113.1","code":"ENETUNREACH"},{"host":"2001:db8::1","code":"ENETUNREACH"},{"host":"blocked.invalid","code":"EAI_AGAIN"}],"browserDenied":["http://203.0.113.1/","http://[::ffff:203.0.113.1]/","http://[2001:db8::1]/","http://blocked.invalid/","http://127.0.0.1:18725/"],"backendRedirectDenied":true,"chromiumSandbox":true}
+Server before test: 200
+
+[suite-ui] authenticated root workspace verified
+[suite-ui] disconnecting
+[suite-ui] offline: navigator and authenticated transport verified
+[suite-ui] reconnecting
+[suite-ui] online: navigator and authenticated transport verified
+[suite-ui] offline/online signal and authenticated transport preflight passed
+[suite-ui] existing canonical suite seeded and customized
+[suite-ui] disconnecting
+[suite-ui] offline: navigator and authenticated transport verified
+[suite-ui] concurrent offline Install buttons committed one held local graph
+[suite-ui] capture offline-installed-suite 1440: 1 visible roots, 3 checkpoints
+[suite-ui] capture offline-installed-suite 1440: all scroll endpoints observed
+[suite-ui] capture offline-installed-suite 390: 1 visible roots, 7 checkpoints
+[suite-ui] capture offline-installed-suite 390: all scroll endpoints observed
+[suite-ui] capture offline-installed-suite 320: 1 visible roots, 7 checkpoints
+[suite-ui] capture offline-installed-suite 320: all scroll endpoints observed
+[suite-ui] capture offline-saved-example 1440: 1 visible roots, 3 checkpoints
+[suite-ui] capture offline-saved-example 1440: all scroll endpoints observed
+[suite-ui] capture offline-saved-example 390: 1 visible roots, 4 checkpoints
+[suite-ui] capture offline-saved-example 390: all scroll endpoints observed
+[suite-ui] capture offline-saved-example 320: 1 visible roots, 5 checkpoints
+[suite-ui] capture offline-saved-example 320: all scroll endpoints observed
+[suite-ui] offline Run example, saved component and cold reload verified
+[suite-ui] offline rename, reload and zero account mutation requests verified
+[suite-ui] reconnecting
+[suite-ui] online: navigator and authenticated transport verified
+[suite-ui] waiting for durable queue convergence
+[suite-ui] durable queue state converged
+[suite-ui] canonical receipt adopted; overlapping edit awaits explicit review
+[suite-ui] capture reconnected-suite-conflict 1440: 5 visible roots, 17 checkpoints
+[suite-ui] capture reconnected-suite-conflict 1440: all scroll endpoints observed
+[suite-ui] capture reconnected-suite-conflict 390: 5 visible roots, 20 checkpoints
+[suite-ui] capture reconnected-suite-conflict 390: all scroll endpoints observed
+[suite-ui] capture reconnected-suite-conflict 320: 5 visible roots, 21 checkpoints
+[suite-ui] capture reconnected-suite-conflict 320: all scroll endpoints observed
+[suite-ui] waiting for durable queue convergence
+[suite-ui] durable queue state converged
+[suite-ui] old local component URL remained editable after canonical adoption and cold reload
+[suite-ui] independent control context authenticated as the exact account and selected plane
+[suite-ui] disconnecting
+[suite-ui] offline: navigator and authenticated transport verified
+[suite-ui] connected control client changed account version while primary stayed offline
+[suite-ui] reconnecting
+[suite-ui] online: navigator and authenticated transport verified
+[suite-ui] waiting for durable queue convergence
+[suite-ui] durable queue state converged
+[suite-ui] capture preserved-suite-version-recovery 1440: 5 visible roots, 17 checkpoints
+[suite-ui] capture preserved-suite-version-recovery 1440: all scroll endpoints observed
+[suite-ui] capture preserved-suite-version-recovery 390: 5 visible roots, 20 checkpoints
+[suite-ui] capture preserved-suite-version-recovery 390: all scroll endpoints observed
+[suite-ui] capture preserved-suite-version-recovery 320: 5 visible roots, 21 checkpoints
+[suite-ui] capture preserved-suite-version-recovery 320: all scroll endpoints observed
+[suite-ui] waiting for durable queue convergence
+✖ signed-in bundled suite installs and edits offline, then adopts the uncached canonical graph without duplicate definitions (168443.937743ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 168557.690092
+
+✖ failing tests:
+
+test at ../account-suites.test.mjs:35:1
+✖ signed-in bundled suite installs and edits offline, then adopts the uncached canonical graph without duplicate definitions (168443.937743ms)
+  Error: Suite state did not converge: [{"id":"05e738c4-cd94-4b04-ad89-8351afdc6911","state":"conflict","error":"Remote content changed. Your local edits are preserved."},{"id":"3d0e59cb-3017-4510-aa67-8fa05e983c9f","state":"synced"},{"id":"4078c44a-4453-4464-9ea2-baa6d46f8cac","state":"synced"},{"id":"479c22c5-18dd-49a8-8261-b817bb6b6ec0","state":"synced"},{"id":"7a44ecf9-f276-46ef-80ff-5994dbc155e9","state":"synced"},{"id":"8169ff5d-cd13-4635-afaa-3b1a9ab8ab38","state":"synced"},{"id":"a6b619a2-945d-4282-938a-69a9f7bed7a1","state":"synced"},{"id":"b560da89-1161-49bf-999d-55cb8256476f","state":"synced"}]
+      at awaitState (file:///tmp/check/account-suites.test.mjs:317:11)
+      at async TestContext.<anonymous> (file:///tmp/check/account-suites.test.mjs:519:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+Container operation failed: 1

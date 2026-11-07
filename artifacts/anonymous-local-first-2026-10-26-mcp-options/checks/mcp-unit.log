@@ -1,0 +1,75 @@
+
+> @thingtime/mcp@0.1.0 test
+> node --import tsx --test test/**/*.test.ts test/save-render-artifacts.test.mjs
+
+✔ reads bounded local Codex messages and rejects rollout paths outside the session root (49.484083ms)
+✔ normalizes ChatGPT exports in chronological order (7.681292ms)
+✔ normalizes Claude exports and attachments (0.778666ms)
+✔ redacts secrets from portable manifest settings (6.332417ms)
+✔ prepares relational parent and child ingestion records (0.48575ms)
+✔ redacts credential fields supplied by an MCP host (0.189334ms)
+✔ imports ChatGPT zip exports and preserves project names without source paths (17.4655ms)
+✔ prepares consented exports as ordered bounded batches (16.294667ms)
+✔ unified renderer requires explicit pinned image/socket and sends a minimal environment (0.88875ms)
+✔ unified MCP discovers legacy tools with rendering disabled and preserves consent/body boundaries (24.338042ms)
+✔ isolated delegate lazily forwards resources exactly, closes each session and rejects invalid input before launch (4.983417ms)
+✔ viewport expansion keeps an explicit 320px viewport exactly once (0.168333ms)
+✔ identity and broad tool surfaces fail closed and clean up (1.674833ms)
+✔ cleanup failure withholds successful artifact output (1.371ms)
+✔ server close cancels active isolation and prevents new launches (0.950334ms)
+✔ concurrency, cancellation and deadlines close sessions without returning partial resources (31.971708ms)
+✔ transport bounds raw bytes before parsing and reports no stderr contents (152.916208ms)
+✔ valid tool artifacts followed by a truncated frame are withheld after cleanup (33.575167ms)
+✔ cancellation while launcher initialization is pending closes the transport (0.726208ms)
+✔ normal stdio entry shuts down cleanly on EOF and SIGTERM without starting Docker (337.110291ms)
+✔ lists Codex sessions and creates a project-scoped thread (5.348666ms)
+✔ refreshes a fresh project registry through one bounded session page (0.515375ms)
+✔ holds a busy-session queue command until app-server accepts the next turn (6.821542ms)
+✔ times out a blocked queue command without acknowledging delivery (11.645583ms)
+✔ reads paged transcripts without exposing reasoning, local paths, commands, or tool output (0.557959ms)
+✔ redacts local paths from connector errors (0.482625ms)
+✔ uses enumerated generic connector errors instead of source messages (0.100167ms)
+✔ classifies a transport loss during turn start as an uncertain outcome (0.495417ms)
+✔ discards JSON-RPC error messages before they leave the local transport (38.420375ms)
+✔ fails closed without an unhandled error when a child closes its stdin pipe (32.348ms)
+✔ does not forward raw Codex error text into cloud-visible events (0.35875ms)
+✔ maps queue and steer to separate Codex turn operations (0.307292ms)
+✔ forwards streamed deltas and approval responses with monotonic sequence numbers (1.563208ms)
+✔ buffers streamed text across chunks and drops split internal context markers (0.209291ms)
+✔ cancels and clears unanswered local approval requests on stop (0.132334ms)
+✔ actively expires unanswered local approval requests without another connector call (41.478ms)
+✔ caps local pending approval requests and cancels overflow fail closed (2.541041ms)
+✔ adapts the native Thingtime Node connector wire without widening operations (0.742625ms)
+✔ preserves the development JSON request wire and rejects malformed native commands (0.206209ms)
+✔ connector list exposes only bounded opaque project references when its unavailable local connector exits early (121.484375ms)
+✔ a blocking queued send does not prevent a concurrent steer command (616.449541ms)
+✔ maps local directories to stable opaque ids without returning paths (1.2725ms)
+✔ fails closed for unknown project ids and relative paths (0.57475ms)
+✔ discovers fresh-install projects locally before exposing bounded references (0.612875ms)
+✔ reloads a private Electron registry while keeping project paths off the wire (40.787375ms)
+﹣ unified stdio agent: isolated native PNGs, canonical dependencies and failures (0.343417ms) # SKIP
+﹣ running web app: clean browser edit, native render, JSON download and zero API traffic (0.112083ms) # SKIP
+﹣ isolated Docker stdio: exact render-only tools, resources and rejected calls (0.344542ms) # SKIP
+✔ isolated renderer requires explicit pinned image and socket; never accepts extra Docker arguments (0.732041ms)
+✔ mounted trees reject dotenv files and escaping symlinks (62.331375ms)
+✔ failed Docker invocation preserves failure, sanitizes CLI environment and cleans temporary state (8683.743584ms)
+✔ cleanup refuses a matching resource name with a different ownership label (31.195583ms)
+✔ cleanup repeats the complete ownership sweep to catch a late acquisition (2354.633791ms)
+✔ saves native host resources with actual provenance and validates before writing (8.980667ms)
+✔ CLI extraction selects the configured unified server explicitly (1.395792ms)
+✔ explicit crop selection preserves diagnostic geometry and strict card validation (2.459ms)
+✔ extracts actual CLI event shape and accepts clean expected invalid-call result (1.057042ms)
+✔ rejects incomplete, ambiguous, unsafe, changed and partial artifacts (31.514667ms)
+✔ saves exclusively after complete validation; existing output and bad input preserve data (108.366083ms)
+✔ recursively redacts credential-shaped fields (1.078916ms)
+✔ allows only files beneath configured roots (64.749458ms)
+✔ negotiates MCP and exposes the consent-first tool surface (15.553791ms)
+✔ copies allowlisted attachment bytes into private staging (10.330375ms)
+ℹ tests 63
+ℹ suites 0
+ℹ pass 60
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 3
+ℹ todo 0
+ℹ duration_ms 11332.783458

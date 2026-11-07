@@ -1,0 +1,28 @@
+✖ native account history retains an offline message through reconnect refusal, explicit retry, two tabs and cold reload (2177.145453ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2276.91344
+
+✖ failing tests:
+
+test at ../account.test.mjs:10:1
+✖ native account history retains an offline message through reconnect refusal, explicit retry, two tabs and cold reload (2177.145453ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  401 !== 200
+  
+      at TestContext.<anonymous> (file:///tmp/check/account.test.mjs:51:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 401,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

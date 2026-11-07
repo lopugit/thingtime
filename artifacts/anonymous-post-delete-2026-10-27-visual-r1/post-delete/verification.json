@@ -1,0 +1,9 @@
+{
+  "selectedPhase": "combined",
+  "checks": [
+    "visual diagnostic only: pending synthetic media post390→320"
+  ],
+  "bounds": [],
+  "mutations": [],
+  "errors": []
+}

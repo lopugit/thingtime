@@ -1,0 +1,103 @@
+{
+  "startedAt": "2026-10-26T09:51:34.191Z",
+  "endedAt": "2026-10-26T09:55:01.371Z",
+  "scope": "Current merged source; sanitized test environment; outbound network restricted to loopback; synthetic unit fixtures only",
+  "results": [
+    {
+      "command": "test:environment-gateway",
+      "code": 0,
+      "elapsedMs": 2718,
+      "summary": [],
+      "counts": {
+        "tests": 14,
+        "pass": 14,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "command": "test:api-capabilities",
+      "code": 0,
+      "elapsedMs": 2526,
+      "summary": [],
+      "counts": {
+        "tests": 133,
+        "pass": 133,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "command": "test:notifications",
+      "code": 0,
+      "elapsedMs": 6102,
+      "summary": [],
+      "counts": {
+        "tests": 64,
+        "pass": 64,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "command": "test:collections",
+      "code": 0,
+      "elapsedMs": 10556,
+      "summary": [],
+      "counts": {
+        "tests": 86,
+        "pass": 86,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "command": "test:local-workspace",
+      "code": 0,
+      "elapsedMs": 164631,
+      "summary": [],
+      "counts": {
+        "tests": 939,
+        "pass": 842,
+        "fail": 0,
+        "skipped": 97
+      }
+    },
+    {
+      "command": "test:schemas",
+      "code": 1,
+      "elapsedMs": 7905,
+      "summary": [],
+      "counts": {
+        "tests": 277,
+        "pass": 276,
+        "fail": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "command": "test:feed",
+      "code": 0,
+      "elapsedMs": 6875,
+      "summary": [],
+      "counts": {
+        "tests": 97,
+        "pass": 96,
+        "fail": 0,
+        "skipped": 1
+      }
+    },
+    {
+      "command": "test:drafts",
+      "code": 0,
+      "elapsedMs": 5859,
+      "summary": [],
+      "counts": {
+        "tests": 59,
+        "pass": 50,
+        "fail": 0,
+        "skipped": 9
+      }
+    }
+  ]
+}

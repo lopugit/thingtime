@@ -1,0 +1,31 @@
+✖ native PostCard deletion persists anonymously and across account offline reload, cancellation and lost replies (70371.385715ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 70986.467359
+
+✖ failing tests:
+
+test at ../post-delete.test.mjs:7:1
+✖ native PostCard deletion persists anonymously and across account offline reload, cancellation and lost replies (70371.385715ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  404 !== 200
+  
+      at file:///tmp/check/post-delete.test.mjs:76:52
+      at async Promise.all (index 1)
+      at async RouteHandler._handleInternal (/opt/thingtime-mcp/MCP/node_modules/playwright-core/lib/coreBundle.js:58638:27)
+      at async RouteHandler._handleImpl (/opt/thingtime-mcp/MCP/node_modules/playwright-core/lib/coreBundle.js:58607:18)
+      at async RouteHandler.handle (/opt/thingtime-mcp/MCP/node_modules/playwright-core/lib/coreBundle.js:58601:16)
+      at async _BrowserContext._onRoute (/opt/thingtime-mcp/MCP/node_modules/playwright-core/lib/coreBundle.js:60722:27) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 404,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

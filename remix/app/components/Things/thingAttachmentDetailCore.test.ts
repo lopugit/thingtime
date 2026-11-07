@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { attachmentFromThing, directAttachmentReferences } from './thingAttachmentDetailCore.ts';
+import { attachmentFromThing, canEditLocalFileDetails, directAttachmentReferences } from './thingAttachmentDetailCore.ts';
 
 test('attachment detail only accepts persisted attachment Things and preserves safe image metadata', () => {
 	assert.deepEqual(
@@ -34,4 +34,14 @@ test('attachment references contain the ACL-checked direct target only', () => {
 	const reference = { id: 'post-1' } as any;
 	assert.deepEqual(directAttachmentReferences(reference), [reference]);
 	assert.deepEqual(directAttachmentReferences(null), []);
+});
+
+test('local metadata editing requires the scoped capability and current ownership, never an ID prefix', () => {
+ const row = { id: 'local-imported', thingtime: ['attachment'], crystal: { name: 'audio.wav', size: 20, contentType: 'audio/wav' }, author: { id: 'owner' }, canEditLocalFileDetails: true };
+ assert.equal(canEditLocalFileDetails(row, 'owner'), true);
+ assert.equal(canEditLocalFileDetails({ ...row, id: 'local-file-upload' }, 'owner'), true);
+ for (const candidate of [null, { ...row, canEditLocalFileDetails: false }, { ...row, canEditLocalFileDetails: undefined }, { ...row, thingtime: ['post'] }, { ...row, targetId: 'post' }]) assert.equal(canEditLocalFileDetails(candidate, 'owner'), false);
+ assert.equal(canEditLocalFileDetails(row, 'other'), false);
+ assert.equal(canEditLocalFileDetails(row), false);
+ assert.equal(canEditLocalFileDetails(row, 'owner', 'shared-link'), false);
 });

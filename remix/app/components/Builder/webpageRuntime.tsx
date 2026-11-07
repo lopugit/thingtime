@@ -8,6 +8,8 @@ import { SharedMediaProvider } from '../Sharing/SharedMedia';
 import { useLocation } from 'react-router';
 
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { useDataPlane } from '~/hooks/useDataPlane';
 import { useCharacterScope } from '../Characters/CharacterScope';
 import { localQueryParams } from '../Actions/localUiAction';
@@ -52,6 +54,10 @@ export type WebpageRuntime = {
 	// seeded copy (an app the viewer can install); null = not a resolved page
 	source: 'user' | 'system' | null;
 	viewer: WebpageRuntimeViewer;
+	// Content availability is separate from authentication. The API adapter
+	// selects local or confirmed account execution and enforces its own lease.
+	canRunSources: boolean;
+	cacheScope: string | null;
 	query: Record<string, string>;
 	setPageQuery: (params: unknown, merge?: boolean) => void;
 	version: number;
@@ -85,6 +91,8 @@ const INERT_RUNTIME: WebpageRuntime = {
 	suiteKey: null,
 	source: null,
 	viewer: INERT_VIEWER,
+	canRunSources: false,
+	cacheScope: null,
 	query: {},
 	setPageQuery: () => {},
 	version: 0,
@@ -173,6 +181,10 @@ export const WebpageRuntimeProvider = ({
 	enabled?: boolean;
 }) => {
 	const user = useCurrentUser();
+	const workspaceUser = useWorkspaceUser();
+	const workspaceScope = useWorkspaceScope();
+	const canRunSources = workspaceScope !== 'pending' && !!workspaceUser?.id;
+	const cacheScope = canRunSources && !shared ? workspaceScope : null;
 	const dataPlane = useDataPlane();
 	const characterId = useCharacterScope()?.id;
 	const location = useLocation();
@@ -185,19 +197,19 @@ export const WebpageRuntimeProvider = ({
 
 	const viewer = React.useMemo<WebpageRuntimeViewer>(
 		() => ({
-			signedIn: !!user?.id,
-			id: user?.id || null,
-			username: user?.username || null,
-			displayName: (user as { displayName?: string | null } | null)?.displayName || user?.username || null
+			signedIn: !!user?.id && !user.temporary,
+			id: workspaceUser?.id || null,
+			username: workspaceUser?.username || null,
+			displayName: workspaceUser?.displayName || workspaceUser?.username || null
 		}),
-		[user]
+		[user?.id, user?.temporary, workspaceUser?.id, workspaceUser?.username, workspaceUser?.displayName]
 	);
 	const runtimeSearch = pageRuntimeSearch(location.pathname, location.search);
 	const urlQuery = React.useMemo(() => queryScopeOf(runtimeSearch), [runtimeSearch]);
 	// The bearer key participates only in this private dependency boundary.
 	// It is never a template value or a persistent cache key.
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- intentional opaque access-context token
-	const identity = React.useMemo(() => ({ key: ++nextRuntimeKey }), [viewer.id, characterId, dataPlane, pageId, pageKey, source, shared, linkKey, enabled]);
+	const identity = React.useMemo(() => ({ key: ++nextRuntimeKey }), [workspaceScope, viewer.signedIn, viewer.id, characterId, dataPlane, pageId, pageKey, source, shared, linkKey, enabled]);
 	// An explicit route transition (even a back/forward visit to the same
 	// URL) starts a new page selection. Local updates leave the route alone.
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque route generation
@@ -287,6 +299,8 @@ export const WebpageRuntimeProvider = ({
 			suiteKey,
 			source,
 			viewer,
+			canRunSources,
+			cacheScope,
 			query,
 			setPageQuery,
 			version,
@@ -306,6 +320,8 @@ export const WebpageRuntimeProvider = ({
 			suiteKey,
 			source,
 			viewer,
+			canRunSources,
+			cacheScope,
 			query,
 			setPageQuery,
 			version,
@@ -337,24 +353,11 @@ export const WebpageRuntimeProvider = ({
 	);
 };
 
-// The localStorage tier for source results — optimistic paint on the next
-// visit (house rule: never flash a loading state when a last-known value
-// exists). Keys are per VIEWER + page + block, so two apps never share a
-// cache line AND two people never do.
-//
-// The viewer segment is the privacy bar, not a nicety. A source result is the
-// signed-in viewer's OWN private data — their orders, their expense rows,
-// their trainer, a natal chart derived from their birth details — and /p/ is
-// a shared public URL. `useThingSource` seeds its state from this cache in a
-// lazy initializer, BEFORE it knows whether the viewer is signed in and
-// before any fetch can replace it, so a page-scoped key would paint the last
-// signed-in viewer's data to whoever opens that page next on the same
-// browser: the signed-out visitor, or the next account on a shared machine.
-// Keyed by viewer, a cache line is only ever readable by the person who
-// filled it; no viewer means no cache line at all (the builder canvas and
-// gallery thumbnails render outside a provider and simply fetch).
-// Sign-out additionally drops these keys (hooks/useApi logout), the same
-// shared-browser rule the tt-activity-/tt-saved- caches follow.
+// Optimistic source results use the complete workspace partition (account,
+// origin and data plane, or anonymous), page and block. Shared surfaces and
+// unresolved identities have no cache scope. Old viewer-only cache entries
+// are deliberately not adopted: their data-plane authority is unknown.
+// Sign-out drops the prefix through the existing useApi cleanup.
 export const SOURCE_CACHE_PREFIX = 'tt-page-source:';
 
 export const sourceCacheKey = (viewerId: string | null, pageId: string | null, blockId: string): string | null =>

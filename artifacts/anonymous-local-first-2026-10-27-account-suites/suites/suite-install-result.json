@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "origin": "http://127.0.0.1:18724",
+  "sessionId": "663fa327-c740-4159-81bf-4cd7ec51d629",
+  "capability": "api.webpages-suites-install@1.7.0",
+  "productionAccess": false,
+  "elapsedMs": 5121,
+  "checks": [
+    "real concurrent replica-set transactions",
+    "canonical map and exact readback",
+    "lost-response receipt replay after later edits",
+    "onlyMissing custom content and hidden bearer redaction",
+    "origin actor plane and bundle guards",
+    "legacy composed canonical update",
+    "cross-account privacy",
+    "custom data-plane session and home-ledger isolation",
+    "quota rollback content receipt and ledger",
+    "same-operation retry after refusal"
+  ]
+}

@@ -1,0 +1,39 @@
+✖ real 4GiB+1 sparse file exports ZIP64 and Python independently checks every byte (2493.33525ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2969.099416
+
+✖ failing tests:
+
+test at app/utils/thingTransfer/zip64Capacity.test.ts:2:1334
+✖ real 4GiB+1 sparse file exports ZIP64 and Python independently checks every byte (2493.33525ms)
+  Error [TransferFormatError]: A transferred file has the wrong size
+      at fail (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/utils/thingTransfer/archive.ts:20:50)
+      at verifyTransferFiles (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/utils/thingTransfer/archive.ts:38:51)
+      at encodeTransferArchiveBlob (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/utils/thingTransfer/archive.ts:69:9)
+      at async TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/utils/thingTransfer/zip64Capacity.test.ts:29:21)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+        3.02 real         2.67 user         0.16 sys
+           109035520  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               11298  page reclaims
+                 597  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                  24  messages sent
+                  15  messages received
+                   9  signals received
+                 176  voluntary context switches
+               11169  involuntary context switches
+           396296246  instructions retired
+           179539824  cycles elapsed
+            16779376  peak memory footprint

@@ -1,0 +1,102 @@
+[
+  {
+    "expectedOffline": true,
+    "online": [
+      {
+        "source": "primary",
+        "online": false
+      }
+    ],
+    "transportFailed": true,
+    "status": null,
+    "actorMatches": false,
+    "planeMatches": false,
+    "at": 1793037503382
+  },
+  {
+    "expectedOffline": false,
+    "online": [
+      {
+        "source": "primary",
+        "online": true
+      }
+    ],
+    "transportFailed": false,
+    "status": 200,
+    "actorMatches": true,
+    "planeMatches": true,
+    "at": 1793037503429
+  },
+  {
+    "expectedOffline": true,
+    "online": [
+      {
+        "source": "primary",
+        "online": false
+      },
+      {
+        "source": "concurrent",
+        "online": false
+      }
+    ],
+    "transportFailed": true,
+    "status": null,
+    "actorMatches": false,
+    "planeMatches": false,
+    "at": 1793037514368
+  },
+  {
+    "expectedOffline": false,
+    "online": [
+      {
+        "source": "primary",
+        "online": true
+      },
+      {
+        "source": "concurrent",
+        "online": true
+      }
+    ],
+    "transportFailed": false,
+    "status": 200,
+    "actorMatches": true,
+    "planeMatches": true,
+    "at": 1793037533465
+  },
+  {
+    "expectedOffline": true,
+    "online": [
+      {
+        "source": "primary",
+        "online": false
+      },
+      {
+        "source": "concurrent",
+        "online": false
+      }
+    ],
+    "transportFailed": true,
+    "status": null,
+    "actorMatches": false,
+    "planeMatches": false,
+    "at": 1793037553498
+  },
+  {
+    "expectedOffline": false,
+    "online": [
+      {
+        "source": "primary",
+        "online": true
+      },
+      {
+        "source": "concurrent",
+        "online": true
+      }
+    ],
+    "transportFailed": false,
+    "status": 200,
+    "actorMatches": true,
+    "planeMatches": true,
+    "at": 1793037555005
+  }
+]

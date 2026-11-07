@@ -1,0 +1,37 @@
+{
+  "integratedPackage": "2f0710ac20e67675e56271dd5607a7a32c2e038853e40ebd62dbf40c9e310e59",
+  "repairPackage": "15e93be01ba2478f19fbdd20201bb18d72ab6c87f794e5a7c4800854b4ab85a7",
+  "allIdentical": false,
+  "files": [
+    {
+      "path": "assets/aiTasks.worker-CKRd9k1s.js",
+      "integratedPackageSha256": "7ca6c1c3055654c3ecd281fa0b48d1e33f2449f0270ce5e8fad5dfe966b4f4cf",
+      "repairPackageSha256": "7ca6c1c3055654c3ecd281fa0b48d1e33f2449f0270ce5e8fad5dfe966b4f4cf",
+      "identical": true
+    },
+    {
+      "path": "assets/mediaWorker-BoV8L5k2.js",
+      "integratedPackageSha256": "9c4448829742559a3e4e632145eb0ccb465883f2f58a2c6694d46678ef21df06",
+      "repairPackageSha256": "9c4448829742559a3e4e632145eb0ccb465883f2f58a2c6694d46678ef21df06",
+      "identical": true
+    },
+    {
+      "path": "index.html",
+      "integratedPackageSha256": "087b1ba2bdba43d15e849e113e57fc7c9b2d005ad782e2b5e84ed74d39b103c4",
+      "repairPackageSha256": "087b1ba2bdba43d15e849e113e57fc7c9b2d005ad782e2b5e84ed74d39b103c4",
+      "identical": true
+    },
+    {
+      "path": "policy.json",
+      "integratedPackageSha256": "f839d46fc28a6fd860349372583daa3830d4c63dbf9776cc7855390b94eee10f",
+      "repairPackageSha256": "f839d46fc28a6fd860349372583daa3830d4c63dbf9776cc7855390b94eee10f",
+      "identical": true
+    },
+    {
+      "path": "runner.js",
+      "integratedPackageSha256": "175694ab1dbc4a17fd447f5e35eff224041dc7344fcd449802990d04f971de59",
+      "repairPackageSha256": "a6571e789f9963a79bd8a04dec4c565e1d46a0ca881b5147d27db23a71e1b32a",
+      "identical": false
+    }
+  ]
+}

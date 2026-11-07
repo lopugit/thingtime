@@ -1,4 +1,6 @@
 import React from 'react';
+import type {PasswordStorage} from '~/passwords/storage';
+import {openStoredPasswordIconBlob} from './PasswordIcon';
 import type {PasswordMetadata} from '~/passwords/model';
 import {openPasswordPreviewIcon, clearPasswordPreviewIcons, passwordPreviewThumbnail} from '~/passwords/icons.client';
 import {SettingsDocumentHost} from '../Settings/SettingsDocumentHost';
@@ -15,7 +17,7 @@ export const PASSWORD_PREVIEW_BLOCKS:WebpageBlock[]=[{id:'pp-list',type:'collect
  ]} as WebpageBlock]} as unknown as WebpageBlock];
 /** Preview text and image are ordinary editable blocks. The adapter alone opens
  * an exact metadata ID; no secret entry or image bytes enter saved layout data. */
-export function PasswordPreviewList({ownerId,entries,disabled,onOpen}:{ownerId:string;entries:PasswordMetadata[];disabled:boolean;onOpen:(entry:PasswordMetadata,trigger:HTMLElement|null)=>void}){
+export function PasswordPreviewList({storage,ownerId,entries,disabled,onOpen}:{storage?:PasswordStorage;ownerId:string;entries:PasswordMetadata[];disabled:boolean;onOpen:(entry:PasswordMetadata,trigger:HTMLElement|null)=>void}){
  const root=React.useRef<HTMLDivElement>(null);
  const origin=location.origin,scope=JSON.stringify([origin,ownerId]);
  const [images,setImages]=React.useState<{scope:string;urls:Record<string,string>}>({scope,urls:{}});
@@ -26,7 +28,7 @@ export function PasswordPreviewList({ownerId,entries,disabled,onOpen}:{ownerId:s
   const controller=new AbortController(),requested=new Set<string>();setImages({scope,urls:{}});
   const load=(id:string)=>{
    const entry=iconEntries.find(item=>item.id===id);if(!entry||requested.has(id)||(!entry.icon&&!entry.websiteIcon))return;requested.add(id);
-   void openPasswordPreviewIcon(ownerId,entry,controller.signal).then(async blob=>{if(controller.signal.aborted||!blob)return;const source=await passwordPreviewThumbnail(blob,controller.signal);if(controller.signal.aborted)return;setImages(current=>current.scope===scope?{scope,urls:{...current.urls,[id]:source}}:current);}).catch(()=>{});
+   void (storage ? entry.icon?.kind==='attachment' ? openStoredPasswordIconBlob(storage,entry.id,entry.icon,controller.signal) : Promise.resolve(null) : openPasswordPreviewIcon(ownerId,entry,controller.signal)).then(async blob=>{if(controller.signal.aborted||!blob)return;const source=await passwordPreviewThumbnail(blob,controller.signal);if(controller.signal.aborted)return;setImages(current=>current.scope===scope?{scope,urls:{...current.urls,[id]:source}}:current);}).catch(()=>{});
   };
   // Observe the existing editable card's exact Action input, rather than guess
   // identities from titles or array positions. Custom layouts keep their data.
@@ -35,7 +37,7 @@ export function PasswordPreviewList({ownerId,entries,disabled,onOpen}:{ownerId:s
   const observe=()=>{for(const card of root.current?.querySelectorAll('[data-tt-action-inputs]')||[])if(!observed.has(card)&&card.querySelector('[data-block-id="pp-icon"]')){observed.add(card);observer.observe(card);}};
   const changes=new MutationObserver(observe);if(root.current)changes.observe(root.current,{childList:true,subtree:true});observe();
   return()=>{controller.abort();observer.disconnect();changes.disconnect();};
- },[ownerId,scope,iconEntries]);
+ },[ownerId,scope,iconEntries,storage]);
  return <div ref={root} className="tt-password-preview-list"><style>{`
   .tt-password-preview-list button[data-tt-action="$transient"]:enabled { cursor: pointer; }
   .tt-password-preview-list button[data-tt-action="$transient"]:focus-visible { outline: 2px solid var(--tt-accent, currentColor); outline-offset: 2px; }

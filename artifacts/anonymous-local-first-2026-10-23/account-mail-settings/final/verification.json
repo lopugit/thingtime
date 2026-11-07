@@ -1,0 +1,61 @@
+{
+  "checks": [
+    "normal signed-in UI save and cold reload while offline, with zero account writes",
+    "newer local save while real reply is held; offline reload; exact retry receipt and independent newer intent produce two server revisions",
+    "real stale-revision refusal, explicit keep and use-account choices, cold reload and guest read/write refusal"
+  ],
+  "errors": [],
+  "providerActions": [],
+  "offlineWrites": [],
+  "attempts": [
+    {
+      "status": 200,
+      "operation": "save-account",
+      "writeId": "f9369544-feb2-4582-8bca-f55fafbf3603",
+      "sha256": "0b3c5e297344b759587fb1f5d1c2b905c72c11b7533a6e5f3f44fbdaaab049d9"
+    },
+    {
+      "status": 200,
+      "operation": "save-account",
+      "writeId": "f9369544-feb2-4582-8bca-f55fafbf3603",
+      "sha256": "0b3c5e297344b759587fb1f5d1c2b905c72c11b7533a6e5f3f44fbdaaab049d9"
+    },
+    {
+      "status": 200,
+      "operation": "save-account",
+      "writeId": "b552cf95-cd73-45a1-9c56-6612d5736960",
+      "sha256": "a1a506b110ce5cdbe3458a380685756ba0e51184c13c678ee46db2e66644e5cb"
+    },
+    {
+      "status": 409,
+      "operation": "save-account",
+      "writeId": "0b9b3964-68af-4658-8a10-4bdd4ca7fbc8",
+      "sha256": "72cd4bc33b8a4ffd6042e20ebaec7342b1aff222923acfe6f3054f59319263ac"
+    }
+  ],
+  "savedRevisions": [
+    1,
+    2,
+    3
+  ],
+  "finalRecord": {
+    "id": "58a7bc98-1d3f-4469-91fe-c348aef30e01",
+    "name": "Account conflict winner",
+    "address": "fixture@example.invalid",
+    "revision": 3,
+    "sync": {
+      "cloud": true,
+      "local": false,
+      "transport": "relay"
+    },
+    "servers": {
+      "imap": {
+        "host": "imap.example.invalid",
+        "port": 993,
+        "security": "tls",
+        "username": "fixture@example.invalid"
+      }
+    }
+  },
+  "providerDeliveryTested": false
+}

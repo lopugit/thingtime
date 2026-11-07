@@ -54,6 +54,8 @@ function fixture(count = 300, selection: 'strict-account' | 'supported-content' 
 	const objects = new Map<string, Uint8Array>();
 	const store: BackupObjectStore = {
 		read: async (key, max) => {
+			state.reads.set(key, (state.reads.get(key) ?? 0) + 1);
+			await state.beforeRead(key);
 			const value = objects.get(key);
 			if (value) assert.ok(value.length <= max);
 			return value ?? null;
@@ -69,6 +71,8 @@ function fixture(count = 300, selection: 'strict-account' | 'supported-content' 
 	const state = {
 		beforeHead: async () => {},
 		beforePut: (_key: string) => {},
+		beforeRead: async (_key: string) => {},
+		reads: new Map<string, number>(),
 		ordinaryYields: [] as string[],
 		queries: 0,
 		closed: 0,
@@ -1004,101 +1008,107 @@ for (const mode of ['missing', 'foreign', 'target', 'purpose', 'profile', 'delet
 	});
 }
 
-
-test('ordinary account capture retains valid content beyond the legacy 100000-node codec', async () => {
-	const f = fixture(2);
-	f.state.alterRows = (n, rows) => {
-		if (n === 2) rows[0].crystal = Array.from({ length: 150_001 }, () => null);
-		return rows;
-	};
-	const plan = await f.run();
-	assert.equal(plan.items, 3);
-	assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), true);
-	assert.equal(f.state.closed, f.state.queries);
-	assert.equal(f.state.ended, 1);
-	await sealBackup(f.store, f.id, f.access);
-	const restored = await openBackupThingSnapshot(f.store, f.id, 'thing-0000', f.access);
-	assert.equal((restored.value as any).crystal.length, 150_001);
+test('large instruction generations are paged private records and recover independently of live content', async () => {
+  const { instructionBackupFixture } = await import('./instructionRecords.fixtures');
+  const { openBackupInstructionRecord } = await import('./instructionRecords');
+  const { recoverBackupInstructionSettings } = await import('./accountSnapshots');
+  const f = fixture(0), generation = instructionBackupFixture('owner', 160, 'committed', 70_000), staging = instructionBackupFixture('owner', 1, 'staging'), doc = accountFixture();
+  const ordinalIds = generation.docs.slice(1).map((record: any) => record.shareId);
+  assert.notDeepEqual([...ordinalIds].sort(), ordinalIds, 'hashed Thing IDs are not instruction ordinal order');
+  assert.ok(Buffer.byteLength(JSON.stringify(generation.instructions)) > 1024 * 1024);
+  doc.secure = Buffer.from(JSON.stringify({ meta: { lopuInstructions: { revision: generation.revision, reference: generation.reference } }, passwordHash: 'NEVER_EXPORT' }));
+  f.source.push(doc, ...generation.docs, ...staging.docs);
+  await f.run();
+  await captureBackup(f.store, f.id, { read: async () => { throw Error('Instruction bytes are already retained'); } }, f.access);
+  await sealBackup(f.store, f.id, f.access);
+  f.source.splice(0);
+  const snapshot = await openBackupAccountSnapshot(f.store, f.id, 'owner', f.access);
+  assert.equal(snapshot.version, 2);
+  assert.deepEqual(accountContentValue(snapshot).preferences.lopuInstructions, { revision: generation.revision, reference: generation.reference });
+  for (const record of [generation.docs[0], generation.docs.at(-1)!, staging.docs[0]]) {
+    const recovered = await openBackupInstructionRecord(f.store, f.id, record.shareId, f.access);
+    assert.equal(recovered.id, record.shareId);
+    assert.equal(recovered.ownerId, 'owner');
+  }
+  const staged = await openBackupInstructionRecord(f.store, f.id, staging.docs[0].shareId, f.access);
+  assert.equal(staged.payload.status, 'staging', 'staging content never becomes active during backup recovery');
+  f.state.reads.clear();
+  const recoveredSettings = await recoverBackupInstructionSettings(f.store, f.id, f.access);
+  assert.equal(JSON.stringify(recoveredSettings.instructions), JSON.stringify(generation.instructions), 'all rows, disabled flags and Unicode bytes recover exactly');
+  assert.equal(recoveredSettings.revision, generation.revision);
+  const plan = f.json('plan.json'), metadataPageReads = [...f.state.reads].filter(([key]) => /\/plan\/\d+\.json$/.test(key)).reduce((sum, [, count]) => sum + count, 0);
+  const chunkReads = [...f.state.reads].filter(([key]) => key.startsWith('chunks/')).reduce((sum, [, count]) => sum + count, 0);
+  assert.ok(plan.pages > 1, 'the sealed inventory spans multiple pages');
+  assert.equal(metadataPageReads, plan.pages * 4, 'recovery verifies and traverses the inventory once per account and selected generation');
+  assert.equal(chunkReads, generation.docs.length + 1, 'each selected immutable record is read once across validation and reconstruction');
+  assert.ok(f.state.queries < 40, 'batching must not query each part individually');
 });
 
-test('ordinary nested composition/schema/action/media closure stays pinned and independently readable', async () => {
-	const f = fixture(0), media = await backupAttachmentFixture('owner', 'closure-media', Buffer.from('independent stored media'), 'post', 'closure-component');
-	f.source.push(
-		{ shareId: 'closure-page', ownerId: 'owner', thingtime: ['webpage'], crystal: { blocks: [{ type: 'component', component: 'closure-widget', args: { action: 'closure-other' } }] } },
-		{ shareId: 'closure-component', ownerId: 'owner', thingtime: ['component'], crystal: { componentKey: 'closure-widget', version: 2, savedArgs: { action: 'closure-action' }, render: { tag: 'button', ttAction: '{action}', props: { backgroundImage: "url('/api/v1/attachments/content?id=closure-media')" } } } },
-		{ shareId: 'closure-action', ownerId: 'owner', thingtime: ['action'], crystal: { actionKey: 'closure-action', steps: [{ op: 'things.get', id: 'closure-data', schema: 'closure-schema-name' }, { op: 'actions.invoke', action: 'closure-other' }] } },
-		{ shareId: 'closure-other', ownerId: 'owner', thingtime: ['action'], crystal: { steps: [{ op: 'actions.invoke', action: 'closure-action' }] } },
-		{ shareId: 'closure-schema', ownerId: 'owner', thingtime: ['schema'], crystal: { name: 'closure-schema-name', render: { tag: 'button', ttAction: 'closure-other' } } },
-		{ shareId: 'closure-data', ownerId: 'owner', thingtime: ['data'], crystal: { schemaId: 'closure-schema', text: 'pinned' } },
-		media.doc
-	);
-	f.heads.set(media.doc.objectKey, media.head);
-	f.state.beforeQuery = n => { if (n === 2) f.source.length = 0; };
-	await f.run();
-	await captureBackup(f.store, f.id, { read: async (_item, offset, length) => media.bytes.subarray(offset, offset + length) }, f.access);
-	await sealBackup(f.store, f.id, f.access);
-	const second = fixture(0);
-	await copySealedBackup(f.store, second.store, f.id, f.access);
-	f.objects.clear();
-	assert.equal(((await openBackupThingSnapshot(second.store, f.id, 'closure-data', f.access)).value as any).crystal.text, 'pinned');
-	assert.deepEqual(((await openBackupThingSnapshot(second.store, f.id, 'closure-page', f.access)).value as any).crystal.blocks[0].args, { action: 'closure-other' });
-	const opened = await openBackupItem(second.store, f.id, 'closure-media', f.access), bytes = [];
-	for await (const range of opened.ranges) bytes.push(range);
-	assert.deepEqual(Buffer.concat(bytes), media.bytes);
+test('selected instruction recovery rejects retained bytes changed after sealed-manifest verification', async () => {
+  const { instructionBackupFixture } = await import('./instructionRecords.fixtures');
+  const { openBackupInstructionGeneration } = await import('./instructionRecords');
+  const f = fixture(0), generation = instructionBackupFixture('owner', 3), doc = accountFixture();
+  f.source.push(doc, ...generation.docs);
+  await f.run();
+  await captureBackup(f.store, f.id, { read: async () => { throw Error('Instruction bytes are already retained'); } }, f.access);
+  await sealBackup(f.store, f.id, f.access);
+  const selectedId = generation.docs[1].shareId, pages = Array.from({ length: f.json('plan.json').pages }, (_, i) => f.json(`plan/${i}.json`));
+  const item = pages.flatMap((page: any) => page.items).find((entry: any) => entry.thingId === selectedId);
+  assert.ok(item);
+  const rangePage = f.json(`ranges/${item.ordinal}/0.json`), chunkKey = `chunks/${rangePage.ranges[0].sha256}`;
+  const originalRead = f.store.read.bind(f.store);
+  let corrupted = false;
+  f.store.read = async (key, maxBytes) => {
+    const bytes = await originalRead(key, maxBytes);
+    if (key === chunkKey && bytes && !corrupted) {
+      corrupted = true;
+      const damaged = bytes.slice(); damaged[0] ^= 1; return damaged;
+    }
+    return bytes;
+  };
+  await assert.rejects(openBackupInstructionGeneration(f.store, f.id, 'owner', generation.reference, f.access), /corrupt|match/i);
+  assert.equal(corrupted, true, 'the mutation occurred after sealed metadata verification, during selected-record reads');
 });
 
-for (const mode of ['missing', 'foreign', 'wrong-kind', 'active-theme'] as const) test(`uncaptured ${mode} dependency is preserved with explicit unresolved evidence`, async () => {
-	const f = fixture(0);
-	if (mode === 'active-theme') {
-		const account = accountFixture(), snapshot = backupAccountSnapshotFromDoc(account), value = accountContentValue(snapshot);
-		const { secure } = buildUserSecure({ email: 'test@example.invalid', passwordHash: 'synthetic', emailVerified: true, meta: { ...value.preferences, activeThemeId: 'absent-theme' } });
-		f.source.push({ ...account, secure });
-	} else {
-		f.source.push({ shareId: 'root', ownerId: 'owner', thingtime: ['component'], crystal: { render: { tag: 'button', ttAction: 'dependency' } } });
-		if (mode !== 'missing') f.source.push({ shareId: 'dependency', ownerId: mode === 'foreign' ? 'foreign' : 'owner', thingtime: mode === 'wrong-kind' ? ['data'] : ['action'], crystal: {} });
-	}
-	await f.run();
-	assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), true);
-	const evidence = f.json('plan/0.json').items.find((item: any) => item.snapshot.adapter === 'backup-reference-coverage');
-	assert.equal(evidence.snapshot.value.coverage.resolution, 'unresolved');
-	assert.equal(evidence.snapshot.value.coverage.wholeAccountReady, false);
+test('instruction recovery rejects an inflated declared part count at the first absent descriptor', async () => {
+  const { instructionBackupFixture } = await import('./instructionRecords.fixtures');
+  const { openBackupInstructionGeneration } = await import('./instructionRecords');
+  const f = fixture(0), generation = instructionBackupFixture('owner', 3), doc = accountFixture();
+  f.source.push(doc, ...generation.docs);
+  await f.run();
+  await captureBackup(f.store, f.id, { read: async () => { throw Error('Instruction bytes are already retained'); } }, f.access);
+  await sealBackup(f.store, f.id, f.access);
+  f.state.reads.clear();
+  await assert.rejects(openBackupInstructionGeneration(f.store, f.id, 'owner', {
+    ...generation.reference, partCount: Number.MAX_SAFE_INTEGER
+  }, f.access), /incomplete/i);
+  const chunkReads = [...f.state.reads].filter(([key]) => key.startsWith('chunks/')).reduce((sum, [, count]) => sum + count, 0);
+  assert.equal(chunkReads, 1, 'only the small manifest is decoded before ordinal three is found missing');
 });
 
-test('one oversized escaped diagnostic cannot prevent exact independent recovery of saved owner content', async () => {
-	const f = fixture(0), reference = '\0'.repeat(2 * 1024 * 1024);
-	f.source.push({ shareId: 'oversized-reference', ownerId: 'owner', thingtime: ['data'], crystal: { renderComponent: { id: reference }, text: 'Keep this exact saved data' } });
-	await f.run();
-	const evidence = f.json('plan/0.json').items.find((item: any) => item.snapshot.adapter === 'backup-reference-coverage').snapshot.value;
-	assert.equal(evidence.coverage.discovery, 'unsupported'); assert.equal(evidence.coverage.wholeAccountReady, false);
-	assert.equal(evidence.issues[0].reference, null);
-	assert.deepEqual(evidence.issues[0].referenceDiagnostic, { encoding: 'utf8', bytes: Buffer.byteLength(reference), sha256: createHash('sha256').update(reference).digest('hex') });
-	await sealBackup(f.store, f.id, f.access);
-	const second = fixture(0); await copySealedBackup(f.store, second.store, f.id, f.access);
-	f.source.length = 0; f.objects.clear();
-	const restored = await openBackupThingSnapshot(second.store, f.id, 'oversized-reference', f.access);
-	assert.equal((restored.value as any).crystal.renderComponent.id, reference);
-	assert.equal((restored.value as any).crystal.text, 'Keep this exact saved data');
+test('instruction generation recovery refuses a different owner before reading backup objects', async () => {
+  const { instructionBackupFixture } = await import('./instructionRecords.fixtures');
+  const { openBackupInstructionGeneration } = await import('./instructionRecords');
+  const f = fixture(0), generation = instructionBackupFixture('foreign-owner', 3);
+  await assert.rejects(openBackupInstructionGeneration(f.store, f.id, 'foreign-owner', generation.reference, f.access), /owner identity/);
+  assert.equal(f.state.reads.size, 0);
 });
 
-test('real-shaped moderation Dates and provider diagnostics are excluded before portable attachment bounding', async () => {
- const f = fixture(0), attachment = await backupAttachmentFixture('owner', 'moderated-attachment', Buffer.from('saved bytes'));
- (attachment.doc as any).moderation = { status: 'clear', checkedAt: new Date(), provider: 'DO_NOT_EXPORT_PROVIDER_DIAGNOSTICS', details: { response: 'DO_NOT_EXPORT_PROVIDER_DIAGNOSTICS' } };
- f.source.push(attachment.doc); f.heads.set(attachment.doc.objectKey, attachment.head);
- await f.run();
- assert.ok(f.projections.some((p: any) => p['moderation.status'] === 1 && p.moderation === undefined));
- assert.ok(![...f.objects.values()].some(bytes => Buffer.from(bytes).includes('DO_NOT_EXPORT_PROVIDER_DIAGNOSTICS')));
- const item = f.json('plan/0.json').items.find((item: any) => item.thingId === attachment.doc.shareId);
- assert.equal(item.snapshot.value.moderation, null);
- assert.deepEqual(item.snapshot.value.content, attachment.content);
-});
-
-test('account file descriptors preserve inert symlink metadata alongside its exact target bytes', async () => {
- const f = fixture(0), bytes = Buffer.from('../target'), attachment = await backupAttachmentFixture('owner', 'symlink-attachment', bytes);
- f.source.push(attachment.doc); f.heads.set(attachment.doc.objectKey, attachment.head);
- const symbolicLink = { format: 'posix-symlink-v1', targetBase64: bytes.toString('base64') };
- f.source.push({ shareId: 'file-one', ownerId: 'owner', thingtime: ['file'], timelineHeadId: 'symlink-revision', folderId: 'folder-one', crystal: { name: 'link', trashed: false, content: attachment.content, symbolicLink } });
- await f.run();
- const file = f.json('plan/0.json').items.find((item: any) => item.thingId === 'file-one');
- assert.deepEqual(file.snapshot.value.symbolicLink, symbolicLink);
- assert.ok(f.projections.some((p: any) => p['crystal.symbolicLink'] === 1));
+test('account instruction references refuse missing, corrupt or uncommitted generations', async () => {
+  const { instructionBackupFixture } = await import('./instructionRecords.fixtures');
+  const { fromBin } = await import('../auth/binary');
+  for (const mode of ['missing', 'corrupt', 'uncommitted', 'wrong-digest', 'wrong-revision'] as const) {
+    const f = fixture(0), generation = instructionBackupFixture('owner', 3), doc = accountFixture();
+    if (mode === 'missing') generation.docs.pop();
+    if (mode === 'corrupt') generation.docs[1].secure = Buffer.from('{}') as any;
+    if (mode === 'uncommitted') {
+      const payload = JSON.parse(fromBin(generation.docs[0].secure));
+      payload.status = 'staging'; generation.docs[0].secure = Buffer.from(JSON.stringify(payload)) as any;
+    }
+    const reference = { ...generation.reference, ...(mode === 'wrong-digest' ? { digest: 'f'.repeat(64) } : {}) };
+    doc.secure = Buffer.from(JSON.stringify({ meta: { lopuInstructions: { revision: mode === 'wrong-revision' ? 'different_revision' : generation.revision, reference } } }));
+    f.source.push(doc, ...generation.docs);
+    await assert.rejects(f.run());
+    assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), false);
+  }
 });

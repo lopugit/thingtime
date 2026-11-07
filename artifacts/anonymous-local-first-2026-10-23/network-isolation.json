@@ -1,0 +1,10 @@
+{
+  "mode": "bwrap-unshare-all",
+  "uid": 1000,
+  "routes": "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT                                                       \n",
+  "applicationConfigAbsent": true,
+  "personalProfileAbsent": true,
+  "chromiumSandbox": true,
+  "recordedAt": "2026-10-23T06:33:22.201Z",
+  "directIpDenied": "ENETUNREACH"
+}

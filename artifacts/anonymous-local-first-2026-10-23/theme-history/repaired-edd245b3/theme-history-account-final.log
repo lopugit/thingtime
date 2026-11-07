@@ -1,0 +1,35 @@
+✔ native account theme History reviews restore, undo and merge offline (44685.06418ms)
+✖ native custom-plane account theme History reviews restore, undo and merge offline (52366.111684ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 98315.283463
+
+✖ failing tests:
+
+test at app/local-workspace/themeVersions.browser.test.ts:2:1675
+✖ native custom-plane account theme History reviews restore, undo and merge offline (52366.111684ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   '/api/v1/themes/sync'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:355:12)
+      at runNextTicks (node:internal/process/task_queues:65:5)
+      at process.processImmediate (node:internal/timers:502:9)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ '/api/v1/themes/sync' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

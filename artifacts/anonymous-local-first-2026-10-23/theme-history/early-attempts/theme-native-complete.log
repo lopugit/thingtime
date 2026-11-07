@@ -1,0 +1,54 @@
+✖ native anonymous theme History reviews restore, undo and merge offline (55164.667001ms)
+✖ native account theme History reviews restore, undo and merge offline (51450.186554ms)
+✖ native custom-plane account theme History reviews restore, undo and merge offline (3789.424336ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 111275.696081
+
+✖ failing tests:
+
+test at app/local-workspace/themeVersions.browser.test.ts:2:1554
+✖ native anonymous theme History reviews restore, undo and merge offline (55164.667001ms)
+  locator.waitFor: Timeout 25000ms exceeded.
+  Call log:
+    - waiting for getByText('Theme "History design f0e115" applied 🎨', { exact: true }) to be visible
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:192:73) {
+    name: 'TimeoutError',
+    log: [ `  - waiting for getByText('Theme "History design f0e115" applied 🎨', { exact: true }) to be visible` ]
+  }
+
+test at app/local-workspace/themeVersions.browser.test.ts:2:1554
+✖ native account theme History reviews restore, undo and merge offline (51450.186554ms)
+  locator.isEnabled: Timeout 25000ms exceeded.
+  Call log:
+    - waiting for getByRole('button', { name: 'Save theme 💾', exact: true })
+  
+      at <anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:165:93)
+      at eventually (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:75:16)
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:165:11) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('button', { name: 'Save theme 💾', exact: true })" ]
+  }
+
+test at app/local-workspace/themeVersions.browser.test.ts:2:1554
+✖ native custom-plane account theme History reviews restore, undo and merge offline (3789.424336ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"code":"ACTOR_CHANGED","error":"The active account changed. Run the action again."}
+  
+  409 !== 200
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:142:14)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 409,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

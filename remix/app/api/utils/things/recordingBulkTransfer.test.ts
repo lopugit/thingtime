@@ -73,3 +73,35 @@ test('archive bulk moves require explicit first-party owner context and retain t
   assert.ok(failed.ok); if (failed.ok) assert.equal(failed.failed, 1);
   assert.doesNotMatch(JSON.stringify(failed), /private database details/);
 });
+
+test('conditional managed move preserves the caller version and refuses stale snapshots before mutation', async () => {
+  let calls = 0;
+  const deps = { collection, moveRecording: async (_owner: string, id: string, folderId: string | null, expected?: string) => {
+    calls++; assert.equal(expected, doc.updatedAt.toISOString()); return { id, folderId };
+  } };
+  const fresh = await bulkThings({ id: 'owner' }, { op: 'move', ids: ['recording'], expectedUpdatedAt: doc.updatedAt.toISOString() }, deps);
+  assert.ok(fresh.ok); if (fresh.ok) assert.equal(fresh.succeeded, 1);
+  const stale = await bulkThings({ id: 'owner' }, { op: 'move', ids: ['recording'], expectedUpdatedAt: new Date(doc.updatedAt.getTime() - 1).toISOString() }, deps);
+  assert.ok(stale.ok); if (stale.ok) { assert.equal(stale.failed, 1); assert.equal(stale.results[0].status, 409); }
+  assert.equal(calls, 1);
+});
+
+test('conditional bulk move rejects ambiguous batches and malformed versions before any storage access', async () => {
+  const deps = { collection: async () => { throw Error('Must not reach storage'); } };
+  for (const body of [
+    { op: 'move', ids: ['a','b'], expectedUpdatedAt: doc.updatedAt.toISOString() },
+    ...['copy','delete','share'].map(op => ({ op, ids: ['a'], expectedUpdatedAt: doc.updatedAt.toISOString() })),
+    ...[null, '', 123, {}, 'not-a-date'].map(expectedUpdatedAt => ({ op: 'move', ids: ['a'], expectedUpdatedAt }))
+  ]) {
+    const result = await bulkThings({ id: 'owner' }, body, deps);
+    assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 400);
+  }
+});
+
+test('a managed move race returns a conflict without exposing storage details', async () => {
+  const result = await bulkThings({ id: 'owner' }, { op: 'move', ids: ['recording'], expectedUpdatedAt: doc.updatedAt.toISOString() }, {
+    collection, moveRecording: async () => { throw Object.assign(Error('private database detail'), { status: 409 }); }
+  });
+  assert.ok(result.ok); if (result.ok) assert.equal(result.results[0].status, 409);
+  assert.doesNotMatch(JSON.stringify(result), /private database detail/);
+});

@@ -1,3 +1,4 @@
+import type { TimelineGraphNode } from '../../../timeline/versionGraph.ts';
 import { createHash } from 'node:crypto';
 import { COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry.ts';
 import {
@@ -62,7 +63,7 @@ export async function readTimelineEntries(things: any, ownerId: string, eventIds
 	return entriesFromDocs(things, ownerId, docs, session);
 }
 
-export type TimelineGraphNode = { id: string; thingId: string; parentIds: string[]; afterAdapter: string | null };
+export type { TimelineGraphNode } from '../../../timeline/versionGraph.ts';
 /** Traverse small graph headers, never thousands of full revision snapshots. */
 export async function readTimelineNodes(things: any, ownerId: string, eventIds: string[]): Promise<TimelineGraphNode[]> {
 	if (eventIds.length > 128) throw new Error('Too many Timeline versions requested.');
@@ -104,6 +105,31 @@ export async function readTimelineNodes(things: any, ownerId: string, eventIds: 
 	return nodes;
 }
 
+/** Serialize account content mutations using the existing protected Timeline
+ * folder and shareId index. The lock and all dependent reads/writes must share
+ * this active-plane transaction; no new uniqueness policy on user data. */
+export async function lockTimelineOwner(things: any, ownerId: string, session: any, at = new Date()) {
+	if (!ownerId || !session) throw new Error('Timeline locking requires the content transaction');
+	const folderId = timelineFolderId(ownerId);
+	const now = at;
+	await things.updateOne({ shareId: folderId }, { $setOnInsert: {
+		shareId: folderId, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, thingtime: ['folder'], ownerId: ownerId,
+		acl: ['tt:user'], targetId: null, folderId: null, crystal: { name: 'Timeline', icon: '🕰️' }, extended: null, tags: [],
+		storageClass: 'control', timelinePosition: 0, createdAt: now, updatedAt: now
+	} }, { session, upsert: true });
+	const folder = await things.findOne({ shareId: folderId }, { session });
+	if (!folder || folder.ownerId !== ownerId || folder.thingtime?.length !== 1 || folder.thingtime[0] !== 'folder' ||
+		!Number.isSafeInteger(folder.timelinePosition) || folder.timelinePosition < 0) throw new Error('Invalid Timeline folder');
+	// A monotonic logical millisecond supplies a range cursor using the EXISTING
+	// targetId/thingtime/createdAt index. Writing this common folder serializes
+	// account commits: a late transaction cannot land behind a published cursor.
+	const position = Math.max(now.getTime(), folder.timelinePosition + 1);
+	if (!Number.isSafeInteger(position) || position < 1 || !Number.isFinite(new Date(position).getTime())) throw new Error('Invalid Timeline position');
+	const advanced = await things.updateOne({ _id: folder._id, timelinePosition: folder.timelinePosition }, { $set: { timelinePosition: position } }, { session });
+	if (advanced.matchedCount !== 1) throw new StorageMutationError(409, 'storage_conflict', 'Timeline changed during this operation — retry with the same operation id');
+	return { folderId, position, now };
+}
+
 /** Collection and session MUST belong to the caller's chosen data plane.
  * This deliberately cannot start a separate transaction after a content write.
  * Event authorization/provenance is the caller's responsibility; shape checks
@@ -135,23 +161,7 @@ export async function appendTimelineEvent(
 		const targets = await things.find({ ownerId: event.ownerId, thingtime: TIMELINE_EVENT_KIND, shareId: { $in: refs.map(ref => timelineEventThingId(event.ownerId, ref.eventId)) } }, { session, projection: { shareId: 1, targetId: 1 } }).toArray();
 		if (refs.some(ref => !targets.some((target: any) => target.shareId === timelineEventThingId(event.ownerId, ref.eventId) && target.targetId === ref.thingId))) throw new StorageMutationError(409, 'storage_conflict', 'A referenced dependency version is unavailable');
 	}
-	const folderId = timelineFolderId(event.ownerId);
-	const now = options.now ?? new Date();
-	await things.updateOne({ shareId: folderId }, { $setOnInsert: {
-		shareId: folderId, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, thingtime: ['folder'], ownerId: event.ownerId,
-		acl: ['tt:user'], targetId: null, folderId: null, crystal: { name: 'Timeline', icon: '🕰️' }, extended: null, tags: [],
-		storageClass: 'control', timelinePosition: 0, createdAt: now, updatedAt: now
-	} }, { session, upsert: true });
-	const folder = await things.findOne({ shareId: folderId }, { session });
-	if (!folder || folder.ownerId !== event.ownerId || folder.thingtime?.length !== 1 || folder.thingtime[0] !== 'folder' ||
-		!Number.isSafeInteger(folder.timelinePosition) || folder.timelinePosition < 0) throw new Error('Invalid Timeline folder');
-	// A monotonic logical millisecond supplies a range cursor using the EXISTING
-	// targetId/thingtime/createdAt index. Writing this common folder serializes
-	// account commits: a late transaction cannot land behind a published cursor.
-	const position = Math.max(now.getTime(), folder.timelinePosition + 1);
-	if (!Number.isSafeInteger(position) || position < 1 || !Number.isFinite(new Date(position).getTime())) throw new Error('Invalid Timeline position');
-	const advanced = await things.updateOne({ _id: folder._id, timelinePosition: folder.timelinePosition }, { $set: { timelinePosition: position } }, { session });
-	if (advanced.matchedCount !== 1) throw new StorageMutationError(409, 'storage_conflict', 'Timeline changed during this operation — retry with the same operation id');
+	const { folderId, position, now } = await lockTimelineOwner(things, event.ownerId, session, options.now);
 	const entry: TimelineEntry = { event, receipt: { formatVersion: 1, eventId: event.id, ownerId: event.ownerId, position, acceptedAt: now.toISOString() } };
 	const linkRecords = splitTimelineEvent(event).links;
 	const doc: any = {

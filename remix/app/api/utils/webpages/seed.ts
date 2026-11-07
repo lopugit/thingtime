@@ -1,3 +1,4 @@
+import { SITE_PAGE_SEEDS, sitePageCrystal } from '~/schemas/sitePages';
 import { integrationBuilderSeeds } from '~/library/builderPages';
 import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
 import { toBin } from '../auth/users';
@@ -9,6 +10,7 @@ import { ASTRO_SCHOOL_ENTRIES } from '../actions/packs/astro/index';
 import { POKEWORLD_SPECIES_SEED } from '../actions/packs/pokeworld/index';
 import { WEBPAGE_DEMO_SLUG_PREFIX, getWebpageDemos, webpageDemoCrystal } from '~/schemas/webpageDemos';
 import { SITE_GLOBAL_PAGE_KEY } from './webpages';
+export { SITE_PAGE_SEEDS } from '~/schemas/sitePages';
 
 // Seed the built-in SITE PAGES: one system-owned webpage thing per app route
 // (shareId webpage-route-<key>) whose block list is just the locked native
@@ -28,47 +30,6 @@ import { SITE_GLOBAL_PAGE_KEY } from './webpages';
 // program. One admin POST seeds hundreds of example things, every demo opens
 // at /p/ and in the builder, and every suite part is browsable on its kind's
 // page (viewers fork or install, never edit the seed).
-
-type SitePageSeed = {
-	key: string; // route key → shareId webpage-route-<key>, native block key
-	path: string; // crystal.siteRoute
-	name: string;
-	// pages decomposed in the client native-section registry
-	// (remix/app/components/Builder/nativeSections.tsx) seed one native block
-	// PER SECTION instead of a single whole-page native — keep the two lists
-	// in sync when converting a page
-	sections?: string[];
-};
-
-export const SITE_PAGE_SEEDS: SitePageSeed[] = [
-	{ key: 'home', path: '/', name: 'Home', sections: ['home-hero', 'home-demo', 'home-use-cases', 'home-ecosystem', 'home-developers', 'home-back', 'home-faq', 'home-footer'] },
-	{ key: 'feed', path: '/feed', name: 'Feed' },
-	{ key: 'messages', path: '/messages', name: 'Messages' },
-	{ key: 'search', path: '/search', name: 'Search' },
-	{ key: 'schemas', path: '/schemas', name: 'Schemas' },
-	{ key: 'components', path: '/components', name: 'Components' },
-	{ key: 'actions', path: '/actions', name: 'Actions' },
-	{ key: 'things', path: '/things', name: 'Things' },
-	{ key: 'settings', path: '/settings', name: 'Settings' },
-	{ key: 'profile', path: '/profile', name: 'Profile' },
-	{ key: 'themes', path: '/themes', name: 'Themes' },
-	{ key: 'status', path: '/status', name: 'Status', sections: ['status-header', 'status-state', 'status-readout', 'status-recheck'] },
-	{ key: 'vercel', path: '/vercel', name: 'Deployments' },
-	{ key: 'mongodb-status', path: '/mongodb-status', name: 'MongoDB', sections: ['mongodb-status-header', 'mongodb-status-connection', 'mongodb-status-endpoint'] },
-	{ key: 'migrations', path: '/migrations', name: 'Migrations' },
-	{ key: 'tests', path: '/tests', name: 'API tests' },
-	{ key: 'admin', path: '/admin', name: 'Admin' },
-	{ key: 'apps', path: '/apps', name: 'App data' },
-	{ key: 'apps-manage', path: '/apps/manage', name: 'My apps' },
-	{ key: 'branding', path: '/branding', name: 'Branding' },
-	{ key: 'docs', path: '/docs', name: 'Docs' },
-	{ key: 'welcome', path: '/welcome', name: 'Welcome', sections: ['welcome-hero', 'welcome-card'] },
-	{ key: 'crypto', path: '/crypto', name: 'Crypto' },
-	{ key: 'raw', path: '/raw', name: 'MongoDB query' },
-	{ key: 'ode', path: '/ode', name: 'Ode', sections: ['ode-poem'] },
-	{ key: 'builder', path: '/builder', name: 'Builder' },
-	{ key: 'builder-demos', path: '/builder/demos', name: 'Builder demos' }
-];
 
 export type SeedWebpagesResult = {
 	ok: true;
@@ -301,18 +262,7 @@ export const seedSiteWebpages = async (): Promise<SeedFail | SeedWebpagesResult>
 	const tags = ['webpage', 'site'];
 	const definitions: SeedDefinition[] = [
 		...SITE_PAGE_SEEDS.map((seed) =>
-			webpageDefinition(`route-${seed.key}`, tags, {
-				name: seed.name,
-				description: `Site page for ${seed.path} — personalise it with the builder's site edit mode.`,
-				pageKey: `route-${seed.key}`,
-				siteRoute: seed.path,
-				version: 1,
-				blocks: (seed.sections || [seed.key]).map((sectionKey) => ({
-					id: `native-${sectionKey}`,
-					type: 'native',
-					native: sectionKey
-				}))
-			})
+			webpageDefinition(`route-${seed.key}`, tags, sitePageCrystal(seed))
 		),
 		webpageDefinition(SITE_GLOBAL_PAGE_KEY, tags, {
 			name: 'Global blocks',

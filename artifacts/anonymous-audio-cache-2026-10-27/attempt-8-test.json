@@ -1,0 +1,5 @@
+{
+  "fixture": "remix/app/components/Attachments/AudioAttachmentPlayer.browser.test.ts",
+  "sourceSha256": "98133b20c1ce8189d37cb884b6ba0f6ac209d2c10eb3790ce1686e4750ab9ff3",
+  "scope": "Allows root unmount while retaining actual held root response, old native audio cleanup and no late-source assertions; adds bounded wait and pauses."
+}

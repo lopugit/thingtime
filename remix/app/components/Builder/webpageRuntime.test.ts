@@ -3,6 +3,7 @@ import test from 'node:test';
 import { MAX_PAGINATION_CURSOR_CHARS, INVALID_PAGINATION_CURSOR } from '~/schemas/paginationCursor';
 import { buildOverview, OVERVIEW_ROLES, parseOverviewInput, type OverviewRole, type OverviewThing } from '~/api/utils/agents/overviewCore';
 import { localQueryHref } from '../Actions/localUiAction';
+import { workspaceScopeKey } from '../../local-workspace/storage';
 
 import { MAX_SHARED_SOURCE_LOADS, gatherFormFields, evictSharedLoads, queryScopeOf, readSourceCache, sourceCacheKey, writeSourceCache } from './webpageRuntime';
 
@@ -226,6 +227,21 @@ test('typed JSON form fields decode once and reject invalid drafts before an Act
 	for (const value of ['', '{', 'x'.repeat(65537)]) assert.throws(() => gatherFormFields(form(value)), /Check the JSON/);
 });
 
+
+test('source caches isolate anonymous, account, origin and data-plane partitions', () => {
+	const scopes = [workspaceScopeKey({ kind: 'anonymous' }), ...[
+		['https://one.example', 'alice', 'home'], ['https://one.example', 'alice', 'selected'],
+		['https://two.example', 'alice', 'home'], ['https://one.example', 'bob', 'home']
+	].map(([origin, ownerId, dataPlane]) => workspaceScopeKey({ kind: 'account', origin, ownerId, dataPlane }))];
+	withFakeStorage(() => {
+		writeSourceCache('alice', 'same-page', 'same-block', 'legacy viewer-only value');
+		for (const [index, scope] of scopes.entries()) {
+			assert.equal(readSourceCache(scope, 'same-page', 'same-block'), undefined);
+			writeSourceCache(scope, 'same-page', 'same-block', { index });
+		}
+		for (const [index, scope] of scopes.entries()) assert.deepEqual(readSourceCache(scope, 'same-page', 'same-block'), { index });
+	});
+});
 
 test('ordinary Actions cannot gather fields from nested transient settings hosts', () => {
 	const field = (name: string, privateHost: boolean) => ({

@@ -1,0 +1,77 @@
+{
+  "applicationTarSha256": "aea7f888d84c7976add09f1d1c5dff646677f086ff2d499ac39e3b466f7a4217",
+  "checks": [
+    {
+      "file": "remix/app/utils/rootDataRecovery.ts",
+      "map": "ThingDrafts-B8Ag8pP4.js.map",
+      "equal": true,
+      "sha256": "f0a1a3831b48d75748a1a5ec756d668e960163e6f384aee09be047bc82349a60"
+    },
+    {
+      "file": "remix/app/local-workspace/passwordFiles.ts",
+      "map": "index-Bzdj5Zvu.js.map",
+      "equal": true,
+      "sha256": "34f4bcda83b9caaec23a1b00104ef9d9a6aef52f158c7a58d267c7cb026cc80f"
+    },
+    {
+      "file": "remix/app/local-workspace/passwordVault.ts",
+      "map": "index-Bzdj5Zvu.js.map",
+      "equal": true,
+      "sha256": "d7581e7e2ef74268f31fa9019f71d059dc3e8e2ac08b76437d3d0d8532d45bf4"
+    },
+    {
+      "file": "remix/app/components/Passwords/DevicePasswordManager.tsx",
+      "map": "index-Bzdj5Zvu.js.map",
+      "equal": true,
+      "sha256": "e96bb1671b952911b309218e06022ee90fc41b6346057bff7bf601581df011ca"
+    },
+    {
+      "file": "remix/app/root.tsx",
+      "map": "index-Bzdj5Zvu.js.map",
+      "equal": true,
+      "sha256": "06ad2637a6871ef9e38916c961c07766b1ca82eaa5af0ef6988fcfdd66262290"
+    },
+    {
+      "file": "remix/app/utils/rootDataLoader.ts",
+      "map": "index-Bzdj5Zvu.js.map",
+      "equal": true,
+      "sha256": "fffec095f4c569d8469b80dc98d02a154a739375f031ba1f1f98390a3a23a8b1"
+    },
+    {
+      "file": "remix/app/routes.tsx",
+      "map": "index-Bzdj5Zvu.js.map",
+      "equal": true,
+      "sha256": "35fc7448d3f6b3c4b92ce1d39f3bd4a764f73f7127e63d782f6822575408f93a"
+    },
+    {
+      "file": "remix/app/components/Passwords/AccountPasswordWorkspace.tsx",
+      "map": "passwords-D7DlDqYw.js.map",
+      "equal": true,
+      "sha256": "dea296dfb2c7434aaebac2323852907beace03084c66d3850e5a8cbcafd88a78"
+    },
+    {
+      "file": "remix/app/components/Passwords/PasswordManager.tsx",
+      "map": "passwords-D7DlDqYw.js.map",
+      "equal": true,
+      "sha256": "055688cdf183ad55094da32fc780f2e83c9d5706c3bf0a6ff102ec962d1f9827"
+    },
+    {
+      "file": "remix/app/utils/rootIdentity.ts",
+      "map": "runtime.client-gX05s3hj.js.map",
+      "equal": true,
+      "sha256": "3ec05ce8e18ec19630505e5180949338fcb5e8ad19309e8927af6ea1dcff2130"
+    },
+    {
+      "file": "remix/app/local-workspace/runtime.client.ts",
+      "map": "runtime.client-gX05s3hj.js.map",
+      "equal": true,
+      "sha256": "05b5a9b084502131a86b119ceb4ce7c75499f263a2ff90c56e0d7db54fe96d9a"
+    },
+    {
+      "file": "remix/app/hooks/useApi.tsx",
+      "map": "useApi-DcNUiQFW.js.map",
+      "equal": true,
+      "sha256": "66daacbb427043385b0aa397aae6e38474fffbd18c6635cc6b1d1a88052cce72"
+    }
+  ]
+}

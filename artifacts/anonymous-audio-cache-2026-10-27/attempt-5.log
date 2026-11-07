@@ -1,0 +1,45 @@
+Exact reviewed package and audio client preflight passed before runtime claim
+Current package ready; running audio
+Egress check 203.0.113.1: ENETUNREACH
+Egress check ::ffff:203.0.113.1: ENETUNREACH
+Egress check 2001:db8::1: ENETUNREACH
+Egress check blocked.invalid: EAI_AGAIN
+Checking backend redirect
+Launching isolated browser
+Browser ready
+Browser egress denied http://203.0.113.1/
+Browser egress denied http://[::ffff:203.0.113.1]/
+Browser egress denied http://[2001:db8::1]/
+Browser egress denied http://blocked.invalid/
+Browser egress denied http://127.0.0.1:18725/
+Closing network-proof browser
+Closing network-proof server
+{"interfaces":["loopback"],"denied":[{"host":"203.0.113.1","code":"ENETUNREACH"},{"host":"::ffff:203.0.113.1","code":"ENETUNREACH"},{"host":"2001:db8::1","code":"ENETUNREACH"},{"host":"blocked.invalid","code":"EAI_AGAIN"}],"browserDenied":["http://203.0.113.1/","http://[::ffff:203.0.113.1]/","http://[2001:db8::1]/","http://blocked.invalid/","http://127.0.0.1:18725/"],"backendRedirectDenied":true,"chromiumSandbox":true}
+Server before test: 200
+
+Audio checkpoint: independent author/viewer fixture and remote player ready
+Audio checkpoint: delayed track-save fence passed
+Audio checkpoint: exact original saved and played
+✖ ordinary audio player fences delayed saves across queue/account changes and keeps exact offline originals (60544.676867ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 60603.436463
+
+✖ failing tests:
+
+test at ../audio-player.test.mjs:27:1
+✖ ordinary audio player fences delayed saves across queue/account changes and keeps exact offline originals (60544.676867ms)
+  locator.click: Timeout 30000ms exceeded.
+  Call log:
+    - waiting for getByRole('button', { name: 'Log out', exact: true })
+
+      at TestContext.<anonymous> (/tmp/check/audio-player.test.mjs:237:76) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('button', { name: 'Log out', exact: true })" ]
+  }
+Container operation failed: 1

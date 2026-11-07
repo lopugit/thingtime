@@ -1,0 +1,6 @@
+{
+  "source": "tmp/continuation/post-delete/post-delete.test.mjs",
+  "sha256": "f7d57b9b69c70ef8dc96015fa4e9834a401437805ca11f4ea09c3a1e78923fd9",
+  "phase": "combined",
+  "note": "r8 executed before status-only snapshot and optional phase selection source refinement"
+}

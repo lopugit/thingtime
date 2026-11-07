@@ -1,0 +1,7 @@
+{
+  "code": 1,
+  "deadlineExceeded": false,
+  "stderr": "Error loading config.toml: invalid transport in mcp_servers.thingtime-drafts",
+  "cause": "The acceptance helper disabled a retired, absent MCP entry. That override created an incomplete transport entry before any tool calls.",
+  "repair": "Removed only the stale invocation override. Installed thingtime configuration and host approval policy unchanged."
+}

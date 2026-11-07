@@ -22,6 +22,15 @@ test('a successful HTTP response alone cannot establish private database readine
   }
 });
 
+test('a partial client build cannot substitute the SPA for an isolated renderer bundle', async () => {
+  for (const missing of ['/draft-preview/runner.js', '/platform/runtime.js', '/library/runner.js', '/embed/thingtime.min.js']) {
+    const request = async (url, options) => options.method === 'HEAD'
+      ? new Response('', { headers: { 'content-type': url.endsWith(missing) ? 'text/html' : 'text/javascript' } })
+      : new Response(html('current'));
+    await assert.rejects(verifyApplicationAssets(request), error => error.message.includes(missing) && error.message.includes('build:client'));
+  }
+});
+
 test('desktop acceptance authority is exact loopback, with private local bytes and explicit data identity', () => {
   const { applicationOptions } = require('../lib/agent-browsers/runtime/application.cjs');
   const id = '12345678-1234-1234-1234-123456789abc', origin = 'http://127.0.0.1:28671';
@@ -46,7 +55,7 @@ test('asset acceptance reads the selected shared test origin, with no fixed-port
     urls.push(url);
     return options.method === 'HEAD' ? new Response('', { headers: { 'content-type': 'text/javascript' } }) : new Response(html('shared'));
   }, origin);
-  assert.deepEqual(urls.sort(), [`${origin}/assets/index-shared.js`, `${origin}/index.html`, `${origin}/login`].sort());
+  assert.deepEqual(urls.sort(), [`${origin}/assets/index-shared.js`, `${origin}/index.html`, `${origin}/login`, ...['/draft-preview/runner.js', '/platform/runtime.js', '/library/runner.js', '/embed/thingtime.min.js'].map(path=>origin+path)].sort());
 });
 
 test('packaged node_middleware exports serve real health and assets through the installed-app listener', async () => {
@@ -56,7 +65,7 @@ test('packaged node_middleware exports serve real health and assets through the 
   const entry = path.join(root, 'index.mjs');
   // Match the packaged Nitro export shape; this module intentionally has no
   // listener of its own, reproducing the previously silent startup failure.
-  await fs.writeFile(entry, `export const middleware=(req,res)=>{if(req.url==='/api/v1/health/nitro'){res.setHeader('content-type','application/json');return res.end(JSON.stringify({ok:true,state:'ready'}));}if(req.url==='/assets/index-current.js'){res.setHeader('content-type','text/javascript');return res.end('export{}');}if(req.url==='/fail')throw Error('private failure');res.end('<script type="module" src="/assets/index-current.js"></script>');};export const handleUpgrade=undefined;`);
+  await fs.writeFile(entry, `export const middleware=(req,res)=>{if(req.url==='/api/v1/health/nitro'){res.setHeader('content-type','application/json');return res.end(JSON.stringify({ok:true,state:'ready'}));}if(['/assets/index-current.js','/draft-preview/runner.js','/platform/runtime.js','/library/runner.js','/embed/thingtime.min.js'].includes(req.url)){res.setHeader('content-type','text/javascript');return res.end('export{}');}if(req.url==='/fail')throw Error('private failure');res.end('<script type="module" src="/assets/index-current.js"></script>');};export const handleUpgrade=undefined;`);
   const reservation = net.createServer();
   await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
   const port = reservation.address().port; await new Promise(resolve => reservation.close(resolve));

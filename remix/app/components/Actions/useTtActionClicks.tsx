@@ -7,7 +7,8 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { gatherFormFields, useWebpageRuntime } from '~/components/Builder/webpageRuntime';
 import { ownsAuthoredControl } from '../Builder/authoredControlOwnership';
 import { captureComponentFormFields } from '../Builder/componentFormFields';
@@ -150,13 +151,13 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 	const runtime = useWebpageRuntime();
 	const runtimeRef = React.useRef(runtime);
 	runtimeRef.current = runtime;
-	const user = useCurrentUser();
-	const signedIn = !!user?.id;
+	const user = useWorkspaceUser();
+	const workspaceScope = useWorkspaceScope();
+	const hasWorkspace = workspaceScope !== 'pending' && !!user?.id;
 	const location = useLocation();
-	// A local selection keeps the route generation. Account/access changes
-	// and real navigation retire async confirmations and completions.
+	// Retire pending confirmations on workspace, runtime or route changes.
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque action generation
-	const actionIdentity = React.useMemo(() => ({}), [user?.id, runtime.identity, location.key, held]);
+	const actionIdentity = React.useMemo(() => ({}), [workspaceScope, runtime.identity, location.key]);
 	const identityRef = React.useRef(actionIdentity);
 	identityRef.current = actionIdentity;
 	const navigate = useNavigate();
@@ -209,7 +210,7 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 				notifyComponentControlActivation(control);
 				return;
 			}
-			if (!signedIn && (!runtimeRef.current.sharedRun || action === INSTALL_ACTION)) {
+			if (!hasWorkspace && (!runtimeRef.current.sharedRun || action === INSTALL_ACTION)) {
 				lopuRef.current({ title: 'Sign in to use this 🗝️', description: 'Controls run as you, on your own things.', status: 'info', duration: 6000 });
 				navigate('/login');
 				return;
@@ -279,9 +280,8 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 						onUnowned: async (key, fields) => {
 							if (!mountedRef.current || identity !== identityRef.current) return false;
 							if (key === CATALOG_RECORD_ACTION) {
-								const { installSuiteOnServer } = await import('../Builder/installSuite');
-								if (!mountedRef.current || identity !== identityRef.current) return false;
-								await installSuiteOnServer('catalog-records', { onlyMissing: true });
+								const { installSuiteForWorkspace } = await import('../Builder/installSuite');
+								await installSuiteForWorkspace('catalog-records', { onlyMissing: true });
 								return true;
 							}
 							return onUnowned?.(key, fields) ?? false;
@@ -330,6 +330,6 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 				}
 			})();
 		},
-		[navigate, signedIn]
+		[navigate, hasWorkspace]
 	);
 };

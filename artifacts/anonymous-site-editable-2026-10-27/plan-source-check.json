@@ -1,0 +1,11 @@
+{
+  "taskCounts": {
+    "done": 65,
+    "local": 22,
+    "todo": 2
+  },
+  "total": 89,
+  "missingLocalLinks": [],
+  "scriptSyntax": "pass",
+  "visualVerification": "Not repeated. Browser tool refused file protocol; no alternate surface or workaround attempted."
+}

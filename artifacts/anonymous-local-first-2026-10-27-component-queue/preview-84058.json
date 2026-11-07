@@ -1,0 +1,72 @@
+{
+  "observedAt": "2026-10-26T15:22:11.861Z",
+  "sourceHead": "84058ca5e097efc4150fdc3ebba773488d6aedeb",
+  "evidenceBoundary": "Read-only public reachability and capability manifests, not deployed functional acceptance",
+  "results": [
+    {
+      "origin": "https://pr-1000.previews.dev.thingtime.com",
+      "pageStatus": 200,
+      "manifestStatus": 200,
+      "manifestOrigin": "https://pr-1000.previews.dev.thingtime.com",
+      "features": {
+        "api.things-export": {
+          "version": "1.18.0"
+        },
+        "api.things-import": {
+          "version": "1.15.0"
+        },
+        "api.themes-sync": {
+          "version": "1.8.0"
+        },
+        "api.algorithms-sync": {
+          "version": "1.6.0"
+        },
+        "api.attachment-content": {
+          "version": "1.18.0"
+        }
+      }
+    },
+    {
+      "origin": "https://thingtime-mcin40zc2-lopugits-projects.vercel.app",
+      "pageStatus": 200,
+      "manifestStatus": 200,
+      "manifestOrigin": "https://thingtime-mcin40zc2-lopugits-projects.vercel.app",
+      "features": {
+        "api.things-export": {
+          "version": "1.18.0"
+        },
+        "api.things-import": {
+          "version": "1.15.0"
+        },
+        "api.themes-sync": {
+          "version": "1.8.0"
+        },
+        "api.algorithms-sync": {
+          "version": "1.6.0"
+        },
+        "api.attachment-content": {
+          "version": "1.18.0"
+        }
+      }
+    },
+    {
+      "origin": "https://master.previews.thingtime.com",
+      "pageStatus": 200,
+      "manifestStatus": 200,
+      "manifestOrigin": "https://master.previews.thingtime.com",
+      "features": {
+        "api.things-export": {
+          "version": "1.15.0"
+        },
+        "api.things-import": {
+          "version": "1.11.0"
+        },
+        "api.themes-sync": null,
+        "api.algorithms-sync": null,
+        "api.attachment-content": {
+          "version": "1.17.0"
+        }
+      }
+    }
+  ]
+}

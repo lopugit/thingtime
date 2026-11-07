@@ -19,7 +19,8 @@ import { ArrowLeft, ExternalLink, Play } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { CARD_STYLES } from '~/theme/card';
@@ -53,6 +54,7 @@ type RunResponse = {
 	ok: boolean;
 	runId?: string;
 	history?: ActionTimelineReport;
+ historyError?: string;
 	status?: 'ok' | 'error';
 	result?: unknown;
 	error?: string;
@@ -65,6 +67,7 @@ type RunResponse = {
 
 type RunRecord = {
 	id: string;
+	localOnly?: boolean;
 	status: string;
 	startedAt: string | null;
 	durationMs: number | null;
@@ -123,7 +126,9 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 			const response = (await apiRef.current.v1.actions.run({ action: action.id, inputs })) as RunResponse;
 			setLastRun(response);
 			onRan?.();
-			if (response?.history?.status === 'incomplete') {
+			if (response?.historyError) {
+ lopuRef.current({ title: 'Local run history', description: response.historyError, status: 'warning' });
+ } else if (response?.history?.status === 'incomplete') {
 				lopuRef.current({ title: 'Action History sync', description: actionTimelineWarning(response.history), status: 'warning' });
 			} else if (response?.status === 'ok') {
 				lopuRef.current({ title: `⚡ ${action.crystal.name || 'Action'} ran ✓`, description: `${response.durationMs}ms · ${response.opsUsed} ops`, status: 'success', duration: 6000 });
@@ -261,11 +266,17 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 };
 
 export const ActionDetailPage = () => {
+ const scope = useWorkspaceScope();
+ const { key } = useParams();
+ return <WorkspaceActionDetailPage key={`${scope}:${key}`} scope={scope} />;
+};
+const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 	const { key } = useParams();
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
-	const user = useCurrentUser();
+	const workspaceUser = useWorkspaceUser();
+ const user = scope === 'pending' ? null : workspaceUser;
 	const navigate = useNavigate();
 	const [state, setState] = React.useState<{ key: string; action: ActionThing | null; missing: boolean }>({
 		key: '',
@@ -299,19 +310,19 @@ export const ActionDetailPage = () => {
 	// that cache while the authoritative fetch reconciles in the background.
 	const cachedAction = React.useMemo(() => {
 		if (!key) return null;
-		const cache = readLocalCache<{ actions?: ActionThing[] }>(`tt-actions-${user?.id || 'anon'}`);
+		const cache = readLocalCache<{ actions?: ActionThing[] }>(`tt-actions-${scope}`);
 		return selectActionByKey(cache?.actions || [], key);
-	}, [key, user?.id]);
+	}, [key, scope]);
 	const visible = state.key === requestKey ? state : { key: requestKey, action: cachedAction, missing: false };
 
 	React.useEffect(() => {
-		if (!key) return;
+		if (!key || scope === 'pending') return;
 		let cancelled = false;
 		(async () => {
 			try {
 				let action: ActionThing | null = null;
 				try {
-					const byId = await apiRef.current.v1.things.get({ id: key });
+					const byId = !user?.localOnly || key.startsWith('local-') ? await apiRef.current.v1.things.get({ id: key }) : null;
 					if (isActionThing(byId?.thing)) action = byId.thing as ActionThing;
 				} catch {}
 				if (!action && user?.id) {
@@ -347,7 +358,7 @@ export const ActionDetailPage = () => {
 						(async () => {
 							const resolved: Record<string, string> = {};
 							await Promise.all(
-								collectSchemaRefs(resolvedAction.crystal).map(async (ref) => {
+								collectSchemaRefs(resolvedAction.crystal).filter(ref => !user?.localOnly || ref.startsWith('local-')).map(async (ref) => {
 									try {
 										const response = await apiRef.current.v1.things.get({ id: ref });
 										const name = response?.thing?.crystal?.name;
@@ -367,7 +378,7 @@ export const ActionDetailPage = () => {
 		return () => {
 			cancelled = true;
 		};
-	}, [key, requestKey, user?.id]);
+	}, [key, requestKey, user?.id, user?.localOnly, scope]);
 
 	const action = visible.action;
 	const crystal = action?.crystal || {};
@@ -405,7 +416,7 @@ export const ActionDetailPage = () => {
 					<>
 						{editing ? <ThingDefinitionEditor id={action.id} onClose={() => setEditing(false)} onSaved={(saved) => {
                             setState({ key: requestKey, action: saved as ActionThing, missing: false });
-                            const cacheKey = `tt-actions-${user?.id || 'anon'}`;
+                            const cacheKey = `tt-actions-${scope}`;
                             const cached = readLocalCache<{ actions?: ActionThing[] }>(cacheKey);
                             if (cached?.actions) writeLocalCache(cacheKey, { ...cached, actions: cached.actions.map((entry) => entry.id === saved.id ? saved : entry) });
                         }} /> : null}
@@ -591,13 +602,14 @@ export const ActionDetailPage = () => {
 							<Text {...monoLabel} mb={2}>
 								Recent execution details
 							</Text>
-							<Button size="sm" variant="outline" mb={2} onClick={() => openThingHistory(action.id)}>Open History</Button>
-							<Text fontSize="xs" color={MUTED} mb={3}>History keeps saved changes and recorded server outcomes. The details below are a rolling debug window of up to 50 server runs.</Text>
+							{!user?.localOnly ? <Button size="sm" variant="outline" mb={2} onClick={() => openThingHistory(action.id)}>Open History</Button> : null}
+							<Text fontSize="xs" color={MUTED} mb={3}>{user?.localOnly ? 'The latest 50 execution details are saved on this device. They stay private to this local workspace.' : 'History keeps saved changes and recorded server outcomes. Recent execution details below are labelled by where the Action ran.'}</Text>
 							{runs.length ? (
 								<Stack spacing={2}>
 									{runs.map((record) => (
 										<Flex align="center" gap={2} key={record.id} wrap="wrap">
 											<ActionChip size="sm" tone={record.status === 'ok' ? 'ok' : 'danger'}>{record.status}</ActionChip>
+											<Text color={MUTED} fontSize="xs">{record.localOnly ? 'This device' : 'Server'}</Text>
 											<Text color={MUTED} fontSize="xs">
 												{record.startedAt ? new Date(record.startedAt).toLocaleString() : '—'}
 											</Text>
@@ -614,7 +626,7 @@ export const ActionDetailPage = () => {
 								</Stack>
 							) : (
 								<Text color={MUTED} fontSize="sm">
-									{crystal.runtime === 'browser' ? 'Browser runs show their trace above for this session. They do not create server run records.' : 'No server runs yet.'}
+									No execution details available yet.
 								</Text>
 							)}
 						</Box>

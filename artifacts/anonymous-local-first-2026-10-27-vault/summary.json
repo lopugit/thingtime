@@ -1,0 +1,33 @@
+{
+  "sourceHead": "84058ca5e097efc4150fdc3ebba773488d6aedeb",
+  "currentSourceSha256": {
+    "remix/app/local-workspace/passwordCapacity.browser.test.ts": "0cdf21f0e33349b6dd501a3b102449d3dc1a73d61ea0bfe4661ac1b9c297559f",
+    "remix/app/local-workspace/passwordCapacity.browser.fixture.ts": "3d40f6e7a2b8bfa92266ce8ea02f62f27fed18d25889b9bf6cefd36a4716a7b7"
+  },
+  "sourceChangedAfterFinalRun": "Only CDP accepted-but-ineffective outcome is now recorded explicitly instead of asserting native refusal; not rerun. UI and native primitives assertions unchanged.",
+  "passedRun": "vault-primitives",
+  "passedEvidence": "vault-primitives/native-primitives.json",
+  "failedRuns": [
+    {
+      "run": "vault-initial-failure",
+      "outcome": "100000 hardline2.8M UTF16-character note fill exceeded30s;no acceptance"
+    },
+    {
+      "run": "vault",
+      "outcome": "Editable textarea and small fill passed;large100000hardline note fill exceeded150s;cgroup OOM kill;no screenshot obtainable"
+    },
+    {
+      "run": "vault-final",
+      "outcome": "Same large Unicode content with spaces instead of hardline separators reached66MiB file picker;setInputFiles timed out30s;cgroup OOM kill;no UI acceptance or screenshot obtainable"
+    }
+  ],
+  "cdpQuota": "Storage.overrideQuotaForOrigin command accepted but16MiB native IndexedDB write not refused at1MiB setting;enforcement and actual quota exhaustion remain unverified",
+  "boundaries": "All manager-owned runtimes network=none,4096MiB,1CPU,sandbox;disposable anonymous/synthetic identities only;cleanup.remaining empty for all runs",
+  "remaining": [
+    "Large note+66MiB normal PasswordManager UI acceptance",
+    "1440/390/320 screenshots/fullscroll checks after successful large upload",
+    "Actual native quota refusal/rollback/retry",
+    "Real authenticated account/provider/vault identity acceptance"
+  ],
+  "productChanges": false
+}

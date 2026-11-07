@@ -1,0 +1,83 @@
+import { localInteractionState } from './interactions';
+import { toAttachmentPublicMetadata } from '../api/utils/attachments/attachmentCore';
+import type { PublicPost } from '../components/Feed/feedTypes';
+import { buildThingCreateRequestPayload } from '../hooks/thingsRequestPayload';
+import { isLocalMediaAttachment, localMediaOrder } from './attachments';
+import { localThingProjection, type LocalThing, type ThingWrite } from './things';
+
+/** Same legacy-post -> canonical Thing mapping used by the ordinary create
+ * transport. Schema validation and attachment binding happen in LocalThings. */
+export function localPostInput(input: Record<string, unknown>): ThingWrite & { shareId?: string; attachmentIds?: unknown } {
+ const payload = buildThingCreateRequestPayload(input);
+ const crystal = Array.isArray(payload.thingtime) ? payload.crystal : Object.fromEntries(
+  ['type', 'text', 'richText', 'images', 'listing', 'thing', 'mediaLayout', 'title', 'subspaceId', 'flairId'].filter(key => payload[key] !== undefined).map(key => [key, payload[key]])
+ );
+ return { thingtime: payload.thingtime || ['post'], crystal, tags: payload.tags, shareId: payload.shareId as string | undefined,
+  attachmentIds: payload.attachmentIds, folderId: payload.folderId as string | undefined, targetId: payload.targetId as string | undefined };
+}
+export function localTargetIndex(all: LocalThing[]) {
+ const indexed = new Map<string, LocalThing[]>();
+ for (const child of all) if (child.targetId) { const list = indexed.get(child.targetId) || []; list.push(child); indexed.set(child.targetId, list); }
+ return indexed;
+}
+/** Resolve only a supplied scoped snapshot. Missing/cyclic ancestors cannot
+ * invent a thread root, and no lookup crosses a workspace or fetches remotely. */
+export function postThreadContext<T extends { id: string; thingtime: string[]; targetId?: string | null }>(row: T, lookup: (id: string) => T | null | undefined) {
+ let parent: T | null = null, root: T | null = null;
+ if (!row.targetId || !row.thingtime.some(kind => ['comment','attachment'].includes(kind))) return { parent, root };
+ const seen = new Set([row.id]); let cursor = row;
+ while (cursor.targetId) {
+  const next = lookup(cursor.targetId);
+  if (!next || seen.has(next.id)) return { parent, root: null };
+  seen.add(next.id); parent ||= next;
+  if (!next.thingtime.some(kind => ['comment','attachment'].includes(kind))) { root = next; break; }
+  if (!next.targetId) return {parent,root:null};
+  cursor = next;
+ }
+ return { parent, root };
+}
+/** The normal Thing read has a separate discussion companion for non-posts.
+ * Discussion reads contain only the direct body; children are cursor-paged. */
+export function localThingReadProjection(row: LocalThing, all: LocalThing[], owner: string, commentProjection = false) {
+ const isPost = row.thingtime.includes('post') || row.thingtime.includes('comment');
+ const projected = localPostProjection(row, all, owner, isPost && !commentProjection);
+ const byId = new Map(all.map(thing => [thing.id,thing]));
+ const context = commentProjection ? {parent:null,root:null} : postThreadContext(row,id=>byId.get(id));
+ return { ok: true, thing: { ...localThingProjection(row, owner), attachments: projected.attachments },
+  post: isPost ? projected : null,
+  discussion: isPost ? null : { ...projected, sourceThingId: row.id },
+  ...(isPost && commentProjection ? { comment: projected } : {}),
+  parent: context.parent ? localPostProjection(context.parent,all,owner) : null, root: context.root ? localPostProjection(context.root,all,owner) : null };
+}
+/** Client projection only: local identity is a workspace label, never a server
+ * author or ACL grant. The persisted/exported Thing remains canonical content. */
+export function localPostProjection(row: LocalThing, all: LocalThing[], owner: string, includeComments = false, byTarget?: ReadonlyMap<string, LocalThing[]>): PublicPost & { localOnly: true; targetId: string | null; repliesLoaded?: false } {
+ const { crystal } = row, base = localThingProjection(row, owner);
+ byTarget ??= localTargetIndex(all);
+ const related = byTarget.get(row.id) || [];
+ const children = related.filter(child => child.thingtime.includes('comment')).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+ const attachments = related.filter(isLocalMediaAttachment)
+  .sort((a, b) => localMediaOrder(a) - localMediaOrder(b) || a.id.localeCompare(b.id))
+  .flatMap(file => { const metadata = toAttachmentPublicMetadata(file.id, file.crystal); return metadata ? [metadata] : []; });
+ return { ...localInteractionState(row, related, owner), id: row.id, thingtime: row.thingtime, author: base.author, acl: base.acl, visibility: 'private', localOnly: true,
+  type: (crystal.type || 'text') as PublicPost['type'], text: String(crystal.text || ''), richText: (crystal.richText || null) as PublicPost['richText'],
+  images: (crystal.images || []) as string[], attachments, mediaLayout: (crystal.mediaLayout || null) as PublicPost['mediaLayout'],
+  listing: (crystal.listing || null) as PublicPost['listing'], thing: (crystal.thing || null) as PublicPost['thing'], tags: base.tags,
+  title: typeof crystal.title === 'string' ? crystal.title : null, targetId: row.targetId || null, createdAt: row.createdAt,
+  ...(typeof crystal.subspaceId === 'string' && crystal.subspaceId ? { subspaceContextMissing: true as const } : {}),
+  commentCount: children.length,
+  comments: includeComments ? children.map(child => localPostProjection(child, all, owner, false, byTarget)) : [], ...(includeComments ? {} : { repliesLoaded: false as const }), shareCount: 0, isShare: false, shareOf: null } as PublicPost & { localOnly: true; targetId: string | null; repliesLoaded?: false };
+}
+
+/** Only complete composer payloads enter the account content queue. The facade
+ * resolves attachment IDs against scoped device records before admission. Geo
+ * and token grants keep their dedicated adapters; never silently drop fields. */
+export function accountPostInput(input: Record<string, unknown>, update = false) {
+ const fields = new Set(['type','text','richText','images','listing','thing','mediaLayout','title','subspaceId','flairId','thingtime','crystal','tags','shareId','folderId','targetId','acl','visibility','attachmentIds', ...(update ? ['id','expectedUpdatedAt','replaceCrystal'] : [])]);
+ if (!input || Object.entries(input).some(([key,value]) => value !== undefined && !fields.has(key))) return null;
+ if (input.attachmentIds !== undefined && (!Array.isArray(input.attachmentIds) || input.attachmentIds.some(id => typeof id !== 'string'))) return null;
+ const mapped = localPostInput(input);
+ if (!Array.isArray(mapped.thingtime) || !mapped.thingtime.includes('post') || mapped.thingtime.some(kind => !['post','comment'].includes(kind))) return null;
+ return { ...mapped, ...(update ? { id: input.id as string, expectedUpdatedAt: input.expectedUpdatedAt as string | undefined, replaceCrystal: input.replaceCrystal as boolean | undefined } : {}),
+  ...(input.acl !== undefined ? { acl: input.acl as string[] } : {}), ...(input.visibility !== undefined ? { visibility: input.visibility as string } : {}) };
+}

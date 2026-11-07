@@ -5,7 +5,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useApi } from '~/hooks/useApi';
 import { useDataPlane } from '~/hooks/useDataPlane';
 import { PageHeader, PageShell } from '~/components/Layout/PageShell';
-import { installSuiteOnServer } from '~/components/Builder/installSuite';
+import { installSuiteForWorkspace } from '~/components/Builder/installSuite';
 import { getElectronBridge } from '~/utils/electronBridge';
 import { AgentTaskSecuritySettings } from '~/components/AgentTasks/AgentNetworkSettings';
 import { AgentBrowserViewer, type BrowserClaim } from '~/components/AgentTasks/AgentBrowserViewer';
@@ -91,7 +91,7 @@ function TaskBrowserControls({ taskId, ownerId, plane, apiOrigin }: { taskId: st
 	const session = snapshot?.sessions.find(session => session.leaseId === activeLease?.id && session.state === 'ready');
 	return <Box display="grid" gap={5} minWidth={0}>
 		<Flex gap={3} wrap="wrap"><Button as={Link} to="/p/agent-tasks" variant="outline">Task board</Button><Button as={Link} to="/settings/things#agent-browser-security" variant="outline">General security settings</Button>
-			<Button isDisabled={busy} onClick={() => perform(async () => { const installed = await installSuiteOnServer('agent-tasks', { onlyMissing: true }); if (alive.current) navigate(`/p/${installed.entryPageKey}`); })}>Install editable task space</Button>
+			<Button isDisabled={busy} onClick={() => perform(async () => { const installed = await installSuiteForWorkspace('agent-tasks', { onlyMissing: true }); if (alive.current) navigate(`/p/${installed.entryPageKey}`); })}>Install editable task space</Button>
 		</Flex>
 		{!taskId && <Flex gap={2} wrap="wrap"><Input flex="1 1 240px" aria-label="Task Thing ID" value={draftId} onChange={event => setDraftId(event.target.value)} placeholder="Open a task by its Thing ID" /><Button onClick={() => navigate(`/agent-browsers/${encodeURIComponent(draftId.trim())}`)} isDisabled={!draftId.trim()}>Open task</Button></Flex>}
 		{!bridge?.agentBrowserVersion && <Text>Browser installation and live sessions are available in the Thingtime Mac app. Your editable task board is also available on the web.</Text>}

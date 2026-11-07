@@ -1,0 +1,29 @@
+{
+  "scope": "Pushed implementation baseline before follow-up acceptance changes",
+  "head": "64a53cba8ccc06db5baa1a53466ff9359a16ad99",
+  "reportedBy": "current_ci child agent; parent recorded the actual returned audit",
+  "recordedAt": "2026-10-26T04:42:41.316617+00:00",
+  "webCI": {
+    "status": "success",
+    "url": "https://github.com/lopugit/thingtime/actions/runs/40268960525"
+  },
+  "codeQL": {
+    "status": "pass",
+    "url": "https://github.com/lopugit/thingtime/runs/121399485062"
+  },
+  "preview": {
+    "url": "https://pr-1000.previews.dev.thingtime.com",
+    "checkedPath": "/api/root-data",
+    "status": 200,
+    "sha": "64a53cba8ccc06db5baa1a53466ff9359a16ad99",
+    "branch": "codex/anonymous-local-first",
+    "deploymentId": 7324079470,
+    "scope": "identity and HTTP readiness, not deployed functional acceptance"
+  },
+  "pr": {
+    "url": "https://github.com/lopugit/thingtime/pull/1000",
+    "state": "OPEN",
+    "autoMerge": false,
+    "noAiMerge": true
+  }
+}

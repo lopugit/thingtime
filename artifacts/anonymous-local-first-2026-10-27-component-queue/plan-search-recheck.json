@@ -1,0 +1,17 @@
+{
+  "failure": {
+    "ok": false,
+    "scope": "Copied static progress plan in isolated namespace; external and artifact links are not followed",
+    "sourceSha256": "06c9fb48c42f742c1ce48797ab8609af01257ae675e3b6514746474079036810",
+    "errors": [],
+    "requests": [
+      "file:///tmp/plan/anonymous-local-first.html"
+    ],
+    "viewports": []
+  },
+  "cause": "Empty-search assertion treats every .work section as a checklist section. Mark the static verification overview separately; it must stay visible while matching task sections hide.",
+  "cleanup": {
+    "session": "4f4fef4c-a624-4266-8f29-964482496e08",
+    "remaining": ""
+  }
+}

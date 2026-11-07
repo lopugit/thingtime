@@ -15,7 +15,7 @@ import { canOfferRecordingHandoff } from '../Lopu/recordingThingHandoff';
 import { archiveNounForKinds, buildArchiveMenuSection } from '../Attachments/attachmentArchiveActions';
 import { buildThingEntityMenu } from '../Thingtime/ContextMenu/thingEntityMenu';
 import { builderThingMenuSections } from '../Thingtime/ContextMenu/builderThingMenu';
-import { thingBrowseHref } from './thingsLocation';
+import { thingBrowseHref, thingInspectHref } from './thingsLocation';
 
 import {
   THINGS_GROUP_OPTIONS,
@@ -55,7 +55,7 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
   const files = archiveNoun ? buildArchiveMenuSection({ fileCount: null, noun: archiveNoun, bulk: actCount > 1 }) : null;
   return buildThingEntityMenu({
     history: actCount === 1 && !!ownerId && thing.author?.id === ownerId,
-    open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, inspect: !archive && { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true, 'share-preview': actCount === 1,
+    open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, inspect: !archive && { href: thingInspectHref(thing.id, locationSearch) }, 'copy-link': true,
     rename: actCount === 1 && (!ownerId || thing.author?.id === ownerId),
     share: !archive && { hint: bulkHint || (folder ? 'Audience for the folder — optionally everything inside' : undefined) },
     delete: !archive && { hint: bulkHint, kbd: '⌫' },

@@ -1,0 +1,538 @@
+{
+  "runId": "2af2d9a3-95b1-486e-8b0e-b8d29e95b637",
+  "error": "AssertionError [ERR_ASSERTION]: Exercise a real phone composer/launcher collision",
+  "screenshot": {
+    "file": "failure-2af2d9a3-95b1-486e-8b0e-b8d29e95b637.png",
+    "sha256": "b79986f7c1015b1b9b8a7b0e45e96fdab8a4d9772310a10bc9b6cbf8dd170712",
+    "bytes": 50275
+  },
+  "browserConnected": true,
+  "pageClosed": false,
+  "url": "http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927",
+  "body": "🦄\naudience-8aa13cd8\n🌈\n🦄\nTHINGTIME · POST 📌\nPost 📌\nA\naudience-8aa13cd8\n@audience-8aa13cd8 · \njust now\n🔒\nprivate subspace members only\n🪐\ns/private_5d7449c7\n\nPrivate parent fixture\n\n2\n0\n0\nA\n\naudience-8aa13cd8\n\njust now\n\nPrivate inherited comment fixture\n\n0\nPost as\naudience-8aa13cd8\n\nDraft saved on this device ✓\n\nRecover earlier comment draft\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 175ms\n\nMongoDB: connected (77ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nAUDIENCE-8AA13CD8\n\nProfile\n\nLog out\n\n✉️ email unverified\n\n🦄",
+  "page": {
+    "url": "http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927",
+    "html": "<html lang=\"en\" prefix=\"og: https://ogp.me/ns#\" style=\"--tt-ink: #16161a; --tt-text: #5a5a66; --tt-muted: #9a9aa6; --tt-faint: #b6b6c0; --tt-border: #ececef; --tt-border-light: #f0f0f2; --tt-surface: #fafafb; --tt-surface-alt: #f5f5f7; --tt-surface-hover: #ececee; --tt-card: #ffffff; --tt-page-bg: #ffffff; --tt-accent: hotpink; --tt-accent-tint: #fff5fa; --tt-accent-contrast: #ffffff; --tt-link: #2f8fd6; --tt-positive: #2f8f4f; --tt-positive-soft: rgba(88, 202, 112, 0.14); --tt-danger: #d6455a; --tt-warning: #ffbc48; --tt-dark-bg: #131318; --tt-dark-chrome: #1c1c22; --tt-dark-border: #2a2a33; --tt-dark-text: #e6e6ee; --tt-dark-muted: #8a8a95; --tt-dark-accent: #59ff9c; --tt-rainbow-1: #f34a4a; --tt-rainbow-2: #ffbc48; --tt-rainbow-3: #58ca70; --tt-rainbow-4: #47b5e6; --tt-rainbow-5: #a555e8; --tt-gradient-rainbow: linear-gradient(90deg, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6); --tt-gradient-rainbow-x: linear-gradient(90deg, #f34a4a, #ffbc48, #58ca70, #47b5e6, #a555e8, #f34a4a); --tt-font-heading: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; --tt-font-body: 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; --tt-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; --tt-font-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; --tt-radius-xs: 7px; --tt-radius-sm: 9px; --tt-radius-md: 12px; --tt-radius-lg: 16px; --tt-radius-xl: 20px; --tt-radius-2xl: 26px; --tt-radius-pill: 999px; --tt-border-w: 1px; --tt-border-w-bold: 2px; --tt-border-w-chunky: 3px; --tt-things-badge-padding: 3px 8px; --tt-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05); --tt-shadow-panel: 0 24px 60px -28px rgba(20, 20, 40, 0.28); --tt-shadow-popover: 0 16px 40px -12px rgba(20, 20, 40, 0.3); --tt-shadow-toast: 0 14px 38px rgba(20, 20, 40, 0.18); --tt-shadow-hard-sm: 5px 5px 0 #16161a; --tt-shadow-hard-lg: 8px 8px 0 #16161a; --tt-traffic-close: #f34a4a; --tt-traffic-minimise: #ffbc48; --tt-traffic-maximise: #58ca70; --tt-traffic-close-radius: 3.5px; --tt-traffic-minimise-radius: 3.5px; --tt-traffic-maximise-radius: 3.5px; --tt-anim-speed: 200ms; --tt-rainbow-anim: moving-rainbow 5s linear infinite; --tt-motion: 1; --thingtime-visual-bottom-padding: 72px; --thingtime-visual-devkit-bottom-offset: 36px; color-scheme: light; scroll-behavior: auto;\" data-theme=\"light\"><head>\n    <script src=\"/tt-preview-freshness.js\" data-thingtime-preview-freshness=\"\"></script>\n\n    <meta charset=\"utf-8\">\n    <!-- maximum-scale=1 stops iOS Safari's auto-zoom when focusing inputs;\n    since iOS 10 Safari ignores the cap for user pinch-zoom, so accessibility\n    zooming still works -->\n    <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover\">\n    <link rel=\"icon\" href=\"/favicon.ico\">\n    <title>[LC] Thingtime - Your Home for Everything</title>\n    <!-- Feed-reader auto-discovery for the public posts Atom feed\n         (GET /api/v1/things/rss — app/api/utils/things/rss.ts). Deliberately\n         OUTSIDE the tt-social-meta marker block below: that block is swapped\n         per-request and this link must survive on every page. -->\n    <link rel=\"alternate\" type=\"application/atom+xml\" title=\"Thingtime — public posts\" href=\"/api/v1/things/rss\">\n    <!-- tt-social-meta:start -->\n    <meta name=\"description\" content=\"Everything is a thing — share posts, run polls and build a home for the things you care about.\">\n    <meta property=\"og:site_name\" content=\"Thingtime\">\n    <meta property=\"og:type\" content=\"website\">\n    <meta property=\"og:title\" content=\"Thingtime - Your Home for Everything\">\n    <meta property=\"og:description\" content=\"Everything is a thing — share posts, run polls and build a home for the things you care about.\">\n    <meta property=\"og:url\" content=\"http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927\">\n    <meta property=\"og:image\" content=\"http://127.0.0.1:18721/branding/presskit/thingtime-og-card-1200x630.png?v=20260917\">\n    <meta property=\"og:image:type\" content=\"image/png\">\n    <meta property=\"og:image:width\" content=\"1200\">\n    <meta property=\"og:image:height\" content=\"630\">\n    <meta property=\"og:image:alt\" content=\"Colourful Thingtime wordmark on a white background with a rainbow border\">\n    <meta name=\"twitter:card\" content=\"summary_large_image\">\n    <meta name=\"twitter:title\" content=\"Thingtime - Your Home for Everything\">\n    <meta name=\"twitter:description\" content=\"Everything is a thing — share posts, run polls and build a home for the things you care about.\">\n    <meta name=\"twitter:image\" content=\"http://127.0.0.1:18721/branding/presskit/thingtime-og-card-1200x630.png?v=20260917\">\n    <meta name=\"twitter:image:alt\" content=\"Colourful Thingtime wordmark on a white background with a rainbow border\">\n    <meta name=\"robots\" content=\"noindex, follow\">\n    <link rel=\"canonical\" href=\"http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927\">\n    <script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@graph\":[{\"@type\":\"WebSite\",\"@id\":\"http://127.0.0.1:18721/#website\",\"url\":\"http://127.0.0.1:18721/\",\"name\":\"Thingtime\",\"publisher\":{\"@id\":\"http://127.0.0.1:18721/#organization\"}},{\"@type\":\"WebPage\",\"@id\":\"http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927#webpage\",\"url\":\"http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927\",\"name\":\"Thingtime - Your Home for Everything\",\"description\":\"Everything is a thing — share posts, run polls and build a home for the things you care about.\",\"isPartOf\":{\"@id\":\"http://127.0.0.1:18721/#website\"},\"primaryImageOfPage\":{\"@type\":\"ImageObject\",\"url\":\"http://127.0.0.1:18721/branding/presskit/thingtime-og-card-1200x630.png?v=20260917\",\"width\":1200,\"height\":630}},{\"@type\":\"Organization\",\"@id\":\"http://127.0.0.1:18721/#organization\",\"name\":\"Thingtime\",\"legalName\":\"Thingtime\",\"url\":\"http://127.0.0.1:18721/\",\"logo\":{\"@type\":\"ImageObject\",\"@id\":\"http://127.0.0.1:18721/#logo\",\"url\":\"http://127.0.0.1:18721/branding/generated/icon/thingtime-icon-1024x1024.png\",\"contentUrl\":\"http://127.0.0.1:18721/branding/generated/icon/thingtime-icon-1024x1024.png\",\"width\":1024,\"height\":1024,\"caption\":\"Thingtime icon — a leafy five-voxel tree\"},\"image\":[{\"@type\":\"ImageObject\",\"url\":\"http://127.0.0.1:18721/branding/generated/logo/thingtime-logo-1024x190.png\",\"contentUrl\":\"http://127.0.0.1:18721/branding/generated/logo/thingtime-logo-1024x190.png\",\"width\":1024,\"height\":190,\"caption\":\"Thingtime wordmark — nine colourful voxel glyphs\"}],\"sameAs\":[\"https://www.instagram.com/thingtime.ig/\",\"https://thingtime.dashery.com/\",\"https://merch.thingtime.com/\"]}]}</script>\n    <!-- tt-social-meta:end -->\n    <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n    <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin=\"\">\n    <link href=\"https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&amp;family=Hanken+Grotesk:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap\" rel=\"stylesheet\">\n    <!-- Early boot (theme snapshot, tab title and guarded module recovery). External file\n         so the CSP can stay `script-src 'self'` with no inline-script hashes. -->\n    <script src=\"/tt-boot.js\"></script>\n    <script type=\"module\" crossorigin=\"\" src=\"/assets/index-DfChw1QF.js\"></script>\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/rolldown-runtime-DAXXjFlN.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/capabilityContract-YGZd7r3F.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/requireCapability.client-00U_blSP.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/jsx-runtime-CBD9r_Rc.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/text-DV3zdfuN.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/button-iiVVfedf.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/use-update-effect-BE1ht6Vv.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/proxy-B0NPJtdG.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/portal-DicUj6Kp.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/hooks-CcwhGgAu.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/preload-helper-Czpn1I53.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/lib-C0yaoKJR.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/focusable-BYQTYkiY.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/call-all-CvnVcB5B.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/popover-trigger-C6P49pQG.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/use-form-control-9iAJMeje.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/select-D0ZrvrKd.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/children-rDSpZAbD.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/use-descendant-DuwvFhU0.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/createLucideIcon-CJkvbz5V.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/smartphone-Bo6mwSjI.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/icon-CCpHsQCx.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/box-7XyDsKb6.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/registry-BkRkwjV5.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/storage-D1Jv7mev.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/componentTemplate-BtbE723f.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/things-DsQSZJXk.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/runtime.client-CFFl2MQj.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/CharacterScope-DB1aJao6.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useCurrentUser-Dsq6iEQC.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/dataPlane-DLa2r0gU.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/aiTasks.client-DcyBDFME.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/rainbow-DtBW-T4E.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useLopu-CM-qRCjg.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/transition-utils-DzB2lp8D.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/image-BOTlCInl.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/icon-button-B05hsXz7.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/center-BQqw8sKr.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/use-checkbox-DsAWMG1e.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/checkbox-2W6Igtyv.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/tslib.es6-DgPp1qHM.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/modal-overlay-Cs9dwNll.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/form-label-Dp4GFCxa.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/grid-Xqnp1IxO.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/input-D67GTdIb.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/modal-close-button-C9odHy47.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/textarea-l7zfdTmn.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/mediaPolicy-k4nddYNP.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/species-CvNO-5AZ.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/actions-BTvoJ0hP.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/componentBrowseTypes-XV-7pG_l.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/apiRequestLog-BW_s4VAC.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useApi-DWj8TfTy.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/check-kWpI1l2W.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/chevron-down-D2nX8Hvp.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/chevron-right-DyIaIeMq.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/circle-check-Brd5K6Xj.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/copy-Bka8Z6ju.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/external-link-F4DmZDSr.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/link-2-dl_XnCy8.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/lock-G-OzztxM.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/play-BeGuapwr.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/trash-2-C-cazxIi.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/rocket-DyANsLm_.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/rotate-ccw-GESIjRin.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/search-CNJUXjL8.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/sparkles-rN-UN3Pq.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/x-Bov-Xyij.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/documents-CfVrKuaJ.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/brandingAssets.generated-DDHK2-QI.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useDrawer-BkAdGvfl.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/userIdentity-CNlrJ64X.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/ThingTransferControls-C17pcDqW.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/arrow-left-FSzb0Tv7.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/responsive-DDqOHO-S.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/collapse-DQ40UYNG.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/use-clipboard-Dxz0qjsJ.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/accordion-panel-DthbZFzK.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/badge-Bmwd7qsR.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/input-element-D8uURpTH.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/simple-grid-DuUn8lnM.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/link-DESGrlWr.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/popover-arrow-hY_4i3Br.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/stack-DJRsJfGO.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/editorJsHtml-DNdlftX1.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/switch-CMR_auj0.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/tr-CEbt8r7Y.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/heading-n5Xlp-qo.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useWorkspaceScope-DwlQGrdM.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/nativeBridge-Ckr5PI3f.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/electronBridge-CsSTpHQ6.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/templateBlocks-BWIfLaUW.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/catalogRecordsSuite-l4xMGTz3.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/marketingPublicationsStore-B2nn1sC4.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/subspaceTypes-BZSt8cs9.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/marketingDownload-DTCr0zJT.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/DefinitionValueEditor-CzQjqGLx.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/PageShell-KupXtgqn.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/card-BekJjnX-.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/ThingDrafts-BQuXHwoR.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/square-DSnkr35m.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/loader-circle-Djmmjtk2.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/settings-2-D6cXoUFa.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/shield-alert-BbV_YpBa.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useLopuSettings-DVGpYiEk.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useMessengerApi-CFw5g-BM.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useLopuChat-CtBOoByC.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/LopuMarkdown-BQxx-ORp.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/LopuModelPicker-BVH8T2Hc.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/chatAttachmentInput-SVOWPyWe.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/LopuChatView-DxcQOv-7.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/LopuVoiceControls-DHL2BELv.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/DeviceCard-DNbcJc9t.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/shield-check-Cg_AYeIa.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useDeviceApi-DoIMr6GE.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/useDeviceStore-D4ufhCOr.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/panel-left-close-D38EP9BO.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/panel-left-open-DwTVwAv7.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/supportContent-Djc1q7Mh.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/notificationCore-BNETJ9ni.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/SettingsSection-DR-vcRyl.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/esm-C_wvsA3c.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/logoMatrix-Cxlc8DF0.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/Logo-CjmmV38u.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/BrutalButton-Brg4gFD7.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/landingSections-bdQWnT3x.js\">\n    <link rel=\"modulepreload\" crossorigin=\"\" href=\"/assets/welcomeSections-CfA6Bjqo.js\">\n    <link rel=\"stylesheet\" crossorigin=\"\" href=\"/assets/index-CYUcBQH4.css\">\n  <style data-emotion=\"cha-global\" data-s=\"\"></style><style data-emotion=\"cha-global\" data-s=\"\"></style><style data-emotion=\"cha-global\" data-s=\"\"></style><style data-emotion=\"cha-global\" data-s=\"\"></style><style data-emotion=\"cha-global\" data-s=\"\"></style><style data-emotion=\"cha\" data-s=\"\"></style></head>\n  <body class=\"chakra-ui-light\">\n    <div id=\"root\"><style>\n        \n        #lopuPageViewport { width: 100%; }\n        #lopuPageViewport[data-lopu-split] {\n          position: fixed;\n          top: var(--lopu-inset-top); right: var(--lopu-inset-right);\n          bottom: var(--lopu-inset-bottom); left: var(--lopu-inset-left);\n          width: auto; overflow: hidden; transform: translateZ(0); isolation: isolate;\n          container-type: inline-size; container-name: lopu-page;\n        }\n        #lopuPageViewport[data-lopu-split] > #lopuPageScroll { height: 100%; overflow: auto; }\n        @container lopu-page (max-width: 680px) {\n          .thingtimeTopNavInner { padding-left: 48px !important; padding-right: 12px !important; }\n          .nav-left-section { padding-left: 0 !important; column-gap: 4px !important; }\n          .nav-right-section { column-gap: 12px !important; }\n          .nav-search-section { display: none !important; }\n          .electron-titlebar-account-button { max-width: 100px; overflow: hidden; }\n          .electron-titlebar-account-button a { min-width: 0; overflow: hidden; text-overflow: ellipsis; }\n        }\n        @container lopu-page (max-width: 440px) {\n          .electron-titlebar-account-button, .electron-titlebar-home-button { display: none !important; }\n        }\n\n        html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [data-testid=\"site-edit-pill\"],\n        html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [class~=\"tt.devKit\"],\n        html[data-lopu-sheet=\"open\"] [data-testid=\"site-edit-pill\"] { z-index: 10059 !important; }\n      </style><div id=\"lopuPageViewport\" style=\"--lopu-inset-top: 0px; --lopu-inset-right: 0px; --lopu-inset-bottom: 0px; --lopu-inset-left: 0px; --thingtime-page-height: 100dvh;\"><div class=\"thingtimeTopNav cha-1w341zc\"><nav class=\"thingtimeTopNavInner cha-ahkh17\"><div class=\"nav-left-section cha-18cyjkv\"><button class=\"electron-titlebar-navigation-button cha-5878j\" type=\"button\" title=\"Back\" aria-label=\"Back\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-arrow-left\" aria-hidden=\"true\"><path d=\"m12 19-7-7 7-7\"></path><path d=\"M19 12H5\"></path></svg></button><button class=\"electron-titlebar-navigation-button cha-5878j\" type=\"button\" title=\"Forward\" aria-label=\"Forward\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-arrow-right\" aria-hidden=\"true\"><path d=\"M5 12h14\"></path><path d=\"m12 5 7 7-7 7\"></path></svg></button><div class=\"electron-titlebar-home-button cha-1wuhey5\"><a href=\"/\" data-discover=\"true\"><div name=\"🦄\" class=\"cha-1ie6p7q\">🦄</div></a></div><button class=\"electron-titlebar-search-button cha-1almx2n\" type=\"button\" title=\"Open Commander search\" aria-label=\"Open Commander search\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-search\" aria-hidden=\"true\"><path d=\"m21 21-4.34-4.34\"></path><circle cx=\"11\" cy=\"11\" r=\"8\"></circle></svg></button><div class=\"electron-titlebar-account-button cha-bev6cn\"><a href=\"/profile\" data-discover=\"true\"><div class=\"cha-kfnzmt\"><div title=\"audience-8aa13cd8\" class=\"cha-1ef5bu8\">audience-8aa13cd8</div><div name=\"🌈\" class=\"cha-sgbnjp\">🌈</div></div></a></div></div><div class=\"nav-right-section cha-1dhwl0n\"><button class=\"nav-lopu-button cha-1283qa6\" type=\"button\" aria-label=\"Talk to Lopu\" aria-pressed=\"false\" title=\"Talk to Lopu 🦄\"><span class=\"cha-d6dxvg\"><span class=\"lopuRingAvatar cha-19gt0v2\" aria-hidden=\"true\"><span class=\"cha-2gemw5\">🦄</span></span></span></button><button type=\"button\" aria-label=\"Open Commander search\" title=\"Search\" class=\"cha-1jmmn01\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-search\" aria-hidden=\"true\"><path d=\"m21 21-4.34-4.34\"></path><circle cx=\"11\" cy=\"11\" r=\"8\"></circle></svg></button><div class=\"nav-right-account-button cha-bev6cn\"><a href=\"/profile\" data-discover=\"true\"><div class=\"cha-kfnzmt\"><div title=\"audience-8aa13cd8\" class=\"cha-1ef5bu8\">audience-8aa13cd8</div><div name=\"🌈\" class=\"cha-sgbnjp\">🌈</div></div></a></div><div class=\"cha-gmuwbf\"><button type=\"button\" aria-label=\"Notifications\" title=\"Notifications 🔔\" id=\"popover-trigger-_r_2_\" aria-haspopup=\"dialog\" aria-expanded=\"false\" aria-controls=\"popover-content-_r_2_\" class=\"cha-gcd01u\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-bell\" aria-hidden=\"true\" style=\"pointer-events: none;\"><path d=\"M10.268 21a2 2 0 0 0 3.464 0\"></path><path d=\"M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326\"></path></svg></button><div class=\"chakra-popover__popper cha-iy22zq\" style=\"visibility: hidden; position: absolute; min-width: max-content; inset: 0px auto auto 0px;\"><section id=\"popover-content-_r_2_\" tabindex=\"-1\" role=\"dialog\" class=\"chakra-popover__content cha-92mx0g\" style=\"transform-origin: var(--popper-transform-origin); opacity: 0; visibility: hidden; transform: scale(0.95);\"></section></div></div><div class=\"cha-1uo7prm\"><a href=\"/\" data-discover=\"true\"><div name=\"🦄\" class=\"cha-1ie6p7q\">🦄</div></a></div></div></nav></div><div id=\"lopuPageScroll\"><div class=\"mainFlexRoot cha-64rata\"><div class=\"mainShiftContainer cha-74d7qi\"><div class=\"mainFlexChildrenContainer cha-5gv3tp\"><div class=\"cha-15hjfp\"></div><div class=\"cha-1lxqzi6\"><div class=\"cha-dzqv1a\"><div class=\"cha-qtk6dd\"><div class=\"cha-1ynu2mz\">Thingtime · Post 📌</div><h1 class=\"cha-po2ngn\">Post 📌</h1></div><div class=\"cha-0\"><div class=\"cha-1cjct5b\"><div class=\"cha-1mmxlz9\"><div class=\"cha-416g4w\"><a href=\"/profile/audience-8aa13cd8\" data-discover=\"true\"><div class=\"cha-34wgct\">A</div></a><div class=\"cha-1hzuwg0\"><div class=\"cha-1xw2ejh\"><a href=\"/profile/audience-8aa13cd8\" data-discover=\"true\"><span class=\"chakra-text cha-mv19uu\">audience-8aa13cd8</span></a><span class=\"chakra-text cha-1od5yge\">@audience-8aa13cd8 · </span><a title=\"10/23/2026, 7:35:34 AM\" href=\"/post/2d46abe0-5e6a-4255-82b2-431920f83927\" data-discover=\"true\"><span class=\"chakra-text cha-g4z0w4\">just now</span></a><span class=\"chakra-text cha-25hwpr\">🔒</span><span class=\"chakra-text cha-89alq4\" title=\"private subspace members only\" data-testid=\"post-audience\">private subspace members only</span></div></div><div class=\"cha-115actz\"><button type=\"button\" class=\"chakra-button cha-1yb6clp\" aria-label=\"Post options\" aria-haspopup=\"menu\" aria-expanded=\"false\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-ellipsis\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"12\" cy=\"12\" r=\"1\"></circle><circle cx=\"19\" cy=\"12\" r=\"1\"></circle><circle cx=\"5\" cy=\"12\" r=\"1\"></circle></svg></button></div></div><div data-testid=\"post-subspace-line\" class=\"cha-195necg\"><a title=\"Private audience fixture\" class=\"cha-1bsykez\" href=\"/s/private_5d7449c7\" data-discover=\"true\"><span class=\"chakra-text cha-0\">🪐</span><span class=\"chakra-text cha-cbnjsb\">s/private_5d7449c7</span></a></div><div class=\"cha-1mmxlz9\"><p class=\"chakra-text cha-sp3n2f\">Private parent fixture</p></div><div class=\"cha-9tfcsg\"><button type=\"button\" aria-label=\"Hide comments\" title=\"Hide comments\" aria-expanded=\"true\" class=\"cha-1jjxklh\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-message-circle\" aria-hidden=\"true\"><path d=\"M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719\"></path></svg><span class=\"chakra-text cha-0\">2</span></button><div data-testid=\"updown-control\" title=\"0 up · 0 down\" class=\"cha-g1n7lb\"><button type=\"button\" aria-label=\"Upvote\" aria-pressed=\"false\" data-updown=\"up\" class=\"cha-m2id1e\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-arrow-big-up\" aria-hidden=\"true\"><path d=\"M9 19a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-6a1 1 0 0 1 1-1h3.293a.707.707 0 0 0 .5-1.207l-7.086-7.086a1 1 0 0 0-1.414 0l-7.086 7.086a.707.707 0 0 0 .5 1.207H8a1 1 0 0 1 1 1z\"></path></svg></button><span class=\"chakra-text cha-wu2d79\" data-updown-score=\"0\">0</span><button type=\"button\" aria-label=\"Downvote\" aria-pressed=\"false\" data-updown=\"down\" class=\"cha-9saewu\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-arrow-big-down\" aria-hidden=\"true\"><path d=\"M9 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v6a1 1 0 0 0 1 1h3.293a.707.707 0 0 1 .5 1.207l-7.086 7.086a1 1 0 0 1-1.414 0l-7.086-7.086a.707.707 0 0 1 .5-1.207H8a1 1 0 0 0 1-1z\"></path></svg></button></div><div class=\"cha-hyxlzm\"><button type=\"button\" aria-label=\"React\" title=\"React\" id=\"popover-trigger-_r_1i_\" aria-haspopup=\"dialog\" aria-expanded=\"false\" aria-controls=\"popover-content-_r_1i_\" class=\"cha-1lpzg49\" style=\"user-select: none; touch-action: manipulation;\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-heart\" aria-hidden=\"true\"><path d=\"M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5\"></path></svg></button><div class=\"chakra-popover__popper cha-iy22zq\" style=\"visibility: hidden; position: absolute; min-width: max-content; inset: 0px auto auto 0px;\"><section id=\"popover-content-_r_1i_\" tabindex=\"-1\" role=\"dialog\" class=\"chakra-popover__content cha-1q53leo\" style=\"transform-origin: var(--popper-transform-origin); opacity: 0; visibility: hidden; transform: scale(0.95);\"></section></div><div class=\"cha-r9romw\"></div><div class=\"chakra-popover__popper cha-iy22zq\" style=\"visibility: hidden; position: absolute; min-width: max-content; inset: 0px auto auto 0px;\"><section id=\"popover-content-_r_1k_\" tabindex=\"-1\" role=\"dialog\" class=\"chakra-popover__content cha-15yxuc9\" style=\"transform-origin: var(--popper-transform-origin); opacity: 0; visibility: hidden; transform: scale(0.95);\"></section></div></div><div class=\"cha-hyxlzm\"><button type=\"button\" aria-label=\"Repost\" title=\"Repost\" id=\"menu-button-_r_1m_\" aria-expanded=\"false\" aria-haspopup=\"menu\" aria-controls=\"menu-list-_r_1m_\" class=\"chakra-menu__menu-button cha-1i6xafj\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"curre",
+    "worker": "http://127.0.0.1:18721/media-cache-sw.mjs"
+  },
+  "navigation": [],
+  "events": [
+    {
+      "at": 1792740933890,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/.well-known/thingtime-capabilities.json"
+    },
+    {
+      "at": 1792740934752,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/.well-known/thingtime-capabilities.json"
+    },
+    {
+      "at": 1792740934752,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/.well-known/thingtime-capabilities.json"
+    },
+    {
+      "at": 1792740937691,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927"
+    },
+    {
+      "at": 1792740939587,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927"
+    },
+    {
+      "at": 1792740939587,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927"
+    },
+    {
+      "at": 1792740939588,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927"
+    },
+    {
+      "at": 1792740941571,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740941582,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740941990,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740941990,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740942073,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740942074,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740942078,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740942078,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740942078,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740942078,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740942101,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740942101,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740943465,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740943468,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740943767,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740943769,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740943874,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740944838,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927"
+    },
+    {
+      "at": 1792740946578,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927"
+    },
+    {
+      "at": 1792740946578,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927"
+    },
+    {
+      "at": 1792740947479,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740947515,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740947677,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740947679,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740947685,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740947686,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740947690,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740947691,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740947720,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740947722,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740947723,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740947726,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740947792,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740947794,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740948334,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740948339,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740949052,
+      "event": "navigation",
+      "detail": "http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927"
+    },
+    {
+      "at": 1792740949914,
+      "event": "domcontentloaded",
+      "detail": "http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927"
+    },
+    {
+      "at": 1792740949914,
+      "event": "load",
+      "detail": "http://127.0.0.1:18721/post/2d46abe0-5e6a-4255-82b2-431920f83927"
+    },
+    {
+      "at": 1792740951504,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740951505,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740951813,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740951825,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740951826,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740951833,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740951833,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740951836,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740951854,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740951854,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740951860,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740951893,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740952419,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    },
+    {
+      "at": 1792740952428,
+      "event": "apiError",
+      "detail": {
+        "path": "/api/v1/webpages/resolve",
+        "status": 503
+      }
+    }
+  ],
+  "errors": [],
+  "failedRequests": [
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/nitro: net::ERR_ABORTED",
+    "/api/v1/health/frontend: net::ERR_ABORTED",
+    "/api/v1/health/mongodb: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/nitro: net::ERR_ABORTED",
+    "/api/v1/health/frontend: net::ERR_ABORTED",
+    "/api/v1/health/mongodb: net::ERR_ABORTED",
+    "/api/v1/drafts: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED",
+    "/css2: net::ERR_INTERNET_DISCONNECTED",
+    "/api/v1/health/nitro: net::ERR_ABORTED",
+    "/api/v1/health/frontend: net::ERR_ABORTED",
+    "/api/v1/health/mongodb: net::ERR_ABORTED",
+    "/api/v1/themes/sync: net::ERR_ABORTED",
+    "/api/v1/things: net::ERR_ABORTED"
+  ],
+  "consoleErrors": [
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+  ],
+  "crashes": [],
+  "bounds": []
+}

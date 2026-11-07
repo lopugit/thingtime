@@ -1,0 +1,41 @@
+{
+  "path": "/components/6c125ce4-f7f7-40e1-b4f6-c10a16fd8c81",
+  "online": false,
+  "settings": [
+    {
+      "disabled": false,
+      "expanded": "true",
+      "visible": true
+    }
+  ],
+  "items": [
+    {
+      "action": "Edit definition…",
+      "disabled": false,
+      "connected": true,
+      "visible": true
+    },
+    {
+      "action": "Rename…",
+      "disabled": false,
+      "connected": true,
+      "visible": true
+    }
+  ],
+  "alerts": [],
+  "workspace": {
+    "ownerId": "6adf94bf2fe0ae616356b788",
+    "dataPlane": "home"
+  },
+  "local": {
+    "id": "6c125ce4-f7f7-40e1-b4f6-c10a16fd8c81",
+    "revision": 3,
+    "expectedOwner": true,
+    "component": true
+  },
+  "queue": {
+    "state": "synced",
+    "pending": false,
+    "claimed": false
+  }
+}

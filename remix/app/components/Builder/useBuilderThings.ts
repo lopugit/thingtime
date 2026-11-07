@@ -10,6 +10,7 @@ type BuilderThingsState = {
 	loading: boolean;
 	error: string | null;
 	nextCursor: string | null;
+	deviceOnly?: boolean;
 };
 
 // Include capability negotiation and JSON parsing in the deadline, even when
@@ -20,7 +21,7 @@ export async function requestBuilderThingsPage(
 	cursor: string | undefined,
 	parent: AbortSignal,
 	timeoutMs = 30_000
-): Promise<{ rows: BuilderThing[]; nextCursor: string | null }> {
+): Promise<{ rows: BuilderThing[]; nextCursor: string | null; deviceOnly?: boolean }> {
 	parent.throwIfAborted();
 	const controller = new AbortController();
 	let timer: ReturnType<typeof setTimeout>;
@@ -48,7 +49,7 @@ export async function requestBuilderThingsPage(
 		if (response?.ok !== true || !Array.isArray(response.things)) throw response || new Error('Invalid Builder response');
 		const nextCursor = typeof response.nextCursor === 'string' && response.nextCursor ? response.nextCursor : null;
 		if (nextCursor && nextCursor === cursor) throw new Error('Builder pagination did not advance');
-		return { rows: response.things, nextCursor };
+		return { rows: response.things, nextCursor, ...(response.incomplete === true ? { deviceOnly: true } : {}) };
 	} finally {
 		clearTimeout(timer!);
 		parent.removeEventListener('abort', onAbort!);
@@ -60,7 +61,7 @@ export const mergeBuilderThings = (existing: BuilderThing[], incoming: BuilderTh
 
 // The containing list is keyed by account and database. Each kind has its own
 // request, cursor and error, so one slow list never hides the other list.
-export function useBuilderThings(list: ListThings, kind: BuilderKind, revision: number, enabled: boolean) {
+export function useBuilderThings(list: ListThings, kind: BuilderKind, revision: number | string, enabled: boolean) {
 	const listRef = React.useRef(list);
 	listRef.current = list;
 	const requestRef = React.useRef<{ controller: AbortController; cursor?: string } | null>(null);
@@ -78,6 +79,7 @@ export function useBuilderThings(list: ListThings, kind: BuilderKind, revision: 
 				setState((previous) => ({
 					rows: mergeBuilderThings(cursor ? previous.rows : [], page.rows),
 					nextCursor: page.nextCursor,
+					deviceOnly: page.deviceOnly,
 					loaded: true,
 					loading: false,
 					error: null
@@ -103,6 +105,14 @@ export function useBuilderThings(list: ListThings, kind: BuilderKind, revision: 
 			requestRef.current?.controller.abort();
 		};
 	}, [load, revision]);
+
+	React.useEffect(() => {
+		// A device cursor cannot continue a server list. Restart at the first
+		// page after reconnecting, retaining the visible rows during the read.
+		const reconnect = () => { void load(); };
+		window.addEventListener('online', reconnect);
+		return () => window.removeEventListener('online', reconnect);
+	}, [load]);
 
 	return {
 		...state,

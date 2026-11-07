@@ -1,0 +1,76 @@
+{
+  "message": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ 'blob:http://127.0.0.1:18724/eae5ada9-e6ab-4c9b-ae2c-f222ccf77dc1'\n- '/api/v1/attachments/content?id=att_041d5bb42505fd5837bea5b786eb6ccafd39860d669c610d4c7716bbd29c9d20'\n",
+  "body": "🦄\naudio-e973e1da-eda\n🌈\n🦄\nTHINGTIME · POST 📌\nPost 📌\nA\naudio-e973e1da-eda\n@audio-e973e1da-eda · \njust now\n🌐\nanyone can see this post\n\nTwo synthetic ordinary audio tracks.\n\nfixture-track-2.wav\n\n15.7 KiB · WAV audio · Track 2 of 2\n\nSaved on this device\n\nDownload original\n\nQUEUE · PLAYS NEXT AUTOMATICALLY\n\n1. fixture-track-1.wav\n2. fixture-track-2.wav\nDownload all · 2 files · 31.3 KiB\n0\nPost as\naudio-e973e1da-eda\nRecover earlier comment draft\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 290ms\n\nMongoDB: connected (12ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nAUDIO-E973E1DA-EDA\n\nProfile\n\nLog out\n\n✉️ email unverified\n\n🦄",
+  "postId": "bf13477d-cd8b-4c38-bacb-6ea5e427e4fb",
+  "ids": [
+    "att_1e520ed012055f20daecf06a4939b88a7aceed97425a34c1f722ccad0ecda5ef",
+    "att_041d5bb42505fd5837bea5b786eb6ccafd39860d669c610d4c7716bbd29c9d20"
+  ],
+  "requests": [
+    {
+      "id": "att_1e520ed012055f20daecf06a4939b88a7aceed97425a34c1f722ccad0ecda5ef",
+      "mode": "retain",
+      "expectedActor": "6adfbbf584b6f2a70f97c0ca",
+      "plane": "home"
+    },
+    {
+      "id": "att_1e520ed012055f20daecf06a4939b88a7aceed97425a34c1f722ccad0ecda5ef",
+      "mode": "retain-bytes",
+      "expectedActor": "6adfbbf584b6f2a70f97c0ca",
+      "plane": "home"
+    },
+    {
+      "id": "att_1e520ed012055f20daecf06a4939b88a7aceed97425a34c1f722ccad0ecda5ef",
+      "mode": "retain",
+      "expectedActor": "6adfbbf584b6f2a70f97c0ca",
+      "plane": "home"
+    },
+    {
+      "id": "att_041d5bb42505fd5837bea5b786eb6ccafd39860d669c610d4c7716bbd29c9d20",
+      "mode": "retain",
+      "expectedActor": "6adfbbf584b6f2a70f97c0ca",
+      "plane": "home"
+    },
+    {
+      "id": "att_041d5bb42505fd5837bea5b786eb6ccafd39860d669c610d4c7716bbd29c9d20",
+      "mode": "retain-bytes",
+      "expectedActor": "6adfbbf584b6f2a70f97c0ca",
+      "plane": "home"
+    },
+    {
+      "id": "att_041d5bb42505fd5837bea5b786eb6ccafd39860d669c610d4c7716bbd29c9d20",
+      "mode": "retain",
+      "expectedActor": "6adfbbf584b6f2a70f97c0ca",
+      "plane": "home"
+    },
+    {
+      "id": "att_1e520ed012055f20daecf06a4939b88a7aceed97425a34c1f722ccad0ecda5ef",
+      "mode": null
+    },
+    {
+      "id": "att_1e520ed012055f20daecf06a4939b88a7aceed97425a34c1f722ccad0ecda5ef",
+      "mode": "retain",
+      "expectedActor": "6adfbbf584b6f2a70f97c0ca",
+      "plane": "home"
+    },
+    {
+      "id": "att_1e520ed012055f20daecf06a4939b88a7aceed97425a34c1f722ccad0ecda5ef",
+      "mode": "retain",
+      "expectedActor": "6adfbbf584b6f2a70f97c0ca",
+      "plane": "home"
+    },
+    {
+      "id": "att_041d5bb42505fd5837bea5b786eb6ccafd39860d669c610d4c7716bbd29c9d20",
+      "mode": "retain",
+      "expectedActor": "6adfbbf584b6f2a70f97c0ca",
+      "plane": "home"
+    },
+    {
+      "id": "att_041d5bb42505fd5837bea5b786eb6ccafd39860d669c610d4c7716bbd29c9d20",
+      "mode": "retain",
+      "expectedActor": "6adfbbf584b6f2a70f97c0ca",
+      "plane": "home"
+    }
+  ],
+  "errors": []
+}

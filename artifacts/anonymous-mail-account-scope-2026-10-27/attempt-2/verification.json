@@ -1,0 +1,27 @@
+{
+  "checks": [
+    "normal account reader exact synthetic canonical encrypted data remains visible offline",
+    "real cross-tab identity invalidation unmounts old reader while root response is held",
+    "next root-confirmed account opens its separate saved reader; same message ID does not reuse previous selection; old partition retained unchanged"
+  ],
+  "proof": {
+    "a": [
+      {
+        "subject": "ACCOUNT A subject",
+        "text": "ACCOUNT A private body"
+      }
+    ],
+    "b": [
+      {
+        "subject": "ACCOUNT B subject",
+        "text": "ACCOUNT B private body"
+      }
+    ]
+  },
+  "mail": [],
+  "errors": [],
+  "limits": [
+    "synthetic disposable account transition on one loopback origin",
+    "no provider mail, native transport, selected-origin change, or installed-app acceptance"
+  ]
+}

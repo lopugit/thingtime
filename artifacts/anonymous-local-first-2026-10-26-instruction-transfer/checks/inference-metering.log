@@ -1,0 +1,17 @@
+✔ unknown model capacity or absent exact checker refuses before reading retained instructions (1.465334ms)
+✔ only the matching verified model checker receives the bounded stream and actual context window (1.069417ms)
+✔ ordinary reference-backed saves remain usable without a tokenizer on every prompt surface (1123.482167ms)
+✔ unverified oversized inference stops at bounded working memory and never clips a successful prompt (1.914917ms)
+✔ disabled large generations stream without reconstructing disabled text and integrity failures propagate (23.841791ms)
+✔ larger inference requires the actual model checker to verify before reconstruction (1.689958ms)
+✔ many short rows within the legacy request budget are not charged transport metadata (43.635542ms)
+✔ long fragmented rows use exact logical escaped UTF-8 bytes without repeated row overhead (3.098458ms)
+✔ a surrogate pair split across parts is metered as the joined logical Unicode text (2.38075ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1882.30375

@@ -1,0 +1,29 @@
+{
+  "lane": "existing disposable host mongod + sanitized Nitro + task-owned Playwright Chrome for Testing",
+  "network": "normal networking; separate profile/backend/DB; production unreachability not asserted",
+  "startedAt": "2026-10-28T11:22:13.826Z",
+  "result": "failed",
+  "failure": {
+    "phase": "preflight",
+    "error": "listen EADDRINUSE: address already in use 127.0.0.1:27017"
+  },
+  "completedAt": "2026-10-28T11:22:13.883Z",
+  "cleanup": {
+    "allocatedOwnedResources": 0,
+    "liveOwnedProcesses": [],
+    "privateStateCreated": false
+  },
+  "scope": "Host-lane preflight only; zero fixture/browser/backend/database executions",
+  "preflight": {
+    "exclusiveBind": "EADDRINUSE127.0.0.1:27017",
+    "visibleListenerDiscovery": "lsof returned no visible listener; inconclusive",
+    "requiredContract": "agentTestEnvironment requires mongodb://127.0.0.1:27017/thingtime?replicaSet=tt-agent-<session UUID>",
+    "packageProof": "tmp/continuation/post-delete-package.json",
+    "archiveSha256": "e5ca5891e959085e7add481841f21f662bdce8da8dfa9649d11aba227a88ba12",
+    "currentPackageSourceHashesVerified": 19,
+    "sourceSha256": "34fbc86482ee27831f48b1cde57a901e487b166bc5b3c5a62b8b12cc20cfc6ff",
+    "compiledSha256": "43c4f14be17a936cbf4193207cbfa0da2b6db7bfd621172e4f7fe1d81ba12831",
+    "browserExecutableAvailable": true,
+    "nativeAddonAvailability": "existing build bcrypt loads on host; archived copy not loaded because port preflight stopped before extraction"
+  }
+}

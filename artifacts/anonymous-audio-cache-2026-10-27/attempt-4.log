@@ -1,0 +1,40 @@
+Current package ready; running audio
+Egress check 203.0.113.1: ENETUNREACH
+Egress check ::ffff:203.0.113.1: ENETUNREACH
+Egress check 2001:db8::1: ENETUNREACH
+Egress check blocked.invalid: EAI_AGAIN
+Checking backend redirect
+Launching isolated browser
+Browser ready
+Browser egress denied http://203.0.113.1/
+Browser egress denied http://[::ffff:203.0.113.1]/
+Browser egress denied http://[2001:db8::1]/
+Browser egress denied http://blocked.invalid/
+Browser egress denied http://127.0.0.1:18725/
+Closing network-proof browser
+Closing network-proof server
+{"interfaces":["loopback"],"denied":[{"host":"203.0.113.1","code":"ENETUNREACH"},{"host":"::ffff:203.0.113.1","code":"ENETUNREACH"},{"host":"2001:db8::1","code":"ENETUNREACH"},{"host":"blocked.invalid","code":"EAI_AGAIN"}],"browserDenied":["http://203.0.113.1/","http://[::ffff:203.0.113.1]/","http://[2001:db8::1]/","http://blocked.invalid/","http://127.0.0.1:18725/"],"backendRedirectDenied":true,"chromiumSandbox":true}
+Server before test: 200
+
+Audio checkpoint: independent author/viewer fixture and remote player ready
+✖ ordinary audio player fences delayed saves across queue/account changes and keeps exact offline originals (56471.680132ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 56536.552872
+
+✖ failing tests:
+
+test at ../audio-player.test.mjs:27:1
+✖ ordinary audio player fences delayed saves across queue/account changes and keeps exact offline originals (56471.680132ms)
+  Error: The player did not issue its original-bytes save request; inspect captured DOM and request modes.
+      at file:///tmp/check/audio-player.test.mjs:89:13
+      at async delayedSave (file:///tmp/check/audio-player.test.mjs:88:5)
+      at async TestContext.<anonymous> (file:///tmp/check/audio-player.test.mjs:174:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+Container operation failed: 1

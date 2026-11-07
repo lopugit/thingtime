@@ -1,3 +1,4 @@
+import { instructionPayloadBytes } from '../settings/instructionStorageEnvelope.ts';
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
 import {
 	COLLECTION_SCHEMA_VERSIONS,
@@ -55,7 +56,9 @@ export const thingStorageSizeBytes = (doc: {
   const noteBytes = timelineNoteBytes(doc);
   if (noteBytes === null) throw new InvalidTimelineStorageEnvelopeError();
   const timelineV2 = Array.isArray(doc.thingtime) && doc.thingtime.includes(TIMELINE_EVENT_KIND) && (doc.timelineEnvelopeVersion === 2 || doc.timelineEnvelopeVersion === 3);
-  const total = (timelineV2 ? 0 : payloadBytes) + (objectBytes ?? 0) + historyBytes + noteBytes;
+  const instructionBytes = instructionPayloadBytes(doc);
+  if (instructionBytes === null) throw new TypeError('Private instruction storage envelope is invalid');
+  const total = (timelineV2 ? 0 : payloadBytes) + (objectBytes ?? 0) + historyBytes + noteBytes + instructionBytes;
   if (!Number.isSafeInteger(total)) throw new RangeError('Thing storage size exceeds the exact counter range');
   return total;
 };

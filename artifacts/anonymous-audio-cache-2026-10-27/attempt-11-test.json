@@ -1,0 +1,4 @@
+{
+  "sourceSha256": "b9461505f4e66de55ad65751499a377deda64e35da8a31b53b89c90b20870c58",
+  "scope": "Reproduced native empty-source pending play cancellation; actual retired app audio verifies zero playing events, no resource, AbortError on pause/load; currentSrc retained evidence."
+}

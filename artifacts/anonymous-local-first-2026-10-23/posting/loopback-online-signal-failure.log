@@ -1,0 +1,19 @@
+✖ native account drafts survive offline reload and draft sync failures never block posting (85675.530195ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 86347.125112
+
+✖ failing tests:
+
+test at app/local-workspace/accountDraftSync.browser.test.ts:2:1271
+✖ native account drafts survive offline reload and draft sync failures never block posting (85675.530195ms)
+  Error: The account did not converge within the bounded retry window: {"ok":true,"drafts":[],"nextCursor":null}
+      at poll (/workspace/thingtime/remix/app/local-workspace/accountDraftSync.browser.test.ts:55:9)
+      at async TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountDraftSync.browser.test.ts:91:18)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

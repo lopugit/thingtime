@@ -1,0 +1,162 @@
+{
+  "error": "TimeoutError: locator.click: Timeout 25000ms exceeded.\nCall log:\n  - waiting for locator('a[href=\"/things?folder=0e8f31bc-5ca7-4e5c-954a-a04c87b7ef4e\"]').first()\n",
+  "sourceRoot": "0e8f31bc-5ca7-4e5c-954a-a04c87b7ef4e",
+  "copyRoot": "",
+  "sourcePost": "1a877201-e2c9-4194-945e-64384ab8e8a4",
+  "copyPost": "",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\n\nOffline account workspace. Local edits are available; account sync is paused until your session is verified.\n\nReconnect\n\n2 changes saved on this device. Offline — sync will resume when connected.\n\nReview sync\n\n3 file changes saved on this device. Waiting for verified account sync.\n\nReview file sync\n\nTHINGTIME · THINGS\n\nBrowse files\nUnfiled files\nSelected library\nHome library\nThings\nNew\nImport…\nPaste\n\nVIEW\n\nGrid\nList\nColumns\n\nSHOW\n\nNames\nPreviews\n\nARRANGE\n\nNewest first\nGroup\n\nKIND\n\n🌀 All\n📁 Folders\n💾 Files\n📝 Posts\n📦 Data\n💎 Schemas\n🧩 Components\n⚡ Actions\n💬 Comments\n🏠 All things\n\n🏠\n\nAll things\n\n📁\n\nLinked gallery 8c025bc3\n\nNew folder +\n\n📁\n\nLinked gallery 8c025bc3\n\nFOLDER\n\njust now\n\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "local": {
+    "things": [
+      {
+        "thingtime": [
+          "folder"
+        ],
+        "crystal": {
+          "name": "Linked gallery 8c025bc3"
+        },
+        "id": "0e8f31bc-5ca7-4e5c-954a-a04c87b7ef4e",
+        "revision": 1,
+        "createdAt": "2026-10-23T09:10:13.023Z",
+        "updatedAt": "2026-10-23T09:10:13.023Z"
+      },
+      {
+        "thingtime": [
+          "post"
+        ],
+        "crystal": {
+          "type": "text",
+          "text": "Private mixed gallery · 独立 🌿 8c025bc3-f721-42a0-9649-654f7e80132e",
+          "images": [],
+          "listing": null,
+          "thing": null
+        },
+        "id": "1a877201-e2c9-4194-945e-64384ab8e8a4",
+        "revision": 1,
+        "createdAt": "2026-10-23T09:10:13.023Z",
+        "updatedAt": "2026-10-23T09:10:13.023Z",
+        "folderId": "0e8f31bc-5ca7-4e5c-954a-a04c87b7ef4e"
+      },
+      {
+        "id": "local-file-79275829-14aa-476d-8879-b2f6424bdf12",
+        "thingtime": [
+          "attachment"
+        ],
+        "crystal": {
+          "name": "stored.txt",
+          "size": 58,
+          "contentType": "text/plain",
+          "mediaKind": "file"
+        },
+        "createdAt": "2026-10-23T09:10:13.023Z",
+        "updatedAt": "2026-10-23T09:10:13.023Z",
+        "revision": 1,
+        "targetId": "1a877201-e2c9-4194-945e-64384ab8e8a4",
+        "localAttachment": {
+          "purpose": "post",
+          "sha256": "092e3fddddc2a69b64fc35e0a69ade47fa85fae6587d0b9ae06c68c84e315a83",
+          "order": 1,
+          "requestId": "79275829-14aa-476d-8879-b2f6424bdf12",
+          "initialFolderId": null
+        }
+      },
+      {
+        "id": "local-link-4c7bf355-af07-4703-8527-c26131dea463",
+        "thingtime": [
+          "attachment"
+        ],
+        "crystal": {
+          "name": "second.txt",
+          "size": 0,
+          "contentType": "text/plain",
+          "mediaKind": "file",
+          "filenamePreview": "second-display.txt",
+          "title": "Second URL 🍑",
+          "description": "Second description\nExact spacing.",
+          "url": "https://gallery.example.test/second.txt?view=2"
+        },
+        "targetId": "1a877201-e2c9-4194-945e-64384ab8e8a4",
+        "createdAt": "2026-10-23T09:10:13.023Z",
+        "updatedAt": "2026-10-23T09:10:13.023Z",
+        "revision": 1,
+        "localLinkedAttachment": {
+          "purpose": "post",
+          "order": 0,
+          "requestId": "4c7bf355-af07-4703-8527-c26131dea463"
+        }
+      },
+      {
+        "id": "local-link-9de2e952-acfe-42e5-8c35-dea1e0f897c0",
+        "thingtime": [
+          "attachment"
+        ],
+        "crystal": {
+          "name": "first.txt",
+          "size": 0,
+          "contentType": "text/plain",
+          "mediaKind": "file",
+          "filenamePreview": "first-display.txt",
+          "title": "First URL 🌿",
+          "description": "First description\n第二行",
+          "url": "https://gallery.example.test/first.txt?view=1#leaf"
+        },
+        "targetId": "1a877201-e2c9-4194-945e-64384ab8e8a4",
+        "createdAt": "2026-10-23T09:10:13.023Z",
+        "updatedAt": "2026-10-23T09:10:13.023Z",
+        "revision": 1,
+        "localLinkedAttachment": {
+          "purpose": "post",
+          "order": 2,
+          "requestId": "9de2e952-acfe-42e5-8c35-dea1e0f897c0"
+        }
+      }
+    ],
+    "files": [
+      {
+        "id": "local-file-79275829-14aa-476d-8879-b2f6424bdf12",
+        "state": "pending",
+        "request": {
+          "requestId": "79275829-14aa-476d-8879-b2f6424bdf12",
+          "filename": "stored.txt",
+          "contentType": "text/plain",
+          "sizeBytes": 58,
+          "purpose": "post"
+        },
+        "phase": "start"
+      },
+      {
+        "id": "local-link-4c7bf355-af07-4703-8527-c26131dea463",
+        "state": "pending",
+        "request": {
+          "requestId": "4c7bf355-af07-4703-8527-c26131dea463",
+          "filename": "second.txt",
+          "contentType": "text/plain",
+          "sizeBytes": 0,
+          "purpose": "post"
+        },
+        "phase": "link"
+      },
+      {
+        "id": "local-link-9de2e952-acfe-42e5-8c35-dea1e0f897c0",
+        "state": "pending",
+        "request": {
+          "requestId": "9de2e952-acfe-42e5-8c35-dea1e0f897c0",
+          "filename": "first.txt",
+          "contentType": "text/plain",
+          "sizeBytes": 0,
+          "purpose": "post"
+        },
+        "phase": "link"
+      }
+    ],
+    "byteIds": [
+      "editor-tree:root:v1",
+      "local-file-79275829-14aa-476d-8879-b2f6424bdf12"
+    ]
+  },
+  "lostRequestId": "",
+  "lostReceipt": null,
+  "linkAttempts": [],
+  "writes": [],
+  "externalRequests": [],
+  "errors": []
+}

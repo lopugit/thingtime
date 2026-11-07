@@ -1,0 +1,119 @@
+{
+  "label": "reconnected-suite-conflict",
+  "width": 1440,
+  "skippedHidden": 3,
+  "roots": [
+    {
+      "marker": "0",
+      "tag": "HTML",
+      "kind": "page",
+      "clientHeight": 1000,
+      "scrollHeight": 4060,
+      "maxScroll": 3060,
+      "rect": {
+        "width": 1440,
+        "height": 4059.765625
+      },
+      "points": [
+        0,
+        765,
+        1530,
+        2295,
+        3060
+      ],
+      "observed": [
+        0,
+        765,
+        1451,
+        1451,
+        1451
+      ]
+    },
+    {
+      "marker": "1",
+      "tag": "PRE",
+      "kind": "pane",
+      "clientHeight": 240,
+      "scrollHeight": 3528,
+      "maxScroll": 3288,
+      "rect": {
+        "width": 427,
+        "height": 240
+      },
+      "points": [
+        0,
+        1644,
+        3288
+      ],
+      "observed": [
+        0,
+        1644,
+        3288
+      ]
+    },
+    {
+      "marker": "2",
+      "tag": "PRE",
+      "kind": "pane",
+      "clientHeight": 240,
+      "scrollHeight": 3510,
+      "maxScroll": 3270,
+      "rect": {
+        "width": 427,
+        "height": 240
+      },
+      "points": [
+        0,
+        1635,
+        3270
+      ],
+      "observed": [
+        0,
+        1635,
+        3270
+      ]
+    },
+    {
+      "marker": "3",
+      "tag": "PRE",
+      "kind": "pane",
+      "clientHeight": 240,
+      "scrollHeight": 3420,
+      "maxScroll": 3180,
+      "rect": {
+        "width": 866,
+        "height": 240
+      },
+      "points": [
+        0,
+        1590,
+        3180
+      ],
+      "observed": [
+        0,
+        1590,
+        3180
+      ]
+    },
+    {
+      "marker": "4",
+      "tag": "PRE",
+      "kind": "pane",
+      "clientHeight": 418,
+      "scrollHeight": 3027,
+      "maxScroll": 2609,
+      "rect": {
+        "width": 828,
+        "height": 420
+      },
+      "points": [
+        0,
+        1304.5,
+        2609
+      ],
+      "observed": []
+    }
+  ],
+  "phase": "traversing",
+  "completedRoots": 4
+}

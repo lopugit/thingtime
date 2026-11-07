@@ -1,0 +1,33 @@
+✖ native offline import accepts twenty independent transfers and retains exact copies after cold reload (60022.228371ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 62166.502495
+
+✖ failing tests:
+
+test at app/local-workspace/transferBatch.browser.test.ts:2:1165
+✖ native offline import accepts twenty independent transfers and retains exact copies after cold reload (60022.228371ms)
+  locator.waitFor: Timeout 25000ms exceeded.
+  Call log:
+    - waiting for getByRole('dialog') to be hidden
+      6 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_1i_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_1i_" aria-labelledby="chakra-modal--header-_r_1i_">…</section>
+      4 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_1l_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_1l_" aria-labelledby="chakra-modal--header-_r_1l_">…</section>
+      3 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_1s_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_1s_" aria-labelledby="chakra-modal--header-_r_1s_">…</section>
+      5 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_22_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_22_" aria-labelledby="chakra-modal--header-_r_22_">…</section>
+      4 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_28_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_28_" aria-labelledby="chakra-modal--header-_r_28_">…</section>
+      4 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_2e_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_2e_" aria-labelledby="chakra-modal--header-_r_2e_">…</section>
+      4 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_2k_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_2k_" aria-labelledby="chakra-modal--header-_r_2k_">…</section>
+      3 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_2q_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_2q_" aria-labelledby="chakra-modal--header-_r_2q_">…</section>
+      2 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_30_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_30_" aria-labelledby="chakra-modal--header-_r_30_">…</section>
+      4 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_36_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_36_" aria-labelledby="chakra-modal--header-_r_36_">…</section>
+      2 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_3c_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_3c_" aria-labelledby="chakra-modal--header-_r_3c_">…</section>
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/transferBatch.browser.test.ts:66:16) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('dialog') to be hidden", '    6 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_1i_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_1i_" aria-labelledby="chakra-modal--header-_r_1i_">…</section>', '    4 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_1l_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_1l_" aria-labelledby="chakra-modal--header-_r_1l_">…</section>', '    3 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_1s_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_1s_" aria-labelledby="chakra-modal--header-_r_1s_">…</section>', '    5 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_22_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_22_" aria-labelledby="chakra-modal--header-_r_22_">…</section>', '    4 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_28_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_28_" aria-labelledby="chakra-modal--header-_r_28_">…</section>', '    4 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_2e_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_2e_" aria-labelledby="chakra-modal--header-_r_2e_">…</section>', '    4 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_2k_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_2k_" aria-labelledby="chakra-modal--header-_r_2k_">…</section>', '    3 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_2q_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_2q_" aria-labelledby="chakra-modal--header-_r_2q_">…</section>', '    2 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_30_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_30_" aria-labelledby="chakra-modal--header-_r_30_">…</section>', '    4 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_36_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_36_" aria-labelledby="chakra-modal--header-_r_36_">…</section>', '    2 × locator resolved to visible <section role="dialog" tabindex="-1" aria-modal="true" id="chakra-modal-_r_3c_" class="chakra-modal__content cha-zyet3q" aria-describedby="chakra-modal--body-_r_3c_" aria-labelledby="chakra-modal--header-_r_3c_">…</section>' ]
+  }

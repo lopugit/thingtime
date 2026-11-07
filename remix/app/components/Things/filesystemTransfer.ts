@@ -48,7 +48,8 @@ export const transferFilesystem = async (clipboard: FileClipboard, destination: 
         if (!item.inode && !isCloudFilesystemFile(item) && !item.thingtime.includes('attachment')) throw new Error('This folder contains other Things. Use the main Things copy action to preserve them.');
         if (isCloudFilesystemFile(item) && (item.crystal.trashed !== false || item.crystal.symbolicLink)) throw Error('Trashed files and symbolic links cannot be copied.');
         const size = item.inode?.size ?? Number(isCloudFilesystemFile(item) ? item.crystal.content?.size : item.crystal.size);
-        if (!Number.isSafeInteger(size) || size < 0 || size > FILESYSTEM_MAX_BYTES || (bytes += size) > 128 * 1024 * 1024) throw new Error('Choose files up to 32 MiB each and 128 MiB total.');
+        if (!Number.isSafeInteger(size) || size < 0) throw new Error('A source file has invalid size metadata.');
+        if ((item.inode || destination.deviceId) && (size > FILESYSTEM_MAX_BYTES || (bytes += size) > 128 * 1024 * 1024)) throw new Error('Paired-device transfers support files up to 32 MiB each and 128 MiB total.');
         result.push({ item });
       }
     }

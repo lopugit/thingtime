@@ -1,0 +1,90 @@
+{
+  "format": "thingtime.transfer",
+  "version": 1,
+  "roots": [
+    "e458da82-55b9-4289-9689-3408c942fb52"
+  ],
+  "things": [
+    {
+      "id": "e458da82-55b9-4289-9689-3408c942fb52",
+      "thingtime": [
+        "folder"
+      ],
+      "crystal": {
+        "name": "Offline looks b1a6be"
+      }
+    },
+    {
+      "id": "3ccb4cd7-0910-4b02-963c-8684813d90de",
+      "thingtime": [
+        "theme"
+      ],
+      "crystal": {
+        "name": "Imported peach 87798f",
+        "theme": {
+          "name": "Imported peach 87798f",
+          "colors": {
+            "ink": "#16161a",
+            "text": "#5a5a66",
+            "muted": "#9a9aa6",
+            "faint": "#b6b6c0",
+            "border": "#ececef",
+            "borderLight": "#f0f0f2",
+            "surface": "#fafafb",
+            "surfaceAlt": "#f5f5f7",
+            "surfaceHover": "#ececee",
+            "card": "#ffffff",
+            "pageBg": "#ffffff",
+            "accent": "#bf8068",
+            "accentTint": "#fff5fa",
+            "accentContrast": "#ffffff",
+            "link": "#2f8fd6",
+            "positive": "#2f8f4f",
+            "positiveSoft": "rgba(88, 202, 112, 0.14)",
+            "danger": "#d6455a",
+            "warning": "#ffbc48",
+            "rainbow": [
+              "#f34a4a",
+              "#ffbc48",
+              "#58ca70",
+              "#47b5e6",
+              "#a555e8"
+            ],
+            "darkBg": "#131318",
+            "darkChrome": "#1c1c22",
+            "darkBorder": "#2a2a33",
+            "darkText": "#e6e6ee",
+            "darkMuted": "#8a8a95",
+            "darkAccent": "#59ff9c"
+          },
+          "fonts": {
+            "heading": "Space Grotesk",
+            "body": "Hanken Grotesk",
+            "mono": "JetBrains Mono",
+            "display": ""
+          },
+          "general": {
+            "radiusScale": 1,
+            "borderWidth": 1,
+            "shadow": "soft",
+            "motion": true,
+            "animSpeed": 200,
+            "iconStyle": "emoji",
+            "thingsBadgePadding": "small",
+            "thingsBadgeCustomPadding": "3px 8px"
+          },
+          "windows": {
+            "closeColor": "",
+            "minimiseColor": "",
+            "maximiseColor": "",
+            "closeRadius": 3.5,
+            "minimiseRadius": 3.5,
+            "maximiseRadius": 3.5
+          }
+        }
+      },
+      "folderId": "e458da82-55b9-4289-9689-3408c942fb52"
+    }
+  ],
+  "files": []
+}

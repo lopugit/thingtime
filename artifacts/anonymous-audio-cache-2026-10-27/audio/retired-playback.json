@@ -1,0 +1,14 @@
+{
+  "beforeCancellation": "pending without source",
+  "nativeState": {
+    "readyState": 0,
+    "networkState": 3,
+    "srcAttribute": null,
+    "sources": [
+      null
+    ]
+  },
+  "playResult": "AbortError",
+  "playingEvents": 0,
+  "paused": true
+}

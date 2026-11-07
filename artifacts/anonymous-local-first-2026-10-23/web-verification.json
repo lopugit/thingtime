@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "cleanBrowser": true,
+  "nativeRender": true,
+  "canonicalDownload": true,
+  "contentHash": "a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c",
+  "requestCount": 4,
+  "apiRequests": [],
+  "opaqueStorageDenied": true,
+  "invalidJsonRejected": true,
+  "staleExportDisabled": true,
+  "emptyAfterReload": true
+}

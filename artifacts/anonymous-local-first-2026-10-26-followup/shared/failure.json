@@ -1,0 +1,193 @@
+{
+  "error": "TimeoutError: Waiting failed: 20000ms exceeded",
+  "stack": "TimeoutError: Waiting failed: 20000ms exceeded\n    at new WaitTask (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/common/WaitTask.js:46:34)\n    at IsolatedWorld.waitForFunction (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/api/Realm.js:49:26)\n    at CdpFrame.waitForFunction (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/api/Frame.js:585:43)\n    at CdpFrame.<anonymous> (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/util/decorators.js:101:27)\n    at CdpPage.waitForFunction (file:///opt/thingtime-browser/node_modules/puppeteer-core/lib/puppeteer/api/Page.js:1540:37)\n    at TestContext.<anonymous> (file:///tmp/check/shared.test.mjs:292:16)\n    at async Test.run (node:internal/test_runner/test:1409:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)",
+  "setupSteps": [
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/register",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/login",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/users/public-uploads",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/attachments/uploads",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "upload-start"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/attachments/uploads/parts",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "upload-parts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/attachments/uploads/complete",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "upload-complete"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/things",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "post"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/things",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "component"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/things",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "webpage"
+    }
+  ],
+  "errors": [],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/things"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/things"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/things"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/webpages/resolve"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/things/export"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/attachments/content",
+      "mode": "validate"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/attachments/content",
+      "mode": "original-bytes"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/attachments/content",
+      "mode": "validate"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/things/export"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/attachments/content",
+      "mode": "validate"
+    },
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    },
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    },
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "generatedAt": "2026-10-27T01:57:25.486152+00:00",
+  "scope": "Prepared fixture and blocked run evidence only",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 3269,
+      "sha256": "24db7c209e35c03d65ead24978c3062aa31e60dd92761bb2ccd92907da1b75e9"
+    },
+    {
+      "path": "capacity-result.json",
+      "bytes": 585,
+      "sha256": "8e5b5cdc2c20b228dba24a3efa56da38fd707249816d528516248b33ca318acc"
+    },
+    {
+      "path": "discovery.log",
+      "bytes": 223,
+      "sha256": "c6b72b6059cb6a5e8acabc28c5d65d8392a3b22c98384c7c331cd64e9af3ad6c"
+    },
+    {
+      "path": "lint.log",
+      "bytes": 529,
+      "sha256": "42be31713f90160587965fb63708cdbba2493d18d4b0cd1382e12c890f2cb5d3"
+    },
+    {
+      "path": "plan-source-check.json",
+      "bytes": 264,
+      "sha256": "a1093c4be7235048e0dbeea12bcb82c51d8858ecd2e4f3facd66abec09230887"
+    },
+    {
+      "path": "prepared-fixture.mjs",
+      "bytes": 12436,
+      "sha256": "3c7f4981121803e9d79bec5865397583677ac11337a697eab210b6272922bed9"
+    },
+    {
+      "path": "source-proof.json",
+      "bytes": 303,
+      "sha256": "4c28c38734f55d34cce93b90b84feac1143aa229fe5278e3e8d9982976ad56e1"
+    }
+  ]
+}

@@ -1,0 +1,183 @@
+(node:79786) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ Claude: streams tool input, executes as the viewer, feeds tool_result back and ends with text (104.528ms)
+✔ Claude preserves the selected effort and speed without a bare retry (17.363333ms)
+[lopu] claude failed before replying: 400 {"type":"error","error":{"type":"invalid_request_error","message":"nope"}}
+✔ an explicit Claude selection never silently falls back to OpenAI (8.646ms)
+✔ OpenAI native tools: per-index argument accumulation, tool messages, and the request shape (138.789333ms)
+✔ OpenAI text mode: fenced tt-tool blocks become tool calls, text outside streams, results go back as a user message (26.31075ms)
+✔ the tt-tool text parser holds partial markers and refuses cut-off arguments (1.363459ms)
+✔ unwrapEnvelopeContent peels the envelopes some OpenAI-compatible bridges leave around the reply (0.378625ms)
+✔ wrapBareToolCalls re-fences a reply that is nothing but tool-call JSON (0.242833ms)
+✔ a plain completion that is a bare tool-call object still runs the tool (text mode) (17.576ms)
+✔ a destructive tool stops for the user (confirm → tool_result needsConfirmation → the model is told to wait); a verified grant lets it run and is listed in the live context (33.294791ms)
+✔ a tool batch beyond the former 24-call cap executes completely (29.280709ms)
+✔ local execution continues beyond twelve hops and four elapsed minutes (146.0765ms)
+✔ hosting checkpoints occur after completed tools without forcing a wrap-up or interrupting a write (10.293667ms)
+✔ lossless crystal pages arrive as complete JSON at the provider (14.697208ms)
+[error-log] {"id":"error-log-2c4a75f2-4e93-4ba1-9bd7-96990579fa93","source":"lopu-chat-stream","message":"400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"nope\"}}","provider":"claude"}
+[error-log] persistence unavailable
+✔ a provider error after output keeps what streamed, emits a retryable error, and never retries another provider (51.413958ms)
+✔ LOPU_CHAT_PROVIDER=test drives the scripted provider through the real loop with real tool execution (4.394708ms)
+✔ no provider configured → the honest unconfigured line, never a blank reply (0.519709ms)
+[lopu] claude failed before replying: 400 {"type":"error","error":{"type":"invalid_request_error","message":"nope"}}
+[lopu] openai failed before replying: 400 nope
+✔ every provider failing before output ends in the daydreaming fallback (24.005042ms)
+✔ an OpenAI-compatible endpoint that refuses streaming is served by the plain-completion rung (text tools, later hops skip streaming) (20.839ms)
+✔ a vault turn runs on the viewer’s own OpenAI-compatible connection: its key, its model, text tools — never the server keys or org (14.895708ms)
+✔ a vault turn on an Anthropic connection sends the vault key to the Messages API with native tools and never the server bearer token (12.876333ms)
+[lopu] vault provider "My own key" failed before replying: 401 nope
+[lopu] vault provider "My own key" failed before replying: This endpoint host is not enabled by the Thingtime administrator.
+[lopu] vault provider "My own key" failed before replying: This endpoint host is not enabled by the Thingtime administrator.
+✔ a vault provider that rejects the key surfaces a friendly error then the canned vault line — the server keys are never a fallback (17.666458ms)
+✔ a vault endpoint outside the server allowlist is refused before any request leaves the server (0.800625ms)
+✔ the dev rewrite table is inert in production builds, so the same connection is refused there (0.491708ms)
+✔ a vault turn takes precedence over LOPU_CHAT_PROVIDER=test and is served by the plain rung when the endpoint refuses streaming (13.43375ms)
+✔ Both provider transports receive actual image/PDF content and retain it after tool hops (42.108542ms)
+✔ an Anthropic pause_turn resumes the exact assistant content instead of reporting completion (15.296084ms)
+[error-log] {"id":"error-log-9fdc6afa-4651-4938-b684-3e177eaa4b36","source":"lopu-chat-stream","message":"Unexpected failure","provider":"claude"}
+[error-log] persistence unavailable
+✔ an unexpected tool failure waits for concurrent writes and retains their receipts (41.918667ms)
+✔ Claude receives a note only after the active tool completes, without replaying it (15.774667ms)
+✔ OpenAI includes a note arriving during a text reply in a following hop of the same turn (13.055917ms)
+✔ ChatGPT plan forces Responses, namespaces local tools and preserves namespace during continuation (22.154625ms)
+✔ ChatGPT plan completes a read-only tool round trip when terminal output is omitted from the envelope (17.100334ms)
+✔ ChatGPT plan accepts optional completed status omitted from done (8.643458ms)
+✔ ChatGPT plan accepts optional completed status omitted from terminal (18.080333ms)
+✔ ChatGPT plan refuses unfinished streamed items without executing tools (8.833125ms)
+✔ ChatGPT plan refuses conflicting-arguments streamed items without executing tools (11.604917ms)
+✔ ChatGPT plan refuses conflicting-namespace streamed items without executing tools (10.72925ms)
+✔ ChatGPT plan refuses duplicate-done streamed items without executing tools (10.343916ms)
+✔ ChatGPT plan refuses incomplete streamed items without executing tools (6.601875ms)
+✔ ChatGPT plan refuses dropped streamed items without executing tools (9.91575ms)
+✔ ChatGPT plan incomplete after partial text never becomes a successful fallback (8.821333ms)
+✔ ChatGPT plan dropped after partial text never becomes a successful fallback (8.943375ms)
+✔ ChatGPT plan usage-limit after partial text never becomes a successful fallback (7.232708ms)
+✔ ChatGPT plan HTTP usage refusal is sanitized and never retried or replaced by API billing (8.845292ms)
+✔ ChatGPT plan refuses a foreign tool namespace before execution (7.054958ms)
+✔ ChatGPT plan request cancellation before a completed tool batch prevents execution and fallback (6.988625ms)
+✔ ChatGPT plan authorization cancellation before a completed tool batch prevents execution and fallback (4.951292ms)
+✔ ChatGPT plan credentials cannot use a custom endpoint, default model, development rewrite or voice route (2.488209ms)
+✔ GPT-5.6 Sol Responses preserves High/Fast, tool IDs, encrypted reasoning, media, notes and cache usage across hops (11.744875ms)
+✔ Astra provider-default uses Responses and completes a tool round trip without weakening reasoning (10.989959ms)
+✔ Astra high uses Responses and completes a tool round trip without weakening reasoning (11.758708ms)
+✔ Astra max uses Responses and completes a tool round trip without weakening reasoning (8.634625ms)
+✔ GPT-5.6 Sol Responses continues a note received after a plain reply (11.9765ms)
+[lopu] openai failed before replying: 400 Provider refused the request
+✔ GPT-5.6 Sol HTTP refusal keeps requested reasoning, never retries a weaker request, and uses neutral guidance (5.880458ms)
+[error-log] {"id":"error-log-757b44cb-c3c2-44b3-b397-f2d3a4f5af77","source":"lopu-chat-stream","message":"The selected model could not finish its response.","provider":"openai"}
+[error-log] persistence unavailable
+✔ GPT-5.6 Sol failed stream preserves text without executing/replaying a tool (9.303625ms)
+[error-log] {"id":"error-log-fe812f10-f0a1-41ec-830f-8da06d04f56b","source":"lopu-chat-stream","message":"The selected model could not finish its response.","provider":"openai"}
+[error-log] persistence unavailable
+✔ GPT-5.6 Sol error stream preserves text without executing/replaying a tool (9.303916ms)
+[error-log] {"id":"error-log-935295e3-c69e-4874-8067-c8ca6c1de53c","source":"lopu-chat-stream","message":"The selected model response ended before completion.","provider":"openai"}
+[error-log] persistence unavailable
+✔ GPT-5.6 Sol dropped stream preserves text without executing/replaying a tool (12.299833ms)
+[error-log] {"id":"error-log-2d6c00fa-3f8b-4b05-94db-8a5f65fda31d","source":"lopu-chat-stream","message":"The selected model returned conflicting completed response items.","provider":"openai"}
+[error-log] persistence unavailable
+✔ GPT-5.6 Sol malformed-arguments stream preserves text without executing/replaying a tool (12.041292ms)
+[error-log] {"id":"error-log-5d65409d-9267-47bf-a5bc-939dabcdff24","source":"lopu-chat-stream","message":"The selected model returned conflicting completed response items.","provider":"openai"}
+[error-log] persistence unavailable
+✔ GPT-5.6 Sol unfinished-call stream preserves text without executing/replaying a tool (9.722458ms)
+✔ GPT-5.6 Sol token exhaustion checkpoints without executing truncated tools (6.588625ms)
+✔ GPT-5.6 Sol cancellation after output prevents buffered calls from executing (9.907125ms)
+✔ GPT-5.6 Sol hosting checkpoint retains the completed receipt and makes no extra provider request (6.694167ms)
+✔ GPT-5.6 Sol text-tool endpoint keeps its Chat Completions contract (7.698167ms)
+[error-log] {"id":"error-log-59fba70f-3374-4ddd-a667-39a85d821d6e","source":"lopu-chat-stream","message":"The selected model returned invalid tool arguments.","provider":"openai"}
+[error-log] persistence unavailable
+[error-log] {"id":"error-log-c02a4179-dfc5-4c94-8b33-e6c4954324fb","source":"lopu-chat-stream","message":"The selected model returned conflicting completed response items.","provider":"openai"}
+[error-log] persistence unavailable
+✔ GPT-5.6 Sol rejects a whole multi-call batch when a later argument is malformed or IDs repeat (22.495917ms)
+✔ GPT-5.6 Sol abort between validated call and tool batch keeps it unexecuted (6.782833ms)
+[error-log] {"id":"error-log-f24700b7-d464-466b-b351-4b5530f5b0a6","source":"lopu-chat-stream","message":"400 Provider refused the request","provider":"openai"}
+[error-log] persistence unavailable
+✔ GPT-5.6 Sol failure on the next hop retains executed tool receipts without replay (21.245625ms)
+✔ GPT-5.6 Sol native vault Responses uses only its own credential, origin and requested effort (8.427875ms)
+[error-log] {"id":"error-log-09f31501-4c9c-48c8-b151-8caa9624c7d3","source":"lopu-chat-stream","message":"The selected model returned conflicting completed response items.","provider":"openai"}
+[error-log] persistence unavailable
+✔ GPT-5.6 Sol rejects name identity changes before tool execution (12.257ms)
+[error-log] {"id":"error-log-0a80e218-81ed-48ed-af23-f2b7f03355eb","source":"lopu-chat-stream","message":"The selected model returned conflicting completed response items.","provider":"openai"}
+[error-log] persistence unavailable
+✔ GPT-5.6 Sol rejects call-id identity changes before tool execution (14.607666ms)
+[error-log] {"id":"error-log-4f930f96-92c6-4cd8-8ed5-9f4bcb52427f","source":"lopu-chat-stream","message":"The selected model returned conflicting completed response items.","provider":"openai"}
+[error-log] persistence unavailable
+✔ GPT-5.6 Sol rejects item-id identity changes before tool execution (33.720833ms)
+[error-log] {"id":"error-log-42a4a5c4-ca5b-47a2-aed7-5b758c604d70","source":"lopu-chat-stream","message":"The selected model returned duplicate tool call identifiers.","provider":"openai"}
+[error-log] persistence unavailable
+✔ GPT-5.6 Sol rejects duplicate-item-id identity changes before tool execution (31.564125ms)
+[error-log] {"id":"error-log-44e83707-4024-48e9-a34b-6ef2c37dd9a2","source":"lopu-chat-stream","message":"The selected model returned inconsistent tool call identifiers.","provider":"openai"}
+[error-log] persistence unavailable
+✔ GPT-5.6 Sol rejects changed-start identity changes before tool execution (9.81475ms)
+[error-log] {"id":"error-log-194ce904-4974-4334-af3f-fd9f3e75b422","source":"lopu-chat-stream","message":"The selected model returned inconsistent tool call identifiers.","provider":"openai"}
+[error-log] persistence unavailable
+✔ GPT-5.6 Sol rejects a later-hop call ID replay while preserving its first receipt (14.24525ms)
+✔ claude: the next reply receives new admin guidance and only enabled private instructions (14.100625ms)
+✔ openai: the next reply receives new admin guidance and only enabled private instructions (15.245542ms)
+✔ providers discover inspect_action and receive enum contracts without a lossy wrapper (9.1615ms)
+✔ a malformed native tool reply repairs itself within the turn without executing displayed JSON (16.764292ms)
+✔ repeated displayed tool calls stop after two repair hops instead of silently reporting completion (16.14575ms)
+✔ waiting for confirmation is not treated as a tool-protocol stall (7.969458ms)
+✔ six-page JSON survives hosted checkpoints and reaches the final edit without model rereads (91.365292ms)
+✔ Action failure recovery data reaches the next model hop (14.626375ms)
+✔ a checkpointed Action result reaches the resumed provider without rerunning the Action (17.459167ms)
+✔ unverified instruction capacity is an explicit nonretryable chat outcome before any provider request (1.249125ms)
+✔ unknown model capacity or absent exact checker refuses before reading retained instructions (3.171041ms)
+✔ only the matching verified model checker receives the bounded stream and actual context window (1.081583ms)
+✔ ordinary reference-backed saves remain usable without a tokenizer on every prompt surface (925.043333ms)
+✔ unverified oversized inference stops at bounded working memory and never clips a successful prompt (0.876458ms)
+✔ disabled large generations stream without reconstructing disabled text and integrity failures propagate (22.195459ms)
+✔ larger inference requires the actual model checker to verify before reconstruction (5.3145ms)
+(node:79788) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ Claude musing preserves the selected effort and speed (56.253333ms)
+✔ a starved Claude attempt falls through without emitting a blank Claude meta event (53.862666ms)
+✔ a decorated Claude stream that yields text is never retried (11.594208ms)
+✔ a starved decorated OpenAI stream retries without effort or priority (8.972667ms)
+✔ all starved provider attempts end in the canned fallback, never a blank musing (616.207291ms)
+(node:79789) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ a stream that stalls mid-answer is abandoned at the deadline (405.126875ms)
+✔ the deadline is shared by the whole waterfall, not restarted per provider (402.414542ms)
+✔ a provider that answers within the deadline is unaffected (6.080417ms)
+✔ an ordinary provider failure still falls through to the next provider (1391.726542ms)
+✔ omitting timeoutMs preserves drain-to-completion (4.903375ms)
+(node:79792) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:79792) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ real SDK transcription falls through 429 to the next selected key without duplicate attempts (194.046583ms)
+✔ analysis can fall through to the Claude OAuth runtime without sending audio or enabling tools (12.958208ms)
+✔ changing the provider selection after a failure stops before resolving another key (2.624209ms)
+✔ turning off both analysis outputs prevents fallback from sending another transcript (7.898792ms)
+✔ recording download uses the authorized attachment and requires its exact byte length (5.516084ms)
+✔ storage HTTP and network failures expose only the download category (5.856ms)
+✔ truncated or oversized storage responses never reach transcription (6.973458ms)
+✔ unavailable sources and unsupported formats are distinguished without a storage fetch (0.33125ms)
+✔ Claude completions use OAuth and preserve effort and speed (42.993ms)
+✔ Google completions apply the selected thinking level (2.133041ms)
+▶ OpenAI-compatible providers receive their native reasoning and speed controls
+  ✔ openai (0.560583ms)
+  ✔ openrouter (0.354041ms)
+  ✔ mistral (0.279666ms)
+  ✔ deepseek (0.285292ms)
+  ✔ groq (0.893667ms)
+  ✔ cohere (0.494541ms)
+  ✔ xai (0.633833ms)
+✔ OpenAI-compatible providers receive their native reasoning and speed controls (4.363709ms)
+✔ Mistral thinking responses return only their text chunks (0.695083ms)
+✔ the model rule: the connection’s own model, else the kind’s first catalog model, else the requested one (1.05225ms)
+✔ a rejected or empty provider answer is a user-facing error, never the raw body (2.4955ms)
+✔ buildPlainCompletionRequest keeps effort "none" out of Anthropic and Gemini bodies (0.241625ms)
+✔ voice tuning normalises: known efforts only, speed is fast or normal, model ids are bounded (0.270084ms)
+✔ only a kind with realtime models can run direct voice; the model must be one of them (1.084792ms)
+✔ mintVaultProviderRealtimeSession exchanges the stored key for the provider’s short-lived credential (1.1325ms)
+✔ mintVaultProviderRealtimeSession refuses a credential that is (or contains) the stored key, a bad answer, or a text-only kind (0.941959ms)
+✔ createLopuVoiceRealtimeSession resolves the caller’s own connection, validates the tuning, and returns no key (0.889542ms)
+ℹ tests 126
+ℹ suites 0
+ℹ pass 126
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4271.212417

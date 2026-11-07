@@ -1,0 +1,58 @@
+{
+  "label": "canonical-suite-after-reload",
+  "width": 390,
+  "attempt": 0,
+  "ready": {
+    "stable": true,
+    "observations": [
+      {
+        "height": 4346,
+        "reviewPanes": 0,
+        "componentReady": false,
+        "notFound": false
+      },
+      {
+        "height": 4351,
+        "reviewPanes": 0,
+        "componentReady": false,
+        "notFound": false
+      }
+    ]
+  },
+  "skippedHidden": 2,
+  "roots": [
+    {
+      "marker": "0",
+      "tag": "HTML",
+      "reviewPane": false,
+      "kind": "page",
+      "clientHeight": 844,
+      "scrollHeight": 4351,
+      "maxScroll": 3507,
+      "rect": {
+        "width": 390,
+        "height": 4350.59375
+      },
+      "points": [
+        0,
+        584.5,
+        1169,
+        1753.5,
+        2338,
+        2922.5,
+        3507
+      ],
+      "observed": [
+        0,
+        585,
+        1169,
+        1754,
+        2338,
+        2923,
+        3507
+      ]
+    }
+  ],
+  "phase": "complete",
+  "completedRoots": 1
+}
