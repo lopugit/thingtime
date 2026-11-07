@@ -12,6 +12,17 @@ on:
       - 'apple/Passwords/**'
       - 'apple/PasswordProvider/**'
       - '.github/workflows/ios-testflight.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'iOS/**'
+      - 'apple/Shared/**'
+      - 'apple/FileSync/**'
+      - 'filesystem-indexer/**'
+      - 'apple/Widgets/**'
+      - 'apple/Passwords/**'
+      - 'apple/PasswordProvider/**'
+      - '.github/workflows/ios-testflight.yml'
   workflow_dispatch:
     inputs:
       operation:
@@ -33,10 +44,40 @@ permissions:
 
 # All releases for this app share a build-number and upload lock, including reruns.
 concurrency:
-  group: ios-testflight-release
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('ios-native-compile-{0}', github.event.pull_request.number) || 'ios-testflight-release' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  native-pr-compile:
+    if: github.event_name == 'pull_request'
+    runs-on: macos-15
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Compile iOS with the exact TestFlight toolchain
+        working-directory: iOS
+        shell: bash
+        run: |
+          test -x "$DEVELOPER_DIR/usr/bin/xcodebuild"
+          xcodebuild -version
+          rustup target add --toolchain stable aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+          export THINGTIME_RUST_CARGO="$(rustup which --toolchain stable cargo)"
+          export RUSTUP_TOOLCHAIN=stable
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate
+          test_device=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; data=json.load(sys.stdin)["devices"]; devices=[d["udid"] for runtime,rows in sorted(data.items(),reverse=True) if ".iOS-" in runtime for d in rows if d.get("isAvailable") and "iPhone" in d["name"]]; assert devices, "No iPhone simulator is available"; print(devices[0])')
+          xcodebuild -project Thingtime.xcodeproj -scheme Thingtime \
+            -destination "platform=iOS Simulator,id=$test_device" \
+            -derivedDataPath "$RUNNER_TEMP/thingtime-native-pr" \
+            -jobs 2 -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO build-for-testing
+
   release:
     if: github.ref == 'refs/heads/main'
     runs-on: macos-15
