@@ -1,3 +1,4 @@
+import { prepareExplicitSyncStart } from '~/fileSync/configurationStart';
 import { SyncDestinationControl } from './SyncDestinationControl';
 import { syncConnectionGlance } from '~/fileSync/connectionGlance';
 import { syncFolderActivityLabel } from './syncFolderCardBlocks';
@@ -145,6 +146,7 @@ function Connections({
 	const appOwned = supportsNativeSyncTasks();
 	const busy = viewBusy || (appOwned && !!nativeTask?.active);
 	const [draft, setDraft] = useState<ConfigurationDraft | null>(null);
+	const draftJournalCurrent = useRef(true);
 	const retainedDrafts = useRef(new Map<string, ConfigurationDraft>(initial.drafts.map(draft => [draft.id, draft])));
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const editorPrefix = useId();
@@ -283,6 +285,7 @@ function Connections({
 		});
 		const changed = (event: StorageEvent) => {
 			if (event.key === key || event.key === null) {
+				draftJournalCurrent.current = false;
 				setReady(false);
 				setStorageError('This draft changed in another tab. Reload to recover it before continuing.');
 			}
@@ -318,14 +321,22 @@ function Connections({
 		}
 	};
 	const progressKey = (id: string) => 'tt:sync-progress:' + syncScopeKey({ ...scope, rootId: id });
-	const transfer = (saved: SavedFileSyncConfiguration) => {
-		if (appOwned) {
-			void startNativeSyncTask(saved, { ...scope, rootId: saved.id }, generation).catch(cause => {
-				if (mounted.current) setError(cause instanceof Error ? cause.message : 'Transfer could not start.');
-			});
-			return;
-		}
+	const transfer = (requested: SavedFileSyncConfiguration) => {
 		void run(async (assertActive) => {
+            const saved = await prepareExplicitSyncStart(requested, scope, {
+                assertCurrent: assertActive,
+                hasDraft: id => !draftJournalCurrent.current || retainedDrafts.current.has(id),
+                get: async id => (await apiRef.current.v1.things.get({ id }, options())).thing,
+                update: async (id, configuration, expectedUpdatedAt) => (await apiRef.current.v1.things.update({ id, crystal: { paused: configuration.paused }, expectedUpdatedAt }, options())).thing
+            });
+            assertActive();
+            cache(connections.map(row => row.id === saved.id ? saved : row));
+            if (appOwned) {
+                void startNativeSyncTask(saved, { ...scope, rootId: saved.id }, generation).catch(cause => {
+                    if (mounted.current) setError(cause instanceof Error ? cause.message : 'Transfer could not start.');
+                });
+                return;
+            }
 			const active = controller.current!,
 				syncScope = { ...scope, rootId: saved.id };
 			transferSession.current?.session.stop();
@@ -687,14 +698,13 @@ function Connections({
 					supportsMobileSyncConditions(capabilities) &&
 					scope.dataPlane === 'home' &&
 					supported &&
-					!saved.configuration.paused &&
 					roots.some((root) => root.id === saved.configuration.localRootId);
 				return (
 					<SyncFolderCard key={saved.id} title={saved.configuration.name} editorSlotId={`${editorPrefix}-${saved.id}`} scopeKey={`${key}:${generation}:${saved.id}`} accountTransport={reviewTransport}
 						path={(nativeRoot?.sourceKind === 'photos' || saved.configuration.sourceKind === 'photos' ? nativeRoot?.name || 'Photo Library' : undefined) || (supportsNativeSourcePaths(capabilities) && validNativeSourcePath(nativeRoot?.sourcePath) && nativeRoot?.sourceKind !== 'photos' ? nativeRoot.sourcePath : undefined) || (nativeRoot ? 'Folder path unavailable' : 'Folder access missing')}
                         destination={folders.find(folder => folder.id === saved.configuration.remoteFolderId)?.path || 'Cloud destination unavailable · refresh folders'}
                         error={!running && (task?.status === 'error' || (!task && progress?.message && !['complete', 'retained'].includes(progress.stage))) ? progress?.message || 'This backup needs attention.' : ''}
-                        quickAction={{ label: running ? task?.stopping ? 'Pausing…' : 'Pause sync' : saved.configuration.paused ? 'Paused' : task?.status === 'paused' && !task.waiting ? 'Resume sync' : progress && !['complete', 'retained'].includes(progress.stage) ? 'Retry transfer' : twoWay ? 'Sync now' : downloading ? 'Download now' : saved.configuration.mode === 'backup' ? 'Start backup' : 'Upload now',
+                        quickAction={{ label: running ? task?.stopping ? 'Pausing…' : 'Pause sync' : saved.configuration.paused ? saved.configuration.mode === 'backup' ? 'Start backup' : 'Resume sync' : task?.status === 'paused' && !task.waiting ? 'Resume sync' : progress && !['complete', 'retained'].includes(progress.stage) ? 'Retry transfer' : twoWay ? 'Sync now' : downloading ? 'Download now' : saved.configuration.mode === 'backup' ? 'Start backup' : 'Upload now',
                             disabled: running ? !!task?.stopping : !allowed || busy || retainedDrafts.current.has(saved.id) || !ready,
                             run: () => { if (running) { if (task?.active) return pauseNativeSyncJob(task.scope, generation).catch(cause => setError(cause instanceof Error ? cause.message : 'Pause could not be saved.')); controller.current?.abort(); } else transfer(saved); }
                         }}
@@ -776,7 +786,7 @@ function Connections({
 
 						{active && selectedId === saved.id && appOwned && !!host && <Box width="100%" minW={0}>
 							<SyncDetailsSection title="Automatic sync"><DesktopSyncAutomation saved={saved} scope={{ ...scope, rootId: saved.id }} generation={generation}
-								disabled={!allowed || retainedDrafts.current.has(saved.id) || !ready} accountTransport={reviewTransport} intervalDraft={intervalDrafts[saved.id]} onIntervalDraftChange={value => setIntervalDrafts(previous => ({ ...previous, [saved.id]: value }))} /></SyncDetailsSection>
+								disabled={!allowed || saved.configuration.paused || retainedDrafts.current.has(saved.id) || !ready} accountTransport={reviewTransport} intervalDraft={intervalDrafts[saved.id]} onIntervalDraftChange={value => setIntervalDrafts(previous => ({ ...previous, [saved.id]: value }))} /></SyncDetailsSection>
 						</Box>}
 						{active && selectedId === saved.id && (host || capabilities?.platform === 'ios') && (progress || progressDescriptor) && <Box width="100%" minW={0}>
 							<SyncDetailsSection title="Progress, speed and priorities"><SyncProgressViewer speedDraftState={speedDrafts.current.get(saved.id)} scopeKey={`${key}:${generation}:${saved.id}`} descriptor={progressDescriptor}

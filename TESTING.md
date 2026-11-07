@@ -15277,7 +15277,10 @@ the isolated real-API/browser command and the metadata-only session boundary.
   deterministic-ID occupant. Moved children need explicit destination selection.
 - [ ] Collapsed saved cards expose Start backup/Pause/Resume/Retry and inactive
   errors; optional settings stay collapsed. A configured paused connection
-  stays paused until explicitly edited. Photo Library uses its virtual label,
+  stays paused on Save/open. Explicit Start/Resume CAS-unpauses only that saved
+  connection, verifies its confirmed response and fresh readback, then starts.
+  CAS refusal, uncertain save, identity changes or retained selected drafts must
+  prevent admission; unrelated Home/other connections and draft bytes stay unchanged. Photo Library uses its virtual label,
   while native folders preserve their absolute source path.
 - [ ] Root Things shows one Device card and hides only its exact managed folder
   duplicate; search and folder-only pickers still find it. The compact native
@@ -15296,3 +15299,11 @@ app/components/Devices/syncFolderCardBlocks.test.ts`; capability suites;
 `node scripts/test-device-sync-control.mjs .output/server/index.mjs
 <path-to-mongod> --device-folders` from Remix. Synthetic fixture/browser evidence
 does not establish personal Photos uploads or physical-device permission.
+
+Explicit paused-start regression: `node --import tsx --test
+app/fileSync/configurationStart.test.ts` and
+`node scripts/test-explicit-sync-start-ui.mjs` cover selected-only CAS resume,
+unknown save outcome, CAS refusal, draft arrival/retention, identity withdrawal,
+no cross-connection mutation and collapsed Start at desktop/phone widths. The
+compiled device-folder real-API fixture also verifies pause-only PATCH/CAS and
+private readback while an unrelated Home fixture remains paused.

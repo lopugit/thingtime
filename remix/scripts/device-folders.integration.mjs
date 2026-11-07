@@ -21,8 +21,8 @@ assert.equal(typeof application.middleware, 'function', 'Use the actual compiled
 const server = createServer((request, response) => application.middleware(request, response));
 server.listen(28180, '127.0.0.1');
 await once(server, 'listening');
-async function request(path, body, viewer) {
-  const response = await fetch(base + path, { method: body === undefined ? 'GET' : 'POST',
+async function request(path, body, viewer, method) {
+  const response = await fetch(base + path, { method: method || (body === undefined ? 'GET' : 'POST'),
     headers: { Origin: base, 'Content-Type': 'application/json', ...(viewer ? { Cookie: viewer.cookie, 'X-Thingtime-Expected-Actor': viewer.id } : {}) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }), redirect: 'error', signal: AbortSignal.timeout(30_000) });
   assert.match(response.headers.get('Content-Type') ?? '', /application\/json/, path + ' must dispatch Nitro JSON, not the SPA');
@@ -94,6 +94,18 @@ try {
  assert.equal((await request(endpoint, { ...payload, ownerId: foreign.id }, owner)).response.status, 400);
  const mismatch = await fetch(base + endpoint, { method: 'POST', headers: { Cookie: owner.cookie, Origin: base, 'Content-Type': 'application/json', 'X-Thingtime-Expected-Actor': foreign.id }, body: JSON.stringify(payload) });
  assert.equal(mismatch.status, 409);
+ const configuration = { configurationVersion: 1, name: 'Photo Library backup', deviceId, localRootId: randomUUID(), remoteFolderId: leaf.id, sourceKind: 'photos', mode: 'backup', paused: true, propagateDeletes: false, network: 'any', chargingOnly: false, excludedPaths: [] };
+ const selected = (await request('/api/v1/things', { shareId: randomUUID(), thingtime: ['file-sync'], acl: ['tt:user'], crystal: configuration }, owner)).value.thing;
+ const home = (await request('/api/v1/things', { shareId: randomUUID(), thingtime: ['file-sync'], acl: ['tt:user'], crystal: { ...configuration, name: 'Unrelated paused Home' } }, owner)).value.thing;
+ const refused = await request('/api/v1/things', { id: selected.id, crystal: { paused: false }, expectedUpdatedAt: '2020-01-01T00:00:00Z' }, owner, 'PATCH');
+ assert.equal(refused.response.status, 409);
+ assert.equal((await request('/api/v1/things?id=' + selected.id, undefined, owner)).value.thing.crystal.paused, true);
+ const resume = await request('/api/v1/things', { id: selected.id, crystal: { paused: false }, expectedUpdatedAt: selected.updatedAt }, owner, 'PATCH');
+ assert.equal(resume.response.status, 200, JSON.stringify(resume.value));
+ const verified = (await request('/api/v1/things?id=' + selected.id, undefined, owner)).value.thing;
+ assert.equal(verified.updatedAt, resume.value.thing.updatedAt);
+ assert.deepEqual(verified.crystal, { ...selected.crystal, paused: false });
+ assert.equal((await request('/api/v1/things?id=' + home.id, undefined, owner)).value.thing.crystal.paused, true);
  console.log('DEVICE_FOLDERS_COMPILED_REAL_API_OK');
 } finally {
  server.closeAllConnections(); await new Promise(resolve => server.close(() => resolve()));

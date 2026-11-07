@@ -1041,3 +1041,13 @@ No public admission/UI entry is enabled until the full supported execution path
 and deployment readiness are independently accepted. Snapshot/reference sidecars
 and plaintext-bearing encrypted hasher state stay in the independent backup store,
 never ordinary Thing crystal fields. See `docs/portable-backups.md` and TESTING.
+
+`fileSync/configurationStart.ts` is the explicit manual Start preflight shared
+by native-host and remote controls. It rereads the exact reviewed owned revision,
+refuses retained selected drafts/identity changes, CAS-patches only paused=false,
+requires a successful acknowledgement and matching fresh readback, then returns
+the confirmed configuration for existing runner admission. Uncertain writes
+never start or blindly retry. Save/open and automatic scheduling never unpause
+a connection; unrelated Home settings/drafts stay intact. Test with
+`configurationStart.test.ts`, `test-explicit-sync-start-ui.mjs` and the compiled
+device-folder replica fixture.

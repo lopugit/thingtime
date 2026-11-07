@@ -1,3 +1,4 @@
+import { prepareExplicitSyncStart } from '~/fileSync/configurationStart';
 import { syncJobAttentionMessage } from '~/fileSync/syncJobFailure';
 import { syncConnectionGlance } from '~/fileSync/connectionGlance';
 import { useRemoteDeviceSyncStatus } from '~/fileSync/remoteDeviceResources.client';
@@ -78,6 +79,7 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 	});
 	const raw = useRef(initial.raw);
 	const [draft, setDraft] = useState<ConfigurationDraft | null>(null);
+	const draftJournalCurrent = useRef(true);
 	const retainedDrafts = useRef(new Map<string, ConfigurationDraft>(initial.drafts.map(draft => [draft.id, draft])));
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const editorPrefix = React.useId();
@@ -150,7 +152,7 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 		const effectSignal = lifetime.current.signal;
 		void negotiateRemoteSourcePaths().then(available => { if (!effectSignal.aborted) { check(); setSourcePathsReady(available); } }).catch(() => { if (!effectSignal.aborted) setSourcePathsReady(false); });
 		void run(async () => { await load('connections'); await load('folders'); });
-		const changed = (event: StorageEvent) => { if (event.key === key || event.key === null) { setDraftReady(false); setStorageError('This draft changed in another tab. Reload this page before saving.'); } };
+		const changed = (event: StorageEvent) => { if (event.key === key || event.key === null) { draftJournalCurrent.current = false; setDraftReady(false); setStorageError('This draft changed in another tab. Reload this page before saving.'); } };
 		window.addEventListener('storage', changed);
 		// Invalidate the latest operation, including operations started after setup.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -207,7 +209,14 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 	const formRoots = [...new Map([...connections.map(row => ({ id: row.configuration.localRootId, name: row.configuration.sourceKind === 'photos' ? 'Photo Library' : 'Saved device folder', ...(row.configuration.sourceKind === 'photos' ? { sourceKind: 'photos' as const } : {}) })), ...roots].map(root => [root.id, root])).values()];
 	const selected = (id: unknown) => { check(); const saved = connectionsRef.current.find(row => row.id === id); if (!saved || saved.configuration.deviceId !== scope.deviceId) throw Error('Refresh this device’s connections before continuing.'); return saved; };
 	const start = (id: unknown, automatic: boolean) => run(async () => {
-		const saved = selected(id); if ((automatic && selectedId !== saved.id) || retainedDrafts.current.has(saved.id) || !online || saved.configuration.paused) throw Error('Save the connection and connect the device before starting sync.');
+		const requested = selected(id); if ((automatic && (selectedId !== requested.id || requested.configuration.paused)) || retainedDrafts.current.has(requested.id) || !online) throw Error('Save the connection and connect the device before starting sync.');
+        const saved = await prepareExplicitSyncStart(requested, scope, {
+            assertCurrent: check,
+            hasDraft: id => !draftJournalCurrent.current || retainedDrafts.current.has(id),
+            get: async id => (await apiRef.current.v1.things.get({ id }, options())).thing,
+            update: async (id, configuration, expectedUpdatedAt) => (await apiRef.current.v1.things.update({ id, crystal: { paused: configuration.paused }, expectedUpdatedAt }, options())).thing
+        });
+        check(); cache(connectionsRef.current.map(row => row.id === saved.id ? saved : row));
 		await send({ action: 'start', connectionId: saved.id, expectedUpdatedAt: saved.updatedAt, ...(automatic ? { intervalMs: intervals[saved.id] ?? status?.jobs.find(job => job.connectionId === saved.id)?.intervalMs ?? 300_000 } : {}) });
 		await refreshStatus();
 	});
@@ -242,8 +251,8 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 				const rate = (reading: SpeedReading) => reading.status === 'known' ? `${reading.value.toFixed(2)} ${reading.unit}` : reading.status === 'paused' ? 'paused' : 'unavailable';
 				return { glance: syncConnectionGlance({ deviceLabel: status?.capabilities.platform === 'ios' ? 'iPhone' : status?.capabilities.platform === 'android' ? 'Device' : 'Mac', progress: progress ?? (job?.progress ? { ...job.progress, confirmed: 0, total: 0 } : undefined), rates, online, active, paused: saved.configuration.paused || task?.status === 'paused' || job?.state === 'paused', waiting: task?.waiting }), editorSlotId: `${editorPrefix}-${saved.id}`, editorHidden: selectedId !== saved.id, toggleGlyph: selectedId === saved.id ? '⌃' : '⌄', summaryStatus: saved.configuration.paused || task?.status === 'paused' || job?.state === 'paused' ? 'Paused' : !online ? 'Device offline' : !roots.some(root => root.id === saved.configuration.localRootId) ? 'Folder access missing' : active ? 'Running' : 'No active transfer', quickStats: progress ? `${progress.confirmed} / ${progress.total} confirmed` : 'No transfer statistics yet', expanded: selectedId === saved.id, expandLabel: selectedId === saved.id ? 'Collapse folder' : 'Expand folder', path: saved.configuration.sourceKind === 'photos' ? roots.find(root => root.id === saved.configuration.localRootId)?.name || 'Photo Library' : (sourcePathsReady && supportsNativeSourcePaths(status?.capabilities) ? roots.find(root => root.id === saved.configuration.localRootId)?.sourcePath : undefined) || 'Folder path unavailable', id: saved.id, name: saved.configuration.name, href: `/things?${new URLSearchParams({ folder: saved.configuration.remoteFolderId })}`,
 					quickError: !active && task?.status === 'error' ? progress?.message || 'This backup needs attention.' : '',
-					quickLabel: task?.stopping ? 'Pausing…' : active ? 'Pause sync' : saved.configuration.paused ? 'Paused' : task?.status === 'paused' || job?.state === 'paused' ? 'Resume sync' : task?.status === 'error' ? 'Retry transfer' : saved.configuration.mode === 'backup' ? 'Start backup' : 'Sync now',
-					quickDisabled: active ? !online || !!pausingId || !!task?.stopping : busy || retainedDrafts.current.has(saved.id) || !online || !!status?.task?.active || saved.configuration.paused,
+					quickLabel: task?.stopping ? 'Pausing…' : active ? 'Pause sync' : saved.configuration.paused ? saved.configuration.mode === 'backup' ? 'Start backup' : 'Resume sync' : task?.status === 'paused' || job?.state === 'paused' ? 'Resume sync' : task?.status === 'error' ? 'Retry transfer' : saved.configuration.mode === 'backup' ? 'Start backup' : 'Sync now',
+					quickDisabled: active ? !online || !!pausingId || !!task?.stopping : busy || retainedDrafts.current.has(saved.id) || !draftReady || !online || !!status?.task?.active,
 					startLabel: saved.configuration.mode === 'backup' ? 'Start backup' : 'Sync now',
 					mode: ({ 'two-way': 'Two-way sync', upload: 'Device to cloud', download: 'Cloud to device', backup: 'Backup to cloud · keep deleted files' })[saved.configuration.mode],
 					status: saved.configuration.paused ? 'Saved configuration: paused' : !online ? 'Device unavailable · settings remain editable' : task?.stopping ? 'Pausing…' : task?.waiting ? 'Waiting for this device’s conditions' : active ? 'Transfer in progress' : task?.status === 'error' ? 'Needs attention' : task?.status === 'complete' ? 'Last transfer finished' : job?.state === 'paused' ? 'Sync is paused' : 'Ready to sync',
