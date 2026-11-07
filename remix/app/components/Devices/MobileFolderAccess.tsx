@@ -95,7 +95,7 @@ function FolderAccess({ ownerId, deviceId, host, active = true }: FolderAccessPr
 			{roots.map((root) => (
 				<SyncFolderCard key={root.id} title={root.name} scopeKey={`${key}:${root.id}`} accountTransport={cardTransport}
                     description="Folder access granted · configure a sync connection below"
-                    path={supportsNativeSourcePaths(host?.capabilities ?? getNativeBridge()) && validNativeSourcePath(root.sourcePath) && root.sourceKind !== 'photos' ? root.sourcePath : 'Folder path unavailable'}
+                    path={root.sourceKind === 'photos' ? root.name : supportsNativeSourcePaths(host?.capabilities ?? getNativeBridge()) && validNativeSourcePath(root.sourcePath) && root.sourceKind !== 'photos' ? root.sourcePath : 'Folder path unavailable'}
                     stats={checked[root.id] || 'Not checked'}>
                 <Flex gap={2} align="center" wrap="wrap">
 					<Box flex="1" minWidth="140px" overflowWrap="anywhere">

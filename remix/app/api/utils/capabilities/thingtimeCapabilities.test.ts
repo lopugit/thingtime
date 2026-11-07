@@ -536,7 +536,7 @@ test('Characters negotiate management and acting identities on both manifests', 
 test('full Mac capability lists negotiate additive device contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://preview.example.test');
   for (const [feature, current, minimum] of [
-    ['api.devices', '1.15.0', '1.10.0'],
+    ['api.devices', '1.16.0', '1.10.0'],
     ['api.devices-node-state', '1.15.0', '1.11.0'],
     ['api.devices-pairing-claim', '1.2.0', '1.0.0']
   ]) {
@@ -551,8 +551,9 @@ test('full Mac capability lists negotiate additive device contracts', () => {
 test('host resource telemetry negotiates both additive device contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://devices.test');
   for (const feature of ['api.devices', 'api.devices-node-state']) {
-    assert.equal(manifest.features[feature]?.version, '1.15.0');
-    assert.equal(createApiCapabilitiesManifest().features[feature], '1.15.0');
+    const current = feature === 'api.devices' ? '1.16.0' : '1.15.0';
+    assert.equal(manifest.features[feature]?.version, current);
+    assert.equal(createApiCapabilitiesManifest().features[feature], current);
     for (const version of ['1.14.0', '1.14.1', '1.15.0']) assert(capabilitySatisfies(version, '1.14.0'));
     for (const version of [undefined, '1.13.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.14.0'), false);
   }
@@ -741,4 +742,14 @@ test('full content Timeline clients require the corrected broad snapshot reader'
  assert.equal(thingtimeCapabilityManifest('https://broad-snapshot.test').features['api.timeline'].version,'1.19.3');
  for(const version of [undefined,'1.19.1','2.0.0']) assert.equal(capabilitySatisfies(version,required),false);
  for(const version of ['1.19.2','1.19.3','1.20.0']) assert.equal(capabilitySatisfies(version,required),true);
+});
+
+test('device folder operations share origin-scoped discovery and explicit client requirements', () => {
+ const manifest = thingtimeCapabilityManifest('https://folders.example.test');
+ assert.equal(manifest.features['api.devices-folders'].version, '1.0.0');
+ assert.equal(createApiCapabilitiesManifest().features['api.devices-folders'], '1.0.0');
+ assert.deepEqual(manifest.operations.find(operation => operation.path === '/api/v1/devices/folders')?.methods, ['GET', 'POST']);
+ assert(capabilitySatisfies('1.1.0', '1.0.0'));
+ assert.equal(capabilitySatisfies(undefined, '1.0.0'), false);
+ assert.equal(capabilitySatisfies('2.0.0', '1.0.0'), false);
 });

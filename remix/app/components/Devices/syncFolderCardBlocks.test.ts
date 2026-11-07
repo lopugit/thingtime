@@ -3,7 +3,7 @@ import test from 'node:test';
 import { findBlock } from '../Builder/webpageBlocks';
 import { settingsDocumentBlocks } from '../Settings/settingsDocument';
 import { resolveBlockProps } from '../Builder/templateBlocks';
-import { syncFolderCardBlocks, syncFolderActivityLabel } from './syncFolderCardBlocks';
+import { syncFolderCardBlocks, syncFolderActivityLabel, withSyncFolderQuickBlocks } from './syncFolderCardBlocks';
 import { remoteSyncBlocks, remoteSyncDisclosureBlocks } from './remoteSyncBlocks';
 
 test('generic folder summaries expose separate editable fields and a typed expansion control', () => {
@@ -36,4 +36,15 @@ test('historical progress never labels a missing grant as ready', () => {
  assert.equal(syncFolderActivityLabel({ ...state, hasRoot: true, taskPaused: true }), 'Paused');
  assert.equal(syncFolderActivityLabel({ ...state, hasRoot: true }), 'No active transfer');
  assert.equal(syncFolderActivityLabel({ ...state, rootsReady: false }), 'Checking folder access');
+});
+
+test('collapsed folder quick actions and error/destination fields remain individually editable', () => {
+ const original = [{ id: 'custom-summary', type: 'element' as const, tag: 'p', text: 'Keep my custom summary' }];
+ const migrated = withSyncFolderQuickBlocks(original);
+ assert.ok(findBlock(migrated, 'custom-summary'));
+ for (const id of ['folder-card-quick-action', 'folder-card-destination', 'folder-card-error']) assert.ok(findBlock(migrated, id));
+ assert.deepEqual(withSyncFolderQuickBlocks(migrated), migrated);
+ assert.equal(findBlock(migrated, 'folder-card-action-state')?.condition?.arg, 'folder.hasAction');
+ const quick = findBlock(remoteSyncDisclosureBlocks(remoteSyncBlocks), 'remote-sync-quick');
+ assert.ok(quick); assert.equal((quick.props?.['data-tt-action-inputs'] as any)?.operation, 'quick');
 });

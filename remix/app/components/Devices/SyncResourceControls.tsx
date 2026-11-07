@@ -1,3 +1,5 @@
+import { findBlock } from '../Builder/webpageBlocks';
+import type { WebpageBlock } from '../Builder/webpageBlocks';
 import React from 'react';
 import type { FileSyncResourceLimits } from '~/fileSync/configuration';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
@@ -5,8 +7,8 @@ import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { SettingsDocumentHost, type SettingsDocumentHostProps } from '../Settings/SettingsDocumentHost';
 import { parseSyncResourceDraft, syncResourceDraft, syncResourceControlsBlocks, syncResourceOperation, SYNC_SPEED_UNITS, type SyncResourceDraft } from './syncResourceControlsBlocks';
 const signature = (value?: FileSyncResourceLimits) => JSON.stringify([value?.uploadBytesPerSecond, value?.downloadBytesPerSecond, value?.transferConcurrency, value?.indexingConcurrency, value?.cpuPercent]);
-export function SyncResourceControls({ resourceLimits, disabled, scopeKey, accountTransport, onChange, onValidityChange, initialDraft, onDraftChange }: {
- resourceLimits?: FileSyncResourceLimits; disabled: boolean; scopeKey: string;
+export function SyncResourceControls({ resourceLimits, disabled, scopeKey, accountTransport, onChange, onValidityChange, initialDraft, onDraftChange, availabilityStatus = '' }: {
+ availabilityStatus?: string; resourceLimits?: FileSyncResourceLimits; disabled: boolean; scopeKey: string;
  accountTransport?: SettingsDocumentHostProps['accountTransport']; onChange(limits?: FileSyncResourceLimits): void; onValidityChange?(valid: boolean): void; initialDraft?: SyncResourceDraft; onDraftChange?(draft: SyncResourceDraft): void;
 }) {
  const prefix = React.useId(), [draft, setDraft] = React.useState(() => initialDraft ?? syncResourceDraft(resourceLimits)), [error, setError] = React.useState(() => { try { parseSyncResourceDraft(initialDraft ?? syncResourceDraft(resourceLimits)); return ''; } catch (cause) { return cause instanceof Error ? cause.message : 'Correct the saved resource input before saving.'; } });
@@ -43,10 +45,14 @@ export function SyncResourceControls({ resourceLimits, disabled, scopeKey, accou
   onDraftChange?.(next);
  };
  const ids = Object.fromEntries(Object.keys(draft).map(key => [key, `${prefix}-${key}`]));
- return <SettingsDocumentHost documentKey="file-sync-resources" defaultDocument={syncResourceControlsBlocks} scopeKey={scopeKey} title="Sync resource limits" accountTransport={accountTransport}>
-  {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} scope={{ resources: { ...draft, ids, disabled, error } }} actions={Object.fromEntries(Object.keys(draft).map(key => [syncResourceOperation(key), ({ value }: { value?: unknown }) => change(key as keyof SyncResourceDraft, value)]))}
+ return <SettingsDocumentHost documentKey="file-sync-resources" defaultDocument={resourceBlocksWithAvailability} migrateBlocks={withAvailability} scopeKey={scopeKey} title="Sync resource limits" accountTransport={accountTransport}>
+  {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} scope={{ resources: { ...draft, ids, disabled, error, status: availabilityStatus } }} actions={Object.fromEntries(Object.keys(draft).map(key => [syncResourceOperation(key), ({ value }: { value?: unknown }) => change(key as keyof SyncResourceDraft, value)]))}
    onError={() => { setValid(false); setError('The resource limit edit was not accepted. Your draft is preserved.'); }}>
    <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
   </TransientBlockHost>}
  </SettingsDocumentHost>;
 }
+
+const availabilityBlock: WebpageBlock = { id: 'resource-platform-status', type: 'element', tag: 'p', text: '{resources.status}', props: { role: 'status' }, css: { 'font-size': '12px', 'overflow-wrap': 'anywhere' } };
+function withAvailability(blocks: WebpageBlock[]) { return findBlock(blocks, availabilityBlock.id) ? blocks : [availabilityBlock, ...blocks]; }
+const resourceBlocksWithAvailability = withAvailability(syncResourceControlsBlocks);
