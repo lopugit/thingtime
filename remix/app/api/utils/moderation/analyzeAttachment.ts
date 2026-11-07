@@ -11,7 +11,6 @@
 import { getHomeThingsCollection } from '../mongodb/collections';
 import { attachmentContentDisposition } from '../attachments/attachmentPresentation';
 import { getPrivateS3, type AttachmentS3 } from '../attachments/privateS3';
-import { fetchStoredObject } from '../attachments/localAttachmentStorage';
 import {
 	moderationFromVerdict,
 	type AttachmentModeration,
@@ -36,7 +35,7 @@ export type AnalyzeAttachmentDependencies = {
 };
 
 const defaultFetchBytes = async (url: string): Promise<Uint8Array> => {
-	const response = await fetchStoredObject(url);
+	const response = await fetch(url);
 	if (!response.ok) throw new Error(`moderation: object fetch failed (${response.status})`);
 	return new Uint8Array(await response.arrayBuffer());
 };
@@ -55,8 +54,7 @@ export type AnalyzeAttachmentResult =
 
 // Stamp the moderation root field. Guarded on the current status so a racing
 // sweep + fire-and-forget pair can't clobber a landed verdict with an older
-// one: verdicts only ever replace 'pending'/absent stamps on ready files.
-// A delayed analyzer must never decorate a retained deletion receipt.
+// one: verdicts only ever replace 'pending'/absent stamps.
 const stampModeration = async (
 	things: Awaited<ReturnType<typeof getHomeThingsCollection>>,
 	shareId: string,
@@ -68,7 +66,7 @@ const stampModeration = async (
 	const overwritable = options.allowOverwriteOf.filter((status): status is ModerationStatus => status !== null);
 	if (overwritable.length) statusClauses.push({ 'moderation.status': { $in: overwritable } });
 	const res = await things.updateOne(
-		{ thingtime: 'attachment', shareId, attachmentState: 'ready', $or: statusClauses } as any,
+		{ thingtime: 'attachment', shareId, $or: statusClauses } as any,
 		{ $set: { moderation, updatedAt: options.now } }
 	);
 	return res.modifiedCount > 0;
@@ -86,9 +84,10 @@ const upsertModerationFlag = async (
 ) => {
 	const shareId = moderationFlagShareId(String(doc.shareId));
 	await things.updateOne(
-		{ shareId, thingtime: MODERATION_FLAG_THINGTIME } as any,
+		{ shareId } as any,
 		{
 			$set: {
+				thingtime: [MODERATION_FLAG_THINGTIME],
 				targetId: String(doc.shareId),
 				crystal: {
 					status: moderation.status,
@@ -106,7 +105,6 @@ const upsertModerationFlag = async (
 			},
 			$setOnInsert: {
 				shareId,
-				thingtime: [MODERATION_FLAG_THINGTIME],
 				ownerId: 'system',
 				storageClass: 'control',
 				acl: [],
@@ -129,37 +127,8 @@ export const createAnalyzeReadyAttachment =
 		if (doc.attachmentState !== 'ready') return { ok: false, error: 'Attachment is not ready', retryable: false };
 		const currentStatus = doc.moderation?.status;
 		if (currentStatus && currentStatus !== 'pending') {
-			// A verdict can land while its deterministic admin flag collides or the
-			// flag write is interrupted. Keep the verdict quarantined and let every
-			// sweep retry only that control-plane write, without re-running the model.
-			if (doc.moderation?.flagPending && (currentStatus === 'nsfw' || currentStatus === 'blocked')) {
-				try {
-					await upsertModerationFlag(things, doc, doc.moderation, deps.now());
-					await things.updateOne(
-						{ thingtime: 'attachment', shareId, 'moderation.status': currentStatus, 'moderation.flagPending': true } as any,
-						{ $unset: { 'moderation.flagPending': '' } }
-					);
-					return { ok: true, status: currentStatus };
-				} catch (error) {
-					console.error(`[moderation] flag retry failed for attachment ${shareId}:`, (error as Error)?.message || error);
-					return { ok: false, error: 'Moderation flag write failed', retryable: true };
-				}
-			}
 			// already analyzed (or deliberately skipped) — idempotent no-op
 			return { ok: true, status: currentStatus };
-		}
-
-		// Linked attachments carry no stored bytes — there is no object for the
-		// analyzer to fetch. They are stamped 'skipped' at mint; this guard keeps
-		// a mint whose stamp was lost from wedging the sweep on a missing object.
-		if (doc.attachmentLinked === true) {
-			await stampModeration(
-				things,
-				shareId,
-				{ status: 'skipped', categories: ['external-url'], provider: 'linked', analyzedAt: now },
-				{ allowOverwriteOf: [null, 'pending'], now }
-			);
-			return { ok: true, status: 'skipped' };
 		}
 
 		const choice = await deps.resolveProvider();
@@ -202,19 +171,13 @@ export const createAnalyzeReadyAttachment =
 			});
 			const bytes = await deps.fetchBytes(signed.url);
 			const verdict = await choice.provider.analyzeImage({ bytes, contentType, filename: String(doc.crystal?.name || '') });
-			const verdictStamp = moderationFromVerdict(verdict, { provider: choice.provider.name, model: choice.provider.model, now: deps.now() });
-			const needsFlag = verdictStamp.status === 'nsfw' || verdictStamp.status === 'blocked';
-			const moderation = needsFlag ? { ...verdictStamp, flagPending: true } : verdictStamp;
+			const moderation = moderationFromVerdict(verdict, { provider: choice.provider.name, model: choice.provider.model, now: deps.now() });
 			const stamped = await stampModeration(things, shareId, moderation, { allowOverwriteOf: [null, 'pending'], now: deps.now() });
 			// The flag doc follows the stamp's optimistic-concurrency guard: when
 			// this verdict lost the race (an admin review already landed), do not
 			// reset the flag's reviewedBy/reviewedAt with a stale re-analysis.
-			if (stamped && needsFlag) {
+			if (stamped && (moderation.status === 'nsfw' || moderation.status === 'blocked')) {
 				await upsertModerationFlag(things, doc, moderation, deps.now());
-				await things.updateOne(
-					{ thingtime: 'attachment', shareId, 'moderation.status': moderation.status, 'moderation.flagPending': true } as any,
-					{ $unset: { 'moderation.flagPending': '' } }
-				);
 			}
 			return { ok: true, status: moderation.status };
 		} catch (error) {

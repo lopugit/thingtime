@@ -1,4 +1,3 @@
-import { requestOmniModeration } from './omniRequest';
 // OpenAI omni-moderation provider + the tiered openai+claude composition.
 //
 // omni-moderation-latest is FREE (verified 2026-08 — see
@@ -102,7 +101,7 @@ export type OmniScreen = (input: ModerationImageInput) => Promise<OmniModeration
 // comfortably under OpenAI's 20 MB image limit.
 export const createOmniScreen = (env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): OmniScreen =>
 	async ({ bytes, contentType }) => {
-		const payload = (await requestOmniModeration(OPENAI_MODERATION_URL, {
+		const response = await fetchImpl(OPENAI_MODERATION_URL, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -112,7 +111,9 @@ export const createOmniScreen = (env: NodeJS.ProcessEnv = process.env, fetchImpl
 				model: OPENAI_MODERATION_MODEL,
 				input: [{ type: 'image_url', image_url: { url: `data:${contentType};base64,${Buffer.from(bytes).toString('base64')}` } }]
 			})
-		}, fetchImpl)) as { results?: OmniModerationResult[] };
+		});
+		if (!response.ok) throw new Error(`moderation: omni-moderation request failed (${response.status})`);
+		const payload = (await response.json()) as { results?: OmniModerationResult[] };
 		const result = payload?.results?.[0];
 		if (!result || typeof result.flagged !== 'boolean') {
 			throw new Error('moderation: malformed omni-moderation response');

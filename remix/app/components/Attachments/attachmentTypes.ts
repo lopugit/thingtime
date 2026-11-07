@@ -31,11 +31,9 @@ export type PublicAttachment = {
 	size: number;
 	contentType: string;
 	mediaKind: AttachmentMediaKind;
-	// owner-selected display label; the original upload name remains immutable
-	filenamePreview?: string;
-	// owner-authored presentation text (media page + lightbox); absent = none
-	title?: string;
-	description?: string;
+	// stamped true by the server moderation pipeline; media renders blurred
+	// behind a "Show Anyway" consent click
+	nsfw?: boolean;
 	// Server-sniffed real container type, present only when contentType stays an
 	// opaque application/octet-stream download (for example video/x-msvideo).
 	detectedContentType?: string;

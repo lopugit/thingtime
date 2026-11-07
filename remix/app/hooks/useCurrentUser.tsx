@@ -18,11 +18,12 @@ export type CurrentUser = {
   birthday: string | null;
   emailVerified: boolean;
   isAdmin: boolean;
-	// Canonical beta upload scopes: public covers posts/comments/custom emoji;
-	// private covers messages and the user's own profile media. The server
-	// projects explicit booleans (including the admin bypass) on every session.
-	publicUploadsEnabled: boolean;
-	privateUploadsEnabled: boolean;
+	// Beta upload-approval scopes (PR #310): public = post/comment/custom-emoji,
+	// private = messages + own profile media; admins always true. canUploadMedia
+	// is the any-scope alias. All optional so cached pre-gate payloads type-check.
+	publicUploadsEnabled?: boolean;
+	privateUploadsEnabled?: boolean;
+	canUploadMedia?: boolean;
   createdAt: string;
   accountKind: 'user' | 'service';
   emailVerificationRequiredBy: string | null;

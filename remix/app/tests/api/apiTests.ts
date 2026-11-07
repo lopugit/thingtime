@@ -1888,33 +1888,19 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin promote attempt was rejected.')
   },
   {
-    id: 'admin-users-lopu-access-guarded',
-    name: 'Verify Lopu access is admin-only',
-    description: 'POST /api/v1/admin/users/lopu-access requires an admin session (401 anonymously, 403 for a plain user) and writes nothing otherwise.',
-    group: 'admin',
+    id: 'attachments-upload-requires-media-grant',
+    name: 'Uploads need the beta upload approval',
+    description:
+      'A freshly registered (both-scopes-withheld) session is blocked from starting a public-purpose attachment upload with the stable public_uploads_not_approved code.',
+    group: 'attachments',
     method: 'POST',
-    path: '/api/v1/admin/users/lopu-access',
-    body: { userId: '000000000000000000000000', verified: true },
-    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string' && !('user' in (body || {})), 'Non-admin Lopu access change was rejected.')
-  },
-  {
-    id: 'admin-lopu-accounts-guarded',
-    name: 'Lopu accounts directory is admin-only',
-    description: 'GET /api/v1/admin/lopu/accounts requires an admin session (401 anonymously, 403 for a plain user) and lists nothing otherwise.',
-    group: 'admin',
-    method: 'GET',
-    path: '/api/v1/admin/lopu/accounts',
-    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string' && !('accounts' in (body || {})), 'Non-admin Lopu accounts listing was rejected.')
-  },
-  {
-    id: 'admin-lopu-credits-guarded',
-    name: 'Lopu credit grants are admin-only',
-    description: 'POST /api/v1/admin/lopu/credits requires an admin session (401 anonymously, 403 for a plain user) and moves no balance otherwise.',
-    group: 'admin',
-    method: 'POST',
-    path: '/api/v1/admin/lopu/credits',
-    body: { userId: '000000000000000000000000', credits: 1000 },
-    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string' && !('account' in (body || {})), 'Non-admin Lopu credit grant was rejected.')
+    path: '/api/v1/attachments/uploads',
+    body: { filename: 'gate-check.png', contentType: 'image/png', sizeBytes: 1024, requestId: 'api-test-media-gate', purpose: 'post' },
+    expect: expectJson(
+      [401, 403],
+      (body) => body?.ok === false && (body?.code === 'public_uploads_not_approved' || typeof body?.error === 'string'),
+      'Ungranted upload start was rejected (public_uploads_not_approved once a session exists).'
+    )
   },
   {
     id: 'admin-moderation-guarded',
@@ -1934,15 +1920,6 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/admin/moderation',
     body: { action: 'review', attachmentId: '000000000000000000000000', verdict: 'block' },
     expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin review attempt was rejected.')
-  },
-  {
-    id: 'admin-integrations-guarded',
-    name: 'Integration vault is admin-only',
-    description: 'Listing external secret metadata and endpoint policies requires an admin session.',
-    group: 'admin',
-    method: 'GET',
-    path: '/api/v1/admin/integrations',
-    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin integration vault read was rejected.')
   },
   {
     id: 'admin-users-overview-guarded',

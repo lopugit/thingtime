@@ -51,7 +51,7 @@ import {
 } from '../moderation/analyzeText';
 import { hasModeratedContent, moderatedContentOf } from '../moderation/textModeration';
 import { attachmentIsBlocked, attachmentModerationStatus } from '../moderation/moderationCore';
-import { sanitizeReactionToken, MAX_REACTION_KEYS_PER_POST, MAX_REACTIONS_PER_USER_PER_POST } from '~/utils/reactionTokens';
+import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 import {
   ACL_ALL,
@@ -1351,7 +1351,9 @@ export const createThing = async (
   if (isFail(folderAssignment)) return folderAssignment;
 
   if (validated.thingtime.includes('comment') && target) {
-    const commentCount = await countCommentsOf(target);
+		// includeBlocked: the cap is a physical doc bound — blocked spam must not
+		// free up quota for more child docs under the same post
+		const commentCount = await countCommentsOf(target, { includeBlocked: true });
     if (commentCount >= MAX_COMMENTS_PER_POST) return fail(400, 'This post has reached its comment limit');
   }
 
@@ -1466,7 +1468,6 @@ export const createThing = async (
 		}
 	}
 
-	const timelineCapture = ownerId !== 'system' && !app?.sandbox ? hooks.timelineCapture ?? newThingMutationCapture(viewer?.id ?? ownerId) : null;
   try {
 		if (billable || registeredApp || target || doc.folderId || hooks.afterInsert || timelineCapture || hooks.transaction) {
 			const write = async (session: any) => {
@@ -1520,7 +1521,6 @@ export const createThing = async (
     throw err;
   }
 
-	const afterCommit = async () => {
 	// Post-insert moderation plan (pure helper, unit-tested):
 	//   notify     — born-blocked docs are invisible everywhere, so followers
 	//                are never notified about content they can't open
@@ -1554,103 +1554,6 @@ export const createThing = async (
 	} else if (moderationPlan.queueAsync) {
 		queueTextModeration(doc.shareId);
 	}
-  };
-  if (hooks.transaction) hooks.transaction.afterCommit(afterCommit);
-  else await afterCommit();
-  return { ok: true, doc, ...(rootSubspaceId !== undefined ? { rootSubspaceId } : {}) };
-};
-
-// Posts land in followers'/friends' notification feeds, capped — big accounts
-// notify their newest FANOUT_CAP connections rather than block the write.
-const FANOUT_CAP = 200;
-
-// @mentions may only ring for people who can actually VIEW the text that
-// mentions them — a mention notification carries a preview (bell AND
-// default-on email), so an ungated emit would leak up to 140 chars of a
-// private or friends-only post to an arbitrary user, contradicting the acl
-// gate the fan-out below applies. The governing acl is the doc's own for
-// posts and the inherit-chain terminal's for comments (a comment is exactly
-// as visible as its thread); a broken/cyclic chain fails closed (nobody is
-// notified). The gate is the exact per-recipient evaluation reads use
-// (canView), so specific-user grants (tt:user/<name>) still notify and
-// exclusions still deny. One friendIdsOf query on the TERMINAL owner answers
-// the friends circle for every candidate — friendship is mutual, so a
-// recipient is inside the owner's friends circle iff the owner's own friend
-// set contains them.
-//
-// Shared by the create funnel (emitCreationNotifications) and updateThing's
-// edit pass; `previousText` (edit pass) limits emits to newly ADDED
-// usernames. Returns the recipient ids actually notified.
-const emitTextMentions = async (
-  doc: ThingDoc,
-  target: ThingDoc | null,
-  actorRef: NotificationActor,
-  previousText?: unknown
-): Promise<Set<string>> => {
-  const isCommentDoc = thingtimeOf(doc).includes('comment');
-  // the walk's first hop is almost always the already-fetched target
-  const findWithTarget = (shareId: string): Promise<ThingDoc | null> =>
-    target && target.shareId === shareId ? Promise.resolve(target) : findThing(shareId);
-  const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findWithTarget);
-  if (!terminal) return new Set<string>();
-  const terminalAcl = aclOf(terminal);
-  const ownerFriends = terminalAcl.some((entry) => entry === ACL_FRIENDS || entry === `-${ACL_FRIENDS}`)
-    ? await friendIdsOf(terminal.ownerId)
-    : null;
-  return emitMentionNotifications({
-    text: crystalOf(doc).text,
-    previousText,
-    actor: actorRef,
-    targetId: doc.shareId,
-    postId: isCommentDoc && target ? target.shareId : doc.shareId,
-    excludeIds: target ? [target.ownerId] : [],
-    canRecipientView: (recipient) =>
-      canView(terminal, {
-        id: recipient.id,
-        username: recipient.username,
-        friendIds: ownerFriends?.has(recipient.id) ? new Set([terminal.ownerId]) : undefined
-      })
-  });
-};
-
-// Notifications for a freshly created thing. createThing is the single funnel
-// for posts, comments (plain + rich), shares AND reaction things, so this one
-// hook covers every creation path — dedicated routes and generic POST alike.
-export const emitCreationNotifications = async (doc: ThingDoc, target: ThingDoc | null, actor: Viewer): Promise<void> => {
-	// A custom endpoint is an untrusted, caller-controlled data plane. Its docs
-	// can deliberately collide with home shareIds/ownerIds, so none may trigger
-	// bell or email side effects in Thingtime's home identity plane.
-	if (isCustomMongoEndpointActive()) return;
-  if (!actor?.id) return;
-  const kinds = thingtimeOf(doc);
-  const actorRef = { id: actor.id, username: actor.username || null };
-
-  // @mentions in the body text notify each mentioned user (posts, comments and
-  // share captions — never reactions, whose "text" is an emoji token). The
-  // notification is the artifact: no mention doc is stored, the literal
-  // @username text re-parses on render (same model as inline #hashtags). The
-  // direct target owner is excluded (they already get the comment/reply/share
-  // notification for this same doc) and mentioned users are excluded from the
-  // post fan-out below, so each person gets exactly one bell entry per event —
-  // the most specific one. Emits are visibility-gated (emitTextMentions): a
-  // mention only rings for someone who can view the doc that mentions them.
-  const mentioned =
-    kinds.includes('post') || kinds.includes('comment') ? await emitTextMentions(doc, target, actorRef) : new Set<string>();
-
-  if (target && kinds.includes('reaction')) {
-    await emitNotification({
-      recipientId: target.ownerId,
-      type: 'reaction',
-      actor: actorRef,
-      targetId: target.shareId,
-      postId: target.shareId,
-      preview: String(crystalOf(doc).emoji || '')
-    });
-    return;
-  }
-  // notification side effects — emit* never throws, so a notification hiccup
-  // can't fail the write that triggered it
-  await emitCreationNotifications(doc, target, asOwner);
   return { ok: true, doc };
 };
 
@@ -1945,18 +1848,127 @@ const resolveRelated = async (docs: ThingDoc[], viewerId: string | null, comment
   const result = { commentsByTarget, reactionsByTarget, votesByTarget, updownByTarget, shareCountByTarget, commentCountByTarget, legacyCommentCountByTarget };
   if (!ids.length) return result;
   const things = await getThingsCollection();
-  const moderation = visibleRelatedModerationClause(viewerId);
-  const aggregate = (pipeline: any[]) => things.aggregate(pipeline, { allowDiskUse: true }).toArray() as Promise<any[]>;
-  const interactions = async (targets: string[], includeLegacy: boolean, excludeEmbedded = false) => {
-    const rows = await aggregate(relatedInteractionPipeline({ ids: targets, collection: things.collectionName, moderation, viewerId, legacy: includeLegacy, updownKind: UPDOWN_THINGTIME, excludeEmbedded }));
-    for (const row of rows) {
-      const target = String(row._id.target), userId = row._id.viewer ? viewerId || '' : '';
-      if (row._id.kind === 'reaction') {
-        const entries = reactionsByTarget.get(target) || []; entries.push({ userId, emoji: String(row._id.token || ''), count: row.count }); reactionsByTarget.set(target, entries);
-      } else if (row._id.kind === 'vote') {
-        const entries = votesByTarget.get(target) || []; entries.push({ userId, optionIndex: Number(row._id.token), count: row.count }); votesByTarget.set(target, entries);
-      } else {
-        const entries = updownByTarget.get(target) || []; entries.push({ userId, direction: row._id.token, count: row.count }); updownByTarget.set(target, entries);
+  const [related, legacyRelational, shareCounts] = await Promise.all([
+    things
+      .find({ targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction'] }, 'moderation.status': { $nin: ['blocked', 'pending'] } } as any)
+      .sort({ createdAt: 1, shareId: 1 })
+      .toArray() as Promise<any[]>,
+    // interim relational era: kind:'reaction'/'comment' docs linked by parentId
+    // (written by the pre-unification relational model; converted by the things
+    // migration, folded here until then)
+    things
+      .find({ kind: { $in: ['comment', 'reaction'] }, parentId: { $in: ids }, 'moderation.status': { $nin: ['blocked', 'pending'] } } as any)
+      .sort({ createdAt: 1 })
+      .toArray() as Promise<any[]>,
+    things
+      .aggregate([
+        { $match: { 'moderation.status': { $nin: ['blocked', 'pending'] }, $or: [{ thingtime: 'share', targetId: { $in: ids } }, { shareOfId: { $in: ids } }] } },
+        { $group: { _id: { $ifNull: ['$targetId', '$shareOfId'] }, count: { $sum: 1 } } }
+      ])
+      .toArray() as Promise<any[]>
+  ]);
+
+  const pushComment = (target: string, entry: CommentEntry) => {
+    const list = commentsByTarget.get(target) || [];
+    // a doc can surface through more than one pass (a comment page's doc is
+    // ALSO its parent's child) — never list the same reply twice
+    if (list.some((existing) => existing.id === entry.id)) return;
+    list.push(entry);
+    commentsByTarget.set(target, list);
+  };
+  const pushReaction = (target: string, entry: ReactionEntry) => {
+    const list = reactionsByTarget.get(target) || [];
+    list.push(entry);
+    reactionsByTarget.set(target, list);
+  };
+
+  for (const doc of related as ThingDoc[]) {
+    const target = doc.targetId as string;
+    if (thingtimeOf(doc).includes('comment')) {
+      pushComment(target, {
+        id: doc.shareId,
+        userId: doc.ownerId,
+        text: String(doc.crystal?.text || ''),
+        createdAt: new Date(doc.createdAt),
+        doc
+      });
+    } else if (thingtimeOf(doc).includes('reaction')) {
+      pushReaction(target, { userId: doc.ownerId, emoji: String(doc.crystal?.emoji || '') });
+    }
+  }
+  for (const doc of legacyRelational as ThingDoc[]) {
+    const target = doc.parentId as string;
+    if (doc.kind === 'comment') {
+      pushComment(target, {
+        id: String(doc.commentId || doc._id),
+        userId: doc.ownerId,
+        text: String((doc as any).text || ''),
+        createdAt: new Date(doc.createdAt)
+      });
+    } else if (doc.kind === 'reaction') {
+      pushReaction(target, { userId: doc.ownerId, emoji: String(doc.token || '') });
+    }
+  }
+  for (const row of shareCounts) shareCountByTarget.set(String(row._id), row.count);
+
+  // Deeper levels, one batched round-trip per level: threads ship THREE
+  // levels of replies (REPLIES_PER_LEVEL per parent per level) so opening any
+  // visible thread never needs a fetch — the client lazily fetches level 4+.
+  // Each processed level fetches its comments' own reactions; the last level
+  // fetches direct reply COUNTS only (no docs). Page docs' own children were
+  // already fetched by pass 1 against the page ids, so page ids are excluded
+  // (a comment-page doc reappearing as its parent's child once doubled its
+  // replies), and seenIds keeps cycles/self-references out.
+  const pageIdSet = new Set(ids);
+  const seenIds = new Set<string>(ids);
+  let levelIds = [...commentsByTarget.values()]
+    .flat()
+    .map((entry) => entry.id)
+    .filter((id) => !pageIdSet.has(id));
+  for (let depth = 0; depth <= SHIPPED_REPLY_LEVELS && levelIds.length; depth++) {
+    const withDocs = depth < SHIPPED_REPLY_LEVELS;
+    const [levelReactions, replyGroups] = await Promise.all([
+      things
+        .find({ targetId: { $in: levelIds }, thingtime: 'reaction', 'moderation.status': { $nin: ['blocked', 'pending'] } } as any)
+        .sort({ createdAt: 1, shareId: 1 })
+        .toArray() as Promise<any[]>,
+      // blocked replies neither ship as docs nor inflate per-level counts —
+      // this mirrors the first-pass related queries above (a blocked doc must
+      // vanish from EVERY thread payload, not just level 1)
+      things
+        .aggregate(
+          withDocs
+            ? [
+                { $match: { targetId: { $in: levelIds }, thingtime: 'comment', 'moderation.status': { $nin: ['blocked', 'pending'] } } },
+                { $sort: { createdAt: -1, shareId: 1 } },
+                { $group: { _id: '$targetId', count: { $sum: 1 }, docs: { $push: '$$ROOT' } } },
+                { $project: { count: 1, docs: { $slice: ['$docs', REPLIES_PER_LEVEL] } } }
+              ]
+            : [
+                { $match: { targetId: { $in: levelIds }, thingtime: 'comment', 'moderation.status': { $nin: ['blocked', 'pending'] } } },
+                { $group: { _id: '$targetId', count: { $sum: 1 } } }
+              ]
+        )
+        .toArray() as Promise<any[]>
+    ]);
+    for (const doc of levelReactions as ThingDoc[]) {
+      pushReaction(doc.targetId as string, { userId: doc.ownerId, emoji: String(doc.crystal?.emoji || '') });
+    }
+    const nextLevelIds: string[] = [];
+    for (const group of replyGroups) {
+      commentCountByTarget.set(String(group._id), group.count);
+      // stored newest-first for the slice; readers want oldest → newest
+      for (const doc of ((group.docs as ThingDoc[]) || []).reverse()) {
+        if (seenIds.has(doc.shareId)) continue;
+        seenIds.add(doc.shareId);
+        nextLevelIds.push(doc.shareId);
+        pushComment(String(group._id), {
+          id: doc.shareId,
+          userId: doc.ownerId,
+          text: String(doc.crystal?.text || ''),
+          createdAt: new Date(doc.createdAt),
+          doc
+        });
       }
     }
   };
@@ -2048,14 +2060,7 @@ const resolvePostAttachments = async (
 	for (const doc of orderAttachmentDocsByStoredSort(docs)) {
 		const targetId = typeof doc.targetId === 'string' ? doc.targetId : '';
 		const expected = expectedTargets?.get(targetId);
-		// The owner keeps seeing their own moderation-PENDING media (flagged
-		// `pending: true`, mirroring visibleRelatedModerationClause) so an
-		// in-analysis image never silently vanishes from their post or its edit
-		// composer. Everyone else keeps the fail-closed hide; blocked stays
-		// hidden for all.
-		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation, {
-			ownerView: !!viewerId && String(doc.ownerId) === viewerId
-		});
+		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation);
 		if (
 			!targetId ||
 			!attachment ||
@@ -2093,8 +2098,32 @@ const boundAttachmentPresence = async (ownerId: string, targetId: string): Promi
 // Total comment count for whole threads (every descendant, not just direct
 // children) — one $graphLookup per page of ids, following targetId chains
 // through v2 comment things.
-const resolveThreadCounts = async (ids: string[], viewerId: string | null): Promise<Map<string, number>> =>
-  ids.length ? pagedThreadCounts(await getThingsCollection(), ids, visibleRelatedModerationClause(viewerId)) : new Map();
+const resolveThreadCounts = async (ids: string[]): Promise<Map<string, number>> => {
+  const totals = new Map<string, number>();
+  if (!ids.length) return totals;
+  const things = await getThingsCollection();
+  const rows = (await things
+    .aggregate([
+      { $match: { shareId: { $in: ids } } },
+      { $project: { shareId: 1 } },
+      {
+        $graphLookup: {
+          from: things.collectionName,
+          startWith: '$shareId',
+          connectFromField: 'shareId',
+          connectToField: 'targetId',
+          as: 'thread',
+          // blocked comments (and via graph pruning their whole subtrees)
+          // don't count — totals must match the visible lists
+          restrictSearchWithMatch: { thingtime: 'comment', 'moderation.status': { $nin: ['blocked', 'pending'] } }
+        }
+      },
+      { $project: { shareId: 1, total: { $size: '$thread' } } }
+    ])
+    .toArray()) as any[];
+  for (const row of rows) totals.set(String(row.shareId), row.total);
+  return totals;
+};
 
 // Merge a post's v1 embedded comments with its standalone comment things.
 const mergedCommentsOf = (doc: ThingDoc, related: RelatedThings): CommentEntry[] =>
@@ -2530,7 +2559,7 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   if (isDeviceControlThing(doc) || isPrivateConnectionThing(doc) || thingtimeOf(doc).some(kind => ['lopu-instruction-transfer', 'lopu-instruction-part', 'agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
-	if ((thingtimeOf(doc).includes(FOUND_POST_KIND) || thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME) || thingtimeOf(doc).includes(MONGODB_CONNECTION_SNAPSHOT_THINGTIME))) return false;
+	if (thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME)) return false;
 	// Moderation-blocked things vanish from every ordinary read for everyone —
 	// owner included, same as blocked attachments. Admins review through the
 	// moderationFlag queue (which carries a bounded excerpt), never this path.
@@ -2546,27 +2575,6 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
 	) {
 		return false;
 	}
-  // The token visibility fence outranks even the owner short-circuit: a
-  // public-only token acting AS the owner must still not see the owner's
-  // private things (inherit acls are judged on their resolved terminal via
-  // canViewInherited; a direct hit on one fails closed).
-  if (patVisibilityBlocksAcl(viewer, aclOf(doc))) return false;
-  // Canonical URLs are the unlisted read capability. The stored audience is
-  // still checked live; removing tt:hidden immediately revokes anonymous access.
-  if (viewer?.linkThingIds?.has(doc.shareId) && aclOf(doc).includes(ACL_HIDDEN)) return true;
-  // Legacy keyed URLs remain accepted: the random link key IS the audience — anyone
-  // presenting it may view, logged out included. The key only grants while
-  // the acl still says hidden, so un-hiding instantly retires shared links.
-  if (
-    viewer?.linkKeys?.size &&
-    typeof doc.linkKey === 'string' &&
-    doc.linkKey &&
-    viewer.linkKeys.has(doc.linkKey) &&
-    aclOf(doc).includes(ACL_HIDDEN)
-  ) {
-    return true;
-  }
-  if (foundPostViewerId(viewer) && foundPostGrantMatches(doc, viewer?.foundPosts?.get(doc.shareId))) return true;
   if (viewer?.id && doc.ownerId === viewer.id) return true;
   // private-subspace posts are fenced to that subspace's active members and
   // moderators (the enriched viewer carries the roster; a bare viewer fails
@@ -2622,6 +2630,17 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
+	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
+	// terminal — a blocked or born-private comment under a clean post must
+	// vanish for non-owners too
+	if (attachmentIsBlocked(doc as any)) return false;
+	if (
+		attachmentModerationStatus(doc as any) === 'pending' &&
+		thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) &&
+		doc.ownerId !== viewer?.id
+	) {
+		return false;
+	}
   const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findByShareId);
   return !!terminal && canView(terminal, viewer);
 };
@@ -2910,19 +2929,15 @@ export const appShapeProjections = async (
   });
 };
 
-const countCommentsOf = async (
-	target: ThingDoc,
-	options: { includeBlocked?: boolean; viewerId?: string | null } = {}
-): Promise<number> => {
-  const legacy = await legacyThingReadsRequired();
+const countCommentsOf = async (target: ThingDoc, options: { includeBlocked?: boolean } = {}): Promise<number> => {
   const things = await getThingsCollection();
 	// visible counts must match what the read paths render (blocked comments
 	// are excluded everywhere); the comment CAP passes includeBlocked because
 	// it doubles as a physical per-post doc bound
-	const blockedClause = options.includeBlocked ? {} : visibleRelatedModerationClause(options.viewerId ?? null);
+	const blockedClause = options.includeBlocked ? {} : { 'moderation.status': { $nin: ['blocked', 'pending'] } };
   const [standalone, legacyRelational] = await Promise.all([
-    things.countDocuments(withMatch({ targetId: target.shareId, thingtime: 'comment' }, blockedClause) as any),
-    legacy ? things.countDocuments(withMatch({ kind: 'comment', parentId: target.shareId }, blockedClause) as any) : Promise.resolve(0)
+    things.countDocuments({ targetId: target.shareId, thingtime: 'comment', ...blockedClause } as any),
+    things.countDocuments({ kind: 'comment', parentId: target.shareId, ...blockedClause } as any)
   ]);
   return standalone + legacyRelational + (target.comments || []).length;
 };
@@ -4312,11 +4327,7 @@ export const addComment = async (
     await appShapeProjections(app, [doc], [comment]);
     const things = await getThingsCollection();
     const commentCount = await things.countDocuments(
-			withMatch(
-				{ targetId: target.shareId, thingtime: 'comment' },
-				visibleRelatedModerationClause(viewerId),
-				...appMatchClauses(app)
-			) as any
+			withMatch({ targetId: target.shareId, thingtime: 'comment', 'moderation.status': { $nin: ['blocked', 'pending'] } }, ...appMatchClauses(app)) as any
 		);
     return { ok: true, comment, commentCount };
   }
@@ -5258,25 +5269,6 @@ export const updateThing = async (
 		if (!storageScope) delete updated.sizeBytes;
 	}
 
-  const notifyAfterCommit = async () => {
-  // A text-changing edit notifies newly ADDED @mentions (posts + comments):
-  // the composer autocomplete and PostCard linkification treat edited text
-  // exactly like created text, so the notification contract must too. Same
-  // grammar, exclusions, and visibility gate as the create pass
-  // (emitTextMentions), with the pre-edit text as the baseline — names
-  // already present never re-ring. Custom data planes never ring the home
-  // bell (same rule as emitCreationNotifications); emit* never throws, so a
-  // notification hiccup can't fail the update that carried it.
-  if (!isCustomMongoEndpointActive() && (thingtime.includes('post') || thingtime.includes('comment'))) {
-    const previousText = crystalOf(doc).text;
-    const nextText = crystalOf(updated).text;
-    if (typeof nextText === 'string' && nextText !== previousText) {
-      const parentId = targetIdOf(updated);
-      const parent = parentId ? await findThing(parentId) : null;
-      await emitTextMentions(updated, parent, { id: viewer.id, username: viewer.username || null }, previousText);
-    }
-  }
-
 	// Edited moderated content (prose, listing text, tags, image URLs) gets
 	// re-screened: the old verdict describes content that no longer exists
 	// (emptied content clears a stale pipeline stamp). The analyzer refuses to
@@ -5287,10 +5279,6 @@ export const updateThing = async (
 	) {
 		queueTextModeration(doc.shareId);
 	}
-
-  };
-  if (options.transaction) options.transaction.afterCommit(notifyAfterCommit);
-  else await notifyAfterCommit();
 
   const thing = (await toPublicThings([updated], viewer))[0];
   if (app) {
