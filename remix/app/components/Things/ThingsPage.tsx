@@ -1,7 +1,7 @@
 import { useMountedRef } from '~/hooks/useMountedRef';
 import { MobileDeviceSetupEntry, MobileDeviceSetupPage } from '../Devices/MobileDeviceSetupEntry';
 import { useDataPlane } from '~/hooks/useDataPlane';
-import { rootIdentity } from '~/utils/rootIdentity';
+import { openDeviceCloudFolder } from '~/fileSync/deviceFolderNavigation.client';
 import { builderAppLaunchHref } from '../Builder/builderAppNavigation';
 import { openSharePreview } from '~/components/Sharing/sharePreviewLink';
 import { BUILDER_THING_KIND } from '~/schemas/builderThing';
@@ -187,6 +187,8 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   const api = useApi();
   const lopu = useLopu();
   const dataPlane = useDataPlane();
+  const deviceFolderScope = useRef({ ownerId: user?.id, dataPlane });
+  deviceFolderScope.current = { ownerId: user?.id, dataPlane };
   const navigate = useNavigate();
   const isMobile = useIsMobileViewport();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -2197,15 +2199,8 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 			onAction={({ action }) => {
         if (action.command === 'inspect-device' && menuDeviceId) openDeviceQuickView(menuDeviceId);
         if (action.command === 'show-device-folder' && menuDeviceId && user?.id && dataPlane) {
-          const generation = rootIdentity.read().generation, origin = window.location.origin;
-          void (async () => {
-            const options = { expectedActor: user.id, expectedDataPlane: dataPlane, expectedApiOrigin: origin };
-            const reference = await api.v1.deviceFolders.inspect(menuDeviceId, options);
-            if (window.location.origin !== origin || !mounted.current || rootIdentity.read().pending || rootIdentity.read().generation !== generation) throw Error('The active account changed.');
-            return reference.folder ? reference : api.v1.deviceFolders.resolve({ deviceId: menuDeviceId }, options);
-          })().then(result => {
-            if (window.location.origin === origin && mounted.current && !rootIdentity.read().pending && rootIdentity.read().generation === generation) navigate(`/things?${new URLSearchParams({ folder: result.rootFolderId })}`);
-          }).catch(cause => lopu({ title: 'Device folder unavailable', description: cause instanceof Error ? cause.message : 'Refresh this device and retry.', status: 'error' }));
+          void openDeviceCloudFolder({ deviceId: menuDeviceId, ownerId: user.id, dataPlane, requests: api.v1.deviceFolders,
+            isCurrent: () => mounted.current && deviceFolderScope.current.ownerId === user.id && deviceFolderScope.current.dataPlane === dataPlane, navigate }).catch(cause => lopu({ title: 'Device folder unavailable', description: cause instanceof Error ? cause.message : 'Refresh this device and retry.', status: 'error' }));
         }
       }}
 		/>

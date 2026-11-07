@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useDataPlane } from '~/hooks/useDataPlane';
+import { openDeviceCloudFolder } from '~/fileSync/deviceFolderNavigation.client';
 import { rootIdentity } from '~/utils/rootIdentity';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
@@ -20,14 +21,10 @@ function DeviceFolderControlContent({ deviceId }: { deviceId: string }) {
  React.useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
  const open = async () => {
   if (active.current || !owner?.id || !plane || rootIdentity.read().pending) return;
-  const generation = rootIdentity.read().generation, origin = window.location.origin;
   active.current = true; setBusy(true); setError('');
-  const check = () => { if (window.location.origin !== origin || !mounted.current || rootIdentity.read().pending || rootIdentity.read().generation !== generation) throw Error('The active account changed.'); };
-  const options = { expectedActor: owner.id, expectedDataPlane: plane, expectedApiOrigin: origin };
   try {
-   const reference = await api.v1.deviceFolders.inspect(deviceId, options); check();
-   const result = reference.folder ? reference : await api.v1.deviceFolders.resolve({ deviceId }, options); check();
-   navigate(`/things?${new URLSearchParams({ folder: result.rootFolderId })}`);
+   await openDeviceCloudFolder({ deviceId, ownerId: owner.id, dataPlane: plane, requests: api.v1.deviceFolders,
+    isCurrent: () => mounted.current, navigate });
   } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : 'The device folder is unavailable.'); }
   finally { active.current = false; if (mounted.current) setBusy(false); }
  };
