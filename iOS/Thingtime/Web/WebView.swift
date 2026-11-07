@@ -58,6 +58,7 @@ struct WebView: UIViewRepresentable {
         // and detaches its queued uploads, even when a widget tap is delivered in
         // the same update. Widget navigation alone stays within the same origin.
         if rootChanged {
+            NativeDeferredUpload.shared.disarm()
             MobileDeviceBackgroundPresence.shared.destinationChanged()
             context.coordinator.mobileLocation.invalidate()
             MobileDeviceAlerts.shared.stop()

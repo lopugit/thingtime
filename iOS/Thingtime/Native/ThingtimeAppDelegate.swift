@@ -7,6 +7,7 @@ final class ThingtimeAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         NativeUploadBackgroundCoordinator.shared.activate()
+        NativeDeferredUpload.shared.activate(foreground: application.applicationState != .background)
         MobileDeviceBackgroundPresence.shared.activate()
         MobileDeviceLocation.shared.activate(foreground: application.applicationState != .background)
         // Foreground launch must reauthorize current web identity/preferences.

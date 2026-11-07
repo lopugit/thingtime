@@ -5,7 +5,8 @@ import Photos
 
 private final class PhotoFixtures: PhotoResourceProvider, @unchecked Sendable {
     var permission = "full", exports = 0, inventoryCalls = 0
-    var records: [PhotoResource] = [], bytes: [String: Data] = [:]
+    var records: [PhotoResource] = [], bytes: [String: Data] = [:], iCloud: [String: Data] = [:]
+    var downloads = 0
     var onWrite: (() -> Void)?
     func access() -> String { permission }
     func inventory() throws -> [PhotoResource] {
@@ -20,6 +21,13 @@ private final class PhotoFixtures: PhotoResourceProvider, @unchecked Sendable {
         try validate(resource); exports += 1
         guard let bytes = bytes[resource.path] else { throw PhotoLibraryReader.Failure.cloudOriginal }
         try bytes.write(to: url); onWrite?()
+    }
+    func download(_ resource: PhotoResource, to url: URL, control: PhotoOriginalDownloadControl) throws {
+        try validate(resource); try control.authorize()
+        guard let original = iCloud[resource.path] else { throw PhotoLibraryReader.Failure.cloudOriginal }
+        downloads += 1
+        try original.write(to: url)
+        control.progress(1)
     }
     @discardableResult func add(_ asset: String, index: Int = 0, bytes: Data, revision: String = "v1") -> PhotoResource {
         let r = PhotoResource(asset: asset, index: index, name: "same-original.jpg", revision: revision)
@@ -122,6 +130,94 @@ final class PhotoLibraryTests: XCTestCase {
             XCTAssertEqual(Data(base64Encoded: chunk.data), provider.bytes[row.path])
         }
     }
+    func testCloudOnlyCompanionDoesNotBlockAvailableOriginalsAndReturnsAfterDownload() throws {
+        let provider = PhotoFixtures()
+        let still = provider.add("live", bytes: Data([1, 2]))
+        let companion = provider.add("live", index: 1, bytes: Data([3, 4]))
+        let later = provider.add("other", bytes: Data([5]))
+        provider.bytes.removeValue(forKey: companion.path)
+        let owner = try FileSyncOwnerScope(ownerId: "photos", url: URL(string: "https://fixture.invalid")!)
+        let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "device", rootId: UUID().uuidString)
+        let reader = try makeReader(provider), id = UUID().uuidString.lowercased()
+        let prepared = try reader.prepareCapture(scope: scope, id: id, generation: id, allowCloudGaps: true)
+        XCTAssertEqual(prepared.coverage, "partial"); XCTAssertEqual(prepared.totalSkipped, 1)
+        XCTAssertThrowsError(try reader.page(scope: scope, capture: prepared, offset: 0))
+        let sealed = try reader.sealCapture(scope: scope, capture: prepared)
+        XCTAssertThrowsError(try reader.status(scope: scope, id: id))
+        XCTAssertEqual(try reader.status(scope: scope, id: id, allowCloudGaps: true), sealed)
+        let gaps = try reader.readSkipped(scope: scope, capture: sealed, offset: 0)
+        XCTAssertEqual(gaps.skipped.map(\.path), [companion.path])
+        XCTAssertEqual(gaps.skipped.map(\.reason), [.cloudOriginal])
+        let entries = try reader.page(scope: scope, capture: sealed, offset: 0).entries
+        XCTAssertEqual(Set(entries.map(\.path)), Set([still.path, later.path]))
+        for entry in entries {
+            let chunk = try reader.read(scope: scope, path: entry.path, version: entry.version, offset: 0, length: 4)
+            XCTAssertEqual(Data(base64Encoded: chunk.data), provider.bytes[entry.path])
+        }
+        provider.bytes[companion.path] = Data([3, 4])
+        let next = UUID().uuidString.lowercased()
+        let preparedFull = try reader.prepareCapture(scope: scope, id: next, generation: next, allowCloudGaps: true)
+        let full = try reader.sealCapture(scope: scope, capture: preparedFull)
+        XCTAssertEqual(full.coverage, "full"); XCTAssertEqual(full.totalSkipped, 0)
+        XCTAssertEqual(try reader.page(scope: scope, capture: full, offset: 0).entries.count, 3)
+        XCTAssertEqual(try reader.readSkipped(scope: scope, capture: full, offset: 0).skipped.count, 0)
+        provider.permission = "unavailable"
+        XCTAssertThrowsError(try reader.readSkipped(scope: scope, capture: sealed, offset: 0))
+    }
+
+    func testExplicitCloudDownloadPreservesCompanionBytesAndRefusesWithoutLivePolicy() throws {
+        let provider = PhotoFixtures()
+        let still = provider.add("live", bytes: Data([1]))
+        let companion = provider.add("live", index: 1, bytes: Data([2, 3, 4]))
+        let original = try XCTUnwrap(provider.bytes.removeValue(forKey: companion.path))
+        provider.iCloud[companion.path] = original
+        let owner = try FileSyncOwnerScope(ownerId: "photos", url: URL(string: "https://fixture.invalid")!)
+        let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "device", rootId: UUID().uuidString)
+        let reader = try makeReader(provider), localID = UUID().uuidString.lowercased()
+        let local = try reader.prepareCapture(scope: scope, id: localID, generation: localID, allowCloudGaps: true)
+        XCTAssertEqual(local.totalSkipped, 1); XCTAssertEqual(provider.downloads, 0)
+        _ = try reader.sealCapture(scope: scope, capture: local)
+        let deniedID = UUID().uuidString.lowercased()
+        XCTAssertThrowsError(try reader.prepareCapture(scope: scope, id: deniedID, generation: deniedID, allowCloudGaps: true,
+            download: .init(authorize: { throw CancellationError() })))
+        XCTAssertEqual(provider.downloads, 0)
+        let id = UUID().uuidString.lowercased()
+        let allowed = PhotoOriginalDownloadControl(authorize: {})
+        let prepared = try reader.prepareCapture(scope: scope, id: id, generation: id, allowCloudGaps: true, download: allowed)
+        let full = try reader.sealCapture(scope: scope, capture: prepared)
+        XCTAssertEqual(full.coverage, "full")
+        XCTAssertEqual(provider.downloads, 1)
+        let entries = try reader.page(scope: scope, capture: full, offset: 0).entries
+        XCTAssertEqual(Set(entries.map(\.path)), Set([still.path, companion.path]))
+        let movie = try XCTUnwrap(entries.first { $0.path == companion.path })
+        reader.discard() // PhotoKit may evict the original before upload.
+        XCTAssertThrowsError(try reader.read(scope: scope, path: movie.path, version: movie.version, offset: 0, length: 1))
+        let bytes = try reader.read(scope: scope, path: movie.path, version: movie.version, offset: 0, length: 4, download: allowed)
+        XCTAssertEqual(Data(base64Encoded: bytes.data), original)
+        XCTAssertEqual(provider.downloads, 2)
+    }
+
+    func testCloudCaptureBudgetDefersRemainingResourcesWithoutTruncatingTheLibrary() throws {
+        let provider = PhotoFixtures()
+        let resources = (0..<6).map { provider.add("original-\($0)", bytes: Data([UInt8($0 + 1)])) }
+        for resource in resources { provider.iCloud[resource.path] = provider.bytes.removeValue(forKey: resource.path) }
+        let owner = try FileSyncOwnerScope(ownerId: "photos", url: URL(string: "https://fixture.invalid")!)
+        let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "device", rootId: UUID().uuidString)
+        let reader = try makeReader(provider), allowed = PhotoOriginalDownloadControl(authorize: {})
+        var totals: [Int] = []
+        for _ in 0..<2 {
+            let id = UUID().uuidString.lowercased()
+            let prepared = try reader.prepareCapture(scope: scope, id: id, generation: id, allowCloudGaps: true,
+                download: allowed, maximumCloudDownloads: 4)
+            let sealed = try reader.sealCapture(scope: scope, capture: prepared)
+            totals.append(sealed.totalEntries)
+            XCTAssertEqual(sealed.totalEntries + (sealed.totalSkipped ?? -1), resources.count)
+            XCTAssertEqual(try reader.readSkipped(scope: scope, capture: sealed, offset: 0).totalSkipped, resources.count - sealed.totalEntries)
+        }
+        XCTAssertEqual(totals, [4, 6])
+        XCTAssertEqual(provider.downloads, 6)
+    }
+
     func testMutationAndCancellationCannotReturnACompleteInventory() async throws {
         let provider = PhotoFixtures(), resource = provider.add("first", bytes: Data([1])), reader = try makeReader(provider)
         let row = try XCTUnwrap(reader.scan(scope: "a").first)

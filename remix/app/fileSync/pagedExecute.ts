@@ -12,7 +12,7 @@ export async function executePagedSyncRun(value: PagedRunSpec, savedScope: SyncS
 
 /** The foreground caller already owns the root lock across scans and review. */
 export async function executePreparedPagedSyncRun(value: PagedRunSpec, savedScope: SyncScope, journal: PagedRunJournal,
-	port: Omit<SyncExecutionPort, 'persist'>, options: { signal?: AbortSignal; changed?: (p: PagedRunProgress) => void } = {}) {
+	port: Omit<SyncExecutionPort, 'persist'>, options: { signal?: AbortSignal; changed?: (p: PagedRunProgress) => void; prepare?: (operation: import('./execute').SyncOperation) => Promise<void>; confirmed?: (operation: import('./execute').SyncOperation) => void } = {}) {
 	const spec = structuredClone(value), scope = structuredClone(savedScope);
 	const check = () => {
 		options.signal?.throwIfAborted();
@@ -22,9 +22,10 @@ export async function executePreparedPagedSyncRun(value: PagedRunSpec, savedScop
 	while (state.phase !== 'complete') {
 		const operation = await journal.claimNext(spec); check();
 		if (!operation) throw Error('Sync run has no next operation.');
+		await options.prepare?.(operation); check();
 		const receipt = await executeSyncOperation(operation, scope, port, options.signal); check();
 		state = await journal.confirm(spec, receipt); check(); options.changed?.(state);
-		port.confirmed?.(operation, receipt);
+		port.confirmed?.(operation, receipt); options.confirmed?.(operation);
 	}
 	return state;
 }

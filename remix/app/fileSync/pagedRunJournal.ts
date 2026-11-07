@@ -1608,6 +1608,27 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		 * transaction scans at most 128 rows; cursors survive interruption. */
 		/** Read-only metadata prefetch. It claims nothing and advances no source
 		 * cursor; appendStream still validates the exact immutable input. */
+		/** Read-only lookahead for already prepared flat, deletion-free backups.
+		 * The regular executor still owns all claims and Timeline receipts. */
+		async peekDeferredUploads(value: PagedRunSpec): Promise<SyncOperation[]> {
+			const spec = parsePagedRunSpec(value);
+			if (spec.streaming || spec.review || spec.configuration?.sourceKind !== 'photos' ||
+				spec.plan.policy.mode !== 'backup' || spec.plan.policy.propagateDeletes) return [];
+			return withHeader(spec, 'readonly', (h, tx, done, fail) => {
+				if (h.phase !== 'running' || cloudProgress(h).phase !== 'ready') { done([]); return; }
+				const request = tx.objectStore(PAGED_RUN_STORES[1]).openCursor(operationRange(spec.id, h.confirmedThrough));
+				const operations: SyncOperation[] = []; let visited = 0;
+				request.onsuccess = () => { try {
+					check(); const cursor = request.result;
+					if (!cursor || operations.length >= 4 || visited++ >= INVENTORY_PAGE_ENTRIES) { done(operations); return; }
+					const saved = row(cursor.value, spec, cursor.primaryKey), m = saved.operation.mutation;
+					if (!saved.operation.confirmed && !saved.rebindPending && m.kind === 'copy' && m.from === 'local' &&
+						m.source.kind === 'file' && m.source.size > 0 && m.source.fingerprint && !m.path.includes('/'))
+						operations.push(structuredClone(saved.operation));
+					cursor.continue();
+				} catch (error) { fail(error); } };
+			});
+		},
 		async peekUploadBatchInputs(value: PagedRunSpec): Promise<StreamInput[]> {
 			const spec = parsePagedRunSpec(value);
 			if (spec.streaming?.source !== 'local') return [];

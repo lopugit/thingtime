@@ -262,6 +262,35 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 		// uploads again after an accepted-write/lost-response interruption.
 		return { status: 'complete', receipt: await commit(file.content, true) };
 	};
+	const reserve = async (size: number, plan = contentPartPlan(size)) => {
+		if (m.kind !== 'copy') throw Error('Only a file copy can reserve bytes.');
+		const started = await json('/api/v1/attachments/uploads', {
+			requestId: write.operation.id,
+			filename: m.path.split('/').at(-1),
+			contentType: 'application/octet-stream',
+			sizeBytes: size,
+			purpose: stagingTargetId ? stagingOptions?.purpose ?? 'file-import' : 'file',
+        ...(stagingTargetId ? (stagingOptions?.fileSyncOrigin ? { fileSyncOrigin: stagingOptions.fileSyncOrigin } : {}) : { fileSyncOrigin: { version: 1, deviceId: scope.deviceId, localRootId: scope.rootId, ...(write.cloudRootId ? { cloudRootId: write.cloudRootId } : {}), fileId, folderId: write.folderId, path: m.path } })
+		});
+		const upload = started.upload;
+		if (!identifier(upload?.id) || upload.partSizeBytes !== plan.partSizeBytes || upload.partCount !== plan.partCount)
+			throw Error('Invalid cloud upload plan.');
+		return upload;
+	};
+	const deferUpload = async (source: FingerprintSource): Promise<import('./contentFingerprint').NativeDeferredFileResult | null> => {
+		const approval = runtime.nativeUploadApproval;
+		if (!source.deferUpload || !approval || !sameSyncScope(approval.scope, scope) ||
+			approval.configuration.sourceKind !== 'photos' || approval.configuration.mode !== 'backup' ||
+			approval.configuration.propagateDeletes || retained || stagingTargetId || m.kind !== 'copy' ||
+			m.from !== 'local' || m.source.kind !== 'file' || !m.source.fingerprint ||
+			m.source.size <= 0 || m.source.size !== source.size || m.source.symbolicLink || m.path.includes('/')) return null;
+		await negotiate(); await runtime.authorizeMutation?.(signal); check();
+		const upload = await reserve(source.size);
+		if (upload.state === 'ready') return null;
+		const queued = await source.deferUpload({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(approval) }, signal);
+		check(); return queued;
+	};
+
 	/** Stage through normal upload approval and integrity gates without publishing a file.
 	 * The caller must use a separately authorized canonical content transaction. */
 	const stage = async (source: FingerprintSource, progress?: (bytes: number, total: number) => void,
@@ -284,17 +313,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 				if (source.size !== m.source.size) throw Error('Source file changed.');
 			};
 			if (!compound) await sourceCheck();
-			const started = await json('/api/v1/attachments/uploads', {
-				requestId: write.operation.id,
-				filename: m.path.split('/').at(-1),
-				contentType: 'application/octet-stream',
-				sizeBytes: source.size,
-				purpose: stagingTargetId ? stagingOptions?.purpose ?? 'file-import' : 'file',
-        ...(stagingTargetId ? (stagingOptions?.fileSyncOrigin ? { fileSyncOrigin: stagingOptions.fileSyncOrigin } : {}) : { fileSyncOrigin: { version: 1, deviceId: scope.deviceId, localRootId: scope.rootId, ...(write.cloudRootId ? { cloudRootId: write.cloudRootId } : {}), fileId, folderId: write.folderId, path: m.path } })
-			});
-			const upload = started.upload;
-			if (!identifier(upload?.id) || upload.partSizeBytes !== plan.partSizeBytes || upload.partCount !== plan.partCount)
-				throw Error('Invalid cloud upload plan.');
+			const upload = await reserve(source.size, plan);
 			// Empty objects are stored and verified by the start endpoint. Never
 			// send them into a native multipart loop or complete an empty MPU.
 			if (source.size === 0 && upload.state !== 'ready')
@@ -428,6 +447,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			return content;
 	};
 	return {
+		deferUpload,
 		lookup,
 		stage,
 		async read() {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { foregroundSyncContext } from './foregroundSyncContext';
+import { foregroundSyncContext, SyncConditionsWait } from './foregroundSyncContext';
 import { foregroundFixture, saved, scope } from './foregroundSync.fixture';
 import type { ForegroundSyncInput } from './foregroundSync';
 
@@ -11,7 +11,7 @@ test('composite authorization retains every configuration/device/conditions boun
  input.authorizeContext = async () => { calls++; if (revoked) throw Error('Device revoked'); return { network: network as 'wifi', charging: true }; };
  const context = foregroundSyncContext(saved, scope, input, new AbortController().signal);
  await context.authorize(); assert.equal(calls, 1);
- network = 'offline'; await assert.rejects(context.authorize(), /internet|network/); assert.equal(calls, 2);
+ network = 'offline'; await assert.rejects(context.authorize(), cause => cause instanceof SyncConditionsWait && cause.reason === 'wifi'); assert.equal(calls, 2);
  network = 'wifi'; revoked = true; await assert.rejects(context.authorize(), /revoked/);
  f.change(); await assert.rejects(context.authorize());
  f.journal().close();
@@ -68,6 +68,6 @@ test('compound observations reject parent mismatch, incomplete reply and offline
  await assert.rejects(context.observeLocal!('Documents/child', 'other'), /Invalid observation/);
  await assert.rejects(context.observeLocal!('Documents/child', 'Documents'), /observation changed/);
  input.observeLocal = async () => ({ conditions: { network: 'offline', charging: true }, entries: [null] });
- await assert.rejects(context.observeLocal!('Documents', ''), /internet|network/);
+ await assert.rejects(context.observeLocal!('Documents', ''), cause => cause instanceof SyncConditionsWait && cause.reason === 'wifi');
  f.journal().close();
 });

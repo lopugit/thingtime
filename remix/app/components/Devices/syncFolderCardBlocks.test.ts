@@ -3,7 +3,7 @@ import test from 'node:test';
 import { findBlock } from '../Builder/webpageBlocks';
 import { settingsDocumentBlocks } from '../Settings/settingsDocument';
 import { resolveBlockProps } from '../Builder/templateBlocks';
-import { syncFolderCardBlocks, syncFolderActivityLabel, withSyncFolderQuickBlocks } from './syncFolderCardBlocks';
+import { photoDownloadPreparation, syncFolderCardBlocks, syncFolderActivityLabel, withSyncFolderQuickBlocks } from './syncFolderCardBlocks';
 import { remoteSyncBlocks, remoteSyncDisclosureBlocks } from './remoteSyncBlocks';
 
 test('generic folder summaries expose separate editable fields and a typed expansion control', () => {
@@ -56,4 +56,32 @@ test('connection status distinguishes waiting, Photos preparation and a partial 
  assert.equal(syncFolderActivityLabel({ ...state, running: false, waiting: true, progress: { ...progress, message: 'Waiting for Wi-Fi.' } }), 'Waiting for Wi-Fi.');
  assert.equal(syncFolderActivityLabel({ ...state, running: false, failed: true, progress }), 'Needs attention');
  assert.equal(syncFolderActivityLabel({ ...state, running: false, progress: { ...progress, stage: 'complete', coverage: 'partial', skipped: 2 } }), 'Partial backup · 2 items need review.');
+});
+
+test('iCloud preparation only presents observed fractions and never claims an unfinished download is complete', () => {
+ assert.equal(photoDownloadPreparation(), undefined);
+ assert.equal(photoDownloadPreparation({ fraction: NaN }), undefined);
+ assert.equal(photoDownloadPreparation({ fraction: 1.01 }), undefined);
+ assert.equal(photoDownloadPreparation({ fraction: 0 })?.percent, undefined);
+ assert.equal(photoDownloadPreparation({ fraction: 0.467 })?.percent, 46.7);
+ assert.equal(photoDownloadPreparation({ fraction: 1 })?.percent, 99.9);
+ const migrated = withSyncFolderQuickBlocks(syncFolderCardBlocks);
+ assert.ok(findBlock(migrated, 'folder-card-preparation-label'));
+ assert.ok(findBlock(migrated, 'folder-card-preparation-progress'));
+});
+
+test('limited photo access reports only the selected photos after a successful backup', () => {
+ const state = { paused: false, rootsReady: true, hasRoot: true, taskPaused: false, running: false, photos: true };
+ const progress = { stage: 'complete' as const, confirmed: 2, total: 2, photoAccess: 'limited' as const };
+ assert.equal(syncFolderActivityLabel({ ...state, progress }), 'Selected photos backed up.');
+ const message = 'An original is only in iCloud. Download it in Photos or explicitly allow cellular in this connection.';
+ assert.equal(syncFolderActivityLabel({ ...state, progress: { ...progress, message, coverage: 'partial', skipped: 1 }, waiting: true }), message);
+});
+
+
+test('refused background scheduling tells the user to keep the app open without hiding transfer progress', () => {
+ const state = { paused: false, rootsReady: true, hasRoot: true, taskPaused: false, running: true, photos: true };
+ const progress = { stage: 'transferring' as const, confirmed: 1, total: 3, backgroundTransfer: 'foreground-only' as const };
+ assert.equal(syncFolderActivityLabel({ ...state, progress }),
+  'Transfer in progress · 1 of 3 operations confirmed · Keep Thingtime open; iOS could not schedule background processing.');
 });

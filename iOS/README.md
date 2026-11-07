@@ -467,23 +467,28 @@ access includes hidden and burst assets exposed by PhotoKit. Original bytes can
 include embedded location metadata. Albums, captions, favorites and other Photos
 database metadata are not yet a portable library restoration contract.
 
-Current scans allow 10,000 resources and 4 MiB of inventory metadata. A scan
-rechecks the complete accessible resource inventory before returning success.
-One original is exported at a time into private temporary storage and reused for
-bounded reads under the same owner/grant; the temporary copy is cleared on
-suspension or failure. Available device storage must fit the largest original plus one upload part.
-An export failure keeps the saved connection and uploaded cloud copies. The
-status distinguishes originals that require an iCloud download, denied Photos
-access, insufficient device storage and other read failures. Resolve the stated
-cause and retry the backup; already indexed original observations are reused.
-The strict scan still prepares every original before the first upload. One
-iCloud-only original blocks that scan; these status improvements do not add
-iCloud downloads or allow partial-library backups.
-Originals must currently be downloaded locally in Photos: the adapter refuses
-unavailable originals instead of starting iCloud traffic outside the sync network
-policy. Background jobs, large-library paging and controlled iCloud downloads
-remain pending. The shared reader and source selection also support Mac; installed signed-app
-PhotoKit acceptance remains pending.
+Paged iOS scans validate the complete accessible PhotoKit membership before
+sealing the current inventory. One original is exported at a time into private
+temporary storage; the device needs enough free space for the largest original
+plus one upload part. Older inline clients have a bounded response envelope.
+The native adapter keeps completed observations across retry.
+
+File access 1.6.0 can back up locally available originals while explicitly
+recording iCloud-only resources, including Live Photo companions, as missing
+from this backup. That pass stays incomplete and the original gap returns to
+the normal plan when its bytes are available. Other export failures, storage
+errors, permission loss and membership changes still stop the scan. File
+access 1.7.0 downloads an iCloud-only original through PhotoKit when the saved
+connection explicitly allows cellular, after exact owner, device, grant, network
+and charging checks. PhotoKit has no public Wi-Fi-only transport switch, so a
+Wi-Fi-only connection keeps missing originals pending and asks to download them
+in Photos or review the connection's network choice. No setting changes
+automatically. Thingtime first publishes the locally available originals, then
+fetches at most four cloud originals per preparation pass and automatically
+continues while the remaining count falls. This is a working batch, not a library
+limit. Each pass verifies and publishes through the normal file journal.
+Locally available original preparation still precedes its first planned upload. The shared reader
+also supports Mac, where the existing strict behavior remains in effect.
 
 Forks need the existing `NSPhotoLibraryUsageDescription` entry in `project.yml`,
 then `xcodegen generate`. No photo-service credentials or private configuration
@@ -617,10 +622,47 @@ reboot recovery and physical-device throughput remain unverified. Apple's backgr
 unconditionally, so it cannot replace the current plaintext transport without
 revisiting destination protection.
 
+### Deferred Photos transfers
+
+Native upload 1.5.0 negotiates `api.file-sync-transfer-admissions` 1.0.0
+on the selected origin. Once Photos inventory and destination bindings are
+sealed, the foreground runner admits up to four upcoming original file
+reservations. Four is the rolling lookahead, not a backup size limit. Each
+admission binds the exact owner/session, device, connection revision, private
+destination, grant, source and original request/upload identities. Scheduling
+uses `BGProcessingTask` with the `.file-sync-processing` identifier and
+the `processing` background mode. iOS decides when to run it.
+
+The protected native checkpoint keeps no session cookie, device credential or
+signed URL. The background worker revalidates the local grant and source,
+reads the paired credential through Keychain, obtains scoped part URLs, refuses
+redirects, and honors saved Wi-Fi and charging policy. Expiry retains the verified
+part cursor; retry uses the same original reservation. Pause disarms the exact
+queue before revoking server authority. Sign-out, a destination change and
+foreground reauthorization cannot borrow the previous account's queue.
+
+Deferred processing can finish already admitted attachments without the WebView.
+The cloud folder and Timeline update only after the normal foreground runner
+verifies the stored fingerprints and publishes the original operations. When
+the queue drains, reopen Thingtime for more preparation or publication. This
+does not discover new Photos in the background or promise OS delivery after
+force-quit. Automatic iCloud original retrieval is a foreground preparation
+step under the explicitly permitted network policy. A Live Activity does not grant
+background execution.
+
+Use the ordinary disposable Photos consent fixture with
+`THINGTIME_PHOTO_DEFERRED_TEST=1` to prove the installed native runner. It
+withholds the first WebView upload, injects a processing task, expires it after
+one verified part, and verifies multiple stored originals before Timeline
+publication. It then reopens the app and verifies those exact reservations
+without duplicate revisions. Actual iOS scheduling and phone Wi-Fi/lock behavior
+remain separate physical-device checks.
+
 ### Continued uploads on iOS 26+
 
-Upload capability 1.3.0 requests `BGContinuedProcessingTask` on iOS 26+ for the
-current user-started whole-file job. One static identifier is registered once;
+Upload capability 1.4.0 requests `BGContinuedProcessingTask` on iOS 26+ only
+for the current explicitly user-started whole-file job. Automatic retries and
+scheduled backup do not request a continued-processing lease. One static identifier is registered once;
 submission uses the fail strategy. The native job retains its redirect-refusing
 file-backed transport, live owner/configuration/pairing/grant checks and bounded
 part cache. This does not persist cookies or create another history store.

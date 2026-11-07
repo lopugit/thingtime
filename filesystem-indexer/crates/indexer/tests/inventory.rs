@@ -429,12 +429,24 @@ fn photo_capture_seals_only_exact_scoped_observations_and_pages_stably() {
         operation("photoPage", "photo-set"),
         "generation_unavailable",
     );
+    let mut gaps = operation("appendPhotoCloudGaps", "photo-set");
+    gaps["paths"] = json!(["cloud-video.mov", "a-photo.jpg"]);
+    assert_fails(&f, gaps.clone(), "collision");
+    assert_eq!(status(&f, "photo-set")["gapCount"], 0);
+    gaps["paths"] = json!(["cloud-video.mov"]);
+    assert_eq!(one(&f, gaps)["gapCount"], 1);
     let mut seal = operation("sealPhotoCapture", "photo-set");
     seal["resourceRevision"] = json!("snapshot-revision");
     seal["totalEntries"] = json!(1);
     assert_fails(&f, seal.clone(), "generation_unavailable");
     seal["totalEntries"] = json!(2);
+    assert_fails(&f, seal.clone(), "generation_unavailable");
+    seal["totalGaps"] = json!(1);
     assert_eq!(one(&f, seal)["coverage"], "sealed");
+    let page = one(&f, operation("gaps", "photo-set"));
+    assert_eq!(page["gaps"][0]["reason"], "cloud-original");
+    assert_eq!(page["gaps"][0]["path"], "cloud-video.mov");
+    assert_eq!(page["gapCount"], 1);
     let mut page = operation("photoPage", "photo-set");
     page["limit"] = json!(1);
     let first = one(&f, page.clone());

@@ -4,7 +4,7 @@ import Foundation
 
 /// One bounded native multipart job. The shared sync journal owns operation
 /// identity and Timeline publication; this host only completes attachment bytes.
-struct NativeUploadFileRequest: Decodable, Sendable {
+struct NativeUploadFileRequest: Codable, Equatable, Sendable {
     let source: MobileFolderReader.Entry
     let uploadId: String
     let requestId: String

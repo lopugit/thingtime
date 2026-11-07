@@ -44,6 +44,7 @@ public struct MobileFolderReader {
     public struct ScanFailure: Error, Encodable, Equatable, Sendable {
         public enum Reason: String, Codable, Sendable {
             case symlink, special, unreadable, changed, fifo, socket, device
+            case cloudOriginal = "cloud-original"
             case invalidPath = "invalid-path"
             case duplicateIdentity = "duplicate-identity"
             case pathCollision = "path-collision"
