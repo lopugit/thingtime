@@ -1,7 +1,7 @@
 import { nativePathObserver } from './nativePathObservation';
 import { reportDeviceSyncHistoryStorage } from './deviceSyncHistory.client';
 import { createDeviceSyncHistoryRecorder } from './deviceSyncHistoryRecorder';
-import { deviceResourceKey, deviceSyncGovernor, readDeviceSyncResourcePolicy } from './deviceResourcePolicy';
+import { deviceResourceKey, nativeDeviceSyncGovernor, readDeviceSyncResourcePolicy } from './deviceResourcePolicy';
 import { activityManager } from '~/activity/activityManager';
 import { fileSyncDownloadRequirements } from './signedDownloadTarget';
 import { createSyncProgressCache } from './syncProgressCache';
@@ -24,7 +24,7 @@ import type { ForegroundSyncInput } from './foregroundSync';
 import type { InventoryIdentity } from './inventoryJournal';
 import { readCloudFolderInventoryPages } from './cloudInventoryPages.client';
 import { readCloudFolderInventory } from './cloudInventory.client';
-import { mobileFolderSource, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging } from './mobileFolders.client';
+import { mobileFolderSource, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
 import { createConflictReviewController } from './conflictReviewController';
@@ -129,7 +129,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			stopCleanup.install(saveStop); check();
 			if (adapter.platform === 'macos') releaseWindow = await holdDesktopSyncWindow(adapter.bridge); check();
 			const resourceKey = deviceResourceKey(binding.origin, binding.ownerId, binding.deviceId);
-			const resources = deviceSyncGovernor(resourceKey, reviewed.configuration.resourceLimits);
+			const resources = nativeDeviceSyncGovernor(resourceKey, adapter.platform === 'macos' || supportsNativeResourceLimits(adapter.bridge), reviewed.configuration.resourceLimits);
 			let nativeResources: SyncResourceStatus | undefined;
 			const host = await createNativeSyncHost({ ...(resources ? { resourcePolicy: { resourceLimits: reviewed.configuration.resourceLimits, resourceScope: reviewed.id, deviceResourceLimits: () => readDeviceSyncResourcePolicy(resourceKey), observe: (value: SyncResourceStatus) => { nativeResources = value; resources.observe(value); history?.observe(value); } } } : {}), ownerId: binding.ownerId, deviceId: binding.deviceId, adapter, signal, assertCurrent: check });
 			if (host.origin() !== binding.origin) throw Error('The selected sync server changed.');
