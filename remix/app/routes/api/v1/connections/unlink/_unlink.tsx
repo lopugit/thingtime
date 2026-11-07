@@ -1,4 +1,3 @@
-import { withVaultRequest } from '~/api/utils/auth/vaultRequest';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';

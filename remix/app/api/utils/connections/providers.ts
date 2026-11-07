@@ -1,4 +1,5 @@
 import { oauthClientConfig } from './oauthConfig';
+import { chatgptIdentityProvider } from './chatgptIdentity';
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
@@ -135,7 +136,7 @@ export type ConnectionProvider = {
     // X requires PKCE on its authorization-code flow; the begin/callback core
     // mints an S256 verifier and threads it through the signed state JWT
     pkce?: boolean;
-    buildAuthorizeUrl: (input: { clientId: string; redirectUri: string; state: string; codeChallenge?: string; nonce?: string; requestedScopes?: readonly string[] }) => string;
+    buildAuthorizeUrl: (input: { clientId: string; redirectUri: string; state: string; codeChallenge?: string; nonce?: string }) => string;
     exchangeCode: (input: {
       code: string;
       clientId: string;
@@ -479,8 +480,9 @@ const CREDENTIAL_HEADERS = ['authorization', 'cookie', 'proxy-authorization'];
 
 // One guarded fetch for every outbound provider call: validates the target,
 // then walks redirects by hand re-validating each hop.
-const guardedFetch = async (url: string, init: RequestInit & { method?: string }): Promise<Response> => {
-  const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+const guardedFetch = async (url: string, init: RequestInit & { method?: string }, sameOriginOnly = false): Promise<Response> => {
+  const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
   const method = init.method || 'GET';
   let target = url;
   let headers = new Headers(init.headers);
@@ -504,6 +506,7 @@ const guardedFetch = async (url: string, init: RequestInit & { method?: string }
     // credentials dropped on an earlier hop are never reinstated by a later
     // redirect back to the starting origin.
     if (next.origin !== new URL(target).origin) {
+      if (sameOriginOnly) throw new BlockedTargetError('the provider redirected outside its API origin');
       headers = new Headers(headers);
       for (const name of CREDENTIAL_HEADERS) headers.delete(name);
     }
@@ -627,6 +630,10 @@ export const authedJson = async (
   url: string,
   opts: {
     token?: string; method?: 'GET' | 'POST'; body?: unknown; headers?: Record<string, string>;
+    // Only fixed, server-registered API operations opt in. User-supplied feed
+    // targets retain their transport budget; complete results cannot redirect
+    // to an arbitrary public host. Provider pagination controls processing size.
+    completeResponse?: boolean; signal?: AbortSignal;
   } = {}
 ): Promise<{ ok: true; data: any } | Fail> => {
   try {
@@ -640,14 +647,15 @@ export const authedJson = async (
         // provider-specific extras (Twitch helix requires a Client-Id header)
         ...(opts.headers || {})
       },
-      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {})
-    });
+      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+      signal: opts.signal
+    }, opts.completeResponse);
     if (!resp.ok) {
       await resp.body?.cancel().catch(() => {});
       const status = resp.status === 401 || resp.status === 403 ? 401 : 502;
       return fail(status, status === 401 ? 'The provider needs a reconnect or additional permission.' : `The provider answered ${resp.status}.`);
     }
-    const text = await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
+    const text = opts.completeResponse ? await resp.text() : await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
     if (text === null) return fail(502, 'The provider response was too large to process');
     try {
       return { ok: true, data: JSON.parse(text) };
@@ -707,9 +715,7 @@ const formOAuthGrant = (config: {
       refreshToken: data.refresh_token ? String(data.refresh_token) : previous?.refreshToken || null,
       expiresAt: expiresAtFrom(data.expires_in),
       tokenType: typeof data.token_type === 'string' ? data.token_type : previous?.tokenType || 'Bearer',
-      scopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean) : previous?.scopes || config.scopes,
-      confirmedScopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean)
-        : Object.prototype.hasOwnProperty.call(data, 'scope') ? [] : previous?.confirmedScopes
+      scopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean) : previous?.scopes || config.scopes
     };
     return config.mapExtra ? config.mapExtra(data, tokens) : tokens;
   };
@@ -1776,9 +1782,9 @@ const facebookAccountProvider: ConnectionProvider = {
   about: 'Save your Facebook identity for later actions. Requests your public profile; no posts permission.',
   oauth: {
     ...facebookProvider.oauth!,
-    buildAuthorizeUrl: ({ clientId, redirectUri, state, requestedScopes }) => {
+    buildAuthorizeUrl: ({ clientId, redirectUri, state }) => {
       const url = new URL('https://www.facebook.com/v23.0/dialog/oauth');
-      url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, state, response_type: 'code', scope: requestedScopes?.join(',') || 'public_profile' }).toString();
+      url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, state, response_type: 'code', scope: 'public_profile' }).toString();
       return url.href;
     },
     exchangeCode: async (input) => {
@@ -1971,24 +1977,21 @@ const tiktokProvider: ConnectionProvider = {
 };
 
 // Google services share one app registration and choose permissions per card.
-export const readConnectionGoogleUserInfo = (tokens: OAuthTokens) =>
-  authedJson('https://openidconnect.googleapis.com/v1/userinfo', { token: tokens.accessToken });
-
 const googleOAuth = (serviceScopes: readonly string[]): NonNullable<ConnectionProvider['oauth']> => {
   const scopes = ['openid', 'profile', 'email', ...serviceScopes];
   return {
     clientIdEnv: 'GOOGLE_CLIENT_ID', clientSecretEnv: 'GOOGLE_CLIENT_SECRET', pkce: true,
-    buildAuthorizeUrl: ({ clientId, redirectUri, state, codeChallenge, requestedScopes }) => {
+    buildAuthorizeUrl: ({ clientId, redirectUri, state, codeChallenge }) => {
       const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
       url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: 'code',
-        scope: (requestedScopes || scopes).join(' '), access_type: 'offline', prompt: 'select_account consent',
+        scope: scopes.join(' '), access_type: 'offline', prompt: 'select_account consent',
         state, code_challenge: codeChallenge || '', code_challenge_method: 'S256' }).toString();
       return url.href;
     },
     ...formOAuthGrant({ tokenUrl: 'https://oauth2.googleapis.com/token', authStyle: 'body', scopes,
       extraExchangeParams: ({ codeVerifier }) => ({ code_verifier: codeVerifier || '' }) }),
     resolveAccountFromTokens: async (tokens) => {
-      const me = await readConnectionGoogleUserInfo(tokens);
+      const me = await authedJson('https://openidconnect.googleapis.com/v1/userinfo', { token: tokens.accessToken });
       if (me.ok === false) return me;
       if (typeof me.data?.sub !== 'string' || !me.data.sub) return fail(502, 'Google did not return an account identity');
       return { ok: true, account: { providerAccountId: me.data.sub,
@@ -2777,6 +2780,7 @@ const spotifyProvider: ConnectionProvider = {
 // --- registry ---------------------------------------------------------------
 
 export const CONNECTION_PROVIDERS: ConnectionProvider[] = [
+  chatgptIdentityProvider,
   ...googleProviders,
   redditAccountProvider,
   blueskyAccountProvider,

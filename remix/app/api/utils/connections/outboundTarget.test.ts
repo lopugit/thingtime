@@ -4,7 +4,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
-import { connectionProviderById, webLink } from './providers.ts';
+import { authedJson, connectionProviderById, webLink } from './providers.ts';
 
 // The outbound-target guard (providers.ts). Feed sources are USER-SUPPLIED —
 // the RSS provider takes any feedUrl, Mastodon/Lemmy take an instance hostname
@@ -49,6 +49,30 @@ const stubFetch = (impl: (url: string) => Response) => {
     return impl(String(url));
   };
 };
+
+test('authenticated provider requests reject malformed successful JSON without echoing its body', async () => {
+  for (const body of ['', '<html>provider sign-in page</html>', '{"access_token":"synthetic-private-value"']) {
+    stubFetch(() => new Response(body, { status: 200 }));
+    const result = await authedJson('https://example.test/data', { token: 'synthetic-access-value' });
+    assert.deepEqual(result, { ok: false, status: 502, error: 'The provider returned malformed JSON' });
+    assert.equal(calls.length, 1);
+  }
+});
+
+test('authenticated provider requests retain reconnect errors for non-JSON refusals', async () => {
+  for (const status of [401, 403]) {
+    stubFetch(() => new Response('<html>sign in again</html>', { status }));
+    const result = await authedJson('https://example.test/data', { token: 'synthetic-access-value' });
+    assert.deepEqual(result, { ok: false, status: 401, error: 'The provider needs a reconnect or additional permission.' });
+  }
+});
+
+test('authenticated provider requests preserve valid empty JSON results', async () => {
+  for (const data of [{ files: [] }, [], null]) {
+    stubFetch(() => Response.json(data));
+    assert.deepEqual(await authedJson('https://example.test/data'), { ok: true, data });
+  }
+});
 
 const RSS_BODY = `<?xml version="1.0"?><rss version="2.0"><channel><title>Example Feed</title>
 <link>https://example.com/</link>
@@ -147,6 +171,47 @@ const timeline = (body: unknown) =>
   new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 
 const mastodonStatuses = [{ id: '1', url: 'https://example.com/@a/1', content: 'hi', account: { acct: 'a' } }];
+
+test('complete saved-operation results cannot redirect credentials or unbounded reads to another origin', async () => {
+  let cancelled = false;
+  stubFetchWithHeaders(() => new Response(new ReadableStream({ cancel() { cancelled = true; } }), {
+    status: 302, headers: { location: 'https://attacker.test/collect' }
+  }));
+  const result = await authedJson('https://example.test/data', { token: 'synthetic-access-value', completeResponse: true });
+  assert.equal(result.ok, false);
+  assert.equal(cancelled, true, 'the abandoned redirect body must be released');
+  assert.deepEqual(hops, [{ url: 'https://example.test/data', authorization: 'Bearer synthetic-access-value' }]);
+});
+
+test('complete saved-operation results retain large content through same-origin redirects', async () => {
+  const content = 'document text'.repeat(300_000);
+  stubFetchWithHeaders((url) => url === 'https://example.test/data'
+    ? new Response(null, { status: 302, headers: { location: '/document' } })
+    : Response.json({ content }));
+  const result = await authedJson('https://example.test/data', { token: 'synthetic-access-value', completeResponse: true });
+  assert.deepEqual(result, { ok: true, data: { content } });
+  assert.equal(hops.length, 2);
+  assert.equal(hops[1].authorization, 'Bearer synthetic-access-value');
+});
+
+test('cancelling a saved-operation request aborts its in-flight provider fetch', async () => {
+  const controller = new AbortController();
+  let fetched!: () => void;
+  const started = new Promise<void>((resolve) => { fetched = resolve; });
+  let providerSignal: AbortSignal | undefined;
+  globalThis.fetch = async (_url, init) => {
+    providerSignal = init?.signal ?? undefined;
+    fetched();
+    return new Promise<Response>((_resolve, reject) => {
+      providerSignal!.addEventListener('abort', () => reject(providerSignal!.reason), { once: true });
+    });
+  };
+  const pending = authedJson('https://example.test/data', { completeResponse: true, signal: controller.signal });
+  await started;
+  controller.abort();
+  assert.equal((await pending).ok, false);
+  assert.equal(providerSignal?.aborted, true);
+});
 
 test('an authenticated GET keeps its token on a same-origin redirect', async () => {
   stubFetchWithHeaders((url) =>

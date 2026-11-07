@@ -61,4 +61,4 @@ export const loader = async ({ request }: { request: Request }) => withVaultRequ
     synced: result.synced,
     filters
   }, { headers: { 'Cache-Control': 'private, no-store' } });
-});
+};

@@ -1254,10 +1254,10 @@ const dataSchema: ThingtimeSchema = {
     'schemas, so the open shape can’t ride past a typed whitelist. Convention: carry a `schema` ' +
     'field naming a published schema thing (e.g. ' +
     '"Table") so schema-driven searches can find you, and tag the thing for feed filters. Keys ' +
-    'use letters/numbers/_/-; strings, arrays, keys and value counts have no product size caps. ' +
-    `Nesting retains MongoDB's ${MAX_STORABLE_NESTING}-level storage constraint; circular/prototype references are rejected. ` +
-    'Request framing, storage accounting and database constraints still apply.',
-
+    `are letters/numbers/_/- (max ${MAX_DATA_KEY_CHARS} chars), nesting is unbounded up to ` +
+    `MongoDB's own ${MAX_STORABLE_NESTING}-level storage limit (circular references rejected), ` +
+    `${MAX_DATA_CRYSTAL_NODES} values per crystal, arrays at ` +
+    `${MAX_DATA_ARRAY_ITEMS} items. Strings are preserved without a character cap; storage capacity still applies.`,
   fields: [
     {
       name: '*',
@@ -5067,7 +5067,6 @@ const sanitizeDataValue = (
       continue;
     }
     if (typeof value === 'string') {
-      if (!base?.unboundedContent && value.length > MAX_TEXT_CHARS) return fail(400, `Data strings cap at ${MAX_TEXT_CHARS} chars (${path})`);
       item.assign(value);
       continue;
     }

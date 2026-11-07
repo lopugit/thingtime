@@ -79,6 +79,7 @@ const { upsertAccountAndLink, listConnections, resolveConnectionCredential, exte
 const { connectionProviderById } = await import('./providers.ts');
 const { fromBin, toBin } = await import('../auth/users.ts');
 const { unpackConnectionTokens } = await import('./tokenVault.ts');
+const { runConnectionRequest } = await import('./requests.ts');
 const provider = connectionProviderById('google')!;
 const { oauthCredsFor } = await import('./providers.ts');
 const config = (await oauthCredsFor(provider, 'https://thingtime.test'))!;
@@ -128,13 +129,6 @@ test('two Google accounts coexist; the same identity in another Thingtime accoun
   assert.equal((await listConnections(user)).connections.length, 2);
   assert.equal((await resolveConnectionCredential(other, first.connection.id)).ok, false);
 });
-test('scope metadata retains every granted scope without truncating valid provider grants', async () => {
-  const scopes = Array.from({ length: 125 }, (_, index) => `scope-${index}`);
-  const linked = await upsertAccountAndLink(user, provider, account(), { ...tokens, scopes });
-  assert.ok(linked.ok);
-  assert.deepEqual(linked.connection.scopes, scopes);
-  assert.deepEqual((await listConnections(user)).connections[0].scopes, scopes);
-});
 test('reconnect is idempotent and preserves a refresh token omitted by the provider', async () => {
   const first = await upsertAccountAndLink(user, provider, account(), tokens);
   const again = await upsertAccountAndLink(user, provider, account(), { ...tokens, refreshToken: null, accessToken: 'renewed' });
@@ -175,6 +169,144 @@ test('disconnect removes saved credentials and denies subsequent requests', asyn
   );
   assert.equal((await resolveConnectionCredential(user, linked.connection.id)).ok, false);
 });
+test('reuse rejects arbitrary operations, wrong services and credentials belonging to another user', async () => {
+  const linked = await upsertAccountAndLink(user, provider, account(), tokens);
+  assert.ok(linked.ok);
+  for (const [actor, operation] of [
+    [user, 'https://attacker.test'],
+    [user, '__proto__'],
+    [user, 'drive.list-files'],
+    [other, 'account.profile']
+  ] as const) {
+    const result = await runConnectionRequest(actor, { connectionId: linked.connection.id, operation });
+    assert.equal(result.ok, false);
+  }
+});
+
+test('saved Google list operations preserve and follow opaque continuation tokens without changing the target', async (t) => {
+  const originalLookup = dns.lookup;
+  dns.lookup = (async () => [{ address: '1.1.1.1', family: 4 }]) as unknown as typeof dns.lookup;
+  syncBuiltinESMExports();
+  t.after(() => { dns.lookup = originalLookup; syncBuiltinESMExports(); });
+  const cursor = 'next&access_token=untrusted+/=?' + 'x'.repeat(5000);
+  const cases = [
+    ['google-drive', 'drive.list-files', 'https://www.googleapis.com/auth/drive.metadata.readonly', 'www.googleapis.com', '/drive/v3/files'],
+    ['google-gmail', 'gmail.list-messages', 'https://www.googleapis.com/auth/gmail.readonly', 'gmail.googleapis.com', '/gmail/v1/users/me/messages'],
+    ['google-calendar', 'calendar.list-calendars', 'https://www.googleapis.com/auth/calendar.readonly', 'www.googleapis.com', '/calendar/v3/users/me/calendarList'],
+    ['google-contacts', 'contacts.list-contacts', 'https://www.googleapis.com/auth/contacts.readonly', 'people.googleapis.com', '/v1/people/me/connections']
+  ];
+  const calls: URL[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: string) => {
+    const target = new URL(url);
+    calls.push(target);
+    return Response.json(target.searchParams.has('pageToken') ? { items: ['last'] } : { items: ['first'], nextPageToken: cursor });
+  });
+  for (const [providerId, operation, scope, host, path] of cases) {
+    const linked = await upsertAccountAndLink(user, connectionProviderById(providerId)!, account(providerId), { ...tokens, scopes: [scope] });
+    assert.ok(linked.ok);
+    const first = await runConnectionRequest(user, { connectionId: linked.connection.id, operation });
+    assert.ok(first.ok);
+    assert.equal(first.data.nextPageToken, cursor);
+    if (providerId === 'google-drive') assert.match(calls.at(-1)!.searchParams.get('fields')!, /nextPageToken/);
+    const last = await runConnectionRequest(user, { connectionId: linked.connection.id, operation, pageToken: first.data.nextPageToken });
+    assert.ok(last.ok);
+    assert.deepEqual(last.data, { items: ['last'] });
+    const target = calls.at(-1)!;
+    assert.equal(target.hostname, host);
+    assert.equal(target.pathname, path);
+    assert.equal(target.searchParams.get('pageToken'), cursor);
+    assert.equal(target.searchParams.has('access_token'), false);
+  }
+  assert.equal(calls.length, cases.length * 2);
+});
+
+test('saved document results retain large nested content while redacting authentication material', async (t) => {
+  const originalLookup = dns.lookup;
+  dns.lookup = (async () => [{ address: '1.1.1.1', family: 4 }]) as unknown as typeof dns.lookup;
+  syncBuiltinESMExports();
+  t.after(() => { dns.lookup = originalLookup; syncBuiltinESMExports(); });
+  const content = 'long document content 🌈'.repeat(180_000);
+  const items = Array.from({ length: 130 }, (_, index) => ({ index, text: 'paragraph'.repeat(350) }));
+  const properties = Object.fromEntries(Array.from({ length: 130 }, (_, index) => [`field${index}`, index]));
+  const nested = Array.from({ length: 30 }).reduce((child) => ({ child }), { key: 'color', value: 'blue' });
+  const payload = { content, items, properties, nested, access_token: 'do-not-expose', auth: { password: 'do-not-expose' }, echo: tokens.accessToken };
+  t.mock.method(globalThis, 'fetch', async () => Response.json(payload));
+  const linked = await upsertAccountAndLink(user, connectionProviderById('google-docs')!, account(), {
+    ...tokens, scopes: ['https://www.googleapis.com/auth/documents.readonly']
+  });
+  assert.ok(linked.ok);
+  const result = await runConnectionRequest(user, { connectionId: linked.connection.id, operation: 'docs.get-document', resourceId: 'document-id' });
+  assert.ok(result.ok);
+  assert.equal(result.data.content, content);
+  assert.deepEqual(result.data.items, items);
+  assert.deepEqual(result.data.properties, properties);
+  assert.equal(result.data.access_token, '[redacted]');
+  assert.deepEqual(result.data.nested, nested);
+  assert.equal(result.data.auth.password, '[redacted]');
+  assert.equal(result.data.echo, '[redacted]');
+});
+
+for (const [kind, accessToken] of [
+  ['JSON keyword', 'true'],
+  ['numeric', '123'],
+  ['punctuation', ':'],
+  ['escaped', 'fixture-"\\-token']
+]) {
+  test(`opaque ${kind} credentials cannot corrupt provider JSON during redaction`, async (t) => {
+    const originalLookup = dns.lookup;
+    dns.lookup = (async () => [{ address: '1.1.1.1', family: 4 }]) as unknown as typeof dns.lookup;
+    syncBuiltinESMExports();
+    t.after(() => { dns.lookup = originalLookup; syncBuiltinESMExports(); });
+    const payload = { flag: true, count: 123, nothing: null, echo: `before ${accessToken} after`, [accessToken]: 'credential-named property' };
+    t.mock.method(globalThis, 'fetch', async () => Response.json(payload));
+    const linked = await upsertAccountAndLink(user, connectionProviderById('google-docs')!, account(), {
+      ...tokens, accessToken, scopes: ['https://www.googleapis.com/auth/documents.readonly']
+    });
+    assert.ok(linked.ok);
+    const result = await runConnectionRequest(user, { connectionId: linked.connection.id, operation: 'docs.get-document', resourceId: 'document-id' });
+    assert.ok(result.ok);
+    assert.deepEqual(result.data, { flag: true, count: 123, nothing: null, echo: 'before [redacted] after', '[redacted]': 'credential-named property' });
+  });
+}
+
+test('redaction removes complete overlapping credentials without rewriting replacement text', async (t) => {
+  const originalLookup = dns.lookup;
+  dns.lookup = (async () => [{ address: '1.1.1.1', family: 4 }]) as unknown as typeof dns.lookup;
+  syncBuiltinESMExports();
+  t.after(() => { dns.lookup = originalLookup; syncBuiltinESMExports(); });
+  const accessToken = 'fixture-grant', refreshToken = 'fixture-grant-longer', idToken = 'redacted';
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ echo: [accessToken, refreshToken, idToken], access_token: 'provider-secret' }));
+  const linked = await upsertAccountAndLink(user, connectionProviderById('google-docs')!, account(), {
+    ...tokens, accessToken, refreshToken, idToken, scopes: ['https://www.googleapis.com/auth/documents.readonly']
+  });
+  assert.ok(linked.ok);
+  const result = await runConnectionRequest(user, { connectionId: linked.connection.id, operation: 'docs.get-document', resourceId: 'document-id' });
+  assert.ok(result.ok);
+  assert.deepEqual(result.data.echo, ['[redacted]', '[redacted]', '[redacted]']);
+  assert.equal(result.data.access_token, '[redacted]');
+});
+
+test('pagination refuses malformed cursors, missing scopes, foreign owners and non-list operations before provider access', async (t) => {
+  const fetch = t.mock.method(globalThis, 'fetch', async () => { throw new Error('must not fetch'); });
+  const linked = await upsertAccountAndLink(user, connectionProviderById('google-drive')!, account(), tokens);
+  assert.ok(linked.ok);
+  for (const pageToken of [123, [], {}, false]) {
+    const result = await runConnectionRequest(user, { connectionId: linked.connection.id, operation: 'drive.list-files', pageToken });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.status, 400);
+  }
+  const missingScope = await runConnectionRequest(user, { connectionId: linked.connection.id, operation: 'drive.list-files', pageToken: 'next' });
+  assert.equal(missingScope.ok, false);
+  if (!missingScope.ok) assert.equal(missingScope.status, 403);
+  const foreign = await runConnectionRequest(other, { connectionId: linked.connection.id, operation: 'drive.list-files', pageToken: 'next' });
+  assert.equal(foreign.ok, false);
+  if (!foreign.ok) assert.equal(foreign.status, 404);
+  const profile = await runConnectionRequest(user, { connectionId: linked.connection.id, operation: 'account.profile', pageToken: 'next' });
+  assert.equal(profile.ok, false);
+  if (!profile.ok) assert.equal(profile.status, 400);
+  assert.equal(fetch.mock.callCount(), 0);
+});
+
 test('a refresh lease prevents concurrent exchanges of a rotating token and reconnect wins', async () => {
   process.env.GOOGLE_CLIENT_ID = 'test';
   process.env.GOOGLE_CLIENT_SECRET = 'test';

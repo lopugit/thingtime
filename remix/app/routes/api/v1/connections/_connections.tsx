@@ -1,4 +1,3 @@
-import { withVaultRequest } from '~/api/utils/auth/vaultRequest';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
@@ -19,9 +18,9 @@ export const loader = async ({ request }: { request: Request }) => withVaultRequ
   if (!limit.allowed) {
     return json({ ok: false, error: 'Listing connections very enthusiastically — take a breather 🌸' }, rateLimitedResponseInit(limit));
   }
-  const result = await listConnections(user, new URL(request.url).searchParams.get('includeNamed') === '1' ? requestOrigin(request) : undefined);
+  const result = await listConnections(user);
   return json({ ok: true, ownerId: user.id, connections: result.connections }, { headers: { 'Cache-Control': 'private, no-store' } });
-});
+};
 
 export const action = async ({ request }: { request: Request }) => withVaultRequest(request, async () => {
   const user = await getCurrentUser(request);
@@ -37,7 +36,7 @@ export const action = async ({ request }: { request: Request }) => withVaultRequ
   if (unsupported) return unsupported;
   const body = await readJsonBody(request, 16 * 1024);
   if (body?.expectedOwnerId !== undefined && body.expectedOwnerId !== user.id) return json({ ok: false, error: 'Your Thingtime account changed. Reload before saving.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
-  const result = await connectProvider(user, { provider: body?.provider, fields: body?.fields, named: body?.named, origin: requestOrigin(request) });
+  const result = await connectProvider(user, { provider: body?.provider, fields: body?.fields });
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });
   }

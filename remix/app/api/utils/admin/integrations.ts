@@ -82,7 +82,7 @@ export const revealAdminSecret = async (id: string): Promise<string | null> => {
 // identity and use fixed labels, never a request-controlled selector.
 export const readAdminAutomationSecret = async (label: string): Promise<string | null> => {
   const records = await (await getAdminIntegrationSecretsCollection()).find({ label }).limit(2).toArray();
-  // Refuse ambiguous legacy labels before decrypting either candidate.
+  // The unique index protects new writes; reject ambiguous legacy/corrupt data.
   return records.length === 1 ? decryptSecret(records[0] as StoredAdminSecret) : null;
 };
 

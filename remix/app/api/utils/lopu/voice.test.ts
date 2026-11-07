@@ -219,7 +219,7 @@ test('voice tuning normalises: known efforts only, speed is fast or normal, mode
 	assert.equal(normalizeLopuVoiceSpeed('warp'), 'normal');
 	assert.equal(safeVaultModelId(' openai/gpt-oss-120b '), 'openai/gpt-oss-120b');
 	assert.equal(safeVaultModelId('bad model id'), null);
-	assert.equal(safeVaultModelId('x'.repeat(201)), null);
+	assert.equal(safeVaultModelId('x'.repeat(201)), 'x'.repeat(201));
 	assert.equal(safeVaultModelId(''), null);
 });
 
