@@ -42,6 +42,10 @@
 			"schedule": "23 3 * * *"
 		},
 		{
+			"path": "/api/v1/backups/run",
+			"schedule": "*/5 * * * *"
+		},
+		{
 			"path": "/api/v1/devices/observations/cleanup",
 			"schedule": "*/15 * * * *"
 		}

@@ -118,6 +118,7 @@ export type UserStorageUsage = {
 };
 
 export const CONTROL_PLANE_STORAGE_THINGTIMES = [
+  'backup-job', 'backup-job-event',
   STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
   'post-discovery',
 	'lopu-recording-settings',

@@ -2,6 +2,7 @@ import { syncJobAttentionMessage } from '~/fileSync/syncJobFailure';
 import { syncConnectionGlance } from '~/fileSync/connectionGlance';
 import { useRemoteDeviceSyncStatus } from '~/fileSync/remoteDeviceResources.client';
 import type { TransferSpeedDraftState } from './TransferSpeedTrackers';
+import { AccountBackupWorkspace, AccountBackupWorkspaceBoundary } from './BackupWorkspace';
 import { DeviceSyncResources } from './DeviceSyncResources';
 import { SyncEditorPlacement } from './SyncEditorPlacement';
 import type { UploadPriorityDraftState } from './SyncUploadPriorities';
@@ -56,7 +57,7 @@ export function RemoteDeviceSync({ ownerId, deviceId, active = true, showResourc
 	const identity = useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
 	if (user?.id !== ownerId || user.temporary || user.isCharacter || user.accountKind !== 'user' || dataPlane !== 'home' || identity.pending || typeof window === 'undefined') return null;
 	const scope = { origin: window.location.origin, ownerId, deviceId, dataPlane };
-	return <>{showResourceSummary && <DeviceSyncResources ownerId={ownerId} deviceId={deviceId} allowed={active} />}<RemoteConnections active={active} key={`${configurationDraftKey(scope)}:${identity.generation}`} scope={scope} generation={identity.generation} /></>;
+	return <>{showResourceSummary && <DeviceSyncResources ownerId={ownerId} deviceId={deviceId} allowed={active} />}<AccountBackupWorkspaceBoundary><RemoteConnections active={active} key={`${configurationDraftKey(scope)}:${identity.generation}`} scope={scope} generation={identity.generation} /></AccountBackupWorkspaceBoundary><Box mt={4}><AccountBackupWorkspace ownerId={ownerId} /></Box></>;
 }
 
 function RemoteConnections({ scope, generation, active }: { scope: ConfigurationEditorScope; generation: number; active: boolean }) {

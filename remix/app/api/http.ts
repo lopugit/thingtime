@@ -15,6 +15,19 @@ export const json = (data: unknown, init: JsonInit = {}) => {
   });
 };
 
+/** Convert an HTTP Request facade while adding cancellation. Nitro/H3 facades
+ * cannot be passed to Undici's private-state clone constructor. This preserves
+ * the one original body stream; it neither buffers nor transfers server-only
+ * WeakMap authorization, which callers must bind explicitly when permitted. */
+export function requestWithSignal(request: Request, signal: AbortSignal): Request {
+  const init: RequestInit & { duplex?: 'half' } = { method: request.method, headers: request.headers, signal };
+  if (!['GET', 'HEAD'].includes(request.method) && request.body !== null) {
+    init.body = request.body;
+    init.duplex = 'half';
+  }
+  return new Request(request.url, init);
+}
+
 /** Shared user content has no application byte ceiling. Fixed control messages
  * retain their caller's numeric budget. Storage/provider admission is separate. */
 export const JSON_BODY_WITHOUT_APPLICATION_LIMIT = 'without-application-limit' as const;

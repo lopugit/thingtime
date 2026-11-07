@@ -33,6 +33,8 @@
     "test:backups:account-profile": "node scripts/test-account-profile-backup.mjs",
     "test:backups:references": "node scripts/test-account-profile-backup.mjs reference-closure",
     "test:backups": "node --import tsx --test app/api/utils/backups/*.test.ts",
+    "test:backups:worker": "node --experimental-test-module-mocks --import tsx --test app/api/utils/backups/backupJobs.test.mts app/api/utils/backups/backupEngine.test.mts app/api/utils/backups/backupTransportRuntime.test.mts",
+    "test:backups:workflow": "node scripts/test-account-profile-backup.mjs backup-workflow",
     "backup:vault": "tsx scripts/backup-vault.mts",
     "backup:cloud": "tsx scripts/backup-cloud.mts",
     "backup:replica": "tsx scripts/backup-replica.mts",
@@ -102,7 +104,7 @@
     "test:ci-control": "node --import tsx --test app/api/utils/ciControl/*.test.ts app/components/Admin/CIControl/*.test.ts app/components/Admin/previewRetentionSettingsBlocks.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/ciControl/stackChat*.test.mts",
     "test:connections:built": "node scripts/smoke-built-connections.mjs",
     "test:connections:oauth": "node scripts/test-connections-oauth.mjs",
-		"test:connections:oauth-tab": "node scripts/test-connections-oauth-tab.mjs",
+    "test:connections:oauth-tab": "node scripts/test-connections-oauth-tab.mjs",
     "test:connections": "node --experimental-test-module-mocks --import tsx --test app/api/utils/connections/*.test.ts app/api/utils/connections/*.test.mts app/components/Connections/*.test.ts",
     "test:dependencies": "node --test scripts/ensure-dependencies.test.js scripts/worktree-bootstrap.test.cjs",
     "test:desktop-oauth": "node --import tsx --test app/api/utils/apps/desktopOAuthCore.test.ts && node --import tsx --test app/api/utils/apps/accountScopes.test.ts app/api/utils/apps/widgetClient.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/auth/scopedUser.test.mjs app/api/utils/auth/resolveActor.oauth.test.mjs app/api/utils/auth/oauthTokenRoute.test.mjs",
@@ -208,7 +210,10 @@
     "test:maps-built": "node scripts/maps-built-smoke.mjs",
     "test:passwords:verification-ui": "node --import tsx scripts/storage-recovery.integration.mts --password-verification --verification-ui",
     "test:passwords:verification": "node --import tsx scripts/storage-recovery.integration.mts --password-verification",
-    "test:passwords:record-storage": "node --import tsx scripts/storage-recovery.integration.mts --password-records"
+    "test:passwords:record-storage": "node --import tsx scripts/storage-recovery.integration.mts --password-records",
+    "test:backups:engine": "node scripts/test-account-profile-backup.mjs backup-engine",
+    "test:backups:restore-steps": "node scripts/test-account-profile-backup.mjs restore-steps",
+    "test:backups:workspace": "NITRO_PRESET=node_middleware npm run build:server && node scripts/test-account-profile-backup.mjs backup-workspace"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "2.1.272",
@@ -264,6 +269,7 @@
     "flatted": "^3.3.3",
     "fuse.js": "^6.6.2",
     "gradient-path": "^2.3.0",
+    "hash-wasm": "4.12.0",
     "heic-to": "1.5.2",
     "hex-to-rgba": "^2.0.1",
     "imapflow": "2.5.2",
