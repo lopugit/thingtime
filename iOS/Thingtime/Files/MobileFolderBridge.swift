@@ -379,6 +379,104 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
               number.doubleValue.rounded() == number.doubleValue else { return nil }
         return number.int64Value
     }
+    // Keep upload request constraints separate from the shared bridge dispatcher.
+    // Xcode 26.2 must type-check the same source used by the TestFlight archive.
+    private func handleUpload(_ payload: [String: Any], action: String, rootId: String, scope: MobileDevicePairing.Scope,
+                              grant: MobileFolderStore.Grant, webView: WKWebView, operation: UUID, base: [String: Any],
+                              cookies: (([HTTPCookie], URL) -> [HTTPCookie])?,
+                              verifyOwner: (MobileDevicePairing.Scope, @escaping () throws -> Void) async throws -> Void,
+                              verifyDevice: ((MobileDevicePairing.Scope, String, @escaping () throws -> Void) async throws -> Void)?,
+                              check: @escaping () throws -> Void,
+                              reply: @escaping (String, [String: Any]) -> Void) async throws -> [String: Any] {
+        var result: [String: Any] = [:]
+        await NativeDeferredUpload.shared.waitForBackground()
+        try check()
+        guard let cookies else { throw MobileFolderStore.Failure.unavailable }
+        let fileRequest = action != "upload-part" ? try self.decode(payload["upload"], as: NativeUploadFileRequest.self) : nil
+        let request: NativeUploadPartRequest = try fileRequest?.part(1) ?? self.decode(payload["upload"], as: NativeUploadPartRequest.self)
+        try request.validate()
+        let photos = self.photos
+        let current = {
+            try check()
+            let latest = try self.store.grant(scope, id: rootId)
+            guard latest.bookmark == grant.bookmark, latest.sourceKind == grant.sourceKind,
+                  grant.sourceKind != "photos" || photos.access() != "unavailable" else { throw MobileFolderStore.Failure.unavailable }
+        }
+        let transport = NativeFileSession(scope: scope, cookieStore: webView.configuration.websiteDataStore.httpCookieStore,
+            cookies: cookies, check: current, invalidated: { [weak self] in if self?.generation == operation { self?.suspend() } },
+            identityChanged: { NativeDeferredUpload.shared.disarm(matching: scope) })
+        self.transport = transport; try await transport.open()
+        try await transport.require([("api.auth-me", [1,0,0]), ("api.attachment-uploads", [1,5,0]), ("api.attachment-upload-parts", [1,1,0])])
+        if let fileRequest {
+            try await transport.require([("api.attachment-upload-complete", [1,4,0])])
+            guard let verifyDevice else { throw MobileFolderStore.Failure.unavailable }
+            let authorization = fileRequest.authorization
+            try authorization.validate(owner: scope, rootId: rootId, photos: grant.sourceKind == "photos")
+            try await transport.require([("api.things", [1,35,0])])
+            let authorize = {
+                try current()
+                try await verifyDevice(scope, authorization.scope.deviceId, current)
+                let saved = try await transport.json("/api/v1/things?id=" + authorization.id)
+                try current()
+                let battery = UIDevice.current.batteryState
+                try authorization.verify(saved, network: self.networkKind, charging: battery == .charging || battery == .full)
+            }
+            try await authorize()
+            let download = self.downloadConditions.control(for: authorization)
+            let staging = NativeUploadPartStaging(scope: scope, grant: grant, photos: photos, store: self.uploadParts, download: download)
+            if action == "defer-upload" {
+                let deferred = try await self.deferUpload(fileRequest, staging: staging, transport: transport, check: current)
+                let deferredResult: [String: Any] = ["deferred": deferred.queued, "scheduled": deferred.scheduled, "uploadId": request.uploadId,
+                    "requestId": request.requestId, "version": request.source.version]
+                result = ["rootId": rootId, "deferredUpload": deferredResult]
+            } else {
+                let deferred = try NativeDeferredUpload.shared.read(scope: scope, request: fileRequest, grantRevision: staging.grantRevision)
+                if payload["continueInBackground"] as? Bool == true {
+                    self.background = await NativeUploadBackgroundCoordinator.shared.begin(size: request.source.size, expired: { [weak self] in
+                        if self?.generation == operation { self?.suspend() }
+                    })
+                }
+                try current()
+                let started: [String: Any] = ["rootId": rootId, "uploadId": fileRequest.uploadId,
+                    "operationId": fileRequest.requestId, "version": request.source.version,
+                    "size": request.source.size, "background": self.background?.canContinue == true, "deferred": deferred != nil]
+                reply("mobile-files-started", base.merging(started) { _, new in new })
+                let onProgress = { (received: Int64) in
+                    self.background?.progress(received)
+                    reply("mobile-files-progress", base.merging(["rootId": rootId, "uploadId": fileRequest.uploadId,
+                        "operationId": fileRequest.requestId, "version": request.source.version,
+                        "size": request.source.size, "received": received]) { _, new in new })
+                }
+                if let deferred {
+                    try await NativeDeferredUpload.shared.foreground(deferred, staging: staging, check: current, progress: onProgress)
+                } else {
+                    try await NativeFileUploadJob.run(fileRequest, check: current, authorize: authorize, json: { path, body in
+                        try await transport.json(path, body: body)
+                    }, upload: { part in
+                        try await self.uploadPart(part, scope: scope, rootId: rootId, grant: grant, transport: transport,
+                            allowsCellular: authorization.configuration.network == "any", authorizeBeforeSend: authorize, download: download, current: current)
+                    }, progress: onProgress)
+                }
+                self.background?.finish(success: true); self.background = nil
+                // The attachment is durable, but publication still belongs to
+                // the shared Timeline runner. Hold its small reply until the
+                // WebView is active and revalidate the owner before delivery.
+                transport.close(); self.transport = nil
+                try await self.awaitForeground()
+                try check(); try await verifyOwner(scope, check); try check()
+                result = ["rootId": rootId, "uploadedFile": ["uploadId": request.uploadId, "requestId": request.requestId,
+                    "version": request.source.version, "size": request.source.size,
+                    "fingerprint": try JSONSerialization.jsonObject(with: JSONEncoder().encode(request.source.fingerprint!))]]
+            }
+        } else {
+            let digest = try await self.uploadPart(request, scope: scope, rootId: rootId, grant: grant, transport: transport, current: current)
+            result = ["rootId": rootId, "uploadedPart": ["uploadId": request.uploadId, "requestId": request.requestId,
+                "partNumber": request.partNumber, "offset": request.offset, "length": request.length,
+                "version": request.source.version, "size": request.source.size, "sha256": digest]]
+        }
+        return result
+    }
+
     func handle(_ body: [String: Any], webView: WKWebView, root: URL, currentRoot: @escaping () -> URL?,
                 cookies: (([HTTPCookie], URL) -> [HTTPCookie])? = nil,
                 verifyOwner: @escaping (MobileDevicePairing.Scope, @escaping () throws -> Void) async throws -> Void,
@@ -398,7 +496,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             guard self?.generation == operation, let webView, currentRoot() == root,
                   let current = webView.url, LopuVoiceContract.sameOrigin(current, root), (UIApplication.shared.applicationState == .active || self?.background?.canContinue == true) else { throw CancellationError() }
         }
-        task = Task { [weak self, weak webView] in
+        task = Task<Void, Never> { [weak self, weak webView] in
             guard let self, let webView else { return }
             defer { if self.generation == operation { self.background?.finish(success: false); self.background = nil; self.task = nil; self.requestId = nil; self.cancellationReply = nil; self.transport?.close(); self.transport = nil } }
             do {
@@ -413,7 +511,8 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                     // no grant data is returned. Node revocation is separately
                     // fenced to the immutable issuing admission on the server.
                     try NativeDeferredUpload.shared.pauseLocally(scope: scope, rootId: rootId, configurationId: configurationId, deviceId: deviceId)
-                    reply("mobile-files-result", base.merging(["rootId": rootId, "cancelled": true, "configurationId": configurationId, "roots": []]) { _, new in new })
+                    let cancelled: [String: Any] = ["rootId": rootId, "cancelled": true, "configurationId": configurationId, "roots": [[String: Any]]()]
+                    reply("mobile-files-result", base.merging(cancelled) { _, new in new })
                     return
                 }
                 try await verifyOwner(scope, check); try check()
@@ -453,89 +552,9 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                         let grant = try self.store.grant(scope, id: rootId)
                         guard grant.sourceKind != "photos" || ["scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard", "inspect", "read", "upload-part", "upload-file", "defer-upload"].contains(action) else { throw MobileFolderStore.Failure.invalid }
                         if ["upload-part", "upload-file", "defer-upload"].contains(action) {
-                            await NativeDeferredUpload.shared.waitForBackground()
-                            try check()
-                            guard let cookies else { throw MobileFolderStore.Failure.unavailable }
-                            let fileRequest = action != "upload-part" ? try self.decode(payload["upload"], as: NativeUploadFileRequest.self) : nil
-                            let request = try fileRequest?.part(1) ?? self.decode(payload["upload"], as: NativeUploadPartRequest.self)
-                            try request.validate()
-                            let photos = self.photos
-                            let current = {
-                                try check()
-                                let latest = try self.store.grant(scope, id: rootId)
-                                guard latest.bookmark == grant.bookmark, latest.sourceKind == grant.sourceKind,
-                                      grant.sourceKind != "photos" || photos.access() != "unavailable" else { throw MobileFolderStore.Failure.unavailable }
-                            }
-                            let transport = NativeFileSession(scope: scope, cookieStore: webView.configuration.websiteDataStore.httpCookieStore,
-                                cookies: cookies, check: current, invalidated: { [weak self] in if self?.generation == operation { self?.suspend() } },
-                                identityChanged: { NativeDeferredUpload.shared.disarm(matching: scope) })
-                            self.transport = transport; try await transport.open()
-                            try await transport.require([("api.auth-me", [1,0,0]), ("api.attachment-uploads", [1,5,0]), ("api.attachment-upload-parts", [1,1,0])])
-                            if let fileRequest {
-                                try await transport.require([("api.attachment-upload-complete", [1,4,0])])
-                                guard let verifyDevice else { throw MobileFolderStore.Failure.unavailable }
-                                let authorization = fileRequest.authorization
-                                try authorization.validate(owner: scope, rootId: rootId, photos: grant.sourceKind == "photos")
-                                try await transport.require([("api.things", [1,35,0])])
-                                let authorize = {
-                                    try current()
-                                    try await verifyDevice(scope, authorization.scope.deviceId, current)
-                                    let saved = try await transport.json("/api/v1/things?id=" + authorization.id)
-                                    try current()
-                                    let battery = UIDevice.current.batteryState
-                                    try authorization.verify(saved, network: self.networkKind, charging: battery == .charging || battery == .full)
-                                }
-                                try await authorize()
-                                let download = self.downloadConditions.control(for: authorization)
-                                let staging = NativeUploadPartStaging(scope: scope, grant: grant, photos: photos, store: self.uploadParts, download: download)
-                                if action == "defer-upload" {
-                                    let deferred = try await self.deferUpload(fileRequest, staging: staging, transport: transport, check: current)
-                                    result = ["rootId": rootId, "deferredUpload": ["deferred": deferred.queued, "scheduled": deferred.scheduled, "uploadId": request.uploadId,
-                                        "requestId": request.requestId, "version": request.source.version]]
-                                } else {
-                                    let deferred = try NativeDeferredUpload.shared.read(scope: scope, request: fileRequest, grantRevision: staging.grantRevision)
-                                    if payload["continueInBackground"] as? Bool == true {
-                                        self.background = await NativeUploadBackgroundCoordinator.shared.begin(size: request.source.size, expired: { [weak self] in
-                                            if self?.generation == operation { self?.suspend() }
-                                        })
-                                    }
-                                    try current()
-                                    reply("mobile-files-started", base.merging(["rootId": rootId, "uploadId": fileRequest.uploadId,
-                                        "operationId": fileRequest.requestId, "version": request.source.version,
-                                        "size": request.source.size, "background": self.background?.canContinue == true, "deferred": deferred != nil]) { _, new in new })
-                                    let onProgress = { (received: Int64) in
-                                        self.background?.progress(received)
-                                        reply("mobile-files-progress", base.merging(["rootId": rootId, "uploadId": fileRequest.uploadId,
-                                            "operationId": fileRequest.requestId, "version": request.source.version,
-                                            "size": request.source.size, "received": received]) { _, new in new })
-                                    }
-                                    if let deferred {
-                                        try await NativeDeferredUpload.shared.foreground(deferred, staging: staging, check: current, progress: onProgress)
-                                    } else {
-                                        try await NativeFileUploadJob.run(fileRequest, check: current, authorize: authorize, json: { path, body in
-                                            try await transport.json(path, body: body)
-                                        }, upload: { part in
-                                            try await self.uploadPart(part, scope: scope, rootId: rootId, grant: grant, transport: transport,
-                                                allowsCellular: authorization.configuration.network == "any", authorizeBeforeSend: authorize, download: download, current: current)
-                                        }, progress: onProgress)
-                                    }
-                                    self.background?.finish(success: true); self.background = nil
-                                    // The attachment is durable, but publication still belongs to
-                                    // the shared Timeline runner. Hold its small reply until the
-                                    // WebView is active and revalidate the owner before delivery.
-                                    transport.close(); self.transport = nil
-                                    try await self.awaitForeground()
-                                    try check(); try await verifyOwner(scope, check); try check()
-                                    result = ["rootId": rootId, "uploadedFile": ["uploadId": request.uploadId, "requestId": request.requestId,
-                                        "version": request.source.version, "size": request.source.size,
-                                        "fingerprint": try JSONSerialization.jsonObject(with: JSONEncoder().encode(request.source.fingerprint!))]]
-                                }
-                            } else {
-                                let digest = try await self.uploadPart(request, scope: scope, rootId: rootId, grant: grant, transport: transport, current: current)
-                                result = ["rootId": rootId, "uploadedPart": ["uploadId": request.uploadId, "requestId": request.requestId,
-                                    "partNumber": request.partNumber, "offset": request.offset, "length": request.length,
-                                    "version": request.source.version, "size": request.source.size, "sha256": digest]]
-                            }
+                            result = try await self.handleUpload(payload, action: action, rootId: rootId, scope: scope,
+                                grant: grant, webView: webView, operation: operation, base: base, cookies: cookies,
+                                verifyOwner: verifyOwner, verifyDevice: verifyDevice, check: check, reply: reply)
                         } else if action == "trash-list" {
                             let trash = self.trash
                             let cursor = payload["cursor"] as? String
