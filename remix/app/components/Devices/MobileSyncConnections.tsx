@@ -1,10 +1,11 @@
+import { SyncDestinationControl } from './SyncDestinationControl';
 import { syncConnectionGlance } from '~/fileSync/connectionGlance';
 import { syncFolderActivityLabel } from './syncFolderCardBlocks';
 import type { TransferSpeedDraftState } from './TransferSpeedTrackers';
 import { SyncEditorPlacement } from './SyncEditorPlacement';
 import type { UploadPriorityDraftState } from './SyncUploadPriorities';
 import { supportsNativeSourcePaths, validNativeSourcePath } from '~/fileSync/mobileFolders.client';
-import { prepareSyncCloudDestination } from '~/fileSync/cloudDestination';
+import { cloudFolderPaths, type CloudFolderPath } from '~/fileSync/folderPaths';
 import { fileSyncDownloadRequirements } from '~/fileSync/signedDownloadTarget';
 import { SyncResourceControls } from './SyncResourceControls';
 import { SyncIgnoreRulesEditor } from './SyncIgnoreRulesEditor';
@@ -68,7 +69,6 @@ import {
 	ConfigurationConflict,
 	persistConfigurationDrafts,
 	readConfigurationDrafts,
-	readOwnedSyncFolder,
 	saveConfigurationDraft,
 	type ConfigurationDraft,
 	type ConfigurationEditorScope
@@ -192,7 +192,7 @@ function Connections({
 	const pagedReview = ownNativeTask?.pagedReview ? { id: ownNativeTask.scope.rootId, controller: ownNativeTask.pagedReview } : foregroundPagedReview;
 	const fileReview = ownNativeTask?.legacyReview ? { id: ownNativeTask.scope.rootId, ...ownNativeTask.legacyReview } : foregroundFileReview;
 	const reviewTransport = React.useMemo(() => host ? { origin: scope.origin, fetch: host.fetch, currentOrigin: host.origin } : undefined, [host, scope.origin]);
-	const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
+	const [folders, setFolders] = useState<CloudFolderPath[]>([]);
 	const [connectionCursor, setConnectionCursor] = useState<string | null>(null),
 		[folderCursor, setFolderCursor] = useState<string | null>(null);
 	const preparingUpload = useRef(false);
@@ -270,14 +270,9 @@ function Connections({
 			setConnectionCursor(result.nextCursor ?? null);
 			if (skipped) setNotice('Some shared or invalid connections are excluded. You can review them in Things.');
 		} else {
-			const accepted: { id: string; name: string }[] = [];
-			for (const row of result.things)
-				try {
-					accepted.push(readOwnedSyncFolder(row, scope.ownerId));
-				} catch {
-					/* Only private, owned destinations are offered. */
-				}
-			setFolders((previous) => [...new Map([...(cursor ? previous : []), ...accepted].map((row) => [row.id, row])).values()]);
+						const paths = await cloudFolderPaths(result.things, scope.ownerId, async id => (await apiRef.current.v1.things.get({ id }, options())).thing, assertCurrent);
+			assertCurrent();
+			setFolders((previous) => [...new Map([...(cursor ? previous : []), ...paths].map(row => [row.id, row])).values()]);
 			setFolderCursor(result.nextCursor ?? null);
 		}
 	};
@@ -561,14 +556,9 @@ function Connections({
 			if (!resourceDraftValid) throw Error('Correct the resource limit fields before saving.');
 			let prepared = draft;
             if (draft.baseUpdatedAt === null && !draft.configuration.remoteFolderId) {
-                const source = roots.find(root => root.id === draft.configuration.localRootId);
-                if (!source || !supportsNativeSourcePaths(capabilities) || !validNativeSourcePath(source?.sourcePath) || source?.sourceKind === 'photos') throw Error('Choose a private cloud folder. This device has not provided the selected folder’s absolute path.');
-                const destination = await prepareSyncCloudDestination({ baseUpdatedAt: null, remoteFolderId: '', source }, scope, {
-                    assertCurrent: assertCurrent,
-                    negotiate: async requirements => { for (const [feature, minimum] of Object.entries(requirements)) await requireCapability(feature, minimum); },
-                    get: async id => (await apiRef.current.v1.things.get({ id }, options())).thing,
-                    create: input => apiRef.current.v1.things.create(input, options())
-                });
+                if (!draft.configuration.localRootId) throw Error('Choose a device folder first.');
+                const result = await apiRef.current.v1.deviceFolders.resolve({ deviceId: scope.deviceId, connectionId: draft.id, name: roots.find(root => root.id === draft.configuration.localRootId)?.name || (draft.configuration.sourceKind === 'photos' ? 'Photo Library' : draft.configuration.name) }, options());
+                const destination = result.folder as CloudFolderPath;
                 assertCurrent();
                 prepared = { ...draft, configuration: { ...draft.configuration, remoteFolderId: destination.id } };
                 persist(prepared); setFolders(previous => [...previous.filter(folder => folder.id !== destination.id), destination]);
@@ -701,10 +691,16 @@ function Connections({
 					roots.some((root) => root.id === saved.configuration.localRootId);
 				return (
 					<SyncFolderCard key={saved.id} title={saved.configuration.name} editorSlotId={`${editorPrefix}-${saved.id}`} scopeKey={`${key}:${generation}:${saved.id}`} accountTransport={reviewTransport}
-						path={(supportsNativeSourcePaths(capabilities) && validNativeSourcePath(nativeRoot?.sourcePath) && nativeRoot?.sourceKind !== 'photos' ? nativeRoot.sourcePath : undefined) || (nativeRoot ? 'Folder path unavailable' : 'Folder access missing')}
+						path={(nativeRoot?.sourceKind === 'photos' || saved.configuration.sourceKind === 'photos' ? nativeRoot?.name || 'Photo Library' : undefined) || (supportsNativeSourcePaths(capabilities) && validNativeSourcePath(nativeRoot?.sourcePath) && nativeRoot?.sourceKind !== 'photos' ? nativeRoot.sourcePath : undefined) || (nativeRoot ? 'Folder path unavailable' : 'Folder access missing')}
+                        destination={folders.find(folder => folder.id === saved.configuration.remoteFolderId)?.path || 'Cloud destination unavailable · refresh folders'}
+                        error={!running && (task?.status === 'error' || (!task && progress?.message && !['complete', 'retained'].includes(progress.stage))) ? progress?.message || 'This backup needs attention.' : ''}
+                        quickAction={{ label: running ? task?.stopping ? 'Pausing…' : 'Pause sync' : saved.configuration.paused ? 'Paused' : task?.status === 'paused' && !task.waiting ? 'Resume sync' : progress && !['complete', 'retained'].includes(progress.stage) ? 'Retry transfer' : twoWay ? 'Sync now' : downloading ? 'Download now' : saved.configuration.mode === 'backup' ? 'Start backup' : 'Upload now',
+                            disabled: running ? !!task?.stopping : !allowed || busy || retainedDrafts.current.has(saved.id) || !ready,
+                            run: () => { if (running) { if (task?.active) return pauseNativeSyncJob(task.scope, generation).catch(cause => setError(cause instanceof Error ? cause.message : 'Pause could not be saved.')); controller.current?.abort(); } else transfer(saved); }
+                        }}
 						description={saved.configuration.mode === 'backup' ? 'Backup to cloud · keep deleted files' : twoWay ? 'Two-way sync' : downloading ? 'Cloud to device' : 'Device to cloud'}
 						glance={syncConnectionGlance({ deviceLabel: capabilities?.platform === 'ios' ? 'iPhone' : capabilities?.platform === 'android' ? 'Device' : 'Mac', progress, online: rootsReady, active: running, paused: saved.configuration.paused || (task?.status === 'paused' && !task.waiting), waiting: task?.waiting, ...(task?.transferSeries ? { rates: { upload: task.transferSeries.read({ direction: 'upload', unit: 'Mbps', windowMs: 5000 }), download: task.transferSeries.read({ direction: 'download', unit: 'Mbps', windowMs: 5000 }) } } : {}) })}
-                        stats={`${syncFolderActivityLabel({ paused: saved.configuration.paused, rootsReady, hasRoot: !!nativeRoot, taskPaused: task?.status === 'paused' && !task.waiting, running })}${progress ? ` · ${progress.confirmed} of ${progress.total} operations confirmed` : ' · No transfer statistics yet'}`}
+                        stats={`${!running && task?.status === 'error' ? 'Needs attention · ' : ''}${syncFolderActivityLabel({ paused: saved.configuration.paused, rootsReady, hasRoot: !!nativeRoot, taskPaused: task?.status === 'paused' && !task.waiting, running })}${progress ? ` · ${progress.confirmed} of ${progress.total} operations confirmed` : ' · No transfer statistics yet'}`}
 						expanded={selectedId === saved.id} onToggle={expanded => { if (expanded) { if (!viewBusy && ready && !storageError) { setSelectedId(saved.id); if (retainedDrafts.current.has(saved.id)) open(saved.id); } } else if (selectedId === saved.id) setSelectedId(null); }}>
 					<Flex align="center" gap={2} wrap="wrap">
 						<Box flex={{ base: '1 1 100%', sm: 1 }} minWidth={0} overflowWrap="anywhere">
@@ -777,21 +773,7 @@ function Connections({
 						<Button size="sm" minHeight="40px" variant="outline" isDisabled={viewBusy || !!storageError || !ready} onClick={() => open(saved.id)}>
 							Edit
 						</Button>
-						{running ? (
-							<Button size="sm" minHeight="40px" isDisabled={task?.stopping} onClick={() => task?.active ? void pauseNativeSyncJob(task.scope, generation).catch(cause => setError(cause instanceof Error ? cause.message : 'Transfer stopped, but its pause could not be saved.')) : controller.current?.abort()}>
-								{task?.stopping ? 'Pausing…' : 'Pause sync'}
-							</Button>
-						) : (
-							<Button size="sm" minHeight="40px" isDisabled={!allowed || busy || retainedDrafts.current.has(saved.id) || !ready} onClick={() => transfer(saved)}>
-								{task?.status === 'paused' && !task.waiting ? 'Resume sync' : progress && !['complete', 'retained'].includes(progress.stage)
-									? 'Retry transfer'
-									: twoWay
-									? 'Sync now'
-									: downloading
-									? 'Download now'
-									: 'Upload now'}
-							</Button>
-						)}
+
 						{active && selectedId === saved.id && appOwned && !!host && <Box width="100%" minW={0}>
 							<SyncDetailsSection title="Automatic sync"><DesktopSyncAutomation saved={saved} scope={{ ...scope, rootId: saved.id }} generation={generation}
 								disabled={!allowed || retainedDrafts.current.has(saved.id) || !ready} accountTransport={reviewTransport} intervalDraft={intervalDrafts[saved.id]} onIntervalDraftChange={value => setIntervalDrafts(previous => ({ ...previous, [saved.id]: value }))} /></SyncDetailsSection>
@@ -935,13 +917,12 @@ export function SyncConfigurationForm({
 	accountTransport,
 	onChange,
 	onResourceValidityChange,
-	onResourceDraftChange,
-	sourcePathsAvailable = false
+	onResourceDraftChange
 }: {
 	sourcePathsAvailable?: boolean;
 	draft: ConfigurationDraft;
 	roots: MobileFolder[];
-	folders: { id: string; name: string }[];
+	folders: CloudFolderPath[];
 	disabled: boolean;
 	scopeKey?: string;
 	accountTransport?: Parameters<typeof SyncIgnoreRulesEditor>[0]['accountTransport'];
@@ -998,22 +979,7 @@ export function SyncConfigurationForm({
 					{photoAccessDescription(selectedRoot)}. Backup runs while this app is open.
 				</Text>
 			)}
-			{field(
-				'remote',
-				'Private cloud folder',
-				<Select id={`${prefix}-remote`} value={c.remoteFolderId} onChange={(e) => change({ remoteFolderId: e.target.value })}>
-					<option value="">{draft.baseUpdatedAt === null && sourcePathsAvailable && validNativeSourcePath(selectedRoot?.sourcePath) && selectedRoot?.sourceKind !== 'photos' ? 'Create matching folders on Save' : 'Choose a folder from Things'}</option>
-					{c.remoteFolderId && !folders.some((r) => r.id === c.remoteFolderId) && (
-						<option value={c.remoteFolderId}>Saved folder · {c.remoteFolderId.slice(0, 8)}</option>
-					)}
-					{folders.map((r) => (
-						<option key={r.id} value={r.id}>
-							{r.name} · {r.id.slice(0, 8)}
-						</option>
-					))}
-				</Select>
-			)}
-			{!folders.length && <Text fontSize="12px">Create a private folder in Things, then refresh this list.</Text>}
+            <SyncDestinationControl sourceName={selectedRoot?.name || (photos ? 'Photo Library' : c.name)} draft={draft} folders={folders} disabled={disabled} scopeKey={scopeKey} accountTransport={accountTransport} onChange={remoteFolderId => change({ remoteFolderId })} />
 			{field(
 				'mode',
 				'Direction',

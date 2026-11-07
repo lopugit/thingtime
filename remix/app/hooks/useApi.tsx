@@ -1131,6 +1131,16 @@ export function useApi() {
         [asyncFetcher]
       )
     },
+    deviceFolders: {
+      inspect: useCallback(async (deviceId?: string, options?: ThingRequestOptions, cursor?: string) => {
+        await requireThingtimeCapability('api.devices-folders', '1.0.0', options?.expectedApiOrigin);
+        return getJson(`/api/v1/devices/folders${toQuery({ deviceId, cursor })}`, options);
+      }, [getJson]),
+      resolve: useCallback(async (body: { deviceId: string; connectionId?: string; name?: string }, options?: ThingRequestOptions) => {
+        await requireThingtimeCapability('api.devices-folders', '1.0.0', options?.expectedApiOrigin);
+        return asyncFetcher.submit(body, { action: '/api/v1/devices/folders', ...options, errorContext: 'open the device folder' });
+      }, [asyncFetcher])
+    },
     things: {
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
         return withExportDeadline(async signal => {

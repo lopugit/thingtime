@@ -15197,3 +15197,42 @@ the isolated real-API/browser command and the metadata-only session boundary.
   recovery receipts, no duplicate effects and strict checkpoint convergence.
   Fixture evidence does not establish personal-folder or installed-GUI transfer
   acceptance. Never add grants, resume Home or touch personal files for this test.
+
+## Device root folders and backup entry points
+
+- [ ] Negotiate `api.devices` 1.16.0 and `api.devices-folders` 1.0.0 on the
+  selected origin. GET root references before upload without creating folders;
+  Show Folder opens an existing normal folder while the device is offline.
+- [ ] On new native and remote drafts, show `Device / Files / Photo Library`
+  (or selected source label), Change and searchable/paginated private paths.
+  Another owned device is selectable before any completed upload. Save uses
+  ordinary private folders and does not start a transfer. Preserve existing
+  remoteFolderId, native grant ID, drafts, pause state and other cards.
+- [ ] Retry lost replies and concurrent same-connection saves: same IDs, one
+  root/Files/leaf, ordinary parent relationships and exact readback. Different
+  device/origin/owner/plane/connection identities remain separate even when
+  labels match. Foreign/shared/replaced roots and malformed IDs are refused.
+- [ ] Rename a root/leaf, move a child, and delete a root. Reuse identities and
+  current names; never silently move surviving data or overwrite an unrelated
+  deterministic-ID occupant. Moved children need explicit destination selection.
+- [ ] Collapsed saved cards expose Start backup/Pause/Resume/Retry and inactive
+  errors; optional settings stay collapsed. A configured paused connection
+  stays paused until explicitly edited. Photo Library uses its virtual label,
+  while native folders preserve their absolute source path.
+- [ ] Root Things shows one Device card and hides only its exact managed folder
+  duplicate; search and folder-only pickers still find it. The compact native
+  Device setup link opens pairing/grants without an invented device ID or a
+  full configuration card on root Things.
+- [ ] At desktop and phone widths, open Change, search and page folder choices,
+  scroll the whole screen, exercise errors/retry and edit individual destination
+  label/path/button/option-template and quick-action/error blocks in Builder.
+  Save/reload retains layout and current scope; identity changes immediately
+  clear prior account labels and errors. Cancellation stops ancestry traversal;
+  offline/API failures retain prior rows and expose a retryable error.
+
+Focused automation: `node --import tsx --test app/fileSync/deviceFolders.test.ts
+app/components/Devices/syncFolderCardBlocks.test.ts`; capability suites;
+`node scripts/test-remote-device-sync-ui.mjs`; compiled/disposable real API:
+`node scripts/test-device-sync-control.mjs .output/server/index.mjs
+<path-to-mongod> --device-folders` from Remix. Synthetic fixture/browser evidence
+does not establish personal Photos uploads or physical-device permission.

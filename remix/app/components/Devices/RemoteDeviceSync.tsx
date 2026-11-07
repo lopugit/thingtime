@@ -5,8 +5,8 @@ import type { TransferSpeedDraftState } from './TransferSpeedTrackers';
 import { DeviceSyncResources } from './DeviceSyncResources';
 import { SyncEditorPlacement } from './SyncEditorPlacement';
 import type { UploadPriorityDraftState } from './SyncUploadPriorities';
-import { supportsNativeSourcePaths, validNativeSourcePath } from '~/fileSync/mobileFolders.client';
-import { prepareSyncCloudDestination } from '~/fileSync/cloudDestination';
+import { supportsNativeSourcePaths } from '~/fileSync/mobileFolders.client';
+import { cloudFolderPaths, type CloudFolderPath } from '~/fileSync/folderPaths';
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Box } from '@chakra-ui/react';
 import { useApi } from '~/hooks/useApi';
@@ -22,7 +22,7 @@ import { newFileSyncConfiguration, FILE_SYNC_RESOURCE_REQUIREMENTS } from '~/fil
 import { fileSyncDownloadRequirements } from '~/fileSync/signedDownloadTarget';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { canonicalDraftConfiguration, configurationDraftKey, ConfigurationConflict, persistConfigurationDrafts, readConfigurationDrafts,
-	readOwnedSyncFolder, saveConfigurationDraft, type ConfigurationDraft, type ConfigurationEditorScope } from '~/fileSync/configurationEditor';
+	saveConfigurationDraft, type ConfigurationDraft, type ConfigurationEditorScope } from '~/fileSync/configurationEditor';
 import { assertRemoteDeviceRoot, hasSavedDeviceRoot } from '~/fileSync/remoteConfigurationRoot';
 import { SYNC_INTERVALS } from '~/fileSync/syncJobJournal';
 import { SyncConfigurationForm } from './MobileSyncConnections';
@@ -92,7 +92,7 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 		});
 	});
 	const connectionsRef = useRef(connections); connectionsRef.current = connections;
-	const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
+	const [folders, setFolders] = useState<CloudFolderPath[]>([]);
 	const [connectionCursor, setConnectionCursor] = useState<string | null>(null), [folderCursor, setFolderCursor] = useState<string | null>(null);
 	const [loaded, setLoaded] = useState(false), [busy, setBusy] = useState(false), busyRef = useRef(false);
 	const [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -139,7 +139,8 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 			cache([...new Map([...(cursor ? connectionsRef.current : []), ...accepted].map(row => [row.id, row])).values()]);
 			setConnectionCursor(result.nextCursor ?? null); setLoaded(true);
 		} else {
-			const accepted = result.things.flatMap(row => { try { return [readOwnedSyncFolder(row, scope.ownerId)]; } catch { return []; } });
+			const accepted = await cloudFolderPaths(result.things, scope.ownerId, async id => (await apiRef.current.v1.things.get({ id }, options())).thing, check);
+			check();
 			setFolders(previous => [...new Map([...(cursor ? previous : []), ...accepted].map(row => [row.id, row])).values()]); setFolderCursor(result.nextCursor ?? null);
 		}
 	};
@@ -169,14 +170,9 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 		if (!draft || !draftReady || !resourceValid) return;
 		let prepared = draft;
             if (draft.baseUpdatedAt === null && !draft.configuration.remoteFolderId) {
-                const source = roots.find(root => root.id === draft.configuration.localRootId);
-                if (!source || !sourcePathsReady || !supportsNativeSourcePaths(status?.capabilities) || !validNativeSourcePath(source?.sourcePath) || source?.sourceKind === 'photos') throw Error('Choose a private cloud folder. This device has not provided the selected folder’s absolute path.');
-                const destination = await prepareSyncCloudDestination({ baseUpdatedAt: null, remoteFolderId: '', source }, scope, {
-                    assertCurrent: check,
-                    negotiate: async requirements => { for (const [feature, minimum] of Object.entries(requirements)) await requireThingtimeCapability(feature, minimum); },
-                    get: async id => (await apiRef.current.v1.things.get({ id }, options())).thing,
-                    create: input => apiRef.current.v1.things.create(input, options())
-                });
+                if (!draft.configuration.localRootId) throw Error('Choose a device folder first.');
+                const result = await apiRef.current.v1.deviceFolders.resolve({ deviceId: scope.deviceId, connectionId: draft.id, name: roots.find(root => root.id === draft.configuration.localRootId)?.name || (draft.configuration.sourceKind === 'photos' ? 'Photo Library' : draft.configuration.name) }, options());
+                const destination = result.folder as CloudFolderPath;
                 check();
                 prepared = { ...draft, configuration: { ...draft.configuration, remoteFolderId: destination.id } };
                 persist(prepared); setFolders(previous => [...previous.filter(folder => folder.id !== destination.id), destination]);
@@ -207,10 +203,10 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 		const result = await client.send<T>(command); check(); setNotice('Device request completed.'); return result;
 	};
 	const roots = status?.roots ?? [];
-	const formRoots = [...new Map([...connections.map(row => ({ id: row.configuration.localRootId, name: `Saved device folder · ${row.configuration.localRootId}`, ...(row.configuration.sourceKind === 'photos' ? { sourceKind: 'photos' as const } : {}) })), ...roots].map(root => [root.id, root])).values()];
+	const formRoots = [...new Map([...connections.map(row => ({ id: row.configuration.localRootId, name: row.configuration.sourceKind === 'photos' ? 'Photo Library' : 'Saved device folder', ...(row.configuration.sourceKind === 'photos' ? { sourceKind: 'photos' as const } : {}) })), ...roots].map(root => [root.id, root])).values()];
 	const selected = (id: unknown) => { check(); const saved = connectionsRef.current.find(row => row.id === id); if (!saved || saved.configuration.deviceId !== scope.deviceId) throw Error('Refresh this device’s connections before continuing.'); return saved; };
 	const start = (id: unknown, automatic: boolean) => run(async () => {
-		const saved = selected(id); if (selectedId !== saved.id || retainedDrafts.current.has(saved.id) || !online || saved.configuration.paused) throw Error('Save the connection and connect the device before starting sync.');
+		const saved = selected(id); if ((automatic && selectedId !== saved.id) || retainedDrafts.current.has(saved.id) || !online || saved.configuration.paused) throw Error('Save the connection and connect the device before starting sync.');
 		await send({ action: 'start', connectionId: saved.id, expectedUpdatedAt: saved.updatedAt, ...(automatic ? { intervalMs: intervals[saved.id] ?? status?.jobs.find(job => job.connectionId === saved.id)?.intervalMs ?? 300_000 } : {}) });
 		await refreshStatus();
 	});
@@ -218,7 +214,7 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 		if (pausing.current || !online) return;
 		const activeSignal = lifetime.current.signal;
 		try {
-			const saved = selected(id); if (selectedId !== saved.id) return; pausing.current = true; setPausingId(saved.id); setError('');
+			const saved = selected(id); pausing.current = true; setPausingId(saved.id); setError('');
 			await send({ action: 'pause', connectionId: saved.id }); check(); await refreshStatus();
 		} catch (cause) { if (!activeSignal.aborted) setError(cause instanceof Error ? cause.message : 'Pause could not be confirmed. Retry to check the same request.'); }
 		finally { pausing.current = false; if (!activeSignal.aborted) setPausingId(null); }
@@ -236,14 +232,18 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 		remote: {
 			status: online && status ? `Connected to this device · Updated ${new Date(status.observedAt).toLocaleTimeString()}` : deviceError || 'Connecting to this device. Saved settings are available independently.',
 			error: error || (!draft ? storageError : ''), notice, busy, checking, editDisabled: busy || !!storageError || !draftReady, addDisabled: busy || !!storageError || !draftReady || !online || !roots.length,
-			deviceDisabled: busy || !online, roots: roots.map(root => ({ ...root, path: (sourcePathsReady && supportsNativeSourcePaths(status?.capabilities) ? root.sourcePath : undefined) || 'Folder path unavailable', accessDescription: connections.some(saved => saved.configuration.localRootId === root.id) ? 'Folder access granted · sync configured below' : 'Folder access granted · no sync connection configured' })), rootsEmpty: online ? status?.rootsReady === false ? 'Folder access will refresh after the current device operation.' : 'No folders selected. Choose a device folder to begin.' : 'Connect the device to manage its folder access.',
+			deviceDisabled: busy || !online, roots: roots.map(root => ({ ...root, path: root.sourceKind === 'photos' ? root.name : (sourcePathsReady && supportsNativeSourcePaths(status?.capabilities) ? root.sourcePath : undefined) || 'Folder path unavailable', accessDescription: connections.some(saved => saved.configuration.localRootId === root.id) ? 'Folder access granted · sync configured below' : 'Folder access granted · no sync connection configured' })), rootsEmpty: online ? status?.rootsReady === false ? 'Folder access will refresh after the current device operation.' : 'No folders selected. Choose a device folder to begin.' : 'Connect the device to manage its folder access.',
 			empty: loaded ? 'No saved sync connections for this device.' : 'Reading saved sync connections…', hasMore: !!connectionCursor,
 			connections: connections.map(saved => {
 				const job = status?.jobs.find(row => row.connectionId === saved.id), task = status?.task?.connectionId === saved.id ? status.task : null;
 				const progress = task?.progress, active = !!task?.active;
 				const rates = task?.transferRates;
 				const rate = (reading: SpeedReading) => reading.status === 'known' ? `${reading.value.toFixed(2)} ${reading.unit}` : reading.status === 'paused' ? 'paused' : 'unavailable';
-				return { glance: syncConnectionGlance({ deviceLabel: status?.capabilities.platform === 'ios' ? 'iPhone' : status?.capabilities.platform === 'android' ? 'Device' : 'Mac', progress: progress ?? (job?.progress ? { ...job.progress, confirmed: 0, total: 0 } : undefined), rates, online, active, paused: saved.configuration.paused || task?.status === 'paused' || job?.state === 'paused', waiting: task?.waiting }), editorSlotId: `${editorPrefix}-${saved.id}`, editorHidden: selectedId !== saved.id, toggleGlyph: selectedId === saved.id ? '⌃' : '⌄', summaryStatus: saved.configuration.paused || task?.status === 'paused' || job?.state === 'paused' ? 'Paused' : !online ? 'Device offline' : !roots.some(root => root.id === saved.configuration.localRootId) ? 'Folder access missing' : active ? 'Running' : 'No active transfer', quickStats: progress ? `${progress.confirmed} / ${progress.total} confirmed` : 'No transfer statistics yet', expanded: selectedId === saved.id, expandLabel: selectedId === saved.id ? 'Collapse folder' : 'Expand folder', path: (sourcePathsReady && supportsNativeSourcePaths(status?.capabilities) ? roots.find(root => root.id === saved.configuration.localRootId)?.sourcePath : undefined) || 'Folder path unavailable', id: saved.id, name: saved.configuration.name, href: `/things?${new URLSearchParams({ folder: saved.configuration.remoteFolderId })}`,
+				return { glance: syncConnectionGlance({ deviceLabel: status?.capabilities.platform === 'ios' ? 'iPhone' : status?.capabilities.platform === 'android' ? 'Device' : 'Mac', progress: progress ?? (job?.progress ? { ...job.progress, confirmed: 0, total: 0 } : undefined), rates, online, active, paused: saved.configuration.paused || task?.status === 'paused' || job?.state === 'paused', waiting: task?.waiting }), editorSlotId: `${editorPrefix}-${saved.id}`, editorHidden: selectedId !== saved.id, toggleGlyph: selectedId === saved.id ? '⌃' : '⌄', summaryStatus: saved.configuration.paused || task?.status === 'paused' || job?.state === 'paused' ? 'Paused' : !online ? 'Device offline' : !roots.some(root => root.id === saved.configuration.localRootId) ? 'Folder access missing' : active ? 'Running' : 'No active transfer', quickStats: progress ? `${progress.confirmed} / ${progress.total} confirmed` : 'No transfer statistics yet', expanded: selectedId === saved.id, expandLabel: selectedId === saved.id ? 'Collapse folder' : 'Expand folder', path: saved.configuration.sourceKind === 'photos' ? roots.find(root => root.id === saved.configuration.localRootId)?.name || 'Photo Library' : (sourcePathsReady && supportsNativeSourcePaths(status?.capabilities) ? roots.find(root => root.id === saved.configuration.localRootId)?.sourcePath : undefined) || 'Folder path unavailable', id: saved.id, name: saved.configuration.name, href: `/things?${new URLSearchParams({ folder: saved.configuration.remoteFolderId })}`,
+					quickError: !active && task?.status === 'error' ? progress?.message || 'This backup needs attention.' : '',
+					quickLabel: task?.stopping ? 'Pausing…' : active ? 'Pause sync' : saved.configuration.paused ? 'Paused' : task?.status === 'paused' || job?.state === 'paused' ? 'Resume sync' : task?.status === 'error' ? 'Retry transfer' : saved.configuration.mode === 'backup' ? 'Start backup' : 'Sync now',
+					quickDisabled: active ? !online || !!pausingId || !!task?.stopping : busy || retainedDrafts.current.has(saved.id) || !online || !!status?.task?.active || saved.configuration.paused,
+					startLabel: saved.configuration.mode === 'backup' ? 'Start backup' : 'Sync now',
 					mode: ({ 'two-way': 'Two-way sync', upload: 'Device to cloud', download: 'Cloud to device', backup: 'Backup to cloud · keep deleted files' })[saved.configuration.mode],
 					status: saved.configuration.paused ? 'Saved configuration: paused' : !online ? 'Device unavailable · settings remain editable' : task?.stopping ? 'Pausing…' : task?.waiting ? 'Waiting for this device’s conditions' : active ? 'Transfer in progress' : task?.status === 'error' ? 'Needs attention' : task?.status === 'complete' ? 'Last transfer finished' : job?.state === 'paused' ? 'Sync is paused' : 'Ready to sync',
 					progress: progress ? progress.message || `${progress.stage} · ${progress.confirmed} of ${progress.total} operations confirmed${progress.path ? ` · ${progress.path}` : ''}` : 'No transfer statistics yet',
@@ -265,6 +265,7 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 			expand: ({ inputs }) => { const id = selected(inputs.id).id; if (selectedId === id) { setSelectedId(null); setDetailsId(null); } else if (!busy && draftReady && !storageError) { setSelectedId(id); setDetailsId(null); if (retainedDrafts.current.has(id)) void run(() => open(id)); } },
 			choose: () => run(async () => { if (!online) return; await send({ action: 'folders', request: { action: 'choose' } }); await refreshStatus(); }),
 			remove: ({ inputs }) => run(async () => { if (!online || typeof inputs.rootId !== 'string' || !roots.some(root => root.id === inputs.rootId)) throw Error('Refresh the device folder list.'); await send({ action: 'folders', request: { action: 'remove', rootId: inputs.rootId } }); await refreshStatus(); }),
+			quick: ({ inputs }) => { const task = status?.task?.connectionId === inputs.id ? status.task : null; return task?.active ? pause(inputs.id) : start(inputs.id, false); },
 			start: ({ inputs }) => start(inputs.id, false), automatic: ({ inputs }) => start(inputs.id, true),
 			details: ({ inputs }) => { if (online && selectedId === inputs.id) setDetailsId(selected(inputs.id).id); },
 			pause: ({ inputs }) => pause(inputs.id),

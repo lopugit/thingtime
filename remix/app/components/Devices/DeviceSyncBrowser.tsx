@@ -1,3 +1,4 @@
+import { DeviceFolderControl } from './DeviceFolderControl';
 import { DeviceSyncResources } from './DeviceSyncResources';
 import React from 'react';
 import { Box, Flex } from '@chakra-ui/react';
@@ -158,7 +159,7 @@ export function DeviceSyncPanel({
 	const local = bridge?.platform === 'darwin' && !!bridge.folderSyncRequest && pairedDeviceIds.includes(deviceId);
 	return (
 		<Box minWidth={0}>
-			<DeviceSyncBrowser deviceId={deviceId} />
+			<DeviceFolderControl key={deviceId} deviceId={deviceId} /><DeviceSyncBrowser deviceId={deviceId} />
 			{ownerId && ownedDeviceIds.includes(deviceId) ? (
 				<SettingsSection
 					eyebrow="Manage sync connections"
@@ -185,7 +186,7 @@ export function DeviceSyncedFilesPage({ deviceId }: { deviceId: string }) {
 			paddingBottom={12}
 		>
 			<Box width="100%" maxWidth="1100px" padding={{ base: 4, md: 6 }} minWidth={0}>
-				<DeviceSyncBrowser deviceId={deviceId} />
+				<DeviceFolderControl key={deviceId} deviceId={deviceId} /><DeviceSyncBrowser deviceId={deviceId} />
 			</Box>
 		</Flex>
 	);

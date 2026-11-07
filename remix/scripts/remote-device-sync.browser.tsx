@@ -1,3 +1,4 @@
+import { deviceFolderIdentity, resolveDeviceFolders } from '../app/fileSync/deviceFolders';
 import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -21,6 +22,7 @@ const configuration = { configurationVersion: 1, name: 'Documents backup', devic
  remoteFolderId: 'cloud-documents', mode: 'backup', paused: false, propagateDeletes: false, network: 'any', chargingOnly: false, excludedPaths: [] };
 let rows: any[] = JSON.parse(localStorage.getItem(databaseKey) || 'null') ?? [
  { id: 'cloud-documents', thingtime: ['folder'], author: { id: ownerId }, acl: ['tt:user'], crystal: { name: 'Cloud documents' } },
+ ...Array.from({ length: 15 }, (_, index) => ({ id: `fixture-folder-${index}`, thingtime: ['folder'], author: { id: ownerId }, acl: ['tt:user'], crystal: { name: `Folder ${String(index).padStart(2, '0')}` } })),
  { id: 'documents-sync', thingtime: ['file-sync'], author: { id: ownerId }, acl: ['tt:user'], updatedAt: '2026-10-23T00:00:00.000Z', crystal: configuration },
  { id: 'archive-sync', thingtime: ['file-sync'], author: { id: ownerId }, acl: ['tt:user'], updatedAt: '2026-10-23T00:00:00.000Z', crystal: { ...configuration, name: 'Archive backup' } },
  { id: 'other-device-sync', thingtime: ['file-sync'], author: { id: ownerId }, acl: ['tt:user'], updatedAt: '2026-10-23T00:00:00.000Z', crystal: { ...configuration, name: 'Other device private sync', deviceId: 'another-device' } },
@@ -53,6 +55,21 @@ window.fetch = async (input, init) => {
  const headers = new Headers(init?.headers);
  if (headers.get('X-Thingtime-Expected-Actor') !== ownerId || headers.get('X-Thingtime-Expected-Data-Plane') !== 'home')
   return json({ ok: false, error: 'Fixture scope headers missing' }, 409);
+ if (url.pathname === '/api/v1/devices/folders') {
+  const scope = { origin: location.origin, ownerId, dataPlane: 'home', deviceId };
+  const rootFolderId = await deviceFolderIdentity(scope, 'root');
+  if ((init?.method || 'GET') === 'GET') {
+   if (!url.searchParams.get('deviceId')) return json(url.searchParams.get('cursor') ? { ok: true, devices: [{ deviceId: 'other-owned-device', rootFolderId: 'other-owned-root', name: 'Travel tablet' }], nextCursor: null } : { ok: true, devices: [{ deviceId, rootFolderId, name: 'My Mac' }], nextCursor: 'fixture-device-page-2' });
+   return json({ ok: true, rootFolderId, deviceName: 'My Mac', folder: rows.find(row => row.id === rootFolderId) || null });
+  }
+  const body = JSON.parse(String(init?.body));
+  const resolved = await resolveDeviceFolders(scope, 'My Mac', body, {
+   assertCurrent() { init?.signal?.throwIfAborted(); },
+   async get(id) { const row = rows.find(row => row.id === id); if (!row) throw Object.assign(Error('Not found'), { status: 404 }); return row; },
+   async create(input) { if (rows.some(row => row.id === input.shareId)) throw Object.assign(Error('Conflict'), { status: 409 }); rows.push({ ...input, id: input.shareId, author: { id: ownerId } }); writes++; localStorage.setItem(databaseKey, JSON.stringify(rows)); }
+  });
+  return json({ ok: true, ...resolved });
+ }
  if (url.pathname === '/api/v1/devices/sync-control') {
   if ((init?.method || 'GET') === 'GET') return json(replies.get(url.searchParams.get('requestId')!) || { ok: false, error: 'Request missing' }, replies.has(url.searchParams.get('requestId')!) ? 200 : 404);
   const body = JSON.parse(String(init?.body));

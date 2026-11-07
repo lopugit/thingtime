@@ -984,3 +984,44 @@ can release holds. `api.things-bulk` 1.7.1 and `api.things-delete` 1.1.1 publish
 managed placement/drain fencing. Run the file-restore real-replica proof plus
 Things/Files/Timeline and content-gate regressions. UI/job activation, History
 audit grouping and installed/native acceptance remain separate.
+
+### Normal device folders and default destinations
+
+`api.devices` 1.16.0 adds an origin/account/content-plane scoped
+`rootFolderId` reference. `api.devices-folders` 1.0.0 is registered in
+`apiDocs.ts` and the Nitro import map. Its GET is read-only: one device returns
+the owned root (or null before creation); no device ID lists paginated owned root
+references (50 per request, canonical chronological cursor), so devices are discoverable before uploads. POST verifies the
+owned device in the home control plane and resolves ordinary private `folder`
+Things through `createThing`/`getThing`, including canonical accounting,
+placement and uniqueness. There is no mixed device/folder kind or new index.
+
+`fileSync/deviceFolders.ts` keys roots and Files folders by origin, owner,
+content plane and device; each leaf also uses the stable connection ID. Labels
+never determine identity. New destinations are `Device / Files / Source label`
+(including Photo Library). Existing explicit remote destinations, opaque native
+root IDs, grants, drafts and pause settings are preserved. No save starts a
+transfer. Renames are retained; moved child folders and replaced/shared
+identities require explicit selection. Recreating a deleted root never moves
+surviving contents back implicitly.
+
+`SyncDestinationControl` uses editable Builder path/action/repeated-option
+blocks with searchable paginated collections and explicit More devices discovery. `folderPaths.ts` reads actual
+owned/private ancestry with a shared cache, four concurrent workers and scope/
+cancellation fences; transport failures remain retryable. Device page and menu
+Show Folder inspect an existing reference before creating a missing root, so
+cloud navigation works while the physical device is offline. Root browsing
+suppresses only an exact managed root already represented by its Device card;
+search, folder-only views and location pickers retain normal folder results.
+
+`SyncFolderCard` has an editable quick action outside collapsed settings,
+with separate error and destination fields. Remote cards share that behavior.
+Photos sources show their virtual source label rather than a missing POSIX path.
+The native-only compact Things entry links to `/things?deviceSetup=1`; that
+page reuses normal device pairing and folder-grant controls.
+
+Run focused `deviceFolders`, capability, folder-card tests and
+`node scripts/test-remote-device-sync-ui.mjs`. Build the Node middleware server,
+then run `node scripts/test-device-sync-control.mjs .output/server/index.mjs
+<path-to-mongod> --device-folders` from Remix for disposable real-API acceptance.
+The launcher starts its own replica and seeds users/devices through APIs only.

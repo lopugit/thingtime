@@ -145,6 +145,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **2026-11-07 — Codex (AI):** Add ordinary device root folder references and
+  idempotent default backup destinations under Device / Files / Source, readable
+  cloud paths and offline Show Folder navigation. Keep existing destinations,
+  drafts and pause settings; expose collapsed-card transfer actions/errors and
+  restore compact native Device setup navigation.
+
+
 - 2026-11-06: Exclude iOS-only Chat Activity sources from the macOS Widgets
   target while retaining shared Lopu voice and recording support. Add a
   source-selection regression that preserves iOS app and test coverage.
