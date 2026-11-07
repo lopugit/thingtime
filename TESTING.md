@@ -11083,6 +11083,15 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Mobile sync connection editor
 
+- [ ] On an iPhone, use a Wi-Fi-only Photos backup with a disposable library.
+  On cellular, the collapsed card shows the Wi-Fi wait and where to edit the
+  network policy. With Wi-Fi restored, check Photos preparation before the
+  first payload. Verify the upload-only card shows downloads off and no live
+  upload speed before bytes are expected. Check that a Photos access or iCloud
+  failure is visible while collapsed and a partial backup reports remaining
+  items. Repeat at desktop and phone widths and verify the saved connection
+  policy never changes during a status refresh.
+
 - [x] In an installed iOS WebKit app, start a real foreground transfer after
   native approval. Inventory and byte requests must retain the Window receiver
   for `fetch`; copying the function into a transport must not cause an illegal

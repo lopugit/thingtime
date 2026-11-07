@@ -48,3 +48,12 @@ test('collapsed folder quick actions and error/destination fields remain individ
  const quick = findBlock(remoteSyncDisclosureBlocks(remoteSyncBlocks), 'remote-sync-quick');
  assert.ok(quick); assert.equal((quick.props?.['data-tt-action-inputs'] as any)?.operation, 'quick');
 });
+
+test('connection status distinguishes waiting, Photos preparation and a partial backup', () => {
+ const state = { paused: false, rootsReady: true, hasRoot: true, taskPaused: false, running: true, photos: true };
+ const progress = { stage: 'scanning' as const, confirmed: 0, total: 0 };
+ assert.equal(syncFolderActivityLabel({ ...state, progress }), 'Preparing Photos backup…');
+ assert.equal(syncFolderActivityLabel({ ...state, running: false, waiting: true, progress: { ...progress, message: 'Waiting for Wi-Fi.' } }), 'Waiting for Wi-Fi.');
+ assert.equal(syncFolderActivityLabel({ ...state, running: false, failed: true, progress }), 'Needs attention');
+ assert.equal(syncFolderActivityLabel({ ...state, running: false, progress: { ...progress, stage: 'complete', coverage: 'partial', skipped: 2 } }), 'Partial backup · 2 items need review.');
+});

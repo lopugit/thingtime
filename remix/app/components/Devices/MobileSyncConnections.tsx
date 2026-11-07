@@ -2,6 +2,7 @@ import { iosManagedSyncResources, IOS_SYNC_RESOURCE_STATUS } from './deviceSyncR
 import { prepareExplicitSyncStart } from '~/fileSync/configurationStart';
 import { SyncDestinationControl } from './SyncDestinationControl';
 import { syncConnectionGlance } from '~/fileSync/connectionGlance';
+import { SyncConditionsWait } from '~/fileSync/foregroundSyncContext';
 import { syncFolderActivityLabel } from './syncFolderCardBlocks';
 import type { TransferSpeedDraftState } from './TransferSpeedTrackers';
 import { SyncEditorPlacement } from './SyncEditorPlacement';
@@ -95,6 +96,8 @@ export function MobileSyncConnections({ ownerId, deviceId, roots, rootsReady = t
 		/>
 	);
 }
+type ConnectionProgress = ForegroundSyncProgress & { message?: string; waiting?: boolean };
+
 function Connections({
 	scope,
 	generation,
@@ -180,10 +183,11 @@ function Connections({
 			}
 		});
 	});
-	const [transfers, setTransfers] = useState<Record<string, ForegroundSyncProgress & { message?: string }>>({});
+	const [transfers, setTransfers] = useState<Record<string, ConnectionProgress>>({});
 	const [progressDescriptors, setProgressDescriptors] = useState<Record<string, SyncProgressDescriptor | undefined>>({});
 	const [inventoryDescriptors, setInventoryDescriptors] = useState<Record<string, SyncInventoryDescriptor | undefined>>({});
 	const [activeTransfer, setActiveTransfer] = useState<string | null>(null);
+	const [transferErrors, setTransferErrors] = useState<Record<string, string>>({});
 	const [foregroundFileReview, setFileReview] = useState<{
 		id: string;
 		conflicts: SyncConflict[];
@@ -228,13 +232,14 @@ function Connections({
 		writeStampedCache(cacheKey, next);
 		pruneCacheNamespace('tt:sync-connections:', cacheKey, 32);
 	};
-	const run = async (work: (assertActive: () => void) => Promise<void>) => {
+	const run = async (work: (assertActive: () => void) => Promise<void>, connectionId?: string) => {
 		if (controller.current) return;
 		const active = new AbortController();
 		controller.current = active;
 		setBusy(true);
 		setError('');
 		setNotice('');
+		if (connectionId) setTransferErrors(previous => ({ ...previous, [connectionId]: '' }));
 		try {
 			assertCurrent();
 			await work(() => {
@@ -243,7 +248,9 @@ function Connections({
 			});
 		} catch (cause) {
 			if (mounted.current && !active.signal.aborted) {
-				setError(cause instanceof Error ? cause.message : 'Connection unavailable. Try again.');
+				const message = cause instanceof Error ? cause.message : 'Connection unavailable. Try again.';
+				if (connectionId) setTransferErrors(previous => ({ ...previous, [connectionId]: message }));
+				else setError(message);
 				if (cause instanceof ConfigurationConflict) setConflict(cause);
 			}
 		} finally {
@@ -334,7 +341,10 @@ function Connections({
             cache(connections.map(row => row.id === saved.id ? saved : row));
             if (appOwned) {
                 void startNativeSyncTask(saved, { ...scope, rootId: saved.id }, generation).catch(cause => {
-                    if (mounted.current) setError(cause instanceof Error ? cause.message : 'Transfer could not start.');
+                    if (mounted.current && !rootIdentity.read().pending && rootIdentity.read().generation === generation && runtimeOrigin() === scope.origin) {
+                        const message = cause instanceof Error ? cause.message : 'Transfer could not start.';
+                        setTransferErrors(previous => ({ ...previous, [saved.id]: message }));
+                    }
                 });
                 return;
             }
@@ -347,7 +357,7 @@ function Connections({
 			setInventoryDescriptors(previous => ({ ...previous, [saved.id]: undefined }));
 			writeStampedCache('tt:sync-inventory:' + syncScopeKey(syncScope), null);
 			let latestProgress: ForegroundSyncProgress = { stage: 'checking', confirmed: 0, total: 0 };
-			const publish = (value: ForegroundSyncProgress & { message?: string }) => {
+			const publish = (value: ConnectionProgress) => {
 				assertActive();
 				latestProgress = value;
 				speeds.stage(value.stage);
@@ -513,15 +523,15 @@ function Connections({
 				if (!active.signal.aborted)
 					publish({
 						...latestProgress,
+						waiting: cause instanceof SyncConditionsWait,
 						message: cause instanceof Error ? cause.message : 'Transfer interrupted. Retry to recover saved work.'
 					});
-				throw cause;
 			} finally {
 				speeds.stop();
 				journal?.close();
 				if (mounted.current) setActiveTransfer(null);
 			}
-		});
+		}, requested.id);
 	};
 	const start = () =>
 		edit({
@@ -643,7 +653,7 @@ function Connections({
 				</Flex>
 			</Flex>
 			<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-				{appOwned && !host ? 'Started transfers continue when you leave this screen. Returning to Thingtime resumes saved work with the same account and folder access. iOS may finish an accepted file in the background; remaining work waits for the app to return. Stop transfer keeps a job paused until you retry.' : appOwned ? 'Started transfers continue when you leave this screen or close the Mac window. Reopen this connection to review conflicts or stop a transfer. Quitting interrupts transfers; unfinished jobs resume when you reopen Thingtime with the same account and access. Stop transfer keeps a job paused until you retry.' :
+				{appOwned && !host ? 'You can leave this screen while Thingtime stays open. iOS may let the current upload finish in the background. Open Thingtime to continue saved work with the same account and folder access. Pause sync keeps a job paused until you resume it.' : appOwned ? 'Started transfers continue when you leave this screen or close the Mac window. Reopen this connection to review conflicts or stop a transfer. Quitting interrupts transfers; unfinished jobs resume when you reopen Thingtime with the same account and access. Stop transfer keeps a job paused until you retry.' :
 					'Transfer selected folders in either direction while this app stays open. Background transfers are still being added.'}
 				{' '}Downloads and two-way sync require native folder approval and recoverable device Trash for deletion propagation. Conflicting changes preserve both copies for review.
 			</Text>
@@ -668,15 +678,30 @@ function Connections({
 			)}
 			{connections.map((saved) => {
 				const task = ownNativeTask?.scope.rootId === saved.id ? ownNativeTask : null;
-				const progress = task?.progress ?? transfers[saved.id] ?? readStampedCache<ForegroundSyncProgress & { message?: string }>(progressKey(saved.id));
+				const progress: ConnectionProgress | null = task?.progress ?? transfers[saved.id] ?? readStampedCache<ConnectionProgress>(progressKey(saved.id));
 				const running = !!task?.active || (viewBusy && activeTransfer === saved.id);
+				const waiting = task?.waiting ?? progress?.waiting ?? false;
+				const taskPaused = task?.status === 'paused' && !waiting;
+				const runError = !running && !waiting && (transferErrors[saved.id] ||
+					(task?.status === 'error' || (!task && progress?.message && !['complete', 'retained'].includes(progress.stage))
+						? progress?.message || 'Sync needs attention. Retry this connection.' : ''));
+				const photos = saved.configuration.sourceKind === 'photos';
+				const downloading = saved.configuration.mode === 'download';
+				const twoWay = saved.configuration.mode === 'two-way';
+				const wifiWait = waiting && saved.configuration.network === 'wifi' &&
+					(progress?.message === 'Waiting for the selected network.' || progress?.message?.startsWith('Waiting for Wi-Fi.'));
+				const statusProgress = wifiWait && progress
+					? { ...progress, message: 'Waiting for Wi-Fi. Connect to Wi-Fi to continue. To allow mobile data, open Edit → Transfer options → Network.' } : progress;
+				const actionLabel = running ? task?.stopping ? 'Pausing…' : 'Pause sync' :
+					saved.configuration.paused ? saved.configuration.mode === 'backup' ? 'Start backup' : 'Resume sync' :
+					waiting ? 'Check again' : taskPaused ? 'Resume sync' :
+					runError || (progress && !['complete', 'retained'].includes(progress.stage)) ? 'Retry transfer' :
+					twoWay ? 'Sync now' : downloading ? 'Download now' : saved.configuration.mode === 'backup' ? 'Start backup' : 'Upload now';
 				const progressScope = { ...scope, rootId: saved.id };
 				const progressDescriptor = task ? task.progressDescriptor : progressDescriptors[saved.id] ?? (!running
 					? readStampedCache<SyncProgressDescriptor>('tt:sync-progress-tree:' + syncScopeKey(progressScope)) ?? undefined : undefined);
 				const inventoryDescriptor = task ? task.inventoryDescriptor : inventoryDescriptors[saved.id] ?? (!running
                     ? readStampedCache<SyncInventoryDescriptor>('tt:sync-inventory:' + syncScopeKey(progressScope)) ?? undefined : undefined);
-				const downloading = saved.configuration.mode === 'download';
-				const twoWay = saved.configuration.mode === 'two-way';
 				if (!speedDrafts.current.has(saved.id)) speedDrafts.current.set(saved.id, {});
 				if (!priorityDrafts.current.has(saved.id)) priorityDrafts.current.set(saved.id, {});
 				const nativeRoot = roots.find((root) => root.id === saved.configuration.localRootId);
@@ -704,14 +729,15 @@ function Connections({
 					<SyncFolderCard key={saved.id} title={saved.configuration.name} editorSlotId={`${editorPrefix}-${saved.id}`} scopeKey={`${key}:${generation}:${saved.id}`} accountTransport={reviewTransport}
 						path={(nativeRoot?.sourceKind === 'photos' || saved.configuration.sourceKind === 'photos' ? nativeRoot?.name || 'Photo Library' : undefined) || (supportsNativeSourcePaths(capabilities) && validNativeSourcePath(nativeRoot?.sourcePath) && nativeRoot?.sourceKind !== 'photos' ? nativeRoot.sourcePath : undefined) || (nativeRoot ? 'Folder path unavailable' : 'Folder access missing')}
                         destination={folders.find(folder => folder.id === saved.configuration.remoteFolderId)?.path || 'Cloud destination unavailable · refresh folders'}
-                        error={!running && (task?.status === 'error' || (!task && progress?.message && !['complete', 'retained'].includes(progress.stage))) ? progress?.message || 'This backup needs attention.' : ''}
-                        quickAction={{ label: running ? task?.stopping ? 'Pausing…' : 'Pause sync' : saved.configuration.paused ? saved.configuration.mode === 'backup' ? 'Start backup' : 'Resume sync' : task?.status === 'paused' && !task.waiting ? 'Resume sync' : progress && !['complete', 'retained'].includes(progress.stage) ? 'Retry transfer' : twoWay ? 'Sync now' : downloading ? 'Download now' : saved.configuration.mode === 'backup' ? 'Start backup' : 'Upload now',
+                        error={runError || ''}
+                        quickAction={{ label: actionLabel,
                             disabled: running ? !!task?.stopping : !allowed || busy || retainedDrafts.current.has(saved.id) || !ready,
                             run: () => { if (running) { if (task?.active) return pauseNativeSyncJob(task.scope, generation).catch(cause => setError(cause instanceof Error ? cause.message : 'Pause could not be saved.')); controller.current?.abort(); } else transfer(saved); }
                         }}
 						description={saved.configuration.mode === 'backup' ? 'Backup to cloud · keep deleted files' : twoWay ? 'Two-way sync' : downloading ? 'Cloud to device' : 'Device to cloud'}
-						glance={syncConnectionGlance({ deviceLabel: capabilities?.platform === 'ios' ? 'iPhone' : capabilities?.platform === 'android' ? 'Device' : 'Mac', progress, online: rootsReady, active: running, paused: saved.configuration.paused || (task?.status === 'paused' && !task.waiting), waiting: task?.waiting, ...(task?.transferSeries ? { rates: { upload: task.transferSeries.read({ direction: 'upload', unit: 'Mbps', windowMs: 5000 }), download: task.transferSeries.read({ direction: 'download', unit: 'Mbps', windowMs: 5000 }) } } : {}) })}
-                        stats={`${!running && task?.status === 'error' ? 'Needs attention · ' : ''}${syncFolderActivityLabel({ paused: saved.configuration.paused, rootsReady, hasRoot: !!nativeRoot, taskPaused: task?.status === 'paused' && !task.waiting, running })}${progress ? ` · ${progress.confirmed} of ${progress.total} operations confirmed` : ' · No transfer statistics yet'}`}
+						glance={syncConnectionGlance({ deviceLabel: capabilities?.platform === 'ios' ? 'iPhone' : capabilities?.platform === 'android' ? 'Device' : 'Mac', progress, online: rootsReady, active: running, paused: saved.configuration.paused || taskPaused, waiting, mode: saved.configuration.mode, ...(task?.transferSeries ? { rates: { upload: task.transferSeries.read({ direction: 'upload', unit: 'Mbps', windowMs: 5000 }), download: task.transferSeries.read({ direction: 'download', unit: 'Mbps', windowMs: 5000 }) } } : {}) })}
+                        stats={syncFolderActivityLabel({ paused: saved.configuration.paused, rootsReady, hasRoot: !!nativeRoot,
+                            taskPaused, running, waiting, failed: !!runError, stopping: task?.stopping, progress: statusProgress, photos })}
 						expanded={selectedId === saved.id} onToggle={expanded => { if (expanded) { if (!viewBusy && ready && !storageError) { setSelectedId(saved.id); if (retainedDrafts.current.has(saved.id)) open(saved.id); } } else if (selectedId === saved.id) setSelectedId(null); }}>
 					<Flex align="center" gap={2} wrap="wrap">
 						<Box flex={{ base: '1 1 100%', sm: 1 }} minWidth={0} overflowWrap="anywhere">
@@ -724,55 +750,24 @@ function Connections({
 								</Text>
 							)}
 							<Text fontSize="12px">
-								{task?.stopping ? 'Pausing…' : task?.status === 'paused' && !task.waiting ? 'Paused' : !rootsReady
-									? running ? 'Transfer in progress · Folder list pending' : 'Checking folder access…'
-									: !sourceAllowed
+								{rootsReady && !sourceAllowed
 									? 'Source access or backup policy needs review'
-									: saved.configuration.paused
-									? 'Paused'
 									: !supported
 									? downloading || twoWay
 										? 'Downloads and two-way sync need folder approval and an updated app for recoverable deletions'
 										: 'This direction is not available yet'
 									: !supportsMobileSyncConditions(capabilities)
 									? 'Update this app to transfer files'
-									: task?.waiting
-									? 'Waiting to continue automatically'
-									: task?.status === 'error' || (!running && progress?.message && !['complete', 'retained'].includes(progress.stage))
-									? 'Needs attention'
-									: running
-									? 'Transfer in progress'
-									: twoWay
+									: !rootsReady || running || saved.configuration.paused || taskPaused || waiting || runError ? null : twoWay
 									? 'Ready for two-way sync with folder approval'
 									: downloading
 									? 'Ready to download with folder approval'
 										: appOwned ? 'Ready to upload' : 'Ready for a foreground upload'}
 								{rootsReady && !nativeRoot ? ' · Folder access missing' : ''}
 							</Text>
-							{progress && (
-								<Text
-									role="status"
-									fontSize="12px"
-									color={progress.stage === 'retained' ? 'var(--tt-muted, #71717a)' : undefined}
-									marginTop={1}
-									overflowWrap="anywhere"
-								>
-									{running
-										? progress.stage === 'reviewing'
-											? 'Waiting for your conflict choices.'
-											: progress.stage === 'scanning'
-											? 'Checking both folders…'
-											: progress.stage === 'verifying'
-											? 'Verifying completed work…'
-											: progress.path
-											? `${progress.path}: ${Math.round(((progress.bytes ?? 0) / Math.max(1, progress.size ?? 1)) * 100)}%`
-											: `${progress.confirmed} of ${progress.total} operations confirmed`
-										: progress.message ||
-										  (progress.stage === 'retained'
-												? 'Both versions are saved in Timeline with IDs built from their contents. You can download or restore them later. This conflict remains unresolved.'
-												: progress.stage === 'complete'
-												? 'Last transfer finished.'
-												: 'Transfer stopped or interrupted. Retry to recover saved work.')}
+							{running && progress?.path && progress.stage === 'transferring' && (
+								<Text fontSize="12px" marginTop={1} overflowWrap="anywhere">
+									{progress.path}: {Math.round(((progress.bytes ?? 0) / Math.max(1, progress.size ?? 1)) * 100)}%
 								</Text>
 							)}
 							{progress?.stage === 'retained' && (
@@ -989,7 +984,7 @@ export function SyncConfigurationForm({
 			)}
 			{selectedRoot?.sourceKind === 'photos' && (
 				<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-					{photoAccessDescription(selectedRoot)}. Backup runs while this app is open.
+					{photoAccessDescription(selectedRoot)}.
 				</Text>
 			)}
             <SyncDestinationControl sourceName={selectedRoot?.name || (photos ? 'Photo Library' : c.name)} draft={draft} folders={folders} disabled={disabled} scopeKey={scopeKey} accountTransport={accountTransport} onChange={remoteFolderId => change({ remoteFolderId })} />

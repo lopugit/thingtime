@@ -13,7 +13,7 @@ export function syncConnectionGlanceBlocks(scope = 'connectionStats', prefix = '
     { id: `${prefix}-${direction}-remaining`, type: 'element', tag: 'span', text: `{${scope}.${direction}.remaining}`, css: { color: 'var(--tt-muted, #71717a)' } }
    ] },
    { id: `${prefix}-${direction}-operations`, type: 'element', tag: 'p', text: `{${scope}.${direction}.operations}`, css: { 'font-size': '11px', color: 'var(--tt-muted, #71717a)' } },
-   { id: `${prefix}-${direction}-bar`, type: 'element', tag: 'div', props: { role: 'meter', 'aria-label': `{${scope}.${direction}.title}`, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': `{${scope}.${direction}.percent}`, 'aria-hidden': `{${scope}.${direction}.unknown}` }, css: { height: '5px', background: 'var(--tt-border, #dedee5)', 'border-radius': '4px', overflow: 'hidden' }, children: [{ id: `${prefix}-${direction}-fill`, type: 'element', tag: 'div', props: { 'aria-hidden': true, style: { width: `{${scope}.${direction}.percent}%` } }, css: { height: '100%', background: 'var(--tt-accent, #7864d9)' } }] }
+   { id: `${prefix}-${direction}-bar`, type: 'element', tag: 'div', props: { role: 'meter', 'aria-label': `{${scope}.${direction}.title}`, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': `{${scope}.${direction}.percent}`, hidden: `{${scope}.${direction}.unknown}`, 'aria-hidden': `{${scope}.${direction}.unknown}` }, css: { height: '5px', background: 'var(--tt-border, #dedee5)', 'border-radius': '4px', overflow: 'hidden' }, children: [{ id: `${prefix}-${direction}-fill`, type: 'element', tag: 'div', props: { 'aria-hidden': true, style: { width: `{${scope}.${direction}.percent}%` } }, css: { height: '100%', background: 'var(--tt-accent, #7864d9)' } }] }
   ]
  })) }];
 }

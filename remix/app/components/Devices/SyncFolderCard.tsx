@@ -10,7 +10,7 @@ import { syncFolderCardBlocks, withSyncFolderQuickBlocks } from './syncFolderCar
 
 const glanceBlocks = syncConnectionGlanceBlocks();
 const withGlance = (blocks: WebpageBlock[]) => findBlock(blocks, 'connection-glance') ? blocks : [...blocks, ...glanceBlocks];
-const withGlanceAndQuick = (blocks: WebpageBlock[]) => withSyncFolderQuickBlocks(withGlance(blocks));
+const withGlanceAndQuick = (blocks: WebpageBlock[]) => withGlance(withSyncFolderQuickBlocks(blocks));
 const defaultQuickBlocks = withSyncFolderQuickBlocks(syncFolderCardBlocks);
 const defaultGlanceQuickBlocks = withGlanceAndQuick(syncFolderCardBlocks);
 
