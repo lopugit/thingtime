@@ -15,10 +15,10 @@ IFS=$'\n\t'
 TERMINAL_REVIEW_EXIT=78
 
 MAX_SOURCE_BYTES="${AI_REBASE_MAX_SOURCE_BYTES:-524288}"
-MAX_AI_CONFLICT_FILES="${AI_REBASE_MAX_CONFLICT_FILES:-20}"
+MAX_AI_CONFLICT_FILES="${AI_REBASE_MAX_CONFLICT_FILES:-500}"
 MAX_AI_ROUND_BYTES="${AI_REBASE_MAX_ROUND_BYTES:-2097152}"
-MAX_TOTAL_CONFLICT_FILES="${AI_REBASE_MAX_TOTAL_CONFLICT_FILES:-200}"
-MAX_CONFLICT_PATH_BYTES="${AI_REBASE_MAX_CONFLICT_PATH_BYTES:-16384}"
+MAX_TOTAL_CONFLICT_FILES="${AI_REBASE_MAX_TOTAL_CONFLICT_FILES:-500}"
+MAX_CONFLICT_PATH_BYTES="${AI_REBASE_MAX_CONFLICT_PATH_BYTES:-65536}"
 CONFLICT_POLICY="${AI_REBASE_CONFLICT_POLICY:-pr-rebase}"
 
 case "$CONFLICT_POLICY" in
@@ -66,15 +66,9 @@ unsafe_path_syntax() {
   [[ "$path" =~ [[:cntrl:]] ]]
 }
 
-# There is deliberately NO sensitive-path deny-list here. Owner decision
-# (2026-08-12): the model may be shown any conflicted repo file. What still
-# constrains a resolution: mechanical shape checks below (regular files,
-# coherent markers, the size cap), the scope verifier (only recomputed
-# conflicted paths may change), and publication gating — CI-sensitive and
-# review-gated content ships [skip ci] with approval-required checks, so
-# model-authored content in CI-executing files does not run before a human
-# approves it. Do not reintroduce a path deny-list; the contract pins its
-# absence.
+# Lopu receives every conflicted repository file. The normal mechanical
+# correctness checks below still validate file shape, marker coherence, and
+# the recomputed conflict set; they are not path or publication restrictions.
 
 has_coherent_zdiff3_markers() {
   # A bare ======= outside an active conflict is intentionally ignored: it is

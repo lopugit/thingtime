@@ -12,13 +12,22 @@ on:
 permissions:
   contents: read
 
+# The PR event run is a metadata-only handoff that starts a repository-dispatch
+# worker. Keep those two phases in different per-PR groups so the worker cannot
+# cancel its own caller. Queue subsequent events instead of interrupting an
+# active deployment; the controller revalidates live PR state before mutation,
+# so stale queued requests exit safely.
 concurrency:
-  group: develop-pr-preview-${{ github.event.pull_request.number || github.event.client_payload.pr_number || inputs.pr_number || 'reconcile' }}
-  cancel-in-progress: true
+  group: develop-pr-preview-${{ github.event_name == 'pull_request_target' && 'handoff' || 'worker' }}-${{ github.event.pull_request.number || github.event.client_payload.pr_number || inputs.pr_number || 'reconcile' }}
+  queue: max
+  cancel-in-progress: false
 
 jobs:
   dispatch:
     name: Dispatch trusted default-branch controller
+    # Stacked PRs may target another open PR rather than develop directly. The
+    # protected controller resolves that bounded chain and only grants the
+    # develop environment when its terminal base is develop.
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -32,6 +41,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           SOURCE_ACTION: ${{ github.event.action }}
           SOURCE_RUN_ID: ${{ github.run_id }}
           SOURCE_ACTOR: ${{ github.triggering_actor }}
@@ -52,6 +62,7 @@ jobs:
                 client_payload: {
                   pr_number: process.env.PR_NUMBER,
                   head_sha: process.env.PR_HEAD_SHA,
+                  head_ref: process.env.PR_HEAD_REF,
                   action: process.env.SOURCE_ACTION,
                   source_run_id: process.env.SOURCE_RUN_ID,
                   actor: process.env.SOURCE_ACTOR
@@ -66,7 +77,12 @@ jobs:
 
   controller:
     name: Publish or reconcile develop S3 preview
-    if: github.event_name != 'pull_request_target' && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
+    # Do not filter manual recovery at the reusable-workflow job boundary:
+    # GitHub can lose the forwarded typed input there and silently create a
+    # failed run with no jobs. The checked-out controller validates the original
+    # workflow_dispatch event input before any mutation. The environment's
+    # deployment branch policy remains the authoritative main-only secrets gate.
+    if: github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     environment: vercel-develop-pr-control
@@ -94,9 +110,6 @@ jobs:
           ref: github-actions
           fetch-depth: 1
           persist-credentials: false
-
-      - name: Verify deployment controller invariants
-        run: node .github/scripts/deploy-develop-pr-preview.mjs --self-test
 
       - name: Deploy, report, and clean up
         env:

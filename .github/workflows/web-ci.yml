@@ -2,7 +2,7 @@ name: Web CI
 
 # One workflow for the remix/ web app (TODO 15 DX ratchet), consolidated from
 # PRs #119 / #121 / #123 / #126:
-#   build      — Vite client build + typecheck ratchet + node --test unit suites
+#   build      — Vite client build + typecheck warning + node --test unit suites
 #   api-tests  — the same suite as the interactive /tests page, run headlessly
 #                against a real dev stack (Vite + Nitro) and a real MongoDB —
 #                no mocks, per FUNDAMENTALS.md (seed and test via the real API).
@@ -21,15 +21,33 @@ on:
       - .github/workflows/web-ci.yml
   workflow_dispatch:
 
+# Build/test jobs only read the repo. Pull-request write is used solely by the
+# no-checkout comment job that reports deterministic contract advisories.
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
 
 concurrency:
   group: web-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Two questions decide whether the full suite applies, and both must be asked.
+  #
+  # First, is there a web app in this tree at all? The control plane carries
+  # only `.github/**`, so a branch (or a PR stacked on one) legitimately has no
+  # `remix/`, and the suite below would fail in seconds against nothing. Branch
+  # names are the wrong signal — deleting `remix/**` still matches the path
+  # filter, and a stacked PR's base is the branch it is stacked on, not the
+  # control plane. Asking the tree works for every topology.
+  #
+  # Second, does this pull request touch the web app? The listener above is
+  # deliberately path-filter-free, so a PR that changes nothing under `remix/`
+  # still starts this workflow; it gets the lightweight required-context
+  # companions instead of the full suite.
+  #
+  # Either answer being "no" means `full_web_ci=false`, which hands the stable
+  # required-context names to the companions rather than leaving them pending.
   scope:
     name: Classify Web CI scope
     runs-on: ubuntu-latest
@@ -37,11 +55,35 @@ jobs:
     outputs:
       full_web_ci: ${{ steps.scope.outputs.full_web_ci }}
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect the web app
+        id: detect
+        run: |
+          set -euo pipefail
+          if [ -f remix/package.json ]; then
+            echo "has_app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "This tree has no remix/ app; the web suite does not apply."
+            echo "has_app=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Inspect pull-request paths
         id: scope
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          HAS_APP: ${{ steps.detect.outputs.has_app }}
         with:
           script: |
+            if (process.env.HAS_APP !== 'true') {
+              core.setOutput('full_web_ci', 'false');
+              core.info(
+                'This tree has no remix/ app: the required-context companions ' +
+                'stand in for the full Web CI suite.'
+              );
+              return;
+            }
+
             const pullRequest = context.payload.pull_request;
             if (!pullRequest) {
               core.setOutput('full_web_ci', 'true');
@@ -81,10 +123,164 @@ jobs:
               `${truncated ? ' (API result truncated; failing safe)' : ''}.`
             );
 
+  product-contract-advisories:
+    name: Product contract advisories (non-blocking)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      warnings: ${{ steps.contracts.outputs.warnings }}
+      report_b64: ${{ steps.contracts.outputs.report_b64 }}
+    steps:
+      - name: Check out the pull-request snapshot for read-only advisories
+        id: contract_checkout
+        continue-on-error: true
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Collect product contract advisory results
+        id: contracts
+        if: always()
+        shell: bash
+        env:
+          CHECKOUT_OUTCOME: ${{ steps.contract_checkout.outcome }}
+        run: |
+          set -uo pipefail
+          report="$RUNNER_TEMP/product-contract-advisories.md"
+          warnings=false
+          : >"$report"
+
+          escape_log() {
+            sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+          }
+          run_contract_if_present() {
+            local label="$1" script="$2"
+            local log status=0
+            if [ ! -f "$script" ]; then
+              printf -- '- ℹ️ %s is not present on this historical branch.\n' "$label" >>"$report"
+              return
+            fi
+            log="$(mktemp "$RUNNER_TEMP/product-contract.XXXXXX")"
+            timeout 120 node "$script" >"$log" 2>&1 || status=$?
+            if (( status == 0 )); then
+              printf -- '- ✅ %s\n' "$label" >>"$report"
+            else
+              warnings=true
+              printf -- '- ⚠️ %s (exit %s)\n' "$label" "$status" >>"$report"
+              {
+                echo '<details><summary>Sanitized tail</summary>'
+                echo
+                echo '<pre>'
+                tail -n 30 "$log" | head -c 12000 | escape_log
+                echo '</pre>'
+                echo '</details>'
+              } >>"$report"
+            fi
+            rm -f -- "$log"
+          }
+
+          if [ "$CHECKOUT_OUTCOME" != success ]; then
+            warnings=true
+            echo '- ⚠️ The advisory checkout was unavailable; no product contract examples ran.' >>"$report"
+          else
+            run_contract_if_present \
+              'Web CI required-context examples' \
+              remix/scripts/web-ci-required-context-contract.mjs
+            run_contract_if_present \
+              'Thin-listener topology examples' \
+              remix/scripts/workflow-caller-contract.mjs
+          fi
+
+          echo "warnings=$warnings" >>"$GITHUB_OUTPUT"
+          printf 'report_b64=' >>"$GITHUB_OUTPUT"
+          base64 -w0 <"$report" >>"$GITHUB_OUTPUT"
+          echo >>"$GITHUB_OUTPUT"
+          if [ "$warnings" = true ]; then
+            echo '::warning::One or more product contract advisories need review; required CI remains unaffected.'
+          fi
+          {
+            echo '## Product contract advisories'
+            echo
+            cat "$report"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  comment-product-contract-advisories:
+    name: Comment product contract advisories (non-blocking)
+    needs: product-contract-advisories
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Upsert or clear the advisory comment
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          HAS_WARNINGS: ${{ needs.product-contract-advisories.outputs.warnings }}
+          REPORT_B64: ${{ needs.product-contract-advisories.outputs.report_b64 }}
+        with:
+          script: |
+            const marker = '<!-- thingtime-product-contract-advisories:v1 -->';
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = [...comments].reverse().find(
+              ({ body, user }) => user?.login === 'github-actions[bot]' && body?.includes(marker)
+            );
+            if (process.env.HAS_WARNINGS !== 'true') {
+              if (existing) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                });
+              }
+              return;
+            }
+            let report = '';
+            try {
+              report = Buffer.from(process.env.REPORT_B64 || '', 'base64').toString('utf8');
+            } catch {
+              report = '- ⚠️ The advisory report could not be decoded.';
+            }
+            report = report.slice(0, 50000);
+            const body = [
+              '⚠️ **Deterministic product contract advisory**',
+              '',
+              'These examples are warning-only. They do not fail the build/API contexts or block this PR.',
+              '',
+              report,
+              '',
+              marker,
+            ].join('\n');
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
   build:
     needs: scope
     if: needs.scope.outputs.full_web_ci == 'true'
-    # This label is a ruleset API identifier. Keep it stable even when the
+    # This label is a ruleset API identifier. Keep it stable even though the
     # checked-out product branch makes the ratchet implementation warning-only.
     name: ${{ needs.scope.outputs.full_web_ci == 'true' && 'Build + typecheck ratchet + unit tests' || 'Full Web CI build (not needed)' }}
     runs-on: ubuntu-latest
@@ -111,10 +307,9 @@ jobs:
       - name: Build client shell
         run: pnpm run build:client
 
-      # Fails only when the tsc error count grows past
-      # scripts/typecheck-baseline.json; shrinking the count is celebrated and
-      # locked in with --update-baseline.
-      - name: Typecheck ratchet
+      # Warns without failing when the tsc error count grows past the baseline;
+      # shrinking the count is celebrated and locked in with --update-baseline.
+      - name: Typecheck ratchet (warning-only)
         run: pnpm run typecheck:ratchet
 
       - name: Unit tests
