@@ -70,7 +70,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
         const photoOriginalPost=window.thingtimeNativeBridge.postMessage;
         window.thingtimeNativeBridge.postMessage=function(m){
           if(m.type==='mobile-files'){
-            if(m.payload?.action==='scan')window.__photoScans++;
+            if(['scan','scan-capture'].includes(m.payload?.action))window.__photoScans++;
             if(m.payload?.action==='upload-file')window.__nativeUploadStats.files++;
             if(m.payload?.action==='upload-part')throw Error('Whole-file capability fell back to bridge part uploads');
             if(m.payload?.action==='read'&&m.payload.length>1)window.__nativeUploadStats.legacy++;
@@ -86,6 +86,8 @@ final class PhotoBackupInstalledTests: XCTestCase {
         """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         web.load(URLRequest(url: origin.appendingPathComponent("things")))
         for _ in 0..<100 where UIApplication.shared.applicationState != .active { try await Task.sleep(nanoseconds: 100_000_000) }
+        try await awaitTrue(web, "Array.from(document.querySelectorAll('button')).some(b=>['Device setup','Add this device','Choose folder'].includes(b.textContent.trim()))")
+        _ = try await web.evaluateJavaScript("Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Device setup')?.click()")
         try await awaitTrue(web, "Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Add this device'||b.textContent.trim()==='Choose folder')")
         _ = try await web.evaluateJavaScript("Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Add this device')?.click()")
         try await awaitTrue(web, "Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Choose folder'&&!b.disabled)")
@@ -158,9 +160,9 @@ final class PhotoBackupInstalledTests: XCTestCase {
             print("IOS_PHOTO_UPLOAD_READY: Starting the visible Upload now control for \(name).")
             let quoted = String(data: try JSONSerialization.data(withJSONObject: [name]), encoding: .utf8)!
             let card = "Array.from(document.querySelectorAll('p')).find(e=>e.textContent===(" + quoted + ")[0])?.parentElement?.parentElement"
-            try await awaitTrue(web, "Array.from((" + card + ")?.querySelectorAll('button')||[]).some(b=>b.textContent.trim()==='Upload now'&&!b.disabled)")
+            try await awaitTrue(web, "Array.from((" + card + ")?.querySelectorAll('button')||[]).some(b=>['Start backup','Upload now'].includes(b.textContent.trim())&&!b.disabled)")
             _ = try await web.evaluateJavaScript("(" + card + ").scrollIntoView({block:'center'})")
-            _ = try await web.evaluateJavaScript("Array.from((" + card + ").querySelectorAll('button')).find(b=>b.textContent.trim()==='Upload now'&&!b.disabled).click()")
+            _ = try await web.evaluateJavaScript("Array.from((" + card + ").querySelectorAll('button')).find(b=>['Start backup','Upload now'].includes(b.textContent.trim())&&!b.disabled).click()")
             try await awaitTrue(web, "window.__photoScans>" + String(previous))
             if background {
                 try await awaitTrue(web, "window.__nativeUploadStarted!==null")
@@ -190,10 +192,12 @@ final class PhotoBackupInstalledTests: XCTestCase {
             let config: [String: Any] = ["configurationVersion": 1, "name": name, "deviceId": paired, "localRootId": grant.id, "sourceKind": "photos", "remoteFolderId": cloud!, "mode": "backup", "paused": false, "propagateDeletes": false, "network": "any", "chargingOnly": false, "excludedPaths": excluded]
             let saved = try await api("/api/v1/things", body: ["thingtime": ["file-sync"], "crystal": config])
             connection = try XCTUnwrap((saved["thing"] as? [String: Any])?["id"] as? String)
+            let firstStarted = Date()
             web.reload(); try await startAndAwaitUpload(background: env["THINGTIME_PHOTO_BACKGROUND_TEST"] == "1")
             let firstNodes = try await cloudNodes()
             let firstNode = try XCTUnwrap(firstNodes.first { $0["path"] as? String == first.path }), firstFile = try XCTUnwrap(firstNode["file"] as? [String: Any])
             try await verifyBytes(firstFile); print("IOS_PHOTO_FIRST_HASH_PASS")
+            print("IOS_PHOTO_FIRST_CONFIRMED_MS: \(Int(Date().timeIntervalSince(firstStarted) * 1000))")
             _ = try await createPhoto()
             try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(PHAsset.fetchAssets(withLocalIdentifiers: [firstID], options: nil)) }
             owned.removeAll { $0 == firstID }

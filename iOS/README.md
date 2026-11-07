@@ -472,6 +472,13 @@ rechecks the complete accessible resource inventory before returning success.
 One original is exported at a time into private temporary storage and reused for
 bounded reads under the same owner/grant; the temporary copy is cleared on
 suspension or failure. Available device storage must fit the largest original plus one upload part.
+An export failure keeps the saved connection and uploaded cloud copies. The
+status distinguishes originals that require an iCloud download, denied Photos
+access, insufficient device storage and other read failures. Resolve the stated
+cause and retry the backup; already indexed original observations are reused.
+The strict scan still prepares every original before the first upload. One
+iCloud-only original blocks that scan; these status improvements do not add
+iCloud downloads or allow partial-library backups.
 Originals must currently be downloaded locally in Photos: the adapter refuses
 unavailable originals instead of starting iCloud traffic outside the sync network
 policy. Background jobs, large-library paging and controlled iCloud downloads

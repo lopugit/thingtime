@@ -12133,6 +12133,11 @@ transfer, whole-account snapshots or production deployment.
 - `PhotoLibraryTests` covers distinct same-name resources, multipart fingerprints,
   bounded reads, owner/grant cache partitioning, changed inventories, revoked
   permission, missing originals, cancellation and denied write authority.
+- PhotoKit export errors must distinguish network-required originals, revoked
+  access, device storage exhaustion, cancellation and other read failures without
+  exposing native asset IDs or paths. Retry after an unavailable original must
+  retain prior indexed observations and include every original/companion resource;
+  a failed scan must never appear as an empty successful backup.
 - Keep actual limited-selection changes, Live Photo/video/EXIF fixtures, iCloud
   downloads, physical devices, large libraries and background acceptance open
   until each has direct evidence. Resource bytes do not prove album/database
