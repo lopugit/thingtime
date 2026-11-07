@@ -14,6 +14,20 @@ import { MAPS_FEATURE, MAPS_FEATURE_VERSION } from '../schemas/maps';
 import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
+test('paired file transfer admissions require their independent same-origin contract', () => {
+  const feature = 'api.file-sync-transfer-admissions';
+  const path = '/api/v1/files/sync-transfer-admissions';
+  const origin = 'https://file-transfer.test';
+  const manifest = thingtimeCapabilityManifest(origin);
+  assert.equal(typeof routeModules['v1/files/sync-transfer-admissions'], 'function');
+  assert.equal(createApiCapabilitiesManifest(Object.keys(routeModules)).features[feature], '1.0.0');
+  assert.equal(manifest.origin, origin);
+  assert.equal(manifest.features[feature].version, '1.0.0');
+  assert.deepEqual(manifest.operations.find(operation => operation.path === path), { feature, path, methods: ['POST'] });
+  for (const compatible of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(compatible, '1.0.0'), true);
+  for (const incompatible of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(incompatible, '1.0.0'), false);
+});
+
 test('connector protection preferences are registered and negotiated independently', () => {
   const feature = 'api.settings-connector-protections';
   const path = '/api/v1/settings/connector-protections';

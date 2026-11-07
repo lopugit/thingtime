@@ -314,15 +314,16 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 			return { uploadId };
 		},
 
-		async signUploadPart({ objectKey, uploadId, partNumber, checksumSha256, contentLength }) {
+		async signUploadPart({ objectKey, uploadId, partNumber, checksumSha256, contentLength, expiresInSeconds = PART_URL_TTL_SECONDS }) {
 			assertObjectKey(objectKey);
 			await readUpload(uploadId);
 			assertPartNumber(partNumber);
 			if (!Number.isSafeInteger(contentLength) || contentLength < 0) throw invalid('Invalid part length');
-			const exp = String(Math.floor(now() / 1000) + PART_URL_TTL_SECONDS);
+			const expiresIn = Math.min(expiresInSeconds, PART_URL_TTL_SECONDS);
+			const exp = String(Math.floor(now() / 1000) + expiresIn);
 			const fields = ['part', objectKey, uploadId, String(partNumber), checksumSha256, String(contentLength), exp];
 			const params = new URLSearchParams({ op: 'part', key: objectKey, upload: uploadId, part: String(partNumber), checksum: checksumSha256, length: String(contentLength), exp, sig: await sign(fields) });
-			return { url: `${urlPrefix}?${params}`, expiresAt: expiresAt(PART_URL_TTL_SECONDS), headers: { 'x-amz-checksum-sha256': checksumSha256 } };
+			return { url: `${urlPrefix}?${params}`, expiresAt: expiresAt(expiresIn), headers: { 'x-amz-checksum-sha256': checksumSha256 } };
 		},
 
 		async listParts({ objectKey, uploadId }) {
