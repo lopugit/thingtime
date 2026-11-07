@@ -12197,6 +12197,35 @@ transfer, whole-account snapshots or production deployment.
   sends one cancellation; switching web destinations sends no old account
   context to the new page (`MobileDeviceBridgeLifecycleTests`).
 
+### iOS deferred Photos transfers
+
+- [ ] Keep the selected connection Wi-Fi only. On cellular, verify a Wi-Fi wait
+  before Photos preparation and no upload payload. Return to Wi-Fi and verify
+  transfer without modifying the setting. Check explicit cellular opt-in and
+  charging-only separately on a disposable connection.
+- [ ] With a mixed library, confirm locally available originals and each
+  available companion publish with exact stored bytes. Check the typed iCloud
+  gap ledger and actionable incomplete status, including an all-cloud library
+  with zero available resources. Make a missing original available in Photos
+  and verify its original identity uploads without changing prior revisions.
+- [ ] Under explicit cellular permission, check the PhotoKit download phase
+  and independent upload status for an iCloud-only image, video and Live Photo.
+  Revoke access, disconnect or unplug with charging-only during retrieval; the
+  exact incomplete original remains retryable. Under limited Photos access,
+  verify only the authorized resources are counted and no full-library
+  completion is shown. Wi-Fi-only never starts a PhotoKit network fetch.
+- [ ] With ordinary Photos consent and an isolated replica, run
+  `THINGTIME_PHOTO_DEFERRED_TEST=1` through the installed acceptance harness.
+  Hold the first WebView upload, expire native processing after a confirmed
+  part, and verify multiple exact originals through scoped admission without
+  publishing Timeline. Reopen and verify the same attachments and original
+  operation receipts with no duplicate revisions. Revoke the saved connection
+  or pause it and verify the old queue cannot sign or complete.
+- [ ] On a physical iPhone, verify actual BGProcessing delivery while unfocused
+  or locked and repeat the expiry/reopen and Wi-Fi cases. Separate scheduler
+  injection or simulator refusal from physical OS delivery. No completion
+  claim is allowed for a queue that has not published its foreground receipts.
+
 ### Mac photo library backup
 
 - Run `MacPhotosSyncTests`, `MacFolderSyncTests` and `FolderStreamXPCTests`.

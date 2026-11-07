@@ -3,9 +3,9 @@ import Foundation
 
 /// Snapshot of the reviewed editable Thing, never an independent permission.
 /// Each part re-reads that Thing and checks the live device and local conditions.
-struct NativeUploadAuthorization: Decodable, Sendable {
-    struct Scope: Decodable, Sendable { let ownerId: String; let origin: String; let dataPlane: String; let rootId: String; let deviceId: String }
-    struct Configuration: Decodable, Equatable, Sendable {
+struct NativeUploadAuthorization: Codable, Equatable, Sendable {
+    struct Scope: Codable, Equatable, Sendable { let ownerId: String; let origin: String; let dataPlane: String; let rootId: String; let deviceId: String }
+    struct Configuration: Codable, Equatable, Sendable {
         let configurationVersion: Int
         let name: String
         let deviceId: String
@@ -18,6 +18,9 @@ struct NativeUploadAuthorization: Decodable, Sendable {
         let network: String
         let chargingOnly: Bool
         let excludedPaths: [String]
+    }
+    enum Wait: String, Error {
+        case wifi, network, offline, charging
     }
     let id: String
     let updatedAt: String
@@ -41,8 +44,16 @@ struct NativeUploadAuthorization: Decodable, Sendable {
         guard response["ok"] as? Bool == true, let thing = response["thing"] as? [String: Any] else { throw MobileFolderStore.Failure.changed }
         let row = try JSONDecoder().decode(Row.self, from: JSONSerialization.data(withJSONObject: thing))
         guard row.id == id, row.updatedAt == updatedAt, row.author.id == scope.ownerId, row.appId == nil, row.targetId == nil,
-              row.acl == ["tt:user"], row.thingtime == ["file-sync"], row.crystal == configuration,
-              ["wifi", "cellular", "ethernet"].contains(network), configuration.network != "wifi" || network == "wifi",
-              !configuration.chargingOnly || charging else { throw MobileFolderStore.Failure.changed }
+              row.acl == ["tt:user"], row.thingtime == ["file-sync"], row.crystal == configuration else {
+            throw MobileFolderStore.Failure.changed
+        }
+        try verifyConditions(network: network, charging: charging)
+    }
+
+    func verifyConditions(network: String, charging: Bool) throws {
+        if configuration.network == "wifi" && network != "wifi" { throw Wait.wifi }
+        if network == "offline" { throw Wait.offline }
+        guard ["wifi", "cellular", "ethernet"].contains(network) else { throw Wait.network }
+        if configuration.chargingOnly && !charging { throw Wait.charging }
     }
 }

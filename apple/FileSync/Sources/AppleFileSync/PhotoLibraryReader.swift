@@ -25,6 +25,25 @@ public protocol PhotoResourceProvider: Sendable {
     func inventory() throws -> [PhotoResource]
     func validate(_ resource: PhotoResource) throws
     func write(_ resource: PhotoResource, to url: URL) throws
+    func download(_ resource: PhotoResource, to url: URL, control: PhotoOriginalDownloadControl) throws
+}
+public extension PhotoResourceProvider {
+    func download(_ resource: PhotoResource, to url: URL, control: PhotoOriginalDownloadControl) throws {
+        throw PhotoLibraryReader.Failure.cloudOriginal
+    }
+}
+
+/// Native hosts only supply this after verifying an explicitly unrestricted
+/// Photos network policy. PhotoKit has no Wi-Fi-only interface selector.
+public struct PhotoOriginalDownloadControl: Sendable {
+    let authorize: @Sendable () throws -> Void
+    let progress: @Sendable (Double?) -> Void
+    public init(authorize: @escaping @Sendable () throws -> Void, progress: @escaping @Sendable (Double?) -> Void = { _ in }) {
+        self.authorize = authorize; self.progress = progress
+    }
+    public func reporting(_ report: @escaping @Sendable (Double?) -> Void) -> Self {
+        .init(authorize: authorize, progress: report)
+    }
 }
 
 /// One temporary original at a time, shared by bounded range reads. PhotoKit has
@@ -141,13 +160,16 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     }
 
     private func scanEntries(_ resources: ArraySlice<PhotoResource>, scope: Scope,
-                             authorize: () throws -> Void = {}, progress: () -> Void = {}) throws -> [MobileFolderReader.Entry] {
+                             authorize: () throws -> Void = {}, allowCloudGaps: Bool = false,
+                             download: PhotoOriginalDownloadControl? = nil, beginDownload: () -> Bool = { true },
+                             cloudGap: (PhotoResource) -> Void = { _ in },
+                             progress: () -> Void = {}) throws -> [MobileFolderReader.Entry] {
         let client = try requireClient()
         for resource in resources { try authorize(); try require(); try provider.validate(resource) }
         let observed: [MobileFolderReader.Entry?] = try client.run("photoObservations", scope: scope,
             fields: ["resources": resources.map(resourceKey)])
         guard observed.count == resources.count else { throw RustInventoryTransportFailure.invalidResponse }
-        return try zip(resources, observed).map { resource, entry in
+        return try zip(resources, observed).compactMap { resource, entry in
             try authorize()
             let result: MobileFolderReader.Entry
             if let entry {
@@ -155,7 +177,11 @@ public final class PhotoLibraryReader: @unchecked Sendable {
                 guard try project(entry, resource: resource) == entry else { throw RustInventoryTransportFailure.invalidResponse }
                 result = entry
             } else {
-                result = try materialize(resource, scope: scope).0
+                do { result = try materialize(resource, scope: scope, download: download, beginDownload: beginDownload).0 }
+                catch Failure.cloudOriginal where allowCloudGaps {
+                    try authorize(); try require(); try provider.validate(resource)
+                    cloudGap(resource); return nil
+                }
             }
             try authorize(); progress()
             return result
@@ -189,7 +215,8 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         try read(scope: Self.legacyScope(scope), path: path, version: version, offset: offset, length: length)
     }
 
-    private func materialize(_ resource: PhotoResource, scope: Scope) throws -> (MobileFolderReader.Entry, MobileFolderReader.Entry, Data) {
+    private func materialize(_ resource: PhotoResource, scope: Scope, download: PhotoOriginalDownloadControl? = nil,
+                             beginDownload: () -> Bool = { true }) throws -> (MobileFolderReader.Entry, MobileFolderReader.Entry, Data) {
         try require(); try provider.validate(resource)
         if let cached, cached.scope == scope, cached.resource == resource {
             try MobileFolderReader.access(cached.bookmark) { try validateNative(cached.native, root: $0) }
@@ -200,7 +227,18 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("thingtime-photo-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700]); directory = root
         do {
-            try provider.write(resource, to: root.appendingPathComponent("original")); try require(); try provider.validate(resource)
+            let original = root.appendingPathComponent("original")
+            do { try provider.write(resource, to: original) }
+            catch Failure.cloudOriginal {
+                guard let download, beginDownload() else { throw Failure.cloudOriginal }
+                try require(); try download.authorize()
+                if FileManager.default.fileExists(atPath: original.path) { try FileManager.default.removeItem(at: original) }
+                download.progress(0)
+                defer { download.progress(nil) }
+                try provider.download(resource, to: original, control: download)
+                try download.authorize()
+            }
+            try require(); try provider.validate(resource)
             let bookmark = try FolderBookmark.create(root)
             let native = try observe(bookmark: bookmark, scope: scope, resource: resource)
             try require(); try provider.validate(resource)
@@ -276,6 +314,13 @@ public final class PhotoLibraryReader: @unchecked Sendable {
 
     public func prepareCapture(scope: Scope, id: String, generation: String,
                                progress: (Int) -> Void = { _ in }, authorize: () throws -> Void = {}) throws -> MobileFolderInventory.Capture {
+        try prepareCapture(scope: scope, id: id, generation: generation, allowCloudGaps: false,
+                           progress: { indexed, _ in progress(indexed) }, authorize: authorize)
+    }
+
+    public func prepareCapture(scope: Scope, id: String, generation: String, allowCloudGaps: Bool,
+                               download: PhotoOriginalDownloadControl? = nil, maximumCloudDownloads: Int? = nil,
+                               progress: (Int, Int) -> Void = { _, _ in }, authorize: () throws -> Void = {}) throws -> MobileFolderInventory.Capture {
         lock.lock(); defer { lock.unlock() }
         guard UUID(uuidString: id) != nil, id.lowercased() == generation.lowercased() else { throw MobileFolderStore.Failure.invalid }
         let client = try requireClient(), generation = generation.lowercased()
@@ -290,18 +335,34 @@ public final class PhotoLibraryReader: @unchecked Sendable {
                 throw RustInventoryTransportFailure.invalidResponse
             }
             began = true
+            var indexed = prepared.entryCount, skipped = prepared.gapCount, cloudDownloads = 0
             if prepared.coverage == "scanning" {
-                var indexed = 0
+                // An interrupted async job is discarded before a new capture starts.
+                guard indexed == 0, skipped == 0 else { throw Failure.changed }
                 for startIndex in stride(from: 0, to: start.resources.count, by: Self.observationBatchSize) {
                     let end = min(start.resources.count, startIndex + Self.observationBatchSize)
                     let resources = start.resources[startIndex..<end]
-                    _ = try scanEntries(resources, scope: scope, authorize: authorize) { indexed += 1; progress(indexed) }
-                    let _: RustInventoryClient.Status = try client.run("appendPhotoCapture", scope: scope,
-                        generation: generation, fields: ["resources": resources.map(resourceKey)])
+                    var gaps = Set<String>()
+                    let entries = try scanEntries(resources, scope: scope, authorize: authorize, allowCloudGaps: allowCloudGaps, download: download, beginDownload: {
+                            if let maximumCloudDownloads, cloudDownloads >= maximumCloudDownloads { return false }
+                            cloudDownloads += 1
+                            return true
+                        }, cloudGap: { resource in
+                            gaps.insert(resource.path); skipped += 1; progress(indexed, skipped)
+                        }) { indexed += 1; progress(indexed, skipped) }
+                    if !entries.isEmpty {
+                        let _: RustInventoryClient.Status = try client.run("appendPhotoCapture", scope: scope,
+                            generation: generation, fields: ["resources": resources.filter { !gaps.contains($0.path) }.map(resourceKey)])
+                    }
+                    if !gaps.isEmpty {
+                        let _: RustInventoryClient.Status = try client.run("appendPhotoCloudGaps", scope: scope,
+                            generation: generation, fields: ["paths": gaps.sorted()])
+                    }
                 }
             }
             try authorize(); try require()
-            return .init(id: id.lowercased(), generation: generation, totalEntries: start.resources.count)
+            guard indexed + skipped == start.resources.count, allowCloudGaps || skipped == 0 else { throw Failure.changed }
+            return Self.descriptor(id: generation, entries: indexed, gaps: skipped, allowCloudGaps: allowCloudGaps)
         } catch {
             clear(); membership = nil
             if began {
@@ -311,27 +372,38 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         }
     }
 
+    private static func descriptor(id: String, entries: Int, gaps: Int, allowCloudGaps: Bool) -> MobileFolderInventory.Capture {
+        .init(id: id, generation: id, totalEntries: entries, coverage: allowCloudGaps ? (gaps == 0 ? "full" : "partial") : nil,
+              consistency: allowCloudGaps ? "per-entry" : nil, totalSkipped: allowCloudGaps ? gaps : nil)
+    }
+
+    private func checkCapture(_ capture: MobileFolderInventory.Capture, status: RustInventoryClient.Status) throws {
+        guard UUID(uuidString: capture.id) != nil, capture.id == capture.generation, status.mode == "photo",
+              status.generation == capture.generation, status.entryCount >= 0, status.gapCount >= 0,
+              status.entryCount <= Int.max - status.gapCount,
+              capture == Self.descriptor(id: capture.id, entries: status.entryCount, gaps: status.gapCount, allowCloudGaps: capture.coverage != nil),
+              capture.coverage != nil || status.gapCount == 0 else { throw Failure.changed }
+    }
+
     public func sealCapture(scope: Scope, capture: MobileFolderInventory.Capture) throws -> MobileFolderInventory.Capture {
         lock.lock(); defer { lock.unlock() }
         try require()
         let client = try requireClient()
         let status: RustInventoryClient.Status? = try client.run("status", scope: scope, generation: capture.generation)
         let current = try snapshot()
-        guard let status, status.mode == "photo", status.generation == capture.generation,
-              status.rootVersion == current.revision, status.entryCount == current.resources.count,
-              status.entryCount == capture.totalEntries else { throw Failure.changed }
+        guard let status else { throw Failure.changed }
+        try checkCapture(capture, status: status)
+        guard status.rootVersion == current.revision, status.entryCount + status.gapCount == current.resources.count else { throw Failure.changed }
         let sealed: RustInventoryClient.Status = try client.run("sealPhotoCapture", scope: scope, generation: capture.generation,
-            fields: ["resourceRevision": current.revision, "totalEntries": capture.totalEntries])
-        guard sealed.generation == capture.generation, sealed.mode == "photo", sealed.coverage == "sealed",
-              sealed.rootVersion == current.revision, sealed.entryCount == capture.totalEntries else {
-            throw RustInventoryTransportFailure.invalidResponse
-        }
+            fields: ["resourceRevision": current.revision, "totalEntries": capture.totalEntries, "totalGaps": status.gapCount])
+        try checkCapture(capture, status: sealed)
+        guard sealed.coverage == "sealed", sealed.rootVersion == current.revision else { throw RustInventoryTransportFailure.invalidResponse }
         try require()
         try remember(current.resources, scope: scope, revision: current.revision)
         return capture
     }
 
-    public func status(scope: Scope, id: String) throws -> MobileFolderInventory.Capture? {
+    public func status(scope: Scope, id: String, allowCloudGaps: Bool = false) throws -> MobileFolderInventory.Capture? {
         try require()
         guard UUID(uuidString: id) != nil else { throw MobileFolderStore.Failure.invalid }
         let generation = id.lowercased()
@@ -339,8 +411,40 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         guard let value, value.mode == "photo", value.coverage == "sealed", value.generation == generation else { return nil }
         lock.lock(); defer { lock.unlock() }
         let current = try snapshot()
-        guard current.revision == value.rootVersion, current.resources.count == value.entryCount else { throw Failure.changed }
-        return .init(id: generation, generation: generation, totalEntries: value.entryCount)
+        let capture = Self.descriptor(id: generation, entries: value.entryCount, gaps: value.gapCount, allowCloudGaps: allowCloudGaps)
+        try checkCapture(capture, status: value)
+        guard current.revision == value.rootVersion, current.resources.count == value.entryCount + value.gapCount else { throw Failure.changed }
+        return capture
+    }
+
+    public func readSkipped(scope: Scope, capture: MobileFolderInventory.Capture, offset: Int, pageSize: Int? = nil) throws -> MobileFolderInventory.SkippedPage {
+        lock.lock(); defer { lock.unlock() }
+        try require()
+        let limit = min(pageSize ?? MobileFolderInventory.maximumPageEntries, MobileFolderInventory.maximumPageEntries)
+        guard limit > 0, let total = capture.totalSkipped, offset >= 0, offset < total || (offset == 0 && total == 0)
+        else { throw MobileFolderStore.Failure.invalid }
+        let client = try requireClient()
+        let value: RustInventoryClient.Status? = try client.run("status", scope: scope, generation: capture.generation)
+        guard let value, value.coverage == "sealed" else { throw Failure.changed }
+        try checkCapture(capture, status: value)
+        if membership?.scope != scope || membership?.revision != value.rootVersion {
+            let current = try snapshot()
+            guard current.revision == value.rootVersion, current.resources.count == value.entryCount + value.gapCount else { throw Failure.changed }
+            try remember(current.resources, scope: scope, revision: current.revision)
+        }
+        let page = try client.gaps(scope, generation: capture.generation, offset: offset, limit: limit)
+        let next = offset + page.gaps.count
+        guard page.generation == capture.generation, page.gapCount == total, next <= total,
+              page.gaps.count <= limit, !page.gaps.isEmpty || total == 0, page.nextOffset == (next < total ? next : nil) else { throw Failure.changed }
+        let rows = try page.gaps.enumerated().map { i, gap in
+            try require()
+            let checked = try gap.checked()
+            guard checked.reason == .cloudOriginal, checked.scope == .entry,
+                  let path = checked.path, let resource = membership?.resources[path] else { throw Failure.changed }
+            try provider.validate(resource)
+            return MobileFolderInventory.Skipped(ordinal: offset + i, gap: checked)
+        }
+        return .init(capture: capture, offset: offset, skipped: rows, nextOffset: page.nextOffset, totalSkipped: total)
     }
 
     public func page(scope: Scope, capture: MobileFolderInventory.Capture, offset: Int, pageSize: Int? = nil) throws -> MobileFolderInventory.Page {
@@ -348,7 +452,6 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         do {
             try require()
             guard UUID(uuidString: capture.id) != nil, capture.id == capture.generation,
-                  capture.coverage == nil, capture.consistency == nil, capture.totalSkipped == nil,
                   offset >= 0, offset <= capture.totalEntries,
                   offset < capture.totalEntries || offset == 0 else { throw MobileFolderStore.Failure.invalid }
             let client = try requireClient()
@@ -356,6 +459,8 @@ public final class PhotoLibraryReader: @unchecked Sendable {
             guard limit > 0 else { throw MobileFolderStore.Failure.invalid }
             let page: RustInventoryClient.Page = try client.run("photoPage", scope: scope, generation: capture.generation,
                 fields: ["offset": offset, "limit": limit])
+            guard let status = page.status else { throw Failure.changed }
+            try checkCapture(capture, status: status)
             guard page.generation == capture.generation, page.coverage == "sealed", page.totalEntries == capture.totalEntries,
                   page.entries.count <= limit, page.entries.count <= capture.totalEntries - offset,
                   !page.entries.isEmpty || capture.totalEntries == 0 else { throw Failure.changed }
@@ -363,7 +468,7 @@ public final class PhotoLibraryReader: @unchecked Sendable {
             guard page.nextOffset == (next < capture.totalEntries ? next : nil) else { throw Failure.changed }
             if membership?.scope != scope || membership?.revision != page.rootVersion || page.nextOffset == nil {
                 let current = try snapshot()
-                guard current.revision == page.rootVersion, current.resources.count == capture.totalEntries else { throw Failure.changed }
+                guard current.revision == page.rootVersion, current.resources.count == status.entryCount + status.gapCount else { throw Failure.changed }
                 try remember(current.resources, scope: scope, revision: current.revision)
             }
             for entry in page.entries {
@@ -395,12 +500,12 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     }
 
     public func stream(scope: Scope, path: String, version: String, offset: Int64, length: Int,
-                       receive: (Data) throws -> Void) throws -> Int64 {
+                       download: PhotoOriginalDownloadControl? = nil, receive: (Data) throws -> Void) throws -> Int64 {
         lock.lock(); defer { lock.unlock() }
         do {
             try require()
             guard let resource = try resolve(path: path, scope: scope) else { throw Failure.unavailable }
-            let (entry, native, bookmark) = try materialize(resource, scope: scope)
+            let (entry, native, bookmark) = try materialize(resource, scope: scope, download: download)
             guard entry.version == version else { throw Failure.changed }
             let size = try MobileFolderReader.stream(bookmark: bookmark, path: native.path, version: native.version, offset: offset, length: length) { bytes in
                 try require(); try receive(bytes)
@@ -409,12 +514,13 @@ public final class PhotoLibraryReader: @unchecked Sendable {
             return size
         } catch { clear(); throw error }
     }
-    public func read(scope: Scope, path: String, version: String, offset: Int64, length: Int) throws -> MobileFolderReader.Chunk {
+    public func read(scope: Scope, path: String, version: String, offset: Int64, length: Int,
+                     download: PhotoOriginalDownloadControl? = nil) throws -> MobileFolderReader.Chunk {
         lock.lock(); defer { lock.unlock() }
         do {
             try require(); guard offset >= 0, length > 0, length <= MobileFolderReader.maximumReadBytes else { throw MobileFolderStore.Failure.invalid }
             guard let resource = try resolve(path: path, scope: scope) else { throw Failure.unavailable }
-            let (entry, native, bookmark) = try materialize(resource, scope: scope)
+            let (entry, native, bookmark) = try materialize(resource, scope: scope, download: download)
             guard entry.version == version else { throw Failure.changed }
             let chunk = try MobileFolderReader.read(bookmark: bookmark, path: native.path, version: native.version, offset: offset, length: length)
             try require(); try provider.validate(resource)
@@ -460,26 +566,53 @@ public struct SystemPhotoResources: PhotoResourceProvider {
     }
     public func validate(_ resource: PhotoResource) throws { _ = try resolve(resource) }
     public func write(_ resource: PhotoResource, to url: URL) throws {
+        try export(resource, to: url, download: nil)
+    }
+    public func download(_ resource: PhotoResource, to url: URL, control: PhotoOriginalDownloadControl) throws {
+        try export(resource, to: url, download: control)
+    }
+    private func export(_ resource: PhotoResource, to url: URL, download: PhotoOriginalDownloadControl?) throws {
         let original = try resolve(resource), manager = PHAssetResourceManager.default(), options = PHAssetResourceRequestOptions()
-        // Do not initiate unbounded iCloud traffic outside the sync network policy.
-        options.isNetworkAccessAllowed = false
+        try download?.authorize()
+        options.isNetworkAccessAllowed = download != nil
         guard FileManager.default.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600]) else { throw MobileFolderStore.Failure.storage }
         let file = try FileHandle(forWritingTo: url); defer { try? file.close() }
         let state = PhotoExportState(file: file)
+        if let download {
+            options.progressHandler = { progress in
+                guard progress.isFinite, (0...1).contains(progress) else { return }
+                if state.report(progress) { download.progress(progress) }
+            }
+        }
         let request = manager.requestData(for: original, options: options, dataReceivedHandler: { state.receive($0) }, completionHandler: { state.complete($0) })
         do {
-            while state.finished.wait(timeout: .now() + 0.1) == .timedOut { try require() }
-            try state.result(); try require(); try validate(resource)
+            while state.finished.wait(timeout: .now() + 0.1) == .timedOut {
+                try require(); try download?.authorize(); try state.result()
+                if download != nil && state.stalled() { throw PhotoLibraryReader.Failure.cloudOriginal }
+            }
+            try state.result(); try require(); try download?.authorize(); try validate(resource)
         } catch { manager.cancelDataRequest(request); state.cancel(); throw error }
     }
 }
 private final class PhotoExportState: @unchecked Sendable {
     let finished = DispatchSemaphore(value: 0)
     private let lock = NSLock(), file: FileHandle
-    private var error: Error?, cancelled = false
+    private var error: Error?, cancelled = false, terminal = false
+    private var lastActivity = DispatchTime.now().uptimeNanoseconds
+    private var progress = 0.0
+    func report(_ fraction: Double) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard !cancelled, !terminal, fraction > progress else { return false }
+        progress = fraction; lastActivity = DispatchTime.now().uptimeNanoseconds
+        return true
+    }
+    func stalled() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return DispatchTime.now().uptimeNanoseconds - lastActivity > 60_000_000_000
+    }
     init(file: FileHandle) { self.file = file }
-    func receive(_ bytes: Data) { lock.lock(); defer { lock.unlock() }; guard !cancelled, error == nil else { return }; do { try file.write(contentsOf: bytes) } catch { self.error = PhotoLibraryReader.exportFailure(error) } }
-    func complete(_ error: Error?) { lock.lock(); if self.error == nil, let error { self.error = PhotoLibraryReader.exportFailure(error) }; lock.unlock(); finished.signal() }
+    func receive(_ bytes: Data) { lock.lock(); defer { lock.unlock() }; guard !cancelled, error == nil else { return }; do { try file.write(contentsOf: bytes); if !bytes.isEmpty { lastActivity = DispatchTime.now().uptimeNanoseconds } } catch { self.error = PhotoLibraryReader.exportFailure(error) } }
+    func complete(_ error: Error?) { lock.lock(); terminal = true; if self.error == nil, let error { self.error = PhotoLibraryReader.exportFailure(error) }; lock.unlock(); finished.signal() }
     func cancel() { lock.lock(); cancelled = true; lock.unlock() }
     func result() throws { lock.lock(); defer { lock.unlock() }; if let error { throw error } }
 }

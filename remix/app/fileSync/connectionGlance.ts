@@ -4,10 +4,10 @@ import type { ForegroundSyncProgress } from './foregroundSync';
 import type { SpeedReading } from './transferSpeed';
 export type ConnectionDirectionGlance = { title: string; rate: string; progress: string; bytes: string; inflight: string; remaining: string; operations: string; percent: number; unknown: boolean };
 export type SyncConnectionGlance = Record<'upload' | 'download', ConnectionDirectionGlance>;
-export function syncConnectionGlance(input: { progress?: ForegroundSyncProgress | null; rates?: { upload: SpeedReading; download: SpeedReading }; online: boolean; active: boolean; paused: boolean; waiting?: boolean; deviceLabel?: string; mode?: SyncMode }): SyncConnectionGlance {
+export function syncConnectionGlance(input: { progress?: ForegroundSyncProgress | null; rates?: { upload: SpeedReading; download: SpeedReading }; online: boolean; active: boolean; paused: boolean; waiting?: boolean; preparing?: boolean; deviceLabel?: string; mode?: SyncMode }): SyncConnectionGlance {
  let directions;
  try { directions = input.progress?.directions ? parseSyncDirections(input.progress.directions) : undefined; } catch { /* A damaged legacy cache is unavailable, never zero. */ }
- const final = input.progress?.totalFinal === true || (input.progress?.stage === 'complete' && input.progress?.indexState !== 'indexing' && input.progress?.totalFinal !== false);
+ const final = !input.preparing && (input.progress?.totalFinal === true || (input.progress?.stage === 'complete' && input.progress?.indexState !== 'indexing' && input.progress?.totalFinal !== false));
  const direction = (name: 'upload' | 'download'): ConnectionDirectionGlance => {
   const total: SyncDirectionTotal | undefined = directions?.[name], reading = input.rates?.[name];
   const title = name === 'upload' ? 'Thingtime · uploads received' : `${input.deviceLabel ?? 'Mac'} · downloads received`;
@@ -16,6 +16,7 @@ export function syncConnectionGlance(input: { progress?: ForegroundSyncProgress 
   const transferring = input.progress?.stage === 'transferring' || input.progress?.stage === 'retaining';
   const rate = !input.online ? 'Unavailable · device offline' : input.waiting ? 'Unavailable · waiting' :
    input.paused || !input.active ? '0 Mbps · ' + (input.paused ? 'paused' : 'idle') :
+   input.preparing ? '—' :
    transferring && reading?.status === 'known' ? `${reading.value.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${reading.unit} live` :
    transferring && (input.progress?.direction === name || (total && BigInt(total.bytesTotal) > BigInt(total.bytesConfirmed))) ? 'Measuring live speed…' : '—';
   if (!total) return { title, rate, progress: 'Progress unavailable', bytes: '', inflight: '', remaining: '', operations: '', percent: 0, unknown: true };

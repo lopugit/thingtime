@@ -153,7 +153,7 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		} } : undefined;
 		// A captured import already owns all its immutable source rows. Resume
 		// seal at its committed validation cursor, without another native read.
-		for await (const page of terminal ? [] : input.scanLocalPages(options)) {
+		for await (const page of terminal ? [] : input.scanLocalPages({ ...options, observationPurpose: reportIndex ? 'plan' : 'checkpoint' })) {
 			check();
 			if (terminal || !page || typeof page.generation !== 'string' ||
 				!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(page.generation) || (generation !== undefined && page.generation !== generation))
@@ -372,7 +372,30 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		openSource,
 		progress: (path, bytes, size, direction) => { check(); publish({ stage: retain ? 'retaining' : 'transferring', confirmed: state.confirmed, total: state.operations, directions: state.directions, totalFinal: true, direction, path, bytes, size, ...(planningCoverage ? { coverage: planningCoverage.coverage, skipped: planningCoverage.totalSkipped, consistency: planningCoverage.consistency } : {}) }); }
 	}, runtime);
-	const done = await executePreparedPagedSyncRun(spec, scope, runs, port, { signal, changed: p => report(p) }); check();
+	const queued = new Set<string>();
+	const prepare = input.deferredUploads && configuration.sourceKind === 'photos' && !spec.review ? async (operation: import('./execute').SyncOperation) => {
+		const ahead = await runs.peekDeferredUploads(spec); check();
+		const candidates = [operation, ...ahead.filter(candidate => candidate.id !== operation.id)].slice(0, 4);
+		for (const candidate of candidates) {
+			if (queued.has(candidate.id)) continue;
+			if (queued.size >= 4) break;
+			try {
+				const state = await port.deferUpload(candidate);
+				if (state?.queued) {
+					queued.add(candidate.id); input.deferredUploads!.queued(queued.size, state.scheduled);
+				}
+			} catch {
+				check(); // Optional lookahead must never suppress cancellation.
+				// Ordinary dispatch reauthorizes the current operation. A failed
+				// lookahead cannot grant native authority or commit any receipt.
+				break;
+			}
+		}
+	} : undefined;
+	const done = await executePreparedPagedSyncRun(spec, scope, runs, port, { signal, prepare, changed: p => report(p),
+		...(prepare ? { confirmed: (operation: import('./execute').SyncOperation) => {
+			queued.delete(operation.id); input.deferredUploads!.queued(queued.size);
+		} } : {}) }); check();
 	if (retain) { await runs.finishRetention(spec); report(done, 'retained'); return { spec, progress: done }; }
 	report(done, 'verifying'); await authorize();
 	const checkpoint = { run: spec, localRootId: configuration.localRootId, remoteFolderId: configuration.remoteFolderId };
