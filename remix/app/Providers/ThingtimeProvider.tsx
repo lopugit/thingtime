@@ -36,82 +36,46 @@ export const ThingtimeContext = createContext<EverythingTypes | null>(null);
 
 // wrap flatted parse and stringify with a function reviver and replacer
 
-// Only strings the replacer itself wrote via toISOString() may revive as Dates.
-// V8's Date.parse accepts everyday strings ("Post 1", "2024", "5 April"), so a
-// lenient check silently rewrote user data as ISO strings after one
-// save/reload cycle.
-const LEGACY_ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+// Dates persist as bare toISOString() output (flatted calls Date.toJSON before
+// any replacer runs), so only that exact shape may revive as a Date. Anything
+// looser (V8's lenient Date.parse) turns everyday strings like "Post 1",
+// "2024" or "March 2024" into Dates, which then re-persist as ISO strings —
+// permanently corrupting user data after one save/reload cycle.
+const ISO_DATE_STRING_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+const reviveDate = (iso: string): Date | string => {
+	const time = Date.parse(iso);
+	return isNaN(time) ? iso : new Date(time);
+};
 
 const reviver = (key: string, value: any) => {
-	// current scheme: Dates persist tagged, mirroring ttype:'function'
-	if (value?.ttype === 'date') {
-		const revived = new Date(value.iso);
-		if (!isNaN(revived.getTime())) {
-			return revived;
-		}
-		return typeof value.iso === 'string' ? value.iso : value;
+	// revive ONLY exact toISOString() output as a Date
+	if (typeof value === 'string' && ISO_DATE_STRING_PATTERN.test(value)) {
+		return reviveDate(value);
 	}
 
-	// legacy scheme: untagged toISOString() output from the previous replacer
-	if (typeof value === 'string' && LEGACY_ISO_DATE_PATTERN.test(value) && !isNaN(Date.parse(value))) {
-		return new Date(value);
-	}
-
-	// if value is a function, return it as a function
+	// NEVER execute persisted code: anything able to write same-origin storage
+	// (an XSS, an extension, another tab) could plant a payload that would run
+	// on every subsequent load. Old blobs may still contain {ttype:'function'}
+	// values — they become inert warning stubs, and load falls back to the
+	// code-defined defaults for those slots.
 	if (value?.ttype === 'function') {
-		try {
-			const func = eval(value.code);
-			if (typeof func === 'function') {
-				if (value?.ttScope && typeof value.ttScope === 'object') {
-					func.ttScope = value.ttScope;
-				}
-
-				// if the scope has keys
-				// re-eval the function with these keyed values in a fake function scope
-				if (Object.keys(func.ttScope || {}).length > 0) {
-					const scopeKeys = Object.keys(func.ttScope);
-					const newEval = `function scoper() {
-						${scopeKeys.map((key) => `const ${key} = this.ttScope.${key};`).join('\n')}
-						return ${value.code}
-					}`;
-					const scopedFunc = eval(newEval);
-					scopedFunc.ttScope = func.ttScope;
-					return scopedFunc;
-				}
-
-				return func;
-			}
-		} catch (err) {
-			console.error('There was an error evaluating the function code:', err);
-		}
 		return function () {
-			console.warn('Function could not be revived:', value.code);
+			console.warn('Persisted functions are no longer revived (see TODO 10):', value?.code);
 		};
 	}
 
 	return value;
 };
 
-const replacer = function (this: any, key: string, value: any) {
-	// JSON.stringify runs Date.prototype.toJSON before the replacer, so `value`
-	// is already an ISO string here — the original Date only survives on the
-	// holder. Persist it tagged (mirroring ttype:'function') so revival never
-	// has to guess whether a string is a Date.
-	const original = this?.[key];
-	if (original instanceof Date && !isNaN(original.getTime())) {
-		return {
-			ttype: 'date',
-			iso: original.toISOString()
-		};
-	}
+const replacer = (key: string, value: any) => {
+	// no Date branch: flatted invokes Date.toJSON before the replacer, so Dates
+	// arrive here already as toISOString() strings; the reviver's strict
+	// pattern restores exactly that shape
 
-	// if value is a function, return it as an object with ttype and code properties
+	// functions never persist — reviving them required eval'ing stored code
 	if (typeof value === 'function') {
-		return {
-			ttype: 'function',
-			code: value.toString(),
-			ttScope: value?.ttScope || {}
-		};
+		return undefined;
 	}
 
 	return value;

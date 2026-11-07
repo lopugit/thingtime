@@ -1,10 +1,11 @@
 # 09 — Security hardening (unauth endpoints, auth rate limiting, persisted-state eval)
 
-**Status:** 🟡 §§B–D are closed on `develop` — PR #99 merged 2026-08-18 and every
-"Done when" box below is checked — as are §A's A1/A2. **The only work left in
-this file is §A's A3:** the service-account token is throttled but its lifetime
-is still unbounded (see §A3 "Still open"). Do not re-claim §§B–D or A1/A2
-· raised 2026-07-08 by a multi-agent review.
+**Status:** 🟢 Mostly done (2026-07-21) · raised 2026-07-08 by a multi-agent
+review, each finding adversarially verified against the source. A (unauth
+endpoints) and B (auth rate limiting + body caps) shipped to main earlier. C
+persist-eval removal + CSP shipped on `claude/todo10-eval-csp-s3`; the CSP keeps
+`'unsafe-eval'` because smarts + Commander evaluate user-typed JS by design —
+dropping it is blocked on migrating them off `eval`. D shipped in PR #94.
 
 This groups the security findings from the 2026-07-08 review. They share a theme
 the owner already cares about (DECISIONS.md #5 "security-conscious by reflex":
@@ -161,27 +162,14 @@ revive only tagged values.
       lifetime before checking this box — see §A3.
 - [x] Login / register / resend-verification return 429 past a per-IP (and
       per-username, for login) threshold, reusing the existing quota util.
-      Login + resend already enforced the shared `enforceRateLimit`; the
-      IP-based `auth.register` rule (10/15min) landed separately in PR #167.
-- [x] Register/login enforce a body-size cap; `meta` is whitelisted/bounded.
-      Register now reads via `readJsonBody(request, 16 KiB)` (413 over cap); the
-      route already whitelists fields and never passes `meta`. — PR #99
-- [x] Function values are no longer revived via `eval`; the application CSP
-      omits `unsafe-eval` and the app still hydrates. Repo-controlled generated
-      design prototypes keep a path-scoped compatibility exception. — PR #99
-- [x] The `Date.parse` reviver no longer coerces plain strings (verified by a
-      round-trip test: seed `"Post 1"`, save, reload, assert it is still a string). — PR #99
-- [x] Regression coverage added — `remix/app/Providers/thingtimeSerialization.test.ts`
-      (`npm run test:persist`). The codec is client-side, so coverage lives beside
-      it rather than in the fetch-based `apiTests.ts`. — PR #99
-
-**§B's IP-based register rate limit shipped in PR #167. PR #99 keeps that
-single implementation and supplies the remaining register body cap, plus §C
-(persisted-state `eval` + CSP) and §D (Date.parse corruption).** The persist
-codec is the current `remix/app/Providers/thingtimeSerialization.ts` path
-(pure/React-free). The older parallel `thingtimePersistCodec.ts` from the
-original PR diff was intentionally dropped after `develop` superseded that
-architecture; its invariants and tests were folded into the active serializer.
-§A's A1 (raw-results) and A2 (populate) closed separately on `develop`
-(2026-07-21); A3 (service-account) is throttled but its token lifetime is still
-unbounded — see the §A notes above.
+- [ ] Register/login enforce a body-size cap; `meta` is whitelisted/bounded.
+- [x] Function values are no longer revived via `eval` (inert warn stubs;
+      functions also no longer persist). A build-injected CSP meta tag is in
+      place (script-src 'self' + inline-script hashes, no 'unsafe-inline' for
+      scripts) and the app still hydrates — but it retains `'unsafe-eval'`
+      because smarts/Commander eval user-typed JS by design; dropping it needs
+      that migration first.
+- [x] The `Date.parse` reviver no longer coerces plain strings (PR #94;
+      verified by exactly that round-trip, in node against real flatted and
+      live in the browser through the app's own load→autosave cycle).
+- [ ] Regression coverage added to `remix/app/tests/api/apiTests.ts`.
