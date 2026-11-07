@@ -36,3 +36,15 @@ test('folder-only and empty directional lanes distinguish pending work from no w
  const value = syncConnectionGlance(input); assert.equal(value.upload.percent, 0); assert.match(value.upload.operations, /0 \/ 1/); assert.match(value.download.progress, /No work/);
  d.upload.confirmed = 1; const late = syncConnectionGlance({ ...input, progress: { ...input.progress, directions: d, direction: 'upload', bytes: 999, size: 999 } }); assert.equal(late.upload.percent, 100); assert.equal(late.upload.inflight, '');
 });
+
+test('a Photos backup has no download meter and starts measuring upload only when bytes are expected', () => {
+ const state = { mode: 'backup' as const, active: true, paused: false, online: true };
+ const scanning = syncConnectionGlance({ ...state, progress: { stage: 'scanning', total: 0, confirmed: 0 } });
+ assert.equal(scanning.download.rate, 'Off for this connection');
+ assert.equal(scanning.download.unknown, true);
+ assert.equal(scanning.upload.rate, '—');
+ const directions = emptySyncDirections(); addSyncDirection(directions, operation('local', 1000));
+ const transferring = syncConnectionGlance({ ...state, progress: { stage: 'transferring', total: 1, confirmed: 0, directions } });
+ assert.equal(transferring.upload.rate, 'Measuring live speed…');
+ assert.equal(transferring.download.rate, 'Off for this connection');
+});
