@@ -1,3 +1,4 @@
+import type { FileSyncApproval } from './configuredPlan';
 import { isSyncConnectionFailure } from './syncConnectionWait';
 import { canonicalIgnoreRules, createSyncIgnorePolicy } from './syncIgnore';
 import { canonicalNativeScanExclusions, isNativeScanExcluded } from './nativeScanExclusions';
@@ -7,7 +8,7 @@ import type { FolderRequest, FolderResult } from './mobileFolders.client';
 export type NativeBackupCapture = { id: string; generation: string; totalEntries: number; coverage: 'full' | 'partial'; consistency: 'per-entry'; totalSkipped: number };
 export type NativeBackupStatus = NativeBackupCapture & { state: 'running' | 'complete' | 'interrupted' };
 export type NativeInventoryCapture = { id: string; generation: string; totalEntries: number } & Partial<Pick<NativeBackupCapture, 'coverage' | 'consistency' | 'totalSkipped'>>;
-export type NativeScanSkip = { ordinal: number; path: string | null; reason: 'symlink' | 'special' | 'fifo' | 'socket' | 'device' | 'unreadable' | 'changed' | 'invalid-path' | 'duplicate-identity' | 'path-collision'; scope: 'entry' | 'subtree' | 'root' };
+export type NativeScanSkip = { ordinal: number; path: string | null; reason: 'cloud-original' | 'symlink' | 'special' | 'fifo' | 'socket' | 'device' | 'unreadable' | 'changed' | 'invalid-path' | 'duplicate-identity' | 'path-collision'; scope: 'entry' | 'subtree' | 'root' };
 export type NativeSkippedPage = { capture: NativeBackupCapture; offset: number; skipped: NativeScanSkip[]; nextOffset: number | null; totalSkipped: number };
 export type NativeIndexProgress = Pick<NativeBackupStatus, 'state' | 'coverage' | 'consistency' | 'totalEntries' | 'totalSkipped'>;
 export class NativeInventoryRetryWait extends Error {}
@@ -46,8 +47,8 @@ export function parseNativeBackupStatus(value: unknown): NativeBackupStatus {
 export function parseNativeScanSkip(value: unknown, ordinal: number): NativeScanSkip {
 	const s = value as NativeScanSkip;
 	if (!s || s.ordinal !== ordinal || !Number.isSafeInteger(ordinal) || ordinal < 0 ||
-		!['symlink', 'special', 'fifo', 'socket', 'device', 'unreadable', 'changed', 'invalid-path', 'duplicate-identity', 'path-collision'].includes(s.reason) ||
-		!['entry', 'subtree', 'root'].includes(s.scope) || (s.scope === 'root' ? s.path !== null || !['changed', 'unreadable'].includes(s.reason) :
+		!['cloud-original', 'symlink', 'special', 'fifo', 'socket', 'device', 'unreadable', 'changed', 'invalid-path', 'duplicate-identity', 'path-collision'].includes(s.reason) ||
+		!['entry', 'subtree', 'root'].includes(s.scope) || (s.reason === 'cloud-original' && s.scope !== 'entry') || (s.scope === 'root' ? s.path !== null || !['changed', 'unreadable'].includes(s.reason) :
 			s.path === null ? s.reason !== 'invalid-path' : !validSyncPath(s.path))) throw Error('Invalid native skipped item.');
 	return { ordinal, path: s.path, reason: s.reason, scope: s.scope };
 }
@@ -108,7 +109,7 @@ export function parseNativeInventoryPage(value: unknown, capture: NativeInventor
  * never become an empty scan; the caller seals its journal after the final count. */
 export async function* readNativeInventory(input: {
 	ownerId: string; deviceId: string; rootId: string; signal: AbortSignal; excludedPaths?: string[]; ignoreRules?: string;
-	backupPolicy?: SyncPolicy; strictAsync?: boolean; captureId?: string; pageSize?: number; onProgress?(progress: NativeIndexProgress): void; onStrictProgress?(indexed: number): void;
+	backupPolicy?: SyncPolicy; photoGapPolicy?: SyncPolicy; photoDownloadAuthorization?: FileSyncApproval; strictAsync?: boolean; captureId?: string; pageSize?: number; onProgress?(progress: NativeIndexProgress): void; onStrictProgress?(indexed: number, cloudOriginals?: number, photoDownloadFraction?: number): void;
 	/** Called only after fresh native authorization pins a complete descriptor. */
 	resume?(capture: NativeBackupCapture): Promise<NativeInventoryResume>;
 	/** The caller discards this backup source after its durable journal handoff. */
@@ -155,9 +156,16 @@ export async function* readNativeInventory(input: {
 		const captureId = input.captureId ?? crypto.randomUUID();
 		if (!uuid.test(captureId)) throw Error('Invalid native capture identity.');
 		if (input.backupPolicy) assertBackupCapturePolicy(input.backupPolicy);
+		if (input.photoGapPolicy) {
+			assertBackupCapturePolicy(input.photoGapPolicy);
+			if (!input.strictAsync || input.backupPolicy || exclusions.length || ignoreRules) throw Error('Invalid photo gap policy.');
+		}
+		const photoGaps = input.photoGapPolicy ? { allowCloudGaps: true as const } : {};
+		if (input.photoDownloadAuthorization && (!input.photoGapPolicy || input.photoDownloadAuthorization.configuration.network !== 'any'))
+			throw Error('PhotoKit download is not authorized by the connection.');
 		if (input.backupPolicy && input.strictAsync) throw Error('Native capture policies cannot be combined.');
 		const capturePolicy = input.backupPolicy ? 'backup-supported' : input.strictAsync ? 'strict-async' : undefined;
-		const begin = await request(ownerId, { action: 'scan-capture', ...ignoredPolicy, rootId, inventoryDeviceId, captureId, ...(capturePolicy ? { capturePolicy } : {}), ...(excludedPaths.length ? { excludedPaths } : {}) }, signal);
+		const begin = await request(ownerId, { action: 'scan-capture', ...ignoredPolicy, ...photoGaps, ...(input.photoDownloadAuthorization ? { photoDownloadAuthorization: input.photoDownloadAuthorization } : {}), rootId, inventoryDeviceId, captureId, ...(capturePolicy ? { capturePolicy } : {}), ...(excludedPaths.length ? { excludedPaths } : {}) }, signal);
 		let offset = 0, ordinal = 0;
 		if (input.backupPolicy) {
 			let status = parseNativeBackupStatus(begin.backupCapture);
@@ -179,6 +187,31 @@ export async function* readNativeInventory(input: {
 				if (next.generation !== status.generation || next.totalSkipped < status.totalSkipped) throw Error('Native indexing generation or coverage changed.');
 				status = next;
 			}
+		} else if (input.strictAsync) {
+			let response = begin, generation: string | undefined;
+			while (true) {
+				signal.throwIfAborted();
+				const status = response.strictCapture;
+				if (!status || status.id !== captureId || (generation !== undefined && status.generation !== generation))
+					throw Error('Native strict capture identity changed.');
+				generation = status.generation;
+				if (input.photoGapPolicy ? !Number.isSafeInteger(status.cloudOriginals) || status.cloudOriginals! < 0 : status.cloudOriginals !== undefined)
+					throw Error('Native photo coverage changed.');
+				input.onStrictProgress?.(status.indexedEntries, status.cloudOriginals, status.photoDownloadFraction);
+				if (status.state === 'complete') {
+					capture = parseNativeInventoryCapture(response.capture);
+					if ((input.photoGapPolicy ? capture.coverage === undefined || capture.totalSkipped !== status.cloudOriginals : capture.coverage !== undefined) || capture.generation !== generation) throw Error('Native strict capture coverage or generation changed.');
+					break;
+				}
+				if (status.state !== 'running' || response.capture !== undefined)
+					throw Error('Indexing stopped before the whole folder was verified. Existing sync state was preserved.');
+				await waitForPoll();
+				signal.throwIfAborted();
+				response = await request(ownerId, { action: 'scan-status', ...ignoredPolicy, ...photoGaps, rootId, inventoryDeviceId, captureId, capturePolicy: 'strict-async', excludedPaths }, signal);
+			}
+		} else { capture = parseNativeInventoryCapture(begin.capture); if (capture.coverage !== undefined) throw Error('Partial inventory requires the negotiated backup policy.'); }
+		if (capture.id !== captureId) throw Error('Native capture identity changed.');
+		if (capture.coverage !== undefined) {
 			const continuation = input.resume ? parseNativeInventoryResume(await input.resume(structuredClone(capture as NativeBackupCapture)), capture as NativeBackupCapture) : undefined;
 			signal.throwIfAborted();
 			if (continuation?.complete) return;
@@ -191,6 +224,7 @@ export async function* readNativeInventory(input: {
 				const response = await request(ownerId, { action: 'scan-skips', ...batch, ...ignoredPolicy, rootId, inventoryDeviceId, capture: capture as NativeBackupCapture, offset: skipOffset, capturePolicy: 'backup-supported' }, signal);
 				const skippedPage = parseNativeSkippedPage(response.skippedPage, capture as NativeBackupCapture, skipOffset, pageSize);
 				signal.throwIfAborted();
+				if (input.photoGapPolicy && skippedPage.skipped.some(row => row.reason !== 'cloud-original')) throw Error('Unexpected photo coverage gap.');
 				for (let start = 0; start < Math.max(1, skippedPage.skipped.length); start += JOURNAL_PAGE_ENTRIES) {
 					signal.throwIfAborted();
 					const skipped = skippedPage.skipped.slice(start, start + JOURNAL_PAGE_ENTRIES);
@@ -201,28 +235,7 @@ export async function* readNativeInventory(input: {
 				if (skippedPage.nextOffset === null) break;
 				skipOffset = skippedPage.nextOffset;
 			}
-		} else if (input.strictAsync) {
-			let response = begin, generation: string | undefined;
-			while (true) {
-				signal.throwIfAborted();
-				const status = response.strictCapture;
-				if (!status || status.id !== captureId || (generation !== undefined && status.generation !== generation))
-					throw Error('Native strict capture identity changed.');
-				generation = status.generation;
-				input.onStrictProgress?.(status.indexedEntries);
-				if (status.state === 'complete') {
-					capture = parseNativeInventoryCapture(response.capture);
-					if (capture.coverage !== undefined || capture.generation !== generation) throw Error('Native strict capture coverage or generation changed.');
-					break;
-				}
-				if (status.state !== 'running' || response.capture !== undefined)
-					throw Error('Indexing stopped before the whole folder was verified. Existing sync state was preserved.');
-				await waitForPoll();
-				signal.throwIfAborted();
-				response = await request(ownerId, { action: 'scan-status', ...ignoredPolicy, rootId, inventoryDeviceId, captureId, capturePolicy: 'strict-async', excludedPaths }, signal);
-			}
-		} else { capture = parseNativeInventoryCapture(begin.capture); if (capture.coverage !== undefined) throw Error('Partial inventory requires the negotiated backup policy.'); }
-		if (capture.id !== captureId) throw Error('Native capture identity changed.');
+		}
 		if (input.resume && offset === capture.totalEntries && offset > 0) {
 			// Older collecting journals may already contain every row but lack
 			// the terminal marker. The native protocol refuses a nonempty EOF
@@ -232,14 +245,14 @@ export async function* readNativeInventory(input: {
 		}
 		while (true) {
 			signal.throwIfAborted();
-			const response = await request(ownerId, { action: 'scan-page', ...batch, ...ignoredPolicy, rootId, inventoryDeviceId, capture, offset, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}) }, signal);
+			const response = await request(ownerId, { action: 'scan-page', ...batch, ...ignoredPolicy, rootId, inventoryDeviceId, capture, offset, ...(capture.coverage !== undefined ? { capturePolicy: 'backup-supported' as const } : {}) }, signal);
 			signal.throwIfAborted();
 			const page = parseNativeInventoryPage(response.inventoryPage, capture, offset, pageSize);
 			if (page.entries.some(entry => isNativeScanExcluded(entry.path, exclusions) || ignore.ignored(entry.path, entry.kind))) throw Error('Native inventory included an excluded path.');
 			for (let start = 0; start < Math.max(1, page.entries.length); start += JOURNAL_PAGE_ENTRIES) {
 				signal.throwIfAborted();
 				const entries = page.entries.slice(start, start + JOURNAL_PAGE_ENTRIES);
-				yield { generation: capture.generation, ordinal: ordinal++, entries, ...(input.backupPolicy ? { backupCapture: capture as NativeBackupCapture } : {}),
+				yield { generation: capture.generation, ordinal: ordinal++, entries, ...(capture.coverage !== undefined ? { backupCapture: capture as NativeBackupCapture } : {}),
 					...(page.nextOffset === null && start + entries.length === page.entries.length ? { totalEntries: capture.totalEntries } : {}) };
 			}
 			if (page.nextOffset === null) return;
@@ -253,6 +266,6 @@ export async function* readNativeInventory(input: {
 	} finally {
 		// Owner changes/cancellation can refuse cleanup. The native cache evicts
 		// old captures under its scope lock, so an abandoned request stays bounded.
-		if (capture && !signal.aborted && !preserveCapture && !input.retainCaptureUntilHandoff) await request(ownerId, { action: 'scan-discard', ...ignoredPolicy, rootId, inventoryDeviceId, capture, ...(input.backupPolicy ? { capturePolicy: 'backup-supported' as const } : {}) }, signal).catch(() => {});
+		if (capture && !signal.aborted && !preserveCapture && !input.retainCaptureUntilHandoff) await request(ownerId, { action: 'scan-discard', ...ignoredPolicy, rootId, inventoryDeviceId, capture, ...(capture.coverage !== undefined ? { capturePolicy: 'backup-supported' as const } : {}) }, signal).catch(() => {});
 	}
 }

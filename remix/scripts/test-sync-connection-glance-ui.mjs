@@ -14,28 +14,30 @@ try {
  import {createRoot} from 'react-dom/client';
  import {ChakraProvider} from '@chakra-ui/react';
  import {SyncFolderCard} from '../app/components/Devices/SyncFolderCard';
- import {syncFolderActivityLabel} from '../app/components/Devices/syncFolderCardBlocks';
+ import {photoDownloadPreparation, syncFolderActivityLabel} from '../app/components/Devices/syncFolderCardBlocks';
  import {syncConnectionGlance} from '../app/fileSync/connectionGlance';
  function Fixture() {
   const [mode, setMode] = useState('live');
   Object.assign(window, { glanceFixture: { mode: setMode } });
-  const metadata = mode === 'metadata', complete = mode === 'complete', photos = mode.startsWith('photos-');
-  const waiting = mode === 'photos-wifi', failed = mode === 'photos-error', partial = mode === 'photos-partial';
-  const running = ['live', 'growing', 'metadata', 'photos-preparing'].includes(mode);
+  const metadata = mode === 'metadata', complete = mode === 'complete' || mode === 'photos-limited', photos = mode.startsWith('photos-');
+  const waiting = mode === 'photos-wifi' || mode === 'photos-icloud-wait', failed = mode === 'photos-error', partial = mode === 'photos-partial';
+  const preparation = photoDownloadPreparation(mode === 'photos-fetch' ? { fraction: 0.64 } : mode === 'photos-fetch-start' ? { fraction: 0 } : undefined);
+  const running = ['live', 'growing', 'metadata', 'photos-preparing'].includes(mode) || !!preparation;
   const directions = {
    upload: { operations: metadata ? 1 : 2, confirmed: complete ? 2 : metadata ? 0 : 1, bytesTotal: metadata ? '0' : '1000', bytesConfirmed: complete ? '1000' : metadata ? '0' : '500' },
    download: { operations: metadata ? 0 : 1, confirmed: complete ? 1 : 0, bytesTotal: metadata ? '0' : '200', bytesConfirmed: complete ? '200' : '0' }
   };
-  const progress = photos ? { stage: partial ? 'complete' : 'scanning', confirmed: 0, total: 0,
-    ...(partial ? { coverage: 'partial', skipped: 2 } : {}), message: waiting ? 'Waiting for Wi-Fi.' : undefined }
+  const progress = photos ? { stage: partial || complete ? 'complete' : preparation ? 'transferring' : 'scanning', confirmed: 0, total: 0,
+    ...(partial ? { coverage: 'partial', skipped: 2 } : {}), ...(mode === 'photos-limited' ? { photoAccess: 'limited' } : {}),
+    message: mode === 'photos-icloud-wait' ? 'An original is only in iCloud. Download it in Photos or explicitly allow cellular in this connection.' : waiting ? 'Waiting for Wi-Fi.' : undefined }
    : { stage: complete ? 'complete' : 'transferring', confirmed: 1, total: 3, directions, totalFinal: mode !== 'growing', direction: 'upload', bytes: 500, size: 500 };
   const reading = value => ({ status: 'known', value, unit: 'Mbps', requestedWindowMs: 1000, observedDurationMs: 1000 });
   const glance = syncConnectionGlance({ progress, rates: photos ? undefined : { upload: reading(3), download: reading(2) },
-   online: mode !== 'offline', active: running, paused: mode === 'paused', waiting, mode: photos ? 'backup' : 'two-way', deviceLabel: photos ? 'iPhone' : 'Mac' });
+   online: mode !== 'offline', active: running, paused: mode === 'paused', waiting, preparing: !!preparation, mode: photos ? 'backup' : 'two-way', deviceLabel: photos ? 'iPhone' : 'Mac' });
   const stats = syncFolderActivityLabel({ paused: mode === 'paused', rootsReady: true, hasRoot: true, taskPaused: false, running, waiting, failed, photos, progress });
   return <ChakraProvider><main style={{ maxWidth: 1000, margin: 'auto', padding: 16 }}>
    <SyncFolderCard title={photos ? 'Photos Library' : 'Desktop'} path={photos ? 'Photos Library' : '/Synthetic/Desktop'}
-    description={photos ? 'Backup to cloud' : 'Two-way sync'} stats={stats} scopeKey="glance-fixture" glance={glance}
+    description={photos ? 'Backup to cloud' : 'Two-way sync'} stats={preparation ? '' : stats} scopeKey="glance-fixture" glance={glance} preparation={preparation}
     error={failed ? 'An original is unavailable. Open Photos and download it from iCloud, then retry.' : ''}>
     <p>Expanded settings only</p>
    </SyncFolderCard><div style={{ height: 500 }}>End of connection fixture</div></main></ChakraProvider>;
@@ -63,6 +65,24 @@ try {
   await page.getByText('Off for this connection', { exact: true }).waitFor();
   assert.equal(await page.getByText('Measuring live speed…', { exact: true }).count(), 0);
   assert.doesNotMatch(await page.locator('article').innerText(), /0 of 0|0 \/ 0/);
+  await page.evaluate(() => window.glanceFixture.mode('photos-fetch-start'));
+  const iCloud = page.getByRole('progressbar', { name: 'Downloading an original from iCloud', exact: true });
+  await iCloud.waitFor();
+  assert.equal(await iCloud.getAttribute('aria-valuenow'), null);
+  await page.evaluate(() => window.glanceFixture.mode('photos-fetch'));
+  await page.getByText('64%', { exact: true }).waitFor();
+  assert.equal(await iCloud.getAttribute('aria-valuenow'), '64');
+  assert.equal(await page.getByRole('progressbar').count(), 1);
+  assert.equal(await page.getByText('Measuring live speed…', { exact: true }).count(), 0);
+  assert.equal(await page.getByText('Expanded settings only', { exact: true }).isVisible(), false);
+  await page.screenshot({ path: join(evidence, label + '-photos-fetch.png'), fullPage: true });
+  await page.evaluate(() => window.glanceFixture.mode('photos-icloud-wait'));
+  await iCloud.waitFor({ state: 'hidden' });
+  await page.getByRole('status').filter({ hasText: /only in iCloud.*allow cellular/ }).waitFor();
+  await page.screenshot({ path: join(evidence, label + '-photos-icloud-wait.png'), fullPage: true });
+  await page.evaluate(() => window.glanceFixture.mode('photos-limited'));
+  await page.getByRole('status').filter({ hasText: 'Selected photos backed up.' }).waitFor();
+  assert.equal(await page.getByText('Last transfer finished.', { exact: true }).count(), 0);
   await page.evaluate(() => window.glanceFixture.mode('photos-wifi'));
   await page.getByRole('status').filter({ hasText: 'Waiting for Wi-Fi.' }).waitFor();
   assert.equal(await page.getByRole('alert').count(), 0);
@@ -84,5 +104,5 @@ try {
   }
   await page.screenshot({ path: join(evidence, label + '-photos-partial.png'), fullPage: true });
  }
- assert.deepEqual(errors,[]);await writeFile(join(evidence,'result.json'),JSON.stringify({passed:true,views:['desktop','mobile'],checks:['collapsed directional fields','live rates','durable-only percentages','growing totals','paused zero vs offline unknown','folder-only work','empty lane','Photos preparation and upload-only lanes','collapsed Wi-Fi wait and Photos error','partial backup coverage','full scroll overflow']},null,2));console.log('Connection glance desktop/mobile checks passed. Evidence: '+evidence);
+ assert.deepEqual(errors,[]);await writeFile(join(evidence,'result.json'),JSON.stringify({passed:true,views:['desktop','mobile'],checks:['collapsed directional fields','live rates','durable-only percentages','growing totals','paused zero vs offline unknown','folder-only work','empty lane','Photos preparation and upload-only lanes','collapsed Wi-Fi wait and Photos error','partial backup coverage','iCloud original preparation','limited Photos access','full scroll overflow']},null,2));console.log('Connection glance desktop/mobile checks passed. Evidence: '+evidence);
 }catch(error){if(context?.pages()[0]){await context.pages()[0].screenshot({path:join(evidence,'failure.png'),fullPage:true}).catch(()=>{});console.error((await context.pages()[0].locator('body').innerText()).slice(0,3500));}throw error;}finally{await context?.close();if(server){server.close();await once(server,'close');}await rm(scratch,{recursive:true,force:true});}

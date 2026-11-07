@@ -12,7 +12,9 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
     private let filterCookies: ([HTTPCookie], URL) -> [HTTPCookie]
     private let check: () throws -> Void
     private let invalidated: () -> Void
+    private let identityChanged: () -> Void
     private var pinnedCookie: String?
+    private var manifest: [String: Any]?
     private var closed = false
     private var upload: NativeFileUpload?
     private var identityWatch: Task<Void, Never>?
@@ -20,9 +22,9 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
     init(scope: FileSyncOwnerScope, cookieStore: WKHTTPCookieStore,
          cookies: @escaping ([HTTPCookie], URL) -> [HTTPCookie],
          check: @escaping () throws -> Void, invalidated: @escaping () -> Void,
-         configuration: URLSessionConfiguration = .ephemeral) {
+         configuration: URLSessionConfiguration = .ephemeral, identityChanged: @escaping () -> Void = {}) {
         self.scope = scope; self.cookieStore = cookieStore; self.filterCookies = cookies
-        self.check = check; self.invalidated = invalidated
+        self.check = check; self.invalidated = invalidated; self.identityChanged = identityChanged
         configuration.httpCookieStorage = nil; configuration.urlCredentialStorage = nil
         configuration.httpShouldSetCookies = false; configuration.urlCache = nil
         session = URLSession(configuration: configuration, delegate: MobileDeviceRedirectPolicy(), delegateQueue: nil)
@@ -32,7 +34,7 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
     func close() {
         guard !closed else { return }
         closed = true; upload?.cancel(); upload = nil; identityWatch?.cancel(); identityWatch = nil
-        cookieStore.remove(self); pinnedCookie = nil; session.invalidateAndCancel()
+        cookieStore.remove(self); pinnedCookie = nil; manifest = nil; session.invalidateAndCancel()
     }
     private func checkActive() throws {
         try Task.checkCancellation(); guard !closed else { throw CancellationError() }; try check()
@@ -63,8 +65,11 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
         let all = await cookieStore.allCookies()
         guard !closed else { return }
         let url = scope.origin.appendingPathComponent("api/v1/auth/me")
-        if (try? checkActive()) == nil || (try? Self.authenticationCookie(filterCookies(all, url))) != pinned {
-            close(); invalidated()
+        let changed = (try? Self.authenticationCookie(filterCookies(all, url))) != pinned
+        if (try? checkActive()) == nil || changed {
+            close()
+            if changed { identityChanged() }
+            invalidated()
         }
     }
     // Only authentication changes invalidate work; unrelated cookies may refresh.
@@ -82,29 +87,38 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
               user["accountKind"] as? String == "user", user["temporary"] as? Bool != true else { throw MobileDevicePairing.Failure.identity }
     }
     func require(_ requirements: [(String, [Int])]) async throws {
-        let manifest = try await json(LopuVoiceContract.manifestPath)
+        try checkActive()
+        let manifest: [String: Any]
+        if let cached = self.manifest { manifest = cached }
+        else { manifest = try await json(LopuVoiceContract.manifestPath); self.manifest = manifest }
         guard requirements.allSatisfy({ LopuVoiceContract.accepts(manifest, baseURL: scope.origin, feature: $0.0, minimum: $0.1) }) else {
             throw MobileDevicePairing.Failure.incompatible
         }
     }
-    func json(_ path: String, body: [String: Any]? = nil) async throws -> [String: Any] {
+    func json(_ path: String, body: [String: Any]? = nil, statuses: Set<Int> = [200]) async throws -> [String: Any] {
         let data = try await read(path, limit: 512 * 1024, body: body) {
-            guard $0.statusCode == 200 else { throw MobileFolderStore.Failure.unavailable }
+            guard statuses.contains($0.statusCode) else { throw MobileFolderStore.Failure.unavailable }
         }
         guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw MobileFolderStore.Failure.invalid }
         return value
     }
     /// The destination comes only from the authenticated selected server. Never
     /// attach account cookies, origin headers or bearer credentials to a PUT.
-    func uploadPart(_ part: any FileUploadPartSource, uploadId: String, partNumber: Int) async throws {
+    func uploadPart(_ part: any FileUploadPartSource, uploadId: String, partNumber: Int, allowsCellular: Bool) async throws {
         try await verifyOwner(); try checkActive()
         let signed = try await json("/api/v1/attachments/uploads/parts", body: ["uploadId": uploadId,
             "parts": [["partNumber": partNumber, "checksumSha256": part.checksumSha256]]])
-        let request = try Self.signedUploadRequest(signed, origin: scope.origin, checksum: part.checksumSha256, length: part.length, partNumber: partNumber)
+        var request = try Self.signedUploadRequest(signed, origin: scope.origin, checksum: part.checksumSha256, length: part.length, partNumber: partNumber)
+        request.allowsCellularAccess = allowsCellular
         try await verifyOwner(); try checkActive()
         let sender = NativeFileUpload(); upload = sender
         defer { sender.cancel(); upload = nil }
-        try await sender.send(request, file: part.url)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.allowsCellularAccess = allowsCellular
+        do { try await sender.send(request, file: part.url, configuration: configuration) }
+        catch let error as URLError where !allowsCellular && error.networkUnavailableReason == .cellular {
+            throw NativeUploadAuthorization.Wait.wifi
+        }
         try checkActive(); try await verifyOwner()
     }
     static func signedUploadRequest(_ signed: [String: Any], origin: URL, checksum: String, length: Int64, partNumber: Int) throws -> URLRequest {

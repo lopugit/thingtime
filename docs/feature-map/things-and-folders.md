@@ -1042,6 +1042,17 @@ and deployment readiness are independently accepted. Snapshot/reference sidecars
 and plaintext-bearing encrypted hasher state stay in the independent backup store,
 never ordinary Thing crystal fields. See `docs/portable-backups.md` and TESTING.
 
+iOS Photos uses `PhotoLibraryReader` and the Rust capture's gap ledger. File
+access 1.6.0 keeps iCloud-only resources explicitly incomplete while transferring
+available originals. File access 1.7.0 can fetch an exact iCloud original
+only with the saved explicit cellular allowance and live power/device checks.
+Native upload 1.5.0 negotiates the origin's scoped transfer
+admission and queues a bounded set of already planned originals in
+`NativeDeferredUpload`. `BGProcessingTask` can finish those attachments;
+`pagedForegroundSync` retains canonical cloud folder and Timeline publication.
+See the [iOS runbook](../../iOS/README.md#deferred-photos-transfers) and the
+iOS deferred Photos checklist for installed and physical acceptance.
+
 Photos installed acceptance uses `iOS/ThingtimeUITests/PhotoLibraryConsentUITests.swift`
 and `iOS/scripts/test-mobile-sync-installed.sh`: ordinary consent, same-grant
 original hashes and reopen, with storage-readiness gates and nonzero executed-test

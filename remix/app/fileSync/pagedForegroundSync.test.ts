@@ -94,7 +94,7 @@ test('paged foreground resumes original operation IDs across page boundaries and
 	assert.equal(original.progress.confirmed, 128); assert.equal(f.creates(), 129);
 	const pending = await runs.read(original.spec); const originalIds = pending.operations.map(o => o.id);
 	await f.reload(); f.condition('cellular');
-	await assert.rejects(runPagedForegroundCloudSync(saved, scope, f.input(), signal()), /selected network/);
+	await assert.rejects(runPagedForegroundCloudSync(saved, scope, f.input(), signal()), /Waiting for Wi-Fi/);
 	assert.equal(f.creates(), 129); f.condition('wifi');
 	const done = await runPagedForegroundCloudSync(saved, scope, f.input(), signal());
 	assert.ok('spec' in done); assert.equal(done.spec.id, original.spec.id); assert.equal(done.progress.confirmed, 135); assert.equal(f.creates(), 135);
@@ -365,4 +365,35 @@ test('fully paged foreground crosses 10,000 paths and checkpoints the entire gen
 		assert.equal(f.creates(), 1);
 		assert.deepEqual(await f.journal().pagedCheckpoints(access(input)).current(), head);
 	} finally { f.journal().close(); }
+});
+
+test('repeated Photos coverage passes publish each original once across local and cloud batches', async () => {
+	const { runPhotoBackupPasses } = await import('./photoBackupPasses');
+	const f = await foregroundFixture(7), input: ForegroundSyncInput = f.input();
+	const photos = { ...saved, configuration: { ...saved.configuration, sourceKind: 'photos' as const, network: 'any' as const } };
+	const configuration = input.readConfiguration;
+	input.readConfiguration = async () => ({ ...(await configuration() as object), crystal: photos.configuration });
+	let available = 1, progress: ForegroundSyncProgress | undefined;
+	input.progress = value => { progress = value; };
+	input.inspectLocal = async path => structuredClone(f.local.slice(0, available).find(entry => entry.path === path) ?? null);
+	input.scanLocalPages = async function* () {
+		const generation = crypto.randomUUID(), totalSkipped = f.local.length - available;
+		const capture = { id: generation, generation, totalEntries: available, totalSkipped,
+			coverage: totalSkipped ? 'partial' as const : 'full' as const, consistency: 'per-entry' as const };
+		yield { generation, ordinal: 0, entries: [], backupCapture: capture,
+			skippedPage: { capture, offset: 0, totalSkipped, nextOffset: null, skipped: f.local.slice(available).map((entry, ordinal) =>
+				({ ordinal, path: entry.path, reason: 'cloud-original' as const, scope: 'entry' as const })) } };
+		yield { generation, ordinal: 0, entries: structuredClone(f.local.slice(0, available)), totalEntries: available, backupCapture: capture };
+	};
+	const seen: number[] = [];
+	const result = await runPhotoBackupPasses(async download => {
+		if (download) available = Math.min(f.local.length, available + 4);
+		await runPagedForegroundCloudSync(photos, scope, input, signal());
+		seen.push(f.creates());
+		return progress;
+	}, () => {}, () => true);
+	assert.deepEqual(seen, [1, 5, 7]);
+	assert.equal(result?.coverage, 'full');
+	assert.equal(f.rows.size, 7);
+	f.journal().close();
 });

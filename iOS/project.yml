@@ -64,6 +64,7 @@ targets:
         UILaunchScreen: {}
         BGTaskSchedulerPermittedIdentifiers:
           - $(PRODUCT_BUNDLE_IDENTIFIER).file-upload
+          - $(PRODUCT_BUNDLE_IDENTIFIER).file-sync-processing
           - $(PRODUCT_BUNDLE_IDENTIFIER).device-presence
         UIBackgroundModes:
           - audio

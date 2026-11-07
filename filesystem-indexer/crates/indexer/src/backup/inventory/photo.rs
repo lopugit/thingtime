@@ -137,3 +137,43 @@ pub(super) fn append(
     tx.commit()?;
     Ok(())
 }
+
+/// PhotoKit reports only the explicit network-required result as a cloud gap.
+pub(super) fn append_cloud_gaps(
+    db: &mut Connection,
+    current: &Status,
+    paths: &[PathBuf],
+) -> Result<(), IndexerError> {
+    if current.mode != "photo" || current.coverage != "scanning" || paths.len() > 128 {
+        return Err(failure("invalid_request"));
+    }
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    if !scanning(&tx, current.id)? {
+        return Err(failure("generation_unavailable"));
+    }
+    for path in paths {
+        let path = path
+            .to_str()
+            .filter(|path| valid_path(path) && !path.contains('/'))
+            .ok_or_else(|| failure("invalid_request"))?;
+        // Canonical name protection also refuses a gap colliding with an entry.
+        if tx.execute(
+            "INSERT INTO inventory_names VALUES(?1,?2) ON CONFLICT DO NOTHING",
+            params![current.id, key(path)],
+        )? == 0
+        {
+            return Err(failure("collision"));
+        }
+        tx.execute(
+            "INSERT INTO inventory_gaps(generation,ordinal,path,reason,coverage)
+             SELECT id,gap_count,?2,'cloud-original','entry' FROM inventory_generations WHERE id=?1",
+            params![current.id, path],
+        )?;
+        tx.execute(
+            "UPDATE inventory_generations SET gap_count=gap_count+1 WHERE id=?1",
+            [current.id],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}

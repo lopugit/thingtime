@@ -145,6 +145,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-07: Keep Wi-Fi-only Photos backups in a clear wait state, identify
+  iCloud-only originals separately, and queue already prepared originals for
+  iOS background processing. The original foreground sync publishes verified
+  cloud-folder and Timeline receipts. **Codex (AI)**
+
 - 2026-11-07: Restore legacy iOS backup starts on hosts without native resource
   limits, while preserving explicitly saved device and connection policies. Add
   ordinary Photos consent and original-byte acceptance with storage-readiness

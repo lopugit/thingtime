@@ -1,0 +1,115 @@
+import AppleFileSync
+import Foundation
+
+/// A device credential is retrieved from the existing scoped Keychain record
+/// only for one negotiated transfer endpoint, never attached to object PUTs.
+@MainActor
+final class NativeDeferredUploadClient {
+    static let path = "/api/v1/files/sync-transfer-admissions"
+    static let feature = "api.file-sync-transfer-admissions"
+    enum Failure: Error, LocalizedError {
+        case incompatible, invalid, denied, partsRetryable, unavailable
+        var terminal: Bool { self == .incompatible || self == .invalid || self == .denied }
+        var errorDescription: String? {
+            switch self {
+            case .denied: return "Background transfer permission changed. Reopen this sync connection to resume."
+            case .incompatible: return "Background transfers are unavailable on this server. Keep Thingtime open to continue."
+            case .invalid: return "The server did not confirm the exact deferred upload."
+            case .partsRetryable, .unavailable: return "Cloud transfer paused. Its original reservation can be retried."
+            }
+        }
+    }
+    private let record: NativeDeferredUploadRecord
+    private let session: URLSession
+    private var verified = false
+
+    init(record: NativeDeferredUploadRecord) {
+        self.record = record
+        let configuration = Self.configuration(allowsCellular: record.configuration.network == "any")
+        session = URLSession(configuration: configuration, delegate: MobileDeviceRedirectPolicy(), delegateQueue: nil)
+    }
+    deinit { session.invalidateAndCancel() }
+
+    private static func configuration(allowsCellular: Bool) -> URLSessionConfiguration {
+        let c = URLSessionConfiguration.ephemeral
+        c.httpCookieStorage = nil; c.urlCredentialStorage = nil
+        c.httpShouldSetCookies = false; c.urlCache = nil
+        c.allowsCellularAccess = allowsCellular
+        return c
+    }
+
+    func requireCapability() async throws {
+        guard !verified else { return }
+        let manifest = try await read(LopuVoiceContract.manifestPath, body: nil)
+        guard LopuVoiceContract.accepts(manifest, baseURL: record.scope.origin, feature: Self.feature, minimum: [1, 0, 0]) else {
+            throw Failure.incompatible
+        }
+        verified = true
+    }
+
+    func request(action: String, parts: [[String: Any]]? = nil) async throws -> [String: Any] {
+        try await requireCapability()
+        var payload: [String: Any] = ["action": action, "admissionId": record.admissionId]
+        if let parts { payload["parts"] = parts }
+        let result = try await read(Self.path, body: payload)
+        if action == "complete" {
+            guard let attachment = result["attachment"] as? [String: Any],
+                  attachment["id"] as? String == record.request.uploadId else { throw Failure.invalid }
+        }
+        return result
+    }
+
+    func send(part: FileUploadPartStore.Part, partNumber: Int, check: () throws -> Void) async throws {
+        let signed = try await request(action: "parts", parts: [["partNumber": partNumber, "checksumSha256": part.checksumSha256]])
+        let allowsCellular = record.configuration.network == "any"
+        var request = try NativeFileSession.signedUploadRequest(signed, origin: record.scope.origin, checksum: part.checksumSha256,
+            length: part.length, partNumber: partNumber)
+        request.allowsCellularAccess = allowsCellular
+        try check()
+        let sender = NativeFileUpload()
+        do { try await sender.send(request, file: part.url, configuration: Self.configuration(allowsCellular: allowsCellular)) }
+        catch let error as URLError where !allowsCellular && error.networkUnavailableReason == .cellular {
+            throw NativeUploadAuthorization.Wait.wifi
+        }
+        try check()
+    }
+
+    private func read(_ path: String, body: [String: Any]?) async throws -> [String: Any] {
+        try Task.checkCancellation()
+        guard let url = URL(string: path, relativeTo: record.scope.origin)?.absoluteURL,
+              LopuVoiceContract.sameOrigin(url, record.scope.origin) else { throw Failure.invalid }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        request.httpShouldHandleCookies = false
+        if let body {
+            guard let device = try MobileDeviceKeychain.load(record.scope), device.scope == record.scope,
+                  !device.revoked, device.deviceId == record.configuration.deviceId,
+                  device.credential.range(of: "^ttnode_[A-Za-z0-9_-]{43}$", options: .regularExpression) != nil else { throw Failure.denied }
+            request.httpMethod = "POST"
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer " + device.credential, forHTTPHeaderField: "Authorization")
+        }
+        let (bytes, response) = try await session.bytes(for: request)
+        guard let http = response as? HTTPURLResponse, http.url == url else { throw Failure.invalid }
+        if [401, 403, 404, 410].contains(http.statusCode) { throw Failure.denied }
+        if http.statusCode == 429 || http.statusCode >= 500 { throw Failure.unavailable }
+        var data = Data()
+        for try await byte in bytes {
+            try Task.checkCancellation()
+            guard data.count < (body == nil ? 512 * 1024 : 65_536) else { throw Failure.invalid }
+            data.append(byte)
+        }
+        let result = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        if http.statusCode == 409 {
+            let error = result?["error"] as? [String: Any]
+            if result?["code"] as? String == "upload_parts_retryable" ||
+                result?["error"] as? String == "upload_parts_retryable" || error?["code"] as? String == "upload_parts_retryable" {
+                throw Failure.partsRetryable
+            }
+            throw Failure.denied
+        }
+        guard (200..<300).contains(http.statusCode), let result,
+              body == nil || result["ok"] as? Bool == true else { throw Failure.invalid }
+        return result
+    }
+}

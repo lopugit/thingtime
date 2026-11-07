@@ -26,6 +26,12 @@ import type { TransferActivity } from './transferActivity';
 export type SyncInventoryDescriptor = { scope: SyncScope; inventory: InventoryIdentity };
 
 export type ForegroundSyncProgress = {
+	/** A durable, path-free wait reason for the exact connection. */
+	message?: string;
+	waiting?: boolean;
+	photoDownload?: { fraction: number };
+	photoAccess?: 'full' | 'limited';
+	backgroundTransfer?: 'queued' | 'foreground-only';
 	directions?: import('./directionalProgress').SyncDirectionalTotals;
 	statisticsObservedAt?: number;
 	resources?: import('./resourceGovernor').SyncResourceStatus;
@@ -52,6 +58,8 @@ export type ForegroundSyncProgress = {
 	preparation?: { phase: 'validate-local' | 'read-remote' | 'validate-remote' | 'index-plan' | 'plan' | 'review' | 'operations' | 'cloud'; completed?: number; total?: number };
 };
 export type ForegroundSyncInput = {
+	/** Optional PhotoKit-specific native queue; durable file publication stays here. */
+	deferredUploads?: { queued(count: number, scheduled?: boolean): void };
 	currentScope(): SyncScope;
 	readConfiguration(): Promise<unknown>;
 	authorizeDevice(): Promise<void>;
@@ -72,6 +80,7 @@ export type ForegroundSyncInput = {
 	/** Set only by the native adapter with exact path inspection and staging. */
 	streamCloudChanges?: boolean;
 	scanLocalPages?(options?: {
+		observationPurpose?: 'plan' | 'checkpoint';
 		resume?(capture: import('./nativeInventory').NativeBackupCapture): Promise<import('./nativeInventory').NativeInventoryResume>;
 		retainCaptureUntilHandoff?: boolean;
 	}): AsyncIterable<LocalInventoryPage>;

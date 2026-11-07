@@ -3,7 +3,7 @@ import { prepareExplicitSyncStart } from '~/fileSync/configurationStart';
 import { SyncDestinationControl } from './SyncDestinationControl';
 import { syncConnectionGlance } from '~/fileSync/connectionGlance';
 import { SyncConditionsWait } from '~/fileSync/foregroundSyncContext';
-import { syncFolderActivityLabel } from './syncFolderCardBlocks';
+import { photoDownloadPreparation, syncFolderActivityLabel } from './syncFolderCardBlocks';
 import type { TransferSpeedDraftState } from './TransferSpeedTrackers';
 import { SyncEditorPlacement } from './SyncEditorPlacement';
 import type { UploadPriorityDraftState } from './SyncUploadPriorities';
@@ -96,7 +96,9 @@ export function MobileSyncConnections({ ownerId, deviceId, roots, rootsReady = t
 		/>
 	);
 }
-type ConnectionProgress = ForegroundSyncProgress & { message?: string; waiting?: boolean };
+type ConnectionProgress = ForegroundSyncProgress & {
+ message?: string; waiting?: boolean; photoDownload?: { fraction: number }; photoAccess?: 'full' | 'limited';
+};
 
 function Connections({
 	scope,
@@ -685,7 +687,9 @@ function Connections({
 				const runError = !running && !waiting && (transferErrors[saved.id] ||
 					(task?.status === 'error' || (!task && progress?.message && !['complete', 'retained'].includes(progress.stage))
 						? progress?.message || 'Sync needs attention. Retry this connection.' : ''));
-				const photos = saved.configuration.sourceKind === 'photos';
+				const nativeRoot = roots.find((root) => root.id === saved.configuration.localRootId);
+				const photos = saved.configuration.sourceKind === 'photos' || nativeRoot?.sourceKind === 'photos';
+				const preparation = photos && running && !waiting && !task?.stopping ? photoDownloadPreparation(progress?.photoDownload) : undefined;
 				const downloading = saved.configuration.mode === 'download';
 				const twoWay = saved.configuration.mode === 'two-way';
 				const wifiWait = waiting && saved.configuration.network === 'wifi' &&
@@ -704,7 +708,6 @@ function Connections({
                     ? readStampedCache<SyncInventoryDescriptor>('tt:sync-inventory:' + syncScopeKey(progressScope)) ?? undefined : undefined);
 				if (!speedDrafts.current.has(saved.id)) speedDrafts.current.set(saved.id, {});
 				if (!priorityDrafts.current.has(saved.id)) priorityDrafts.current.set(saved.id, {});
-				const nativeRoot = roots.find((root) => root.id === saved.configuration.localRootId);
 				let sourceAllowed = true;
 				try {
 					assertPhotoSourcePolicy(saved.configuration, roots);
@@ -730,13 +733,14 @@ function Connections({
 						path={(nativeRoot?.sourceKind === 'photos' || saved.configuration.sourceKind === 'photos' ? nativeRoot?.name || 'Photo Library' : undefined) || (supportsNativeSourcePaths(capabilities) && validNativeSourcePath(nativeRoot?.sourcePath) && nativeRoot?.sourceKind !== 'photos' ? nativeRoot.sourcePath : undefined) || (nativeRoot ? 'Folder path unavailable' : 'Folder access missing')}
                         destination={folders.find(folder => folder.id === saved.configuration.remoteFolderId)?.path || 'Cloud destination unavailable · refresh folders'}
                         error={runError || ''}
+                        preparation={preparation}
                         quickAction={{ label: actionLabel,
                             disabled: running ? !!task?.stopping : !allowed || busy || retainedDrafts.current.has(saved.id) || !ready,
                             run: () => { if (running) { if (task?.active) return pauseNativeSyncJob(task.scope, generation).catch(cause => setError(cause instanceof Error ? cause.message : 'Pause could not be saved.')); controller.current?.abort(); } else transfer(saved); }
                         }}
 						description={saved.configuration.mode === 'backup' ? 'Backup to cloud · keep deleted files' : twoWay ? 'Two-way sync' : downloading ? 'Cloud to device' : 'Device to cloud'}
-						glance={syncConnectionGlance({ deviceLabel: capabilities?.platform === 'ios' ? 'iPhone' : capabilities?.platform === 'android' ? 'Device' : 'Mac', progress, online: rootsReady, active: running, paused: saved.configuration.paused || taskPaused, waiting, mode: saved.configuration.mode, ...(task?.transferSeries ? { rates: { upload: task.transferSeries.read({ direction: 'upload', unit: 'Mbps', windowMs: 5000 }), download: task.transferSeries.read({ direction: 'download', unit: 'Mbps', windowMs: 5000 }) } } : {}) })}
-                        stats={syncFolderActivityLabel({ paused: saved.configuration.paused, rootsReady, hasRoot: !!nativeRoot,
+						glance={syncConnectionGlance({ deviceLabel: capabilities?.platform === 'ios' ? 'iPhone' : capabilities?.platform === 'android' ? 'Device' : 'Mac', progress, online: rootsReady, active: running, paused: saved.configuration.paused || taskPaused, waiting, preparing: !!preparation, mode: saved.configuration.mode, ...(task?.transferSeries ? { rates: { upload: task.transferSeries.read({ direction: 'upload', unit: 'Mbps', windowMs: 5000 }), download: task.transferSeries.read({ direction: 'download', unit: 'Mbps', windowMs: 5000 }) } } : {}) })}
+                        stats={preparation ? '' : syncFolderActivityLabel({ paused: saved.configuration.paused, rootsReady, hasRoot: !!nativeRoot,
                             taskPaused, running, waiting, failed: !!runError, stopping: task?.stopping, progress: statusProgress, photos })}
 						expanded={selectedId === saved.id} onToggle={expanded => { if (expanded) { if (!viewBusy && ready && !storageError) { setSelectedId(saved.id); if (retainedDrafts.current.has(saved.id)) open(saved.id); } } else if (selectedId === saved.id) setSelectedId(null); }}>
 					<Flex align="center" gap={2} wrap="wrap">

@@ -7,9 +7,9 @@ import type { CloudTransportRuntime } from './cloudTransport';
 import type { ForegroundSyncInput } from './foregroundSync';
 
 export class SyncConditionsWait extends Error {
-	constructor(readonly reason: 'paused' | 'offline' | 'network' | 'charging') {
+	constructor(readonly reason: 'paused' | 'offline' | 'network' | 'wifi' | 'charging') {
 		super({ paused: 'This connection is paused.', offline: 'Waiting for an internet connection.',
-			network: 'Waiting for the selected network.', charging: 'Waiting for this device to charge.' }[reason]);
+			network: 'Waiting for the selected network.', wifi: 'Waiting for Wi-Fi. Connect this device to Wi-Fi to continue.', charging: 'Waiting for this device to charge.' }[reason]);
 	}
 }
 
@@ -53,7 +53,7 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 			remoteFolderId: configuration.remoteFolderId,
 			conditions
 		});
-		if (result.status === 'waiting') throw new SyncConditionsWait(result.reason);
+		if (result.status === 'waiting') throw new SyncConditionsWait(configuration.network === 'wifi' && (result.reason === 'network' || result.reason === 'offline') ? 'wifi' : result.reason);
 		return conditions;
 	};
 	const scanCloud = async () => {

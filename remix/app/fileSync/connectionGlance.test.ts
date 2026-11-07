@@ -48,3 +48,12 @@ test('a Photos backup has no download meter and starts measuring upload only whe
  assert.equal(transferring.upload.rate, 'Measuring live speed…');
  assert.equal(transferring.download.rate, 'Off for this connection');
 });
+
+test('fetching an iCloud original does not measure upload throughput or mark its plan complete', () => {
+ const directions = emptySyncDirections(); addSyncDirection(directions, operation('local', 1000, true));
+ const view = syncConnectionGlance({ mode: 'backup', preparing: true, online: true, active: true, paused: false,
+  progress: { stage: 'transferring', direction: 'upload', total: 1, confirmed: 1, directions, totalFinal: true } });
+ assert.equal(view.upload.rate, '—');
+ assert.notEqual(view.upload.percent, 100);
+ assert.equal(view.download.rate, 'Off for this connection');
+});

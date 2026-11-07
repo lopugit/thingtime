@@ -94,6 +94,7 @@ source=max(products.glob('Thingtime_iphonesimulator*.xctestrun'),key=lambda p:p.
 data=plistlib.load(source.open('rb'))
 data['ThingtimeTests'].setdefault('EnvironmentVariables',{}).update({
  'THINGTIME_PHOTO_UI_AUTOMATION':os.environ.get('THINGTIME_PHOTO_UI_AUTOMATION','0'),
+ 'THINGTIME_PHOTO_DEFERRED_TEST':os.environ.get('THINGTIME_PHOTO_DEFERRED_TEST','0'),
  'THINGTIME_PHOTO_BACKGROUND_TEST':os.environ.get('THINGTIME_PHOTO_BACKGROUND_TEST','0'),
  'THINGTIME_PHOTO_RESUME_GRANT':os.environ.get('THINGTIME_PHOTO_RESUME_GRANT',''),'THINGTIME_SYNC_INSTALLED_ACCEPTANCE':'1','THINGTIME_PHOTO_BACKUP_TEST':os.environ.get('THINGTIME_PHOTO_BACKUP_TEST','0'),'THINGTIME_FILE_EXPORT_TEST':os.environ.get('THINGTIME_FILE_EXPORT_TEST','0'),'THINGTIME_DEVICE_TEST_ORIGIN':fixture['base'],
  'THINGTIME_DEVICE_TEST_USERNAME':fixture['username'],'THINGTIME_DEVICE_TEST_PASSWORD':fixture['password']})
