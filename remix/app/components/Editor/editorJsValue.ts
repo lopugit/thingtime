@@ -1,5 +1,3 @@
-// @ts-ignore Direct Node test imports require the source extension.
-import { MAX_STORABLE_NESTING } from '../../schemas/storableLimits.ts';
 // @ts-ignore Node 24 runs the *.test.ts suite on this file directly and needs the .ts extension (Vite resolves it too).
 import { inlineHtmlToText } from './inlineHtmlText.ts';
 
