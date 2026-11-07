@@ -23,8 +23,6 @@ import { type SyncEntry, type SyncScope, type SyncBaseline } from './reconcile';
 import type { SyncProgressDescriptor } from './progressProjection';
 import type { TransferActivity } from './transferActivity';
 
-export type SyncInventoryDescriptor = { scope: SyncScope; inventory: InventoryIdentity };
-
 export type ForegroundSyncProgress = {
 	/** A durable, path-free wait reason for the exact connection. */
 	message?: string;
@@ -97,8 +95,6 @@ export type ForegroundSyncInput = {
 	progress(value: ForegroundSyncProgress): void;
 	/** Read-only journal references for the editable progress hierarchy. */
 	progressSession?(value: SyncProgressDescriptor): void;
-	/** Scope-bound access to the durable scan and its paged skip ledger. */
-	inventorySession?(value: SyncInventoryDescriptor): void;
 	transfer?(value: TransferActivity): void;
 	reviewConflicts?(conflicts: SyncConflict[]): Promise<SyncConflictReviewResult>;
 	/** Bounded, durable review adapter for editable Builder surfaces. */
@@ -286,7 +282,7 @@ export async function runForegroundCloudSync(
 			localTarget,
 			signal,
 			transfer: input.transfer,
-			progress: (path, bytes, size, direction) => {
+			progress: (path, bytes, size) => {
 				check();
 				input.progress({
 					stage: retain ? 'retaining' : 'transferring',

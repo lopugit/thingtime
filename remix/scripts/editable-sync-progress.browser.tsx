@@ -28,8 +28,8 @@ window.fetch = async function(input, init) {
 	const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
 	if (url.pathname.includes('thingtime-capabilities')) return Response.json(thingtimeCapabilityManifest(location.origin));
 	if (url.pathname === '/api/v1/webpages/resolve') {
-		const pages = JSON.parse(localStorage.getItem(layoutKey) || '{}');
-		const selected = pages[url.searchParams.get('id') || ''] ?? null;
+		const page = JSON.parse(localStorage.getItem(layoutKey) || 'null');
+		const selected = page?.crystal?.pageKey === url.searchParams.get('id') ? page : null;
         return Response.json(selected ? { ok: true, page: selected, source: 'user' } : { ok: false }, { status: selected ? 200 : 404 });
 	}
 	if (url.pathname === '/api/v1/things' && ['POST', 'PATCH'].includes(init?.method || '')) {

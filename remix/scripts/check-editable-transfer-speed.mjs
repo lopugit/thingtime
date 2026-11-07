@@ -34,37 +34,6 @@ if (!process.env.TT_SPEED_WORKER) {
 		await host.getByRole('heading', { name: 'Transfer speeds', exact: true }).waitFor();
 		await host.getByText('Upload: 1 Mbps', { exact: true }).waitFor();
 		await host.getByText('Download: 2 Mbps', { exact: true }).waitFor();
-        const priority = page.locator('[data-settings-document="file-sync-priority-readiness"]');
-        await priority.getByRole('heading', { name: 'Upload priority readiness', exact: true }).waitFor();
-        await priority.getByText(/0 \/ 100,000 fixed observations checked/).waitFor();
-        const states = [['partial', /4,096 \/ 100,000/], ['ready', /candidate is ready for preparation/],
-            ['reserved', /operation must finish safely/], ['unsupported', /unsupported by this adapter/],
-            ['unmeasured', /Waiting for the scheduler to check/], ['not-indexed', /does not prove backup completion/]];
-        for (const [name, width, height] of [['desktop', 1440, 1000], ['mobile', 390, 844]]) {
-            await page.setViewportSize({ width, height });
-            for (const [state, text] of states) {
-                await page.getByRole('button', { name: `Priority ${state}`, exact: true }).click();
-                await priority.getByText(text).waitFor(); await priority.scrollIntoViewIfNeeded();
-                assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-                await priority.screenshot({ path: join(evidence, `${name}-priority-${state}.png`) });
-            }
-        }
-        await priority.getByRole('button', { name: 'Edit layout', exact: true }).click();
-        await priority.locator('[data-block-id="sync-priority-readiness-title"]').click();
-        for (const [field, text] of [['title', 'My priority readiness'], ['gate', 'Trusted gate: {sync.priorityGate}'],
-            ['proof', 'Validation: {sync.priorityProof}'], ['candidate', 'Candidate: {sync.priorityCandidate}'], ['status', 'Why waiting: {sync.priorityStatus}']]) {
-            await page.getByRole('combobox', { name: 'Select block', exact: true }).selectOption('sync-priority-readiness-' + field);
-            await page.getByRole('textbox', { name: 'Block text', exact: true }).fill(text);
-        }
-        await page.getByRole('button', { name: 'Close builder', exact: true }).click();
-        await priority.getByRole('button', { name: 'Save layout', exact: true }).click();
-        await priority.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
-        await priority.getByRole('button', { name: 'Done editing layout', exact: true }).click();
-        await page.reload(); await priority.getByRole('heading', { name: 'My priority readiness', exact: true }).waitFor();
-        await priority.getByText(/Trusted gate:.*5 saved priorities.*revision 3/).waitFor();
-        const priorityLayout = await page.evaluate(() => window.progressFixture.layout('file-sync-priority-readiness'));
-        assert.ok(!/proofCursor|proofCutoff|candidateSequence/.test(JSON.stringify(priorityLayout)), 'Runtime observations are not saved into Builder layout');
-
 		await host.getByRole('button', { name: 'Add tracker', exact: true }).click();
 		let cards = host.getByRole('group', { name: 'Transfer speed tracker', exact: true });
 		await cards.nth(1).waitFor();
@@ -122,39 +91,7 @@ if (!process.env.TT_SPEED_WORKER) {
 				assert.ok(bounds.scrollWidth <= bounds.width, JSON.stringify(bounds)); if (bounds.y + bounds.height >= bounds.total - 1) break; assert.ok(++steps < 100); await page.evaluate(() => scrollBy(0, innerHeight * 0.8)); }
 			await page.screenshot({ path: join(evidence, `${name}-bottom.png`) }); await page.evaluate(() => scrollTo(0, 0)); await page.screenshot({ path: join(evidence, `${name}.png`) });
 		}
-        await cards.nth(0).getByRole('spinbutton', { name: 'Averaging timeframe', exact: true }).fill('10');
-        await cards.nth(0).getByRole('combobox', { name: 'Transfer rate unit', exact: true }).selectOption('Mbps');
-        await cards.nth(0).getByRole('button', { name: 'Apply custom tracker', exact: true }).click();
-        await page.getByRole('button', { name: 'Recover byte coverage', exact: true }).click();
-        await host.getByText('Sent: 1 Mbps', { exact: true }).waitFor();
-        await host.getByText(/Upload 1s \/ Download 10s measured/).waitFor();
-        await host.getByText(/native uploads update on completed-part acknowledgment, not continuous wire progress/).waitFor();
-        for (const [name, width, height] of [['desktop', 1440, 1000], ['mobile', 390, 844]]) {
-            await page.setViewportSize({ width, height }); await page.evaluate(() => scrollTo(0, 0));
-            let steps = 0;
-            for (;;) {
-                const bounds = await page.evaluate(() => ({ y: scrollY, height: innerHeight, total: document.documentElement.scrollHeight, width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
-                assert.ok(bounds.scrollWidth <= bounds.width, JSON.stringify(bounds));
-                if (bounds.y + bounds.height >= bounds.total - 1) break;
-                assert.ok(++steps < 100); await page.evaluate(() => scrollBy(0, innerHeight * 0.8));
-            }
-            await page.screenshot({ path: join(evidence, `${name}-payload-coverage.png`) });
-        }
-        await page.getByRole('button', { name: 'Pause fixture', exact: true }).click();
-        await host.getByText('Sent: Paused', { exact: true }).waitFor();
-        await host.getByText('Received: Paused', { exact: true }).waitFor();
-        await priority.getByText(/Why waiting: Saved observation/).waitFor();
-        await page.reload(); await priority.getByText(/Why waiting: Saved observation/).waitFor();
-        await host.getByText('Sent: Paused', { exact: true }).waitFor();
-        await host.getByText('Received: Paused', { exact: true }).scrollIntoViewIfNeeded();
-        await page.screenshot({ path: join(evidence, 'mobile-paused.png') });
-        await page.getByRole('button', { name: 'Complete fixture', exact: true }).click();
-        await host.getByText('Sent: Complete', { exact: true }).waitFor();
-        await host.getByText('Received: Complete', { exact: true }).waitFor();
-        await host.getByText('Received: Complete', { exact: true }).scrollIntoViewIfNeeded();
-        await page.screenshot({ path: join(evidence, 'mobile-complete.png') });
-        assert.equal(await host.getByText(/^(Sent|Received): Paused$/).count(), 0);
-		assert.deepEqual(errors, []); await writeFile(join(evidence, 'result.json'), JSON.stringify({ ok: true, isolated: true, viewports: [1440, 390], nestedBlocksEdited: true, savedAndReloaded: true, independentWindows: true, terminalStates: ['paused', 'complete'], directions: ['upload', 'download'], units: ['Kbps', 'Mbps', 'Gbps', 'Files/ps', 'Folders/ps', 'INodes/ps'] }));
+		assert.deepEqual(errors, []); await writeFile(join(evidence, 'result.json'), JSON.stringify({ ok: true, isolated: true, viewports: [1440, 390], nestedBlocksEdited: true, savedAndReloaded: true, independentWindows: true, directions: ['upload', 'download'], units: ['Kbps', 'Mbps', 'Gbps', 'Files/ps', 'Folders/ps', 'INodes/ps'] }));
 		console.log(`EDITABLE_TRANSFER_SPEED_OK ${evidence}`);
 	} catch (error) {
 		if (page) { await page.screenshot({ path: join(evidence, 'failed.png') }).catch(() => {}); await writeFile(join(evidence, 'failed-dom.txt'), await page.locator('body').innerText()).catch(() => {}); }

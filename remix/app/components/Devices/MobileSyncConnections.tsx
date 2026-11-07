@@ -359,7 +359,6 @@ function Connections({
 			let latestProgress: ForegroundSyncProgress = { stage: 'checking', confirmed: 0, total: 0 };
 			const publish = (value: ConnectionProgress) => {
 				assertActive();
-				latestProgress = value;
 				speeds.stage(value.stage);
 				setTransfers((previous) => ({ ...previous, [saved.id]: value }));
 				writeStampedCache(progressKey(saved.id), value);
@@ -460,12 +459,7 @@ function Connections({
 								},
 								progress: publish,
 								transfer: value => { assertActive(); speeds.add(value); },
-								inventorySession: (descriptor: SyncInventoryDescriptor) => {
-                                    assertActive(); setInventoryDescriptors(previous => ({ ...previous, [saved.id]: descriptor }));
-                                    const cacheKey = 'tt:sync-inventory:' + syncScopeKey(syncScope);
-                                    writeStampedCache(cacheKey, descriptor); pruneCacheNamespace('tt:sync-inventory:', cacheKey, 32);
-                                },
-                                progressSession: (descriptor: SyncProgressDescriptor) => {
+								progressSession: (descriptor: SyncProgressDescriptor) => {
 									assertActive(); setProgressDescriptors(previous => ({ ...previous, [saved.id]: descriptor }));
 									const cacheKey = 'tt:sync-progress-tree:' + syncScopeKey(syncScope);
 									writeStampedCache(cacheKey, descriptor); pruneCacheNamespace('tt:sync-progress-tree:', cacheKey, 32);
@@ -788,11 +782,10 @@ function Connections({
 							<SyncDetailsSection title="Automatic sync"><DesktopSyncAutomation saved={saved} scope={{ ...scope, rootId: saved.id }} generation={generation}
 								disabled={!allowed || saved.configuration.paused || retainedDrafts.current.has(saved.id) || !ready} accountTransport={reviewTransport} intervalDraft={intervalDrafts[saved.id]} onIntervalDraftChange={value => setIntervalDrafts(previous => ({ ...previous, [saved.id]: value }))} /></SyncDetailsSection>
 						</Box>}
-						{active && selectedId === saved.id && (host || capabilities?.platform === 'ios') && (progress || progressDescriptor) && <Box width="100%" minW={0}>
-							<SyncDetailsSection title="Progress, speed and priorities"><SyncProgressViewer speedDraftState={speedDrafts.current.get(saved.id)} scopeKey={`${key}:${generation}:${saved.id}`} descriptor={progressDescriptor}
-								uploadPriorities={!downloading ? { draftState: priorityDrafts.current.get(saved.id), scope: progressScope, excludedPaths: saved.configuration.excludedPaths, ignoreRules: saved.configuration.ignoreRules } : undefined}
+						{(host || capabilities?.platform === 'ios') && (progress || progressDescriptor) && <Box width="100%" minW={0}>
+							<SyncProgressViewer scopeKey={`${key}:${generation}:${saved.id}`} descriptor={progressDescriptor}
 								series={task?.transferSeries ?? (transferSession.current?.id === saved.id ? transferSession.current.session.series : undefined)}
-								progress={progress ?? undefined} status={task?.status ?? (running ? 'running' : progress?.stage === 'complete' ? 'complete' : progress?.message && progress.stage !== 'retained' ? 'error' : 'paused')}
+								progress={progress ?? undefined} status={task?.status ?? (running ? 'running' : progress?.stage === 'complete' ? 'complete' : 'paused')}
 								message={progress?.message} accountTransport={reviewTransport} currentScope={() => {
 									if (!mounted.current || rootIdentity.read().pending || rootIdentity.read().generation !== generation || runtimeOrigin() !== scope.origin)
 										throw Error('The account or storage destination changed.');

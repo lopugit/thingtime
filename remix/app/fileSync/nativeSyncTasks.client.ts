@@ -296,153 +296,64 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				if (!job) return; // A stopped/completed/replaced discovery is never replayed.
 				if (stopRequested) await jobs!.transition(job, 'paused');
 				check();
-				if (photoSource && strictAsync && supportsNativePhotoQueue(capabilities) && !job.photoQueueEpoch) {
-					const savedQueue = await jobs!.photoQueue(job, crypto.randomUUID()); check();
-					if (!savedQueue) throw Error('The sync job changed before Photos preparation.');
-					job = savedQueue;
-				}
-
-				// Use the same admitted device/origin, and fence by account
-				// generation without the run's abort so Stop can record its end.
-				const historyJournal = journal!.deviceHistory({ scope: binding, assertCurrent: checkIdentity });
-				history = createDeviceSyncHistoryRecorder({
-					write: sample => historyJournal.append(sample),
-					...(adapter.platform === 'macos' ? { readResources: async (readSignal: AbortSignal) => {
-						check(); readSignal.throwIfAborted();
-						const result = await request(binding.ownerId, { action: 'resources' }, readSignal);
-						check(); readSignal.throwIfAborted();
-						if (result.roots.length || !result.deviceResourceLimits) throw Error('The device did not confirm sync resources.');
-						return result.resources;
-					} } : {}),
-					onStorageStatus: available => { checkIdentity(); reportDeviceSyncHistoryStorage(binding, available); }
-				});
-				let deferredUploads: ForegroundSyncInput['deferredUploads'];
-				if (photoSource && supportsNativeDeferredUploads(capabilities)) {
-					try {
-						await host.requireCapability('api.file-sync-transfer-admissions', '1.0.0'); check();
-						deferredUploads = { queued: (count, scheduled) => { deferredCount = count; if (scheduled !== undefined) deferredScheduled = scheduled; } };
-					} catch { check(); } // Older origins retain ordinary foreground uploads.
-				}
-				const executePass = async (downloadCloud: boolean) => {
-					downloadCloudForPlan = downloadCloud;
-					observedPhotoBatch = undefined;
-					const result = await runPagedForegroundCloudSync(reviewed, binding, {
-						currentScope, localTarget, journal: journal!, runtime, progress: publish, ...(deferredUploads ? { deferredUploads } : {}),
-						...(host.uploadBatch ? { uploadBatch: host.uploadBatch } : {}),
-						...(host.folderBatch ? { folderBatch: host.folderBatch } : {}),
-						...(supportsNativeAuthorizationContext(capabilities) ? { nativeOperationGuards: true as const } : {}),
-						...(!photoSource && inspect && supportsNativeStreamingIndex(capabilities) && !reviewed.configuration.propagateDeletes ? {
-							streamLocalChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>, waitForFinish?: (signal: AbortSignal) => Promise<void>) => readNativeIndexChanges({ ownerId: binding.ownerId, deviceId: binding.deviceId,
-								rootId: reviewed.configuration.localRootId, captureId, afterSequence, readyToFinish, waitForFinish, signal: streamSignal ?? signal, request, excludedPaths: reviewed.configuration.excludedPaths, ignoreRules: reviewed.configuration.ignoreRules,
-								...(supportsNativeStreamingBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}) }),
-							streamRemoteChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>, resume?: { cursor?: string; snapshotComplete?: boolean; checkpoint(cursor: string, snapshotComplete: boolean): Promise<void> }) => {
-								if (!readyToFinish || !resume) throw Error('The durable cloud index consumer is unavailable.');
-								return readCloudIndexChanges(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal: streamSignal ?? signal }, captureId, afterSequence, readyToFinish, resume);
-							}
-						} : {}),
-						inventorySession: descriptor => {
-							check(); update({ inventoryDescriptor: descriptor });
-							const key = 'tt:sync-inventory:' + syncScopeKey(binding);
-							writeStampedCache(key, descriptor); pruneCacheNamespace('tt:sync-inventory:', key, 32);
-						},
-						transfer: value => { check(); update({ transfer: value }); history?.transfer(value); },
-						progressSession: descriptor => {
-							check(); update({ progressDescriptor: descriptor });
-							const key = 'tt:sync-progress-tree:' + syncScopeKey(binding);
-							writeStampedCache(key, descriptor); pruneCacheNamespace('tt:sync-progress-tree:', key, 32);
-						},
-						readConfiguration: async () => {
-							const url = new URL('/api/v1/things', binding.origin); url.searchParams.set('id', reviewed.id);
-							const response = await host.fetch(url, { credentials: 'include', cache: 'no-store', redirect: 'error', signal,
-								headers: { 'X-Thingtime-Expected-Actor': binding.ownerId, 'X-Thingtime-Expected-Data-Plane': 'home' } });
-							if (!response.ok) throw Error('The saved sync connection could not be verified.');
-							const value = await response.json(); check(); return value.thing;
-						},
-						...(host.authorizeContext ? { authorizeContext: async () => {
-							const authorization = await host.authorizeContext!(binding.ownerId, binding.deviceId!, signal);
-							assertPhotoSourcePolicy(reviewed.configuration, authorization.roots); updatePhotoAccess(authorization.roots); check();
-							return authorization.conditions;
-						} } : {}),
-						authorizeDevice: async () => {
-							await host.authorizeDevice(binding.ownerId, binding.deviceId, signal);
-							const latest = (await request(binding.ownerId, { action: 'list' }, signal)).roots;
-							assertPhotoSourcePolicy(reviewed.configuration, latest); updatePhotoAccess(latest); check();
-						},
-						conditions: async () => (await request(binding.ownerId, { action: 'conditions' }, signal)).conditions!,
-						scanLocal: async () => (await request(binding.ownerId, { action: 'scan', rootId: reviewed.configuration.localRootId, excludedPaths: reviewed.configuration.excludedPaths, ...(reviewed.configuration.ignoreRules ? { ignoreRules: reviewed.configuration.ignoreRules } : {}) }, signal)).entries!,
-						...(inspect && supportsNativeInventoryPages(capabilities) ? {
-							scanLocalPages: nativePages, ...(backup ? { beginLocalImport, releaseLocalImport } : {})
-						} : {}),
-						observeLocal: nativePathObserver(host, binding.ownerId, signal),
-						...(inspect ? { inspectLocal: async (path: string) => (await request(binding.ownerId,
-							{ action: 'inspect', rootId: reviewed.configuration.localRootId, path }, signal)).inspectedEntry! } : {}),
-						inventory: () => readCloudFolderInventory(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal }),
-						inventoryPages: (options?: { signal?: AbortSignal }) => readCloudFolderInventoryPages(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal: options?.signal ?? signal }),
-						source: async entry => mobileFolderSource(binding.ownerId, reviewed.configuration.localRootId, entry, signal, request, capabilities, !resume, photoDownloadApproval()),
-						reviewPagedConflicts: session => new Promise<PagedConflictReviewResult>((resolve, reject) => {
-							let settled = false;
-							const finish = (value?: PagedConflictReviewResult) => {
-								if (settled) return; settled = true; signal.removeEventListener('abort', abort);
-								if (!signal.aborted) update({ pagedReview: undefined });
-								if (signal.aborted) reject(signal.reason);
-								else if (value) resolve(value); else reject(Error('Conflict review interrupted. Saved choices can be resumed.'));
-							};
-							const controller = createConflictReviewController(session, finish);
-							const abort = () => { controller.dispose(); finish(); };
-							signal.addEventListener('abort', abort, { once: true });
-							if (signal.aborted) { abort(); return; }
-							update({ pagedReview: controller }); void controller.reload().catch(() => {});
-						}),
-						reviewConflicts: conflicts => new Promise<SyncConflictReviewResult>((resolve, reject) => {
-							let settled = false;
-							const finish = (value?: SyncConflictReviewResult) => {
-								if (settled) return; settled = true; signal.removeEventListener('abort', abort);
-								if (!signal.aborted) update({ legacyReview: undefined });
-								if (signal.aborted) reject(signal.reason);
-								else if (value) resolve(value); else reject(Error('Conflict review cancelled. Both folders were preserved.'));
-							};
-							const abort = () => finish(); signal.addEventListener('abort', abort, { once: true });
-							if (signal.aborted) { abort(); return; }
-							update({ legacyReview: { conflicts, apply: finish, retain: () => finish({ action: 'retain' }), cancel: () => finish() } });
-						})
-					}, signal);
-					const photoQueue = result && 'photoQueue' in result && result.photoQueue !== undefined ? parseNativePhotoQueueBatch(result.photoQueue) : undefined;
-					const observed = observedPhotoBatch as NativePhotoQueueBatch | undefined;
-					const reported = nativeSyncTasks.read()?.progress;
-					const verified = result && 'progress' in result && result.progress.phase === 'complete';
-					// Nonempty batches still say verifying in the card until a
-					// fresh empty selection; the durable checkpoint can advance.
-					const progress = photoQueue && verified && reported ? { ...reported, stage: 'complete' as const } : reported;
-					return { progress, photoQueue, replacedPhotoBatch: !!(photoQueue && ((observed && observed.id !== photoQueue.id) ||
-						(result && 'progress' in result && result.progress.photoSourceChanged))) };
-				};
-				const queueApproval = photoQueueApproval();
-				const queuedResult = queueApproval ? await runNativePhotoQueue(
-					() => executePass(true),
-					async batch => {
-						await request(binding.ownerId, { action: 'photo-queue-finish', rootId: reviewed.configuration.localRootId,
-							photoBatchId: batch.id, photoQueueApproval: queueApproval }, signal);
-					}, check, queueApproval.request.epoch
-				) : undefined;
-				const finishedProgress = queuedResult?.progress ?? (queueApproval ? undefined :
-					await runPhotoBackupPasses(async downloadCloud => (await executePass(downloadCloud)).progress,
-						check, () => photoDownloadApproval() !== undefined));
-				const count = queuedResult?.photoQueue?.unavailable ?? (finishedProgress?.coverage === 'partial' ? finishedProgress.skipped : undefined);
-				if (photoSource && finishedProgress?.stage === 'complete' && count) {
-					if (queueApproval) {
-						const savedQueue = await jobs!.photoQueue(job, null); check();
-						if (!savedQueue) throw Error('The sync job changed before the unavailable originals could be scheduled for retry.');
-						job = savedQueue;
-					}
-					const action = reviewed.configuration.network === 'wifi' ?
-						'Download the remaining originals in Photos, or explicitly allow cellular in this connection to let Thingtime fetch them.' :
-						'Thingtime will retry. You can also download the remaining originals in Photos.';
-					throw new SyncConnectionWait(
-						`${count} ${count === 1 ? 'original is' : 'originals are'} only in iCloud. ${action}`,
-						SYNC_RETRY_MAX_MS);
-				}
-				const finished = await jobs!.finish(job, Date.now()); check();
-				if (finished) historyStatus = 'complete';
+				await runPagedForegroundCloudSync(reviewed, binding, {
+					currentScope, localTarget, journal: journal!, runtime, progress: publish,
+					transfer: value => { check(); update({ transfer: value }); },
+					progressSession: descriptor => {
+						check(); update({ progressDescriptor: descriptor });
+						const key = 'tt:sync-progress-tree:' + syncScopeKey(binding);
+						writeStampedCache(key, descriptor); pruneCacheNamespace('tt:sync-progress-tree:', key, 32);
+					},
+					readConfiguration: async () => {
+						const url = new URL('/api/v1/things', binding.origin); url.searchParams.set('id', reviewed.id);
+						const response = await host.fetch(url, { credentials: 'include', cache: 'no-store', redirect: 'error', signal,
+							headers: { 'X-Thingtime-Expected-Actor': binding.ownerId, 'X-Thingtime-Expected-Data-Plane': 'home' } });
+						if (!response.ok) throw Error('The saved sync connection could not be verified.');
+						const value = await response.json(); check(); return value.thing;
+					},
+					authorizeDevice: async () => {
+						await host.authorizeDevice(binding.ownerId, binding.deviceId, signal);
+						assertPhotoSourcePolicy(reviewed.configuration, (await request(binding.ownerId, { action: 'list' }, signal)).roots); check();
+					},
+					conditions: async () => (await request(binding.ownerId, { action: 'conditions' }, signal)).conditions!,
+					scanLocal: async () => (await request(binding.ownerId, { action: 'scan', rootId: reviewed.configuration.localRootId, excludedPaths: reviewed.configuration.excludedPaths }, signal)).entries!,
+					...(inspect && supportsNativeInventoryPages(capabilities) ? {
+						scanLocalPages: () => readNativeInventory({ ownerId: binding.ownerId, deviceId: binding.deviceId,
+							rootId: reviewed.configuration.localRootId, excludedPaths: reviewed.configuration.excludedPaths, signal, request })
+					} : {}),
+					...(inspect ? { inspectLocal: async (path: string) => (await request(binding.ownerId,
+						{ action: 'inspect', rootId: reviewed.configuration.localRootId, path }, signal)).inspectedEntry! } : {}),
+					inventory: () => readCloudFolderInventory(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal }),
+					inventoryPages: () => readCloudFolderInventoryPages(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal }),
+					source: async entry => mobileFolderSource(binding.ownerId, reviewed.configuration.localRootId, entry, signal, request, capabilities),
+					reviewPagedConflicts: session => new Promise<PagedConflictReviewResult>((resolve, reject) => {
+						let settled = false;
+						const finish = (value?: PagedConflictReviewResult) => {
+							if (settled) return; settled = true; signal.removeEventListener('abort', abort);
+							if (!signal.aborted) update({ pagedReview: undefined });
+							if (signal.aborted) reject(signal.reason);
+							else if (value) resolve(value); else reject(Error('Conflict review interrupted. Saved choices can be resumed.'));
+						};
+						const controller = createConflictReviewController(session, finish);
+						const abort = () => { controller.dispose(); finish(); };
+						signal.addEventListener('abort', abort, { once: true });
+						if (signal.aborted) { abort(); return; }
+						update({ pagedReview: controller }); void controller.reload().catch(() => {});
+					}),
+					reviewConflicts: conflicts => new Promise<SyncConflictReviewResult>((resolve, reject) => {
+						let settled = false;
+						const finish = (value?: SyncConflictReviewResult) => {
+							if (settled) return; settled = true; signal.removeEventListener('abort', abort);
+							if (!signal.aborted) update({ legacyReview: undefined });
+							if (signal.aborted) reject(signal.reason);
+							else if (value) resolve(value); else reject(Error('Conflict review cancelled. Both folders were preserved.'));
+						};
+						const abort = () => finish(); signal.addEventListener('abort', abort, { once: true });
+						if (signal.aborted) { abort(); return; }
+						update({ legacyReview: { conflicts, apply: finish, retain: () => finish({ action: 'retain' }), cancel: () => finish() } });
+					})
+				}, signal);
+				check(); const finished = await jobs!.finish(job, Date.now()); check();
 				if (finished?.state === 'scheduled' && adapter.platform === 'macos') await setDesktopSyncScheduled(true, adapter.bridge);
 			}, undefined, signal);
 		} catch (error) {

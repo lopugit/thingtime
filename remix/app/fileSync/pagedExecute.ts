@@ -20,17 +20,12 @@ export async function executePreparedPagedSyncRun(value: PagedRunSpec, savedScop
 	};
 	check(); let state = await journal.start(spec); check();
 	while (state.phase !== 'complete') {
-		const operation = await journal.claimNext(spec); check();
-		if (!operation) throw Error('Sync run has no next operation.');
-		await options.prepare?.(operation); check();
-		let receipt: Awaited<ReturnType<typeof executeSyncOperation>>;
-		try { receipt = await executeSyncOperation(operation, scope, port, options.signal); }
-		catch (error) {
-			check();
-			if (!spec.photoAssetOrder || !(error instanceof SyncObservationChangedError) || !error.sourceChanged) throw error;
-			state = await journal.omitChangedPhotoSource(spec, operation); check();
-			options.omitted?.(operation); options.changed?.(state);
-			continue;
+		const page = await journal.read(spec); check();
+		if (!page.operations.length) throw Error('Sync run has no next operation.');
+		for (const operation of page.operations) {
+			check(); const receipt = await executeSyncOperation(operation, scope, port, options.signal); check();
+			state = await journal.confirm(spec, receipt); check(); options.changed?.(state);
+			port.confirmed?.(operation, receipt);
 		}
 		check();
 		state = await journal.confirm(spec, receipt); check(); options.changed?.(state);
