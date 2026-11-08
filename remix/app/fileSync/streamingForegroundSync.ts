@@ -23,6 +23,8 @@ import type { PagedRunProgress, PagedRunSpec } from './pagedRunJournal';
 import { NATIVE_INVENTORY_BATCH_ENTRIES } from './nativeInventory';
 import { INVENTORY_PAGE_ENTRIES } from './inventoryJournal';
 import { recoverRemountedNativeFeed } from './nativeFeedRecovery';
+import { automaticStoragePathAllowed } from './automaticStoragePlacement';
+import { AutomaticStoragePlacementExcluded } from '../utils/thingStoragePolicy';
 
 /** Streaming uses the existing durable run, scheduler and guarded transports.
  * A terminal feed releases no baseline: sealed reconciliation owns that proof. */
@@ -365,8 +367,10 @@ export async function streamForegroundSync(
 		// A missing previously recorded destination and all conflicting
 		// edits wait for strict reconciliation.
 		if (!sameSyncStamp(target, priorTarget) || (entry.kind === 'folder' && target)) { await defer(); return; }
-		const decision = decideSyncPath({ path: entry.path, local: left, remote: right, beforeLocal, beforeRemote },
-			{ mode: 'two-way', propagateDeletes: false }, false, false);
+		const row = { path: entry.path, local: left, remote: right, beforeLocal, beforeRemote }, policy = { mode: 'two-way', propagateDeletes: false } as const;
+		const placement = await runtime.automaticStoragePlacement?.rules();
+		if (placement && !automaticStoragePathAllowed(row, policy, scope, placement)) { await defer(); return; }
+		const decision = decideSyncPath(row, policy, false, false);
 		if (decision.kind !== 'copy' || decision.from !== from) { await defer(); return; }
 		const operation: SyncOperation = { id: crypto.randomUUID(), mutation: decision, confirmed: false };
 		const binding = await prepareCloudOperationBinding(operation, scope, configuration.remoteFolderId, {
@@ -423,12 +427,14 @@ export async function streamForegroundSync(
 					beforeRemote = previous.operation.mutation.source;
 				}
 			}
-			const decision = decideSyncPath(
-				{ path: change.entry.path, local: local ? source : target, remote: local ? target : source, beforeLocal, beforeRemote },
-				{ mode: configuration.mode, propagateDeletes: false },
-				false,
-				false
-			);
+			const row = { path: change.entry.path, local: local ? source : target, remote: local ? target : source, beforeLocal, beforeRemote };
+			const policy = { mode: configuration.mode, propagateDeletes: false };
+			const placement = await runtime.automaticStoragePlacement?.rules();
+			if (placement && !automaticStoragePathAllowed(row, policy, scope, placement)) {
+				state = await runs.appendStream(spec, event, null);
+				wake(); report(); return;
+			}
+			const decision = decideSyncPath(row, policy, false, false);
 			if (decision.kind !== 'copy') {
 				state = await runs.appendStream(spec, event, null, decision.kind === 'conflict');
 				wake();
@@ -574,6 +580,8 @@ export async function streamForegroundSync(
 				// owns its original ID even if this retry is refused.
 				if (twoWay && dispatching.first && error instanceof ExactCloudSyncDestinationChanged) {
 					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, true, true);
+				} else if (error instanceof AutomaticStoragePlacementExcluded && (!dispatching.marked || dispatching.first)) {
+					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, false, false, dispatching.first);
 				} else if (error instanceof SyncObservationChangedError) {
 					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, error.targetChanged);
 				} else if (twoWay && applyEntered && !dispatching.marked && operation.mutation.kind === 'copy') {

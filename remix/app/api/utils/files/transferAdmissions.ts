@@ -30,6 +30,7 @@ import type { DeviceActor } from '../devices/deviceAuth';
 import { getHomeThingsCollection, getSessionsCollection, withHomeMongoSnapshot, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { MAX_FOLDER_DEPTH } from '../things/folderPlacement';
+import { automaticThingCloudSyncAllowed } from '../things/thingStoragePolicy';
 import { cloudInventoryAccess, readCloudInventoryRoot, readCloudPath } from './inventory';
 
 const PHOTO_RUN_PURPOSE = 'file-sync-photo-run' as const;
@@ -628,6 +629,8 @@ export async function transferAdmission(input: {
 		)
 			return expired();
 		if (a.photoRun && !(await liveRun(a.photoRun, row.userId, a.deviceSessionId))) return expired();
+		if (!(await automaticThingCloudSyncAllowed(await getHomeThingsCollection(), row.userId, a.provenance.fileId)))
+			return fail(409, 'Cloud sync is paused for this file');
 		if (
 			!attachment ||
 			!reservationMatches(attachment.doc, a) ||

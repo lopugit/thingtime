@@ -22,6 +22,7 @@ struct WebView: UIViewRepresentable {
         configuration.userContentController.addUserScript(MobileDeviceLocationBridge.script)
         configuration.userContentController.addUserScript(MobileFolderBridge.script)
         configuration.userContentController.addUserScript(FileExportBridge.script)
+        configuration.userContentController.addUserScript(FileReplicaBridge.script)
         configuration.userContentController.addUserScript(LiDARBridge.script)
         configuration.userContentController.add(context.coordinator, name: Self.nativeMessageHandlerName)
         context.coordinator.configureShareComposer(configuration: configuration, origin: url)
@@ -80,6 +81,7 @@ struct WebView: UIViewRepresentable {
         context.coordinator.mobileDevice.suspend()
         context.coordinator.mobileFolders.suspend()
         context.coordinator.fileExports.suspend()
+        context.coordinator.fileReplicas.suspend()
         context.coordinator.cancelVoice()
         if rootChanged { context.coordinator.suspendRecordingUploads() }
         context.coordinator.loadedRootURL = url
@@ -104,6 +106,7 @@ struct WebView: UIViewRepresentable {
         let mobileLocation = MobileDeviceLocationBridge()
         let mobileFolders = MobileFolderBridge()
         let fileExports = FileExportBridge()
+        let fileReplicas = FileReplicaBridge()
         private let lopuVoice = LopuVoiceSessionController()
         private let lopuChats = LopuChatActivityController()
 
@@ -162,6 +165,7 @@ struct WebView: UIViewRepresentable {
             mobileDevice.suspend()
             mobileFolders.suspend()
             fileExports.suspend()
+            fileReplicas.suspend()
         }
 
         // OAuth consent must run in the system browser. Explicit new-window web
@@ -195,6 +199,7 @@ struct WebView: UIViewRepresentable {
                 "filePhotoAutomationVersion": MobileFolderBridge.photoAutomationVersion,
                 "fileUploadVersion": MobileFolderBridge.uploadVersion,
                 "fileExportVersion": FileExportBridge.version,
+                "fileReplicaVersion": FileReplicaBridge.version,
                 "lidarVersion": LiDARBridge.version,
                 "fileStagingVersion": MobileFolderBridge.stagingVersion, "filePublicationVersion": MobileFolderBridge.publicationVersion,
                 "watchNotifications": true
@@ -237,6 +242,18 @@ struct WebView: UIViewRepresentable {
                     currentRoot: { [weak self] in self?.loadedRootURL },
                     cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] },
                     reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
+            case "file-replica":
+                guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
+                      let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
+                      let frame = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frame, root) else { return }
+                fileReplicas.handle(body, webView: webView, root: root,
+                    currentRoot: { [weak self] in self?.loadedRootURL },
+                    cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] },
+                    verifyDevice: { [weak self, weak webView] scope, deviceId, check in
+                        guard let self, let webView else { throw CancellationError() }
+                        try await self.mobileDevice.verifyDevice(scope, deviceId: deviceId, webView: webView,
+                            cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] }, check: check)
+                    }, reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
             case "mobile-files":
                 guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
                       let current = webView.url, LopuVoiceContract.sameOrigin(current, root),

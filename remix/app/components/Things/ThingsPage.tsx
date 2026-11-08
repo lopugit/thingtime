@@ -57,6 +57,7 @@ import { DeleteConfirmDialog, MoveDialog, NewFolderDialog, PreviewModal, RenameD
 import { ThingsColumnsView, ThingsGridView, ThingsListView } from './ThingsViews';
 import { browseMenuPosition } from './browseInteraction';
 import type { ThingsItemAction, ThingsItemHandlers } from './ThingsViews';
+import { thingStorageHref } from './thingStorageNavigation';
 import { buildThingsBackgroundMenu, buildThingsItemMenu } from './thingsMenuModel';
 import {
   THINGS_GROUP_OPTIONS,
@@ -1249,6 +1250,9 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         case 'preview':
           setPreviewThing(thing);
           break;
+        case 'storage-placement':
+          navigate(thingStorageHref(thing.id, { archive: thing.thingtime.includes('chat-archive'), dataPlane, fromThings: true }));
+          break;
         case 'inspect':
           navigate(`/thing/${encodeURIComponent(thing.id)}`);
           break;
@@ -1293,7 +1297,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
           break;
       }
     },
-    [archive, copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo, builderMode, user?.id]
+    [dataPlane, archive, copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo, builderMode, user?.id]
   );
 
   // ------------------------------------------------------------------ drag & drop
@@ -1391,8 +1395,8 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 
   const itemMenuModel = useMemo(
     () =>
-			menuThing ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode }) : { sections: [] },
-    [menuThing, menuActCount, clipboard?.ids.length, user?.id, searchParams, builderMode]
+			menuThing ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode, dataPlane }) : { sections: [] },
+    [menuThing, menuActCount, clipboard?.ids.length, user?.id, searchParams, builderMode, dataPlane]
   );
 
   const onItemMenuAction = useCallback(
@@ -1403,6 +1407,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         case 'open-builder':
         case 'open-live': onItemAction(menuThing, action.command); break;
         case 'edit-definition': onItemAction(menuThing, 'edit-definition'); break;
+        case 'storage-placement': onItemAction(menuThing, 'storage-placement'); break;
         case 'download':
           onItemAction(menuThing, 'download');
           break;
@@ -1455,7 +1460,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
           break;
       }
     },
-    [copyLink, menuThing, onItemAction, openThing, pasteClipboardTo]
+    [copyLink, menuThing, navigate, onItemAction, openThing, pasteClipboardTo]
   );
 
   const backgroundMenuModel = useMemo(
@@ -1612,7 +1617,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   const eventlessItemContextMenu: ThingsItemHandlers['onItemContextMenu'] = (_thing, event) => { event.preventDefault(); event.stopPropagation(); };
   const itemHandlers: ThingsItemHandlers = {
     builderMode,
-    ...(locationPicker ? { itemMenuFor: () => ({ sections: [] }) } : builderMode ? { itemMenuFor: (thing: ThingsThing) => buildThingsItemMenu({ thing, actCount: selection.has(thing.id) ? Math.max(1, selection.size) : 1, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode: true }) } : {}),
+    ...(locationPicker ? { itemMenuFor: () => ({ sections: [] }) } : builderMode ? { itemMenuFor: (thing: ThingsThing) => buildThingsItemMenu({ thing, actCount: selection.has(thing.id) ? Math.max(1, selection.size) : 1, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode: true, dataPlane }) } : {}),
     itemHref: (thing: ThingsThing) => locationPicker ? (isFolder(thing) ? `?${new URLSearchParams({ ...Object.fromEntries(searchParams), folder: thing.id })}` : undefined) : (builderMode ? builderAppLaunchHref(thing) : null) || thingBrowseHref(thing, searchParams.toString(), user?.id),
 
     locationSearch: searchParams.toString(),
