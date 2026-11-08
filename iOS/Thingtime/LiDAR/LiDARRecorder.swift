@@ -6,6 +6,7 @@ final class LiDARRecorder: NSObject, ARSessionDelegate, @unchecked Sendable {
         case recording(frameCount: Int, bytes: Int64, elapsed: TimeInterval, tracking: String, hasDepth: Bool)
         case finalizing
         case saved(LiDARCapture)
+        case emptyCapture
         case failed(message: String, canRecover: Bool)
         case discardFailed(uploadDisabled: Bool)
         case discarded
@@ -264,6 +265,9 @@ final class LiDARRecorder: NSObject, ARSessionDelegate, @unchecked Sendable {
             let capture = try store.finalize(detail: detail, worldMapStatus: worldMapStatus)
             self.store = nil
             emit(.saved(capture))
+        } catch LiDARTarArchive.ArchiveError.emptyCapture {
+            self.store = nil
+            emit(.emptyCapture)
         } catch {
             self.store = nil
             emit(.failed(message: Self.failure(error, defaultMessage: "The scan is still on this device, but could not be finalized."),
@@ -287,6 +291,8 @@ final class LiDARRecorder: NSObject, ARSessionDelegate, @unchecked Sendable {
             || nsError.domain == NSPOSIXErrorDomain && nsError.code == Int(ENOSPC)
             || underlying?.domain == NSPOSIXErrorDomain && underlying?.code == Int(ENOSPC)
         if full { return "The device ran out of storage. Free space to finish saving the recorded data." }
-        return (error as? LiDARFrameWriter.BufferError)?.errorDescription ?? defaultMessage
+        return (error as? LiDARTarArchive.ArchiveError)?.errorDescription
+            ?? (error as? LiDARFrameWriter.BufferError)?.errorDescription
+            ?? defaultMessage
     }
 }

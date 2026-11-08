@@ -11,12 +11,16 @@ final class LiDARUploadTests: XCTestCase {
         let scope = try FileSyncOwnerScope(ownerId: "scanner", url: URL(string: "https://scans.test")!)
         let outbox = fixture.outbox()
         let id = try outbox.reserve(scope: scope)
-        let capture = try fixture.capture(id: id, bytes: 124)
-        let bytes = try Data(contentsOf: capture.archiveURL)
-        // Simulate a process death before the scanner could invoke its callback.
+        var interrupted: LiDARCaptureStore? = try fixture.startCapture(id: id, bytes: 124)
+        let originalURL = try XCTUnwrap(interrupted?.archiveURL)
+        let original = try Data(contentsOf: originalURL)
+        // The process died before it could seal the TAR or invoke the callback.
+        interrupted = nil
         let recoveredValue = try await fixture.outbox().recover(id: id, scope: scope)
         let recovered = try XCTUnwrap(recoveredValue)
-        XCTAssertEqual(recovered.byteCount, capture.byteCount)
+        XCTAssertNotEqual(recovered.archiveURL, originalURL)
+        XCTAssertEqual(try Data(contentsOf: originalURL), original)
+        let bytes = try Data(contentsOf: recovered.archiveURL)
         let server = FakeLiDARServer(scope: scope, id: id, bytes: bytes)
         server.offline = true
         do {
@@ -24,7 +28,8 @@ final class LiDARUploadTests: XCTestCase {
             XCTFail("An offline capture was reported as saved")
         } catch let error as URLError { XCTAssertEqual(error.code, .notConnectedToInternet) }
         XCTAssertNil(try fixture.outbox().entries(scope: scope).first?.receipt)
-        XCTAssertEqual(try Data(contentsOf: capture.archiveURL), bytes)
+        XCTAssertEqual(try Data(contentsOf: recovered.archiveURL), bytes)
+        XCTAssertEqual(try Data(contentsOf: originalURL), original)
 
         server.offline = false
         server.loseCommit = true
@@ -39,7 +44,8 @@ final class LiDARUploadTests: XCTestCase {
         XCTAssertEqual(server.commits.count, 2)
         XCTAssertEqual(server.commits.first, server.commits.last)
         XCTAssertEqual(try fixture.outbox().entries(scope: scope).first?.receipt, receipt)
-        XCTAssertEqual(try Data(contentsOf: capture.archiveURL), bytes)
+        XCTAssertEqual(try Data(contentsOf: recovered.archiveURL), bytes)
+        XCTAssertEqual(try Data(contentsOf: originalURL), original)
     }
 
     func testChangedAccountOriginAndTransportCannotAccessCapture() async throws {
@@ -67,6 +73,32 @@ final class LiDARUploadTests: XCTestCase {
             } catch LiDARUploadOutbox.Failure.wrongScope {}
             XCTAssertTrue(server.calls.isEmpty)
         }
+    }
+
+    func testDamagedSealedArchiveCannotEstablishItsFirstUploadFingerprint() async throws {
+        let fixture = try LiDARUploadFixture()
+        defer { fixture.remove() }
+        let scope = try FileSyncOwnerScope(ownerId: "scanner", url: URL(string: "https://scans.test")!)
+        let outbox = fixture.outbox(), id = try outbox.reserve(scope: scope)
+        let capture = try fixture.capture(id: id, bytes: 36)
+        try outbox.record(capture, scope: scope)
+        var bytes = try Data(contentsOf: capture.archiveURL)
+        let file = try FileHandle(forReadingFrom: capture.archiveURL)
+        let first = try XCTUnwrap(LiDARTarArchive.nextEntry(in: file, offset: 0, length: UInt64(bytes.count)))
+        try file.close()
+        // Preserve the size, capture header, manifest, and its receipt. Only
+        // traversing the sealed TAR finds this damaged camera entry header.
+        bytes[Int(first.nextOffset)] ^= 1
+        try bytes.write(to: capture.archiveURL)
+        let server = FakeLiDARServer(scope: scope, id: id, bytes: bytes)
+        do {
+            _ = try await outbox.upload(id: id, scope: scope, session: server)
+            XCTFail("A damaged archive was accepted before its first fingerprint")
+        } catch LiDARUploadOutbox.Failure.archiveChanged {}
+        XCTAssertFalse(server.calls.contains("/api/v1/attachments/uploads"))
+        XCTAssertEqual(server.uploads, 0)
+        XCTAssertTrue(server.commits.isEmpty)
+        XCTAssertEqual(try Data(contentsOf: capture.archiveURL), bytes)
     }
 
     func testPendingArchiveFollowsOnlyItsReservedPathAfterSandboxRelocation() async throws {

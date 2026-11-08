@@ -1,3 +1,4 @@
+import { formatByteSize } from '../../utils/formatByteSize';
 import { formatElapsedTime } from './elapsedTime';
 import { copiedMediaRefs, mapResolvedCopiedMedia } from '../Sharing/copiedMediaRefs';
 
@@ -209,6 +210,7 @@ const ordinal = (n: number): string => {
 const formatValue = (spec: Record<string, unknown>, value: unknown): string => {
 	const kind = typeof spec.kind === 'string' ? spec.kind : 'text';
 	const digits = typeof spec.digits === 'number' ? Math.max(0, Math.min(6, Math.round(spec.digits))) : 0;
+	if (kind === 'bytes') return formatByteSize(value);
 	if (kind === 'upper') return scalarText(value).toUpperCase();
 	if (kind === 'lower') return scalarText(value).toLowerCase();
 	if (kind === 'capitalize') {
