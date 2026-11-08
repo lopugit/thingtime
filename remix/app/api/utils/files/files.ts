@@ -2,7 +2,7 @@ import { contentExecutionHold, recordCreationContentEpoch, type ContentExecution
 import { ExactCloudSyncDestinationChanged, SYNC_DESTINATION_CHANGED } from '../../../fileSync/cloudSyncDestination';
 import { assertCloudSyncDestination } from './inventory';
 import { symbolicLinkBytes, symbolicLinkFingerprint } from '../../../fileSync/symbolicLink';
-import { equalContentFingerprints } from '../../../fileSync/contentFingerprint';
+import { equalContentFingerprints, type ContentFingerprint } from '../../../fileSync/contentFingerprint';
 import { parseFileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { createHash } from 'node:crypto';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
@@ -97,7 +97,7 @@ export function createCloudFileService(overrides: Partial<{
 				return doc ? { ok: true as const, file: publicFile(doc) } : failure(404, 'File not found');
 			} catch (error) { return errorResult(error); }
 		},
-		async commit(ownerId: string, value: unknown, context?: { session: any; executionHold?: ContentExecutionHold; auditLabel?: string; consumeImportDraft?: true }) {
+		async commit(ownerId: string, value: unknown, context?: { session: any; executionHold?: ContentExecutionHold; auditLabel?: string; consumeImportDraft?: true; expectedFingerprint?: ContentFingerprint; syncSourceGrant?: { localRootId: string; grantRevision: string } }) {
 			if (context && !context.session?.inTransaction?.()) throw Error('File composition requires an active transaction');
 			if (deps.customPlane()) return failure(409, 'Files currently require the home data plane');
 			if (!ownerId) return failure(401, 'Unauthorized');
@@ -106,6 +106,8 @@ export function createCloudFileService(overrides: Partial<{
 			try { input = retained ? parseCloudFileRetention(value) : parseCloudFileCommit(value); } catch { return failure(400, 'Invalid file commit'); }
 			const requestHash = digest(input), eid = eventId(ownerId, input.id, input.operationId, retained), now = deps.now();
 			const replay = (saved: { file: CloudFile; requestHash: string }) => {
+				if (context?.expectedFingerprint && !equalContentFingerprints(context.expectedFingerprint, saved.file.content.fingerprint))
+					conflict('File bytes differ from the approved fingerprint');
 				if (saved.requestHash !== requestHash) conflict('File operation was reused with different content');
 				return { ok: true as const, file: saved.file, replayed: true, ...(retained ? { retained: true as const } : {}) };
 			};
@@ -114,6 +116,8 @@ export function createCloudFileService(overrides: Partial<{
 				const prior = await receipt(things, ownerId, input.id, input.operationId, context?.session, retained); if (prior) return replay(prior);
 				const verified = await deps.fingerprint({ id: ownerId }, input.attachmentId);
 				if (verified.ok === false) return verified;
+				if (context?.expectedFingerprint && !equalContentFingerprints(context.expectedFingerprint, verified.fingerprint))
+					conflict('File bytes differ from the approved fingerprint');
 				if (verified.version !== input.contentVersion) conflict('File bytes changed before commit');
 				if (input.symbolicLink && (symbolicLinkBytes(input.symbolicLink).byteLength !== verified.size || !equalContentFingerprints(await symbolicLinkFingerprint(input.symbolicLink), verified.fingerprint))) conflict('Symbolic link metadata does not match its verified target bytes');
 				return await (context ? async (work: (session: any) => Promise<any>) => work(context.session) : deps.transaction)(async session => {
@@ -148,7 +152,7 @@ export function createCloudFileService(overrides: Partial<{
 					const bound = await things.updateOne({ _id: attachment._id, ownerId, attachmentState: 'ready', objectVersionId: attachment.objectVersionId,
             ...(consumeImport ? { attachmentImportDraft: true, attachmentExpiresAt: { $gt: bindingNow } } : {}),
 						...(attachment.targetId == null ? { targetId: { $in: [null] } } : { targetId: input.id }) },
-						{ $set: { targetId: input.id, parentId: input.id, folderId: null, acl: ['tt:inherit'], updatedAt: now, fileBindingToken: eid, ...(consumeImport ? { attachmentImportDraft: false, attachmentExpiresAt: null } : {}) } }, { session });
+						{ $set: { targetId: input.id, parentId: input.id, folderId: null, acl: ['tt:inherit'], updatedAt: now, fileBindingToken: eid, ...(context?.syncSourceGrant ? { fileSyncSourceGrant: context.syncSourceGrant } : {}), ...(consumeImport ? { attachmentImportDraft: false, attachmentExpiresAt: null } : {}) } }, { session });
 					if (bound.matchedCount !== 1) conflict('File upload changed before publication');
 					const crystal = { name: input.name, trashed: input.trashed, ...(input.symbolicLink ? { symbolicLink: input.symbolicLink } : {}), content: { attachmentId: verified.id, version: verified.version, size: verified.size, fingerprint: verified.fingerprint } };
 					const next: any = { ...(before ?? {}), ...(context?.executionHold && !before ? { executionHold: contentExecutionHold(context.executionHold) } : {}), shareId: input.id, ownerId, thingtime: [CLOUD_FILE_KIND], schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,

@@ -21,14 +21,17 @@ const photoCases = [
 	{ format: 'paged', start: runPagedForegroundCloudSync, variant: 'new folder' },
 	{ format: 'legacy', start: runForegroundCloudSync, variant: 'same folder' },
 	{ format: 'legacy', start: runForegroundCloudSync, variant: 'new folder' },
-	{ format: 'paged', start: runPagedForegroundCloudSync, variant: 'revision only' }
+	{ format: 'paged', start: runPagedForegroundCloudSync, variant: 'revision only' },
+	{ format: 'paged', start: runPagedForegroundCloudSync, variant: 'v4 policy migration' }
 ] as const;
 
 for (const { format, start, variant } of photoCases)
 	test(`Photos Retry reconciles an interrupted ${format} backup after a ${variant} change`, async t => {
 		const sameFolder = variant !== 'new folder', revisionOnly = variant === 'revision only';
 		const newFolder = sameFolder ? oldFolder : current.configuration.remoteFolderId;
-		const updated = { ...current, configuration: revisionOnly ? old.configuration : { ...current.configuration, remoteFolderId: newFolder } };
+		const updated: typeof old = { ...current, configuration: revisionOnly ? old.configuration : { ...current.configuration,
+			remoteFolderId: newFolder, ...(variant === 'v4 policy migration' ? { configurationVersion: 4 as const,
+				photoAutomation: { notificationIntervalMs: 1_800_000, uploadBytesPerSecond: 625_000, uploadBytesPerHour: 1_000_000_000 } } : {}) } };
 		const f = await foregroundFixture();
 		t.after(() => f.journal().close());
 		const signal = new AbortController().signal, access = { scope, currentScope: () => scope, signal };

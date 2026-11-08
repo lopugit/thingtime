@@ -430,6 +430,28 @@ export const findUserById = async (id: string) => {
 	return legacy;
 };
 
+/** A delegated private upload publication must serialize with the current
+ * account's upload-permission change or deletion, as well as session revoke.
+ * Keep the same Things-first identity and permission policy as ordinary auth. */
+export async function fencePrivateUploadPermission(id: string, token: string, session: any, signal: AbortSignal) {
+	if (!session?.inTransaction()) throw Error('Upload authorization requires the publication transaction');
+	const options = { session, signal };
+	const things = await getThingsCollection();
+	const filter = { shareId: id, thingtime: 'user' };
+	const row = await things.findOne(filter, options);
+	const eligible = (user: any) => user && user.accountKind !== 'service' && userPrivateUploadsEnabled(user);
+	if (row) {
+		if (!eligible(userThingToDoc(row))) return false;
+		const result = await things.updateOne({ _id: row._id, ...filter }, { $set: { fileSyncPublicationFence: token } }, options);
+		return result.matchedCount === 1;
+	}
+	if (!ObjectId.isValid(id)) return false;
+	const legacy = await getUsersCollection(), legacyFilter = { _id: new ObjectId(id) };
+	if (!eligible(await legacy.findOne(legacyFilter, options))) return false;
+	const result = await legacy.updateOne(legacyFilter, { $set: { fileSyncPublicationFence: token } }, options);
+	return result.matchedCount === 1;
+}
+
 // Batch form for bounded admin directories. Preserve caller order and the
 // same Things-first migration precedence as findUserById, while replacing up
 // to hundreds of two-store point reads with one query per physical store.

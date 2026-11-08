@@ -27,9 +27,27 @@ export const canonicalResourceLimitFields = (value: FileSyncResourceLimits) => F
  const view = new DataView(new ArrayBuffer(8)); view.setFloat64(0, n);
  return view.getBigUint64(0).toString(16).padStart(16, '0');
 });
+export const FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS = { 'api.things': '1.53.0', 'api.things-update': '1.21.0' } as const;
+export const PHOTO_AUTOMATION_INTERVAL_MS = 300_000;
+export const DEFAULT_PHOTO_AUTOMATION = { notificationIntervalMs: 1_800_000, uploadBytesPerSecond: 625_000 } as const;
+export type PhotoAutomation = { notificationIntervalMs: number; uploadBytesPerSecond?: number; uploadBytesPerHour?: number };
+export function parsePhotoAutomation(value: unknown): PhotoAutomation | undefined {
+ if (value === undefined) return undefined;
+ if (!value || typeof value !== 'object' || Array.isArray(value) ||
+  Object.keys(value).some(key => !['notificationIntervalMs', 'uploadBytesPerSecond', 'uploadBytesPerHour'].includes(key)))
+  throw Error('Invalid Photos automation settings.');
+ const { notificationIntervalMs, uploadBytesPerSecond, uploadBytesPerHour } = value as PhotoAutomation;
+ if (!Number.isSafeInteger(notificationIntervalMs) || notificationIntervalMs < 0 || notificationIntervalMs % 60_000 !== 0)
+  throw Error('Choose a whole-minute Photos notification interval, or turn it off.');
+ for (const limit of [uploadBytesPerSecond, uploadBytesPerHour])
+  if (limit !== undefined && (!Number.isSafeInteger(limit) || limit <= 0)) throw Error('Photos transfer limits must be positive whole bytes.');
+ return { notificationIntervalMs, ...(uploadBytesPerSecond === undefined ? {} : { uploadBytesPerSecond }),
+  ...(uploadBytesPerHour === undefined ? {} : { uploadBytesPerHour }) };
+}
 export const MAX_SYNC_EXCLUSIONS = 100;
 export type FileSyncConfiguration = {
- configurationVersion: 1 | 2 | 3;
+ configurationVersion: 1 | 2 | 3 | 4;
+ photoAutomation?: PhotoAutomation;
  resourceLimits?: FileSyncResourceLimits;
  name: string;
  deviceId: string;
@@ -51,9 +69,12 @@ const id = (value: unknown): value is string => typeof value === 'string' && /^[
  * origin and data plane, and obtain device-local approval of the exact policy. */
 export function parseFileSyncConfiguration(value: unknown): FileSyncConfiguration {
  const c = value as FileSyncConfiguration;
- if (!c || (c.configurationVersion !== 1 && c.configurationVersion !== 2 && c.configurationVersion !== 3)) throw Error('Unsupported file sync configuration version.');
+ if (!c || (c.configurationVersion !== 1 && c.configurationVersion !== 2 && c.configurationVersion !== 3 && c.configurationVersion !== 4)) throw Error('Unsupported file sync configuration version.');
  const resourceLimits = parseFileSyncResourceLimits(c.resourceLimits);
- if (resourceLimits && c.configurationVersion !== 3) throw Error('Resource limits require file sync configuration version 3.');
+ const photoAutomation = parsePhotoAutomation(c.photoAutomation);
+ if ((c.configurationVersion === 4) !== !!photoAutomation || (photoAutomation && c.sourceKind !== 'photos'))
+  throw Error('Version 4 requires Photos automation settings on a photo library backup.');
+ if (resourceLimits && c.configurationVersion < 3) throw Error('Resource limits require file sync configuration version 3 or later.');
  if (c.configurationVersion === 3 && !resourceLimits) throw Error('Version 3 requires nonempty resource limits.');
  const ignoreRules = canonicalIgnoreRules(c.ignoreRules);
  if (ignoreRules && c.configurationVersion === 1) throw Error('Ignore rules require file sync configuration version 2.');
@@ -69,8 +90,8 @@ export function parseFileSyncConfiguration(value: unknown): FileSyncConfiguratio
  if (c.excludedPaths.reduce((n, path) => n + new TextEncoder().encode(path).length, 0) > 16_384) throw Error('Sync exclusions exceed 16 KiB.');
  const keys = c.excludedPaths.map(syncPathKey);
  if (new Set(keys).size !== keys.length) throw Error('Sync exclusions contain duplicate or ambiguous paths.');
- return { configurationVersion: resourceLimits ? 3 : ignoreRules ? 2 : 1, name: c.name.trim(), deviceId: c.deviceId, localRootId: c.localRootId, remoteFolderId: c.remoteFolderId,
-  ...(c.sourceKind !== undefined ? { sourceKind: c.sourceKind } : {}), mode: c.mode, paused: c.paused, propagateDeletes: c.propagateDeletes, network: c.network, chargingOnly: c.chargingOnly, excludedPaths: [...c.excludedPaths], ...(ignoreRules ? { ignoreRules } : {}), ...(resourceLimits ? { resourceLimits } : {}) };
+ return { configurationVersion: photoAutomation ? 4 : resourceLimits ? 3 : ignoreRules ? 2 : 1, name: c.name.trim(), deviceId: c.deviceId, localRootId: c.localRootId, remoteFolderId: c.remoteFolderId,
+  ...(c.sourceKind !== undefined ? { sourceKind: c.sourceKind } : {}), mode: c.mode, paused: c.paused, propagateDeletes: c.propagateDeletes, network: c.network, chargingOnly: c.chargingOnly, excludedPaths: [...c.excludedPaths], ...(ignoreRules ? { ignoreRules } : {}), ...(resourceLimits ? { resourceLimits } : {}), ...(photoAutomation ? { photoAutomation } : {}) };
 }
 
 export function newFileSyncConfiguration(input: Pick<FileSyncConfiguration, 'name' | 'deviceId' | 'localRootId' | 'remoteFolderId'> & Pick<Partial<FileSyncConfiguration>, 'sourceKind'>): FileSyncConfiguration {
@@ -79,11 +100,11 @@ export function newFileSyncConfiguration(input: Pick<FileSyncConfiguration, 'nam
 }
 
 export const fileSyncSchema: ThingtimeSchema = {
- id: FILE_SYNC_KIND, version: 4, kind: 'crystal', collection: null, title: 'File sync',
+ id: FILE_SYNC_KIND, version: 5, kind: 'crystal', collection: null, title: 'File sync',
  summary: 'An editable connection between a selected device folder and a cloud folder.',
- detail: 'One ordinary Thing per connection, private by default. Native paths, bookmarks, tree URIs and credentials stay on the device. This configuration grants no access and does not start transfers by itself. Workers require current ownership, private audience, matching device-local approval and fresh folder authorization. Direction, exclusions and network/power choices apply before planning; confirmed transfer history stays in Timeline. Defaults are paused, Wi-Fi and no deletion propagation; folders default to two-way and photo libraries to backup.',
+ detail: 'One ordinary Thing per connection, private by default. Native paths, bookmarks, tree URIs and credentials stay on the device. Workers require current ownership, private audience, matching device-local approval and fresh folder authorization. Enabled iOS Photos connections can run automatically after these checks. Direction, exclusions and network/power choices apply before planning; confirmed transfer history stays in Timeline. Defaults are paused, Wi-Fi and no deletion propagation; folders default to two-way and photo libraries to backup.',
  fields: [
-  { name: 'configurationVersion', type: 'number', required: true, min: 1, max: 3, description: 'Configuration format version. Version 2 requires ignore rules; version 3 requires nonempty resourceLimits. Older clients must refuse unsupported policy versions.' },
+  { name: 'configurationVersion', type: 'number', required: true, min: 1, max: 4, description: 'Configuration format version. Version 2 describes ignore rules, version 3 adds resource limits, and version 4 adds Photos automation. Older clients must refuse unsupported policy versions.' },
   { name: 'name', type: 'string', required: true, max: 120, description: 'Display name.' },
   { name: 'deviceId', type: 'id', required: true, max: 200, description: 'Paired device identity; never a credential.' },
   { name: 'localRootId', type: 'id', required: true, max: 200, description: 'Opaque device-local selected-folder grant identity; never a path or URI.' },
@@ -95,12 +116,17 @@ export const fileSyncSchema: ThingtimeSchema = {
   { name: 'network', type: 'enum', required: true, values: ['wifi', 'any'], description: 'Allowed native network connection. Unknown connectivity waits.' },
   { name: 'chargingOnly', type: 'boolean', required: true, description: 'Wait unless the native power reading confirms charging.' },
   { name: 'excludedPaths', type: 'string[]', required: true, max: MAX_SYNC_EXCLUSIONS, description: 'Relative exact paths and entire descendant subtrees to skip, case/Unicode folded. No glob syntax. At most 16 KiB in total.' },
-  { name: 'resourceLimits', type: 'object', required: false, description: 'Optional closed positive ceilings: uploadBytesPerSecond, downloadBytesPerSecond, transferConcurrency, indexingConcurrency, cpuPercent (1–100 of total available CPU capacity attributable to this sync). Unset values preserve worker defaults. Requires configurationVersion 3.', children: [
+  { name: 'resourceLimits', type: 'object', required: false, description: 'Optional closed positive ceilings: uploadBytesPerSecond, downloadBytesPerSecond, transferConcurrency, indexingConcurrency, cpuPercent (1–100 of total available CPU capacity attributable to this sync). Unset values preserve worker defaults. Requires configurationVersion 3 or later.', children: [
    { name: 'uploadBytesPerSecond', type: 'number', required: false, description: 'Positive aggregate upload bytes per second for this connection.' },
    { name: 'downloadBytesPerSecond', type: 'number', required: false, description: 'Positive aggregate download bytes per second for this connection.' },
    { name: 'transferConcurrency', type: 'number', required: false, min: 1, description: 'Positive safe integer maximum simultaneous file/folder transfers.' },
    { name: 'indexingConcurrency', type: 'number', required: false, min: 1, description: 'Positive safe integer maximum simultaneous indexing workers.' },
    { name: 'cpuPercent', type: 'number', required: false, min: 1, max: 100, description: 'Whole percent of total available CPU capacity attributed to this sync.' }
+  ] },
+  { name: 'photoAutomation', type: 'object', required: false, description: 'iOS Photos backup controls for configurationVersion 4.', children: [
+   { name: 'notificationIntervalMs', type: 'number', required: true, min: 0, description: 'Desired interval in whole minutes expressed in milliseconds. Zero disables progress notifications. Background timing is controlled by iOS.' },
+   { name: 'uploadBytesPerSecond', type: 'number', required: false, min: 1, description: 'Upload rate in bytes per second. The iOS Photos default is 625000 bytes per second.' },
+   { name: 'uploadBytesPerHour', type: 'number', required: false, min: 1, description: 'Optional upload payload allowance over the last hour. Omitted means no hourly allowance restriction.' }
   ] },
   { name: 'ignoreRules', type: 'string', required: false, description: 'Optional case-sensitive root-relative Gitignore rules, subject to the selected native bridge request budget. Ordered negation cannot reinclude children of an ignored parent. No nested .gitignore reads. Empty text is omitted.' }
  ],

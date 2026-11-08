@@ -2,6 +2,7 @@ import type { SyncResourceDraft } from '../components/Devices/syncResourceContro
 import { parseFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
 import { readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
 
+export type PhotoAutomationDraft = { speed: string; speedUnit: 'Mbps' | 'MB/s'; data: string; dataUnit: 'MB' | 'GB'; notificationIntervalMs: string };
 export type ConfigurationDraft = {
 	version: 1;
 	id: string;
@@ -10,6 +11,7 @@ export type ConfigurationDraft = {
 	exclusions: string;
 	pending: boolean;
 	resourceDraft?: SyncResourceDraft;
+	photoAutomationDraft?: PhotoAutomationDraft;
 };
 export type ConfigurationEditorScope = { origin: string; ownerId: string; dataPlane: string; deviceId: string };
 export const configurationDraftKey = (scope: ConfigurationEditorScope) => 'tt:sync-editor:v1:' + JSON.stringify(scope);
@@ -44,6 +46,10 @@ export function readConfigurationDraft(raw: string | null, deviceId: string): Co
 			!['Kbps', 'Mbps', 'Gbps'].includes(draft.resourceDraft.uploadUnit) || !['Kbps', 'Mbps', 'Gbps'].includes(draft.resourceDraft.downloadUnit))
 			throw Error('The saved resource draft needs recovery; it has not been replaced.');
 	}
+	const photo = draft.photoAutomationDraft;
+	if (photo !== undefined && (!photo || typeof photo.speed !== 'string' || typeof photo.data !== 'string' ||
+		typeof photo.notificationIntervalMs !== 'string' || !['Mbps', 'MB/s'].includes(photo.speedUnit) ||
+		!['MB', 'GB'].includes(photo.dataUnit))) throw Error('The saved Photos automation draft needs recovery; it has not been replaced.');
 	if (draft.pending) canonicalDraftConfiguration(draft);
 	return draft;
 }

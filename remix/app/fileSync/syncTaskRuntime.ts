@@ -48,6 +48,7 @@ export function createSyncTaskRuntime() {
 		read: () => snapshot,
 		subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
 		isPaused: (scope: SyncScope) => pausedScopes.has(syncScopeKey(scope)),
+		resumeScope: (scope: SyncScope) => { pausedScopes.delete(syncScopeKey(scope)); },
 		async cancel(scope: SyncScope) {
 			// Install the scope barrier synchronously, including idle discovery races.
 			pausedScopes.add(syncScopeKey(scope));

@@ -28,7 +28,7 @@ export function cloudSyncHttpError(status: number, retryAfter: string | null = n
 export function isSyncConnectionFailure(error: unknown): boolean {
 	if (error instanceof SyncConnectionWait) return true;
 	if (!(error instanceof Error)) return false;
-	if (error.name === 'TimeoutError') return true;
+	if (error.name === 'TimeoutError' || error.message === 'Folder access timed out. Your saved selections are preserved.') return true;
 	if (error.name === 'TypeError' && /^(failed to fetch|fetch failed|load failed|networkerror(?:\b|:))/i.test(error.message)) return true;
 	return /^(?:network (?:request|connection) (?:failed|lost|unavailable)|connection (?:lost|closed)|the network connection was lost)\.?$/i.test(
 		error.message

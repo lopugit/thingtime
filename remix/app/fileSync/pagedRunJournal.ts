@@ -20,7 +20,7 @@ import { INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, INVENTORY_PIN_STORE, INVE
 import { journalScope, type JournalAccess } from './journalScope';
 import { pagedPlanJournal, parsePagedPlanSpec, provesConflictFreeInitialUpload, PLAN_PIN_STORE, PLAN_STORES, validatePagedPlanHeader,
 	type PagedPlanCursor, type PagedPlanHeader, type PagedPlanSpec } from './pagedPlanJournal';
-import { sameSyncScope, sameSyncStamp, syncPathKey, validSyncPath, validSyncEntry, validSyncPathKey, syncScopeKey, type SyncEntry, type SyncScope } from './reconcile';
+import { sameSyncScope, sameSyncContent, sameSyncStamp, syncPathKey, validSyncPath, validSyncEntry, validSyncPathKey, syncScopeKey, type SyncEntry, type SyncScope } from './reconcile';
 
 export const RETAINED_HEADS = 'sync-retained-run-heads';
 export const REVIEW_STORE = 'sync-run-reviews';
@@ -33,7 +33,7 @@ export const PAGED_RUN_HEADS = 'sync-paged-run-heads';
 export const streamReconciliationKey = (scope: string): IDBValidKey => [scope, 'stream-reconciliation'];
 export const PAGED_RUN_STORES = ['sync-paged-runs', 'sync-paged-operations'] as const;
 const stores = [SYNC_PRIORITY_STORE, JOURNAL_RETENTION_STORE, RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, ...PAGED_RUN_STORES, PAGED_RUN_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE, PAGED_CHECKPOINT_HEADS, 'runs'];
-export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration; photoAssetOrder?: string[]; streaming?: { source: 'local' | 'remote' | 'both'; captureId: string } };
+export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration; photoAssetOrder?: string[]; backgroundPhotoPublication?: true; streaming?: { source: 'local' | 'remote' | 'both'; captureId: string } };
 export type PagedRunProgress = { phase: 'preparing' | 'ready' | 'running' | 'complete'; read: number; total: number; operations: number; confirmed: number; directions?: SyncDirectionalTotals; photoSourceChanged?: true };
 const directionMigrationsByDatabase = new WeakMap<IDBDatabase, Map<string, Promise<PagedRunProgress | undefined>>>();
 type SortKey = [number, number, string];
@@ -62,8 +62,11 @@ export const parsePagedRunSpec = (value: PagedRunSpec): PagedRunSpec => {
 		configuration.propagateDeletes || value.streaming || !Array.isArray(photoAssetOrder) || photoAssetOrder.length > 4 ||
 		!photoAssetOrder.every(isNativePhotoAssetKey) || new Set(photoAssetOrder).size !== photoAssetOrder.length))
 		throw Error('Invalid saved Photos asset order.');
+	if (value.backgroundPhotoPublication !== undefined && (value.backgroundPhotoPublication !== true ||
+		configuration?.sourceKind !== 'photos' || configuration.mode !== 'backup' || configuration.propagateDeletes ||
+		value.review || value.streaming)) throw Error('Invalid saved background Photos publication.');
 	if (value.streaming && (!configuration || value.review || plan.policy.propagateDeletes || !identifier(value.streaming.captureId) || value.streaming.source !== (plan.policy.mode === 'two-way' ? 'both' : plan.policy.mode === 'download' ? 'remote' : 'local'))) throw Error('Streaming requires an approved connection without deletions.');
-	return { id: value.id, plan, ...(photoAssetOrder ? { photoAssetOrder: [...photoAssetOrder] } : {}), ...(value.streaming ? { streaming: { source: value.streaming.source, captureId: value.streaming.captureId } } : {}), ...(value.review === undefined ? {} : { review: parsePagedRunReview(value.review) }), ...(configuration ? { configuration } : {}) };
+	return { id: value.id, plan, ...(photoAssetOrder ? { photoAssetOrder: [...photoAssetOrder] } : {}), ...(value.backgroundPhotoPublication ? { backgroundPhotoPublication: true as const } : {}), ...(value.streaming ? { streaming: { source: value.streaming.source, captureId: value.streaming.captureId } } : {}), ...(value.review === undefined ? {} : { review: parsePagedRunReview(value.review) }), ...(configuration ? { configuration } : {}) };
 };
 const validStreamInput = (change: NativeIndexChange & { replica?: Replica }, spec: PagedRunSpec) =>
 	validIndexProvenance(change) && (spec.streaming?.source === 'both'
@@ -756,7 +759,8 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		for (const r of snapshot.rows) {
 			const cloud = await prepareCloudOperationBinding(r.operation, scope, h.cloud!.root.rootId, {
 				node: async path => { if (!nodes.has(path)) throw Error('Cloud binding input is missing.'); return nodes.get(path)!; },
-				operation: async path => { if (!operations.has(path)) throw Error('Cloud parent operation is missing.'); return operations.get(path)!; }, previousTrash
+				operation: async path => { if (!operations.has(path)) throw Error('Cloud parent operation is missing.'); return operations.get(path)!; }, previousTrash,
+				guardPhotoPublication: spec.backgroundPhotoPublication
 			}); check();
 			const bound = { ...r, cloud }, length = bytes(bound) + 1;
 			if (size + length > INVENTORY_PAGE_BYTES) {
@@ -2028,11 +2032,15 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				done(progress(h));
 			});
 		},
-		/** The executor calls this only after the canonical receipt lookup
-		 * returned missing and a fresh source read proved the exact original
-		 * changed. Already confirmed siblings and their receipts stay pinned. */
-		async omitChangedPhotoSource(value: PagedRunSpec, supplied: SyncOperation): Promise<PagedRunProgress> {
-			const spec = parsePagedRunSpec(value), expected = structuredClone(supplied);
+		/** After a missing canonical receipt, retire only this unpublished
+		 * original. The checkpoint independently reobserves either a changed
+		 * source or the exact already-present file of a different runner. */
+		async omitPhotoOperation(value: PagedRunSpec, supplied: SyncOperation, settledTarget?: SyncEntry): Promise<PagedRunProgress> {
+			const spec = parsePagedRunSpec(value), expected = structuredClone(supplied), target = structuredClone(settledTarget);
+			const mutation = expected.mutation;
+			if (target && (!spec.backgroundPhotoPublication || spec.review || mutation.kind !== 'copy' || mutation.from !== 'local' ||
+				mutation.expectedTarget !== null || mutation.source.kind !== 'file' || !mutation.source.fingerprint || !target.fingerprint || !validSyncEntry(target) ||
+				target.path !== mutation.path || !sameSyncContent(target, mutation.source))) throw Error('Photos destination does not confirm the original bytes.');
 			if (!spec.photoAssetOrder || spec.review?.kind === 'retain') throw Error('Only a prepared Photos batch can replace an obsolete source.');
 			return withHeader(spec, 'readwrite', (h, tx, done, fail) => {
 				if (h.phase !== 'running' || h.scheduling?.reserved !== expected.id || cloudProgress(h).phase !== 'ready')
@@ -2042,12 +2050,12 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				get.onsuccess = () => { try {
 					check();
 					const saved = row(get.result, spec);
-					if (saved.operation.confirmed || saved.receipt || JSON.stringify(saved.operation) !== JSON.stringify(expected))
-						throw Error('The obsolete Photos operation has a different effect.');
+					if (saved.operation.confirmed || saved.receipt || JSON.stringify(saved.operation) !== JSON.stringify(expected) ||
+						(target && !saved.cloud?.write.guardDestination)) throw Error('The obsolete Photos operation has a different effect.');
 					ops.delete([key, spec.id, ...orderKey(expected, spec)]);
 					if (h.directions) removeUnconfirmedSyncDirection(h.directions, expected);
 					h.operations--; h.cloud!.prepared--; if (!h.operations) h.cloud!.after = null;
-					h.scheduling!.reserved = null; h.photoSourceChanged = true;
+					h.scheduling!.reserved = null; if (!target) h.photoSourceChanged = true;
 					if (h.confirmed === h.operations) h.phase = 'complete';
 					h.revision++; save(h, tx); done(progress(h));
 				} catch (error) { fail(error); } };

@@ -85,6 +85,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
         let prior = try store.list(scope).first { $0.sourceKind == "photos" }
         let uiAutomation = env["THINGTIME_PHOTO_UI_AUTOMATION"] == "1"
         let deferredProof = env["THINGTIME_PHOTO_DEFERRED_TEST"] == "1"
+        let automaticProof = env["THINGTIME_PHOTO_AUTOMATIC_TEST"] == "1"
         let orderedProof = env["THINGTIME_PHOTO_EXPECT_NEWEST"] == "1"
         let resumeReceipt = env["THINGTIME_PHOTO_REOPEN_RECEIPT"].flatMap { Data($0.utf8) }
         let uiVerified = uiAutomation && env["THINGTIME_PHOTO_PREPARE_ONLY"] != "1"
@@ -92,12 +93,13 @@ final class PhotoBackupInstalledTests: XCTestCase {
         web.configuration.userContentController.addUserScript(WKUserScript(source: """
         window.__photoDocument=performance.timeOrigin;
         window.__nativeUploadStarted=null;window.__nativeUploadStats={files:0,parts:0,bytes:0,legacy:0};window.__photoScans=0;
-        window.__photoDeferredHeld=false;window.__photoDeferredPaths=[];
+        window.__photoDeferredHeld=false;window.__photoDeferredPaths=[];window.__photoNativeArms=0;
         const testHold=\(deferredProof ? "true" : "false");
         const photoOriginalPost=window.thingtimeNativeBridge.postMessage;
         window.thingtimeNativeBridge.postMessage=function(m){
           if(m.type==='mobile-files'){
             if(['scan','scan-capture'].includes(m.payload?.action))window.__photoScans++;
+            if(m.payload?.action==='arm-photo-run'&&m.payload?.execution==='native')window.__photoNativeArms++;
             if(m.payload?.action==='defer-upload'){
               const path=m.payload.upload?.source?.path;
               if(path&&!window.__photoDeferredPaths.includes(path))window.__photoDeferredPaths.push(path);
@@ -261,8 +263,10 @@ final class PhotoBackupInstalledTests: XCTestCase {
                 throw NSError(domain: "PhotoBackupAcceptance", code: 11, userInfo: [NSLocalizedDescriptionKey: "Deferred native processing did not complete"])
             }
             let completed = try checkpoint.load().filter { $0.scope == scope && $0.request.authorization.id == connection && $0.ready }
-            XCTAssertEqual(completed.count, queued.count)
-            XCTAssertEqual(Set(completed.map(\.request.uploadId)), Set(queued.map(\.request.uploadId)))
+            if !automaticProof {
+                XCTAssertEqual(completed.count, queued.count)
+                XCTAssertEqual(Set(completed.map(\.request.uploadId)), Set(queued.map(\.request.uploadId)))
+            }
             for record in completed {
                 let (download, response) = try await session.data(from: origin.appendingPathComponent("api/v1/attachments/content").appending(queryItems: [
                     URLQueryItem(name: "id", value: record.request.uploadId), URLQueryItem(name: "cache", value: "bytes")]))
@@ -274,7 +278,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
                 XCTAssertEqual(SHA256.hash(data: download), SHA256.hash(data: try Data(contentsOf: original)))
             }
             let unpublished = try await cloudNodes()
-            XCTAssertTrue(unpublished.isEmpty, "Native attachment completion must not publish Timeline")
+            XCTAssertTrue(unpublished.isEmpty, "An older staging-only admission must not publish Timeline")
             deferredCount = completed.count
             deferredAttachmentIDs = Set(completed.map(\.request.uploadId))
             deferredPartCount = completed.reduce(0) { $0 + $1.confirmedParts }
@@ -298,6 +302,26 @@ final class PhotoBackupInstalledTests: XCTestCase {
             let card = "Array.from(document.querySelectorAll('h4,p')).find(e=>e.textContent===(" + quoted + ")[0])?.closest('article')"
             try await awaitTrue(web, "!!(" + card + ")")
             _ = try await web.evaluateJavaScript("(" + card + ").querySelector('button[aria-label=\"Expand folder\"]')?.click()")
+            if automaticProof {
+                let connection = try XCTUnwrap(connection)
+                let device = try XCTUnwrap(MobileDeviceKeychain.load(scope)?.deviceId)
+                try await awaitTrue(web, "window.__photoNativeArms>0")
+                NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+                NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+                let deadline = Date().addingTimeInterval(360)
+                while Date() < deadline {
+                    let progress = try NativeDeferredUpload.shared.photoRunProgress(scope: scope, configurationId: connection, rootId: grant.id, deviceId: device)
+                    if progress?["stage"] as? String == "complete" { break }
+                    try await Task.sleep(for: .milliseconds(250))
+                }
+                let progress = try XCTUnwrap(NativeDeferredUpload.shared.photoRunProgress(scope: scope, configurationId: connection, rootId: grant.id, deviceId: device))
+                XCTAssertEqual(progress["stage"] as? String, "complete")
+                let scans = try await web.evaluateJavaScript("window.__photoScans"), stats = try await web.evaluateJavaScript("window.__nativeUploadStats")
+                XCTAssertEqual(scans as? Int, 0)
+                XCTAssertEqual((stats as? [String: Int])?["files"], 0)
+                print("IOS_PHOTO_AUTOMATIC_FOREGROUND_PASS: one native worker, no WebView scan or upload, no manual start after interruption")
+                return
+            }
             try await awaitTrue(web, "Array.from((" + card + ")?.querySelectorAll('button')||[]).some(b=>['Start backup','Upload now'].includes(b.textContent.trim())&&!b.disabled&&b.getClientRects().length>0)")
             let started = try await web.evaluateJavaScript("(()=>{const card=" + card + ";const button=Array.from(card?.querySelectorAll('button')||[]).find(b=>['Start backup','Upload now'].includes(b.textContent.trim())&&!b.disabled&&b.getClientRects().length>0);if(!button)return false;card.scrollIntoView({block:'center'});button.click();return true;})()")
             guard started as? Bool == true else { throw NSError(domain: "PhotoBackupAcceptance", code: 6, userInfo: [NSLocalizedDescriptionKey: "The fresh saved backup action was unavailable"]) }
@@ -323,6 +347,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
         if let resumeReceipt {
             let receipt = try XCTUnwrap(JSONSerialization.jsonObject(with: resumeReceipt) as? [String: Any])
             let id = try XCTUnwrap(receipt["id"] as? String)
+            connection = id
             name = try XCTUnwrap(receipt["name"] as? String)
             cloud = try XCTUnwrap(receipt["rootId"] as? String)
             let expected = try XCTUnwrap(receipt["files"] as? [String: String])
@@ -354,7 +379,9 @@ final class PhotoBackupInstalledTests: XCTestCase {
             let firstID: String
             if let retained = owned.first { firstID = retained }
             else { firstID = try await createPhoto() }
-            if deferredProof && uiVerified { _ = try await createPhoto() }
+            if (deferredProof || automaticProof) && uiVerified {
+                for _ in 0..<(automaticProof ? 4 : 1) { _ = try await createPhoto() }
+            }
             let resources = try provider.inventory(), first = try XCTUnwrap(resources.first { $0.asset == firstID })
             let excluded: [String] = [] // Strict Photos captures cover the disposable library, without unsupported exclusions.
             phase = "read verified native pairing"
@@ -362,7 +389,11 @@ final class PhotoBackupInstalledTests: XCTestCase {
             phase = "save private cloud folder"
             let root = try await api("/api/v1/things", body: ["thingtime": ["folder"], "crystal": ["name": name]])
             cloud = try XCTUnwrap((root["thing"] as? [String: Any])?["id"] as? String)
-            let config: [String: Any] = ["configurationVersion": 1, "name": name, "deviceId": paired, "localRootId": grant.id, "sourceKind": "photos", "remoteFolderId": cloud!, "mode": "backup", "paused": false, "propagateDeletes": false, "network": "any", "chargingOnly": false, "excludedPaths": excluded]
+            var config: [String: Any] = ["configurationVersion": 1, "name": name, "deviceId": paired, "localRootId": grant.id, "sourceKind": "photos", "remoteFolderId": cloud!, "mode": "backup", "paused": false, "propagateDeletes": false, "network": "any", "chargingOnly": false, "excludedPaths": excluded]
+            if automaticProof {
+                config["configurationVersion"] = 4
+                config["photoAutomation"] = ["notificationIntervalMs": 1_800_000, "uploadBytesPerSecond": 625_000, "uploadBytesPerHour": 1_000_000_000]
+            }
             phase = "save backup connection"
             let saved = try await api("/api/v1/things", body: ["thingtime": ["file-sync"], "crystal": config])
             connection = try XCTUnwrap((saved["thing"] as? [String: Any])?["id"] as? String)
@@ -405,10 +436,20 @@ final class PhotoBackupInstalledTests: XCTestCase {
             XCTAssertEqual(retained["revision"] as? String, firstFile["revision"] as? String)
             let observedStats = try await web.evaluateJavaScript("window.__nativeUploadStats")
             let stats = try XCTUnwrap(observedStats as? [String: Int])
-            XCTAssertEqual((stats["files"] ?? 0) + deferredCount, resources.count + (uiVerified ? 0 : 1))
-            XCTAssertGreaterThanOrEqual((stats["parts"] ?? 0) + deferredPartCount, uiVerified ? 2 : 4)
-            XCTAssertGreaterThanOrEqual(Int64(stats["bytes"] ?? 0) + deferredBytes, Int64(bytes.count * (uiVerified ? 1 : 2)))
-            if deferredProof {
+            if automaticProof {
+                let configId = try XCTUnwrap(connection)
+                let progress = try XCTUnwrap(NativeDeferredUpload.shared.photoRunProgress(scope: scope, configurationId: configId, rootId: grant.id, deviceId: paired))
+                let confirmed = try XCTUnwrap(progress["confirmed"] as? [String: Int64])
+                XCTAssertEqual(stats["files"], 0)
+                XCTAssertEqual(confirmed["photos"], Int64(resources.count + (uiVerified ? 0 : 1)))
+                XCTAssertEqual((confirmed["wifiBytes"] ?? 0) + (confirmed["mobileBytes"] ?? 0) + (confirmed["unknownBytes"] ?? 0),
+                               Int64((resources.count + (uiVerified ? 0 : 1)) * bytes.count))
+            } else {
+                XCTAssertEqual((stats["files"] ?? 0) + deferredCount, resources.count + (uiVerified ? 0 : 1))
+                XCTAssertGreaterThanOrEqual((stats["parts"] ?? 0) + deferredPartCount, uiVerified ? 2 : 4)
+                XCTAssertGreaterThanOrEqual(Int64(stats["bytes"] ?? 0) + deferredBytes, Int64(bytes.count * (uiVerified ? 1 : 2)))
+            }
+            if deferredProof && !automaticProof {
                 let published = Set(nodes.compactMap { node in ((node["file"] as? [String: Any])?["content"] as? [String: Any])?["attachmentId"] as? String })
                 XCTAssertTrue(deferredAttachmentIDs.isSubset(of: published), "Timeline must reconcile the exact deferred reservations")
                 XCTAssertGreaterThanOrEqual(deferredAttachmentIDs.count, 2)

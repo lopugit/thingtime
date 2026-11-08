@@ -1,7 +1,8 @@
 import { executeSyncOperation, SyncObservationChangedError, type SyncExecutionPort } from './execute';
 import { withSyncRootLock } from './journal.client';
 import { type PagedRunJournal, type PagedRunProgress, type PagedRunSpec } from './pagedRunJournal';
-import { sameSyncScope, type SyncScope } from './reconcile';
+import { ExactCloudSyncDestinationChanged } from './cloudSyncDestination';
+import { sameSyncContent, sameSyncScope, sameSyncStamp, type SyncScope } from './reconcile';
 
 /** Resume only already prepared operations. Adapters must supply the same live
  * authorization, exact destination guards and durable receipts as normal sync. */
@@ -27,10 +28,30 @@ export async function executePreparedPagedSyncRun(value: PagedRunSpec, savedScop
 		try { receipt = await executeSyncOperation(operation, scope, port, options.signal); }
 		catch (error) {
 			check();
-			if (!spec.photoAssetOrder || !(error instanceof SyncObservationChangedError) || !error.sourceChanged) throw error;
-			state = await journal.omitChangedPhotoSource(spec, operation); check();
-			options.omitted?.(operation); options.changed?.(state);
-			continue;
+			if (spec.photoAssetOrder && error instanceof SyncObservationChangedError && error.sourceChanged) {
+				state = await journal.omitPhotoOperation(spec, operation); check();
+				options.omitted?.(operation); options.changed?.(state);
+				continue;
+			}
+			const mutation = operation.mutation;
+			if (!spec.backgroundPhotoPublication || !spec.photoAssetOrder || spec.review ||
+				mutation.kind !== 'copy' || mutation.from !== 'local' || mutation.expectedTarget !== null ||
+				!(error instanceof ExactCloudSyncDestinationChanged || (error instanceof SyncObservationChangedError && error.targetChanged))) throw error;
+			// A native refill and this older foreground plan can both prove
+			// the same path absent. An existing matching file settles the
+			// plan without inventing a receipt for this browser operation.
+			const prior = await port.lookup(operation.id, scope); check();
+			if (prior.status === 'complete') receipt = prior.receipt;
+			else {
+				if (prior.status !== 'missing') throw error;
+				const local = await port.read('local', mutation.path); check();
+				const remote = await port.read('remote', mutation.path); check();
+				if (!sameSyncStamp(local, mutation.source) || !remote || remote.path !== mutation.path ||
+					!sameSyncContent(remote, mutation.source)) throw error;
+				state = await journal.omitPhotoOperation(spec, operation, remote); check();
+				options.omitted?.(operation); options.changed?.(state);
+				continue;
+			}
 		}
 		check();
 		state = await journal.confirm(spec, receipt); check(); options.changed?.(state);
