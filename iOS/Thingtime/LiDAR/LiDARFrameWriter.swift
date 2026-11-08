@@ -1,4 +1,5 @@
 import ARKit
+import CoreFoundation
 import CoreGraphics
 import CoreVideo
 import Foundation
@@ -221,7 +222,7 @@ enum LiDARFrameWriter {
                      pointCloudStatus: "Raw depth is retained; pixel format or calibration did not support PLY projection.")
     }
 
-    private static func pixels(_ buffer: CVPixelBuffer, named name: String, path: String,
+    static func pixels(_ buffer: CVPixelBuffer, named name: String, path: String,
                                to store: LiDARCaptureStore) throws -> Pixels {
         guard CVPixelBufferLockBaseAddress(buffer, .readOnly) == kCVReturnSuccess else {
             throw BufferError.inaccessiblePixels
@@ -262,14 +263,21 @@ enum LiDARFrameWriter {
         switch value {
         case let object as [String: Any]: return object.mapValues(plistValue)
         case let array as [Any]: return array.map(plistValue)
-        case let colorSpace as CGColorSpace:
-            var record: [String: Any] = ["coreVideoType": "CGColorSpace"]
-            if let name = colorSpace.name { record["name"] = name as String }
-            if let icc = colorSpace.copyICCData() { record["iccProfile"] = icc as Data }
-            return record
         case is NSString, is NSNumber, is NSData, is NSDate: return value
-        default: return ["unserializedMetadataType": String(describing: type(of: value))]
+        default: break
         }
+
+        // Swift casts to an opaque Core Foundation type can accept unrelated
+        // objects. Verify the runtime type before passing it to Core Graphics.
+        let object = value as CFTypeRef
+        guard CFGetTypeID(object) == CGColorSpace.typeID else {
+            return ["unserializedMetadataType": String(describing: type(of: value))]
+        }
+        let colorSpace = object as! CGColorSpace
+        var record: [String: Any] = ["coreVideoType": "CGColorSpace"]
+        if let name = colorSpace.name { record["name"] = name as String }
+        if let icc = colorSpace.copyICCData() { record["iccProfile"] = icc as Data }
+        return record
     }
 
     private static func featurePoints(_ points: ARPointCloud, path: String, to store: LiDARCaptureStore) throws -> Int {
