@@ -31,9 +31,13 @@ export function validContentFingerprint(value: unknown, size: number): value is 
 export const equalContentFingerprints = (a: ContentFingerprint, b: ContentFingerprint): boolean =>
 	a.algorithm === b.algorithm && a.partSizeBytes === b.partSizeBytes && a.partCount === b.partCount && a.sha256 === b.sha256;
 
-export type NativeFileUpload = { uploadId: string; requestId: string; authorization: FileSyncApproval };
+export type PhotoUploadPublication = { expectedRevision: string | null };
+export type NativeFileUpload = { uploadId: string; requestId: string; authorization: FileSyncApproval; publication?: PhotoUploadPublication };
 export type NativePartUpload = { uploadId: string; requestId: string; partNumber: number; offset: number; length: number };
+export type NativeDeferredFileResult = { queued: boolean; scheduled: boolean };
 export type FingerprintSource = {
+	/** Queue immutable multipart admission with optional exact Photos publication. */
+	deferUpload?(request: NativeFileUpload, signal?: AbortSignal): Promise<NativeDeferredFileResult>;
 	/** Fresh owner-authorized authority for one native range; never persist it. */
 	downloadTarget?(offset: number, length: number, signal?: AbortSignal): Promise<import('./signedDownloadTarget').SignedDownloadTarget>;
 	/** Native multipart loop and attachment completion. The caller still verifies

@@ -3,7 +3,7 @@ import { parseFileSyncUploadOrigin, sameFileSyncUploadOrigin } from '../../../fi
 import { logFinalizationFailure, type AttachmentFinalizationStage } from './finalizationDiagnostic';
 import { activeAttachmentRetention, attachmentRetention } from './attachmentRetention';
 import { fingerprintFromVerifiedHead, attachmentContentVersion } from './contentFingerprint';
-import { contentPartPlan, MIN_CONTENT_PART_BYTES, MAX_CONTENT_PART_BYTES, type ContentFingerprint } from '../../../fileSync/contentFingerprint';
+import { contentPartPlan, equalContentFingerprints, MIN_CONTENT_PART_BYTES, MAX_CONTENT_PART_BYTES, type ContentFingerprint } from '../../../fileSync/contentFingerprint';
 import { ownedMediaDraftIds } from '../drafts/media';
 import { attachmentCountLimit } from '../../../schemas/attachmentLimits';
 import { createHash, randomUUID } from 'node:crypto';
@@ -125,6 +125,19 @@ const fail = (status: number, error: string, details: Pick<AttachmentFail, 'code
 	error,
 	...details
 });
+
+/** Server-only restriction on an existing multipart operation. A delegated
+ * worker cannot choose the expected bytes, extend its lease, or publish a file. */
+export type AttachmentTransferAuthority = {
+	expiresAt: Date;
+	expectedFingerprint: ContentFingerprint;
+	check: () => Promise<AttachmentFail | null>;
+};
+
+const matchesTransferFingerprint = (head: AttachmentObjectHead, authority: AttachmentTransferAuthority): boolean => {
+	const fingerprint = fingerprintFromVerifiedHead(head);
+	return !!fingerprint && equalContentFingerprints(fingerprint, authority.expectedFingerprint);
+};
 
 const normalizeId = (value: unknown): string | null => {
 	if (typeof value !== 'string' || value !== value.trim() || !value || value.length > 128) return null;
@@ -974,7 +987,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		}
 	};
 
-	const signParts = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ parts: Array<Record<string, unknown>> }>> => {
+	const signParts = async (ownerId: string, input: unknown, authority?: AttachmentTransferAuthority): Promise<AttachmentResult<{ parts: Array<Record<string, unknown>> }>> => {
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid upload part request');
 			const raw = input as Record<string, unknown>;
@@ -983,6 +996,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			}
 			const id = normalizeId(raw.uploadId);
 			if (!id) return fail(400, 'Invalid attachment upload id');
+			const refused = await authority?.check();
+			if (refused) return refused;
 			const doc = await dependencies.store.getOwned(ownerId, id);
 			if (!doc || (doc.attachmentPurpose === 'password' && !dependencies.passwordVault) || doc.attachmentState !== 'pending' || !doc.uploadId) return fail(404, 'Attachment upload not found');
 			if (!doc.attachmentExpiresAt || doc.attachmentExpiresAt.getTime() <= dependencies.now().getTime()) {
@@ -990,6 +1005,13 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			}
 			const plan = attachmentPartPlan(doc.objectSizeBytes);
 			const requested = exactPartRequest(raw.parts, plan.partCount);
+			const expiresInSeconds = authority ? Math.min(120, Math.floor((authority.expiresAt.getTime() - dependencies.now().getTime()) / 1000)) : undefined;
+			if (expiresInSeconds !== undefined && expiresInSeconds < 1) return fail(410, 'Transfer admission expired');
+			// A one-part object's entire committed source can be verified before
+			// giving storage any URL. Multipart objects are verified before Complete.
+			if (authority && plan.partCount === 1 && createHash('sha256').update(Buffer.from(requested[0].checksumSha256, 'base64')).digest('hex') !== authority.expectedFingerprint.sha256) {
+				return fail(409, 'Upload part does not match the admitted source');
+			}
 			const s3 = dependencies.getS3();
 			const parts = await Promise.all(
 				requested.map(async (part) => ({
@@ -1001,18 +1023,22 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 						checksumSha256: part.checksumSha256,
 						// Signed Content-Length closes the cost bypass where a tiny quota
 						// reservation could otherwise accept an oversized incomplete part.
-						contentLength: attachmentExpectedPartBytes(doc.objectSizeBytes, part.partNumber)
+						contentLength: attachmentExpectedPartBytes(doc.objectSizeBytes, part.partNumber),
+						...(expiresInSeconds === undefined ? {} : { expiresInSeconds })
 					}))
 				}))
 			);
 			await dependencies.store.markPartsIssued(ownerId, id, dependencies.now());
+			const changed = await authority?.check();
+			if (changed) return changed;
+			if (authority && parts.some(part => Date.parse(part.expiresAt) > authority.expiresAt.getTime())) return fail(410, 'Transfer admission expired');
 			return { ok: true, parts };
 		} catch (error) {
 			return knownFailure(error) || unavailable('sign parts', error);
 		}
 	};
 
-	const complete = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ attachment: Record<string, unknown> }>> => {
+	const complete = async (ownerId: string, input: unknown, authority?: AttachmentTransferAuthority): Promise<AttachmentResult<{ attachment: Record<string, unknown> }>> => {
 		let stage: AttachmentFinalizationStage = 'validate-request';
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid completion request');
@@ -1023,6 +1049,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			stage = 'load-upload';
 			const candidate = await dependencies.store.getOwned(ownerId, id);
 			if (candidate?.attachmentPurpose === 'password' && !dependencies.passwordVault) return fail(404, 'Attachment upload not found');
+			const refused = await authority?.check();
+			if (refused) return refused;
 			const finalizationLeaseId = dependencies.uuid();
 			stage = 'claim-lease';
 			const finalizationClaim = await dependencies.store.claimFinalizing(ownerId, id, finalizationLeaseId);
@@ -1042,8 +1070,14 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// the exact version the new lease holder may be adopting.
 			const settleLostFinalizationLease = async (completedVersionId?: string): Promise<AttachmentResult<{ attachment: Record<string, unknown> }>> => {
 				stage = 'reconcile-lease';
+				const refused = await authority?.check();
+				if (refused) return refused;
 				let raced = await dependencies.store.getOwned(ownerId, id);
 				if (raced?.attachmentState === 'ready') {
+					if (authority && (!raced.objectVersionId || !matchesTransferFingerprint(await verifiedHeadForDoc(s3, raced, raced.objectVersionId), authority)))
+						return fail(409, 'Stored bytes do not match the admitted source');
+					const changed = await authority?.check();
+					if (changed) return changed;
 					if (!raced.objectVersionId) {
 						const recovered = completedVersionId ? await verifiedHeadForDoc(s3, raced, completedVersionId) : await verifiedHeadForDoc(s3, raced);
 						raced = await dependencies.store.setObjectVersionId(ownerId, id, recovered.versionId);
@@ -1052,6 +1086,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					}
 					if (!isAttachmentObjectVersionId(raced.objectVersionId)) return finalizationInProgress();
 					await s3.markObjectReady({ objectKey: raced.objectKey, versionId: raced.objectVersionId });
+					const refused = await authority?.check();
+					if (refused) return refused;
 					return { ok: true, attachment: attachmentPublicProjection(raced.shareId, raced.crystal) };
 				}
 
@@ -1095,6 +1131,10 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			};
 
 			if (doc.attachmentState === 'ready') {
+				if (authority && (!doc.objectVersionId || !matchesTransferFingerprint(await verifiedHeadForDoc(s3, doc, doc.objectVersionId), authority)))
+					return fail(409, 'Stored bytes do not match the admitted source');
+				const refused = await authority?.check();
+				if (refused) return refused;
 				if (!doc.objectVersionId) {
 					stage = 'verify-object';
 					const recovered = await verifiedHeadForDoc(s3, doc);
@@ -1108,6 +1148,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				await s3.markObjectReady({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
 				stage = 'queue-moderation';
 				if (doc.attachmentPurpose !== 'password') dependencies.queueModeration?.(doc.shareId);
+				const changed = await authority?.check();
+				if (changed) return changed;
 				return { ok: true, attachment: attachmentPublicProjection(doc.shareId, doc.crystal) };
 			}
 			if (!finalizationClaim.acquired) {
@@ -1191,6 +1233,15 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 						retryable: true
 					};
 				}
+				if (authority) {
+					const digest = createHash('sha256');
+					for (const part of verified.parts) digest.update(Buffer.from(part.checksumSha256, 'base64'));
+					const changed = await authority.check();
+					if (changed || digest.digest('hex') !== authority.expectedFingerprint.sha256) {
+						await dependencies.store.revertFinalizing(ownerId, id, finalizationLeaseId);
+						return changed ?? fail(409, 'Uploaded parts do not match the admitted source', { code: 'upload_parts_retryable', retryable: true });
+					}
+				}
 				try {
 					stage = 'complete-multipart';
 					const completed = await s3.completeMultipartUpload({
@@ -1238,6 +1289,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (!head.checksumSha256 || head.checksumType !== 'COMPOSITE' || !isAttachmentObjectVersionId(head.versionId)) {
 				return fail(409, 'Uploaded object failed integrity verification');
 			}
+			if (authority && !matchesTransferFingerprint(head, authority)) return fail(409, 'Stored bytes do not match the admitted source');
 
 			stage = 'detect-content';
 			const detected = doc.attachmentPurpose === 'password' ? { contentType: 'application/octet-stream', mediaKind: 'file' as const } : detectedAttachmentType(await s3.detectContentType({ objectKey: doc.objectKey, versionId: head.versionId }), doc.crystal.name);
@@ -1246,6 +1298,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const readyCrystal: AttachmentCrystal = { ...doc.crystal, ...detected };
 			try {
 				stage = 'persist-ready';
+				const refused = await authority?.check();
+				if (refused) return refused;
 				doc = await dependencies.store.markReady(
 					ownerId,
 					id,
@@ -1268,6 +1322,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// admin sweep retries anything that misses this kickoff.
 			stage = 'queue-moderation';
 			if (doc.attachmentPurpose !== 'password') dependencies.queueModeration?.(doc.shareId);
+			// A request already inside the provider/DB operation may leave this
+			// owner-private, unbound attachment staged. It grants no node receipt
+			// after revocation, and the worker has no Files publication authority.
+			const changed = await authority?.check();
+			if (changed) return changed;
 			return { ok: true, attachment: attachmentPublicProjection(doc.shareId, doc.crystal) };
 		} catch (error) {
 			const known = knownFailure(error);

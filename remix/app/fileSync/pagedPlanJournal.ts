@@ -14,6 +14,7 @@ export type PagedPlanSpec = {
 	local: InventoryIdentity;
 	remote: InventoryIdentity;
 	baseline: { local: InventoryIdentity; remote: InventoryIdentity };
+	photoBaselineInstance?: string;
 	policy: SyncPolicy;
 	excludedPaths: string[];
 	ignoreRules?: string;
@@ -45,6 +46,8 @@ export function parsePagedPlanSpec(value: PagedPlanSpec): PagedPlanSpec {
 	if (!value || !identifier(value.id) || !value.baseline || !value.policy ||
 		!['two-way', 'upload', 'download', 'backup'].includes(value.policy.mode) || typeof value.policy.propagateDeletes !== 'boolean' ||
 		(value.earlyRunId !== undefined && (!identifier(value.earlyRunId) || value.earlyRunId === value.id)) ||
+		(value.photoBaselineInstance !== undefined && (!identifier(value.photoBaselineInstance) || value.earlyRunId ||
+			value.policy.mode !== 'backup' || value.policy.propagateDeletes)) ||
 		!Array.isArray(value.excludedPaths) || value.excludedPaths.length > MAX_SYNC_EXCLUSIONS || value.excludedPaths.some(p => !validSyncPath(p)) ||
 		value.excludedPaths.reduce((n, p) => n + encoder.encode(p).length, 0) > 16_384) throw Error('Invalid paged sync plan.');
 	const ignoreRules = canonicalIgnoreRules(value.ignoreRules);
@@ -53,6 +56,7 @@ export function parsePagedPlanSpec(value: PagedPlanSpec): PagedPlanSpec {
 	const exclusions = value.excludedPaths.map(syncPathKey);
 	if (new Set(exclusions).size !== exclusions.length) throw Error('Duplicate sync exclusion.');
 	return { id: value.id, local: inputs[0], remote: inputs[1], baseline: { local: inputs[2], remote: inputs[3] },
+		...(value.photoBaselineInstance ? { photoBaselineInstance: value.photoBaselineInstance } : {}),
 		policy: { mode: value.policy.mode, propagateDeletes: value.policy.propagateDeletes }, excludedPaths: [...value.excludedPaths], ...(ignoreRules ? { ignoreRules } : {}), ...(value.earlyRunId ? { earlyRunId: value.earlyRunId } : {}) };
 }
 

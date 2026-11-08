@@ -1,15 +1,24 @@
 import { deviceResourceKey, deviceSyncGovernor } from './deviceResourcePolicy';
-import { parseFileSyncConfiguration, FILE_SYNC_IGNORE_REQUIREMENTS, FILE_SYNC_RESOURCE_REQUIREMENTS } from './configuration';
+import { parseFileSyncConfiguration, FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, FILE_SYNC_IGNORE_REQUIREMENTS, FILE_SYNC_RESOURCE_REQUIREMENTS } from './configuration';
 import { assertConfiguredSyncApproval, planConfiguredFileSync, readOwnedFileSyncConfiguration, type SyncConditions, type SavedFileSyncConfiguration } from './configuredPlan';
 import { inventorySyncEntry, parseCloudInventory } from './cloudInventory';
 import { sameSyncScope, validSyncEntry, validSyncPath, type SyncScope, type SyncEntry } from './reconcile';
 import type { CloudTransportRuntime } from './cloudTransport';
 import type { ForegroundSyncInput } from './foregroundSync';
 
+export const LEGACY_NATIVE_INACTIVE_MESSAGE = 'Folder access paused. Try again when the app is active.';
+const WAIT_MESSAGES = { paused: 'This connection is paused.', offline: 'Waiting for an internet connection.',
+	network: 'Waiting for the selected network.', wifi: 'Waiting for Wi-Fi. Connect this device to Wi-Fi to continue.',
+	charging: 'Waiting for this device to charge.', inactive: 'Waiting for Thingtime to become active.',
+	'data-budget': 'Waiting for the next upload data allowance.' } as const;
+export type SyncWaitReason = keyof typeof WAIT_MESSAGES;
+export const isSyncWaitReason = (reason: unknown): reason is SyncWaitReason =>
+	typeof reason === 'string' && Object.prototype.hasOwnProperty.call(WAIT_MESSAGES, reason);
 export class SyncConditionsWait extends Error {
-	constructor(readonly reason: 'paused' | 'offline' | 'network' | 'charging') {
-		super({ paused: 'This connection is paused.', offline: 'Waiting for an internet connection.',
-			network: 'Waiting for the selected network.', charging: 'Waiting for this device to charge.' }[reason]);
+	constructor(readonly reason: SyncWaitReason, readonly retryAt?: number, readonly minimumPartBytes?: number) {
+		super(reason === 'data-budget' && minimumPartBytes !== undefined
+			? `Set the hourly data allowance to at least ${minimumPartBytes.toLocaleString()} bytes for the next upload part.`
+			: WAIT_MESSAGES[reason]);
 	}
 }
 
@@ -30,6 +39,7 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 	};
 	const authorize = async (observe?: () => Promise<SyncConditions>) => {
 		check();
+		if (configuration.photoAutomation) for (const [feature, minimum] of Object.entries(FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS)) await input.runtime.requireCapability(feature, minimum);
 		if (configuration.resourceLimits) for (const [feature, minimum] of Object.entries(FILE_SYNC_RESOURCE_REQUIREMENTS)) await input.runtime.requireCapability(feature, minimum);
 		if (configuration.ignoreRules) await input.runtime.requireCapability('api.things', FILE_SYNC_IGNORE_REQUIREMENTS['api.things']);
 		check();
@@ -53,7 +63,7 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 			remoteFolderId: configuration.remoteFolderId,
 			conditions
 		});
-		if (result.status === 'waiting') throw new SyncConditionsWait(result.reason);
+		if (result.status === 'waiting') throw new SyncConditionsWait(configuration.network === 'wifi' && (result.reason === 'network' || result.reason === 'offline') ? 'wifi' : result.reason);
 		return conditions;
 	};
 	const scanCloud = async () => {

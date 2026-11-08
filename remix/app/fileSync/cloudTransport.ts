@@ -1,3 +1,4 @@
+import { nativePhotoAssetKey } from './nativeInventory';
 import { parseFileSyncUploadOrigin, type FileSyncUploadOrigin } from './uploadOrigin';
 import { UPLOAD_BATCH_FILE_BYTES } from './uploadBatch';
 import { CLOUD_SYNC_DESTINATION_REQUIREMENTS, ExactCloudSyncDestinationChanged, SYNC_DESTINATION_CHANGED } from './cloudSyncDestination';
@@ -220,6 +221,11 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 		...(empty ? { 'api.files': '1.8.1',
 			'api.attachment-upload-complete': '1.5.0', 'api.attachment-content': '1.16.0' } : {}),
 		...(write.guardDestination ? CLOUD_SYNC_DESTINATION_REQUIREMENTS : {}) });
+	const photoPublication = (approval: import('./configuredPlan').FileSyncApproval) =>
+		write.guardDestination && approval.configuration.sourceKind === 'photos' && approval.configuration.mode === 'backup' &&
+		!approval.configuration.propagateDeletes && !retained && !stagingTargetId && m.kind === 'copy' &&
+		m.from === 'local' && m.source.kind === 'file' && !m.source.symbolicLink && !m.path.includes('/') && nativePhotoAssetKey(m.path)
+			? { publication: { expectedRevision: write.before?.revision ?? null } } : {};
 	const fileId = stagingTargetId ?? write.before?.id ?? write.operation.id;
 	const receipt = (value: unknown): SyncReceipt => {
 		const file = parseCloudFile(value);
@@ -262,6 +268,35 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 		// uploads again after an accepted-write/lost-response interruption.
 		return { status: 'complete', receipt: await commit(file.content, true) };
 	};
+	const reserve = async (size: number, plan = contentPartPlan(size)) => {
+		if (m.kind !== 'copy') throw Error('Only a file copy can reserve bytes.');
+		const started = await json('/api/v1/attachments/uploads', {
+			requestId: write.operation.id,
+			filename: m.path.split('/').at(-1),
+			contentType: 'application/octet-stream',
+			sizeBytes: size,
+			purpose: stagingTargetId ? stagingOptions?.purpose ?? 'file-import' : 'file',
+        ...(stagingTargetId ? (stagingOptions?.fileSyncOrigin ? { fileSyncOrigin: stagingOptions.fileSyncOrigin } : {}) : { fileSyncOrigin: { version: 1, deviceId: scope.deviceId, localRootId: scope.rootId, ...(write.cloudRootId ? { cloudRootId: write.cloudRootId } : {}), fileId, folderId: write.folderId, path: m.path } })
+		});
+		const upload = started.upload;
+		if (!identifier(upload?.id) || upload.partSizeBytes !== plan.partSizeBytes || upload.partCount !== plan.partCount)
+			throw Error('Invalid cloud upload plan.');
+		return upload;
+	};
+	const deferUpload = async (source: FingerprintSource): Promise<import('./contentFingerprint').NativeDeferredFileResult | null> => {
+		const approval = runtime.nativeUploadApproval;
+		if (!source.deferUpload || !approval || !sameSyncScope(approval.scope, scope) ||
+			approval.configuration.sourceKind !== 'photos' || approval.configuration.mode !== 'backup' ||
+			approval.configuration.propagateDeletes || retained || stagingTargetId || m.kind !== 'copy' ||
+			m.from !== 'local' || m.source.kind !== 'file' || !m.source.fingerprint ||
+			m.source.size <= 0 || m.source.size !== source.size || m.source.symbolicLink || m.path.includes('/')) return null;
+		await negotiate(); await runtime.authorizeMutation?.(signal); check();
+		const upload = await reserve(source.size);
+		if (upload.state === 'ready') return null;
+		const queued = await source.deferUpload({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(approval), ...photoPublication(approval) }, signal);
+		check(); return queued;
+	};
+
 	/** Stage through normal upload approval and integrity gates without publishing a file.
 	 * The caller must use a separately authorized canonical content transaction. */
 	const stage = async (source: FingerprintSource, progress?: (bytes: number, total: number) => void,
@@ -284,17 +319,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 				if (source.size !== m.source.size) throw Error('Source file changed.');
 			};
 			if (!compound) await sourceCheck();
-			const started = await json('/api/v1/attachments/uploads', {
-				requestId: write.operation.id,
-				filename: m.path.split('/').at(-1),
-				contentType: 'application/octet-stream',
-				sizeBytes: source.size,
-				purpose: stagingTargetId ? stagingOptions?.purpose ?? 'file-import' : 'file',
-        ...(stagingTargetId ? (stagingOptions?.fileSyncOrigin ? { fileSyncOrigin: stagingOptions.fileSyncOrigin } : {}) : { fileSyncOrigin: { version: 1, deviceId: scope.deviceId, localRootId: scope.rootId, ...(write.cloudRootId ? { cloudRootId: write.cloudRootId } : {}), fileId, folderId: write.folderId, path: m.path } })
-			});
-			const upload = started.upload;
-			if (!identifier(upload?.id) || upload.partSizeBytes !== plan.partSizeBytes || upload.partCount !== plan.partCount)
-				throw Error('Invalid cloud upload plan.');
+			const upload = await reserve(source.size, plan);
 			// Empty objects are stored and verified by the start endpoint. Never
 			// send them into a native multipart loop or complete an empty MPU.
 			if (source.size === 0 && upload.state !== 'ready')
@@ -315,7 +340,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 				transferred?.(null);
 				await runtime.authorizeMutation?.(signal);
 				await sourceCheck();
-				const uploaded = await nativeUpload({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(nativeApproval) }, signal, progress);
+				const uploaded = await nativeUpload({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(nativeApproval), ...photoPublication(nativeApproval) }, signal, progress);
 				await sourceCheck();
 				if (!uploaded?.fingerprint || !equalContentFingerprints(uploaded.fingerprint, m.source.fingerprint!))
 					throw Error('Native upload does not match the planned fingerprint.');
@@ -428,6 +453,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			return content;
 	};
 	return {
+		deferUpload,
 		lookup,
 		stage,
 		async read() {

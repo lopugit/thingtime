@@ -4,6 +4,8 @@ import { isTransientBlockTarget, TRANSIENT_BLOCK_ACTION } from '../Builder/trans
 import { CATALOG_RECORD_ACTION } from '~/schemas/catalogRecordsSuite';
 import { LOCAL_UI_ACTION, localQueryFormInput } from './localUiAction';
 import { useLocation, useNavigate } from 'react-router';
+import { useLidarScanActivation } from '../NativeBridge/LidarScanProvider';
+import { isLidarScanInput } from '../NativeBridge/lidarScanBridge';
 
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -152,6 +154,7 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 	runtimeRef.current = runtime;
 	const user = useCurrentUser();
 	const signedIn = !!user?.id;
+	const activateLidar = useLidarScanActivation();
 	const location = useLocation();
 	// A local selection keeps the route generation. Account/access changes
 	// and real navigation retire async confirmations and completions.
@@ -185,6 +188,13 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 				try {
 					const input = JSON.parse(control.getAttribute('data-tt-action-inputs') || '{}');
 					if (input && typeof input === 'object' && !Array.isArray(input)) {
+						if (input.op === 'native') {
+							if (!activateLidar || !isLidarScanInput(input) || !control.matches('button[type=button]') ||
+								!event.nativeEvent.isTrusted || event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+							const issue = activateLidar(user?.id);
+							if (issue) lopuRef.current({ title: 'LiDAR scanner', description: issue, status: 'info', link: { label: 'Things', href: '/things' } });
+							return;
+						}
 						const wrapper = event.currentTarget as HTMLElement;
 						const fieldset = control.closest('fieldset') as HTMLElement | null;
 						const group = fieldset && ownsAuthoredControl(wrapper, fieldset) ? fieldset : fallbackGroupRef.current?.(control, wrapper) || wrapper;
@@ -330,6 +340,6 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 				}
 			})();
 		},
-		[navigate, signedIn]
+		[activateLidar, navigate, signedIn, user?.id]
 	);
 };

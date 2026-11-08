@@ -3016,6 +3016,16 @@ email whose link points at the attacker.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] Paired File Sync transfer admission: run `test:files:transfer-admissions`
+      against a disposable replica and built Nitro per the
+      [transfer admission runbook](docs/file-sync-transfer-admissions.md). Verify
+      two independently admitted transfers, provider checksum refusal, duplicate
+      completion, exact origin/pairing, configuration and destination changes,
+      revocation, expiry and foreground re-admission on the original upload. Check
+      staging-only refusal, v4 settings readback, exact background/foreground
+      receipt replay, six paired-only refill originals, and publication refusal
+      after pause, run revocation or unpair.
+
 - [ ] Local attachment storage stand-in (PR: developer-experience follow-ups):
       with `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=.local-attachments` in
       `remix/.env` and the dev stack restarted, run
@@ -11103,6 +11113,15 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Mobile sync connection editor
 
+- [ ] On an iPhone, use a Wi-Fi-only Photos backup with a disposable library.
+  On cellular, the collapsed card shows the Wi-Fi wait and where to edit the
+  network policy. With Wi-Fi restored, check Photos preparation before the
+  first payload. Verify the upload-only card shows downloads off and no live
+  upload speed before bytes are expected. Check that a Photos access or iCloud
+  failure is visible while collapsed and a partial backup reports remaining
+  items. Repeat at desktop and phone widths and verify the saved connection
+  policy never changes during a status refresh.
+
 - [x] In an installed iOS WebKit app, start a real foreground transfer after
   native approval. Inventory and byte requests must retain the Window receiver
   for `fetch`; copying the function into a transport must not cause an illegal
@@ -12153,6 +12172,26 @@ transfer, whole-account snapshots or production deployment.
 - `PhotoLibraryTests` covers distinct same-name resources, multipart fingerprints,
   bounded reads, owner/grant cache partitioning, changed inventories, revoked
   permission, missing originals, cancellation and denied write authority.
+- Opt-in installed Photos acceptance uses `THINGTIME_PHOTO_UI_AUTOMATION=1`
+  with a disposable loopback fixture: the separate UI-testing target must
+  execute a real consent test, followed by the hosted original-byte/hash test
+  using the same account/origin and native grant. Never treat a zero-test result,
+  an unsupported hosted `XCUIApplication` call or injected permission as consent.
+  Assert storage accounting is ready before/after each phase. Automated mode
+  retains originals; manual deletion/retention acceptance remains separate.
+  The compiled device sync control fixture checks accounting after pairing,
+  after the first device state with omitted telemetry, and after replaying it
+  and publishing a newer state. The fixture initializes its ledger only once.
+- On iOS without `fileResourceLimitsVersion`, start a saved backup with no
+  explicit limits and confirm original bytes. Then confirm explicit saved limits
+  refuse Start without clearing settings, including a device preference saved
+  in this session and after reload. Do not report implicit native CPU,
+  scan or transfer targets as enforced; Mac resource enforcement must be unchanged.
+- PhotoKit export errors must distinguish network-required originals, revoked
+  access, device storage exhaustion, cancellation and other read failures without
+  exposing native asset IDs or paths. Retry after an unavailable original must
+  retain prior indexed observations and include every original/companion resource;
+  a failed scan must never appear as an empty successful backup.
 - Keep actual limited-selection changes, Live Photo/video/EXIF fixtures, iCloud
   downloads, physical devices, large libraries and background acceptance open
   until each has direct evidence. Resource bytes do not prove album/database
@@ -12183,6 +12222,93 @@ transfer, whole-account snapshots or production deployment.
   the serialized device queue until its 120-second timeout. Repeated suspension
   sends one cancellation; switching web destinations sends no old account
   context to the new page (`MobileDeviceBridgeLifecycleTests`).
+
+### iOS deferred Photos transfers
+
+- [ ] Interrupt an iPhone Photos backup after one cloud receipt and a second
+  accepted write whose reply is lost. On the same Photos connection, save
+  Any network and Only while charging, then tap Retry transfer. Verify it
+  waits when unplugged and copies missing originals over cellular when
+  charging. Repeat after changing the cloud folder. Verify the old folder and
+  revisions stay intact, matching originals at the current folder keep their
+  revisions, and reopening causes no duplicate transfers. Run
+  `photoSettingsRecovery.test.ts` for both persisted journal formats, including
+  Stop, lost cleanup, reopening and revision-only reapproval.
+- [ ] Keep the selected connection Wi-Fi only. On cellular, verify a Wi-Fi wait
+  before Photos preparation and no upload payload. Return to Wi-Fi and verify
+  transfer without modifying the setting. Check explicit cellular opt-in and
+  charging-only separately on a disposable connection.
+- [ ] With a mixed library, confirm locally available originals and each
+  available companion publish with exact stored bytes. Check the typed iCloud
+  gap ledger and actionable incomplete status, including an all-cloud library
+  with zero available resources. Make a missing original available in Photos
+  and verify its original identity uploads without changing prior revisions.
+- [ ] Under explicit cellular permission, check the PhotoKit download phase
+  and independent upload status for an iCloud-only image, video and Live Photo.
+  Revoke access, disconnect or unplug with charging-only during retrieval; the
+  exact incomplete original remains retryable. Under limited Photos access,
+  verify only the authorized resources are counted and no full-library
+  completion is shown. Wi-Fi-only never starts a PhotoKit network fetch.
+- [ ] Verify the newest PhotoKit capture dates are attempted first in the same
+  queue for local and iCloud originals, with Live Photo companions kept together.
+  Insert a newer asset during the final nonempty batch; the fresh terminal
+  observation must see it. Delete or edit an unconfirmed selected asset and
+  verify exact prior receipts stay intact. Leave an original unavailable across
+  terminal verification, then make the same version local and retry. Run the
+  installed fixture with `THINGTIME_PHOTO_EXPECT_NEWEST=1` and verify the
+  first native admissions match independently read PhotoKit metadata.
+- [ ] With ordinary Photos consent and an isolated replica, run
+  `THINGTIME_PHOTO_DEFERRED_TEST=1` through the installed acceptance harness.
+  Hold the first WebView upload, expire native processing after a confirmed
+  part, and verify multiple exact originals through scoped admission. Verify staging-only
+  and explicitly admitted Photos publication separately. Reopen and verify the same attachments and original
+  operation receipts with no duplicate revisions. Revoke the saved connection
+  or pause it and verify the old queue cannot sign or complete.
+- [ ] On a physical iPhone, verify actual BGProcessing delivery while unfocused
+  or locked and repeat the expiry/reopen and Wi-Fi cases. Separate scheduler
+  injection or simulator refusal from physical OS delivery. No completion
+  claim is allowed before the queue has verified canonical Files receipts.
+
+### iOS Photos launch and retry
+
+- Reopen a current native build with an enabled private Photos backup and an
+  older unfinished journal. Interrupt the native scan while the app is inactive,
+  including the legacy “Folder access paused” reply. Verify that foreground
+  return wakes the same connection, confirmed files survive recovery, and an
+  allowed cellular connection uploads with the device unplugged. Reopen after
+  Pause and verify no source read or upload. Exercise compatible configuration
+  edits, an unavailable grant, Wi-Fi-only, and charging-only separately.
+- Confirm automatic retry respects its five-minute deadline and that a native
+  connectivity or power update rechecks the saved settings. Exercise a budget
+  reset across app restart and a multipart file larger than the hourly allowance
+  whose individual parts fit. Check that history has one canonical receipt per
+  operation when background and foreground finish in either order. Allow a
+  native 1.2 run to refill past its first batch while the WebView is inactive,
+  then resume the WebView and verify that already-backed bytes are reused.
+  Change the exact configuration or revoke its run between reserve and publish
+  and confirm that the old operation cannot complete publication.
+- On the sole-native bridge, launch, change power/network, hide and reopen the
+  WebView while one native operation is running. Verify one native operation
+  identity, native-only progress, and no WebView PhotoKit scan or upload. Check
+  same-grant edited originals retain their previous revision, and unknown
+  occupied paths remain a review state. Confirm Run in Background only comes
+  from its explicit control, uses the existing native queue, and handles iOS
+  refusal, expiration, user Resume and true completion.
+- Open Device setup while iOS launch discovery reads folder access and native
+  backup status. Build 53 accepts one normal folder request at a time. Verify
+  the card shows native status without a busy error, an abandoned queued
+  request never suspends the active one, an account or origin change drops
+  stale queued work, and Pause still reaches native immediately. A busy status
+  read may retry once. An unconfirmed arm must be checked before sending again.
+- Let the native run authorization expire at the same saved revision. On the
+  next five-minute check, verify the browser reauthorizes the exact current
+  binding. A live binding returns its existing handle. An expired binding
+  renews without losing the native checkpoint or confirmed receipts. Verify
+  a continuation hold or a data budget below one part remains waiting.
+- On a physical device, compare Wi-Fi and cellular managed-upload bytes and
+  newly confirmed asset counts with the summary notification. Check Live Photo
+  resource counting, quiet periods, notification Off, denied notification
+  permission, and iOS-scheduled delivery separately from simulator checks.
 
 ### Mac photo library backup
 
@@ -13007,6 +13133,9 @@ separate from deterministic discovery/lease tests.
 
 ## Automatic iOS TestFlight and vault delivery
 
+- [ ] Before merging an iOS change, require the exact TestFlight Xcode
+  `native-pr-compile` job. It compiles the app and tests without signing;
+  passing a newer local Swift compiler does not cover this gate.
 - [ ] Run the shared FileSync package and native suite on the release runner.
   The simulator uses its host kernel: exercise the unsupported rename-flag
   fallback with `NativeFileDestinationTests`, retain no-follow/exclusive/swap
@@ -14968,6 +15097,16 @@ the isolated real-API/browser command and the metadata-only session boundary.
       the old authority. Sign back into the same account with activity still off:
       one read-only verified status must resume retained opt-in without another
       enable/permission prompt. Hide/show the app without withdrawing authority.
+      Restore connectivity before a failed foreground check settles: retry the
+      scoped read once, without another opt-in or repeated network requests.
+- [ ] With native location bridge 1.2+, explicitly authorize Always and enable
+      location history on a paired iPhone. Drive for at least 20 minutes with
+      the screen locked; verify intermediate measured fixes about five minutes
+      apart when iOS has fixes. Stop and resume driving, lose and regain
+      connectivity, and compare observed versus received times. The outbox
+      must keep original times and IDs. Downgrade to While Using the App and
+      repeat with the screen locked; no background fixes may be collected.
+      Force quit and poor reception can leave gaps; no synthetic points.
 - [ ] Send a target-device message/default tone and an approved uploaded MP3.
       Verify original bytes, exact prepared derivative, target isolation,
       cancellation and lease expiry. Lose replies and retry the same request:
@@ -15047,6 +15186,30 @@ the isolated real-API/browser command and the metadata-only session boundary.
 
 
 ### Account restore admission plans
+
+- Run `pnpm --dir remix run test:backups:worker` for original-session/lease
+  fencing, encrypted hash/CAS recovery, bounded snapshot engine interoperability
+  with canonical v1 seals, corrupt-byte/revocation refusal and the actual internal
+  transport outer-guard cancellation regression. Collection/transport doubles
+  here are unit evidence only.
+- Run `pnpm --dir remix run test:backups:workflow` on its task-owned replica set.
+  Require generic backup-job/event exact/batch/inherited/export and bulk refusal
+  for owner/other/anonymous, unchanged ordinary CRUD, paused/revoked canonical
+  writes rolled back, accepted encrypted checkpoint reply-loss recovery and
+  killed-process continuation. Do not replace this gate with unit doubles.
+- A transient `snapshot-unavailable` continuation retains its exact BSON timestamp;
+  `snapshot-expired` requires a newly reviewed backup operation. Neither may
+  silently select a newer timestamp. Producer/reference receipts must replay
+  after uncertain replies without widening source scope.
+- Guard calls must freshly reject revoked/scoped/Character/replaced/expired
+  authority without writing a healthy lease on every immutable object read.
+  Near-expiry renewal alone may write, with the unchanged original-session/job
+  transaction fence. Measure census at the same timestamp with the synthetic
+  1,000-item API profile; history expiry remains refusal, never a wider capture.
+- Workflow registration, deployed scheduling, independent destination readiness,
+  real snapshot/selected restore execution and editable desktop/mobile UI remain
+  distinct acceptance gates. A snapshot unit seal or configured destination does
+  not establish the complete product flow or whole-account readiness.
 
 - Run `node --import tsx --test app/api/utils/backups/backupDestinations.test.ts`
   from `remix/` for exact-origin/environment vault registration, primary-bucket
@@ -15183,6 +15346,42 @@ the isolated real-API/browser command and the metadata-only session boundary.
   Live object-provider durability, History audit grouping, final signed/installed
   acceptance and measured large-volume behavior remain independent gates.
 
+### First-party backup workspace and durable dispatch
+
+- The builtin schema projection contract must pin `backup-job` and
+  `backup-job-event` to empty public fields while preserving protected generic
+  read/write/export refusals. Run `builtinSchemaProjection.test.ts` and the
+  protected coordinator cases in `backupJobs.test.mts`.
+
+- Run the catalog/path and dispatch regressions: duplicate basenames in distinct
+  nested folders, 75-level retained ancestry across fresh units, corrupt sidecars,
+  revocation, stale first-page jobs, transient authority outages across two
+  scheduler drains, and late scheduling receipts with the original attempt ID.
+- Run `corepack pnpm --dir remix run test:backups:workspace` (builds the compiled
+  middleware first) for
+  disposable real HTTP/API/replica/Chrome acceptance at Mongo28175/HTTP28176.
+  It owns its account, independent local store, browser profile and cleanup;
+  networking remains normal. Desktop/mobile use the actual adapter, shared folder
+  picker and account Builder transport. Compare restored current/historical
+  bytes and ordinary content independently, then save/reload nested Builder
+  text and controls. Do not substitute synthetic composition for this gate.
+- Keep source, isolated local provider, deployed Workflow/cron and actual S3
+  acceptance distinct. An SDK scheduling receipt is not an executed first step;
+  an executed first step is not provider recovery proof. An unavailable worker
+  blocks admission, while configured/unverified execution can confirm itself
+  through the first ordinary snapshot, review or reviewed restore admission.
+
+- Embedded `ThingsPage.locationPicker` must ignore the containing URL's device
+  selection/view query while preserving that URL and its sync drafts. Open the
+  picker from a normal device Sync & Backup entry, select an owned folder, confirm
+  exact timeline revision, then cancel/reopen and reload the outer device page.
+  The embedded slot must never recursively render device details.
+
+- Compiled Nitro H3 requests must be reconstructed from public URL/method/headers
+  and body stream when adding a deadline signal; native `new Request(h3Request)`
+  fails Undici private-state branding. Smoke the built workspace GET refusal and
+  normal authenticated POST body path, retaining abort/deadline semantics.
+
 ### Native indexed feed idle wake — 2026-11-07
 
 - Run `node --import tsx --test app/fileSync/streamingIndexRecovery.test.ts
@@ -15217,3 +15416,120 @@ the isolated real-API/browser command and the metadata-only session boundary.
   recovery receipts, no duplicate effects and strict checkpoint convergence.
   Fixture evidence does not establish personal-folder or installed-GUI transfer
   acceptance. Never add grants, resume Home or touch personal files for this test.
+
+## Device root folders and backup entry points
+
+- [ ] Negotiate `api.devices` 1.16.0 and `api.devices-folders` 1.0.0 on the
+  selected origin. GET root references before upload without creating folders;
+  Show Folder opens an existing normal folder while the device is offline.
+- [ ] In the bundled desktop renderer, open **Show Folder** from the device and
+  its Things context menu. Confirm it negotiates with the selected API and opens
+  an existing folder read-only when the origins differ. Change the selected API
+  while the first read is in flight. Confirm the old result does not create or
+  open a folder.
+- [ ] On new native and remote drafts, show `Device / Files / Photo Library`
+  (or selected source label), Change and searchable/paginated private paths.
+  Another owned device is selectable before any completed upload. Save uses
+  ordinary private folders and does not start a transfer. Preserve existing
+  remoteFolderId, native grant ID, drafts, pause state and other cards.
+- [ ] Retry lost replies and concurrent same-connection saves: same IDs, one
+  root/Files/leaf, ordinary parent relationships and exact readback. Different
+  device/origin/owner/plane/connection identities remain separate even when
+  labels match. Foreign/shared/replaced roots and malformed IDs are refused.
+- [ ] Rename a root/leaf, move a child, and delete a root. Reuse identities and
+  current names; never silently move surviving data or overwrite an unrelated
+  deterministic-ID occupant. Moved children need explicit destination selection.
+- [ ] Collapsed saved cards expose Start backup/Pause/Resume/Retry and inactive
+  errors; optional settings stay collapsed. A configured paused connection
+  stays paused on Save/open. Explicit Start/Resume CAS-unpauses only that saved
+  connection, verifies its confirmed response and fresh readback, then starts.
+  CAS refusal, uncertain save, identity changes or retained selected drafts must
+  prevent admission; unrelated Home/other connections and draft bytes stay unchanged. Photo Library uses its virtual label,
+  while native folders preserve their absolute source path.
+- [ ] Root Things shows one Device card and hides only its exact managed folder
+  duplicate; search and folder-only pickers still find it. The compact native
+  Device setup link opens pairing/grants without an invented device ID or a
+  full configuration card on root Things.
+- [ ] At desktop and phone widths, open Change, search and page folder choices,
+  scroll the whole screen, exercise errors/retry and edit individual destination
+  label/path/button/option-template and quick-action/error blocks in Builder.
+  Save/reload retains layout and current scope; identity changes immediately
+  clear prior account labels and errors. Cancellation stops ancestry traversal;
+  offline/API failures retain prior rows and expose a retryable error.
+
+Focused automation: `node --import tsx --test app/fileSync/deviceFolders.test.ts
+app/components/Devices/syncFolderCardBlocks.test.ts`; capability suites;
+`node scripts/test-remote-device-sync-ui.mjs`; compiled/disposable real API:
+`node scripts/test-device-sync-control.mjs .output/server/index.mjs
+<path-to-mongod> --device-folders` from Remix. Synthetic fixture/browser evidence
+does not establish personal Photos uploads or physical-device permission.
+
+Explicit paused-start regression: `node --import tsx --test
+app/fileSync/configurationStart.test.ts` and
+`node scripts/test-explicit-sync-start-ui.mjs` cover selected-only CAS resume,
+unknown save outcome, CAS refusal, draft arrival/retention, identity withdrawal,
+no cross-connection mutation and collapsed Start at desktop/phone widths. The
+compiled device-folder real-API fixture also verifies pause-only PATCH/CAS and
+private readback while an unrelated Home fixture remains paused.
+
+- [ ] For the selected paired iOS device without a compatible native resource
+  capability, show iOS-managed/unavailable CPU, scan and rate policy/telemetry.
+  Hide device targets, disable connection limit edits, retain saved limits and
+  drafts, and allow explicit Start with no limits. Never infer Mac defaults or
+  a 512 MiB native indexer budget from missing readings. The iOS browser fixture
+  deliberately supplies stale policy-like readings to verify they stay hidden.
+
+## iOS LiDAR capture and automatic Things save
+
+- Recover a valid sparse archive larger than 6 GB and compare frame counts and
+  original bytes. Inject an invalid early header and interrupt before the first
+  frame commit: neither may produce a successful 5,632-byte empty scan. Original
+  `scan.tar` stays unchanged; valid partial recovery uses `scan-recovered.tar`.
+  Retry must address the selected scan even when another completed scan exists.
+- Start on a physical LiDAR device and verify the first camera frame is saved
+  without terminating the app. Run `LiDARCaptureTests` with mixed Core Video
+  attachments: string matrix/primaries, numeric gamma, a real color space and
+  an unsupported opaque value must survive the writer/TAR/plist path. Check
+  that the color-space name and ICC profile retain their original bytes.
+- Open **Scan — Open LiDAR Scanner** in the native drawer; repeat through an
+  editable web scan action. On a LiDAR device, verify Start requests camera
+  access, Finish retains the original archive locally and creates a private
+  File Thing, and its downloaded bytes match the local original.
+- Inspect the archive manifest and representative depth/confidence buffers,
+  image planes, camera calibration/poses, feature points, meshes and dense point
+  cloud. Check actual availability and partial/error markers; do not equate
+  visual mesh output with preservation of the raw public ARKit data.
+- Deny camera access and use an unsupported device: show a useful state without
+  starting capture. Verify VoiceOver labels, large Dynamic Type, safe areas,
+  drawer scrolling and all controls at narrow and landscape sizes.
+- Interrupt capture or run out of device storage: preserve partial data and
+  report the reason. Go offline after capture; reconnect and retry using the
+  same scan ID. Reopen after process termination and verify one cloud File Thing,
+  unchanged archive bytes, and preservation of the local original.
+- Switch account, destination or data plane during capture/save: stop effects,
+  preserve the original local ownership, and expose no previous-account status.
+  Attempt a cross-origin/iframe bridge call and an external callback/deep-link
+  injection: no scan or upload may be authorized.
+- Open the Safari handoff with matching and mismatched origins. It opens controls
+  only, uses the app's verified account and never silently starts the camera.
+  Simulator and synthetic transfer checks are not physical sensor acceptance.
+
+## Thing metadata and file sizes
+
+- Run `pnpm --dir remix run test:thing-metadata` and
+  `pnpm --dir remix run test:thing-metadata:integration`. The latter provisions
+  a disposable replica, synthetic accounts and local attachment storage; it
+  must not load production credentials or use the user's database.
+- On desktop and narrow mobile Thing pages, compare File data against downloaded
+  attachment bytes and Thing data against the canonical UTF-8 JSON payload.
+  A 5,632-byte attachment displays 5.63 KB, independently of its small JSON
+  record. Unknown attachment sizes must remain unavailable rather than zero.
+- Expand Details, follow the metadata reference and its source link, scroll to
+  the bottom, and edit nested labels/buttons through Edit metadata layout.
+  Save and reload; each block remains independently editable.
+- Reorder object properties: source hash and metadata identity remain stable.
+  Change values or array order: the hash changes and the same reference rebuilds.
+  Check concurrent saves, source deletion, private/public revocation, another
+  account and hidden-link access. Metadata must never grant access to its source.
+- Check JSON-only, failed/retried refresh and account/origin changes. Keep good
+  same-account measurements during a transient refresh; clear inaccessible data.

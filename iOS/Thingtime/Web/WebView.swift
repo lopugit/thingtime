@@ -7,6 +7,7 @@ struct WebView: UIViewRepresentable {
 
     let url: URL
     @Binding var widgetPath: String?
+    @Binding var lidarRequest: UUID?
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -21,6 +22,7 @@ struct WebView: UIViewRepresentable {
         configuration.userContentController.addUserScript(MobileDeviceLocationBridge.script)
         configuration.userContentController.addUserScript(MobileFolderBridge.script)
         configuration.userContentController.addUserScript(FileExportBridge.script)
+        configuration.userContentController.addUserScript(LiDARBridge.script)
         configuration.userContentController.add(context.coordinator, name: Self.nativeMessageHandlerName)
         context.coordinator.configureShareComposer(configuration: configuration, origin: url)
 
@@ -52,12 +54,22 @@ struct WebView: UIViewRepresentable {
         // value cannot suppress the teardown for a later destination change.
         let widgetTarget = widgetPath.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }
         if widgetPath != nil { DispatchQueue.main.async { widgetPath = nil } }
+        if lidarRequest != nil {
+            DispatchQueue.main.async { lidarRequest = nil }
+            if !rootChanged {
+                context.coordinator.pendingNativeScanOrigin = url
+                context.coordinator.openLiDAR()
+            }
+        }
         guard rootChanged || widgetTarget != nil else { return }
+        context.coordinator.lidar.invalidate()
 
         // A destination switch always drops the previous origin's widget content
         // and detaches its queued uploads, even when a widget tap is delivered in
         // the same update. Widget navigation alone stays within the same origin.
         if rootChanged {
+            context.coordinator.pendingNativeScanOrigin = nil
+            NativeDeferredUpload.shared.disarm()
             MobileDeviceBackgroundPresence.shared.destinationChanged()
             context.coordinator.mobileLocation.invalidate()
             MobileDeviceAlerts.shared.stop()
@@ -87,6 +99,7 @@ struct WebView: UIViewRepresentable {
             configuration.userContentController.addScriptMessageHandler(bridge, contentWorld: .page, name: ShareComposerBridge.name)
             configuration.userContentController.addUserScript(ShareComposerBridge.script(origin: origin))
         }
+        let lidar = LiDARBridge()
         let mobileDevice = MobileDeviceBridge()
         let mobileLocation = MobileDeviceLocationBridge()
         let mobileFolders = MobileFolderBridge()
@@ -95,6 +108,17 @@ struct WebView: UIViewRepresentable {
         private let lopuChats = LopuChatActivityController()
 
         func resetChatActivity() { lopuChats.reset() }
+        var pendingNativeScanOrigin: URL?
+        func openLiDAR() {
+            guard let webView, let root = loadedRootURL,
+                  LiDARLaunchRoute.canConsume(pendingOrigin: pendingNativeScanOrigin,
+                      selectedOrigin: root, currentURL: webView.url, isLoading: webView.isLoading) else { return }
+            pendingNativeScanOrigin = nil
+            lidar.openFromNative(webView: webView, root: root,
+                currentRoot: { [weak self] in self?.loadedRootURL },
+                cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] },
+                reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
+        }
         private var pendingVoiceStart = UUID()
         private var pendingRecordingSync = UUID()
         private var recordingOwnerId: String?
@@ -108,6 +132,16 @@ struct WebView: UIViewRepresentable {
 
         override init() {
             super.init()
+            mobileFolders.conditionsChanged = { [weak self] in
+                guard let self, UIApplication.shared.applicationState == .active, let root = self.loadedRootURL,
+                      let url = self.webView?.url, LopuVoiceContract.sameOrigin(url, root) else { return }
+                self.sendToWeb(type: "mobile-files-conditions-changed", payload: [String: String]())
+            }
+            mobileFolders.photoProgressChanged = { [weak self] in
+                guard let self, UIApplication.shared.applicationState == .active, let root = self.loadedRootURL,
+                      let url = self.webView?.url, LopuVoiceContract.sameOrigin(url, root) else { return }
+                self.sendToWeb(type: "mobile-files-photo-progress", payload: [String: String]())
+            }
             lopuChats.register = { [weak self] root, owner, activityId, token, contextKey, chats in
                 await self?.registerChatActivity(root: root, owner: owner, activityId: activityId, token: token, contextKey: contextKey, chats: chats)
             }
@@ -118,6 +152,7 @@ struct WebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            lidar.invalidate()
             // A background refresh may construct the initial web scene. Only a
             // foreground navigation invalidates its persisted approval here.
             if UIApplication.shared.applicationState == .active {
@@ -146,8 +181,9 @@ struct WebView: UIViewRepresentable {
             (webView as? ThingtimeWKWebView)?.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
 
             if let rootURL = loadedRootURL ?? webView.url { ThingtimeNativeNotifications.shared.attach(webView: webView, rootURL: rootURL) }
+            if pendingNativeScanOrigin != nil { openLiDAR() }
 
-            sendToWeb(type: "native-ready", payload: [
+            var capabilities: [String: Any] = [
                 "platform": "ios",
                 "version": "1.3.0",
                 "lopuVoiceVersion": "1.3.0",
@@ -156,11 +192,15 @@ struct WebView: UIViewRepresentable {
                 "devicePairingVersion": "1.1.0",
                 "deviceLocationVersion": "1.1.0",
                 "fileAccessVersion": MobileFolderBridge.accessVersion,
+                "filePhotoAutomationVersion": MobileFolderBridge.photoAutomationVersion,
                 "fileUploadVersion": MobileFolderBridge.uploadVersion,
                 "fileExportVersion": FileExportBridge.version,
+                "lidarVersion": LiDARBridge.version,
                 "fileStagingVersion": MobileFolderBridge.stagingVersion, "filePublicationVersion": MobileFolderBridge.publicationVersion,
                 "watchNotifications": true
-            ])
+            ]
+            capabilities["filePhotoContinuationVersion"] = MobileFolderBridge.photoContinuationVersion
+            sendToWeb(type: "native-ready", payload: capabilities)
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -181,6 +221,14 @@ struct WebView: UIViewRepresentable {
                 return
             }
             switch type {
+            case "lidar-scan":
+                guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
+                      let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
+                      let frame = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frame, root) else { return }
+                lidar.handle(body, webView: webView, root: root,
+                    currentRoot: { [weak self] in self?.loadedRootURL },
+                    cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] },
+                    reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
             case "file-export":
                 guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
                       let current = webView.url, LopuVoiceContract.sameOrigin(current, root),

@@ -14,8 +14,8 @@ test('alert operations and metadata patches are registered deliberately in both 
 		['devices-node-alert-sounds', 'node/alert-sounds', '1.0.0'],
 		['devices-commands', 'commands', '1.11.0'],
 		['devices-node-commands', 'node/commands', '1.11.0'],
-		['devices', '', '1.15.0'],
-		['devices-node-state', 'node/state', '1.15.0']
+		['devices', '', '1.16.0'],
+		['devices-node-state', 'node/state', '1.15.1']
 	]) {
 		assert.equal(source.features[`api.${id}`], version);
 		assert.equal(runtime.features[`api.${id}`]?.version, version);

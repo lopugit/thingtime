@@ -97,6 +97,7 @@ test('scheduled processing, cleanup, sync, and notification jobs are registered 
 			schedule: '37 21 * * 0'
 		},
 		{ path: '/api/v1/ai/models/sync', schedule: '23 3 * * *' },
+		{ path: '/api/v1/backups/run', schedule: '*/5 * * * *' },
 		{ path: '/api/v1/devices/observations/cleanup', schedule: '*/15 * * * *' }
 	]);
 });

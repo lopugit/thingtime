@@ -8,6 +8,9 @@ import { realpath, stat } from 'node:fs/promises';
 import { dirname, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 
+const log = console.log;
+console.log = (...args) => { if (!String(args[0]).startsWith('[email][console]')) log(...args); };
+
 const directory = process.env.THINGTIME_SYNC_CONTROL_TEST_DIRECTORY;
 assert.ok(directory && basename(directory).startsWith('thingtime-sync-control-'));
 assert.equal(dirname(await realpath(directory)), await realpath(tmpdir()));
@@ -21,17 +24,20 @@ server.listen(28180, '127.0.0.1');
 await once(server, 'listening');
 async function request(path, body, viewer) {
   const response = await fetch(base + path, { method: body === undefined ? 'GET' : 'POST',
-    headers: { Origin: base, 'Content-Type': 'application/json', ...(viewer ? { Cookie: viewer.cookie, 'X-Thingtime-Expected-Actor': viewer.id } : {}) },
+    headers: { Origin: base, 'Content-Type': 'application/json', ...(viewer?.deviceCredential
+      ? { Authorization: 'Bearer ' + viewer.deviceCredential }
+      : viewer ? { Cookie: viewer.cookie, 'X-Thingtime-Expected-Actor': viewer.id } : {}) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }), redirect: 'error', signal: AbortSignal.timeout(30_000) });
   assert.match(response.headers.get('Content-Type') ?? '', /application\/json/, path + ' must dispatch Nitro JSON, not the SPA');
   const value = await response.json();
   return { response, value };
 }
 async function register() {
-  const { response, value } = await request('/api/v1/auth/register', { username: 'sync-' + randomUUID().slice(0, 8),
+  const username = 'sync-' + randomUUID().slice(0, 8);
+  const { response, value } = await request('/api/v1/auth/register', { username,
     email: randomUUID() + '@example.invalid', password: randomUUID() + '-Fixture!' });
   assert.equal(response.status, 200, 'Disposable account registration: ' + JSON.stringify(value));
-  return { id: value.user.id, cookie: response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ') };
+  return { id: value.user.id, username, cookie: response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ') };
 }
 async function pair(viewer) {
   const { value: challenge, response } = await request('/api/v1/devices/pairing', {}, viewer);
@@ -48,16 +54,40 @@ async function pair(viewer) {
   const claimed = await request('/api/v1/devices/pairing/claim', { op: 'complete', pairingSecret: challenge.pairing.pairingSecret,
     credential, device, capabilities: [], proof: { pairingId, publicKey, nonce, serverNonce, signature: sign(null, bytes, privateKey).toString('base64url') } });
   assert.equal(claimed.response.status, 200, JSON.stringify(claimed.value));
-  return claimed.value.device.id;
+  return { deviceId: claimed.value.device.id, deviceCredential: credential };
+}
+
+async function assertStorageReady(admin, stage) {
+  const health = await request('/api/v1/health/nitro');
+  assert.equal(health.value.storageAccounting?.state, 'ready', stage);
+  const status = await request('/api/v1/admin/migrations', undefined, admin);
+  assert.equal(status.response.status, 200, stage);
+  const storage = status.value.migrations.find(row => row.id === 'backfill-user-storage-accounting');
+  assert.equal(storage?.pending, 0, stage);
 }
 try {
   const endpoint = '/api/v1/devices/sync-control';
   const publicManifest = await request('/.well-known/thingtime-capabilities.json');
-  assert.equal(publicManifest.value.features['api.devices-sync-control'].version, '1.3.0');
-  assert.equal((await request('/api/v1/capabilities')).value.features['api.devices-sync-control'], '1.3.0');
+  assert.equal(publicManifest.value.features['api.devices-sync-control'].version, '1.4.0');
+  assert.equal((await request('/api/v1/capabilities')).value.features['api.devices-sync-control'], '1.4.0');
   assert.equal((await request(endpoint + '-docs')).value.docs.id, 'devices-sync-control');
   assert.equal((await request(endpoint, { action: 'poll', deviceId: 'device' })).response.status, 401);
-  const owner = await register(), foreign = await register(), deviceId = await pair(owner);
+  const owner = await register(), foreign = await register(), admin = await register();
+  process.env.ADMIN_USERNAMES = admin.username;
+  const baseline = await request('/api/v1/admin/migrations/run', { migration: 'backfill-user-storage-accounting' }, admin);
+  assert.equal(baseline.response.status, 200, 'Initialize the disposable fixture before device writes');
+  const paired = await pair(owner);
+  const { deviceId } = paired;
+  await assertStorageReady(admin, 'After pairing');
+  const stateEndpoint = '/api/v1/devices/node/state';
+  const snapshot = { revision: 1, state: { locked: false, volume: 0.5, brightness: 0.8 }, connectors: [] };
+  assert.equal((await request(stateEndpoint, snapshot, paired)).value.applied, true);
+  await assertStorageReady(admin, 'First snapshot with omitted optional telemetry');
+  assert.equal((await request(stateEndpoint, snapshot, paired)).value.applied, false);
+  const nextSnapshot = { ...snapshot, revision: 2, state: { locked: false, appleMusic: { isInstalled: true, isRunning: false } } };
+  assert.equal((await request(stateEndpoint, nextSnapshot, paired)).value.applied, true);
+  await assertStorageReady(admin, 'Newer snapshot with both supplied and omitted telemetry');
+  assert.equal(publicManifest.value.features['api.devices-node-state'].version, '1.15.1');
   const post = (body, viewer = owner) => request(endpoint, { deviceId, ...body }, viewer);
   const requestId = randomUUID();
   assert.equal((await post({ action: 'enqueue', requestId, command: { action: 'status' } })).value.status, 'pending');

@@ -1,5 +1,6 @@
 import { createCanViewHomeAttachmentTarget } from './attachmentAccess';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 import {
@@ -85,6 +86,31 @@ const noopS3 = (overrides: Partial<AttachmentS3> = {}): AttachmentS3 => ({
 	isNoSuchUpload: () => false,
 	isNotFound: () => false,
 	...overrides
+});
+
+test('revocation during exact-version HEAD withholds a delegated completion receipt', async () => {
+	const doc = attachmentDoc({ attachmentPurpose: 'file', attachmentState: 'ready', objectVersionId: 'version-1', uploadId: undefined });
+	const composite = createHash('sha256').update(Buffer.concat([Buffer.alloc(32, 1), Buffer.alloc(32, 2)])).digest();
+	let revoked = false;
+	let tags = 0;
+	const service = createAttachmentService({
+		store: { getOwned: async () => doc, claimFinalizing: async () => ({ doc, acquired: false }) } as any,
+		getS3: () => noopS3({
+			headObject: async () => {
+				revoked = true;
+				return { sizeBytes: doc.objectSizeBytes, checksumType: 'COMPOSITE', checksumSha256: composite.toString('base64') + '-2', attachmentId: doc.shareId, versionId: 'version-1' };
+			},
+			markObjectReady: async () => { tags++; }
+		})
+	});
+	const result = await service.complete(doc.ownerId, { uploadId: doc.shareId }, {
+		expiresAt: new Date(now.getTime() + 60_000),
+		expectedFingerprint: { algorithm: 'sha256-parts-v1', ...attachmentPartPlan(doc.objectSizeBytes), sha256: composite.toString('hex') },
+		check: async () => revoked ? { ok: false, status: 410, error: 'Revoked while awaiting storage' } : null
+	});
+	assert.equal(result.ok, false);
+	if (!result.ok) assert.equal(result.status, 410);
+	assert.equal(tags, 0);
 });
 
 test('excluded export bytes skip storage without bypassing live authorization', async () => {

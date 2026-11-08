@@ -145,6 +145,50 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-08: Show referenced Thing metadata with canonical JSON hashing, human-readable JSON and verified attachment sizes, editable layouts and access-aware refresh. Preserve original LiDAR archives during recovery and refuse empty captures. [Contract](../docs/thing-metadata.md) · [PR 1425 validation](../PRs/1425-codex-thing-metadata-sizes-show-thing-metadata-sizes-and-preserve-original-lidar-scans.md). **Codex (AI)**
+
+- 2026-11-08: Resume enabled iPhone Photos backup on launch and after temporary
+  native interruptions. Keep saved policy and upload receipts while adding a
+  five-minute retry, managed upload pacing and budgets, progress notifications
+  and one native Photos engine for active and iOS-scheduled work. [Verification](../PRs/1424-codex-ios-photos-auto-sync-resume-and-continue-iphone-photos-backups-automatically.md). **Codex (AI)**
+
+- 2026-11-08: Add the iOS LiDAR scanner drawer entry, origin-bound web action and
+  [Verification](../PRs/1422-codex-ios-lidar-capture-add-native-ios-lidar-capture-and-private-thing-saving.md).
+  durable private scan archive upload. Preserve available ARKit depth, imagery,
+  calibration and geometry, with local recovery and retry identity. Physical
+  LiDAR acceptance is tracked separately. See [scan workflow](../docs/native-lidar-scans.md). **Codex (AI)**
+
+- 2026-11-08: Back up iOS Photos in capture-date order through one queue for
+  local and iCloud originals, with companion resources kept together
+  ([PR 1417 notes](../PRs/1417-ios-photo-newest-first-newest-first-photos-backup.md)). **Codex (AI)**
+
+- 2026-11-07: Keep Wi-Fi-only Photos backups in a clear wait state, identify
+  iCloud-only originals separately, and queue already prepared originals for
+  iOS background processing. The original foreground sync publishes verified
+  cloud-folder and Timeline receipts ([PR 1413 notes](../PRs/1413-ios-background-photo-sync-prepared-photos-uploads.md)). **Codex (AI)**
+
+- 2026-11-07: Restore legacy iOS backup starts on hosts without native resource
+  limits, while preserving explicitly saved device and connection policies. Add
+  ordinary Photos consent and original-byte acceptance with storage-readiness
+  checks ([PR 1408 notes](../PRs/1408-ios-photos-upload-recovery.md)). **Codex (AI)**
+
+- **2026-11-07 — Codex (AI):** Add ordinary device root folder references and
+  idempotent default backup destinations under Device / Files / Source, readable
+  cloud paths and offline Show Folder navigation. Keep existing destinations,
+  drafts and pause settings; expose collapsed-card transfer actions/errors and
+  restore compact native Device setup navigation. Explicit Start confirms a
+  pause-only CAS update for the selected connection before runner admission;
+  uncertain saves and retained drafts never start transfers.
+
+- 2026-11-07: Compose an editable account backup workspace with protected durable
+  snapshot/review/restore jobs, independent immutable storage, exact-T inventory,
+  retained file history/annotations and canonical ordinary graph creation.
+  Verify real isolated HTTP/Chrome desktop/mobile, shared destination picker,
+  Builder persistence and interruption recovery. Deployed Workflow/S3 and
+  whole-account acceptance remain open. See
+  [the scoped implementation note](../PRs/1405-codex-backup-resumable-verification-editable-snapshot-review-and-restore.md).
+  **Codex (AI)**
+
 - 2026-11-06: Exclude iOS-only Chat Activity sources from the macOS Widgets
   target while retaining shared Lopu voice and recording support. Add a
   source-selection regression that preserves iOS app and test coverage.

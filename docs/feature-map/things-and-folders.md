@@ -1,5 +1,17 @@
 # Things and folders
 
+## Derived Thing metadata
+
+`ThingMetadataPanel.tsx` sits at the top of Thing detail pages. Its individually
+editable `thingMetadataBlocks.ts` layout shows canonical JSON and original file
+bytes separately. `thingMetadata.ts` in the Things utility layer reauthorizes
+the source, measures sorted-key JSON with `thingMetadataCore.ts`, verifies
+attachment bindings and saves one protected metadata reference. GET measures;
+owner POST rebuilds. The exact metadata permalink always rechecks its source.
+Run `test:thing-metadata`, `test:thing-metadata:integration` and the
+[manual checklist](../../TESTING.md#thing-metadata-and-file-sizes).
+See the [format and lifecycle](../thing-metadata.md).
+
 Device pages expose Location history through `DeviceLocationWorkspace`, a
 scoped data/action adapter that resolves private saved `/devices/location` and
 `settings-device-location-settings` layouts. Map markers, filters, retention,
@@ -984,3 +996,119 @@ can release holds. `api.things-bulk` 1.7.1 and `api.things-delete` 1.1.1 publish
 managed placement/drain fencing. Run the file-restore real-replica proof plus
 Things/Files/Timeline and content-gate regressions. UI/job activation, History
 audit grouping and installed/native acceptance remain separate.
+
+### Normal device folders and default destinations
+
+`api.devices` 1.16.0 adds an origin/account/content-plane scoped
+`rootFolderId` reference. `api.devices-folders` 1.0.0 is registered in
+`apiDocs.ts` and the Nitro import map. Its GET is read-only: one device returns
+the owned root (or null before creation); no device ID lists paginated owned root
+references (50 per request, canonical chronological cursor), so devices are discoverable before uploads. POST verifies the
+owned device in the home control plane and resolves ordinary private `folder`
+Things through `createThing`/`getThing`, including canonical accounting,
+placement and uniqueness. There is no mixed device/folder kind or new index.
+
+`fileSync/deviceFolders.ts` keys roots and Files folders by origin, owner,
+content plane and device; each leaf also uses the stable connection ID. Labels
+never determine identity. New destinations are `Device / Files / Source label`
+(including Photo Library). Existing explicit remote destinations, opaque native
+root IDs, grants, drafts and pause settings are preserved. No save starts a
+transfer. Renames are retained; moved child folders and replaced/shared
+identities require explicit selection. Recreating a deleted root never moves
+surviving contents back implicitly.
+
+`SyncDestinationControl` uses editable Builder path/action/repeated-option
+blocks with searchable paginated collections and explicit More devices discovery. `folderPaths.ts` reads actual
+owned/private ancestry with a shared cache, four concurrent workers and scope/
+cancellation fences; transport failures remain retryable. Device page and menu
+Show Folder inspect an existing reference before creating a missing root, so
+cloud navigation works while the physical device is offline. Root browsing
+suppresses only an exact managed root already represented by its Device card;
+search, folder-only views and location pickers retain normal folder results.
+
+`SyncFolderCard` has an editable quick action outside collapsed settings,
+with separate error and destination fields. The remote command worker runs
+on paired Macs. Remote iPhone and Android panels show saved settings, and
+the current iPhone can jump to its local transfer controls. Mounted panels
+share verified saved revisions for the same owner, origin and device.
+Photos sources display their virtual source label.
+The native-only compact Things entry links to `/things?deviceSetup=1`; that
+page reuses normal device pairing and folder-grant controls.
+
+Run focused `deviceFolders`, capability, folder-card tests and
+`node scripts/test-remote-device-sync-ui.mjs`. Build the Node middleware server,
+then run `node scripts/test-device-sync-control.mjs .output/server/index.mjs
+<path-to-mongod> --device-folders` from Remix for disposable real-API acceptance.
+The launcher starts its own replica and seeds users/devices through APIs only.
+
+## Durable backup authority boundary
+
+`api/utils/backups/backupJobs.ts` owns private home-plane backup-job/event control
+Things, original-session leases and atomic cursor/hash-reference checkpoints.
+`things.ts` refuses their generic exact, inherited, mixed-kind and exported reads;
+ordinary descendants cannot borrow a public ancestor through that private boundary.
+`api.things` 1.52.1, `api.things-export` 1.16.1 and `api.things-bulk` 1.7.2 publish
+that corrected permission boundary. Unit checks are `test:backups:worker`; actual
+API-utils/replica transaction checks are `test:backups:workflow`.
+`backupWorkflow.server.ts` reuses the supported ID-only Vercel Workflow lifecycle;
+`backupEngine.server.ts` composes bounded inventory/capture/verification units.
+No public admission/UI entry is enabled until the full supported execution path
+and deployment readiness are independently accepted. Snapshot/reference sidecars
+and plaintext-bearing encrypted hasher state stay in the independent backup store,
+never ordinary Thing crystal fields. See `docs/portable-backups.md` and TESTING.
+
+iOS Photos uses `PhotoLibraryReader` and the Rust capture's gap ledger. File
+access 1.6.0 keeps iCloud-only resources explicitly incomplete while transferring
+available originals. File access 1.7.0 can fetch an exact iCloud original
+only with the saved explicit cellular allowance and live power/device checks.
+File access 1.8.0 uses `PhotoBackupQueue` for one date-ordered queue of asset
+groups. The Rust indexer seals selected originals and exact iCloud gaps;
+untouched assets need no synthetic gap rows. After the initial checkpoint,
+`pagedForegroundSync` reads only the scoped paths needed for the next batch
+and merges its verified pairs into the existing baseline. Native batch
+acknowledgement checks the exact cloud original fingerprints.
+Native upload 1.5.0 negotiates the origin's scoped transfer
+admission and queues a bounded set of already planned originals in
+`NativeDeferredUpload`. `BGProcessingTask` can finish those attachments;
+`pagedForegroundSync` retains canonical cloud folder and Timeline publication.
+See the [iOS runbook](../../iOS/README.md#deferred-photos-transfers) and the
+iOS deferred Photos checklist for installed and physical acceptance.
+
+Explicit iOS Start/Retry recovers changed Photos backup settings for the same
+authorized grant and device with cloud copies retained. It verifies the current
+saved revision, native grant and destination, disarms the prior native queue
+and verifies the current settings again before atomically archiving the old
+operation/review pointers and admitting a fresh job. The new queue epoch
+reconciles current observations against the saved folder. Already copied files
+keep their revisions, and the saved network and charging rules still apply.
+A repeat retry of the exact revision resumes the current epoch. The root lock
+and live configuration check fence new dispatches under the old settings. If
+an earlier unguarded file publication is already in flight at the server,
+a same-folder rescan can still race that commit. The earlier journal and any
+published revision remain available. Verify both journal formats and the
+signed upload path with `photoSettingsRecovery.test.ts`.
+
+Photos installed acceptance uses `iOS/ThingtimeUITests/PhotoLibraryConsentUITests.swift`
+and `iOS/scripts/test-mobile-sync-installed.sh`: ordinary consent, same-grant
+original hashes and reopen, with storage-readiness gates and nonzero executed-test
+assertions. `nativeDeviceSyncGovernor` allows legacy connections without saved
+limits on unsupported iOS while refusing explicit device and connection limits.
+`deviceResourcePolicy.test.ts` covers that boundary; Mac enforcement is unchanged.
+
+`fileSync/configurationStart.ts` is the explicit manual Start preflight shared
+by native-host and remote controls. It rereads the exact reviewed owned revision,
+refuses retained selected drafts/identity changes, CAS-patches only paused=false,
+requires a successful acknowledgement and matching fresh readback, then returns
+the confirmed configuration for existing runner admission. Uncertain writes
+never start or blindly retry. Save/open and automatic scheduling never unpause
+a connection; unrelated Home settings/drafts stay intact. Test with
+`configurationStart.test.ts`, `test-explicit-sync-start-ui.mjs` and the compiled
+device-folder replica fixture.
+
+`DeviceSyncResources` and connection limit controls classify the actual selected
+iOS bridge capability. A locally paired match is verified through its native
+identity; other devices use their scoped status. Missing native resource support
+shows iOS-managed/unavailable rather than Mac budgets or invented zero telemetry.
+Existing explicit limits/drafts remain intact; ordinary connection progress is
+independent from native CPU/scan telemetry. The paused-start browser harness
+exercises unsupported iOS capabilities and retained controls at both widths.

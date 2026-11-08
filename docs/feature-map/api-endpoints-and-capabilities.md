@@ -1,5 +1,21 @@
 # API endpoints and capabilities
 
+`api.things-metadata` 1.0.0 registers GET/POST
+`/api/v1/things/metadata` in the canonical docs registry and Nitro import map.
+GET reads authorized current measurements; same-origin owning-session POST
+saves a protected derived reference. Clients negotiate this feature before
+either operation. Both manifests and `test:api-capabilities` cover it; run
+`test:thing-metadata:integration` for real handlers, ACLs, concurrent rebuilds,
+deletion and checksum-verified original file bytes. See [Thing metadata](../thing-metadata.md).
+
+`api.file-sync-transfer-admissions` 1.3.0 extends
+`POST /api/v1/files/sync-transfer-admissions`. The owner can admit publication
+of an exact private Photos original or open a revocable iPhone run for subsequent original reservations. The current native runner can update a previously verified same-grant original through the canonical Files revision guard. Existing 1.0.0 admissions still authorize
+signing and completing only the original reservation. Optional v4 Photos policy
+requires `api.things` 1.53.0 and `api.things-update` 1.21.0. The import map and registry describe the route;
+`test:api-capabilities` checks negotiation and `test:files:transfer-admissions`
+exercises the built API. See [transfer admissions](../file-sync-transfer-admissions.md).
+
 ## Private device observations and locate actions
 
 `deviceObservations.ts` implements owner-only location reads/settings and
@@ -832,3 +848,23 @@ versions from `apiDocs.ts`. Trusted transaction composition and audit labels are
 internal options, never new accepted HTTP fields; public retained-version input
 and upload approval remain unchanged. Run `test:api-capabilities`, the backup
 contract test, canonical build/output smoke and `test:backups:file-restore`.
+
+
+Backup dispatch recovery is `/api/v1/backups/run` (`api.backup-dispatch` 1.0.0),
+registered in the docs registry, Nitro import map and existing Vercel cron config.
+GET uses the existing scheduler secret; POST uses full same-origin administrator
+permission and no selectors/payload. `backupDispatch.server.ts` reserves opaque
+attempt IDs before SDK start; `backupJobs.ts` keeps original-session and
+transaction/lease fences. No browser call can supply a Workflow run ID, store
+address, original session or runnable intent. Source configuration and compiled
+routing are not deployed scheduler/provider evidence; see TESTING and README.
+
+The first-party `/api/v1/backups/workspace` contract (`api.backup-workspace`
+1.0.0) provides catalog, sealed snapshot pages, durable job progress and completed
+review reads, plus fixed snapshot/review/restore/control commands. Its route,
+Nitro map, `useApi` wrappers and explicit requirements share the DTO in
+`app/backups/workspace.ts`. Saved source paths come from a bounded worker catalog
+stage over retained exact-timestamp descriptors. Browser reads never obtain
+provider configuration, session references, execution leases or writable intents.
+See the first-party backup workspace checklist in TESTING for real HTTP/Builder
+acceptance and the separate deployed scheduler/provider gates.

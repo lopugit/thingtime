@@ -1,3 +1,4 @@
+import { selectedDesktopApiOrigin } from '../utils/electronBridge';
 import { sameSymbolicLink } from './symbolicLink';
 import { timelineScopeKey, type TimelineEvent, type TimelineScope } from '../timeline/contract';
 import { CLOUD_FILE_ADAPTER, parseCloudFile, parseCloudFileCommit, type CloudFile, type CloudFileCommit } from './cloudFile';
@@ -63,15 +64,8 @@ export function fileRestoreKey(scope: TimelineScope, version: CloudFile): string
 
 /** Desktop History is rendered locally, but file restores target its selected account API. */
 export function desktopFileRestoreScope(scope: TimelineScope, info: { contentOrigin?: string | null; apiOrigin?: string | null }): TimelineScope | null {
-	if (info.contentOrigin !== scope.apiOrigin || !info.apiOrigin) return null;
-	try {
-		const selected = new URL(info.apiOrigin);
-		const loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(selected.hostname) || selected.hostname.endsWith('.localhost');
-		if (selected.href !== `${selected.origin}/` || (selected.protocol !== 'https:' && !(selected.protocol === 'http:' && loopback))) return null;
-		return { ...scope, apiOrigin: selected.origin };
-	} catch {
-		return null;
-	}
+	const apiOrigin = selectedDesktopApiOrigin(scope.apiOrigin, info);
+	return apiOrigin ? { ...scope, apiOrigin } : null;
 }
 
 async function fileOperationEventId(ownerId: string, id: string, operationId: string, kind: 'commit' | 'retain'): Promise<string> {

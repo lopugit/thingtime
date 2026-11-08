@@ -43,7 +43,7 @@ try {
    await page.getByText('Sync connections', { exact: true }).waitFor();
    await page.getByRole('button', { name: 'Expand folder', exact: true }).first().waitFor();
    assert.equal(await page.getByRole('button', { name: 'Edit', exact: true }).count(), 0, 'saved cards start collapsed');
-   assert.equal(await page.getByRole('button', { name: 'Sync now', exact: true }).count(), 0);
+   assert.equal(await page.getByRole('button', { name: 'Start backup', exact: true }).count(), 2, 'collapsed saved cards expose the quick action');
    const documents = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Documents backup', exact: true }) });
    const archive = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Archive backup', exact: true }) });
    await page.screenshot({ path: join(evidence, `${label}-collapsed-folders.png`), fullPage: true });
@@ -90,9 +90,9 @@ try {
    await page.locator('article').filter({ has: page.getByRole('heading', { name: `${label} browser backup`, exact: true }) }).getByRole('button', { name: 'Expand folder', exact: true }).click();
    await page.evaluate(() => window.remoteSyncFixture.setOnline(true));
    await page.getByRole('button', { name: 'Refresh device', exact: true }).click();
-   const start = page.getByRole('button', { name: 'Sync now', exact: true });
+   const start = page.locator('article').filter({ has: page.getByRole('heading', { name: `${label} browser backup`, exact: true }) }).getByRole('button', { name: /^(Start backup|Resume sync|Retry transfer)$/ });
    await start.waitFor();
-   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Sync now' && !button.disabled));
+   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Start backup' && !button.disabled));
    await page.evaluate(() => window.remoteSyncFixture.failNext('Device declined this sync request.'));
    await start.click();
    await page.getByText('Device declined this sync request.', { exact: true }).waitFor();
@@ -197,7 +197,19 @@ try {
    await page.getByRole('button', { name: 'Choose device folder', exact: true }).click();
    await page.getByRole('button', { name: 'Add connection', exact: true }).click();
    await page.getByRole('textbox', { name: 'Connection name', exact: true }).fill('New connection from browser');
-   await page.getByRole('combobox', { name: 'Private cloud folder', exact: true }).selectOption('cloud-documents');
+   await page.getByRole('button', { name: 'Change', exact: true }).click();
+   await page.getByRole('button', { name: 'My Mac', exact: true }).waitFor();
+   await page.getByRole('button', { name: 'More devices', exact: true }).click();
+   await page.getByRole('button', { name: 'Travel tablet', exact: true }).waitFor();
+   await page.getByRole('button', { name: 'My Mac', exact: true }).click();
+   await page.locator('[data-settings-document="file-sync-destination"]').filter({ visible: true }).getByText('My Mac', { exact: true }).waitFor();
+   await page.getByRole('button', { name: 'Change', exact: true }).click();
+
+   await page.getByRole('button', { name: 'Next page of Private cloud folders', exact: true }).click();
+   await page.getByRole('searchbox', { name: 'Search Private cloud folders', exact: true }).fill('Folder 14');
+   await page.getByRole('button', { name: 'Folder 14', exact: true }).waitFor();
+   await page.getByRole('searchbox', { name: 'Search Private cloud folders', exact: true }).fill('Cloud documents');
+   await page.getByRole('button', { name: 'Cloud documents', exact: true }).click();
    const startsBeforeCreation = (await page.evaluate(() => window.remoteSyncFixture.state())).commands.filter(command => command.action === 'start').length;
    await page.getByRole('button', { name: 'Save connection', exact: true }).click();
    await page.getByRole('button', { name: 'Save connection', exact: true }).waitFor({ state: 'hidden' });
@@ -210,8 +222,19 @@ try {
    const folderWritesBefore = state.rows.filter(row => row.thingtime.includes('folder')).length;
    await page.getByRole('button', { name: 'Add connection', exact: true }).click();
    await page.getByRole('textbox', { name: 'Connection name', exact: true }).fill('Path-mapped backup');
-   assert.equal(await page.getByRole('combobox', { name: 'Private cloud folder', exact: true }).inputValue(), '');
+   await page.getByText('My Mac / Files / Documents on Mac', { exact: true }).waitFor();
    assert.equal((await page.evaluate(() => window.remoteSyncFixture.state())).rows.filter(row => row.thingtime.includes('folder')).length, folderWritesBefore, 'opening a new draft cannot create folders');
+   const destinationLayout = page.locator('[data-settings-document="file-sync-destination"]').filter({ visible: true });
+   await destinationLayout.getByRole('button', { name: 'Edit layout', exact: true }).click();
+   await destinationLayout.locator('[data-block-id="sync-destination-path"]').click();
+   const destinationSelected = page.getByRole('combobox', { name: 'Select block', exact: true });
+   assert.equal(await destinationSelected.inputValue(), 'sync-destination-path');
+   await destinationSelected.selectOption('sync-destination-change');
+   assert.equal(await destinationSelected.inputValue(), 'sync-destination-change');
+   await page.screenshot({ path: join(evidence, `${label}-destination-builder.png`), fullPage: true });
+   await page.getByRole('button', { name: 'Close builder', exact: true }).click();
+   await destinationLayout.getByRole('button', { name: 'Done editing layout', exact: true }).click();
+
    await page.getByRole('button', { name: 'Save connection', exact: true }).click();
    await page.getByRole('button', { name: 'Save connection', exact: true }).waitFor({ state: 'hidden' });
    await page.waitForFunction(() => window.remoteSyncFixture.state().rows.some(row => row.crystal.name === 'Path-mapped backup'));
@@ -222,8 +245,8 @@ try {
    const accountFolder = state.rows.find(row => row.id === leaf.folderId);
    const usersFolder = state.rows.find(row => row.id === accountFolder.folderId);
    assert.equal(leaf.crystal.name, 'Documents on Mac');
-   assert.equal(accountFolder.crystal.name, 'example');
-   assert.equal(usersFolder.crystal.name, 'Users');
+   assert.equal(accountFolder.crystal.name, 'Files');
+   assert.equal(usersFolder.crystal.name, 'My Mac');
    assert.equal(usersFolder.folderId, null);
    assert.equal(state.commands.filter(command => command.action === 'start').length, startsBeforeCreation, 'folder preparation cannot start transfers');
    assert.equal(state.rows.find(row => row.id === 'documents-sync').crystal.remoteFolderId, 'cloud-documents', 'existing destinations remain unchanged');
@@ -244,11 +267,29 @@ try {
    results.push({ viewport: label, browserWithoutNativeBridge: true, offlineSettingsSave: true, savedSettingsReload: true,
     collapsedGenericCards: true, independentEditableCardFields: true, invalidResourceDraftRetained: true, siblingDraftRetained: true, privateDeviceScope: true, noTransferOnOpen: true, rejectedCommandVisible: true, remoteStart: true, remotePause: true, pauseBeforeStartAcknowledgement: true,
     remoteAutomaticInterval: true, remotePriorities: true, unsavedPriorityDraftRetained: true, rawSpeedDraftRetained: true, unsavedSpeedLayoutRetained: true, recoverySelectionRetained: true, noBrowserSyncJournal: true, conflictPreservesDraft: true,
-    newConnectionCreatesRealThingHierarchy: true, existingDestinationPreserved: true, remoteFolderSelection: true, newConnectionVerifiesRoots: true, noOverflow: true });
+    newConnectionCreatesRealThingHierarchy: true, searchablePagedCloudPaths: true, deviceRootsBeforeUploads: true, moreDevicePages: true, selectedDevicePathImmediate: true, independentEditableDestinationFields: true, collapsedTransferAction: true, existingDestinationPreserved: true, remoteFolderSelection: true, newConnectionVerifiesRoots: true, noOverflow: true });
   } catch (error) {
    await page.screenshot({ path: join(evidence, `${label}-failure.png`), fullPage: true }).catch(() => {});
    console.error(await page.locator('body').innerText().catch(() => ''));
    throw error;
+  } finally { await context.close(); }
+ }
+ for (const scenario of ['existing', 'missing', 'switched']) {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 900 }, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+   await page.goto(origin + '?desktopFolder=' + scenario);
+   await page.getByRole('button', { name: 'Show Folder', exact: true }).click();
+   if (scenario === 'switched') await page.getByText('The selected sync server changed.', { exact: true }).waitFor();
+   else await page.getByRole('heading', { name: 'Folder opened' }).waitFor();
+   const state = await page.evaluate(() => window.remoteSyncFixture.state());
+   assert.deepEqual(state.folderManifests, ['https://selected-sync.test']);
+   assert.deepEqual(state.folderRequests, (scenario === 'missing' ? ['GET', 'POST'] : ['GET'])
+    .map(method => ({ method, origin: 'https://selected-sync.test' })));
+   assert.equal(state.route.pathname, scenario === 'switched' ? '/' : '/things');
+   if (scenario !== 'switched') assert.ok(new URLSearchParams(state.route.search).get('folder'));
+   results.push({ desktopFolder: scenario, passed: true });
   } finally { await context.close(); }
  }
  assert.deepEqual(errors, []);

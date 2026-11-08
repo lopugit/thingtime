@@ -1,3 +1,5 @@
+import { deviceFolderIdentity } from '../../../fileSync/deviceFolders';
+import { mongoDataPlane } from '../mongodb/dataPlane';
 import { randomUUID } from 'node:crypto';
 import { normalizeDeviceDescriptorPatch } from './deviceDescriptorPatch';
 import { isDevicePlatform } from '../../../devices/platform';
@@ -135,6 +137,8 @@ export type PublicDeviceConnector = DeviceConnectorSnapshot & {
 
 export type PublicDevice = {
 	id: string;
+	/** Reserved normal folder reference, materialized by api.devices-folders. */
+	rootFolderId?: string | null;
 	name: string;
 	platform: DeviceDescriptor['platform'];
 	model: string | null;
@@ -620,7 +624,8 @@ export const readDeviceIdentity = async (ownerId: string, deviceId: string): Pro
 
 export const listDevices = async (
 	ownerId: string,
-	requestedDeviceId?: unknown
+	requestedDeviceId?: unknown,
+	origin?: string
 ): Promise<DeviceFail | { ok: true; devices: PublicDevice[]; device?: PublicDevice }> => {
 	const deviceId = typeof requestedDeviceId === 'string' ? requestedDeviceId.trim() : '';
 	const things = await getHomeThingsCollection();
@@ -766,13 +771,14 @@ export const listDevices = async (
 		recentByDevice.set(id, bucket);
 	}
 
-	const publicDevices = docs.map((doc: any) => {
+	const publicDevices = await Promise.all(docs.map(async (doc: any) => {
 		const base = minimalPublicDevice(doc);
 		const state = publicDeviceState(stateByDevice.get(base.id));
 		const lastSeenAt = lastSeenByDevice.get(base.id) ?? null;
 		const lastSync = lastSyncByDevice.get(base.id) ?? null;
 		return {
 			...base,
+			...(origin ? { rootFolderId: await deviceFolderIdentity({ origin, ownerId, deviceId: base.id, dataPlane: mongoDataPlane() }, 'root') } : {}),
 			online: !!lastSeenAt && Date.now() - lastSeenAt.getTime() <= ONLINE_WINDOW_MS,
 			lastSeenAt: lastSeenAt?.toISOString() ?? null,
 			lastSyncAt: lastSync?.at.toISOString() ?? null,
@@ -790,7 +796,7 @@ export const listDevices = async (
 			pendingCommandCount: commandCounts.get(base.id) ?? 0,
 			pendingApprovalCount: approvalCounts.get(base.id) ?? 0
 		};
-	});
+	}));
 	return deviceId ? { ok: true, devices: publicDevices, device: publicDevices[0] } : { ok: true, devices: publicDevices };
 };
 
@@ -863,7 +869,8 @@ export const updateDeviceState = async (
 						targetId: deviceId,
 						crystal: { deviceStateKey: stateKey, revision, stateHash, snapshotHash, state, observedAt: now }
 					}),
-					{ ...HOME_ACCOUNTING, session }
+					// Match the logical JSON byte stamp. BSON otherwise stores undefined telemetry as null.
+					{ ...HOME_ACCOUNTING, session, ignoreUndefined: true }
 				);
 			} else if (stateDecision === 'update') {
 				const updated = await updateAccountedThing(
@@ -885,7 +892,7 @@ export const updateDeviceState = async (
 							updatedAt: now
 						}
 					},
-					{ ...HOME_ACCOUNTING, session }
+					{ ...HOME_ACCOUNTING, session, ignoreUndefined: true }
 				);
 				if (!updated.modifiedCount) throw Object.assign(new Error('device_snapshot_race'), { status: 409 });
 			}

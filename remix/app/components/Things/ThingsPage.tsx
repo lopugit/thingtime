@@ -1,3 +1,8 @@
+import { useMountedRef } from '~/hooks/useMountedRef';
+import { MobileDeviceSetupEntry, MobileDeviceSetupPage } from '../Devices/MobileDeviceSetupEntry';
+import { LidarScanControls } from '../NativeBridge/LidarScanControls';
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { openDeviceCloudFolder } from '~/fileSync/deviceFolderNavigation.client';
 import { builderAppLaunchHref } from '../Builder/builderAppNavigation';
 import { openSharePreview } from '~/components/Sharing/sharePreviewLink';
 import { BUILDER_THING_KIND } from '~/schemas/builderThing';
@@ -151,6 +156,7 @@ type ThingsPageProps = { builderMode?: boolean; locationPicker?: ThingsLocationP
 
 export const ThingsPage = ({ builderMode = false, locationPicker }: ThingsPageProps) => {
   const [params] = useSearchParams();
+  if (!builderMode && !locationPicker && params.get('deviceSetup') === '1') return <MobileDeviceSetupPage />;
   if (locationPicker) return <ThingsLibraryPage locationPicker={locationPicker} />;
   if (!builderMode && params.get('activity') === '1') return <ActivityManagerPage />;
   if (!builderMode && params.get('unfiled') === 'attachments') return <UnfiledAttachmentsPage />;
@@ -165,6 +171,7 @@ const ThingsPageContents = ({ builderMode = false }: { builderMode?: boolean }) 
 
 const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPageProps) => {
   const user = useCurrentUser();
+  const mounted = useMountedRef();
   const [importOpen, setImportOpen] = useState(false);
   const [importBundle, setImportBundle] = useState<TransferBundle | null>(null);
   const [importDestination, setImportDestination] = useState<string | null>(null);
@@ -180,6 +187,9 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   }, [user?.id]);
   const api = useApi();
   const lopu = useLopu();
+  const dataPlane = useDataPlane();
+  const deviceFolderScope = useRef({ ownerId: user?.id, dataPlane });
+  deviceFolderScope.current = { ownerId: user?.id, dataPlane };
   const navigate = useNavigate();
   const isMobile = useIsMobileViewport();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -202,9 +212,11 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 
   const folderId = searchParams.get('folder') || null;
   const previewParam = searchParams.get('preview') || null;
-	const deviceParam = searchParams.get('device') || null;
+	// Embedded destination pickers retain their containing page URL, but must
+	// browse folders rather than recursively render that page's device view.
+	const deviceParam = locationPicker ? null : searchParams.get('device') || null;
 	const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
-	const deviceView = deviceViewMode(searchParams);
+	const deviceView = locationPicker ? null : deviceViewMode(searchParams);
   const currentKey = folderKeyOf(folderId);
 
   const archive = useAttachmentArchive();
@@ -632,7 +644,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   }, [itemsFor, folderId, kindFilter]);
 
   const searchMode = q.trim().length > 0;
-  const displayItems = searchMode ? searchResults || [] : browseItems;
+
 	const visibleDevices = useMemo<DeviceRuntimeState[]>(() => {
 		if (!devicesEnabled || kindFilter !== 'all' || (!searchMode && folderId)) return [];
 		const query = q.trim().toLocaleLowerCase();
@@ -655,6 +667,14 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 			return searchable.includes(query);
 		});
 	}, [deviceStore.devices, devicesEnabled, folderId, kindFilter, q, searchMode]);
+
+  const displayItems = useMemo(() => {
+    const rows = searchMode ? searchResults || [] : browseItems;
+    if (searchMode || folderId || locationPicker || !visibleDevices.length) return rows;
+    const represented = new Map(visibleDevices.map(device => [device.deviceId, device.summary?.rootFolderId]));
+    return rows.filter(thing => !(isFolder(thing) && thing.author?.id === user?.id &&
+      thing.crystal?.metadata?.deviceFolderRole === 'root' && represented.get(thing.crystal?.metadata?.deviceId) === thing.id));
+  }, [browseItems, folderId, locationPicker, searchMode, searchResults, user?.id, visibleDevices]);
 
   const breadcrumbs = useMemo(() => {
     const trail: { id: string; name: string; icon?: string }[] = [];
@@ -1454,6 +1474,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 		id: 'open-device-page', label: 'Open device page', icon: '⚙️', lucide: 'maximize', href: menuDeviceId ? deviceThingsPageHref(menuDeviceId) : '/things'
 	}, { id: 'open-device-settings', label: 'Quick view', icon: '⚙️', lucide: 'settings', command: 'inspect-device'
 	}, { id: 'open-device-sync', label: 'File sync & backup', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncPageHref(menuDeviceId) : '/things'
+	}, { id: 'show-device-folder', label: 'Show Folder', icon: '🗂️', lucide: 'folder', command: 'show-device-folder'
 	}, { id: 'open-device-files', label: 'Open synced files', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncedFilesHref(menuDeviceId) : '/things'
 	}] }] }), [menuDeviceId]);
 
@@ -1649,8 +1670,8 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 	if (deviceView === 'sync' && deviceParam) return (
     <Flex justify="center" background="var(--tt-surface, #fafafb)" minHeight="100vh" paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 24px)" paddingBottom={16} paddingX={{ base: 4, md: 6 }} width="100%">
       <Flex direction="column" gap={6} width="100%" maxWidth="1100px" minWidth={0}>
-        <DeviceSyncPanel deviceId={deviceParam} ownerId={user?.id} pairedDeviceIds={localNode.pairedDeviceIds} ownedDeviceIds={currentAccountDeviceIds} />
-        {devicesEnabled && user?.id ? <MobileDeviceSetupCard ownerId={user.id} onPaired={deviceStore.refreshList} /> : null}
+        <DeviceSyncPanel deviceId={deviceParam} devicePlatform={deviceStore.devices.find(device => device.summary?.id === deviceParam)?.summary?.platform} ownerId={user?.id} pairedDeviceIds={localNode.pairedDeviceIds} ownedDeviceIds={currentAccountDeviceIds} />
+        {devicesEnabled && user?.id ? <MobileDeviceSetupCard ownerId={user.id} onPaired={deviceStore.refreshList} syncAnchor /> : null}
         {devicesEnabled && localNode.available ? <LocalNodeSetupCard onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} /> : null}
       </Flex>
     </Flex>
@@ -1686,6 +1707,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
       <Flex direction="column" gap={4} maxWidth="100%" paddingTop={[4, 6]} paddingX={4} width={['100%', '100%', '1100px']}
         style={{ boxSizing: 'border-box', minWidth: 0, paddingInline: 16 }}>
         <Flex alignItems="baseline" gap={3} wrap="wrap">
+          {!locationPicker && !builderMode && !folderId && !searchMode && <MobileDeviceSetupEntry />}
           <Text {...monoLabel}>Thingtime · {builderMode ? 'Builder' : 'Things'}</Text>
           {!locationPicker && (builderMode ? <Button as={RouterLink} to="/things" size="sm" variant="ghost">All Things</Button> : <Button as={RouterLink} to="/things?files=thingtime" size="sm" variant="ghost">Browse files</Button>)}
           {!locationPicker && !builderMode && !folderId && !searchMode ? <Button as={RouterLink} to="/things?unfiled=attachments" size="sm" variant="outline" minHeight="44px">Unfiled files</Button> : null}
@@ -1745,6 +1767,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
             </Portal>
           </Menu>
         </Flex>
+        {!locationPicker && !builderMode && !folderId && !searchMode ? <LidarScanControls onSaved={() => { void fetchFolder(null); }} /> : null}
         {builderMode && <Flex alignItems="center" justifyContent="space-between" gap={3} wrap="wrap">
           <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
             {folderId ? 'This app contains independent Things. Moving one here changes its organization, not who can read it.' : 'Group pages, components, Actions, schemas and data into apps. Ungrouped Things remain in their type views.'}
@@ -2175,7 +2198,13 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 			{...deviceMenu.menuProps}
 			meta={menuDeviceId ? { path: deviceStore.devices.find((device) => device.deviceId === menuDeviceId)?.summary?.name || 'Device', type: 'Device' } : undefined}
 			model={deviceMenuModel}
-			onAction={({ action }) => { if (action.command === 'inspect-device' && menuDeviceId) openDeviceQuickView(menuDeviceId); }}
+			onAction={({ action }) => {
+        if (action.command === 'inspect-device' && menuDeviceId) openDeviceQuickView(menuDeviceId);
+        if (action.command === 'show-device-folder' && menuDeviceId && user?.id && dataPlane) {
+          void openDeviceCloudFolder({ deviceId: menuDeviceId, ownerId: user.id, dataPlane, requests: api.v1.deviceFolders,
+            isCurrent: () => mounted.current && deviceFolderScope.current.ownerId === user.id && deviceFolderScope.current.dataPlane === dataPlane, navigate }).catch(cause => lopu({ title: 'Device folder unavailable', description: cause instanceof Error ? cause.message : 'Refresh this device and retry.', status: 'error' }));
+        }
+      }}
 		/>
     </Flex>
   );

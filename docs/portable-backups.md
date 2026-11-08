@@ -970,3 +970,61 @@ signup/upload/file/Timeline handlers, a private replica and the durable local
 object adapter. This phase does not establish public restore/jobs/UI, complete
 managed/account/security adapters, live S3/provider durability, installed/native
 acceptance or measured 100 GB–100 TB operation. `wholeAccountReady` stays false.
+
+
+### Bounded authenticated Workflow continuation
+
+The server coordinator uses private `backup-job`/`backup-job-event` control Things,
+home-plane storage accounting and the original full account session reference.
+It does not persist a JWT. The ID-only Workflow obtains its run identity inside
+the supported Vercel runtime; pause/cancel invalidate the lease, and retry/resume
+fence out an older sleeping run. Cursor and hash references advance in one
+session/lease-fenced transaction. An uncertain accepted reply is recovered from
+its original operation and immutable receipt, never from a newly allocated job.
+Generic Things, inherited reads, export and bulk operations cannot expose or
+mutate those control roots. This is a server authority boundary, not a UI rule.
+
+The source producer selects BSON `atClusterTime` before any payload pages, then
+uses that exact timestamp across bounded census/dependency reads. Its immutable
+reference index and contexts continue entirely from retained approved sidecars
+once census finishes. A transient snapshot error retries the same timestamp;
+expired history fails closed and requires a new operation. Processing batch sizes
+are not account limits. The snapshot history window still bounds source census
+feasibility; small synthetic cadence evidence does not prove large-account
+capture can finish within a deployed provider's history window.
+
+`backupEngine.server.ts` composes that producer, exact-version attachment range
+capture, canonical multipart fingerprint verification and canonical v1 manifest
+hashing. Worker instances retain fixed scalar cursors, not an in-memory complete
+catalogue or a durable SQLite connection. Current object reads and exact seal
+readback anchor completion. Bounded internal API transport reuses normal retained
+content/upload/Files handlers and releases trusted Request bindings on deadline
+or cancellation. Cancellation does not undo effects already accepted; retries
+retain operation identities and receipts.
+
+SHA-256 save/load is pinned to `hash-wasm` 4.12.0 and its SHA-256 implementation.
+Saved state can contain plaintext tails. AES-256-GCM state therefore stays only in
+private independent backup objects under the same encryption/access/retention
+boundary as backed-up content. The protected coordinator retains opaque hashes,
+offsets and fixed references. Each hash stream has its own operation UUID; a job
+UUID is never reused across all streams. Per-job keys derive transiently through
+the canonical user vault key, with exact origin/account/job/destination binding;
+unknown rotation fails closed. No key or hasher tail is an ordinary Thing field.
+
+The public workspace composes the selected-graph review/restore engine and
+editable UI over these mechanisms. Real isolated HTTP/replica/Chrome acceptance
+covers creation, review, current/historical bytes, ordinary content and Builder
+save/reload; it uses an independent private local store and a fixture-owned
+bounded runner. Deployed Vercel Workflow/cron scheduling and actual independent
+provider recovery remain separate required gates. Destination discovery retains
+`executionAvailable:false`: configured storage is not a provider durability
+claim. Retained file history and ordinary current graph support do not imply
+whole-account/provider completeness; original ordinary Timeline history remains
+archived rather than imported.
+
+A worker-only catalog stage prepares full source paths from retained exact-T
+parent/name descriptors, with 32-edge continuation and immutable path caching.
+Browsing reads prepared pages and origin/account/seal-bound continuations, never
+live source folders. Very large names or paths have explicitly labelled bounded
+display previews; their full original metadata stays chunked and lossless for
+review/restore. The display preview is not a source-name or data-size limit.

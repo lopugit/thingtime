@@ -27,6 +27,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/devices/node/identity': () => import('../../../app/routes/api/v1/devices/node/identity/_identity'),
   'v1/devices/disconnect': () => import('../../../app/routes/api/v1/devices/disconnect/_disconnect'),
   'v1/files/batches': () => import('../../../app/routes/api/v1/files/batches/_batches'),
+  'v1/files/sync-transfer-admissions': () => import('../../../app/routes/api/v1/files/sync-transfer-admissions/_sync-transfer-admissions'),
   'v1/files': () => import('../../../app/routes/api/v1/files/_files'),
   'v1/lopu/network': () => import('../../../app/routes/api/v1/lopu/network/_network'),
   'v1/lopu/tasks': () => import('../../../app/routes/api/v1/lopu/tasks/_tasks'),
@@ -172,7 +173,10 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/chats/settings': () => import('../../../app/routes/api/v1/chats/settings/_settings'),
   'v1/chats/update': () => import('../../../app/routes/api/v1/chats/update/_update'),
   'v1/chats/updates': () => import('../../../app/routes/api/v1/chats/updates/_updates'),
+	'v1/backups/workspace': () => import('../../../app/routes/api/v1/backups/workspace/_workspace'),
+	'v1/backups/run': () => import('../../../app/routes/api/v1/backups/run/_run'),
 	'v1/backups/destinations': () => import('../../../app/routes/api/v1/backups/destinations/_destinations'),
+	'v1/devices/folders': () => import('../../../app/routes/api/v1/devices/folders/_folders'),
 	'v1/devices': () => import('../../../app/routes/api/v1/devices/_devices'),
 	'v1/devices/approvals': () => import('../../../app/routes/api/v1/devices/approvals/_approvals'),
 	'v1/devices/sync-control': () => import('../../../app/routes/api/v1/devices/sync-control/_sync-control'),
@@ -316,6 +320,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/tokens/revoke': () => import('../../../app/routes/api/v1/tokens/revoke/_revoke'),
   'v1/tokens/self': () => import('../../../app/routes/api/v1/tokens/self/_self'),
   'v1/sitemap': () => import('../../../app/routes/api/v1/sitemap/_sitemap'),
+	'v1/things/metadata': () => import('../../../app/routes/api/v1/things/metadata/_metadata'),
 	'v1/things/reveal': () => import('../../../app/routes/api/v1/things/reveal/_reveal'),
 	'v1/vault/reveal': () => import('../../../app/routes/api/v1/vault/reveal/_reveal'),
   'v1/users/activity': () => import('../../../app/routes/api/v1/users/activity/_activity'),
@@ -427,6 +432,7 @@ export default defineHandler(async (event) => {
   }
 
   if (shouldProxyApiToFallback(event.req)) {
+    if (path === 'v1/files/sync-transfer-admissions') return jsonResponse({ ok: false, error: 'File transfer admissions require this configured origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/ai/chatgpt-plan' && process.env.THINGTIME_DESKTOP_API_MODE !== 'remote') return jsonResponse({ ok: false, available: false, error: 'Choose a configured local or self-hosted account runtime for ChatGPT plan usage.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/mail/google/callback') return jsonResponse({ ok: false, error: 'Google callback requires this configured origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/integrations/ios-release') return jsonResponse({ ok: false, error: 'Configure iOS release delivery on this origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });

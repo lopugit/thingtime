@@ -114,11 +114,20 @@ export const deviceSyncResourceBlocks: WebpageBlock[] = migrateDeviceSyncResourc
  { ...text('device-resource-status', 'p', '{deviceResources.status}'), css: { 'min-height': '1.5em' } },
  { id: 'device-resource-bars', type: 'element', tag: 'div', css: { display: 'grid', 'grid-template-columns': 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '16px' }, children: [meter('transfer', 'Upload + download'), meter('scan', 'File-content scan'), meter('cpu', 'Sync CPU'), meter('memory', 'Indexer memory')] },
  text('device-resource-directions', 'p', '{deviceResources.directions}'),
- text('device-resource-scope', 'p', 'Device-wide budgets are shared by all connections, including background runs. CPU is an adaptive target for Sync work, as a share of total device CPU capacity. Directory discovery is paced by CPU and worker backpressure; Mbps measures file-content reads.'),
- { id: 'device-resource-settings', type: 'element', tag: 'details', children: [text('device-resource-settings-summary', 'summary', 'Device resource targets'),
+ text('device-resource-scope', 'p', '{deviceResources.policyDescription}'),
+ { id: 'device-resource-settings', type: 'element', tag: 'details', props: { hidden: '{deviceResources.targetsUnavailable}' }, children: [text('device-resource-settings-summary', 'summary', 'Device resource targets'),
  ...(['transfer', 'scan', 'cpu'] as const).flatMap(name => [text(`${name}-target-label`, 'label', name === 'cpu' ? 'CPU target (%)' : name === 'scan' ? 'Scan budget (Mbps)' : 'Shared transfer budget (Mbps)', { for: `{deviceResources.${name}Id}` }),
  { id: `${name}-target-input`, type: 'element', tag: 'input', props: { id: `{deviceResources.${name}Id}`, name, type: 'number', min: name === 'cpu' ? 1 : '0.000001', ...(name === 'cpu' ? { max: 100 } : {}), step: name === 'cpu' ? 1 : 'any', value: `{deviceResources.${name}Target}`, disabled: '{deviceResources.disabled}', 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation: `target-${name}` }, 'aria-label': name === 'cpu' ? 'CPU target (%)' : `${name} budget (Mbps)` }, css: { display: 'block', width: '100%', 'box-sizing': 'border-box', 'min-width': '0', 'min-height': '40px', padding: '8px', 'margin-bottom': '8px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px' } } as WebpageBlock]),
  { ...text('device-resource-save', 'button', 'Save device targets', { type: 'button', disabled: '{deviceResources.disabled}', 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation: 'save-targets' } }), css: { 'min-height': '44px', padding: '10px 16px', background: 'var(--tt-accent, #7864d9)', color: '#fff', 'border-radius': '8px', 'font-weight': '600', cursor: 'pointer', 'justify-self': 'start' } },
  text('device-resource-persistence', 'p', 'Saved for this device, account and server. Lower connection limits still apply. Transfer changes apply to subsequent chunks; active scan and CPU capture budgets update when the next capture starts. No paused connection is resumed.'),
  text('device-resource-error', 'p', '{deviceResources.error}', { role: 'status' }) ] }
 ]}]);
+
+export function withDeviceResourceAvailability(blocks: WebpageBlock[]): WebpageBlock[] {
+ const visit = (block: WebpageBlock): WebpageBlock => ({ ...block,
+  ...(block.id === 'device-resource-scope' && block.text === 'Device-wide budgets are shared by all connections, including background runs. CPU is an adaptive target for Sync work, as a share of total device CPU capacity. Directory discovery is paced by CPU and worker backpressure; Mbps measures file-content reads.' ? { text: '{deviceResources.policyDescription}' } : {}),
+  ...(block.id === 'device-resource-settings' ? { props: { ...block.props, hidden: '{deviceResources.targetsUnavailable}' } } : {}),
+  ...(block.children ? { children: block.children.map(visit) } : {})
+ });
+ return blocks.map(visit);
+}
