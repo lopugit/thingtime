@@ -1015,8 +1015,11 @@ suppresses only an exact managed root already represented by its Device card;
 search, folder-only views and location pickers retain normal folder results.
 
 `SyncFolderCard` has an editable quick action outside collapsed settings,
-with separate error and destination fields. Remote cards share that behavior.
-Photos sources show their virtual source label rather than a missing POSIX path.
+with separate error and destination fields. The remote command worker runs
+on paired Macs. Remote iPhone and Android panels show saved settings, and
+the current iPhone can jump to its local transfer controls. Mounted panels
+share verified saved revisions for the same owner, origin and device.
+Photos sources display their virtual source label.
 The native-only compact Things entry links to `/things?deviceSetup=1`; that
 page reuses normal device pairing and folder-grant controls.
 
@@ -1059,14 +1062,19 @@ admission and queues a bounded set of already planned originals in
 See the [iOS runbook](../../iOS/README.md#deferred-photos-transfers) and the
 iOS deferred Photos checklist for installed and physical acceptance.
 
-Explicit iOS Start/Retry can recover a changed Photos cloud destination for
-the same authorized grant and deletion-free backup policy. After verifying the
-saved revision, device access and new folder, it disarms the old native queue,
-then atomically archives the old operation/review pointers and admits a fresh
-job. The new folder is planned from current observations, with a new native
-Photos queue epoch. The old cloud copies and their history stay where they
-were, and the normal Wi-Fi and power gates still apply. Verify the real
-legacy/paged runner boundary with `photoDestinationRecovery.test.ts`.
+Explicit iOS Start/Retry recovers changed Photos backup settings for the same
+authorized grant and device with cloud copies retained. It verifies the current
+saved revision, native grant and destination, disarms the prior native queue
+and verifies the current settings again before atomically archiving the old
+operation/review pointers and admitting a fresh job. The new queue epoch
+reconciles current observations against the saved folder. Already copied files
+keep their revisions, and the saved network and charging rules still apply.
+A repeat retry of the exact revision resumes the current epoch. The root lock
+and live configuration check fence new dispatches under the old settings. If
+an earlier unguarded file publication is already in flight at the server,
+a same-folder rescan can still race that commit. The earlier journal and any
+published revision remain available. Verify both journal formats and the
+signed upload path with `photoSettingsRecovery.test.ts`.
 
 Photos installed acceptance uses `iOS/ThingtimeUITests/PhotoLibraryConsentUITests.swift`
 and `iOS/scripts/test-mobile-sync-installed.sh`: ordinary consent, same-grant

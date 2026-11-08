@@ -2,7 +2,7 @@ import { deviceSyncHistoryJournal, upgradeDeviceSyncHistoryJournal } from './dev
 import { syncPriorityJournal, upgradeSyncPriorityJournal } from './syncPriorityJournal';
 import { upgradeJournalRetention } from './journalRetention';
 import { syncJobJournal, upgradeSyncJobJournal } from './syncJobJournal';
-import { previousPhotoRunKey } from './photoDestinationJournal';
+import { previousPhotoRunKey } from './photoSettingsJournal';
 import { journalMaintenance } from './journalMaintenance';
 import { PAGED_CHECKPOINT_HEADS, validateSyncCheckpoint, type SyncCheckpoint } from './checkpoint';
 import { validateSyncRun, type SyncRun } from './execute';
@@ -70,7 +70,7 @@ export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 't
 			refusePagedRun(tx, key, reject);
 			const parked = store.getKey(previousPhotoRunKey(key, run.id));
 			parked.onsuccess = () => {
-				if (parked.result !== undefined) { reject(Error('The Photos transfer belongs to the previous destination.')); tx.abort(); }
+				if (parked.result !== undefined) { reject(Error('The Photos transfer belongs to earlier settings.')); tx.abort(); }
 			};
 			request.onsuccess = () => {
 				try {

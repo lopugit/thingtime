@@ -1,6 +1,7 @@
 import { iosManagedSyncResources, IOS_SYNC_RESOURCE_STATUS } from './deviceSyncResourceDisplay';
 import { prepareExplicitSyncStart } from '~/fileSync/configurationStart';
 import { SyncDestinationControl } from './SyncDestinationControl';
+import { hasSavedSyncDraft, observeSavedSyncConnections, publishSavedSyncConnection, reconcileSavedSyncList } from './savedSyncConnectionUpdates';
 import { syncConnectionGlance } from '~/fileSync/connectionGlance';
 import { SyncConditionsWait } from '~/fileSync/foregroundSyncContext';
 import { photoDownloadPreparation, photoQueueDisplay, syncFolderActivityLabel, type PhotoQueueProgress } from './syncFolderCardBlocks';
@@ -183,6 +184,7 @@ function Connections({
 			}
 		});
 	});
+	const connectionsRef = useRef(connections);
 	const [transfers, setTransfers] = useState<Record<string, ConnectionProgress>>({});
 	const [progressDescriptors, setProgressDescriptors] = useState<Record<string, SyncProgressDescriptor | undefined>>({});
 	const [inventoryDescriptors, setInventoryDescriptors] = useState<Record<string, SyncInventoryDescriptor | undefined>>({});
@@ -228,9 +230,20 @@ function Connections({
 		setStorageError('');
 	};
 	const cache = (next: SavedFileSyncConfiguration[]) => {
+		connectionsRef.current = next;
 		setConnections(next);
 		writeStampedCache(cacheKey, next);
 		pruneCacheNamespace('tt:sync-connections:', cacheKey, 32);
+	};
+	const remember = (saved: SavedFileSyncConfiguration) => {
+		const rows = connectionsRef.current;
+		const current = rows.find(row => row.id === saved.id);
+		if (current && Date.parse(current.updatedAt) > Date.parse(saved.updatedAt)) return false;
+		cache(current ? rows.map(row => row.id === saved.id ? saved : row) : [saved, ...rows]);
+		return true;
+	};
+	const acceptSave = (saved: SavedFileSyncConfiguration) => {
+		if (remember(saved)) publishSavedSyncConnection(scope, generation, saved);
 	};
 	const run = async (work: (assertActive: () => void) => Promise<void>, connectionId?: string) => {
 		if (controller.current) return;
@@ -262,6 +275,7 @@ function Connections({
 	};
 	const load = async (kind: 'connections' | 'folders', cursor?: string | null) => {
 		const active = controller.current!;
+		const before = connectionsRef.current;
 		const result = await apiRef.current.v1.things.list({ thingtime: kind === 'connections' ? 'file-sync' : 'folder', limit: 50, cursor }, options());
 		active.signal.throwIfAborted();
 		assertCurrent();
@@ -276,7 +290,7 @@ function Connections({
 				} catch {
 					skipped++;
 				}
-			cache([...new Map([...(cursor ? connections : []), ...accepted].map((row) => [row.id, row])).values()]);
+			cache(reconcileSavedSyncList(before, connectionsRef.current, accepted, !!cursor));
 			setConnectionCursor(result.nextCursor ?? null);
 			if (skipped) setNotice('Some shared or invalid connections are excluded. You can review them in Things.');
 		} else {
@@ -287,6 +301,10 @@ function Connections({
 		}
 	};
 	useEffect(() => {
+		const unsubscribe = observeSavedSyncConnections(scope, generation, saved => {
+			const identity = rootIdentity.read();
+			if (mounted.current && !identity.pending && identity.generation === generation && runtimeOrigin() === scope.origin) remember(saved);
+		});
 		void run(async () => {
 			await load('connections');
 			await load('folders');
@@ -307,6 +325,7 @@ function Connections({
 		document.addEventListener('visibilitychange', hidden);
 		window.addEventListener('storage', changed);
 		return () => {
+			unsubscribe();
 			controller.current?.abort();
 			controller.current = null;
 			window.removeEventListener('storage', changed);
@@ -329,16 +348,25 @@ function Connections({
 		}
 	};
 	const progressKey = (id: string) => 'tt:sync-progress:' + syncScopeKey({ ...scope, rootId: id });
-	const transfer = (requested: SavedFileSyncConfiguration) => {
+	const transfer = (id: string) => {
 		void run(async (assertActive) => {
+			const requested = connectionsRef.current.find(row => row.id === id);
+			if (!requested) throw Error('Refresh this device’s connections before continuing.');
             const saved = await prepareExplicitSyncStart(requested, scope, {
                 assertCurrent: assertActive,
-                hasDraft: id => !draftJournalCurrent.current || retainedDrafts.current.has(id),
-                get: async id => (await apiRef.current.v1.things.get({ id }, options())).thing,
-                update: async (id, configuration, expectedUpdatedAt) => (await apiRef.current.v1.things.update({ id, crystal: { paused: configuration.paused }, expectedUpdatedAt }, options())).thing
+                hasDraft: id => !draftJournalCurrent.current || retainedDrafts.current.has(id) || hasSavedSyncDraft(scope, id),
+                get: async id => {
+                    const value = (await apiRef.current.v1.things.get({ id }, { ...options(), expectedApiOrigin: scope.origin })).thing;
+                    assertActive();
+                    const current = readOwnedFileSyncConfiguration(value, scope.ownerId);
+                    if (current.id === id && current.configuration.deviceId === scope.deviceId && !remember(current))
+                        throw Error('This connection changed elsewhere. Review its saved settings before starting. No transfer was started.');
+                    return value;
+                },
+                update: async (id, configuration, expectedUpdatedAt) => (await apiRef.current.v1.things.update({ id, crystal: { paused: configuration.paused }, expectedUpdatedAt }, { ...options(), expectedApiOrigin: scope.origin })).thing
             });
             assertActive();
-            cache(connections.map(row => row.id === saved.id ? saved : row));
+            acceptSave(saved);
             if (appOwned) {
                 void startNativeSyncTask(saved, { ...scope, rootId: saved.id }, generation).catch(cause => {
                     if (mounted.current && !rootIdentity.read().pending && rootIdentity.read().generation === generation && runtimeOrigin() === scope.origin) {
@@ -531,7 +559,7 @@ function Connections({
 				journal?.close();
 				if (mounted.current) setActiveTransfer(null);
 			}
-		}, requested.id);
+		}, id);
 	};
 	const start = () =>
 		edit({
@@ -623,7 +651,7 @@ function Connections({
 			assertCurrent();
 			persist(null);
 			setConflict(null);
-			cache([saved, ...connections.filter((row) => row.id !== saved.id)]);
+			acceptSave(saved);
 			setNotice('Connection saved. Supported transfers can run while this app stays open.');
 		});
 	return (
@@ -736,7 +764,7 @@ function Connections({
                         photoQueue={photoQueue}
                         quickAction={{ label: actionLabel,
                             disabled: running ? !!task?.stopping : !allowed || busy || retainedDrafts.current.has(saved.id) || !ready,
-                            run: () => { if (running) { if (task?.active) return pauseNativeSyncJob(task.scope, generation).catch(cause => setError(cause instanceof Error ? cause.message : 'Pause could not be saved.')); controller.current?.abort(); } else transfer(saved); }
+                            run: () => { if (running) { if (task?.active) return pauseNativeSyncJob(task.scope, generation).catch(cause => setError(cause instanceof Error ? cause.message : 'Pause could not be saved.')); controller.current?.abort(); } else transfer(saved.id); }
                         }}
 						description={saved.configuration.mode === 'backup' ? 'Backup to cloud · keep deleted files' : twoWay ? 'Two-way sync' : downloading ? 'Cloud to device' : 'Device to cloud'}
 						glance={syncConnectionGlance({ deviceLabel: capabilities?.platform === 'ios' ? 'iPhone' : capabilities?.platform === 'android' ? 'Device' : 'Mac', progress, online: rootsReady, active: running, paused: saved.configuration.paused || taskPaused, waiting, preparing: !!preparation, mode: saved.configuration.mode, ...(task?.transferSeries ? { rates: { upload: task.transferSeries.read({ direction: 'upload', unit: 'Mbps', windowMs: 5000 }), download: task.transferSeries.read({ direction: 'download', unit: 'Mbps', windowMs: 5000 }) } } : {}) })}

@@ -26,7 +26,7 @@ import { readCloudFolderInventoryPages } from './cloudInventoryPages.client';
 import { readCloudFolderInventory } from './cloudInventory.client';
 import { CLOUD_FOLDER_REQUIREMENTS, parseCloudFolder } from './cloudFolder';
 import { cloudRequests } from './cloudTransport';
-import { preparePhotoDestinationRecovery } from './photoDestinationRecovery';
+import { preparePhotoSettingsRecovery } from './photoSettingsRecovery';
 import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { runNativePhotoQueue, runPhotoBackupPasses } from './photoBackupPasses';
@@ -299,7 +299,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 						captureId: prior.nativeCaptureId, capturePolicy: 'backup-supported', excludedPaths: configuration.excludedPaths,
 						...(configuration.ignoreRules ? { ignoreRules: configuration.ignoreRules } : {}) }, signal); check();
 				};
-				const photoDestination = !resume && photoSource && adapter.platform === 'ios' ? await preparePhotoDestinationRecovery(
+				const photoSettings = !resume && photoSource && adapter.platform === 'ios' ? await preparePhotoSettingsRecovery(
 					journal!, { scope: binding, currentScope, signal }, prior, reviewed, {
 						check,
 						verify: async () => {
@@ -321,21 +321,21 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 								const retired = await request(binding.ownerId, { action: 'cancel-deferred-upload',
 									rootId: localRootId, configurationId: reviewed.id, deviceId: binding.deviceId }, signal);
 								if (retired.cancelled !== true)
-									throw Error('The earlier Photos transfer could not be disarmed. Retry before starting the new destination.');
+									throw Error('The earlier Photos transfer could not be disarmed. Retry before starting with the saved settings.');
 							}
 						}
 					}
 				) : undefined;
 				// A new approved revision cannot borrow the earlier native job.
 				// Cancel its same-connection scan before dropping that ticket.
-				if (!resume && !photoDestination && prior?.nativeCaptureId &&
+				if (!resume && !photoSettings && prior?.nativeCaptureId &&
 					(prior.state === 'paused' || JSON.stringify(prior.reviewed.configuration) === JSON.stringify(reviewed.configuration)) &&
 					JSON.stringify(prior.reviewed) !== JSON.stringify(reviewed)) await cancelPriorBackupCapture();
 				check();
-				admissionPending = resumeJob ? jobs!.begin(resumeJob, Date.now(), crypto.randomUUID()) : jobs!.admit(reviewed, crypto.randomUUID(), intervalMs, photoDestination);
+				admissionPending = resumeJob ? jobs!.begin(resumeJob, Date.now(), crypto.randomUUID()) : jobs!.admit(reviewed, crypto.randomUUID(), intervalMs, photoSettings);
 				job = await admissionPending;
 				if (!job) return; // A stopped/completed/replaced discovery is never replayed.
-				if (photoDestination) {
+				if (photoSettings) {
 					for (const prefix of ['tt:sync-progress:', 'tt:sync-inventory:', 'tt:sync-progress-tree:'])
 						clearLocalCache(prefix + syncScopeKey(binding));
 				}

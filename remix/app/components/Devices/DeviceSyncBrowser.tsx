@@ -9,17 +9,19 @@ import { rootIdentity } from '~/utils/rootIdentity';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
-import { deviceSyncOverviewBlocks } from './deviceSyncBlocks';
+import { deviceSyncOverviewBlocks, localMobileSyncBlocks } from './deviceSyncBlocks';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { SettingsSection } from '../Settings/SettingsSection';
 import { DesktopFolderAccess } from './DesktopFolderAccess';
 import { RemoteDeviceSync } from './RemoteDeviceSync';
+import { LOCAL_MOBILE_SYNC_ID } from './MobileDeviceSetupCard';
+import { mobileDeviceScope, observeMobileDevice, readMobileDeviceObservation } from './mobileDeviceObservations';
 import { getElectronBridge } from '~/utils/electronBridge';
 import { deviceThingsPageHref } from './deviceNavigation';
 import { deviceSyncFolders, deviceSyncedFilesHref, type DeviceSyncFolder } from './deviceSyncNavigation';
 
 const cache = new Map<string, DeviceSyncFolder[]>();
-export function DeviceSyncBrowser({ deviceId }: { deviceId: string }) {
+export function DeviceSyncBrowser({ deviceId, showResourceSummary = true }: { deviceId: string; showResourceSummary?: boolean }) {
 	const user = useCurrentUser(),
 		plane = useDataPlane(),
 		api = useApi(),
@@ -29,7 +31,7 @@ export function DeviceSyncBrowser({ deviceId }: { deviceId: string }) {
 	const ownerId = user?.id || '',
 		allowed = !!ownerId && !user?.temporary && user?.accountKind === 'user' && plane === 'home' && !identity.pending;
 	const key = JSON.stringify([typeof window === 'undefined' ? 'server' : window.location.origin, ownerId, plane, deviceId, identity.generation]);
-	return <><DeviceSyncResources key={key + ":resources"} {...{ deviceId, ownerId, allowed }} /><DeviceSyncBrowserContent key={key} {...{ deviceId, ownerId, allowed, scopeKey: key, apiRef }} generation={identity.generation} /></>;
+	return <>{showResourceSummary && <DeviceSyncResources key={key + ":resources"} {...{ deviceId, ownerId, allowed }} />}<DeviceSyncBrowserContent key={key} {...{ deviceId, ownerId, allowed, scopeKey: key, apiRef }} generation={identity.generation} /></>;
 }
 function DeviceSyncBrowserContent({
 	deviceId,
@@ -144,11 +146,13 @@ function DeviceSyncBrowserContent({
 }
 export function DeviceSyncPanel({
 	deviceId,
+	devicePlatform,
 	ownerId,
 	pairedDeviceIds = [],
 	ownedDeviceIds = []
 }: {
 	deviceId: string;
+	devicePlatform?: string;
 	ownerId?: string;
 	pairedDeviceIds?: readonly string[];
 	ownedDeviceIds?: readonly string[];
@@ -157,9 +161,14 @@ export function DeviceSyncPanel({
 	const [visited, setVisited] = React.useState(false);
 	const bridge = getElectronBridge();
 	const local = bridge?.platform === 'darwin' && !!bridge.folderSyncRequest && pairedDeviceIds.includes(deviceId);
+	const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
+	const mobileScope = typeof window !== 'undefined' && ownerId && !identity.pending ? mobileDeviceScope(window.location.origin, ownerId, identity.generation) : null;
+	const subscribe = React.useCallback((listener: () => void) => mobileScope ? observeMobileDevice(mobileScope, listener) : () => {}, [mobileScope]);
+	const observation = React.useSyncExternalStore(subscribe, () => mobileScope ? readMobileDeviceObservation(mobileScope) : undefined, () => undefined);
+	const localMobile = observation?.state === 'paired' && observation.deviceId === deviceId;
 	return (
 		<Box minWidth={0}>
-			<DeviceFolderControl key={deviceId} deviceId={deviceId} /><DeviceSyncBrowser deviceId={deviceId} />
+			<DeviceFolderControl key={deviceId} deviceId={deviceId} /><DeviceSyncBrowser deviceId={deviceId} showResourceSummary={local || devicePlatform === 'macos' || devicePlatform === 'darwin'} />
 			{ownerId && ownedDeviceIds.includes(deviceId) ? (
 				<SettingsSection
 					eyebrow="Manage sync connections"
@@ -169,7 +178,18 @@ export function DeviceSyncPanel({
 				>
 					{visited && local ? (
 						<DesktopFolderAccess showResourceSummary={false} active={managing} ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={pairedDeviceIds} ownedDeviceIds={ownedDeviceIds} />
-					) : visited ? <RemoteDeviceSync showResourceSummary={false} active={managing} ownerId={ownerId} deviceId={deviceId} /> : null}
+					) : visited ? <>
+						{localMobile && <SettingsDocumentHost documentKey="local-mobile-sync" defaultDocument={localMobileSyncBlocks} title="Local mobile sync" scopeKey={mobileScope!}>
+							{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={mobileScope!} enabled={!editing} scope={{ localSync: { href: `#${LOCAL_MOBILE_SYNC_ID}` } }} actions={{
+								'go-to-local-sync': () => {
+									const target = document.getElementById(LOCAL_MOBILE_SYNC_ID);
+									target?.focus({ preventScroll: true });
+									target?.scrollIntoView({ block: 'start' });
+								}
+							}}><WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} /></TransientBlockHost>}
+						</SettingsDocumentHost>}
+						<Box hidden={localMobile}><RemoteDeviceSync showResourceSummary={false} active={managing && !localMobile} ownerId={ownerId} deviceId={deviceId} devicePlatform={devicePlatform} /></Box>
+					</> : null}
 				</SettingsSection>
 			) : null}
 		</Box>
