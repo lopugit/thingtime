@@ -69,10 +69,12 @@ const photoBatchId = crypto.randomUUID(), finalPhotoBatchId = crypto.randomUUID(
 type NativeFixtureRun = {
  revision: string; queueId: string; progress: NativePhotoRunProgress; retryAt: number;
  confirmedPayload: number[] | null;
+ leaseExpired?: boolean;
 };
 let nativeRun: NativeFixtureRun | null = nativeOnly ? JSON.parse(localStorage.getItem(nativeRunKey) ?? 'null') : null;
 const nativeCalls: Array<{ action: string; execution?: string; revision?: string }> = [];
 const webTransfers: string[] = [];
+let folderSlot: string | undefined, nativeFolderContentions = 0;
 let nativeTimer: ReturnType<typeof setTimeout> | undefined;
 let declineNextContinuation = true;
 const nativeHint = () => {
@@ -86,7 +88,8 @@ const persistNativeRun = () => {
 };
 const scheduleNativeFixture = () => {
  clearTimeout(nativeTimer);
- if (!nativeRun || !['waiting', 'uploading'].includes(nativeRun.progress.stage)) return;
+ if (!nativeRun || nativeRun.leaseExpired || nativeRun.progress.continuation === 'held' ||
+     nativeRun.progress.minimumPartBytes !== undefined || !['waiting', 'uploading'].includes(nativeRun.progress.stage)) return;
  nativeTimer = setTimeout(() => {
   if (!nativeRun) return;
   if (nativeRun.progress.stage === 'waiting') {
@@ -149,9 +152,15 @@ if (photoRecovery || mobilePanel) {
    const request = message.payload as any;
    const { requestId, ownerId: owner, origin, action, rootId, configurationId, deviceId: device } = request;
    if (owner !== ownerId || origin !== location.origin) throw Error('Unexpected native scope');
-   if (action === 'suspend') return;
-   const reply = (type: string, payload: object) => window.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, {
-    detail: { type, payload: { requestId, ownerId: owner, origin, ...payload } } }));
+   if (action === 'suspend') {
+    if (message.type === 'mobile-files' && folderSlot === requestId) folderSlot = undefined;
+    return;
+   }
+   const reply = (type: string, payload: object) => {
+    if (type === 'mobile-files-result' && folderSlot === requestId) folderSlot = undefined;
+    window.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, {
+     detail: { type, payload: { requestId, ownerId: owner, origin, ...payload } } }));
+   };
    if (message.type === 'mobile-device' && action === 'status') {
     pairingReads++;
     if (holdPairing) {
@@ -160,6 +169,18 @@ if (photoRecovery || mobilePanel) {
      return;
     }
     reply('mobile-device-result', { state: 'paired', deviceId }); return;
+   }
+   // Build 53 accepts only one normal folder request. Pause denials
+   // bypass the slot, and suspend releases only the matching operation.
+   if (nativeOnly && message.type === 'mobile-files' && !['cancel-deferred-upload', 'pause-photo-runs'].includes(action)) {
+    if (folderSlot) {
+     nativeFolderContentions++;
+     reply('mobile-files-result', { error: 'Another folder request is running.' });
+     return;
+    }
+    folderSlot = requestId;
+    await new Promise(resolve => setTimeout(resolve, 80));
+    if (folderSlot !== requestId) return;
    }
    if (nativeOnly && ['arm-photo-run', 'photo-run-status', 'cancel-deferred-upload', 'run-photo-in-background'].includes(action)) {
     const id = request.authorization?.id ?? configurationId;
@@ -179,6 +200,12 @@ if (photoRecovery || mobilePanel) {
         confirmed: nativeRun?.progress.confirmed ?? { photos: 2, videos: 1, other: 0, wifiBytes: 1_048_576, mobileBytes: 2_097_152, unknownBytes: 524_288 }
        } };
       persistNativeRun(); scheduleNativeFixture();
+     } else if (nativeRun.leaseExpired) {
+      if (nativeRun.progress.continuation === 'held' || nativeRun.progress.minimumPartBytes)
+       throw Error('Waiting for user or policy must not rearm the native queue');
+      nativeRun.leaseExpired = false;
+      nativeRun.progress = { stage: 'complete', pendingOriginals: 0, confirmed: nativeRun.progress.confirmed };
+      persistNativeRun();
      }
      reply('mobile-files-result', { ...result, configurationRevision: nativeRun.revision,
       photoRunArmed: true, scheduled: true, nativeOwnsRun: true, photoRunProgress: nativeRun.progress });
@@ -295,7 +322,16 @@ Object.assign(window, { remoteSyncFixture: {
  reset() { localStorage.clear(); },
  photoRecovery: async () => ({ events: photoEvents, job: await readPhotoJob(), oldPhotoEpoch, uploaded: [...photoUploads.values()].filter(row => row.bytes), files: [...photoFiles.values()] }),
  photoScanCount: () => photoEvents.filter(event => event.type === 'scan-capture').length,
- nativeOnlyState: () => structuredClone({ nativeRun, nativeCalls, webTransfers }),
+ nativeOnlyState: () => structuredClone({ nativeRun, nativeCalls, webTransfers, nativeFolderContentions }),
+ setNativePhotoWait(reason: 'expired' | 'held' | 'budget') {
+  if (!nativeRun?.confirmedPayload) throw Error('The native receipt is missing');
+  clearTimeout(nativeTimer);
+  nativeRun.leaseExpired = reason !== 'budget';
+  nativeRun.progress = { stage: 'waiting', confirmed: nativeRun.progress.confirmed, pendingOriginals: 1,
+   ...(reason === 'held' ? { continuation: 'held' as const } : {}),
+   ...(reason === 'budget' ? { syncWait: 'data-budget' as const, minimumPartBytes: 8_388_608 } : { syncWait: 'network' as const }) };
+  persistNativeRun();
+ },
  expirePhotoContinuation() {
   if (!nativeRun || nativeRun.progress.continuation !== 'active') throw Error('No continued Photos task is active');
   clearTimeout(nativeTimer);

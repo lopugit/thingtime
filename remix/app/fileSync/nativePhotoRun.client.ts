@@ -53,8 +53,14 @@ export async function armNativePhotoRun(input: {
 				if (automatic) {
 					const status = await readNativePhotoRunProgress(scope.ownerId, statusScope, signal, host.request); check();
 					const progress = status.photoRunProgress;
-					if (status.configurationRevision === reviewed.updatedAt && progress &&
-						(progress.stage !== 'paused' || progress.continuation === 'held')) return;
+					if (status.configurationRevision === reviewed.updatedAt && progress) {
+						// Build 53 reports expired authority as waiting without a retry date.
+						// A live run can look the same. Rechecking its exact binding is
+						// idempotent, and native retains the same checkpoint on renewal.
+						const needsAuthorityCheck = progress.stage === 'waiting' && progress.retryAt === undefined &&
+							progress.minimumPartBytes === undefined && progress.continuation === undefined;
+						if (progress.continuation === 'held' || (progress.stage !== 'paused' && !needsAuthorityCheck)) return;
+					}
 				}
 				const { roots } = await host.request(scope.ownerId, { action: 'list' }, signal); check();
 				assertPhotoSourcePolicy(reviewed.configuration, roots);

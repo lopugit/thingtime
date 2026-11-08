@@ -12274,6 +12274,17 @@ transfer, whole-account snapshots or production deployment.
   occupied paths remain a review state. Confirm Run in Background only comes
   from its explicit control, uses the existing native queue, and handles iOS
   refusal, expiration, user Resume and true completion.
+- Open Device setup while iOS launch discovery reads folder access and native
+  backup status. Build 53 accepts one normal folder request at a time. Verify
+  the card shows native status without a busy error, an abandoned queued
+  request never suspends the active one, an account or origin change drops
+  stale queued work, and Pause still reaches native immediately. A busy status
+  read may retry once. An unconfirmed arm must be checked before sending again.
+- Let the native run authorization expire at the same saved revision. On the
+  next five-minute check, verify the browser reauthorizes the exact current
+  binding. A live binding returns its existing handle. An expired binding
+  renews without losing the native checkpoint or confirmed receipts. Verify
+  a continuation hold or a data budget below one part remains waiting.
 - On a physical device, compare Wi-Fi and cellular managed-upload bytes and
   newly confirmed asset counts with the summary notification. Check Live Photo
   resource counting, quiet periods, notification Off, denied notification

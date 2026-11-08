@@ -54,6 +54,7 @@ try {
      const backgroundAction = card.getByRole('button', { name: 'Run in Background', exact: true });
      assert.equal(await backgroundAction.count(), 0, 'a condition-blocked run cannot request background continuation');
      const initial = await state();
+     assert.equal(initial.nativeFolderContentions, 0, 'launch discovery, folder access and native status share one slot');
      const due = await page.evaluate(() => window.remoteSyncFixture.nativeOnlyState().nativeRun.retryAt - Date.now());
      assert.ok(due > 0 && due <= 300_000);
      await page.clock.fastForward(due + 10);
@@ -95,6 +96,7 @@ try {
      assert.deepEqual(background.nativeRun.confirmedPayload, [7, 8, 9]);
      assert.equal(background.nativeRun.progress.confirmed.mobileBytes, 2_097_155);
      assert.deepEqual(background.webTransfers, []);
+     assert.equal(background.nativeFolderContentions, 0);
      await page.evaluate(() => window.remoteSyncFixture.setAppHidden(false));
      await card.getByText('3 photos · 1 video confirmed', { exact: true }).waitFor();
      await card.getByText('Last transfer finished.', { exact: true }).waitFor();
@@ -105,6 +107,24 @@ try {
      await card.getByText('3 photos · 1 video confirmed', { exact: true }).waitFor();
      assert.equal((await state()).nativeRun.queueId, initial.nativeRun.queueId);
      assert.equal((await state()).nativeCalls.filter(call => call.action === 'arm-photo-run').length, 0);
+     for (const reason of ['held', 'budget']) {
+      await page.evaluate(reason => window.remoteSyncFixture.setNativePhotoWait(reason), reason);
+      await page.reload();
+      await card.getByText(reason === 'held' ? /Background processing stopped/ : /One upload part needs at least/).waitFor();
+      await page.waitForFunction(() => window.remoteSyncFixture.nativeOnlyState().nativeCalls.filter(call => call.action === 'photo-run-status').length >= 3);
+      await page.clock.runFor(500);
+      assert.equal((await state()).nativeCalls.filter(call => call.action === 'arm-photo-run').length, 0,
+       reason + ' wait does not renew the native run');
+     }
+     await page.evaluate(() => window.remoteSyncFixture.setNativePhotoWait('expired'));
+     await page.reload();
+     await card.getByText('Last transfer finished.', { exact: true }).waitFor();
+     const renewed = await state();
+     assert.equal(renewed.nativeCalls.filter(call => call.action === 'arm-photo-run').length, 1);
+     assert.equal(renewed.nativeRun.queueId, initial.nativeRun.queueId);
+     assert.deepEqual(renewed.nativeRun.confirmedPayload, [7, 8, 9]);
+     assert.equal(renewed.nativeRun.progress.confirmed.mobileBytes, 2_097_155);
+     assert.deepEqual(renewed.webTransfers, []);
      await card.getByRole('button', { name: 'Pause sync', exact: true }).click();
      await card.getByRole('button', { name: 'Resume automatic backup', exact: true }).waitFor();
      await page.reload();
