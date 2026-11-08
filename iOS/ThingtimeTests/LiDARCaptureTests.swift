@@ -1,3 +1,4 @@
+import CoreGraphics
 import CoreVideo
 import Foundation
 import simd
@@ -91,6 +92,41 @@ final class LiDARCaptureTests: XCTestCase {
         XCTAssertTrue(try LiDARCaptureStore.isDiscarded(id: header.captureID, directory: directory))
         XCTAssertNil(try LiDARCaptureStore.recover(id: header.captureID, directory: directory))
         XCTAssertNil(try LiDARCaptureStore.readSealedCapture(id: header.captureID, directory: directory))
+    }
+
+    func testCameraBufferArchivesMixedColorAttachments() throws {
+        let (directory, header) = try fixture()
+        defer { try? FileManager.default.removeItem(at: directory.deletingLastPathComponent()) }
+        let store = try LiDARCaptureStore(header: header, directory: directory)
+        let image = try buffer(format: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange)
+        let colorSpace = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+        CVBufferSetAttachment(image, kCVImageBufferYCbCrMatrixKey, kCVImageBufferYCbCrMatrix_ITU_R_709_2, .shouldPropagate)
+        CVBufferSetAttachment(image, kCVImageBufferColorPrimariesKey, kCVImageBufferColorPrimaries_ITU_R_709_2, .shouldPropagate)
+        CVBufferSetAttachment(image, kCVImageBufferCGColorSpaceKey, colorSpace, .shouldPropagate)
+        CVBufferSetAttachment(image, kCVImageBufferGammaLevelKey, NSNumber(value: 2.2), .shouldPropagate)
+        // An unsupported CF type should be described, not cast as a color space.
+        CVBufferSetAttachment(image, "FixtureOtherColorValue" as CFString, CGColor(gray: 0, alpha: 1), .shouldNotPropagate)
+
+        let pixels = try LiDARFrameWriter.pixels(image, named: "camera", path: "frames/0", to: store)
+        XCTAssertEqual(pixels.planes.count, 2)
+        let filename = try XCTUnwrap(pixels.attachments)
+        try store.json("frames/0/frame.json", ["index": 0])
+        store.commit()
+        let capture = try store.finalize(detail: nil, worldMapStatus: "unavailable")
+        let entries = try tarEntries(capture.archiveURL)
+        let bytes = try XCTUnwrap(entries["frames/0/\(filename)"])
+        let metadata = try XCTUnwrap(PropertyListSerialization.propertyList(from: bytes, format: nil) as? [String: Any])
+        let propagated = try XCTUnwrap(metadata["propagated"] as? [String: Any])
+        XCTAssertEqual(propagated[kCVImageBufferYCbCrMatrixKey as String] as? String, kCVImageBufferYCbCrMatrix_ITU_R_709_2 as String)
+        XCTAssertEqual(propagated[kCVImageBufferColorPrimariesKey as String] as? String, kCVImageBufferColorPrimaries_ITU_R_709_2 as String)
+        XCTAssertEqual(propagated[kCVImageBufferGammaLevelKey as String] as? Double, 2.2)
+        let archivedSpace = try XCTUnwrap(propagated[kCVImageBufferCGColorSpaceKey as String] as? [String: Any])
+        XCTAssertEqual(archivedSpace["name"] as? String, colorSpace.name as String?)
+        let profile = try XCTUnwrap(colorSpace.copyICCData())
+        XCTAssertEqual(archivedSpace["iccProfile"] as? Data, profile as Data)
+        let local = try XCTUnwrap(metadata["notPropagated"] as? [String: Any])
+        let unknown = try XCTUnwrap(local["FixtureOtherColorValue"] as? [String: String])
+        XCTAssertNotNil(unknown["unserializedMetadataType"])
     }
 
     func testDensePLYProjectsValidSamplesAndRetainsConfidence() throws {

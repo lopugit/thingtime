@@ -15417,6 +15417,11 @@ private readback while an unrelated Home fixture remains paused.
 
 ## iOS LiDAR capture and automatic Things save
 
+- Start on a physical LiDAR device and verify the first camera frame is saved
+  without terminating the app. Run `LiDARCaptureTests` with mixed Core Video
+  attachments: string matrix/primaries, numeric gamma, a real color space and
+  an unsupported opaque value must survive the writer/TAR/plist path. Check
+  that the color-space name and ICC profile retain their original bytes.
 - Open **Scan — Open LiDAR Scanner** in the native drawer; repeat through an
   editable web scan action. On a LiDAR device, verify Start requests camera
   access, Finish retains the original archive locally and creates a private
