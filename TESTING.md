@@ -3023,7 +3023,8 @@ email whose link points at the attacker.
       completion, exact origin/pairing, configuration and destination changes,
       revocation, expiry and foreground re-admission on the original upload. Check
       staging-only refusal, v4 settings readback, exact background/foreground
-      receipt replay, and publication refusal after pause or unpair.
+      receipt replay, six paired-only refill originals, and publication refusal
+      after pause, run revocation or unpair.
 
 - [ ] Local attachment storage stand-in (PR: developer-experience follow-ups):
       with `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=.local-attachments` in
@@ -12261,7 +12262,11 @@ transfer, whole-account snapshots or production deployment.
   connectivity or power update rechecks the saved settings. Exercise a budget
   reset across app restart and a multipart file larger than the hourly allowance
   whose individual parts fit. Check that history has one canonical receipt per
-  operation when background and foreground finish in either order.
+  operation when background and foreground finish in either order. Allow a
+  native 1.2 run to refill past its first batch while the WebView is inactive,
+  then resume the WebView and verify that already-backed bytes are reused.
+  Change the exact configuration or revoke its run between reserve and publish
+  and confirm that the old operation cannot complete publication.
 - On a physical device, compare Wi-Fi and cellular managed-upload bytes and
   newly confirmed asset counts with the summary notification. Check Live Photo
   resource counting, quiet periods, notification Off, denied notification

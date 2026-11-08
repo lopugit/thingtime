@@ -472,7 +472,7 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		progress: (path, bytes, size, direction) => { check(); publish({ stage: retain ? 'retaining' : 'transferring', confirmed: state.confirmed, total: state.operations, directions: state.directions, totalFinal: true, direction, path, bytes, size, ...coverageProgress }); }
 	}, runtime);
 	const queued = new Set<string>();
-	const prepare = input.deferredUploads && configuration.sourceKind === 'photos' && !spec.review ? async (operation: import('./execute').SyncOperation) => {
+	const prepare = input.deferredUploads && !input.deferredUploads.skipLookahead && configuration.sourceKind === 'photos' && !spec.review ? async (operation: import('./execute').SyncOperation) => {
 		const ahead = await runs.peekDeferredUploads(spec); check();
 		const candidates = [operation, ...ahead.filter(candidate => candidate.id !== operation.id)].slice(0, 4);
 		for (const candidate of candidates) {

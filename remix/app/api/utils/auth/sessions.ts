@@ -19,7 +19,8 @@ export type SessionDoc = {
   // credential it upgrades into, revocable the same way
   // 'file-sync-transfer' — no credential of its own; binds the exact issuing
   // browser and paired device sessions to one existing upload reservation.
-  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'deployment-link' | 'device-pairing' | 'watch-pairing' | 'device' | 'file-sync-transfer' | 'oauth-code' | 'chatgpt-oauth-code' | 'chatgpt-oauth-relay' | 'chatgpt-mcp' | 'chatgpt-mcp-refresh' | 'chatgpt-mcp-connection' | 'chatgpt-mcp-mutation' | 'chatgpt-mcp-mutation-chunk';
+  // A file-sync-photo-run can mint only exact original reservations for its current private Photos backup.
+  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'deployment-link' | 'device-pairing' | 'watch-pairing' | 'device' | 'file-sync-transfer' | 'file-sync-photo-run' | 'oauth-code' | 'chatgpt-oauth-code' | 'chatgpt-oauth-relay' | 'chatgpt-mcp' | 'chatgpt-mcp-refresh' | 'chatgpt-mcp-connection' | 'chatgpt-mcp-mutation' | 'chatgpt-mcp-mutation-chunk';
   secureVaultKey?: Binary;
   meta?: Record<string, any>;
 };

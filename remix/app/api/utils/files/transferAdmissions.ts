@@ -1,12 +1,12 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { folderThingMatch, isFolderThing } from '~/schemas/folderThing';
-import { type ContentFingerprint, validContentFingerprint } from '~/fileSync/contentFingerprint';
+import { equalContentFingerprints, type ContentFingerprint, validContentFingerprint } from '~/fileSync/contentFingerprint';
 import { readOwnedFileSyncConfiguration } from '~/fileSync/configuredPlan';
 import { nativePhotoAssetKey } from '~/fileSync/nativeInventory';
 import { ExactCloudSyncDestinationChanged, SYNC_DESTINATION_CHANGED } from '~/fileSync/cloudSyncDestination';
 import type { PhotoUploadPublication } from '~/fileSync/contentFingerprint';
-import { syncPathKey } from '~/fileSync/reconcile';
+import { syncPathKey, validSyncPath } from '~/fileSync/reconcile';
 import { createSyncIgnorePolicy } from '~/fileSync/syncIgnore';
 import { parseFileSyncUploadOrigin, sameFileSyncUploadOrigin, type FileSyncUploadOrigin } from '~/fileSync/uploadOrigin';
 import {
@@ -14,6 +14,7 @@ import {
 	ATTACHMENT_UPLOAD_TTL_MS,
 	completeAttachmentUpload,
 	signAttachmentUploadParts,
+	startAttachmentUpload,
 	type AttachmentTransferAuthority
 } from '../attachments/attachments';
 import { attachmentContentVersion } from '../attachments/contentFingerprint';
@@ -29,8 +30,9 @@ import type { DeviceActor } from '../devices/deviceAuth';
 import { getHomeThingsCollection, getSessionsCollection, withHomeMongoSnapshot, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { MAX_FOLDER_DEPTH } from '../things/folderPlacement';
-import { cloudInventoryAccess, readCloudInventoryRoot } from './inventory';
+import { cloudInventoryAccess, readCloudInventoryRoot, readCloudPath } from './inventory';
 
+const PHOTO_RUN_PURPOSE = 'file-sync-photo-run' as const;
 export const TRANSFER_SESSION_PURPOSE = 'file-sync-transfer' as const;
 const id = (value: unknown, max = 200): value is string =>
 	typeof value === 'string' && value.length <= max && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value);
@@ -59,14 +61,24 @@ export async function resolveTransferOwner(request: Request): Promise<TransferOw
 	};
 }
 
-type AdmissionInput = {
+type ConnectionBinding = {
+	configurationId: string; configurationRevision: string; deviceId: string; localRootId: string; grantRevision: string;
+};
+type PhotoRunBinding = ConnectionBinding & {
+	origin: string; ownerSessionId: string; deviceSessionId: string; configDigest: string; folderId: string;
+};
+type PhotoRun = { binding: PhotoRunBinding; handle: string };
+const photoRunKey = (value: unknown) => typeof value === 'string' ? /^(photo-run_[a-f0-9]{64})\.[a-f0-9]{32}$/.exec(value)?.[1] : undefined;
+const photoRunFields = ['configurationId', 'configurationRevision', 'deviceId', 'localRootId', 'grantRevision'];
+const validConfigurationRevision = (revision: unknown): revision is string =>
+	typeof revision === 'string' && revision.length === 24 && Number.isFinite(Date.parse(revision));
+const operationForOriginal = (value: unknown) => {
+	const key = digest(value);
+	return `${key.slice(0, 8)}-${key.slice(8, 12)}-4${key.slice(13, 16)}-8${key.slice(17, 20)}-${key.slice(20, 32)}`;
+};
+type AdmissionInput = ConnectionBinding & {
 	uploadId: string;
 	requestId: string;
-	configurationId: string;
-	configurationRevision: string;
-	deviceId: string;
-	localRootId: string;
-	grantRevision: string;
 	sourceVersion: string;
 	fingerprint: ContentFingerprint;
 	sizeBytes: number;
@@ -81,6 +93,7 @@ type Admission = AdmissionInput & {
 	reservationFingerprint: string;
 	reservationCreatedAt: string;
 	providerUploadId: string;
+	photoRun?: string;
 };
 
 type AdmissionRecord = { binding: Admission; handle: string; previousHandle: string | null; authorizationExpiresAt: Date };
@@ -100,10 +113,17 @@ const admitKeys = [
 	'replacesAdmissionId',
 	'publication'
 ];
+const parseFingerprint = (value: unknown, sizeBytes: unknown): ContentFingerprint | null => {
+	const f = value as Record<string, unknown> | undefined;
+	if (typeof sizeBytes !== 'number' || !Number.isSafeInteger(sizeBytes) || sizeBytes < 1 ||
+		!f || typeof f !== 'object' || Array.isArray(f) || Object.keys(f).some(key => !['partSizeBytes', 'partCount', 'sha256'].includes(key)) || !sha256(f.sha256)) return null;
+	const fingerprint = { algorithm: 'sha256-parts-v1', partSizeBytes: f.partSizeBytes, partCount: f.partCount, sha256: f.sha256 };
+	return validContentFingerprint(fingerprint, sizeBytes) ? fingerprint : null;
+};
 const parseInput = (raw: Record<string, unknown>): AdmissionInput | null => {
 	const { uploadId, requestId, configurationId, configurationRevision, deviceId, localRootId, grantRevision, sourceVersion, sizeBytes } = raw;
 	const publication = raw.publication as Record<string, unknown> | undefined;
-	const f = raw.fingerprint as Record<string, unknown> | undefined;
+	const fingerprint = parseFingerprint(raw.fingerprint, sizeBytes);
 	if (
 		Object.keys(raw).some((key) => !admitKeys.includes(key)) ||
 		!id(uploadId, 128) ||
@@ -113,27 +133,15 @@ const parseInput = (raw: Record<string, unknown>): AdmissionInput | null => {
 		!id(localRootId) ||
 		!sha256(grantRevision) ||
 		!id(sourceVersion) ||
-		typeof configurationRevision !== 'string' ||
-		configurationRevision.length !== 24 ||
-		!Number.isFinite(Date.parse(configurationRevision)) ||
-		typeof sizeBytes !== 'number' ||
-		!Number.isSafeInteger(sizeBytes) ||
-		sizeBytes < 1 ||
-		!f ||
-		typeof f !== 'object' ||
-		Array.isArray(f) ||
-		Object.keys(f).some((key) => !['partSizeBytes', 'partCount', 'sha256'].includes(key)) ||
-		!sha256(f.sha256) ||
+		!validConfigurationRevision(configurationRevision) || typeof sizeBytes !== 'number' || !fingerprint ||
 		(publication !== undefined && (!publication || typeof publication !== 'object' || Array.isArray(publication) ||
 			Object.keys(publication).length !== 1 || (publication.expectedRevision !== null && !id(publication.expectedRevision))))
 	)
 		return null;
-	const fingerprint = { algorithm: 'sha256-parts-v1', partSizeBytes: f.partSizeBytes, partCount: f.partCount, sha256: f.sha256 };
-	if (!validContentFingerprint(fingerprint, sizeBytes)) return null;
 	return { uploadId, requestId, configurationId, configurationRevision, deviceId, localRootId, grantRevision, sourceVersion, fingerprint, sizeBytes, ...(publication ? { publication: { expectedRevision: publication.expectedRevision as string | null } } : {}) };
 };
 
-const readConfiguration = async (owner: string, input: AdmissionInput, signal: AbortSignal, fence?: { session: any; token: string }) => {
+const readConfiguration = async (owner: string, input: ConnectionBinding, signal: AbortSignal, fence?: { session: any; token: string }) => {
 	const things = await getHomeThingsCollection();
 	const row = await things.findOne({ shareId: input.configurationId, ownerId: owner }, { signal, maxTimeMS: 5000, session: fence?.session });
 	if (!row || row.sandbox != null || row.sandboxSpace != null) return null;
@@ -230,27 +238,32 @@ const reservationMatches = (doc: AttachmentDoc, admission: Admission) =>
 	(doc.attachmentState === 'ready' || doc.uploadId === admission.providerUploadId) &&
 	sameFileSyncUploadOrigin(doc.attachmentFileSyncOrigin, admission.provenance);
 
+const isPhotoBackup = (config: NonNullable<Awaited<ReturnType<typeof readConfiguration>>>) =>
+	config.sourceKind === 'photos' && config.mode === 'backup' && !config.propagateDeletes;
 const publicationAllowed = (config: NonNullable<Awaited<ReturnType<typeof readConfiguration>>>, provenance: FileSyncUploadOrigin) =>
-	config.sourceKind === 'photos' && config.mode === 'backup' && !config.propagateDeletes &&
+	isPhotoBackup(config) &&
 	provenance.cloudRootId === config.remoteFolderId && provenance.folderId === config.remoteFolderId &&
 	!provenance.path.includes('/') && !!nativePhotoAssetKey(provenance.path);
 
+type TransferAdmissionResult = { ok: true; [field: string]: unknown } | { ok: false; status: number; error: string; [field: string]: unknown };
 export async function transferAdmission(input: {
 	raw: Record<string, unknown>;
 	origin: string;
 	owner?: TransferOwner | null;
 	device?: DeviceActor | null;
 	signal: AbortSignal;
-}) {
-	const { raw, origin, owner, device, signal } = input;
+	/** Internal only. Device actions cannot supply this field directly. */
+	photoRun?: string;
+}): Promise<TransferAdmissionResult> {
+	const { raw, origin, owner, device, signal, photoRun } = input;
 	if (isCustomMongoEndpointActive()) return fail(409, 'Background file transfers require the selected home data plane');
 	const now = Date.now();
 	const sessions = await getSessionsCollection();
 	const things = await getHomeThingsCollection();
 	const byId = (jti: string) => ({ jti, purpose: TRANSFER_SESSION_PURPOSE });
 	const read = (jti: string): Promise<SessionDoc | null> => sessions.findOne(byId(jti), { signal, maxTimeMS: 5000 });
-	const deviceThing = (userId: string, deviceId: string) =>
-		things.findOne({ shareId: deviceId, ownerId: userId, thingtime: 'device' }, { signal, maxTimeMS: 5000, projection: { _id: 1 } });
+	const deviceThing = (userId: string, deviceId: string, iosOnly = false) =>
+		things.findOne({ shareId: deviceId, ownerId: userId, thingtime: 'device', ...(iosOnly ? { 'crystal.platform': 'ios' } : {}) }, { signal, maxTimeMS: 5000, projection: { _id: 1 } });
 	const paired = (userId: string, deviceId: string, jti?: string): Promise<SessionDoc | null> =>
 		sessions.findOne(
 			{
@@ -274,6 +287,133 @@ export async function transferAdmission(input: {
 			? session
 			: null;
 	};
+	const runFilter = (jti: string) => ({ jti, purpose: PHOTO_RUN_PURPOSE });
+	const readRun = async (handle: unknown) => {
+		const jti = photoRunKey(handle);
+		if (!jti) return null;
+		const row = await sessions.findOne(runFilter(jti), { signal, maxTimeMS: 5000 });
+		const meta = row?.meta as PhotoRun | undefined;
+		return row && meta?.handle === handle && meta.binding.origin === origin ? { row, meta } : null;
+	};
+	const liveRun = async (handle: string, ownerId: string, deviceSessionId: string) => {
+		const found = await readRun(handle);
+		if (!found || found.row.userId !== ownerId || found.meta.binding.deviceSessionId !== deviceSessionId || !live(found.row, Date.now())) return null;
+		return found;
+	};
+	if (raw.action === 'open-photo-run') {
+		if (!owner) return fail(401, 'An owning browser session is required');
+		if (!owner.uploadsEnabled) return fail(403, 'Private uploads are not approved for this account');
+		const { configurationId, configurationRevision, deviceId, localRootId, grantRevision } = raw;
+		if (Object.keys(raw).some(key => key !== 'action' && !photoRunFields.includes(key)) || !id(configurationId) ||
+			!validConfigurationRevision(configurationRevision) || !id(deviceId) || !id(localRootId) || !sha256(grantRevision))
+			return fail(400, 'Invalid Photos run request');
+		const scope = { configurationId, configurationRevision, deviceId, localRootId, grantRevision };
+		const [config, pairing, attached, browserSession] = await Promise.all([
+			readConfiguration(owner.userId, scope, signal), paired(owner.userId, deviceId),
+			deviceThing(owner.userId, deviceId, true), originalOwner(owner.userId, owner.sessionId)
+		]);
+		if (!config || !isPhotoBackup(config) || config.resourceLimits || config.ignoreRules || !pairing || !attached || !browserSession) return changed();
+		try {
+			await withHomeMongoSnapshot(session => readCloudInventoryRoot(things, session, owner.userId, config.remoteFolderId, () => 5000, signal));
+		} catch (error) {
+			if (error instanceof StorageMutationError && [404, 409].includes(error.status)) return changed();
+			throw error;
+		}
+		const expiresAt = new Date(Math.min(owner.credentialExpiresAt, browserSession.expiresAt?.getTime() ?? Infinity, pairing.expiresAt!.getTime()));
+		if (!(expiresAt.getTime() > now)) return expired();
+		const jti = 'photo-run_' + digest(['file-sync-photo-run-v1', origin, owner.userId, deviceId, configurationId]);
+		const binding: PhotoRunBinding = { ...scope, origin, ownerSessionId: owner.sessionId, deviceSessionId: pairing.jti,
+			configDigest: digest(config), folderId: config.remoteFolderId };
+		const current = await sessions.findOne(runFilter(jti), { signal, maxTimeMS: 5000 });
+		const prior = current?.meta as PhotoRun | undefined;
+		const receipt = (handle: string, expiry: Date) => ({ ok: true as const, runId: handle, expiresAt: expiry.toISOString() });
+		if (current && prior && current.expiresAt && live(current, now) && digest(prior.binding) === digest(binding))
+			return receipt(prior.handle, current.expiresAt);
+		const meta: PhotoRun = { binding, handle: jti + '.' + randomBytes(16).toString('hex') };
+		try {
+			return await withHomeMongoTransaction(async session => {
+				const fresh = await readConfiguration(owner.userId, scope, signal, { session, token: randomUUID() });
+				if (!fresh || digest(fresh) !== binding.configDigest) return changed();
+				if (current && prior) {
+					const replaced = await sessions.updateOne({ ...runFilter(jti), 'meta.handle': prior.handle },
+						{ $set: { meta, expiresAt, revokedAt: null } }, { session, signal });
+					if (replaced.matchedCount !== 1) return changed();
+				} else {
+					await sessions.insertOne({ jti, userId: owner.userId, type: 'tt.session', schemaVersion: COLLECTION_SCHEMA_VERSIONS.sessions,
+						purpose: PHOTO_RUN_PURPOSE, createdAt: new Date(now), expiresAt, revokedAt: null, meta }, { session });
+				}
+				return receipt(meta.handle, expiresAt);
+			});
+		} catch (error) {
+			if ((error as { code?: number })?.code === 11000) return changed();
+			throw error;
+		}
+	}
+	if (raw.action === 'reserve-photo-original' || raw.action === 'revoke-photo-run' || raw.action === 'check-photo-run') {
+		const revoking = raw.action === 'revoke-photo-run';
+		const checking = raw.action === 'check-photo-run';
+		const allowed = revoking || checking ? ['action', 'runId'] : ['action', 'runId', 'path', 'sourceVersion', 'sizeBytes', 'fingerprint'];
+		if (Object.keys(raw).some(key => !allowed.includes(key)) || !photoRunKey(raw.runId)) return fail(400, 'Invalid Photos run request');
+		const handle = raw.runId as string, found = await readRun(handle);
+		if (!found) return missing();
+		const { row, meta: { binding } } = found;
+		if (!(device ? device.userId === row.userId && device.deviceId === binding.deviceId && device.sessionId === binding.deviceSessionId :
+			revoking && owner?.userId === row.userId && owner.sessionId === binding.ownerSessionId)) return missing();
+		if (revoking) {
+			const revoked = await sessions.updateOne({ ...runFilter(row.jti), 'meta.handle': handle }, { $set: { revokedAt: new Date() } }, { signal });
+			return revoked.matchedCount ? { ok: true as const, revoked: true } : missing();
+		}
+		if (!live(row, now) || !row.expiresAt) return expired();
+		const [config, ownerSession, pairing, attached] = await Promise.all([
+			readConfiguration(row.userId, binding, signal), originalOwner(row.userId, binding.ownerSessionId),
+			paired(row.userId, binding.deviceId, binding.deviceSessionId), deviceThing(row.userId, binding.deviceId, true)
+		]);
+		if (!ownerSession || !pairing || !attached) return expired();
+		if (!config || digest(config) !== binding.configDigest || !isPhotoBackup(config) || config.resourceLimits || config.ignoreRules) return changed();
+		if (checking) {
+			try {
+				await withHomeMongoSnapshot(session => readCloudInventoryRoot(things, session, row.userId, binding.folderId, () => 5000, signal));
+			} catch (error) {
+				if (error instanceof StorageMutationError && [404, 409].includes(error.status)) return changed();
+				throw error;
+			}
+			return (await liveRun(handle, row.userId, binding.deviceSessionId)) ? { ok: true } : expired();
+		}
+		const { path, sourceVersion, sizeBytes } = raw, fingerprint = parseFingerprint(raw.fingerprint, sizeBytes);
+		if (!validSyncPath(path) || path.includes('/') || !nativePhotoAssetKey(path) || !id(sourceVersion) || typeof sizeBytes !== 'number' || !fingerprint)
+			return fail(400, 'Invalid Photos original');
+		if (createSyncIgnorePolicy(config.ignoreRules, config.excludedPaths).ignored(path, 'file')) return changed();
+		const observation = await readCloudPath(row.userId, binding.folderId, path, signal);
+		if (!observation.ok) return observation;
+		const existing = observation.observation.entry;
+		if (existing) {
+			if (existing.kind !== 'file' || existing.symbolicLink || existing.size !== sizeBytes || !existing.fingerprint ||
+				!equalContentFingerprints(existing.fingerprint, fingerprint)) return fail(409, 'The Photos destination path requires review');
+			if (!(await liveRun(handle, row.userId, binding.deviceSessionId))) return expired();
+			return { ok: true as const, state: 'already-backed' as const };
+		}
+		if (!(await liveRun(handle, row.userId, binding.deviceSessionId))) return expired();
+		const requestId = operationForOriginal(['file-sync-photo-original-v1', handle, path, sourceVersion, fingerprint]);
+		const reservation = await startAttachmentUpload(row.userId, { filename: path, contentType: 'application/octet-stream', sizeBytes,
+			requestId, purpose: 'file', fileSyncOrigin: { version: 1, deviceId: binding.deviceId, localRootId: binding.configurationId,
+				cloudRootId: binding.folderId, fileId: requestId, folderId: binding.folderId, path } });
+		if (!reservation.ok) return reservation;
+		const uploadId = reservation.upload.id, publication = { expectedRevision: null };
+		const { algorithm: _algorithm, ...digestFields } = fingerprint;
+		const admitRequest = { action: 'admit', uploadId, requestId, configurationId: binding.configurationId,
+			configurationRevision: binding.configurationRevision, deviceId: binding.deviceId, localRootId: binding.localRootId,
+			grantRevision: binding.grantRevision, sourceVersion, sizeBytes, fingerprint: digestFields, publication };
+		const issuingOwner = { userId: row.userId, sessionId: binding.ownerSessionId, credentialExpiresAt: row.expiresAt.getTime(), uploadsEnabled: true };
+		const admitOriginal = (raw: Record<string, unknown>) =>
+			transferAdmission({ raw, origin, owner: issuingOwner, signal, photoRun: handle });
+		let admission = await admitOriginal(admitRequest);
+		if (!admission.ok && 'code' in admission && admission.code === 'admission_renewal_required' && 'admissionId' in admission)
+			admission = await admitOriginal({ ...admitRequest, replacesAdmissionId: admission.admissionId });
+		if (!admission.ok) return admission;
+		if (typeof admission.admissionId !== 'string' || typeof admission.expiresAt !== 'string') throw Error('Unexpected original admission result');
+		return { ok: true as const, state: 'reserved' as const, requestId, uploadId, admissionId: admission.admissionId,
+			expiresAt: admission.expiresAt, publication, ...(reservation.upload.state === 'ready' ? { staged: true as const } : {}) };
+	}
 	if (raw.action === 'admit') {
 		if (!owner) return fail(401, 'An owning browser session is required');
 		if (!owner.uploadsEnabled) return fail(403, 'Private uploads are not approved for this account');
@@ -304,6 +444,7 @@ export async function transferAdmission(input: {
 			!(await destinationLive(owner.userId, config.remoteFolderId, reservation.provenance, signal))
 		)
 			return changed();
+		if (photoRun && !(await liveRun(photoRun, owner.userId, pairing.jti))) return expired();
 		const { doc, provenance } = reservation;
 		const binding = (providerUploadId: string): Admission => ({
 			...admitted,
@@ -314,7 +455,8 @@ export async function transferAdmission(input: {
 			provenance,
 			reservationFingerprint: doc.attachmentRequestFingerprint!,
 			reservationCreatedAt: doc.createdAt.toISOString(),
-			providerUploadId
+			providerUploadId,
+			...(photoRun ? { photoRun } : {})
 		});
 		const receipt = (meta: AdmissionRecord) => ({
 			ok: true as const,
@@ -324,13 +466,14 @@ export async function transferAdmission(input: {
 		const matchesOriginal = (row: SessionDoc, prior: Admission) =>
 			row.userId === owner.userId &&
 			prior.origin === origin &&
-			reservationMatches(doc, prior) &&
+			(reservationMatches(doc, prior) || (photoRun && !admissionLive(row, row.meta as AdmissionRecord) &&
+				prior.reservationFingerprint === doc.attachmentRequestFingerprint && sameFileSyncUploadOrigin(provenance, prior.provenance))) &&
 			prior.requestId === admitted.requestId &&
 			prior.configurationId === admitted.configurationId &&
 			prior.deviceId === admitted.deviceId &&
 			prior.deviceSessionId === pairing.jti &&
 			prior.localRootId === admitted.localRootId &&
-			prior.grantRevision === admitted.grantRevision &&
+			prior.grantRevision === admitted.grantRevision && prior.photoRun === photoRun &&
 			prior.sourceVersion === admitted.sourceVersion &&
 			digest(prior.fingerprint) === digest(admitted.fingerprint) &&
 			JSON.stringify(prior.publication) === JSON.stringify(admitted.publication);
@@ -342,7 +485,7 @@ export async function transferAdmission(input: {
 				// Queue loss may hide the exact prior handle. An authenticated
 				// owner with the original source and live policy can recover it
 				// without creating a new authorization or enumerating admissions.
-				return replacement === undefined && doc.attachmentState === 'pending'
+				return replacement === undefined && (doc.attachmentState === 'pending' || (photoRun && doc.attachmentState === 'ready'))
 					? { ...expired(), code: 'admission_renewal_required', admissionId: meta.handle }
 					: expired();
 			}
@@ -352,11 +495,12 @@ export async function transferAdmission(input: {
 		};
 		if (existing && (replacement === undefined || replacement !== (existing.meta as AdmissionRecord).handle)) return replay(existing);
 		if (replacement !== undefined && !existing) return missing();
-		if (doc.attachmentState !== 'pending' || !doc.uploadId || !doc.attachmentExpiresAt) return changed();
+		const ready = !!photoRun && doc.attachmentState === 'ready';
+		if (!ready && (doc.attachmentState !== 'pending' || !doc.uploadId || !doc.attachmentExpiresAt)) return changed();
 		const authorizationExpiresAt = new Date(
 			Math.min(
 				now + ATTACHMENT_UPLOAD_TTL_MS,
-				doc.attachmentExpiresAt.getTime(),
+				doc.attachmentExpiresAt?.getTime() ?? Infinity,
 				owner.credentialExpiresAt,
 				browserSession.expiresAt?.getTime() ?? Infinity,
 				pairing.expiresAt?.getTime() ?? Infinity
@@ -364,7 +508,7 @@ export async function transferAdmission(input: {
 		);
 		if (!(authorizationExpiresAt.getTime() > Date.now())) return expired();
 		const meta: AdmissionRecord = {
-			binding: binding(doc.uploadId),
+			binding: binding(doc.uploadId ?? 'verified-ready'),
 			handle: jti + '.' + randomBytes(16).toString('hex'),
 			previousHandle: typeof replacement === 'string' ? replacement : null,
 			authorizationExpiresAt
@@ -390,7 +534,7 @@ export async function transferAdmission(input: {
 			schemaVersion: COLLECTION_SCHEMA_VERSIONS.sessions,
 			purpose: TRANSFER_SESSION_PURPOSE,
 			createdAt: new Date(now),
-			expiresAt: doc.attachmentExpiresAt,
+			expiresAt: doc.attachmentExpiresAt ?? authorizationExpiresAt,
 			revokedAt: null,
 			meta
 		};
@@ -444,7 +588,7 @@ export async function transferAdmission(input: {
 			readReservation(row.userId, a, publishing ? a.provenance.fileId : undefined),
 			readConfiguration(row.userId, a, signal),
 			paired(row.userId, a.deviceId, a.deviceSessionId),
-			deviceThing(row.userId, a.deviceId)
+			deviceThing(row.userId, a.deviceId, !!a.photoRun)
 		]);
 		const currentMeta = current?.meta as AdmissionRecord | undefined;
 		if (
@@ -457,6 +601,7 @@ export async function transferAdmission(input: {
 			!attachedDevice
 		)
 			return expired();
+		if (a.photoRun && !(await liveRun(a.photoRun, row.userId, a.deviceSessionId))) return expired();
 		if (
 			!attachment ||
 			!reservationMatches(attachment.doc, a) ||
@@ -487,9 +632,17 @@ export async function transferAdmission(input: {
 						{ $set: { 'meta.fileSyncPublicationFence': token } }, { session, signal });
 					if (result.matchedCount !== 1) return refuse(expired());
 				}
+				if (a.photoRun) {
+					const key = photoRunKey(a.photoRun);
+					if (!key) return refuse(expired());
+					const locked = await sessions.updateOne({ ...runFilter(key), userId: ownerId, 'meta.handle': a.photoRun,
+						'meta.binding.deviceSessionId': a.deviceSessionId, revokedAt: null, expiresAt: { $gt: date } },
+						{ $set: { 'meta.fileSyncPublicationFence': token } }, { session, signal });
+					if (locked.matchedCount !== 1) return refuse(expired());
+				}
 				if (!(await originalOwner(ownerId, a.ownerSessionId)) ||
 					!(await fencePrivateUploadPermission(ownerId, token, session, signal))) return refuse(expired());
-				const attached = await things.updateOne({ shareId: a.deviceId, ownerId, thingtime: 'device' },
+				const attached = await things.updateOne({ shareId: a.deviceId, ownerId, thingtime: 'device', ...(a.photoRun ? { 'crystal.platform': 'ios' } : {}) },
 					{ $set: { fileSyncPublicationFence: token } }, { session, signal });
 				if (attached.matchedCount !== 1) return refuse(expired());
 				const config = await readConfiguration(ownerId, a, signal, { session, token });

@@ -184,6 +184,19 @@ final class PhotoBackupQueue {
         return entries
     }
 
+    func retryUnavailable() throws {
+        // Retry only asset revisions whose originals were unavailable. The
+        // acknowledged library prefix stays indexed and need not be rescanned.
+        guard try read(Selection.self, at: selectedFile) == nil else { throw PhotoLibraryReader.Failure.changed }
+        try loadOutcomes()
+        for (key, outcome) in outcomes ?? [:] where !outcome.unavailable.isEmpty {
+            try Task.checkCancellation()
+            try FileManager.default.removeItem(at: record(key))
+            outcomes?.removeValue(forKey: key)
+            membership = nil
+        }
+    }
+
     func finish(_ batch: UUID) throws {
         if completed == batch { return }
         if try read(UUID.self, at: completedFile) == batch {

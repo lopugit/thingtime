@@ -4,7 +4,9 @@ Paired-device background staging uses the existing private file reservation and
 multipart provider. `files/transferAdmissions.ts` verifies the browser session,
 exact pairing, saved configuration and private destination. It authorizes signing and
 completing that one reservation. An explicit Photos publication descriptor can
-also bind the verified attachment through the canonical Files transaction. See the [transfer admission
+also bind the verified attachment through the canonical Files transaction. A
+revocable 1.2 Photos run can replenish original reservations under the same
+private destination and current settings. See the [transfer admission
 contract and fixture](../file-sync-transfer-admissions.md).
 
 The shared `MobileFolderInventoryTests` use macOS strict capture and iOS's

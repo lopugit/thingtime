@@ -2,7 +2,7 @@
 
 An installed device can finish a positive-size private multipart upload without
 retaining the owner's web session. Negotiate `api.file-sync-transfer-admissions`
-1.0.0 for staging or 1.1.0 for exact Photos publication on the selected account origin. The exact request envelopes are in
+1.0.0 for staging, 1.1.0 for exact Photos publication, or 1.2.0 for an owner-authorized Photos run on the selected account origin. The exact request envelopes are in
 `/api/v1/files/sync-transfer-admissions-docs`.
 
 The owner first uses the ordinary attachment API to reserve the original request
@@ -56,10 +56,18 @@ minutes and can wake early when the app becomes active or connectivity or
 charging changes. Pause persists locally even before the first upload. Older
 compatible settings keep their saved network, charging, source and destination.
 
-When iOS grants background execution, the app can finish and publish the
-already-admitted originals. It currently needs a foreground WebView to admit
-the next Photos batch. iOS chooses when background work and notification
-delivery can run.
+The 1.1.0 path finishes already-admitted originals. With a compatible app and
+1.2.0, the owning browser opens a run bound to the live owner session, iOS
+pairing, grant, saved revision and private destination. During iOS background
+execution the paired phone can check that run before reading PhotoKit and
+reserve further exact originals. The API derives their destination and
+operation IDs, reuses matching verified cloud bytes, and leaves differing
+occupied paths for foreground review. Pausing, changing the configuration,
+revoking the run or losing the issuing session disables new child requests.
+An unbound reservation created during a revoke race remains private and
+expires through normal attachment cleanup. iOS chooses when background work
+and notifications can run. A fresh session or a changed configuration needs
+a newly opened run.
 
 The default managed-upload rate is 5 Mbps (625,000 bytes per second). An
 optional hourly allowance applies to measured app-managed upload payload; it
@@ -82,5 +90,6 @@ The fixture starts a new loopback Mongo replica and built Nitro runtime with
 synthetic accounts and local attachment storage. It verifies two queued files,
 including multipart checksum mismatch and retry, wrong origin/device/account,
 private placement, v4 policy readback, staged-only refusal, matching
-foreground/device publication, pause, expiry, logout, disconnect and replacement. Physical iPhone scheduling and automatic PhotoKit discovery need
+foreground/device publication, six paired-only original refills across the initial
+batch boundary, pause and run rotation, expiry, logout, disconnect and replacement. Physical iPhone scheduling and automatic PhotoKit discovery need
 separate acceptance.

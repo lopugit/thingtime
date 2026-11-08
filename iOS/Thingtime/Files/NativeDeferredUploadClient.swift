@@ -19,13 +19,23 @@ final class NativeDeferredUploadClient {
             }
         }
     }
-    private let record: NativeDeferredUploadRecord
+    private let record: NativeDeferredUploadRecord?
+    private let scope: FileSyncOwnerScope
+    private let deviceId: String
+    private let minimum: [Int]
     private let session: URLSession
     private var verified = false
 
     init(record: NativeDeferredUploadRecord) {
         self.record = record
+        scope = record.scope; deviceId = record.configuration.deviceId
+        minimum = record.request.publication == nil ? [1, 0, 0] : [1, 1, 0]
         let configuration = Self.configuration(allowsCellular: record.configuration.network == "any")
+        session = URLSession(configuration: configuration, delegate: MobileDeviceRedirectPolicy(), delegateQueue: nil)
+    }
+    init(photoRun: NativePhotoRunRecord) {
+        record = nil; scope = photoRun.scope; deviceId = photoRun.authorization.scope.deviceId; minimum = [1, 2, 0]
+        let configuration = Self.configuration(allowsCellular: photoRun.authorization.configuration.network == "any")
         session = URLSession(configuration: configuration, delegate: MobileDeviceRedirectPolicy(), delegateQueue: nil)
     }
     deinit { session.invalidateAndCancel() }
@@ -41,14 +51,14 @@ final class NativeDeferredUploadClient {
     func requireCapability() async throws {
         guard !verified else { return }
         let manifest = try await read(LopuVoiceContract.manifestPath, body: nil)
-        let minimum = record.request.publication == nil ? [1, 0, 0] : [1, 1, 0]
-        guard LopuVoiceContract.accepts(manifest, baseURL: record.scope.origin, feature: Self.feature, minimum: minimum) else {
+        guard LopuVoiceContract.accepts(manifest, baseURL: scope.origin, feature: Self.feature, minimum: minimum) else {
             throw Failure.incompatible
         }
         verified = true
     }
 
     func request(action: String, parts: [[String: Any]]? = nil) async throws -> [String: Any] {
+        guard let record else { throw Failure.invalid }
         try await requireCapability()
         var payload: [String: Any] = ["action": action, "admissionId": record.admissionId]
         if let parts { payload["parts"] = parts }
@@ -61,6 +71,12 @@ final class NativeDeferredUploadClient {
         return result
     }
 
+    func photoRunRequest(_ body: [String: Any]) async throws -> [String: Any] {
+        guard record == nil else { throw Failure.invalid }
+        try await requireCapability()
+        return try await read(Self.path, body: body)
+    }
+
     private func validatePublication(_ result: [String: Any]) throws {
         struct Receipt: Decodable {
             struct File: Decodable {
@@ -70,6 +86,7 @@ final class NativeDeferredUploadClient {
             let file: File; let replayed: Bool
         }
         let receipt = try JSONDecoder().decode(Receipt.self, from: JSONSerialization.data(withJSONObject: result))
+        guard let record else { throw Failure.invalid }
         let file = receipt.file, source = record.request.source
         guard record.request.publication != nil, !file.id.isEmpty, !file.revision.isEmpty, !file.trashed,
               file.name == source.path, file.folderId == record.configuration.remoteFolderId,
@@ -79,6 +96,7 @@ final class NativeDeferredUploadClient {
 
     func send(part: FileUploadPartStore.Part, partNumber: Int, conditions: NativePhotoDownloadConditions, check: () throws -> Void,
               account: (NativePhotoTransferBytes) throws -> Void) async throws {
+        guard let record else { throw Failure.invalid }
         let signed = try await request(action: "parts", parts: [["partNumber": partNumber, "checksumSha256": part.checksumSha256]])
         let allowsCellular = record.configuration.network == "any"
         var request = try NativeFileSession.signedUploadRequest(signed, origin: record.scope.origin, checksum: part.checksumSha256,
@@ -102,13 +120,13 @@ final class NativeDeferredUploadClient {
 
     private func read(_ path: String, body: [String: Any]?) async throws -> [String: Any] {
         try Task.checkCancellation()
-        guard let url = URL(string: path, relativeTo: record.scope.origin)?.absoluteURL,
-              LopuVoiceContract.sameOrigin(url, record.scope.origin) else { throw Failure.invalid }
+        guard let url = URL(string: path, relativeTo: scope.origin)?.absoluteURL,
+              LopuVoiceContract.sameOrigin(url, scope.origin) else { throw Failure.invalid }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
         request.httpShouldHandleCookies = false
         if let body {
-            guard let device = try MobileDeviceKeychain.load(record.scope), device.scope == record.scope,
-                  !device.revoked, device.deviceId == record.configuration.deviceId,
+            guard let device = try MobileDeviceKeychain.load(scope), device.scope == scope,
+                  !device.revoked, device.deviceId == deviceId,
                   device.credential.range(of: "^ttnode_[A-Za-z0-9_-]{43}$", options: .regularExpression) != nil else { throw Failure.denied }
             request.httpMethod = "POST"
             request.httpBody = try JSONSerialization.data(withJSONObject: body)

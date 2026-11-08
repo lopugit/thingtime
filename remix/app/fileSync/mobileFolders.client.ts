@@ -57,6 +57,7 @@ export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePol
 	| { action: 'upload-batch'; rootId: string; batch: import('./uploadBatch').NativeUploadBatchInput }
 	| { action: 'upload-single'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'defer-upload'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
+	| { action: 'arm-photo-run'; rootId: string; authorization: FileSyncApproval }
 	| { action: 'cancel-deferred-upload'; rootId: string; configurationId: string; deviceId: string }
 	| { action: 'upload-file'; rootId: string; continueInBackground?: true; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
@@ -168,6 +169,8 @@ export function assertNativeSymbolicLinkRequest(request: FolderRequest, capabili
 export const supportsNativeSourcePaths = (bridge: FolderCapabilities | undefined) =>
  bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 15;
 export const supportsNativeResourceLimits = (bridge: FolderCapabilities | undefined) => /^1\.\d+\.\d+$/.test(bridge?.fileResourceLimitsVersion ?? '');
+export const supportsNativePhotoRuns = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'ios' && capabilitySatisfies(bridge.filePhotoAutomationVersion ?? '', '1.1.0');
 export const supportsNativePhotoAutomation = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'ios' && capabilitySatisfies(bridge.filePhotoAutomationVersion ?? '', '1.0.0');
 export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
@@ -394,7 +397,7 @@ export function parseMobileFolderResult(
 	if (payload.syncWait !== undefined) {
 		const { syncWait, retryAt, minimumPartBytes } = payload;
 		const transfer = ['upload-file', 'defer-upload'].includes(request.action);
-		const allowed = syncWait === 'inactive' ? ['list', 'conditions', 'inspect', 'upload-file', 'defer-upload', 'scan', 'scan-capture', 'scan-status', 'scan-page', 'scan-cancel', 'scan-discard', 'cancel-deferred-upload', 'photo-queue-finish', 'read', 'read-range'].includes(request.action) :
+		const allowed = syncWait === 'inactive' ? ['list', 'conditions', 'inspect', 'upload-file', 'defer-upload', 'scan', 'scan-capture', 'scan-status', 'scan-page', 'scan-cancel', 'scan-discard', 'cancel-deferred-upload', 'arm-photo-run', 'photo-queue-finish', 'read', 'read-range'].includes(request.action) :
 			syncWait === 'data-budget' ? transfer : ['upload-file', 'defer-upload', 'scan-capture', 'scan-status', 'read', 'photo-queue-finish'].includes(request.action);
 		const deadline = typeof retryAt === 'string' ? Date.parse(retryAt) : NaN;
 		if (!allowed || !isSyncWaitReason(syncWait) || syncWait === 'paused' || payload.rootId !== expectedRoot || payload.error !== undefined ||
@@ -435,6 +438,8 @@ export function parseMobileFolderResult(
 			...(r.sourceKind === 'photos' ? { sourceKind: r.sourceKind, photoAccess: r.photoAccess } : {})
 		}))
 	};
+	if (request.action === 'arm-photo-run' && (payload.rootId !== request.rootId || payload.configurationId !== request.authorization.id || payload.photoRunArmed !== true || typeof payload.scheduled !== 'boolean' || payload.roots.length))
+		throw Error('Native Photos did not confirm the background run.');
 	if (request.action === 'defer-upload') {
 		const queued = payload.deferredUpload;
 		if (payload.rootId !== request.rootId || !queued || typeof queued.deferred !== 'boolean' || typeof queued.scheduled !== 'boolean' ||
@@ -884,6 +889,7 @@ export function requestMobileFolders(
 	if (request.action === 'inspect' && (!supportsNativePathInspection(bridge) || !validSyncPath(request.path)))
 		return Promise.reject(Error('Path inspection requires a supported app and a relative path.'));
 	if (request.action === 'upload-single' && (!supportsNativeSingleUpload(bridge) || !validFileUpload(request.upload) || request.upload.source.size > UPLOAD_BATCH_FILE_BYTES)) return Promise.reject(Error('Unsupported native single upload.'));
+	if (request.action === 'arm-photo-run' && !supportsNativePhotoRuns(bridge)) throw Error('Update Thingtime to prepare a background Photos run.');
 	if ((request.action === 'defer-upload' || request.action === 'cancel-deferred-upload') && !supportsNativeDeferredUploads(bridge))
 		throw Error('Update Thingtime to queue Photos transfers in the background.');
 	if (request.action === 'defer-upload' && !validFileUpload(request.upload)) throw Error('Invalid deferred file upload.');

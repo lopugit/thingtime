@@ -20,7 +20,7 @@ import { INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, INVENTORY_PIN_STORE, INVE
 import { journalScope, type JournalAccess } from './journalScope';
 import { pagedPlanJournal, parsePagedPlanSpec, provesConflictFreeInitialUpload, PLAN_PIN_STORE, PLAN_STORES, validatePagedPlanHeader,
 	type PagedPlanCursor, type PagedPlanHeader, type PagedPlanSpec } from './pagedPlanJournal';
-import { sameSyncScope, sameSyncStamp, syncPathKey, validSyncPath, validSyncEntry, validSyncPathKey, syncScopeKey, type SyncEntry, type SyncScope } from './reconcile';
+import { sameSyncScope, sameSyncContent, sameSyncStamp, syncPathKey, validSyncPath, validSyncEntry, validSyncPathKey, syncScopeKey, type SyncEntry, type SyncScope } from './reconcile';
 
 export const RETAINED_HEADS = 'sync-retained-run-heads';
 export const REVIEW_STORE = 'sync-run-reviews';
@@ -2032,11 +2032,15 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				done(progress(h));
 			});
 		},
-		/** The executor calls this only after the canonical receipt lookup
-		 * returned missing and a fresh source read proved the exact original
-		 * changed. Already confirmed siblings and their receipts stay pinned. */
-		async omitChangedPhotoSource(value: PagedRunSpec, supplied: SyncOperation): Promise<PagedRunProgress> {
-			const spec = parsePagedRunSpec(value), expected = structuredClone(supplied);
+		/** After a missing canonical receipt, retire only this unpublished
+		 * original. The checkpoint independently reobserves either a changed
+		 * source or the exact already-present file of a different runner. */
+		async omitPhotoOperation(value: PagedRunSpec, supplied: SyncOperation, settledTarget?: SyncEntry): Promise<PagedRunProgress> {
+			const spec = parsePagedRunSpec(value), expected = structuredClone(supplied), target = structuredClone(settledTarget);
+			const mutation = expected.mutation;
+			if (target && (!spec.backgroundPhotoPublication || spec.review || mutation.kind !== 'copy' || mutation.from !== 'local' ||
+				mutation.expectedTarget !== null || mutation.source.kind !== 'file' || !mutation.source.fingerprint || !target.fingerprint || !validSyncEntry(target) ||
+				target.path !== mutation.path || !sameSyncContent(target, mutation.source))) throw Error('Photos destination does not confirm the original bytes.');
 			if (!spec.photoAssetOrder || spec.review?.kind === 'retain') throw Error('Only a prepared Photos batch can replace an obsolete source.');
 			return withHeader(spec, 'readwrite', (h, tx, done, fail) => {
 				if (h.phase !== 'running' || h.scheduling?.reserved !== expected.id || cloudProgress(h).phase !== 'ready')
@@ -2046,12 +2050,12 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				get.onsuccess = () => { try {
 					check();
 					const saved = row(get.result, spec);
-					if (saved.operation.confirmed || saved.receipt || JSON.stringify(saved.operation) !== JSON.stringify(expected))
-						throw Error('The obsolete Photos operation has a different effect.');
+					if (saved.operation.confirmed || saved.receipt || JSON.stringify(saved.operation) !== JSON.stringify(expected) ||
+						(target && !saved.cloud?.write.guardDestination)) throw Error('The obsolete Photos operation has a different effect.');
 					ops.delete([key, spec.id, ...orderKey(expected, spec)]);
 					if (h.directions) removeUnconfirmedSyncDirection(h.directions, expected);
 					h.operations--; h.cloud!.prepared--; if (!h.operations) h.cloud!.after = null;
-					h.scheduling!.reserved = null; h.photoSourceChanged = true;
+					h.scheduling!.reserved = null; if (!target) h.photoSourceChanged = true;
 					if (h.confirmed === h.operations) h.phase = 'complete';
 					h.revision++; save(h, tx); done(progress(h));
 				} catch (error) { fail(error); } };

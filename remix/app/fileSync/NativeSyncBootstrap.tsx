@@ -89,8 +89,8 @@ export function NativeSyncBootstrap({ ownerId, generation }: { ownerId: string; 
 		const disabled = () => { if(activitySignal.reason === 'disabled') void cancelSyncForActivity(nativeSyncTasks).catch(() => {}); };
 		activitySignal.addEventListener('abort',disabled,{once:true});
 		let queued: ReturnType<typeof setTimeout> | undefined, timer: ReturnType<typeof setTimeout> | undefined;
-		let running = false, pendingConditionWake = false;
 		const bridge = getNativeSyncAdapter();
+		let running = false, pendingConditionWake = bridge?.platform === 'ios' && supportsNativePhotoAutomation(bridge.bridge);
 		const desktop = bridge?.platform === 'macos' ? bridge.bridge : undefined;
 		const kick = () => {
 			if (!controller.signal.aborted && !running && queued === undefined) queued = setTimeout(resume, 0);

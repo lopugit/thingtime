@@ -22,6 +22,7 @@ struct NativeDeferredUploadRecord: Codable, Equatable, Sendable {
     var retryAt = Date.distantPast
     var transferBytes: NativePhotoTransferBytes?
     var publishStarted: Bool?
+    var photoRunId: String?
 
     var configuration: NativeUploadAuthorization.Configuration { request.authorization.configuration }
     var rootId: String { configuration.localRootId }
@@ -34,6 +35,7 @@ struct NativeDeferredUploadRecord: Codable, Equatable, Sendable {
               !revoked || !armed,
               !ready || (!armed && confirmedParts == request.source.fingerprint?.partCount),
               request.publication == nil || configuration.sourceKind == "photos",
+              photoRunId.map({ request.publication != nil && NativePhotoRunRecord.validHandle($0) }) ?? true,
               publishStarted != true || request.publication != nil else {
             throw MobileFolderStore.Failure.invalid
         }
@@ -47,7 +49,7 @@ struct NativeDeferredUploadRecord: Codable, Equatable, Sendable {
 
     func matches(_ value: NativeDeferredUploadRecord) -> Bool {
         sameReservation(scope: value.scope, request: value.request, grantRevision: value.grantRevision) &&
-            admissionId == value.admissionId && expiresAt == value.expiresAt
+            admissionId == value.admissionId && expiresAt == value.expiresAt && photoRunId == value.photoRunId
     }
 }
 
@@ -199,6 +201,7 @@ private struct DeferredProcessingScheduler: NativeDeferredUploadScheduling {
 final class NativeDeferredUpload {
     static let shared = NativeDeferredUpload(store: .init(), scheduler: DeferredProcessingScheduler())
     private let store: NativeDeferredUploadStore
+    private let photoRuns: NativePhotoRunStore
     private let scheduler: NativeDeferredUploadScheduling
     private let grants: MobileFolderStore
     private let photos: PhotoLibraryReader
@@ -215,6 +218,7 @@ final class NativeDeferredUpload {
     init(store: NativeDeferredUploadStore, scheduler: NativeDeferredUploadScheduling,
          grants: MobileFolderStore? = nil, photos: PhotoLibraryReader? = nil, parts: FileUploadPartStore? = nil) {
         self.store = store; self.scheduler = scheduler
+        photoRuns = NativePhotoRunStore(directory: store.url.deletingLastPathComponent())
         self.grants = grants ?? MobileFolderStore()
         self.photos = photos ?? PhotoLibraryReader(transport: RustEmbeddedInventoryTransport.default)
         self.parts = parts ?? FileUploadPartStore()
@@ -250,6 +254,7 @@ final class NativeDeferredUpload {
         // A fresh foreground process waits for its web identity; ordinary
         // app switching no longer destroys a healthy admitted checkpoint.
         if foreground { disarm(clearSummaries: false) }
+        else { schedule() }
     }
 
     /// A foreground context change prevents a previous account's queued work
@@ -260,12 +265,13 @@ final class NativeDeferredUpload {
         if clearSummaries { NativePhotoBackupSummaries.shared.clear(matching: scope, configurationId: configurationId, rootId: rootId) }
         do {
             var records = try store.load()
+            let runs = try disarmPhotoRuns(scope: scope, configurationId: configurationId, rootId: rootId)
             let indices = records.indices.filter { i in
                 records[i].armed && (scope == nil || records[i].scope == scope) &&
                     (configurationId == nil || records[i].request.authorization.id == configurationId) &&
                     (rootId == nil || records[i].rootId == rootId)
             }
-            if scope == nil || !indices.isEmpty { stopScheduler() }
+            if scope == nil || !indices.isEmpty || !runs.isEmpty { stopScheduler() }
             guard !indices.isEmpty else { return }
             for index in indices { records[index].armed = false }
             try store.save(records)
@@ -277,7 +283,41 @@ final class NativeDeferredUpload {
     func verifiedForegroundScope(_ scope: FileSyncOwnerScope) {
         guard let rows = try? store.load() else { return }
         if let other = rows.first(where: { $0.armed && $0.scope != scope })?.scope { disarm(matching: other) }
+        if let runs = try? photoRuns.load() {
+            for other in runs where other.armed && other.scope != scope { disarm(matching: other.scope) }
+        }
         NativePhotoBackupSummaries.shared.resume(verified: scope)
+    }
+
+    private func disarmPhotoRuns(scope: FileSyncOwnerScope?, configurationId: String?, rootId: String?, deviceId: String? = nil) throws -> [NativePhotoRunRecord] {
+        var affected: [NativePhotoRunRecord] = []
+        for var run in try photoRuns.load() where run.armed && (scope == nil || run.scope == scope) &&
+            (configurationId == nil || run.authorization.id == configurationId) && (rootId == nil || run.rootId == rootId) &&
+            (deviceId == nil || run.authorization.scope.deviceId == deviceId) {
+            run.armed = false; try photoRuns.write(run); affected.append(run)
+        }
+        return affected
+    }
+
+    @discardableResult
+    func armPhotoRun(_ proposed: NativePhotoRunRecord) throws -> Bool {
+        try proposed.validate()
+        guard registered, !persistenceUncertain, proposed.expiresAt > Date(), !revoking.contains(proposed.runId) else {
+            throw NativeDeferredUploadClient.Failure.unavailable
+        }
+        let current = try photoRuns.lookup(proposed)
+        var next = proposed
+        if let current, current.sameScope(proposed), current.authorization == proposed.authorization {
+            // Renewal changes only the handle. The protected queue and
+            // reviewed asset selection remain at the same checkpoint.
+            next.epoch = current.epoch; next.captureId = current.captureId; next.batch = current.batch
+            next.retryAt = current.retryAt; next.retryCloudGaps = current.retryCloudGaps
+        }
+        if let current, current.armed, !current.sameRun(next) {
+            NativeManagedPhotoPartTransfer.shared.cancel(matching: current.scope, configurationId: current.authorization.id, rootId: current.rootId)
+        }
+        try photoRuns.write(next)
+        return schedule()
     }
 
     private func stopScheduler() {
@@ -292,25 +332,34 @@ final class NativeDeferredUpload {
     /// Local Pause is durable without an internet round trip. Server revocation
     /// uses only the exact immutable admissions captured by that pause.
     func pauseLocally(scope: FileSyncOwnerScope, rootId: String, configurationId: String, deviceId: String) throws {
-        NativeManagedPhotoPartTransfer.shared.cancel(matching: scope, configurationId: configurationId, rootId: rootId)
+        NativeManagedPhotoPartTransfer.shared.cancel(matching: scope, configurationId: configurationId, rootId: rootId, deviceId: deviceId)
         NativePhotoBackupSummaries.shared.clear(matching: scope, configurationId: configurationId)
         var records: [NativeDeferredUploadRecord]
-        do { records = try store.load() }
+        let runs: [NativePhotoRunRecord]
+        do {
+            records = try store.load()
+            runs = try disarmPhotoRuns(scope: scope, configurationId: configurationId, rootId: rootId, deviceId: deviceId)
+        }
         catch { failClosed(); throw NativeDeferredUploadStore.Failure.pausePersistence }
         let indices = records.indices.filter { i in
             let record = records[i]
             return record.scope == scope && record.rootId == rootId && record.request.authorization.id == configurationId &&
                 record.configuration.deviceId == deviceId && !record.ready
         }
-        guard !indices.isEmpty else { return }
+        guard !indices.isEmpty || !runs.isEmpty else { return }
         let toRevoke = indices.map { records[$0] }.filter { !$0.revoked && $0.expiresAt > Date() && !revoking.contains($0.admissionId) }
         for index in indices { records[index].armed = false }
         stopScheduler()
         do { try store.save(records) }
         catch { failClosed(); throw NativeDeferredUploadStore.Failure.pausePersistence }
         for record in toRevoke { revoking.insert(record.admissionId) }
+        for run in runs { revoking.insert(run.runId) }
         Task { [weak self] in
             guard let self else { return }
+            for run in runs {
+                defer { self.revoking.remove(run.runId) }
+                _ = try? await NativeDeferredUploadClient(photoRun: run).photoRunRequest(["action": "revoke-photo-run", "runId": run.runId])
+            }
             for record in toRevoke {
                 defer { self.revoking.remove(record.admissionId) }
                 let client = NativeDeferredUploadClient(record: record)
@@ -395,13 +444,19 @@ final class NativeDeferredUpload {
         guard !persistenceUncertain else { return [] }
         return ((try? store.load()) ?? []).filter { $0.armed && !$0.ready && $0.expiresAt > now && $0.retryAt < $0.expiresAt }
     }
+    private func pendingRuns(now: Date = Date()) -> [NativePhotoRunRecord] {
+        guard !persistenceUncertain else { return [] }
+        return ((try? photoRuns.load()) ?? []).filter { $0.armed && $0.expiresAt > now && $0.retryAt < $0.expiresAt }
+    }
 
     @discardableResult
     func schedule(minimumDelay: TimeInterval = 10) -> Bool {
         if scheduled { return true }
-        guard registered, let next = pending().min(by: { $0.retryAt < $1.retryAt }) else { return false }
+        let candidates = pending().map { ($0.retryAt, $0.configuration.chargingOnly) } +
+            pendingRuns().map { ($0.retryAt, $0.authorization.configuration.chargingOnly) }
+        guard registered, let next = candidates.min(by: { $0.0 < $1.0 }) else { return false }
         do {
-            try scheduler.submit(earliest: max(Date(timeIntervalSinceNow: minimumDelay), next.retryAt), charging: next.configuration.chargingOnly)
+            try scheduler.submit(earliest: max(Date(timeIntervalSinceNow: minimumDelay), next.0), charging: candidates.allSatisfy { $0.1 })
             scheduled = true
             return true
         } catch {
@@ -430,7 +485,8 @@ final class NativeDeferredUpload {
     }) {
         scheduled = false
         let ready = pending().filter { $0.retryAt <= Date() }
-        guard background == nil, operation == nil, !ready.isEmpty else {
+        let runs = pendingRuns().filter { $0.retryAt <= Date() }.sorted { $0.retryAt < $1.retryAt }
+        guard background == nil, operation == nil, !ready.isEmpty || !runs.isEmpty else {
             task.complete(false); schedule(); return
         }
         // Arm the next opportunistic slice before processing, so the OS can
@@ -467,6 +523,20 @@ final class NativeDeferredUpload {
                         try? self.store.update(saved)
                     }
                     if Task.isCancelled || error is NativeUploadAuthorization.Wait || error is NativePhotoUploadBudget.Wait { break }
+                }
+            }
+            for run in runs where !Task.isCancelled {
+                do { try await self.advancePhotoRun(run, checkExecution: checkExecution) }
+                catch {
+                    success = false
+                    if var saved = try? self.photoRuns.lookup(run), saved.sameRun(run), saved.armed {
+                        if (error as? NativeDeferredUploadClient.Failure)?.terminal == true || (error as? MobileFolderStore.Failure) == .changed {
+                            saved.armed = false
+                        } else {
+                            saved.retryAt = max(Date(timeIntervalSinceNow: 300), (error as? NativePhotoUploadBudget.Wait)?.retryAt ?? .distantPast)
+                        }
+                        try? self.photoRuns.update(saved)
+                    }
                 }
             }
             finish(success)
@@ -539,6 +609,143 @@ final class NativeDeferredUpload {
         }
         current.ready = true; current.armed = false
         try store.update(current)
-        if pending().isEmpty { scheduler.cancel(); scheduled = false }
+        if pending().isEmpty && pendingRuns().isEmpty { scheduler.cancel(); scheduled = false }
+    }
+
+    private func advancePhotoRun(_ proposed: NativePhotoRunRecord, checkExecution: @escaping () throws -> Void) async throws {
+        guard var run = try photoRuns.lookup(proposed), run.sameRun(proposed), run.armed else { throw CancellationError() }
+        let authorization = run.authorization, conditions = self.conditions, photos = self.photos, parts = self.parts
+        let queue = run.queue, photoScope = run.photoScope
+        let client = NativeDeferredUploadClient(photoRun: run)
+        let check = {
+            try Task.checkCancellation(); try checkExecution()
+            guard !self.persistenceUncertain, let live = try self.photoRuns.lookup(proposed), live.sameRun(proposed),
+                  live.armed, live.expiresAt > Date() else { throw CancellationError() }
+            let grant = try self.grants.grant(proposed.scope, id: proposed.rootId)
+            guard grant.sourceKind == "photos", NativeUploadPartStaging.grantRevision(grant) == proposed.grantRevision,
+                  photos.access() != "unavailable" else { throw MobileFolderStore.Failure.changed }
+            try conditions.verify(authorization)
+            return grant
+        }
+        let authorize = {
+            _ = try check()
+            _ = try await client.photoRunRequest(["action": "check-photo-run", "runId": proposed.runId])
+            _ = try check()
+        }
+        let grant = try check()
+        let download = conditions.control(for: authorization)
+        let staging = NativeUploadPartStaging(scope: run.scope, grant: grant, photos: photos, store: parts, download: download)
+        if run.retryCloudGaps, run.batch == nil {
+            try await authorize()
+            let retry = Task.detached { try photos.retryUnavailableQueueOriginals(scope: photoScope, request: queue) }
+            try await withTaskCancellationHandler(operation: { try await retry.value }, onCancel: { retry.cancel() })
+            _ = try check()
+            run.retryCloudGaps = false; try photoRuns.update(run)
+        }
+
+        while true {
+            try await authorize()
+            if run.batch == nil {
+                if run.captureId == nil {
+                    run.captureId = UUID().uuidString.lowercased()
+                    try photoRuns.update(run)
+                }
+                let id = run.captureId!
+                let preparation = Task.detached {
+                    if let sealed = try photos.status(scope: photoScope, id: id, allowCloudGaps: true, queueRequest: queue) {
+                        return sealed
+                    }
+                    // A prior process may have died during a scanning
+                    // generation. Only its exact unsealed capture is replaced;
+                    // the reviewed asset selection and receipts stay intact.
+                    try photos.discard(scope: photoScope, capture: .init(id: id, generation: id, totalEntries: 0))
+                    let capture = try photos.prepareCapture(scope: photoScope, id: id, generation: id, allowCloudGaps: true,
+                        download: download, queueRequest: queue, authorize: { try conditions.verify(authorization) })
+                    try conditions.verify(authorization)
+                    return try photos.sealCapture(scope: photoScope, capture: capture)
+                }
+                var authorizationFailure: Error?
+                let watchdog = Task {
+                    while !Task.isCancelled {
+                        do { try await Task.sleep(for: .seconds(15)); try await authorize() }
+                        catch {
+                            if !Task.isCancelled { authorizationFailure = error; preparation.cancel() }
+                            return
+                        }
+                    }
+                }
+                defer { watchdog.cancel() }
+                let capture: MobileFolderInventory.Capture
+                do { capture = try await withTaskCancellationHandler(operation: { try await preparation.value }, onCancel: { preparation.cancel() }) }
+                catch {
+                    if let failure = error as? PhotoLibraryReader.Failure, case .changed = failure {
+                        run.captureId = nil; try photoRuns.update(run)
+                    }
+                    throw authorizationFailure ?? error
+                }
+                try await authorize()
+                guard let batch = capture.photoQueue, batch.epoch == run.epoch else { throw MobileFolderStore.Failure.changed }
+                run.batch = batch; try photoRuns.update(run)
+            }
+            guard let batch = run.batch, let id = run.captureId else { throw MobileFolderStore.Failure.invalid }
+            let read = Task.detached { try photos.queueBatchEntries(scope: photoScope, request: queue, batchId: batch.id) }
+            let originals = try await withTaskCancellationHandler(operation: { try await read.value }, onCancel: { read.cancel() })
+            for source in originals {
+                _ = try check()
+                let retained = try store.load().first { $0.photoRunId == run.runId && $0.request.source == source && $0.expiresAt > Date() && ($0.ready || $0.armed) }
+                let next: NativeDeferredUploadRecord?
+                if let retained { next = retained }
+                else { next = try await reservePhotoOriginal(source, run: run, client: client) }
+                _ = try check()
+                if let next {
+                    if !next.ready {
+                        if retained == nil, try !enqueue(next) { throw NativeDeferredUploadClient.Failure.unavailable }
+                        try await advance(next, staging: staging, check: { _ = try check() }, progress: { _ in })
+                    }
+                } else if let identity = try await staging.photoOriginalIdentity(source) {
+                    _ = try check()
+                    try? NativePhotoBackupSummaries.shared.observe(.init(authorization, owner: run.scope), originals: [identity])
+                }
+            }
+            try await authorize()
+            let finish = Task.detached { try photos.finishQueueBatch(scope: photoScope, request: queue, batchId: batch.id) }
+            try await withTaskCancellationHandler(operation: { try await finish.value }, onCancel: { finish.cancel() })
+            _ = try check()
+            run.captureId = nil; run.batch = nil
+            let finished = batch.assetKeys.isEmpty && batch.pending == 0
+            if finished {
+                run.retryAt = Date(timeIntervalSinceNow: 300); run.retryCloudGaps = batch.unavailable > 0
+            }
+            try photoRuns.update(run)
+            // The PhotoKit selection receipt is durable. Release only the
+            // consumed temporary index generation and keep the next cursor.
+            let cleanup = Task.detached { try? photos.discard(scope: photoScope, capture: .init(id: id, generation: id, totalEntries: 0)) }
+            await cleanup.value
+            if finished { return }
+        }
+    }
+
+    private func reservePhotoOriginal(_ source: MobileFolderReader.Entry, run: NativePhotoRunRecord,
+                                      client: NativeDeferredUploadClient) async throws -> NativeDeferredUploadRecord? {
+        guard source.kind == "file", !source.path.contains("/"), source.size > 0, let fingerprint = source.fingerprint else {
+            throw MobileFolderStore.Failure.invalid
+        }
+        let result = try await client.photoRunRequest(["action": "reserve-photo-original", "runId": run.runId,
+            "path": source.path, "sourceVersion": source.version, "sizeBytes": source.size,
+            "fingerprint": ["partSizeBytes": fingerprint.partSizeBytes, "partCount": fingerprint.partCount, "sha256": fingerprint.sha256]])
+        if result["state"] as? String == "already-backed" { return nil }
+        guard result["state"] as? String == "reserved", let uploadId = result["uploadId"] as? String,
+              let requestId = result["requestId"] as? String, let admission = result["admissionId"] as? String,
+              let raw = result["expiresAt"] as? String, let expiry = MobileDevicePairing.date(raw), expiry > Date(), expiry <= run.expiresAt,
+              let publication = result["publication"] as? [String: Any] else { throw NativeDeferredUploadClient.Failure.invalid }
+        let guardValue = try JSONDecoder().decode(NativeUploadFileRequest.Publication.self, from: JSONSerialization.data(withJSONObject: publication))
+        let request = NativeUploadFileRequest(source: source, uploadId: uploadId, requestId: requestId,
+                                              authorization: run.authorization, publication: guardValue)
+        var next = NativeDeferredUploadRecord(scope: run.scope, request: request, grantRevision: run.grantRevision,
+                                              admissionId: admission, expiresAt: expiry)
+        next.photoRunId = run.runId
+        if result["staged"] as? Bool == true { next.confirmedParts = fingerprint.partCount }
+        try next.validate()
+        return next
     }
 }

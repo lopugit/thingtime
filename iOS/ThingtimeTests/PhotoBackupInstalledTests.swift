@@ -262,8 +262,10 @@ final class PhotoBackupInstalledTests: XCTestCase {
                 throw NSError(domain: "PhotoBackupAcceptance", code: 11, userInfo: [NSLocalizedDescriptionKey: "Deferred native processing did not complete"])
             }
             let completed = try checkpoint.load().filter { $0.scope == scope && $0.request.authorization.id == connection && $0.ready }
-            XCTAssertEqual(completed.count, queued.count)
-            XCTAssertEqual(Set(completed.map(\.request.uploadId)), Set(queued.map(\.request.uploadId)))
+            if !automaticProof {
+                XCTAssertEqual(completed.count, queued.count)
+                XCTAssertEqual(Set(completed.map(\.request.uploadId)), Set(queued.map(\.request.uploadId)))
+            }
             for record in completed {
                 let (download, response) = try await session.data(from: origin.appendingPathComponent("api/v1/attachments/content").appending(queryItems: [
                     URLQueryItem(name: "id", value: record.request.uploadId), URLQueryItem(name: "cache", value: "bytes")]))
@@ -277,13 +279,17 @@ final class PhotoBackupInstalledTests: XCTestCase {
             let unpublished = try await cloudNodes()
             if automaticProof {
                 XCTAssertTrue(completed.allSatisfy { $0.request.publication != nil })
-                XCTAssertEqual(unpublished.count, completed.count, "The admitted native worker publishes without a WebView upload")
-                let authorization = try XCTUnwrap(completed.first?.request.authorization)
+                let resources = try provider.inventory()
+                XCTAssertEqual(Set(unpublished.compactMap { $0["path"] as? String }), Set(resources.map(\.path)))
+                XCTAssertGreaterThan(unpublished.count, queued.count, "The native planner must replenish beyond the browser's original admissions")
+                XCTAssertTrue(completed.contains { $0.photoRunId != nil })
+                for node in unpublished { try await verifyBytes(try XCTUnwrap(node["file"] as? [String: Any])) }
+                let authorization = try XCTUnwrap(queued.first?.request.authorization)
                 let summaries = try NativePhotoBackupSummaries.shared.pendingWindows(.init(authorization, owner: scope))
-                XCTAssertEqual(summaries.reduce(0) { $0 + $1.totals.photos }, completed.count)
-                XCTAssertEqual(summaries.reduce(0) { $0 + $1.totals.bytes.total }, completed.reduce(0) { $0 + $1.request.source.size })
+                XCTAssertEqual(summaries.reduce(0) { $0 + $1.totals.photos }, resources.count)
+                XCTAssertEqual(summaries.reduce(0) { $0 + $1.totals.bytes.total }, Int64(resources.count * bytes.count))
                 XCTAssertTrue(summaries.allSatisfy { $0.due.timeIntervalSince($0.start) == 1800 })
-                print("IOS_PHOTO_BACKGROUND_PUBLICATION_PASS: native exact file receipts and 30-minute summary")
+                print("IOS_PHOTO_BACKGROUND_PUBLICATION_PASS: native replenished beyond \(queued.count) browser admissions and independently verified \(resources.count) originals and a 30-minute summary")
             } else {
                 XCTAssertTrue(unpublished.isEmpty, "An older staging-only admission must not publish Timeline")
             }
@@ -374,7 +380,9 @@ final class PhotoBackupInstalledTests: XCTestCase {
             let firstID: String
             if let retained = owned.first { firstID = retained }
             else { firstID = try await createPhoto() }
-            if deferredProof && uiVerified { _ = try await createPhoto() }
+            if deferredProof && uiVerified {
+                for _ in 0..<(automaticProof ? 4 : 1) { _ = try await createPhoto() }
+            }
             let resources = try provider.inventory(), first = try XCTUnwrap(resources.first { $0.asset == firstID })
             let excluded: [String] = [] // Strict Photos captures cover the disposable library, without unsupported exclusions.
             phase = "read verified native pairing"

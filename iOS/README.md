@@ -459,10 +459,12 @@ In Things, add this device, then choose **Choose folder → Photo library
 (backup)**. The native explanation precedes the system Photos permission dialog.
 Choose limited or full access; the selected scope is shown in the connection.
 Granting access alone starts no upload. Create an ordinary private file-sync
-connection, select a private cloud folder, unpause it and use Upload now while
-the app remains open. Photo connections are backup-only and keep saved cloud
-copies when device originals disappear. Downloads, deletes and device-Trash
-restoration cannot target a photo-library grant.
+connection, select a private cloud folder and enable it. On a compatible
+installed build and origin, an existing enabled backup starts or resumes when
+Thingtime opens and when verified conditions recover. Pause remains a durable
+local denial even while offline. Photo connections are backup-only and keep
+saved cloud copies when device originals disappear. Downloads, deletes and
+device-Trash restoration cannot target a photo-library grant.
 
 The shared Apple PhotoKit reader preserves every resource returned for each
 accessible photo/video (including original and edited resources and Live Photo
@@ -500,6 +502,40 @@ queue checks the published cloud fingerprints before advancing. Recent and
 interrupted queue outcomes survive retry; exhausted older epochs are cleaned
 up without deleting source photos or cloud files. The shared reader also supports
 Mac, where the existing strict behavior remains in effect.
+
+Native Photos automation 1.1.0 negotiates `api.file-sync-transfer-admissions`
+1.2.0 for an optional background run. The verified browser session opens a
+revocable, exact account/device/grant/connection/destination binding; the paired
+iPhone can then prepare and publish newest-first batches without an active
+WebView. iOS background processing gets the same protected queue, pending
+asset selection and accepted multipart cursor after expiration or relaunch.
+Older compatible origins may finish and publish only the files the WebView
+already admitted. A newer background run will recognize unchanged cloud bytes;
+an occupied path with different bytes stays for foreground reconciliation.
+
+Thingtime requests another processing opportunity after five minutes for
+unfinished work. iOS chooses when or whether to run it, including after lock,
+force quit, battery constraints and app refresh restrictions. Brief inactive
+transitions such as system prompts preserve the foreground request. A short
+UIKit continuation may finish already-authorized finite work; automatic Photos
+backup does not request an iOS 26 user-initiated continued-processing task.
+
+Managed original uploads are paced in small writes, 625,000 bytes/s (5 Mbps)
+by default. An optional hourly budget uses the measured payload bytes from all
+managed Photos transfers on that account/origin/device, including failed
+attempts. Each capped connection checks that shared usage against its own cap;
+an uncapped connection does not inherit another connection's cap. If a single
+required provider part is larger than the allowance, the connection reports
+the minimum part size instead of exceeding the budget. A file may span multiple
+budget windows at its confirmed part boundaries. iCloud downloads use Apple's
+PhotoKit transport and aren't subject to Thingtime's upload rate or budget.
+
+When iOS notifications are allowed, the configured reporting interval defaults
+to 30 minutes. Pending notifications report confirmed PhotoKit assets and the
+measured Wi-Fi, mobile or unknown-network upload bytes that produced them.
+A Live Photo counts once when its original and companion are verified.
+Background scheduling and system notification delivery remain separate from
+the successful cloud publication receipt.
 
 Forks need the existing `NSPhotoLibraryUsageDescription` entry in `project.yml`,
 then `xcodegen generate`. No photo-service credentials or private configuration

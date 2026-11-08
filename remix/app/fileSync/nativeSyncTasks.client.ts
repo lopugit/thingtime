@@ -30,7 +30,7 @@ import { CLOUD_SYNC_DESTINATION_REQUIREMENTS } from './cloudSyncDestination';
 import { CLOUD_FOLDER_REQUIREMENTS, parseCloudFolder } from './cloudFolder';
 import { cloudRequests } from './cloudTransport';
 import { preparePhotoSettingsRecovery } from './photoSettingsRecovery';
-import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits, supportsNativePhotoAutomation } from './mobileFolders.client';
+import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits, supportsNativePhotoAutomation, supportsNativePhotoRuns } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { runNativePhotoQueue, runPhotoBackupPasses } from './photoBackupPasses';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
@@ -85,9 +85,9 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			if (rootIdentity.read().pending || rootIdentity.read().generation !== generation || !isNativeSyncAdapterCurrent(adapter))
 				throw Error('The active account changed. Reopen folder access.');
 		};
-		let deferredCount = 0, deferredScheduled: boolean | undefined;
+		let deferredCount = 0, deferredScheduled: boolean | undefined, photoRunArmed = false;
 		const visibility = adapter.platform === 'ios' ? watchNativeSyncVisibility(signal, message =>
-			nativeSyncTasks.suspend(deferredCount > 0 ?
+			nativeSyncTasks.suspend(photoRunArmed ? 'Photos backup can continue in the background when iOS allows.' : deferredCount > 0 ?
 				deferredScheduled ?
 					'Prepared files can upload in the background when iOS allows. Reopen Thingtime to verify and continue the backup.' :
 					'iOS did not schedule background processing. Open Thingtime to resume.' : message, true)) : undefined;
@@ -360,6 +360,15 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				}
 				if (stopRequested) await jobs!.transition(job, 'paused');
 				check();
+				if (photoAutomation && supportsNativePhotoRuns(capabilities)) {
+					try {
+						await host.requireCapability('api.file-sync-transfer-admissions', '1.2.0'); check();
+						await request(binding.ownerId, { action: 'arm-photo-run', rootId: reviewed.configuration.localRootId,
+							authorization: { ...reviewed, scope: binding } }, signal);
+						photoRunArmed = true;
+					} catch { check(); } // An older/unavailable endpoint keeps foreground backup available.
+				}
+
 				if (photoSource && strictAsync && supportsNativePhotoQueue(capabilities) && !job.photoQueueEpoch) {
 					const savedQueue = await jobs!.photoQueue(job, crypto.randomUUID()); check();
 					if (!savedQueue) throw Error('The sync job changed before Photos preparation.');
@@ -384,7 +393,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				if (photoSource && supportsNativeDeferredUploads(capabilities)) {
 					try {
 						await host.requireCapability('api.file-sync-transfer-admissions', '1.0.0'); check();
-						deferredUploads = { queued: (count, scheduled) => { deferredCount = count; if (scheduled !== undefined) deferredScheduled = scheduled; } };
+						deferredUploads = { ...(photoRunArmed ? { skipLookahead: true as const } : {}), queued: (count, scheduled) => { deferredCount = count; if (scheduled !== undefined) deferredScheduled = scheduled; } };
 						if (photoAutomation) {
 							await host.requireCapability('api.file-sync-transfer-admissions', '1.1.0');
 							await host.requireCapability('api.files', CLOUD_SYNC_DESTINATION_REQUIREMENTS['api.files']); check();

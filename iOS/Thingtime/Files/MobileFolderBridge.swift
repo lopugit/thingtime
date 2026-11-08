@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let uploadVersion = "1.5.0"
     static let accessVersion = "1.8.0"
-    static let photoAutomationVersion = "1.0.0"
+    static let photoAutomationVersion = "1.1.0"
     static let stagingVersion = "1.2.0"
     static let publicationVersion = "1.2.0"
     static let trashVersion = "1.2.1"
@@ -424,6 +424,31 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
         try auth.verify(row, network: networkKind, charging: battery == .charging || battery == .full)
     }
 
+    private func armPhotoRun(_ auth: NativeUploadAuthorization, scope: FileSyncOwnerScope, grant: MobileFolderStore.Grant,
+                             webView: WKWebView, cookies: @escaping ([HTTPCookie], URL) -> [HTTPCookie],
+                             check: @escaping () throws -> Void) async throws -> Bool {
+        try auth.validate(owner: scope, rootId: grant.id, photos: true)
+        let transport = NativeFileSession(scope: scope, cookieStore: webView.configuration.websiteDataStore.httpCookieStore,
+                                          cookies: cookies, check: check, invalidated: {})
+        defer { transport.close() }
+        try await transport.open()
+        try await transport.require([(NativeDeferredUploadClient.feature, [1, 2, 0]), ("api.things", [1, 35, 0])])
+        try auth.verifyConfiguration(await transport.json("/api/v1/things?id=" + auth.id))
+        let revision = NativeUploadPartStaging.grantRevision(grant)
+        let result = try await transport.json(NativeDeferredUploadClient.path, body: ["action": "open-photo-run",
+            "configurationId": auth.id, "configurationRevision": auth.updatedAt, "deviceId": auth.scope.deviceId,
+            "localRootId": grant.id, "grantRevision": revision])
+        try check(); try await transport.verifyOwner(); try check()
+        let current = try store.grant(scope, id: grant.id)
+        guard current.sourceKind == "photos", NativeUploadPartStaging.grantRevision(current) == revision,
+              photos.access() != "unavailable", result["ok"] as? Bool == true, let runId = result["runId"] as? String,
+              let raw = result["expiresAt"] as? String, let expiry = MobileDevicePairing.date(raw), expiry > Date() else {
+            throw MobileFolderStore.Failure.changed
+        }
+        return try NativeDeferredUpload.shared.armPhotoRun(.init(scope: scope, authorization: auth, grantRevision: revision,
+                                                               runId: runId, expiresAt: expiry))
+    }
+
     private func decode<T: Decodable>(_ value: Any?, as type: T.Type) throws -> T {
         guard let value = value as? [String: Any] else { throw MobileFolderStore.Failure.invalid }
         let data = try JSONSerialization.data(withJSONObject: value)
@@ -592,7 +617,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 reply: @escaping (String, [String: Any]) -> Void) {
         guard let payload = body["payload"] as? [String: Any], let id = payload["requestId"] as? String, UUID(uuidString: id) != nil,
               let owner = payload["ownerId"] as? String, let action = payload["action"] as? String,
-              ["list", "choose", "remove", "scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard", "inspect", "read", "upload-part", "upload-file", "defer-upload", "cancel-deferred-upload", "photo-queue-finish", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "write-check", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
+              ["list", "choose", "remove", "scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard", "inspect", "read", "upload-part", "upload-file", "defer-upload", "cancel-deferred-upload", "arm-photo-run", "photo-queue-finish", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "write-check", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
         if action == "suspend" { if requestId == id { suspend(.requestCancelled) }; return }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
@@ -699,8 +724,15 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 }
                 else {
                     let grant = try self.store.grant(scope, id: rootId)
-                    guard grant.sourceKind != "photos" || ["scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard", "inspect", "read", "upload-part", "upload-file", "defer-upload", "photo-queue-finish"].contains(action) else { throw MobileFolderStore.Failure.invalid }
-                    if ["upload-part", "upload-file", "defer-upload"].contains(action) {
+                    guard grant.sourceKind != "photos" || ["scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard", "inspect", "read", "upload-part", "upload-file", "defer-upload", "arm-photo-run", "photo-queue-finish"].contains(action) else { throw MobileFolderStore.Failure.invalid }
+                    if action == "arm-photo-run" {
+                        let authorization = try self.decode(payload["authorization"], as: NativeUploadAuthorization.self)
+                        guard grant.sourceKind == "photos", let verifyDevice, let cookies else { throw MobileFolderStore.Failure.invalid }
+                        try await verifyDevice(scope, authorization.scope.deviceId, check); try check()
+                        let scheduled = try await self.armPhotoRun(authorization, scope: scope, grant: grant, webView: webView, cookies: cookies, check: check)
+                        result = ["rootId": rootId, "configurationId": authorization.id, "photoRunArmed": true, "scheduled": scheduled]
+                        inventoryDevice = authorization.scope.deviceId; inspectedGrant = grant
+                    } else if ["upload-part", "upload-file", "defer-upload"].contains(action) {
                         result = try await self.handleUpload(payload, action: action, rootId: rootId, scope: scope,
                             grant: grant, webView: webView, operation: operation, base: base, cookies: cookies,
                             verifyOwner: verifyOwner, verifyDevice: verifyDevice, check: check, reply: reply)

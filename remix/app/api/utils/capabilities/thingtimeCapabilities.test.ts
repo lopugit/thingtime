@@ -759,7 +759,7 @@ test('Photos automation settings and exact publication are additive origin-scope
  const { FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS } = await import('../../../fileSync/configuration');
  const origin = 'https://photos.test';
  const source = createApiCapabilitiesManifest(), runtime = thingtimeCapabilityManifest(origin);
- for (const [feature, minimum, previous] of [...Object.entries(FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS).map(([feature, version]) => [feature, version, feature === 'api.things' ? '1.52.1' : '1.20.0']), ['api.file-sync-transfer-admissions', '1.1.0', '1.0.0']]) {
+ for (const [feature, minimum, previous] of [...Object.entries(FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS).map(([feature, version]) => [feature, version, feature === 'api.things' ? '1.52.1' : '1.20.0']), ['api.file-sync-transfer-admissions', '1.2.0', '1.1.0']]) {
   assert.equal(source.features[feature], minimum);
   assert.equal(runtime.features[feature]?.version, minimum);
   assert.equal(capabilitySatisfies(minimum, minimum), true);

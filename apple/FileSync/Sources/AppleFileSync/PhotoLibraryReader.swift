@@ -531,6 +531,11 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         return capture
     }
 
+    public func retryUnavailableQueueOriginals(scope: Scope, request: PhotoBackupQueueRequest) throws {
+        lock.lock(); defer { lock.unlock() }
+        try require(); try queueStore(scope: scope, request: request).retryUnavailable()
+    }
+
     public func readSkipped(scope: Scope, capture: MobileFolderInventory.Capture, offset: Int, pageSize: Int? = nil) throws -> MobileFolderInventory.SkippedPage {
         lock.lock(); defer { lock.unlock() }
         try require()

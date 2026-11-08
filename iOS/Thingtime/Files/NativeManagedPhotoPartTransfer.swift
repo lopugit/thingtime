@@ -18,7 +18,7 @@ struct NativePhotoTransferBytes: Codable, Equatable, Sendable {
 final class NativeManagedPhotoPartTransfer {
     static let shared = NativeManagedPhotoPartTransfer(budget: .init())
     private let budget: NativePhotoUploadBudget
-    private var active: (scope: FileSyncOwnerScope, config: String, root: String, sender: NativeFileUpload)?
+    private var active: (scope: FileSyncOwnerScope, config: String, root: String, device: String, sender: NativeFileUpload)?
     init(budget: NativePhotoUploadBudget) { self.budget = budget }
 
     func send(_ request: URLRequest, file: URL, length: Int64, configuration: URLSessionConfiguration,
@@ -30,7 +30,7 @@ final class NativeManagedPhotoPartTransfer {
         try conditions.verify(authorization)
         let lease = try budget.reserve(scope: scope, deviceId: authorization.scope.deviceId, bytes: length,
             cap: policy.uploadBytesPerHour, duration: NativeFileUpload.timeout(length: length, rate: policy.rate))
-        active = (scope, authorization.id, authorization.configuration.localRootId, sender)
+        active = (scope, authorization.id, authorization.configuration.localRootId, authorization.scope.deviceId, sender)
         defer { active = nil }
         let path = conditions.snapshot()
         let outcome: Result<Void, Error>
@@ -54,9 +54,10 @@ final class NativeManagedPhotoPartTransfer {
         try outcome.get()
     }
 
-    func cancel(matching scope: FileSyncOwnerScope? = nil, configurationId: String? = nil, rootId: String? = nil) {
+    func cancel(matching scope: FileSyncOwnerScope? = nil, configurationId: String? = nil, rootId: String? = nil, deviceId: String? = nil) {
         guard let active, scope == nil || scope == active.scope,
-              configurationId == nil || configurationId == active.config, rootId == nil || rootId == active.root else { return }
+              configurationId == nil || configurationId == active.config, rootId == nil || rootId == active.root,
+              deviceId == nil || deviceId == active.device else { return }
         active.sender.cancel()
     }
 }

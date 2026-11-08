@@ -31,6 +31,8 @@ struct NativeUploadAuthorization: Codable, Equatable, Sendable {
         let chargingOnly: Bool
         let excludedPaths: [String]
         let photoAutomation: PhotoAutomation?
+        let resourceLimits: [String: Double]?
+        let ignoreRules: String?
         var managedPhotos: PhotoAutomation? { sourceKind == "photos" ? (photoAutomation ?? .legacy) : nil }
     }
     enum Wait: String, Error {
@@ -47,11 +49,17 @@ struct NativeUploadAuthorization: Codable, Equatable, Sendable {
               scope.dataPlane == "home", scope.deviceId == c.deviceId, c.localRootId == rootId,
               (c.configurationVersion == 1 && c.photoAutomation == nil ||
                c.configurationVersion == 4 && photos && c.photoAutomation?.valid == true),
+              c.resourceLimits == nil, c.ignoreRules == nil,
               !c.paused, ["upload", "two-way", "backup"].contains(c.mode),
               ["wifi", "any"].contains(c.network), (c.sourceKind == "photos") == photos,
-              !photos || (c.mode == "backup" && !c.propagateDeletes) else { throw MobileFolderStore.Failure.changed }
+              !photos || (c.mode == "backup" && !c.propagateDeletes && c.excludedPaths.isEmpty) else { throw MobileFolderStore.Failure.changed }
     }
     func verify(_ response: [String: Any], network: String, charging: Bool) throws {
+        try verifyConfiguration(response)
+        try verifyConditions(network: network, charging: charging)
+    }
+
+    func verifyConfiguration(_ response: [String: Any]) throws {
         struct Row: Decodable {
             struct Author: Decodable { let id: String }
             let id: String; let updatedAt: String; let author: Author
@@ -63,7 +71,6 @@ struct NativeUploadAuthorization: Codable, Equatable, Sendable {
               row.acl == ["tt:user"], row.thingtime == ["file-sync"], row.crystal == configuration else {
             throw MobileFolderStore.Failure.changed
         }
-        try verifyConditions(network: network, charging: charging)
     }
 
     func verifyConditions(network: String, charging: Bool) throws {

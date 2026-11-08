@@ -60,7 +60,7 @@ export type ForegroundSyncProgress = {
 };
 export type ForegroundSyncInput = {
 	/** Optional PhotoKit-specific native queue; durable file publication stays here. */
-	deferredUploads?: { publishPhotos?: true; queued(count: number, scheduled?: boolean): void };
+	deferredUploads?: { publishPhotos?: true; skipLookahead?: true; queued(count: number, scheduled?: boolean): void };
 	currentScope(): SyncScope;
 	readConfiguration(): Promise<unknown>;
 	authorizeDevice(): Promise<void>;
