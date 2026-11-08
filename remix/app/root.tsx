@@ -25,6 +25,7 @@ import { BUILDER_OVERLAY_CHROME_CSS } from './components/Builder/BuilderOverlayH
 import { DevKit } from './components/DevKit/DevKit';
 import { ElectronBridgeHost } from './components/Electron/ElectronBridgeHost';
 import { NativeBridgeHost } from './components/NativeBridge/NativeBridgeHost';
+import { LidarScanProvider } from './components/NativeBridge/LidarScanProvider';
 import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHost';
 import { ThemeHost } from './components/ThemeSettings/ThemeHost';
 import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
@@ -130,6 +131,9 @@ export default function App() {
 
   if (identity.pending && rootData.clientIdentityGeneration !== identity.generation) return <RootRecovery refreshing />;
 
+  const nativeOwner = !identity.pending && rootData.dataPlane === 'home' && rootData.user?.accountKind === 'user' &&
+    !rootData.user.temporary && !rootData.user.isCharacter ? rootData.user.id : undefined;
+
   return (
     <ChakraWrapper>
       <GlobalStyles />
@@ -143,6 +147,7 @@ export default function App() {
       <ThingtimeProvider key={rootData.user?.id || 'guest'} accountId={rootData.user?.id} storageKey={rootData.user?.id ? `thingtime:account:${rootData.user.id}` : 'thingtime'}>
         <ThingDraftsProvider>
          <TimelineProvider>
+         <LidarScanProvider ownerId={nativeOwner} generation={identity.generation}>
          {mounted && !isAuthorizePopup ? <><TimelineHost /><SharePreviewHost /></> : null}
         <VisualSettingsHost />
         {mounted ? <BrowserExtensionAccountBridge /> : null}
@@ -151,11 +156,10 @@ export default function App() {
         {/* Mirrors settings.lopu.position into the cache useLopu reads at fire time. */}
         <LopuPositionSync />
         {mounted ? <ElectronBridgeHost /> : null}
-        {mounted && !identity.pending && rootData.dataPlane === 'home' && rootData.user?.id &&
-          rootData.user.accountKind === 'user' && !rootData.user.temporary && !rootData.user.isCharacter ?
-          <><MobileDevicePresenceBootstrap ownerId={rootData.user.id} generation={identity.generation} />
-          <NativeSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} />
-          <RemoteSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} /></> : null}
+        {mounted && nativeOwner ?
+          <><MobileDevicePresenceBootstrap ownerId={nativeOwner} generation={identity.generation} />
+          <NativeSyncBootstrap ownerId={nativeOwner} generation={identity.generation} />
+          <RemoteSyncBootstrap ownerId={nativeOwner} generation={identity.generation} /></> : null}
         {mounted ? <NativeBridgeHost /> : null}
         {/* Invite signup and authorization/pairing use a focused auth
             surface with their own chrome, so the app shell (nav, drawer trigger,
@@ -190,6 +194,7 @@ export default function App() {
         {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
         {!isStandalonePage ? <ConfettiCanvas /> : null}
         {mounted && !isStandalonePage ? <EasterEggs /> : null}
+         </LidarScanProvider>
          </TimelineProvider>
         </ThingDraftsProvider>
       </ThingtimeProvider>

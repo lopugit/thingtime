@@ -15414,3 +15414,28 @@ private readback while an unrelated Home fixture remains paused.
   drafts, and allow explicit Start with no limits. Never infer Mac defaults or
   a 512 MiB native indexer budget from missing readings. The iOS browser fixture
   deliberately supplies stale policy-like readings to verify they stay hidden.
+
+## iOS LiDAR capture and automatic Things save
+
+- Open **Scan — Open LiDAR Scanner** in the native drawer; repeat through an
+  editable web scan action. On a LiDAR device, verify Start requests camera
+  access, Finish retains the original archive locally and creates a private
+  File Thing, and its downloaded bytes match the local original.
+- Inspect the archive manifest and representative depth/confidence buffers,
+  image planes, camera calibration/poses, feature points, meshes and dense point
+  cloud. Check actual availability and partial/error markers; do not equate
+  visual mesh output with preservation of the raw public ARKit data.
+- Deny camera access and use an unsupported device: show a useful state without
+  starting capture. Verify VoiceOver labels, large Dynamic Type, safe areas,
+  drawer scrolling and all controls at narrow and landscape sizes.
+- Interrupt capture or run out of device storage: preserve partial data and
+  report the reason. Go offline after capture; reconnect and retry using the
+  same scan ID. Reopen after process termination and verify one cloud File Thing,
+  unchanged archive bytes, and preservation of the local original.
+- Switch account, destination or data plane during capture/save: stop effects,
+  preserve the original local ownership, and expose no previous-account status.
+  Attempt a cross-origin/iframe bridge call and an external callback/deep-link
+  injection: no scan or upload may be authorized.
+- Open the Safari handoff with matching and mismatched origins. It opens controls
+  only, uses the app's verified account and never silently starts the camera.
+  Simulator and synthetic transfer checks are not physical sensor acceptance.

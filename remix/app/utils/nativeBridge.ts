@@ -13,6 +13,7 @@ export type ThingtimeNativeBridge = {
   notificationsVersion?: string;
   devicePairingVersion?: string;
   deviceLocationVersion?: string;
+  lidarVersion?: string;
   fileAccessVersion?: string;
   fileInventoryStrictCoverage?: boolean;
   fileSymbolicLinksVersion?: string;

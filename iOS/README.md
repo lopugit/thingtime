@@ -705,3 +705,13 @@ use Simulator Home after its readiness marker, verify the attachment changes fro
 pending to ready using the local fixture account while the app is backgrounded,
 then return to Thingtime and verify Timeline publication. Never infer background
 completion from an upload that was already finished before leaving the app.
+
+### LiDAR scanner
+
+The native drawer includes **Scan — Open LiDAR Scanner**. On compatible devices,
+Start records ARKit's available depth, images, geometry and calibration into a
+local original-data archive. Finish automatically saves it as a private File
+Thing; pending uploads retain their original identity and local bytes for retry.
+The web UI can invoke the same scanner through its independently versioned
+native bridge or hand off from Safari. See [capture format and lifecycle](../docs/native-lidar-scans.md)
+and the LiDAR checklist in [TESTING](../TESTING.md).

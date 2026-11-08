@@ -57,7 +57,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         NSLocationWhenInUseUsageDescription: Thingtime can save this device's measured location when you enable location history.
         NSLocationAlwaysAndWhenInUseUsageDescription: Thingtime can periodically save this device’s measured location in the background when you enable device location history. You can turn this off in device settings.
-        NSCameraUsageDescription: Thingtime uses the camera so you can take photos and videos to share.
+        NSCameraUsageDescription: Thingtime uses the camera for LiDAR scans and to take photos and videos you choose to save or share.
         NSMicrophoneUsageDescription: Thingtime uses the microphone for Lopu voice conversations and when you record a video to share.
         NSSpeechRecognitionUsageDescription: Thingtime transcribes your speech so Lopu can respond or save private transcription pages.
         NSPhotoLibraryUsageDescription: Thingtime uses your photo library so you can choose photos and videos to share or back up original files with their embedded metadata.
