@@ -13,7 +13,9 @@ export function collectWebpageAttachmentIds(crystal: unknown): string[] {
     const row = block as Record<string, unknown>;
     collect(row.src); collect(row.html);
     for (const bag of [row.args, row.css]) if (bag && typeof bag === 'object' && !Array.isArray(bag)) for (const value of Object.values(bag)) collect(value);
-    if (Array.isArray(row.children)) pending.push(...[...row.children].reverse());
+    if (Array.isArray(row.children)) {
+      for (let index = row.children.length - 1; index >= 0; index--) pending.push(row.children[index]);
+    }
   }
   return [...ids];
 }

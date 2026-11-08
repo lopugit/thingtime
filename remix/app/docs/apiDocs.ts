@@ -9642,8 +9642,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // optional cursor-backed rich comment projections.
     // 1.52.1: private backup coordinator Things remain inaccessible through generic exact and inherited reads.
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
-    featureVersion: '1.53.0',
-    contractVersion: '1.53.0',
+    // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
+    featureVersion: '1.54.0',
+    contractVersion: '1.54.0',
 
 
     group: 'things',
@@ -9653,6 +9654,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.53 adds exact single-ID reads of saved derived metadata Things, rechecking the source audience and recalculating viewer-visible attachment bytes. Metadata stays outside generic list, batch, search, export and mutation surfaces. ' +
       'Version 1.49.2 corrects Timeline capture for valid Webpages exceeding 1,200 authored blocks or 24 nested containers; saved content and Component authorization remain unchanged. Version 1.49 preserves generic authored Collection source offsetInput/limitInput/totalPath mappings, explicit total and selected-row presentation, and Map query-parameter selection bindings. Authenticated GET ?ids=<JSON array of Thing IDs> returns { ok: true, things: [PublicThing|null,...] } in exact input order, including duplicates. It reuses canonical exact-read ACLs, PAT visibility, app namespace/liveness and protected-record gates, batches DB and public projection work, and does not hydrate discussions or write discovery state. Missing, denied and protected IDs are indistinguishable nulls. ids cannot be combined with list/id/projection parameters; the existing optional hidden-link key remains supported. The operation has no product item cap, but GET URL and response transport limits still apply; clients must process large selections in encoded-byte-aware chunks and reduce the chunk on a transport refusal instead of truncating the dataset. It adds authenticated GET ?count=true over the ordinary Things list filters, returning { ok: true, count } after the same owner, namespace, PAT visibility, moderation and inherited ACL checks. Counts reject paging, exact-ID and discussion-projection parameters, return no partial total on failure or cancellation, and are observations rather than transactionally reserved snapshots. Ordinary list and count reads accept excludeArchived=true, excluding only crystal.archived=true before pagination. Optional list offset is a nonnegative visible-row ordinal; it cannot be combined with a cursor or discussion projection and returns offset plus nextOffset (null at the end). Offset reads scan authorization metadata and project only the requested window, without promising constant-time random access. Safe ordinary owner data uses native database counts; exceptional rows stream authorization metadata only. No raw query language, new index, item limit or public data projection is added. ' +
       'Version 1.48 supports saved map marker child templates, including ordinary Component references bound to each point, and authored detail reveal controls. Normal composition and authorization checks remain. ' +
       'Version 1.47 accepts individually editable tt-upload blocks and adds first-party owner/PAT numeric summaries for exact data schemaId and parentId lists. GET with maxCrystalField=<top-level field> and optional excludeArchived=true returns summary.max (null when no finite numeric value exists), traverses all authorized pages without an item-count cap, and fails without a partial result on cancellation or pagination failure. Summary reads are not atomic order reservations. ' +
@@ -11691,6 +11693,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: true, post: { id: 'share_123', thingtime: ['post', 'share'], isShare: true } }
       }
     ]
+  }),
+  endpoint({
+    id: 'things-metadata',
+    featureVersion: '1.0.0',
+    contractVersion: '1.0.0',
+    group: 'things',
+    title: 'Thing metadata',
+    endpoint: '/api/v1/things/metadata',
+    summary: 'Measure logical Thing JSON separately from verified original attachment bytes and save the results as a related metadata Thing.',
+    detail: 'GET takes an exact source id and an optional hidden-link key. The response includes metadata, with a saved metadata Thing id or null, and canSave, which is true only for an owning session with missing or stale saved metadata. Canonical version 1 measures SHA-256 and UTF-8 bytes of the logical { crystal, extended, tags } JSON payload with stable recursive object order and unchanged array order. Source identity, audience, secrets, cached discussion descendants, derived fields and attachment bytes are outside the payload. Attached bytes count unique, currently authorized objects using the upload-verified stored envelope. File Things use the exact current version only. Linked or unverified originals yield attachedBytes null and separate knownAttachedBytes and unavailableAttachmentCount values. POST takes the source id in the query, requires the owning same-origin session on the home data plane, and recomputes the facts without accepting client-supplied measurements. The first save assigns an opaque stable reference. Its exact permalink follows the current source audience, including canonical unlisted-link access. Ordinary cascade-managed Things and stable File roots support saving. Other visible managed Things may provide live measurements only.',
+    auth: { mode: 'optional', description: 'GET inherits the source Thing audience. POST requires a full owning account session.' },
+    methods: ['GET', 'POST'],
+    steps: ['Negotiate api.things-metadata 1.0.0 and api.things 1.53.0 on the selected origin.', 'GET with an exact source id.', 'Use same-origin POST with that id to refresh when canSave is true.', 'Open a non-null metadata id through the single Thing route.'],
+    requestExamples: [{ name: 'Read sizes', description: 'Measure one visible Thing.', method: 'GET', query: { id: 'source_thing' } }],
+    responseExamples: [{ status: 200, description: 'Current facts and metadata persistence status.', body: { ok: true, canSave: true,
+      metadata: { id: null, targetId: 'source_thing', sourceHash: 'a'.repeat(64), canonicalVersion: 1, jsonBytes: 128, attachedBytes: 0, knownAttachedBytes: 0, attachmentCount: 0, unavailableAttachmentCount: 0 } } }]
   }),
   endpoint({
     id: 'things-update',

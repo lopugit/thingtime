@@ -13,29 +13,14 @@ struct LiDARUploadArchive: Sendable {
         try await offMain { try LiDARCaptureStore.recover(id: id, directory: directory) }
     }
 
-    static func verifyRelocated(_ capture: LiDARCapture) async throws {
-        try await offMain {
-            let sealedCapture: LiDARCapture?
-            do {
-                sealedCapture = try LiDARCaptureStore.readSealedCapture(id: capture.id, directory: capture.archiveURL.deletingLastPathComponent())
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch {
-                throw LiDARUploadOutbox.Failure.archiveChanged
-            }
-            guard let sealed = sealedCapture,
-                  sealed.byteCount == capture.byteCount, sealed.frameCount == capture.frameCount,
-                  sealed.isPartial == capture.isPartial, sealed.statusDetail == capture.statusDetail,
-                  abs(sealed.startedAt.timeIntervalSince(capture.startedAt)) < 1,
-                  abs(sealed.finishedAt.timeIntervalSince(capture.finishedAt)) < 1 else {
-                throw LiDARUploadOutbox.Failure.archiveChanged
-            }
-        }
-    }
-
-    static func inspect(_ capture: LiDARCapture) async throws -> Self {
+    static func inspect(_ capture: LiDARCapture, verifySeal: Bool) async throws -> Self {
         try await offMain {
             try withArchive(capture) { file in
+                if verifySeal {
+                    do { try LiDARCaptureStore.validateSealedArchive(capture, file: file) }
+                    catch is CancellationError { throw CancellationError() }
+                    catch { throw LiDARUploadOutbox.Failure.archiveChanged }
+                }
                 let plan = try FileUploadPart.plan(size: capture.byteCount)
                 var checksums: [Data] = []
                 var composite = SHA256()

@@ -161,12 +161,21 @@ final class LiDARBridge {
                         task = nil; emit(["state": "error", "error": "This scan is not available in the selected account."])
                         return
                     }
-                    let pending = entries.filter { $0.receipt == nil && (retryID == nil || $0.id == retryID) }
+                    // Status refers to the newest actionable scan. Retry is
+                    // bound to its exact ID, even if newer scans now exist.
+                    let pending = entries.reversed().filter { $0.receipt == nil && (retryID == nil || $0.id == retryID) }
                     var pendingID: UUID?
+                    var recoveryIssue: (id: UUID, error: LiDARTarArchive.ArchiveError)?
                     for candidate in pending {
-                        let capture = try await outbox.recover(id: candidate.id, scope: target)
-                        try check()
-                        if capture != nil { pendingID = candidate.id; break }
+                        do {
+                            let capture = try await outbox.recover(id: candidate.id, scope: target)
+                            try check()
+                            if capture != nil { pendingID = candidate.id; break }
+                        } catch let error as LiDARTarArchive.ArchiveError
+                            where error == .damagedArchive || error == .recoveryUnavailable {
+                            try check()
+                            if recoveryIssue == nil { recoveryIssue = (candidate.id, error) }
+                        }
                     }
                     task = nil
                     if let pendingID {
@@ -176,8 +185,17 @@ final class LiDARBridge {
                             emit(["state": "pending", "scanId": pendingID.uuidString.lowercased(),
                                   "error": "Saved on this device. Retry saving this scan to your Things."])
                         }
-                    } else if let retryID, let saved = entries.first(where: { $0.id == retryID })?.receipt {
-                        emit(["state": "saved", "scanId": retryID.uuidString.lowercased(), "fileThingId": saved.fileThingId])
+                    } else if let recoveryIssue {
+                        emit(["state": recoveryIssue.error == .recoveryUnavailable ? "pending" : "error",
+                              "scanId": recoveryIssue.id.uuidString.lowercased(),
+                              "error": recoveryIssue.error.localizedDescription])
+                    } else if let retryID {
+                        let scanId = retryID.uuidString.lowercased()
+                        if let saved = entries.first(where: { $0.id == retryID })?.receipt {
+                            emit(["state": "saved", "scanId": scanId, "fileThingId": saved.fileThingId])
+                        } else {
+                            emit(["state": "error", "scanId": scanId, "error": "This scan has no completed archive to save."])
+                        }
                     } else if let latest = entries.last(where: { $0.receipt != nil }), let receipt = latest.receipt {
                         emit(["state": "saved", "scanId": latest.id.uuidString.lowercased(), "fileThingId": receipt.fileThingId])
                     } else { emit(["state": "idle"]) }

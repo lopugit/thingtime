@@ -3,18 +3,22 @@ import Foundation
 /// A seekable POSIX ustar stream. A scan can grow past 4 GiB without staging
 /// duplicate copies. Each entry is one frame plane, geometry buffer or record.
 final class LiDARTarArchive {
-    enum ArchiveError: LocalizedError {
+    enum ArchiveError: LocalizedError, Equatable {
         case invalidEntry
-        case missingCaptureHeader
         case noWritableArchive
         case alreadyRecording
+        case damagedArchive
+        case recoveryUnavailable
+        case emptyCapture
 
         var errorDescription: String? {
             switch self {
             case .invalidEntry: return "A scan data record could not be archived."
-            case .missingCaptureHeader: return "The scan ended before its first record was saved."
             case .noWritableArchive: return "The device could not create the local scan."
             case .alreadyRecording: return "This scan is already open."
+            case .damagedArchive: return "Some scan data could not be verified. The original remains on this device."
+            case .recoveryUnavailable: return "The scan could not be finalized. The original remains on this device."
+            case .emptyCapture: return "No complete camera frames were saved. Close the scanner and start a new scan."
             }
         }
     }
@@ -39,6 +43,7 @@ final class LiDARTarArchive {
         self.offset = offset
         self.committedOffset = offset
         if offset > 0 {
+            guard try file.seekToEnd() >= offset else { throw ArchiveError.damagedArchive }
             try file.truncate(atOffset: offset)
         }
         try file.seek(toOffset: offset)
@@ -63,6 +68,7 @@ final class LiDARTarArchive {
     func commit() { committedOffset = offset }
 
     func rollback() throws {
+        guard try file.seekToEnd() >= committedOffset else { throw ArchiveError.damagedArchive }
         try file.truncate(atOffset: committedOffset)
         try file.seek(toOffset: committedOffset)
         offset = committedOffset
@@ -119,23 +125,31 @@ final class LiDARTarArchive {
     /// Recover only complete, checksum-valid headers whose payload and padding
     /// fit the actual file. The caller advances its checkpoint at each commit
     /// marker. Large raw payloads are never read into memory.
-    static func nextEntry(in file: FileHandle, offset: UInt64, length: UInt64) throws -> Entry? {
+    static func nextEntry(in file: FileHandle, offset: UInt64, length: UInt64,
+                          rejectDamagedHeader: Bool = false) throws -> Entry? {
         guard offset <= length, length - offset >= UInt64(blockSize) else { return nil }
         try file.seek(toOffset: offset)
         guard let header = try file.read(upToCount: blockSize), header.count == blockSize,
               header[257..<263].elementsEqual([117, 115, 116, 97, 114, 0]),
               header[156] == 48,
               let storedChecksum = number(header[148..<156]),
-              let size = number(header[124..<136]), size <= 0o77777777777 else { return nil }
+              let size = number(header[124..<136]), size <= 0o77777777777 else {
+            if rejectDamagedHeader { throw ArchiveError.damagedArchive }
+            return nil
+        }
         let checksum = header.enumerated().reduce(UInt64(0)) {
             $0 + ((148..<156).contains($1.offset) ? 32 : UInt64($1.element))
         }
-        guard checksum == storedChecksum else { return nil }
-        let path = String(decoding: header[0..<100].prefix { $0 != 0 }, as: UTF8.self)
+        let name = header[0..<100].prefix { $0 != 0 }
+        guard checksum == storedChecksum, !name.isEmpty, name.allSatisfy({ (32...126).contains($0) }) else {
+            if rejectDamagedHeader { throw ArchiveError.damagedArchive }
+            return nil
+        }
         let dataOffset = offset + UInt64(blockSize)
-        let nextOffset = dataOffset + ((size + UInt64(blockSize - 1)) / UInt64(blockSize)) * UInt64(blockSize)
-        guard !path.isEmpty, nextOffset <= length else { return nil }
-        return Entry(path: path, size: size, dataOffset: dataOffset, nextOffset: nextOffset)
+        let paddedSize = ((size + UInt64(blockSize - 1)) / UInt64(blockSize)) * UInt64(blockSize)
+        guard paddedSize <= length - dataOffset else { return nil }
+        return Entry(path: String(decoding: name, as: UTF8.self), size: size,
+                     dataOffset: dataOffset, nextOffset: dataOffset + paddedSize)
     }
 
     static func hasEndMarker(in file: FileHandle, offset: UInt64, length: UInt64) throws -> Bool {
@@ -145,6 +159,8 @@ final class LiDARTarArchive {
     }
 
     private static func number(_ bytes: Data.SubSequence) -> UInt64? {
-        UInt64(String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: CharacterSet(charactersIn: " \0")), radix: 8)
+        let field = String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: CharacterSet(charactersIn: " \0"))
+        guard !field.isEmpty, field.utf8.allSatisfy({ (48...55).contains($0) }) else { return nil }
+        return UInt64(field, radix: 8)
     }
 }

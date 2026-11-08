@@ -1,5 +1,13 @@
 # API endpoints and capabilities
 
+`api.things-metadata` 1.0.0 registers GET/POST
+`/api/v1/things/metadata` in the canonical docs registry and Nitro import map.
+GET reads authorized current measurements; same-origin owning-session POST
+saves a protected derived reference. Clients negotiate this feature before
+either operation. Both manifests and `test:api-capabilities` cover it; run
+`test:thing-metadata:integration` for real handlers, ACLs, concurrent rebuilds,
+deletion and checksum-verified original file bytes. See [Thing metadata](../thing-metadata.md).
+
 `api.file-sync-transfer-admissions` 1.3.0 extends
 `POST /api/v1/files/sync-transfer-admissions`. The owner can admit publication
 of an exact private Photos original or open a revocable iPhone run for subsequent original reservations. The current native runner can update a previously verified same-grant original through the canonical Files revision guard. Existing 1.0.0 admissions still authorize

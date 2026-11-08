@@ -155,6 +155,12 @@ struct LiDARScannerView: View {
             } else {
                 primaryButton("Try Again", icon: "arrow.clockwise", action: model.resetPermissionPrompt)
             }
+        case .emptyCapture:
+            status("No frames saved", icon: "exclamationmark.triangle",
+                   description: LiDARTarArchive.ArchiveError.emptyCapture.localizedDescription)
+            Button("Close", action: onClose)
+                .frame(minHeight: 44)
+                .buttonStyle(.plain)
         case .saved(let capture):
             status(capture.isPartial ? "Partial scan saved" : "Scan saved on this device",
                    icon: "checkmark.circle", description: capture.statusDetail ?? "Waiting for Thingtime to save the private Thing.")
@@ -311,6 +317,7 @@ private final class LiDARScannerModel: ObservableObject {
         case discardFailure(uploadDisabled: Bool)
         case failure(String, canRecover: Bool)
         case saved(LiDARCapture)
+        case emptyCapture
 
         var showsCamera: Bool {
             if case .recording = self { return true }
@@ -355,6 +362,8 @@ private final class LiDARScannerModel: ObservableObject {
                     if self?.state != .discarding { self?.state = .finalizing }
                 case .failed(let message, let canRecover):
                     if self?.state != .discarding { self?.state = .failure(message, canRecover: canRecover) }
+                case .emptyCapture:
+                    if self?.state != .discarding { self?.state = .emptyCapture }
                 case .saved(let capture):
                     self?.state = .saved(capture)
                     onSaved(capture)

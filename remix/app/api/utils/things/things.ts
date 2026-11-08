@@ -1,4 +1,5 @@
 import { contentExecutionHold, contentExecutionStates, type ContentExecutionHold } from './contentExecutionGate';
+import { THING_METADATA_KIND } from '../../../utils/thingMetadata';
 import { relatedCommentPipeline, relatedInteractionPipeline, pagedThreadCounts, tallyRelatedUpdown, tallyRelatedPoll, type CountedPollVote, type CountedUpdown } from './relatedWindows';
 import { discussionAttachmentMap } from './discussionAttachments';
 import { builderThingUpdateKinds } from '../../../schemas/builderThing';
@@ -37,6 +38,7 @@ import { attachmentCascadeCleanupTargets } from '../attachments/attachmentCascad
 import {
 	orderAttachmentDocsByStoredSort,
 	toAttachmentPublicMetadata,
+	VAULT_ATTACHMENT_PURPOSE,
 	type AttachmentPublicMetadata,
 	type AttachmentPurpose
 } from '../attachments/attachmentCore';
@@ -234,6 +236,8 @@ export type ThingDoc = {
   tokenAcl?: string[];
   // Server-maintained Timeline revision fence; never accepted from generic input.
   timelineHeadId?: string;
+  // Protected reference and rebuild fence for one derived metadata child.
+  thingMetadata?: { id: string; revision: string };
   // Legacy single-value form of the same grant (round-2 stamp) — read as an
   // implicit tt:token/<id> entry by tokenAclOf; never written anymore.
   createdByTokenId?: string;
@@ -2908,9 +2912,11 @@ const isBackupControlThing = (doc: ThingDoc) => thingtimeOf(doc).some(kind => ki
 
 // Single and batched exact reads share the same protected-record exclusion.
 const genericThingReadBlocked = (doc: ThingDoc) => isBackupControlThing(doc) || isDeviceControlThing(doc) || isPrivateConnectionThing(doc) ||
+  thingtimeOf(doc).includes(THING_METADATA_KIND) ||
   thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'draft', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind));
 
 export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
+  if (thingtimeOf(doc).includes(THING_METADATA_KIND)) return false;
   // Every `timeline-` kind (events, links, snapshot parts, branches, heads, notes, version names)
   // is protected History metadata reachable only through the Timeline API, never a generic read.
   if (thingtimeOf(doc).some(kind => typeof kind === 'string' && kind.startsWith('timeline-'))) return false;
@@ -3013,6 +3019,7 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
+  if (thingtimeOf(doc).includes(THING_METADATA_KIND)) return false;
   if (isBackupControlThing(doc) || isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
 	// terminal — a blocked or born-private comment under a clean post must
@@ -3224,6 +3231,28 @@ export const findViewableThing = async (shareId: unknown, viewer: Viewer, sessio
   // friend enrichment happens here so every interaction path (react, comment,
   // share, save, view) resolves friends-only targets for real friends
   if (!doc || !(await canViewInherited(doc, withThingLink(await withFriendIds(viewer), doc.shareId)))) return null;
+  return doc;
+};
+
+export const findThingMetadataSource = async (shareId: string, viewer: Viewer, session?: any): Promise<ThingDoc | null> => {
+  const doc = await findThing(shareId, session);
+  if (!doc || genericThingReadBlocked(doc) || doc.attachmentPurpose === VAULT_ATTACHMENT_PURPOSE || doc.appId != null || doc.sandboxSpace != null || doc.sandboxExpiresAt != null) return null;
+  if (thingtimeOf(doc).includes('chat-archive') && (viewer?.id !== doc.ownerId || viewer.pat || (doc as any).archiveDeleting)) return null;
+  const linkedViewer = withThingLink(await withFriendIds(viewer), doc.shareId);
+  // A visible tombstone can still hide the original body. Apply that same
+  // body gate to the source and its inherited audience before computing facts.
+  if (discussionBodyRemoved(doc, linkedViewer)) return null;
+  let redactedAncestor = false;
+  const visible = await canViewInherited(doc, linkedViewer, async id => {
+    const parent = await findThing(id, session);
+    if (parent && discussionBodyRemoved(parent, linkedViewer)) redactedAncestor = true;
+    return parent;
+  });
+  if (!visible || redactedAncestor) return null;
+  if (isPostLikeThing(doc) || thingtimeOf(doc).includes('comment')) {
+    const { comments: _comments, replies: _replies, reactions: _reactions, ...crystal } = crystalOf(doc);
+    return { ...doc, crystal };
+  }
   return doc;
 };
 
