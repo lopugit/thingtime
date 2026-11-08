@@ -240,6 +240,7 @@ test('accepted hidden uploads pause the JS deadline, foreground restores it and 
 			(value) => authority.push(value)
 		);
 		const rejected = assert.rejects(pending, { name: 'AbortError' });
+		await new Promise<void>(resolve => setImmediate(resolve));
 		dispatch();
 		visibility('hidden');
 		t.mock.timers.tick(1_800_000);
@@ -267,6 +268,7 @@ test('accepted hidden uploads pause the JS deadline, foreground restores it and 
 			(value) => authority.push(value)
 		);
 		const timedOut = assert.rejects(old, /timed out/);
+		await new Promise<void>(resolve => setImmediate(resolve));
 		dispatch();
 		t.mock.timers.tick(900_000);
 		await timedOut;

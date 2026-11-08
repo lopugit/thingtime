@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	parseMobileFolderResult,
@@ -19,6 +19,8 @@ import {
 	type FolderRequest
 } from './mobileFolders.client';
 import { nativeBridgeMessageEvent } from '../utils/nativeBridge';
+import { rootIdentity } from '../utils/rootIdentity';
+import { saved, scope } from './foregroundSync.fixture';
 const rootId = '00000000-0000-4000-8000-000000000001';
 const expected = { requestId: 'request', ownerId: 'owner', origin: 'https://native.test' };
 const root = { id: rootId, name: 'Selected folder' };
@@ -176,6 +178,113 @@ test('native source chunks reads, rechecks its version, and cancels the exact pe
 		if (previous) Object.defineProperty(globalThis, 'window', previous);
 		else delete (globalThis as any).window;
 	}
+});
+
+function iosFolderBridge(t: TestContext) {
+	const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+	type Request = FolderRequest & typeof expected;
+	const requests: Request[] = [];
+	const location = { origin: expected.origin };
+	const target = Object.assign(new EventTarget(), { location, thingtimeNativeBridge: {
+		version: '1.0.0', platform: 'ios', isNativeWebView: true, fileAccessVersion: '1.8.0', filePhotoAutomationVersion: '1.2.0', fileUploadVersion: '1.5.0',
+		postMessage: ({ payload }: { payload: Request }) => { requests.push(payload); }
+	} });
+	Object.defineProperty(globalThis, 'window', { configurable: true, value: target });
+	t.after(() => {
+		rootIdentity.confirm(rootIdentity.read().generation);
+		if (previous) Object.defineProperty(globalThis, 'window', previous);
+		else Reflect.deleteProperty(globalThis, 'window');
+	});
+	const reply = ({ requestId, ownerId, origin }: Request, payload: object = { roots: [root] }) =>
+		target.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, {
+			detail: { type: 'mobile-files-result', payload: { requestId, ownerId, origin, ...payload } }
+		}));
+	return { requests, reply, location };
+}
+
+test('queued iOS cancellation leaves the active slot alone and native Pause bypasses it', async t => {
+	const { requests, reply } = iosFolderBridge(t);
+	const activeController = new AbortController(), queuedController = new AbortController(), signal = new AbortController().signal;
+	const active = requestMobileFolders('owner', { action: 'list' }, activeController.signal);
+	const queued = requestMobileFolders('owner', { action: 'choose' }, queuedController.signal);
+	const next = requestMobileFolders('owner', { action: 'list' }, signal);
+	await Promise.resolve();
+	assert.deepEqual(requests.map(request => request.action), ['list']);
+	queuedController.abort();
+	await assert.rejects(queued, { name: 'AbortError' });
+	assert.deepEqual(requests.map(request => request.action), ['list']);
+
+	const pause = requestMobileFolders('owner', { action: 'pause-photo-runs' }, signal);
+	assert.deepEqual(requests.map(request => request.action), ['list', 'pause-photo-runs']);
+	reply(requests[1], { roots: [], photoRunsPaused: true });
+	await pause;
+	const cancel = requestMobileFolders('owner', { action: 'cancel-deferred-upload', rootId,
+		configurationId: 'connection', deviceId: 'device' }, signal);
+	assert.deepEqual(requests.map(request => request.action), ['list', 'pause-photo-runs', 'cancel-deferred-upload']);
+	reply(requests[2], { roots: [], rootId, configurationId: 'connection', cancelled: true });
+	await cancel;
+
+	activeController.abort();
+	await assert.rejects(active, { name: 'AbortError' });
+	await new Promise<void>(resolve => setImmediate(resolve));
+	assert.deepEqual(requests.map(request => request.action), ['list', 'pause-photo-runs', 'cancel-deferred-upload', 'suspend', 'list']);
+	assert.equal(requests[3].requestId, requests[0].requestId);
+	reply(requests[4]);
+	await next;
+});
+
+for (const change of ['account', 'origin'] as const) {
+	test(`queued iOS work cannot cross a change of ${change}`, async t => {
+		const { requests, reply, location } = iosFolderBridge(t);
+		const signal = new AbortController().signal;
+		const active = requestMobileFolders('owner', { action: 'list' }, signal);
+		const queued = requestMobileFolders('owner', { action: 'choose' }, signal);
+		await Promise.resolve();
+		if (change === 'account') {
+			rootIdentity.changed();
+			rootIdentity.confirm(rootIdentity.read().generation);
+		} else location.origin = 'https://different.native.test';
+		reply(requests[0]);
+		await Promise.all([assert.rejects(active, { name: 'AbortError' }), assert.rejects(queued, { name: 'AbortError' })]);
+		assert.deepEqual(requests.map(request => request.action), ['list']);
+		const fresh = requestMobileFolders('current-owner', { action: 'list' }, signal);
+		await new Promise<void>(resolve => setImmediate(resolve));
+		assert.equal(requests[1].origin, location.origin);
+		assert.equal(requests[1].ownerId, 'current-owner');
+		reply(requests[1]);
+		await fresh;
+	});
+}
+
+test('iOS retries a busy status read once and never resends an uncertain arm', async t => {
+	const { requests, reply } = iosFolderBridge(t);
+	t.mock.timers.enable({ apis: ['setTimeout'] });
+	const signal = new AbortController().signal;
+	const status: FolderRequest = { action: 'photo-run-status', rootId, configurationId: 'connection', deviceId: 'device' };
+	const read = requestMobileFolders('owner', status, signal);
+	await Promise.resolve();
+	reply(requests[0], { error: 'Another folder request is running.' });
+	await new Promise<void>(resolve => setImmediate(resolve));
+	t.mock.timers.tick(150);
+	await new Promise<void>(resolve => setImmediate(resolve));
+	assert.deepEqual(requests.map(request => request.action), ['photo-run-status', 'photo-run-status']);
+	reply(requests[1], { roots: [], rootId, configurationId: 'connection', deviceId: 'device', photoRunProgress: null });
+	await read;
+
+	const arm: FolderRequest = { action: 'arm-photo-run', rootId, execution: 'native',
+		authorization: { ...saved, configuration: { ...saved.configuration, localRootId: rootId, sourceKind: 'photos' },
+			scope: { ...scope, origin: expected.origin } }
+	};
+	const busy = requestMobileFolders('owner', arm, signal);
+	await new Promise<void>(resolve => setImmediate(resolve));
+	reply(requests[2], { error: 'Another folder request is running.' });
+	await assert.rejects(busy, /Another folder request is running/);
+	const uncertain = requestMobileFolders('owner', arm, signal);
+	await new Promise<void>(resolve => setImmediate(resolve));
+	t.mock.timers.tick(30_000);
+	await assert.rejects(uncertain, /Folder access timed out/);
+	assert.deepEqual(requests.map(request => request.action), ['photo-run-status', 'photo-run-status', 'arm-photo-run', 'arm-photo-run', 'suspend']);
+	assert.equal(requests[4].requestId, requests[3].requestId);
 });
 
 test('transfer conditions require the new native capability and reject missing or malformed policy signals', () => {

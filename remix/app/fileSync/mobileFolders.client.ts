@@ -29,6 +29,7 @@ import { validateLocalStage, type LocalStagedCopy } from './localSyncTarget';
 import type { SyncOperation, SyncReceiptLookup } from './execute';
 import { sameSyncScope, sameSyncContent, type SyncScope } from './reconcile';
 import type { SyncConditions } from './configuredPlan';
+import { rootIdentity } from '../utils/rootIdentity';
 import { getNativeBridge, nativeBridgeMessageEvent, type ThingtimeNativeBridge } from '../utils/nativeBridge';
 import { planFileSync, validSyncEntry, validSyncPath, type SyncEntry } from './reconcile';
 import {
@@ -395,6 +396,9 @@ export const supportsMobileFolders = (bridge: ThingtimeNativeBridge | undefined 
 	Boolean(
 		bridge?.isNativeWebView && (bridge.platform === 'ios' || bridge.platform === 'android') && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '')
 	);
+const nativeFolderBusyMessage = 'Another folder request is running.';
+class NativeFolderBusy extends Error {}
+
 export function parseMobileFolderResult(
 	value: unknown,
 	expected: { requestId: string; ownerId: string; origin: string },
@@ -417,6 +421,7 @@ export function parseMobileFolderResult(
 	}
 	if (payload.error === LEGACY_NATIVE_INACTIVE_MESSAGE && (payload.rootId === undefined || payload.rootId === expectedRoot))
 		throw new SyncConditionsWait('inactive');
+	if (payload.error === nativeFolderBusyMessage) throw new NativeFolderBusy(nativeFolderBusyMessage);
 	if (typeof payload.error === 'string') throw Error(payload.error.slice(0, 240));
 	if (
 		!Array.isArray(payload.roots) ||
@@ -905,6 +910,9 @@ export const supportsMobileTrashRecovery = (bridge: FolderCapabilities | undefin
 export const supportsNativeFileVersions = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsMobilePublication(bridge) && /^1\.\d+\.\d+$/.test(bridge?.fileVersionsVersion ?? '');
 
+const folderRequestTails = new WeakMap<ThingtimeNativeBridge, Promise<void>>();
+const cancelledFolderRequest = () => new DOMException('Folder request cancelled', 'AbortError');
+
 export function requestMobileFolders(
 	ownerId: string,
 	request: FolderRequest,
@@ -913,7 +921,54 @@ export function requestMobileFolders(
 	onBackground?: (allowed: boolean) => void
 ): Promise<FolderResult> {
 	const bridge = getNativeBridge();
-	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
+	if (!bridge || !supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
+	if (signal.aborted) return Promise.reject(cancelledFolderRequest());
+	const input = structuredClone(request);
+	const send = () => requestMobileFoldersNow(bridge, ownerId, input, signal, onProgress, onBackground);
+	// iOS has one folder request slot. Pause commands are local denials
+	// that the native bridge can process immediately even with an active slot.
+	if (bridge.platform !== 'ios' || input.action === 'pause-photo-runs' || input.action === 'cancel-deferred-upload') return send();
+	const origin = window.location.origin;
+	const generation = rootIdentity.read().generation;
+	const check = () => {
+		const identity = rootIdentity.read();
+		if (signal.aborted || identity.pending || identity.generation !== generation || window.location.origin !== origin || getNativeBridge() !== bridge)
+			throw cancelledFolderRequest();
+	};
+	const run = (folderRequestTails.get(bridge) ?? Promise.resolve()).then(async () => {
+		check();
+		let result: FolderResult;
+		try { result = await send(); }
+		catch (error) {
+			// This exact reply means native rejected dispatch. A timeout or
+			// uncertain mutation never issues a second command.
+			if (!(error instanceof NativeFolderBusy) || !['list', 'conditions', 'photo-run-status'].includes(input.action)) throw error;
+			check();
+			await new Promise(resolve => setTimeout(resolve, 150));
+			check();
+			result = await send();
+		}
+		check();
+		return result;
+	});
+	const tail = run.then(() => {}, () => {});
+	folderRequestTails.set(bridge, tail);
+	void tail.then(() => { if (folderRequestTails.get(bridge) === tail) folderRequestTails.delete(bridge); });
+	return new Promise((resolve, reject) => {
+		const abort = () => reject(cancelledFolderRequest());
+		signal.addEventListener('abort', abort, { once: true });
+		void run.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+	});
+}
+
+function requestMobileFoldersNow(
+	bridge: ThingtimeNativeBridge,
+	ownerId: string,
+	request: FolderRequest,
+	signal: AbortSignal,
+	onProgress?: (bytes: number, total: number) => void,
+	onBackground?: (allowed: boolean) => void
+): Promise<FolderResult> {
 	try { assertNativeScanExclusions(request, bridge); assertNativeSymbolicLinkRequest(request, bridge); } catch (error) { return Promise.reject(error); }
 	if (['scan-capture', 'scan-page', 'scan-discard'].includes(request.action) && !supportsNativeInventoryPages(bridge))
 		return Promise.reject(Error('Inventory pages require a supported Mac or iOS app.'));
@@ -997,8 +1052,7 @@ export function requestMobileFolders(
 		return Promise.reject(Error('Update the app to browse and restore retained files.'));
 	if (request.action.startsWith('version-') && !supportsNativeFileVersions(bridge))
 		return Promise.reject(Error('Update this app to restore retained file versions.'));
-	const input = structuredClone(request),
-		expected = { requestId: crypto.randomUUID(), ownerId, origin: window.location.origin };
+	const input = request, expected = { requestId: crypto.randomUUID(), ownerId, origin: window.location.origin };
 	return new Promise((resolve, reject) => {
 		let nextOffset = 0,
 			uploadedBytes = 0;
@@ -1021,7 +1075,7 @@ export function requestMobileFolders(
 		const abort = () => {
 			cleanup();
 			stop();
-			reject(new DOMException('Folder request cancelled', 'AbortError'));
+			reject(cancelledFolderRequest());
 		};
 		const listener = (event: Event) => {
 			try {
@@ -1078,7 +1132,7 @@ export function requestMobileFolders(
 				}
 			} catch (error) {
 				cleanup();
-				stop();
+				if (!(error instanceof NativeFolderBusy)) stop();
 				reject(error);
 			}
 		};
