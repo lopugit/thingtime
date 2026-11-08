@@ -1,22 +1,23 @@
 import { parseFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
 import { validateSyncRun, type SyncRun } from './execute';
-import { canReplacePhotoDestination } from './photoDestinationPolicy';
+import { samePhotoBackupSource } from './photoSettingsPolicy';
 import { PAGED_RUN_HEADS, PAGED_RUN_STORES, parsePagedRunSpec, validatePagedRunHeader, type PagedRunHeader } from './pagedRunJournal';
 import { REVIEW_DRAFT_HEADS, REVIEW_DRAFT_STORES, parseReviewDraftSpec, validateReviewDraftHeader, type ReviewDraftHeader } from './pagedReviewDraft';
 import { sameSyncScope, type SyncScope } from './reconcile';
 import { SyncJobConfigurationChanged } from './syncJobFailure';
 
-export const PHOTO_DESTINATION_STORES = [PAGED_RUN_HEADS, PAGED_RUN_STORES[0], REVIEW_DRAFT_HEADS, REVIEW_DRAFT_STORES[0], 'runs'] as const;
+export const PHOTO_SETTINGS_STORES = [PAGED_RUN_HEADS, PAGED_RUN_STORES[0], REVIEW_DRAFT_HEADS, REVIEW_DRAFT_STORES[0], 'runs'] as const;
 type PreviousTransfer = { id: string; park: boolean };
+// Preserve the persisted key used by destination-only recovery.
 export const previousPhotoRunKey = (key: string, id: string) => [key, 'previous-photo-destination', id];
-export type PreviousPhotoDestination = { paged?: PreviousTransfer; review?: PreviousTransfer; legacy?: PreviousTransfer };
+export type PreviousPhotoSettings = { paged?: PreviousTransfer; review?: PreviousTransfer; legacy?: PreviousTransfer };
 
 /** Archive pointers, never the operation rows themselves. An archived pointer
  * cannot claim, confirm, or advance a run. Keep its plans/receipts attached to
  * the original IDs; canonical cloud history is independent of these records. */
-export function parkPhotoDestination(
+export function parkPhotoSettings(
 	tx: IDBTransaction, scope: SyncScope, key: string, current: FileSyncConfiguration,
-	expected: PreviousPhotoDestination, done: () => void, fail: (error: unknown) => void
+	expected: PreviousPhotoSettings, reviewedChanged: boolean, done: () => void, fail: (error: unknown) => void
 ) {
 	let pending = 3;
 	const finish = () => { if (--pending === 0) done(); };
@@ -25,7 +26,8 @@ export function parkPhotoDestination(
 		request.onsuccess = () => { try { consume(request.result); } catch (error) { fail(error); } };
 	};
 	const matches = (id: string, configuration: FileSyncConfiguration | undefined, prior: string | undefined) => {
-		if (id !== prior || !configuration || !canReplacePhotoDestination(configuration, current)) throw new SyncJobConfigurationChanged();
+		if (id !== prior || !configuration || !samePhotoBackupSource(configuration, current) ||
+			(!reviewedChanged && JSON.stringify(configuration) === JSON.stringify(current))) throw new SyncJobConfigurationChanged();
 		return configuration.remoteFolderId;
 	};
 	const parkHead = (store: IDBObjectStore, id: string, folder: string) => {

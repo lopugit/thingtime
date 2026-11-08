@@ -52,7 +52,7 @@ export function MobileDevicePresenceBootstrap({ ownerId, generation }: { ownerId
 								!rootIdentity.read().pending &&
 								rootIdentity.read().generation === generation
 							) {
-								publishMobileDeviceObservation(mobileDeviceScope(origin, ownerId), status);
+								publishMobileDeviceObservation(mobileDeviceScope(origin, ownerId, generation), status);
 								// Read-only verification resumes only an already enabled native binding.
 								// Native status never prompts or enables location collection.
 								if (status.state === 'paired' && supportsMobileLocation()) {

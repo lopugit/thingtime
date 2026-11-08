@@ -18,6 +18,14 @@ const linkStyle = {
 	'text-decoration': 'none',
 	'overflow-wrap': 'anywhere'
 };
+export const localMobileSyncBlocks: WebpageBlock[] = [
+	{ ...text('local-mobile-sync-description', 'p', 'This is your paired device. Use its sync controls below to edit settings or start a transfer.'), css: { 'font-size': '14px', 'margin-bottom': '8px' } },
+	{ ...text('local-mobile-sync-link', 'a', 'Go to this device’s sync controls', {
+		href: '{localSync.href}',
+		'data-tt-action': '$transient',
+		'data-tt-action-inputs': { operation: 'go-to-local-sync' }
+	}), css: linkStyle }
+];
 export const deviceSyncOverviewBlocks: WebpageBlock[] = [
 	{
 		id: 'device-sync-overview',
