@@ -1,6 +1,8 @@
 import { SYNC_RETRY_DELAY_MS, SYNC_RETRY_MAX_MS } from './syncConnectionWait';
 import { isSyncJobFailure, syncJobFailure, SyncJobConfigurationChanged, type SyncJobFailure } from './syncJobFailure';
 import { parseFileSyncConfiguration } from './configuration';
+import { PHOTO_DESTINATION_STORES, parkPhotoDestination, type PreviousPhotoDestination } from './photoDestinationJournal';
+import { canReplacePhotoDestination } from './photoDestinationPolicy';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { journalScope, type JournalAccess } from './journalScope';
 import { syncScopeKey, type SyncScope } from './reconcile';
@@ -195,31 +197,43 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 				} catch (error) { fail(error); }
 			};
 		}),
-		admit: (saved: SavedFileSyncConfiguration, id: string, intervalMs?: number) => bound.transaction<SyncJob>([STORE, INVENTORY_PIN_STORE], 'readwrite', (tx, done, fail) => {
-			const reviewed = canonical(saved, bound.scope), store = tx.objectStore(STORE), request = store.get(bound.key);
-			request.onsuccess = () => {
-				try {
-					const previous = request.result ? validate(request.result) : null;
-					if (previous?.strictCaptureId) throw Error('Confirm the previous strict inventory cleanup before admitting a new scan.');
-					const unfinished = previous && previous.state !== 'complete' && previous.nextRunAt === undefined;
-					const policyChanged = !!unfinished && JSON.stringify(previous.reviewed.configuration) !== JSON.stringify(reviewed.configuration);
-					if (policyChanged && previous.state !== 'paused')
-						throw new SyncJobConfigurationChanged();
-					const repeat = intervalMs ?? (previous && (syncJobEnabled(previous) || previous.state === 'attention') ? previous.intervalMs : undefined);
-					const job = validate({ version: 1, key: bound.key, id: unfinished && !policyChanged ? previous.id : id,
-						revision: (previous?.revision ?? 0) + 1, scope: bound.scope, reviewed, state: 'runnable',
-						...(repeat === undefined ? {} : { intervalMs: repeat }),
-						...(unfinished && previous.photoQueueEpoch && JSON.stringify(previous.reviewed) === JSON.stringify(reviewed) ? { photoQueueEpoch: previous.photoQueueEpoch } : {}),
-						...(unfinished && !policyChanged && previous.localImport && JSON.stringify(previous.reviewed) === JSON.stringify(reviewed) ? { localImport: previous.localImport } : {}),
-						...(unfinished && !policyChanged && previous.nativeCaptureId && JSON.stringify(previous.reviewed) === JSON.stringify(reviewed) ? { nativeCaptureId: previous.nativeCaptureId, ...(previous.nativeCaptureGeneration ? { nativeCaptureGeneration: previous.nativeCaptureGeneration, nativeCaptureRestarts: previous.state === 'runnable' ? previous.nativeCaptureRestarts ?? 0 : 0 } : {}) } : {}) });
-					const count = store.index('account').count(accountRange());
-					count.onsuccess = () => {
-						if (!previous && count.result >= MAX_SYNC_JOBS_PER_ACCOUNT) { fail(Error('This account has reached its saved sync job limit.')); return; }
-						pinImport(tx, previous, job); store.put(job); done(job);
-					};
-				} catch (error) { fail(error); }
-			};
-		}).then(changed),
+		admit: (saved: SavedFileSyncConfiguration, id: string, intervalMs?: number,
+			photoDestination?: { previous: SyncJob | null; transfers: PreviousPhotoDestination }) =>
+			bound.transaction<SyncJob>([STORE, INVENTORY_PIN_STORE, ...(photoDestination ? PHOTO_DESTINATION_STORES : [])], 'readwrite', (tx, done, fail) => {
+				const reviewed = canonical(saved, bound.scope), store = tx.objectStore(STORE), request = store.get(bound.key);
+				request.onsuccess = () => {
+					try {
+						const previous = request.result ? validate(request.result) : null;
+						if (previous?.strictCaptureId) throw Error('Confirm the previous strict inventory cleanup before admitting a new scan.');
+						if (photoDestination && (previous?.id !== photoDestination.previous?.id || previous?.revision !== photoDestination.previous?.revision))
+							throw Error('The sync job changed while stopping. Please retry.');
+						const unfinished = previous && previous.state !== 'complete' && previous.nextRunAt === undefined;
+						const policyChanged = !!unfinished && JSON.stringify(previous.reviewed.configuration) !== JSON.stringify(reviewed.configuration);
+						const replacingPhotos = !!photoDestination && !!previous && canReplacePhotoDestination(previous.reviewed.configuration, reviewed.configuration);
+						if (photoDestination && !replacingPhotos && !Object.values(photoDestination.transfers).some(transfer => transfer.park))
+							throw new SyncJobConfigurationChanged();
+						if (policyChanged && previous.state !== 'paused' && !replacingPhotos) throw new SyncJobConfigurationChanged();
+						const resume = unfinished && !policyChanged && !photoDestination;
+						const sameReviewed = resume && JSON.stringify(previous.reviewed) === JSON.stringify(reviewed);
+						const repeat = intervalMs ?? (previous && (syncJobEnabled(previous) || previous.state === 'attention') ? previous.intervalMs : undefined);
+						const job = validate({ version: 1, key: bound.key, id: resume ? previous.id : id,
+							revision: (previous?.revision ?? 0) + 1, scope: bound.scope, reviewed, state: 'runnable',
+							...(repeat === undefined ? {} : { intervalMs: repeat }),
+							...(sameReviewed && previous.photoQueueEpoch ? { photoQueueEpoch: previous.photoQueueEpoch } : {}),
+							...(sameReviewed && previous.localImport ? { localImport: previous.localImport } : {}),
+							...(sameReviewed && previous.nativeCaptureId ? { nativeCaptureId: previous.nativeCaptureId, ...(previous.nativeCaptureGeneration ? { nativeCaptureGeneration: previous.nativeCaptureGeneration, nativeCaptureRestarts: previous.state === 'runnable' ? previous.nativeCaptureRestarts ?? 0 : 0 } : {}) } : {}) });
+						const count = store.index('account').count(accountRange());
+						count.onsuccess = () => {
+							if (!previous && count.result >= MAX_SYNC_JOBS_PER_ACCOUNT) { fail(Error('This account has reached its saved sync job limit.')); return; }
+							const commit = () => { bound.check(); pinImport(tx, previous, job); store.put(job); done(job); };
+							try {
+								if (photoDestination) parkPhotoDestination(tx, bound.scope, bound.key, reviewed.configuration, photoDestination.transfers, commit, fail);
+								else commit();
+							} catch (error) { fail(error); }
+						};
+					} catch (error) { fail(error); }
+				};
+			}).then(changed),
 		/** CAS prevents an old discovery or late completion from reviving a
 		 * stopped job, replacing a newer attempt, or replaying completed work. */
 		transition: (expected: SyncJob, state: 'runnable' | 'paused' | 'attention' | 'complete') => change(expected,

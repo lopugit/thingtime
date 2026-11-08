@@ -24,6 +24,9 @@ import type { ForegroundSyncInput, ForegroundSyncProgress } from './foregroundSy
 import type { InventoryIdentity } from './inventoryJournal';
 import { readCloudFolderInventoryPages } from './cloudInventoryPages.client';
 import { readCloudFolderInventory } from './cloudInventory.client';
+import { CLOUD_FOLDER_REQUIREMENTS, parseCloudFolder } from './cloudFolder';
+import { cloudRequests } from './cloudTransport';
+import { preparePhotoDestinationRecovery } from './photoDestinationRecovery';
 import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { runNativePhotoQueue, runPhotoBackupPasses } from './photoBackupPasses';
@@ -31,9 +34,9 @@ import { assertPhotoSourcePolicy } from './photoSourcePolicy';
 import { createConflictReviewController } from './conflictReviewController';
 import type { PagedConflictReviewResult } from './pagedForegroundReview';
 import type { SyncConflictReviewResult } from './conflictResolution';
-import type { SavedFileSyncConfiguration } from './configuredPlan';
+import { assertConfiguredSyncApproval, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
 import type { SyncScope } from './reconcile';
-import { writeStampedCache, pruneCacheNamespace } from '../hooks/localCache';
+import { clearLocalCache, writeStampedCache, pruneCacheNamespace } from '../hooks/localCache';
 import { TIMELINE_CHANGED_EVENT } from '../timeline/clientEvents';
 
 export const nativeSyncTasks = createSyncTaskRuntime();
@@ -161,6 +164,13 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			if (reviewed.configuration.ignoreRules && !supportsNativeIgnoreRules(capabilities)) throw Error('Update Thingtime Mac before using this connection’s Gitignore rules.');
 			const currentScope = () => { check(); host.assertCurrent(); return binding; };
 			const runtime = { ...(resources ? { resources } : {}), currentScope, origin: host.origin, fetch: host.fetch, requireCapability: host.requireCapability };
+			const readConfiguration = async () => {
+				const url = new URL('/api/v1/things', binding.origin); url.searchParams.set('id', reviewed.id);
+				const response = await host.fetch(url, { credentials: 'include', cache: 'no-store', redirect: 'error', signal,
+					headers: { 'X-Thingtime-Expected-Actor': binding.ownerId, 'X-Thingtime-Expected-Data-Plane': 'home' } });
+				if (!response.ok) throw Error('The saved sync connection could not be verified.');
+				const value = await response.json(); check(); return value.thing;
+			};
 			let photoSource = false, backup = false, strictAsync = false, downloadCloudForPlan = false;
 			let photoAccess: ForegroundSyncProgress['photoAccess'];
 			const updatePhotoAccess = (roots: Awaited<ReturnType<typeof request>>['roots']) => {
@@ -282,18 +292,53 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					if (!prior) return;
 					if (resume) resumeJob = prior;
 				}
-				if (!resume) {
-					// A new approved revision cannot borrow the earlier native job.
-					// Cancel its same-connection scan before dropping that ticket.
-					if (prior?.nativeCaptureId && (prior.state === 'paused' || JSON.stringify(prior.reviewed.configuration) === JSON.stringify(reviewed.configuration)) && JSON.stringify(prior.reviewed) !== JSON.stringify(reviewed)) {
-						await request(binding.ownerId, { action: 'scan-cancel', rootId: prior.reviewed.configuration.localRootId, inventoryDeviceId: binding.deviceId,
-							captureId: prior.nativeCaptureId, capturePolicy: 'backup-supported', excludedPaths: prior.reviewed.configuration.excludedPaths, ...(prior.reviewed.configuration.ignoreRules ? { ignoreRules: prior.reviewed.configuration.ignoreRules } : {}) }, signal); check();
+				const cancelPriorBackupCapture = async () => {
+					if (!prior?.nativeCaptureId) return;
+					const { configuration } = prior.reviewed;
+					await request(binding.ownerId, { action: 'scan-cancel', rootId: configuration.localRootId, inventoryDeviceId: binding.deviceId,
+						captureId: prior.nativeCaptureId, capturePolicy: 'backup-supported', excludedPaths: configuration.excludedPaths,
+						...(configuration.ignoreRules ? { ignoreRules: configuration.ignoreRules } : {}) }, signal); check();
+				};
+				const photoDestination = !resume && photoSource && adapter.platform === 'ios' ? await preparePhotoDestinationRecovery(
+					journal!, { scope: binding, currentScope, signal }, prior, reviewed, {
+						check,
+						verify: async () => {
+							const { localRootId, remoteFolderId } = reviewed.configuration;
+							await host.authorizeDevice(binding.ownerId, binding.deviceId, signal); check();
+							const latest = (await request(binding.ownerId, { action: 'list' }, signal)).roots;
+							assertPhotoSourcePolicy(reviewed.configuration, latest); check();
+							const { json, negotiate } = cloudRequests(runtime, binding, signal);
+							await negotiate(CLOUD_FOLDER_REQUIREMENTS);
+							const value = await json('/api/v1/files?' + new URLSearchParams({ folderId: remoteFolderId }));
+							if (parseCloudFolder(value.folder).id !== remoteFolderId) throw Error('The cloud folder changed.');
+							const saved = readOwnedFileSyncConfiguration(await readConfiguration(), binding.ownerId);
+							assertConfiguredSyncApproval(saved, { ...reviewed, scope: binding }, binding, localRootId, remoteFolderId);
+						},
+						disarm: async () => {
+							await cancelPriorBackupCapture();
+							if (supportsNativeDeferredUploads(capabilities)) {
+								const { localRootId } = reviewed.configuration;
+								const retired = await request(binding.ownerId, { action: 'cancel-deferred-upload',
+									rootId: localRootId, configurationId: reviewed.id, deviceId: binding.deviceId }, signal);
+								if (retired.cancelled !== true)
+									throw Error('The earlier Photos transfer could not be disarmed. Retry before starting the new destination.');
+							}
+						}
 					}
-				}
+				) : undefined;
+				// A new approved revision cannot borrow the earlier native job.
+				// Cancel its same-connection scan before dropping that ticket.
+				if (!resume && !photoDestination && prior?.nativeCaptureId &&
+					(prior.state === 'paused' || JSON.stringify(prior.reviewed.configuration) === JSON.stringify(reviewed.configuration)) &&
+					JSON.stringify(prior.reviewed) !== JSON.stringify(reviewed)) await cancelPriorBackupCapture();
 				check();
-				admissionPending = resumeJob ? jobs!.begin(resumeJob, Date.now(), crypto.randomUUID()) : jobs!.admit(reviewed, crypto.randomUUID(), intervalMs);
+				admissionPending = resumeJob ? jobs!.begin(resumeJob, Date.now(), crypto.randomUUID()) : jobs!.admit(reviewed, crypto.randomUUID(), intervalMs, photoDestination);
 				job = await admissionPending;
 				if (!job) return; // A stopped/completed/replaced discovery is never replayed.
+				if (photoDestination) {
+					for (const prefix of ['tt:sync-progress:', 'tt:sync-inventory:', 'tt:sync-progress-tree:'])
+						clearLocalCache(prefix + syncScopeKey(binding));
+				}
 				if (stopRequested) await jobs!.transition(job, 'paused');
 				check();
 				if (photoSource && strictAsync && supportsNativePhotoQueue(capabilities) && !job.photoQueueEpoch) {
@@ -351,13 +396,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 							const key = 'tt:sync-progress-tree:' + syncScopeKey(binding);
 							writeStampedCache(key, descriptor); pruneCacheNamespace('tt:sync-progress-tree:', key, 32);
 						},
-						readConfiguration: async () => {
-							const url = new URL('/api/v1/things', binding.origin); url.searchParams.set('id', reviewed.id);
-							const response = await host.fetch(url, { credentials: 'include', cache: 'no-store', redirect: 'error', signal,
-								headers: { 'X-Thingtime-Expected-Actor': binding.ownerId, 'X-Thingtime-Expected-Data-Plane': 'home' } });
-							if (!response.ok) throw Error('The saved sync connection could not be verified.');
-							const value = await response.json(); check(); return value.thing;
-						},
+						readConfiguration,
 						...(host.authorizeContext ? { authorizeContext: async () => {
 							const authorization = await host.authorizeContext!(binding.ownerId, binding.deviceId!, signal);
 							assertPhotoSourcePolicy(reviewed.configuration, authorization.roots); updatePhotoAccess(authorization.roots); check();
