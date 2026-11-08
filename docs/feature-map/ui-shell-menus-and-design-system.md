@@ -1,5 +1,22 @@
 # UI shell, menus and design system
 
+## Editable LiDAR capture controls
+
+The Things root shows an editable LiDAR scan section on iOS. Its
+`SettingsDocumentHost` uses separate heading, description, start, retry, status,
+and receipt-link blocks. `useTtActionClicks` also lets a saved Builder button
+open the same scanner with the allowlisted `$ui` native capability `lidar.scan`.
+Only direct activation of a regular button can request capture. The native
+scanner requires a separate Start gesture before opening the camera.
+
+`LidarScanProvider` checks the current Home account and compatible iOS
+`lidarVersion`; native replies must match the exact request, owner and origin.
+An iPhone or iPad browser can hand off its HTTPS origin to the app, where the
+app independently checks the account. Local originals and upload retries stay
+in native storage. Run `lidarScanBridge.test.ts` and
+`remix/scripts/lidar-scan.browser.mjs`. See [native LiDAR scans](../native-lidar-scans.md)
+for the bridge, archive and hardware acceptance.
+
 ## Native mobile background presence
 
 `MobileDevicePresenceBootstrap` owns the Activity manager preference and identity
