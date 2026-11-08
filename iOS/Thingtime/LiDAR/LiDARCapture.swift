@@ -23,7 +23,7 @@ struct LiDARCapture: Codable, Sendable, Equatable {
 /// Disk format state; shared by the AR session, interrupted-capture recovery
 /// and the format tests. No frame is held after its delegate callback returns.
 final class LiDARCaptureStore {
-    struct Header: Codable {
+    struct Header: Codable, Equatable {
         var format = "thingtime.lidar.capture"
         var version = LiDARCapture.manifestVersion
         let captureID: UUID
@@ -151,6 +151,9 @@ final class LiDARCaptureStore {
     private static var activeIDs: Set<UUID> = []
     private static var failedDiscardIDs: Set<UUID> = []
     private static let archiveName = "scan.tar"
+    private static let recoveredArchiveName = "scan-recovered.tar"
+    private static let recoveryStagingName = ".scan-recovery.tar"
+    static let archiveNames = [archiveName, recoveredArchiveName]
     private static let reserveName = "finalization.reserve"
     private static let discardName = ".discarded"
     private static let receiptName = "capture-receipt.json"
@@ -230,6 +233,7 @@ final class LiDARCaptureStore {
     func synchronize() throws { try archive.synchronize() }
 
     func finalize(detail: String?, worldMapStatus: String) throws -> LiDARCapture {
+        guard counts.frames > 0 else { throw LiDARTarArchive.ArchiveError.emptyCapture }
         try Self.releaseReserve(at: folder)
         try archive.rollback()
         let manifest = Self.manifest(header: header, counts: counts, detail: detail, worldMapStatus: worldMapStatus)
@@ -254,34 +258,46 @@ final class LiDARCaptureStore {
 
     static func discardClosed(id: UUID, uploadDisabled: Bool) throws {
         let folder = try directory(id: id)
+        guard claim(id) else {
+            let disabled = (try? markDiscarded(at: folder)) != nil || uploadDisabled
+            if !disabled { markDiscardFailed(id) }
+            throw DiscardFailure(uploadDisabled: disabled)
+        }
+        defer { release(id) }
         let archiveURL = folder.appendingPathComponent(archiveName)
         try discard(id: id, folder: folder, uploadDisabled: uploadDisabled,
                     removeArchive: { try FileManager.default.removeItem(at: $0) }, erase: {
-            let file = try FileHandle(forWritingTo: archiveURL)
-            defer { try? file.close() }
-            try file.truncate(atOffset: 0)
-            try file.synchronize()
+            try eraseArchive(at: archiveURL)
         })
+    }
+
+    private static func eraseArchive(at url: URL) throws {
+        let file = try FileHandle(forWritingTo: url)
+        defer { try? file.close() }
+        try file.truncate(atOffset: 0)
+        try file.synchronize()
     }
 
     private static func discard(id: UUID, folder: URL, uploadDisabled: Bool,
                                 removeArchive: (URL) throws -> Void, erase: () throws -> Void) throws {
-        let archiveURL = folder.appendingPathComponent(archiveName)
         var disabled = uploadDisabled
         if (try? markDiscarded(at: folder)) != nil { disabled = true }
-        do {
-            try removeArchive(archiveURL)
-        } catch let error as CocoaError where error.code == .fileNoSuchFile || error.code == .fileReadNoSuchFile {
-            // A previous attempt already removed the original.
-        } catch {
-            if !disabled, (try? erase()) != nil {
-                // An empty canonical file cannot be interpreted as a capture.
-                // Best-effort cleanup must not turn a successful erase into an upload.
-                try? FileManager.default.removeItem(at: folder)
-                return
+        // Both the original and any recovered or still-staged clone can hold
+        // private scan data. The durable no-upload marker covers all of them.
+        for name in archiveNames + [recoveryStagingName] {
+            let url = folder.appendingPathComponent(name)
+            do {
+                try removeArchive(url)
+            } catch let error as CocoaError where error.code == .fileNoSuchFile || error.code == .fileReadNoSuchFile {
+                continue
+            } catch {
+                if !disabled {
+                    let erased: Void? = try? (name == archiveName ? erase() : eraseArchive(at: url))
+                    if erased != nil { continue }
+                    markDiscardFailed(id)
+                }
+                throw DiscardFailure(uploadDisabled: disabled)
             }
-            if !disabled { markDiscardFailed(id) }
-            throw DiscardFailure(uploadDisabled: disabled)
         }
         try? FileManager.default.removeItem(at: folder.appendingPathComponent(receiptName))
         if disabled {
@@ -342,7 +358,7 @@ final class LiDARCaptureStore {
         guard claim(id) else { return nil }
         defer { release(id) }
         guard try !isDiscarded(id: id, directory: directory) else { return nil }
-        let archiveURL = directory.appendingPathComponent(archiveName)
+        let archiveURL = existingArchive(in: directory)
         guard FileManager.default.fileExists(atPath: archiveURL.path) else { return nil }
         let file = try FileHandle(forReadingFrom: archiveURL)
         defer { try? file.close() }
@@ -369,32 +385,47 @@ final class LiDARCaptureStore {
         defer { release(id) }
         let folder = try directory ?? Self.directory(id: id)
         guard try !isDiscarded(id: id, directory: folder) else { return nil }
-        let archiveURL = folder.appendingPathComponent(archiveName)
+        let archiveURL = existingArchive(in: folder)
         guard FileManager.default.fileExists(atPath: archiveURL.path) else { return nil }
         let file = try FileHandle(forReadingFrom: archiveURL)
         defer { try? file.close() }
         let length = try file.seekToEnd()
         let decoder = decoder()
         guard let (first, header) = try readHeader(id: id, file: file, length: length, decoder: decoder) else {
-            throw LiDARTarArchive.ArchiveError.missingCaptureHeader
+            throw LiDARTarArchive.ArchiveError.damagedArchive
         }
         if let fast = try readReceipt(id: id, directory: folder, archiveURL: archiveURL,
                                       file: file, length: length, decoder: decoder) {
-            return fast
+            return fast.frameCount > 0 ? fast : nil
         }
 
         var counts = Counts()
         var pending = Counts()
         var offset = first.nextOffset
         var checkpoint = offset
-        while let entry = try LiDARTarArchive.nextEntry(in: file, offset: offset, length: length) {
+        while let entry = try LiDARTarArchive.nextEntry(in: file, offset: offset, length: length, rejectDamagedHeader: true) {
+            try Task.checkCancellation()
             let entryOffset = offset
             offset = entry.nextOffset
             if entry.path == "manifest.json" {
                 if let sealed = try readManifest(id: id, archiveURL: archiveURL, file: file,
                                                  length: length, entry: entry, decoder: decoder) {
                     try? writeReceipt(sealed, manifestOffset: entryOffset, at: folder)
-                    return sealed
+                    return sealed.frameCount > 0 ? sealed : nil
+                }
+                // A completed manifest with no terminal blocks can result from
+                // a stop during finalization. Verify its identity and prefix
+                // before creating a sealed copy.
+                guard let manifest = try readJSON(Manifest.self, from: file, entry: entry, decoder: decoder),
+                      manifest.capture.captureID == id, manifest.capture.format == header.format,
+                      manifest.capture.version == header.version, manifest.outputs == counts,
+                      checkpoint == entryOffset, length - offset < 1024 else {
+                    throw LiDARTarArchive.ArchiveError.damagedArchive
+                }
+                try file.seek(toOffset: offset)
+                let tail = try file.read(upToCount: Int(length - offset)) ?? Data()
+                guard tail.count == Int(length - offset), tail.allSatisfy({ $0 == 0 }) else {
+                    throw LiDARTarArchive.ArchiveError.damagedArchive
                 }
                 break
             }
@@ -406,16 +437,90 @@ final class LiDARCaptureStore {
                 checkpoint = offset
             }
         }
-        try releaseReserve(at: folder)
-        let writer = try LiDARTarArchive(url: archiveURL, date: header.startedAt, offset: checkpoint)
+        guard archiveURL.lastPathComponent == archiveName else {
+            throw LiDARTarArchive.ArchiveError.damagedArchive
+        }
+        guard counts.frames > 0 else { return nil }
+
         let recovered = manifest(header: header, counts: counts,
-                                 detail: "Recording was interrupted. The scan contains the data saved before the interruption.",
+                                 detail: "Recording was interrupted. The scan contains the complete frames saved before the interruption.",
                                  worldMapStatus: counts.worldMap > 0 ? "available" : "interrupted")
-        try writer.entry("manifest.json", data: encoder().encode(recovered))
-        try writer.finish()
-        let capture = capture(from: recovered, url: archiveURL, length: writer.offset)
-        try? writeReceipt(capture, manifestOffset: checkpoint, at: folder)
-        return capture
+        return try sealRecoveredCopy(original: file, folder: folder, checkpoint: checkpoint, manifest: recovered)
+    }
+
+    private static func existingArchive(in folder: URL) -> URL {
+        let recovered = folder.appendingPathComponent(recoveredArchiveName)
+        return FileManager.default.fileExists(atPath: recovered.path)
+            ? recovered : folder.appendingPathComponent(archiveName)
+    }
+
+    /// APFS shares the recorded blocks. Only the clone is shortened, and the
+    /// sealed name becomes visible after the entire replacement is on disk.
+    private static func sealRecoveredCopy(original: FileHandle, folder: URL, checkpoint: UInt64,
+                                          manifest: Manifest) throws -> LiDARCapture {
+        let staging = folder.appendingPathComponent(recoveryStagingName)
+        let destination = folder.appendingPathComponent(recoveredArchiveName)
+        try Task.checkCancellation()
+        do {
+            // The per-capture claim makes it safe to remove a staging clone
+            // left by a process interruption before the final rename.
+            if FileManager.default.fileExists(atPath: staging.path) {
+                try FileManager.default.removeItem(at: staging)
+            }
+            try releaseReserve(at: folder)
+            guard fclonefileat(original.fileDescriptor, AT_FDCWD, staging.path, 0) == 0 else {
+                throw LiDARTarArchive.ArchiveError.recoveryUnavailable
+            }
+            defer { try? FileManager.default.removeItem(at: staging) }
+            let writer = try LiDARTarArchive(url: staging, date: manifest.capture.startedAt, offset: checkpoint)
+            try writer.entry("manifest.json", data: encoder().encode(manifest))
+            try writer.finish()
+            try Task.checkCancellation()
+            guard try !isDiscarded(id: manifest.capture.captureID, directory: folder) else { throw CancellationError() }
+            guard renamex_np(staging.path, destination.path, UInt32(RENAME_EXCL)) == 0 else {
+                throw LiDARTarArchive.ArchiveError.recoveryUnavailable
+            }
+            let capture = capture(from: manifest, url: destination, length: writer.offset)
+            try? writeReceipt(capture, manifestOffset: checkpoint, at: folder)
+            return capture
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw LiDARTarArchive.ArchiveError.recoveryUnavailable
+        }
+    }
+
+    /// Verify the exact open file that will be hashed, including every TAR
+    /// header and the seal. A receipt proves neither earlier headers nor the
+    /// presence of all committed records.
+    static func validateSealedArchive(_ expected: LiDARCapture, file: FileHandle) throws {
+        let length = UInt64(expected.byteCount)
+        let decoder = decoder()
+        guard let (first, header) = try readHeader(id: expected.id, file: file, length: length, decoder: decoder) else {
+            throw LiDARTarArchive.ArchiveError.damagedArchive
+        }
+        var counts = Counts()
+        var offset = first.nextOffset
+        var checkpoint = offset
+        while let entry = try LiDARTarArchive.nextEntry(in: file, offset: offset, length: length, rejectDamagedHeader: true) {
+            try Task.checkCancellation()
+            if entry.path == "manifest.json" {
+                guard let manifest = try readJSON(Manifest.self, from: file, entry: entry, decoder: decoder),
+                      manifest.capture == header, manifest.outputs == counts, checkpoint == offset,
+                      capture(from: manifest, url: expected.archiveURL, length: length) == expected,
+                      try LiDARTarArchive.hasEndMarker(in: file, offset: entry.nextOffset, length: length) else {
+                    throw LiDARTarArchive.ArchiveError.damagedArchive
+                }
+                try file.seek(toOffset: 0)
+                return
+            }
+            counts.observe(path: entry.path)
+            offset = entry.nextOffset
+            if entry.path.hasSuffix("/frame.json") || entry.path.hasSuffix("/event.json") || entry.path == "world-map.arexperience" {
+                checkpoint = offset
+            }
+        }
+        throw LiDARTarArchive.ArchiveError.damagedArchive
     }
 
     private static func readHeader(id: UUID, file: FileHandle, length: UInt64, decoder: JSONDecoder) throws -> (LiDARTarArchive.Entry, Header)? {
@@ -431,6 +536,7 @@ final class LiDARCaptureStore {
         guard let data = try? Data(contentsOf: directory.appendingPathComponent(receiptName)),
               let receipt = try? decoder.decode(Receipt.self, from: data),
               receipt.capture.id == id, receipt.capture.byteCount == Int64(length),
+              receipt.capture.archiveURL.lastPathComponent == archiveURL.lastPathComponent,
               let entry = try LiDARTarArchive.nextEntry(in: file, offset: receipt.manifestOffset, length: length) else { return nil }
         return try readManifest(id: id, archiveURL: archiveURL, file: file, length: length, entry: entry, decoder: decoder)
     }

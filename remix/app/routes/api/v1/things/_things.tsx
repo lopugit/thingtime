@@ -40,6 +40,7 @@ import { readThingNumericSummary } from '~/api/utils/things/numericSummary';
 import { deleteOwnedChatArchive } from '~/api/utils/things/chatArchiveOwnerTransfer';
 import { renameLibraryThing } from '~/api/utils/things/renameLibraryThing';
 import { readOwnedChatArchive } from '~/api/utils/things/chatArchiveReadTransfer';
+import { isThingMetadataReference } from '~/utils/thingMetadata';
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
 // use, so the generic endpoint can't be used to bypass the per-op limits.
@@ -194,17 +195,29 @@ export const loader = async ({ request }: { request: Request }) => {
     // Canonical-link reads stay readable during limiter outages, but creating
     // durable discovery state is bounded per authenticated user or request IP.
     const canRemember = (actor.kind === 'anonymous' || (actor.kind === 'user' && user?.accountKind === 'user'));
-    const discoveryAllowed = canRemember && (await enforceRateLimit(request, 'things.views', user ? `user:${user.id}` : null, { failClosed: true })).allowed;
-    const result = await getThing(viewer, id, app, { commentProjection, commentSort: commentSort.sort, rememberDiscovery: discoveryAllowed, discoveryIp: foundPostVisitIp(request) });
+    const rateForView = () => enforceRateLimit(request, 'things.views', user ? `user:${user.id}` : null, { failClosed: true });
+    const discoveryRate = canRemember ? await rateForView() : null;
+    const headers = { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' };
+    let metadataRate = discoveryRate;
+    const metadata = !app && !(actor.kind === 'pat' && actor.cors) && isThingMetadataReference(id)
+      ? await (await import('~/api/utils/things/thingMetadata')).getThingMetadataThing(id, viewer, request.signal, async () => {
+        metadataRate ??= await rateForView();
+        return metadataRate.allowed ? null : { ok: false, status: metadataRate.unavailable ? 503 : 429, error: 'Thing metadata is unavailable or rate limited' };
+      }) : null;
+    const result = metadata ?? await getThing(viewer, id, app, { commentProjection, commentSort: commentSort.sort, rememberDiscovery: discoveryRate?.allowed, discoveryIp: foundPostVisitIp(request) });
     if (result.ok === false) {
-      return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
+      if (metadata && metadataRate && !metadataRate.allowed) {
+        const init = rateLimitedResponseInit(metadataRate);
+        return json({ ok: false, error: result.error }, { ...init, headers: { ...init.headers, ...headers } });
+      }
+      return json({ ok: false, error: result.error }, { status: result.status, headers: metadata ? headers : cors });
     }
     // comments project as posts too; parent/root carry their thread context
     // (post/parent/root are first-party projections — null under the app lens);
     // the response echoes the comment order it shipped (null = default)
     return json(
       { ok: true, thing: result.thing, post: result.post, discussion: result.discussion, parent: result.parent, root: result.root, commentSort: commentSort.sort },
-      { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } }
+      { headers }
     );
   }
 

@@ -40,36 +40,111 @@ final class LiDARCaptureTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: result.archiveURL), archive)
     }
 
-    func testInterruptedArchiveKeepsCommittedRecordsAndRemovesTrailingFrame() throws {
+    func testInterruptedArchiveRecoversSeveralCompleteFramesWithoutChangingOriginal() throws {
         let (directory, header) = try fixture()
         defer { try? FileManager.default.removeItem(at: directory.deletingLastPathComponent()) }
         var store: LiDARCaptureStore? = try LiDARCaptureStore(header: header, directory: directory)
         let archiveURL = try XCTUnwrap(store?.archiveURL)
-        try store?.data("frames/0/scene-depth-plane-0.bin", Data([0, 0, 128, 63]))
-        try store?.json("frames/0/frame.json", ["index": 0])
-        store?.commit()
+        let image = try buffer(format: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange)
+        for index in 0..<3 {
+            _ = try LiDARFrameWriter.pixels(image, named: "camera", path: "frames/\(index)", to: XCTUnwrap(store))
+            try store?.data("frames/\(index)/scene-depth-plane-0.bin", Data([UInt8(index), 0, 128, 63]))
+            try store?.json("frames/\(index)/frame.json", ["index": index])
+            store?.commit()
+        }
         try store?.json("events/0/event.json", ["event": "added"])
         store?.commit()
-        try store?.data("frames/1/scene-depth-plane-0.bin", Data([0, 0, 0, 64]))
+        let trailingHeader = UInt64(try XCTUnwrap(store?.byteCount))
+        try store?.data("frames/3/scene-depth-plane-0.bin", Data([0, 0, 0, 64]))
+        // A status request must not recover a scan whose recorder is still open.
+        XCTAssertNil(try LiDARCaptureStore.recover(id: header.captureID, directory: directory))
         store = nil
-        // Simulate termination inside a subsequent tar block.
+        // The next record's header was written but its payload was interrupted.
         let writer = try FileHandle(forWritingTo: archiveURL)
-        try writer.seekToEnd()
-        try writer.write(contentsOf: Data(repeating: 127, count: 300))
+        try writer.truncate(atOffset: trailingHeader + UInt64(LiDARTarArchive.blockSize) + 2)
         try writer.close()
+        let original = try Data(contentsOf: archiveURL)
         XCTAssertNil(try LiDARCaptureStore.readSealedCapture(id: header.captureID, directory: directory))
 
+        let interruptedStaging = directory.appendingPathComponent(".scan-recovery.tar")
+        try original.write(to: interruptedStaging)
         let result = try XCTUnwrap(LiDARCaptureStore.recover(id: header.captureID, directory: directory))
         XCTAssertTrue(result.isPartial)
-        XCTAssertEqual(result.frameCount, 1)
-        let entries = try tarEntries(archiveURL)
-        XCTAssertNotNil(entries["frames/0/scene-depth-plane-0.bin"])
+        XCTAssertEqual(result.frameCount, 3)
+        XCTAssertNotEqual(result.archiveURL, archiveURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: interruptedStaging.path))
+        XCTAssertEqual(try Data(contentsOf: archiveURL), original)
+        let entries = try tarEntries(result.archiveURL)
+        for index in 0..<3 {
+            XCTAssertNotNil(entries["frames/\(index)/camera-plane-0.bin"])
+            XCTAssertEqual(entries["frames/\(index)/scene-depth-plane-0.bin"], Data([UInt8(index), 0, 128, 63]))
+        }
         XCTAssertNotNil(entries["events/0/event.json"])
-        XCTAssertNil(entries["frames/1/scene-depth-plane-0.bin"])
+        XCTAssertNil(entries["frames/3/scene-depth-plane-0.bin"])
         let manifest = try decodeManifest(entries)
-        XCTAssertEqual(manifest.outputs.sceneDepth, 1)
+        XCTAssertEqual(manifest.outputs.sceneDepth, 3)
         XCTAssertEqual(manifest.outputs.anchorEvents, 1)
         XCTAssertEqual(manifest.worldMapStatus, "interrupted")
+        XCTAssertEqual(try LiDARCaptureStore.recover(id: header.captureID, directory: directory), result)
+        XCTAssertEqual(try LiDARCaptureStore.readSealedCapture(id: header.captureID, directory: directory), result)
+    }
+
+    func testDamagedEarlyTARHeaderCannotReplaceLaterCommittedFrames() throws {
+        let (directory, header) = try fixture()
+        defer { try? FileManager.default.removeItem(at: directory.deletingLastPathComponent()) }
+        var store: LiDARCaptureStore? = try LiDARCaptureStore(header: header, directory: directory)
+        let archive = try XCTUnwrap(store?.archiveURL)
+        let firstFrameOffset = UInt64(try XCTUnwrap(store?.byteCount))
+        for index in 0..<3 {
+            try store?.data("frames/\(index)/camera-plane-0.bin", Data(repeating: UInt8(index), count: 2048))
+            try store?.json("frames/\(index)/frame.json", ["index": index])
+            store?.commit()
+        }
+        store = nil
+        let writer = try FileHandle(forWritingTo: archive)
+        try writer.seek(toOffset: firstFrameOffset)
+        // Change the entry name without changing the header checksum.
+        try writer.write(contentsOf: Data([0x58]))
+        try writer.close()
+        let original = try Data(contentsOf: archive)
+
+        XCTAssertThrowsError(try LiDARCaptureStore.recover(id: header.captureID, directory: directory)) { error in
+            XCTAssertEqual(error as? LiDARTarArchive.ArchiveError, .damagedArchive)
+        }
+        XCTAssertEqual(try Data(contentsOf: archive), original)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("scan-recovered.tar").path))
+    }
+
+    func testCaptureWithoutACompleteFrameStaysLocalAndUnpublished() throws {
+        let (directory, header) = try fixture()
+        defer { try? FileManager.default.removeItem(at: directory.deletingLastPathComponent()) }
+        var store: LiDARCaptureStore? = try LiDARCaptureStore(header: header, directory: directory)
+        let archive = try XCTUnwrap(store?.archiveURL)
+        try store?.data("frames/0/camera-plane-0.bin", Data([0, 255, 15, 101]))
+        let original = try Data(contentsOf: archive)
+        XCTAssertThrowsError(try store?.finalize(detail: "camera stopped", worldMapStatus: "unavailable")) { error in
+            XCTAssertEqual(error as? LiDARTarArchive.ArchiveError, .emptyCapture)
+        }
+        store = nil
+
+        XCTAssertNil(try LiDARCaptureStore.recover(id: header.captureID, directory: directory))
+        XCTAssertEqual(try Data(contentsOf: archive), original)
+        XCTAssertNil(try LiDARCaptureStore.readSealedCapture(id: header.captureID, directory: directory))
+    }
+
+    func testDiscardRemovesEveryArchiveAndKeepsTheNoUploadMarker() throws {
+        let (directory, header) = try fixture()
+        defer { try? FileManager.default.removeItem(at: directory.deletingLastPathComponent()) }
+        let store = try LiDARCaptureStore(header: header, directory: directory)
+        let recovered = directory.appendingPathComponent("scan-recovered.tar")
+        let staging = directory.appendingPathComponent(".scan-recovery.tar")
+        try Data([1]).write(to: recovered)
+        try Data([2]).write(to: staging)
+        try store.discard(uploadDisabled: true)
+        for url in [store.archiveURL, recovered, staging] {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        }
+        XCTAssertTrue(try LiDARCaptureStore.isDiscarded(id: header.captureID, directory: directory))
     }
 
     func testDiscardRemainsUnrecoverableWhenOriginalCannotBeDeleted() throws {

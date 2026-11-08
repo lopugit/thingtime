@@ -98,6 +98,7 @@ final class LiDARUploadOutbox {
         var entry = try owned(capture.id, scope: scope)
         try checkDiscard(entry)
         try validate(capture, id: entry.id)
+        guard capture.frameCount > 0 else { throw LiDARTarArchive.ArchiveError.emptyCapture }
         if let existing = entry.capture {
             guard existing == capture else { throw Failure.archiveChanged }
             return
@@ -120,7 +121,7 @@ final class LiDARUploadOutbox {
     func recover(id: UUID, scope: FileSyncOwnerScope) async throws -> LiDARCapture? {
         let entry = try owned(id, scope: scope)
         if try isDiscarded(entry) { return nil }
-        if let capture = entry.capture { return capture }
+        if let capture = entry.capture { return capture.frameCount > 0 ? capture : nil }
         guard let capture = try await LiDARUploadArchive.recover(id: id, directory: archiveFolder(id)) else { return nil }
         try Task.checkCancellation()
         let current = try owned(id, scope: scope)
@@ -153,6 +154,7 @@ final class LiDARUploadOutbox {
         guard session.scope == scope else { throw Failure.wrongScope }
         try checkDiscard(entry)
         guard let capture = entry.capture else { throw Failure.missingCapture }
+        guard capture.frameCount > 0 || entry.receipt != nil else { throw LiDARTarArchive.ArchiveError.emptyCapture }
         let key = location(id)
         guard Self.active.insert(key).inserted else { throw Failure.busy }
         defer { Self.active.remove(key) }
@@ -193,8 +195,7 @@ final class LiDARUploadOutbox {
         }
 
         if entry.staged == nil {
-            if entry.archiveRelocated { try await LiDARUploadArchive.verifyRelocated(capture); try checkActive() }
-            let archive = try await LiDARUploadArchive.inspect(capture)
+            let archive = try await LiDARUploadArchive.inspect(capture, verifySeal: entry.fingerprint == nil || entry.archiveRelocated)
             try checkActive()
             if let recorded = entry.fingerprint, recorded != archive.fingerprint { throw Failure.archiveChanged }
             entry.fingerprint = archive.fingerprint
@@ -285,7 +286,8 @@ final class LiDARUploadOutbox {
         if let capture = entry.capture {
             // iOS may move Application Support when it installs an update.
             // Derive the actual source path exclusively from the reserved ID.
-            let current = LiDARCapture(id: capture.id, archiveURL: archiveFolder(id).appendingPathComponent("scan.tar"),
+            guard LiDARCaptureStore.archiveNames.contains(capture.archiveURL.lastPathComponent) else { throw Failure.archiveChanged }
+            let current = LiDARCapture(id: capture.id, archiveURL: archiveFolder(id).appendingPathComponent(capture.archiveURL.lastPathComponent),
                 startedAt: capture.startedAt, finishedAt: capture.finishedAt, frameCount: capture.frameCount,
                 byteCount: capture.byteCount, isPartial: capture.isPartial, statusDetail: capture.statusDetail)
             try validate(current, id: id)
@@ -311,8 +313,10 @@ final class LiDARUploadOutbox {
     }
 
     private func validate(_ capture: LiDARCapture, id: UUID) throws {
+        let filename = capture.archiveURL.lastPathComponent
         guard capture.id == id, capture.byteCount > 0, capture.frameCount >= 0, capture.archiveURL.isFileURL,
-              capture.archiveURL.standardizedFileURL == archiveFolder(id).appendingPathComponent("scan.tar").standardizedFileURL else {
+              LiDARCaptureStore.archiveNames.contains(filename),
+              capture.archiveURL.standardizedFileURL == archiveFolder(id).appendingPathComponent(filename).standardizedFileURL else {
             throw Failure.archiveChanged
         }
     }

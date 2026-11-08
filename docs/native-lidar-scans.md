@@ -39,6 +39,14 @@ the explicit Retry control. Confirmed discard writes independent durable
 no-upload markers before deletion. If deletion fails, the remaining bytes stay
 excluded from recovery and upload, and the scanner offers Retry Delete.
 
+Recovery never truncates the original `scan.tar`. It validates archive headers
+and committed frame records, then seals a separate copy-on-write APFS clone,
+`scan-recovered.tar`, for a valid interrupted capture. Corrupt headers and scans
+with no complete frames remain local and cannot be published as successful
+scans. If safe cloning is unavailable, recovery fails with the original intact.
+Pending status selects the newest usable capture; an explicit Retry stays bound
+to its selected scan ID. Previously published empty Files are not deleted.
+
 The scanner currently publishes to the signed-in account's Home data plane.
 A selected external database is not silently used. A scanner button in Safari
 opens `thingtime://scan/lidar?origin=<origin>` in the installed app. The origin
@@ -124,7 +132,7 @@ texture are outside this capture; camera grain intensity is recorded. The
 scanner does not sample or compress the delivered frames. It stops on sustained
 capture backpressure or write errors. On process interruption, recovery scans
 the TAR headers, retains the last complete frame and anchor records, and seals
-the archive as partial. The local copy is protected in application storage and
+a separate recovery archive as partial. The local original is protected in application storage and
 can be shared from the native result controls.
 
 ## Verification boundaries
