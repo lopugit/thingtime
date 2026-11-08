@@ -7,7 +7,7 @@ import WebKit
 @MainActor
 final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
     private let session: URLSession
-    private let scope: FileSyncOwnerScope
+    let scope: FileSyncOwnerScope
     private let cookieStore: WKHTTPCookieStore
     private let filterCookies: ([HTTPCookie], URL) -> [HTTPCookie]
     private let check: () throws -> Void

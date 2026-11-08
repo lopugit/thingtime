@@ -23,6 +23,8 @@ struct ThingtimeWebView: View {
 
     @Environment(\.scenePhase) private var scenePhase
     @State private var widgetPath: String?
+    @State private var lidarRequest: UUID?
+    @State private var invalidScanLink = false
     @State private var pendingShare: UUID?
     @State private var widgetSettingsOpen = false
     @State private var deploymentGroups: [ThingtimeWebDestination.DeploymentGroup] = []
@@ -69,7 +71,7 @@ struct ThingtimeWebView: View {
                         .background(.regularMaterial)
                         .accessibilityHint("Opens your unfinished share in the post composer")
                     }
-                    WebView(url: selectedDestination.url, widgetPath: $widgetPath)
+                    WebView(url: selectedDestination.url, widgetPath: $widgetPath, lidarRequest: $lidarRequest)
                         .ignoresSafeArea(.container, edges: [.bottom])
                 }
 
@@ -91,7 +93,8 @@ struct ThingtimeWebView: View {
                     onRefreshDeployments: refreshDeployments,
                     onClose: closeDestinationPicker,
                     onWidgetSettings: { closeDestinationPicker(); widgetSettingsOpen = true },
-                    onMail: { closeDestinationPicker(); widgetPath = "/mail" }
+                    onMail: { closeDestinationPicker(); widgetPath = "/mail" },
+                    onScan: { closeDestinationPicker(); lidarRequest = UUID() }
                 )
                 .accessibilityHidden(!isDestinationPickerOpen)
                 .frame(width: max(drawerWidth, 280))
@@ -110,7 +113,18 @@ struct ThingtimeWebView: View {
                     }
                 }
             }
-            .onOpenURL { url in widgetPath = WidgetRoute.path(for: url) }
+            .onOpenURL { url in
+                if url.scheme == "thingtime", url.host == "scan" {
+                    if LiDARLaunchRoute.accepts(url, selectedOrigin: selectedDestination.url) {
+                        closeDestinationPicker(); lidarRequest = UUID()
+                    } else { invalidScanLink = true }
+                } else { widgetPath = WidgetRoute.path(for: url) }
+            }
+            .alert("Scanner destination does not match", isPresented: $invalidScanLink) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Select the same Thingtime destination in the native drawer, then open the scanner again.")
+            }
             .onReceive(NotificationCenter.default.publisher(for: .thingtimeWidgetAction)) { _ in receiveWidgetAction() }
             .onChange(of: scenePhase) { _, phase in if phase == .active { receiveWidgetAction(); refreshPendingShare() } }
             .onAppear { prepareDestinationState(); receiveWidgetAction(); refreshPendingShare() }

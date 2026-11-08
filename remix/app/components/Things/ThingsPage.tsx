@@ -1,5 +1,6 @@
 import { useMountedRef } from '~/hooks/useMountedRef';
 import { MobileDeviceSetupEntry, MobileDeviceSetupPage } from '../Devices/MobileDeviceSetupEntry';
+import { LidarScanControls } from '../NativeBridge/LidarScanControls';
 import { useDataPlane } from '~/hooks/useDataPlane';
 import { openDeviceCloudFolder } from '~/fileSync/deviceFolderNavigation.client';
 import { builderAppLaunchHref } from '../Builder/builderAppNavigation';
@@ -1766,6 +1767,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
             </Portal>
           </Menu>
         </Flex>
+        {!locationPicker && !builderMode && !folderId && !searchMode ? <LidarScanControls onSaved={() => { void fetchFolder(null); }} /> : null}
         {builderMode && <Flex alignItems="center" justifyContent="space-between" gap={3} wrap="wrap">
           <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
             {folderId ? 'This app contains independent Things. Moving one here changes its organization, not who can read it.' : 'Group pages, components, Actions, schemas and data into apps. Ungrouped Things remain in their type views.'}
