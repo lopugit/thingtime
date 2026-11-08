@@ -10,8 +10,8 @@ import type { SyncJob } from './syncJobJournal';
 type Journal = Awaited<ReturnType<typeof openSyncJournal>>;
 type Recovery = { previous: SyncJob | null; transfers: PreviousPhotoSettings };
 
-/** Called only for explicit Start, under the root lock and after native Photos
- * source access is established. Plan locally before making any cancellation. */
+/** Called under the root lock after fresh native Photos source access.
+ * Explicit Start and enabled Photos automation both require current approval. */
 export async function preparePhotoSettingsRecovery(
 	journal: Journal, access: JournalAccess, prior: SyncJob | null, saved: SavedFileSyncConfiguration,
 	port: { verify(): Promise<void>; disarm(): Promise<void>; check(): void }

@@ -30,6 +30,12 @@ struct NativeUploadPartStaging: Sendable {
         .init(owner: scope, deviceId: Self.inventoryIdentity, rootId: grant.id)
     }
 
+    func photoOriginalIdentity(_ source: MobileFolderReader.Entry) async throws -> PhotoLibraryReader.OriginalIdentity? {
+        guard grant.sourceKind == "photos" else { return nil }
+        let worker = Task.detached { try photos.originalIdentity(scope: photoScope, source: source) }
+        return try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+    }
+
     func verify(_ source: MobileFolderReader.Entry) async throws {
         let worker = Task.detached {
             if grant.sourceKind == "photos" {

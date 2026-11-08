@@ -29,6 +29,28 @@ final class NativeFileUploadJobTests: XCTestCase {
         let source = MobileFolderReader.Entry(path: "file.bin", id: "file", version: "v1", kind: "file", size: 16 * 1024 * 1024 + 1, sha256: nil, fingerprint: fingerprint)
         return (NativeUploadFileRequest(source: source, uploadId: "upload", requestId: "operation", authorization: try authorization()), digest)
     }
+
+    func testDeviceBudgetCountsPartialRetryAndRetainsUncertainBytesAcrossRelaunch() throws {
+        let owner = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
+        let other = try FileSyncOwnerScope(ownerId: "other", url: owner.origin)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let budget = NativePhotoUploadBudget(directory: directory)
+        let now = Date(timeIntervalSince1970: 6000)
+        let first = try budget.reserve(scope: owner, deviceId: "device", bytes: 80, cap: 100, now: now)
+        try budget.finish(first, observedBytes: 30, now: now.addingTimeInterval(1))
+        XCTAssertThrowsError(try budget.reserve(scope: owner, deviceId: "device", bytes: 80, cap: 100, now: now.addingTimeInterval(2))) {
+            XCTAssertEqual(($0 as? NativePhotoUploadBudget.Wait)?.retryAt, now.addingTimeInterval(3660))
+        }
+        XCTAssertThrowsError(try budget.reserve(scope: owner, deviceId: "device", bytes: 120, cap: 100, now: now)) {
+            XCTAssertEqual(($0 as? NativePhotoUploadBudget.Wait)?.minimumPartBytes, 120)
+        }
+        _ = try budget.reserve(scope: owner, deviceId: "device", bytes: 60, cap: 100, now: now.addingTimeInterval(2))
+        let restarted = NativePhotoUploadBudget(directory: directory)
+        XCTAssertThrowsError(try restarted.reserve(scope: owner, deviceId: "device", bytes: 11, cap: 100, now: now.addingTimeInterval(3)))
+        _ = try restarted.reserve(scope: other, deviceId: "device", bytes: 100, cap: 100, now: now)
+        _ = try restarted.reserve(scope: owner, deviceId: "device", bytes: 100, cap: 100, now: now.addingTimeInterval(4800))
+    }
     func testWholeFileUsesCanonicalOrderedPartsAndCompletesOnlyAfterCompositeVerification() async throws {
         let (request,digest) = try fixture()
         var parts = [Int](), progress = [Int64](), paths = [String](), authorizations = 0

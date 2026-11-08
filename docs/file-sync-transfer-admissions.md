@@ -2,7 +2,7 @@
 
 An installed device can finish a positive-size private multipart upload without
 retaining the owner's web session. Negotiate `api.file-sync-transfer-admissions`
-1.0.0 on the selected account origin. The exact request envelopes are in
+1.0.0 for staging, 1.1.0 for exact Photos publication, 1.2.0 for a creation-only Photos run, or 1.3.0 for the current native Photos runner on the selected account origin. The exact request envelopes are in
 `/api/v1/files/sync-transfer-admissions-docs`.
 
 The owner first uses the ordinary attachment API to reserve the original request
@@ -21,8 +21,21 @@ no cookie, credential or URL belongs in the queue. The device may complete only
 that reservation. The server verifies the storage provider's ordered SHA-256
 part digest before completion and the exact-version digest after completion.
 Existing reservation quota, verification, provider recovery and idempotency apply.
-This leaves an unbound owner-private attachment. Only the canonical Files write
-under the foreground owner session can publish it or create a Timeline receipt.
+Completion leaves an unbound owner-private attachment. A staging-only admission
+can still be reconciled and published by the owning foreground session. For a
+flat Photos backup original, the owning browser can also admit an immutable
+`publication: { expectedRevision }` descriptor. The device must recheck the
+current Photos grant, source version, network and power before posting
+`{ action: 'publish', admissionId }`. The server uses the original operation ID,
+private destination, expected file revision and verified attachment. The same
+canonical Files transaction binds the attachment, accounts for content and
+writes the Timeline receipt. A matching foreground commit and repeated device
+publication return that receipt. An older staging-only handle cannot acquire
+publication authority through retry or replacement. The transaction serializes
+publication with changes to the issuing session, paired device, owner upload
+permission and saved configuration. Its internal fence fields leave the saved
+settings, modification time, public projections and customer payload byte
+measurement alone.
 
 An exact retry returns the same live admission and expiry. Explicit revoke, a
 changed configuration revision, loss of private destination access, or original
@@ -35,6 +48,52 @@ retains the request and fingerprint but issues a distinct handle; old handles
 never become valid again. If the reservation itself is gone, the foreground
 must reconcile the original operation receipt before reserving it again.
 
+## iPhone Photos automation
+
+An enabled Photos backup on a compatible iPhone checks its existing grant and
+saved account policy on launch. Foreground discovery retries about every five
+minutes and can wake early when the app becomes active or connectivity or
+charging changes. Pause persists locally even before the first upload. Older
+compatible settings keep their saved network, charging, source and destination.
+
+The 1.1.0 path finishes already-admitted originals. With a compatible app and
+1.2.0, the owning browser opens a run bound to the live owner session, iOS
+pairing, grant, saved revision and private destination. During iOS background
+execution the paired phone can check that run before reading PhotoKit and
+reserve further exact originals. The API derives their destination and
+operation IDs, reuses matching verified cloud bytes, and leaves differing
+occupied paths for foreground review. Pausing, changing the configuration,
+revoking the run or losing the issuing session disables new child requests.
+An unbound reservation created during a revoke race remains private and
+expires through normal attachment cleanup. iOS chooses when background work
+and notifications can run. A fresh session or a changed configuration needs
+a newly opened run.
+
+A compatible app uses one durable native Photos engine both when the app is
+open and when iOS grants background execution. The WebView authorizes saved
+settings, requests Pause or Resume, and renders scoped native progress. The
+1.3.0 protocol can update a managed original only when the current attached
+file has protected provenance for the same native grant, device, configuration,
+private root and path. The canonical Files revision guard retains the prior
+version in Timeline. Unrelated occupied paths and older attachments whose
+grant cannot be established need review.
+
+On supported iPhones, the explicit Run in Background button can request an
+iOS continued-processing window for the same queue. It works on real queued
+originals and finishes when eligible work is exhausted. Automatic checks use
+the ordinary iOS background scheduler. iOS can decline or expire a continued
+request. A held run resumes only after an explicit user action.
+
+The default managed-upload rate is 5 Mbps (625,000 bytes per second). An
+optional hourly allowance applies to measured app-managed upload payload; it
+does not count Photos/iCloud download traffic. Governed connections on a device
+share the persisted usage ledger and their own configured allowance is checked
+against that ledger. A multipart file can continue in a later hour if each
+provider part fits. If even one part exceeds the allowance, the app shows the
+minimum needed for that part. Progress summaries default to 30 minutes, can be
+turned off, and count newly verified assets and observed Wi-Fi, mobile or
+unclassified payload traffic.
+
 Run from the repository root with `mongod` and `mongosh` available:
 
 ```sh
@@ -45,6 +104,7 @@ npm --prefix remix run test:files:transfer-admissions
 The fixture starts a new loopback Mongo replica and built Nitro runtime with
 synthetic accounts and local attachment storage. It verifies two queued files,
 including multipart checksum mismatch and retry, wrong origin/device/account,
-private placement, saved revision changes, expiry, logout, disconnect and
-replacement. Physical iPhone scheduling and automatic PhotoKit discovery need
+private placement, v4 policy readback, staged-only refusal, matching
+foreground/device publication, six paired-only original refills across the initial
+batch boundary, a guarded native update retaining its prior version, wrong-grant and unproven path refusals, pause and run rotation, expiry, logout, disconnect and replacement. Physical iPhone scheduling and automatic PhotoKit discovery need
 separate acceptance.

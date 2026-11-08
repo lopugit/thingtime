@@ -1,8 +1,9 @@
 import { SYNC_RETRY_DELAY_MS, SYNC_RETRY_MAX_MS } from './syncConnectionWait';
 import { isSyncJobFailure, syncJobFailure, SyncJobConfigurationChanged, type SyncJobFailure } from './syncJobFailure';
-import { parseFileSyncConfiguration } from './configuration';
+import { PHOTO_AUTOMATION_INTERVAL_MS, parseFileSyncConfiguration } from './configuration';
 import { PHOTO_SETTINGS_STORES, parkPhotoSettings, type PreviousPhotoSettings } from './photoSettingsJournal';
-import { photoSettingsChanged } from './photoSettingsPolicy';
+import { photoSettingsChanged, samePhotoBackupSource } from './photoSettingsPolicy';
+import { isSyncWaitReason, type SyncWaitReason } from './foregroundSyncContext';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { journalScope, type JournalAccess } from './journalScope';
 import { syncScopeKey, type SyncScope } from './reconcile';
@@ -17,13 +18,17 @@ export type SyncJob = {
 	version: 1; key: string; id: string; revision: number;
 	scope: SyncScope; reviewed: SavedFileSyncConfiguration;
 	state: 'runnable' | 'scheduled' | 'paused' | 'attention' | 'complete';
-	/** Absent on existing one-shot admissions. Editable Things cannot opt in. */
+	/** Absent on one-shot admissions. */
 	intervalMs?: number;
 	/** Fixed allowlisted diagnostic only; legacy jobs have no recorded reason. */
 	failureReason?: SyncJobFailure;
 	nextRunAt?: number;
 	/** Durable not-before time for an unfinished transiently interrupted attempt. */
 	retryAt?: number;
+	waitReason?: SyncWaitReason;
+	minimumPartBytes?: number;
+	/** Revision whose automatic recovery requires attention. */
+	automaticPhotoRevision?: string;
 	/** Bound by this job's full scope and immutable reviewed revision/settings. */
 	nativeCaptureId?: string;
 	/** Retained until exact native cleanup is confirmed, including after Stop. */
@@ -37,8 +42,12 @@ export type SyncJob = {
 };
 export const syncJobCanPause = (job: SyncJob | null) => !!job && ['runnable', 'scheduled', 'attention'].includes(job.state);
 export const syncJobEnabled = (job: SyncJob) => job.intervalMs !== undefined && ['runnable', 'scheduled'].includes(job.state);
-export const syncJobDue = (job: SyncJob, now: number) => Number.isSafeInteger(now) &&
-	(job.state === 'runnable' ? job.retryAt === undefined || now >= job.retryAt : job.state === 'scheduled' && now >= job.nextRunAt!);
+export const syncJobDue = (job: SyncJob, now: number, wakeConditions = false) => {
+	const canWake = wakeConditions && job.waitReason !== undefined && !['paused', 'data-budget'].includes(job.waitReason);
+	return Number.isSafeInteger(now) && (job.state === 'runnable' || job.state === 'scheduled') &&
+		(job.retryAt === undefined || now >= job.retryAt || canWake) &&
+		(job.state === 'runnable' || now >= job.nextRunAt!);
+};
 
 /** Stop the admitted cycle even when completion just scheduled its next run.
  * A newer cycle/admission has a different ID and cannot be stopped by this
@@ -83,6 +92,9 @@ function validate(value: SyncJob): SyncJob {
 		(value.intervalMs !== undefined && !SYNC_INTERVALS.some(interval => interval === value.intervalMs)) ||
 		(value.nextRunAt !== undefined && (!Number.isSafeInteger(value.nextRunAt) || value.nextRunAt < 0 || !['scheduled', 'paused', 'attention'].includes(value.state))) ||
 		(value.state === 'scheduled' && (value.intervalMs === undefined || value.nextRunAt === undefined)) ||
+		(value.minimumPartBytes !== undefined && (value.waitReason !== 'data-budget' || !Number.isSafeInteger(value.minimumPartBytes) || value.minimumPartBytes < 1)) ||
+		(value.waitReason !== undefined && (!isSyncWaitReason(value.waitReason) || value.retryAt === undefined)) ||
+		(value.automaticPhotoRevision !== undefined && (typeof value.automaticPhotoRevision !== 'string' || !Number.isFinite(Date.parse(value.automaticPhotoRevision)))) ||
 		(value.retryAt !== undefined && (!Number.isSafeInteger(value.retryAt) || value.retryAt < 0)) ||
 		(value.nativeCaptureId !== undefined && (typeof value.nativeCaptureId !== 'string' || !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(value.nativeCaptureId) || value.reviewed?.configuration.mode !== 'backup' || value.reviewed?.configuration.propagateDeletes !== false)) ||
 		(value.strictCaptureId !== undefined && (value.nativeCaptureId !== undefined || typeof value.strictCaptureId !== 'string' ||
@@ -139,12 +151,14 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 		read,
 		/** This attempt may defer only its own unchanged runnable admission. Stop,
 		 * reapproval and a newer attempt all win through the existing revision CAS. */
-		defer: (expected: SyncJob, now: number, delay = SYNC_RETRY_DELAY_MS) => change(expected, current => {
+		defer: (expected: SyncJob, now: number, delay = SYNC_RETRY_DELAY_MS, wait?: { reason: SyncWaitReason; retryAt?: number; minimumPartBytes?: number }, automaticPhoto = false) => change(expected, current => {
 			if (!Number.isSafeInteger(now) || now < 0 || !Number.isFinite(delay)) throw Error('Invalid sync retry deadline.');
-			if (current.state !== 'runnable') return null;
-			const retryAt = now + Math.round(Math.max(SYNC_RETRY_DELAY_MS, Math.min(SYNC_RETRY_MAX_MS, delay)));
+			if (current.state !== 'runnable' && (!automaticPhoto || !['scheduled', 'attention'].includes(current.state))) return null;
+			const cadence = automaticPhoto ? PHOTO_AUTOMATION_INTERVAL_MS : Math.round(Math.max(SYNC_RETRY_DELAY_MS, Math.min(SYNC_RETRY_MAX_MS, delay)));
+			const retryAt = Math.max(now + cadence, wait?.retryAt ?? 0);
 			if (!Number.isSafeInteger(retryAt)) throw Error('Invalid sync retry deadline.');
-			return { ...current, retryAt };
+			const { waitReason: _wait, minimumPartBytes: _part, ...rest } = current;
+			return { ...rest, retryAt, ...(wait ? { waitReason: wait.reason } : {}), ...(wait?.minimumPartBytes !== undefined ? { minimumPartBytes: wait.minimumPartBytes } : {}) };
 		}),
 		photoQueue: (expected: SyncJob, epoch: string | null) => change(expected, current => {
 			if (current.state !== 'runnable' || current.reviewed.configuration.sourceKind !== 'photos') return null;
@@ -198,12 +212,13 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 			};
 		}),
 		admit: (saved: SavedFileSyncConfiguration, id: string, intervalMs?: number,
-			photoSettings?: { previous: SyncJob | null; transfers: PreviousPhotoSettings }) =>
+			photoSettings?: { previous: SyncJob | null; transfers: PreviousPhotoSettings }, automatic?: { previous: SyncJob | null }) =>
 			bound.transaction<SyncJob>([STORE, INVENTORY_PIN_STORE, ...(photoSettings ? PHOTO_SETTINGS_STORES : [])], 'readwrite', (tx, done, fail) => {
 				const reviewed = canonical(saved, bound.scope), store = tx.objectStore(STORE), request = store.get(bound.key);
 				request.onsuccess = () => {
 					try {
 						const previous = request.result ? validate(request.result) : null;
+						if (automatic && (previous?.id !== automatic.previous?.id || previous?.revision !== automatic.previous?.revision || previous?.state === 'paused' || reviewed.configuration.paused)) throw Error('The saved sync job changed while preparing automatic Photos backup.');
 						if (previous?.strictCaptureId) throw Error('Confirm the previous strict inventory cleanup before admitting a new scan.');
 						if (photoSettings && (previous?.id !== photoSettings.previous?.id || previous?.revision !== photoSettings.previous?.revision))
 							throw Error('The sync job changed while stopping. Please retry.');
@@ -244,22 +259,57 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 				const { localImport: _import, nativeCaptureId: _capture, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, ...rest } = current;
 				return { ...rest, state };
 			}),
-		begin: (expected: SyncJob, now: number, id: string) => change(expected, current => {
-			if (!syncJobDue(current, now)) return null;
-			const { retryAt: _retry, nextRunAt: _due, nativeCaptureId, nativeCaptureGeneration, nativeCaptureRestarts, localImport, ...rest } = current;
-			return { ...rest, id: current.state === 'scheduled' ? id : current.id, state: 'runnable', ...(current.state === 'runnable' && localImport ? { localImport } : {}), ...(current.state === 'runnable' && nativeCaptureId ? { nativeCaptureId, ...(nativeCaptureGeneration ? { nativeCaptureGeneration, nativeCaptureRestarts: nativeCaptureRestarts ?? 0 } : {}) } : {}) };
+		begin: (expected: SyncJob, now: number, id: string, photo?: { wakeConditions: boolean }) => change(expected, current => {
+			if (!syncJobDue(current, now, photo?.wakeConditions)) return null;
+			const { retryAt: _retry, waitReason: _wait, minimumPartBytes: _part, automaticPhotoRevision: _blocked, nextRunAt: _due, nativeCaptureId, nativeCaptureGeneration, nativeCaptureRestarts, localImport, ...rest } = current;
+			return { ...rest, id: current.state === 'scheduled' ? id : current.id, state: 'runnable', ...(photo ? { intervalMs: PHOTO_AUTOMATION_INTERVAL_MS } : {}), ...(current.state === 'runnable' && localImport ? { localImport } : {}), ...(current.state === 'runnable' && nativeCaptureId ? { nativeCaptureId, ...(nativeCaptureGeneration ? { nativeCaptureGeneration, nativeCaptureRestarts: nativeCaptureRestarts ?? 0 } : {}) } : {}) };
 		}),
 		finish: (expected: SyncJob, now: number) => change(expected, current => {
 			if (current.state !== 'runnable') return null;
 			if (current.strictCaptureId) throw Error('Strict inventory cleanup has not been confirmed.');
 			if (!Number.isSafeInteger(now) || now < 0) throw Error('Invalid sync completion time.');
-			const { retryAt: _retry, nativeCaptureId: _capture, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, localImport: _import, photoQueueEpoch: _photoQueue, ...rest } = current;
+			const { retryAt: _retry, waitReason: _wait, minimumPartBytes: _part, automaticPhotoRevision: _blocked, nativeCaptureId: _capture, nativeCaptureGeneration: _generation, nativeCaptureRestarts: _restarts, localImport: _import, photoQueueEpoch: _photoQueue, ...rest } = current;
 			return current.intervalMs === undefined ? { ...rest, state: 'complete' } :
 				{ ...rest, state: 'scheduled', nextRunAt: now + current.intervalMs };
 		}),
+		/** Denial-only pause can exist before automatic Photos admits its first run. */
+		pausePhoto: (saved: SavedFileSyncConfiguration, id: string) =>
+			bound.transaction<SyncJob>([STORE], 'readwrite', (tx, done, fail) => {
+				const reviewed = canonical(saved, bound.scope);
+				const enabled = { ...reviewed.configuration, paused: false };
+				if (!samePhotoBackupSource(enabled, enabled)) throw Error('Only Photos backup can be paused before admission.');
+				const store = tx.objectStore(STORE), request = store.get(bound.key);
+				request.onsuccess = () => {
+					try {
+						const prior = request.result ? validate(request.result) : null;
+						if (prior?.state === 'paused') { done(prior); return; }
+						if (prior && !samePhotoBackupSource(prior.reviewed.configuration, enabled))
+							throw Error('This saved job uses a different native source.');
+						const next = prior ? { ...prior, state: 'paused' as const, revision: prior.revision + 1 } :
+							{ version: 1 as const, key: bound.key, id, revision: 1, scope: bound.scope, reviewed, state: 'paused' as const };
+						const save = () => { bound.check(); store.put(validate(next)); done(next); };
+						if (prior) save();
+						else {
+							const count = store.index('account').count(accountRange());
+							count.onsuccess = () => {
+								try {
+									if (count.result >= MAX_SYNC_JOBS_PER_ACCOUNT) throw Error('This account has reached its saved sync job limit.');
+									save();
+								} catch (error) { fail(error); }
+							};
+						}
+					} catch (error) { fail(error); }
+				};
+			}).then(changed),
+		/** Sole native Resume lifts the local denial without re-admitting old
+		 * browser transfers or dropping their native cleanup and receipt pins. */
+		resumePhotoPause: (expected: SyncJob) => change(expected, current => {
+			if (current.state !== 'paused' || current.reviewed.configuration.sourceKind !== 'photos') return null;
+			return { ...current, state: current.nextRunAt === undefined ? 'runnable' : 'scheduled' };
+		}),
 		pause: (expected: SyncJob) => change(expected, current =>
 			syncJobCanPause(current) ? { ...current, state: 'paused' } : null),
-		attention: (expected: SyncJob, cause?: unknown) => change(expected, current =>
-			['runnable', 'scheduled'].includes(current.state) ? { ...current, state: 'attention', failureReason: syncJobFailure(cause) } : null)
+		attention: (expected: SyncJob, cause?: unknown, automaticPhotoRevision?: string) => change(expected, current =>
+			(['runnable', 'scheduled'].includes(current.state) || (current.state !== 'paused' && automaticPhotoRevision !== undefined)) ? { ...current, state: 'attention', failureReason: syncJobFailure(cause), ...(automaticPhotoRevision ? { automaticPhotoRevision } : {}) } : null)
 	};
 }

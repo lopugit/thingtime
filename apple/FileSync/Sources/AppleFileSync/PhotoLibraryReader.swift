@@ -12,11 +12,15 @@ public struct PhotoResource: Equatable, Sendable {
     public let revision: String
     public let capturedAt: Date?
     public let modifiedAt: Date?
+    public let assetKind: String?
+    public let originalCount: Int
     let identity: String
     public let path: String
-    public init(asset: String, index: Int, name: String, revision: String, capturedAt: Date? = nil, modifiedAt: Date? = nil) {
+    public init(asset: String, index: Int, name: String, revision: String, capturedAt: Date? = nil, modifiedAt: Date? = nil,
+                assetKind: String? = nil, originalCount: Int = 1) {
         self.asset = asset; self.index = index; self.name = name; self.revision = revision
         self.capturedAt = capturedAt; self.modifiedAt = modifiedAt
+        self.assetKind = assetKind; self.originalCount = originalCount
         identity = PhotoLibraryReader.hash(Data((asset + ":" + String(index)).utf8))
         let assetHash = PhotoLibraryReader.hash(Data(asset.utf8))
         let safe = String(name.unicodeScalars.map { CharacterSet.controlCharacters.contains($0) || $0.properties.generalCategory == .format || $0 == "/" || $0 == "\\" ? "_" : String($0) }.prefix(80).joined())
@@ -75,6 +79,10 @@ public struct PhotoOriginalDownloadControl: Sendable {
 /// in one Data value. The cache is private, ephemeral and partitioned by grant.
 public final class PhotoLibraryReader: @unchecked Sendable {
     public typealias Scope = MobileFolderInventory.Scope
+    public struct OriginalIdentity: Equatable, Sendable {
+        public let group: String, resource: String, kind: String?
+        public let count: Int
+    }
 
     public enum Failure: Error, LocalizedError {
         case unavailable, changed, cloudOriginal, storageFull, readFailed
@@ -523,6 +531,11 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         return capture
     }
 
+    public func retryUnavailableQueueOriginals(scope: Scope, request: PhotoBackupQueueRequest) throws {
+        lock.lock(); defer { lock.unlock() }
+        try require(); try queueStore(scope: scope, request: request).retryUnavailable()
+    }
+
     public func readSkipped(scope: Scope, capture: MobileFolderInventory.Capture, offset: Int, pageSize: Int? = nil) throws -> MobileFolderInventory.SkippedPage {
         lock.lock(); defer { lock.unlock() }
         try require()
@@ -605,6 +618,16 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         } catch { clear(); throw error }
     }
 
+    /// Asset identity, current revision, and number of original resources are
+    /// all from PhotoKit; a Live Photo's motion companion is not a second asset.
+    public func originalIdentity(scope: Scope, source: MobileFolderReader.Entry) throws -> OriginalIdentity? {
+        lock.lock(); defer { lock.unlock() }
+        guard let resource = try resolve(path: source.path, scope: scope), resource.originalCount > 0 else { return nil }
+        guard try scanEntry(resource, scope: scope) == source else { throw Failure.changed }
+        return .init(group: Self.hash(Data((resource.asset + ":" + resource.revision).utf8)), resource: resource.identity,
+                     kind: resource.assetKind, count: resource.originalCount)
+    }
+
     public func stream(scope: Scope, path: String, version: String, offset: Int64, length: Int,
                        download: PhotoOriginalDownloadControl? = nil, receive: (Data) throws -> Void) throws -> Int64 {
         lock.lock(); defer { lock.unlock() }
@@ -672,7 +695,9 @@ public struct SystemPhotoResources: PhotoResourceProvider {
         let revision = PhotoLibraryReader.hash(Data((asset.localIdentifier + ":" + String(asset.modificationDate?.timeIntervalSince1970 ?? -1) + ":" + descriptions).utf8))
         return rows.enumerated().map {
             (.init(asset: asset.localIdentifier, index: $0.offset, name: $0.element.originalFilename, revision: revision,
-                   capturedAt: asset.creationDate, modifiedAt: asset.modificationDate), $0.element)
+                   capturedAt: asset.creationDate, modifiedAt: asset.modificationDate,
+                   assetKind: asset.mediaType == .image ? "photo" : asset.mediaType == .video ? "video" : nil,
+                   originalCount: rows.count), $0.element)
         }
     }
     public func inventory() throws -> [PhotoResource] {

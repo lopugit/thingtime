@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
 	parseMobileFolderResult,
 	supportsNativeSourcePaths,
+	supportsNativePhotoContinuation,
+	supportsSoleNativePhotoRun,
 	validNativeSourcePath,
 	supportsNativePartPayloadBytes,
 	mobileFolderSource,
@@ -532,4 +534,43 @@ test('compound observation requires exact policy echo and complete ordered candi
  assert.throws(() => parse({ complete: false }));
  assert.equal(parse({ complete: false, observationUnavailable: true, observedEntries: [] })!.observationUnavailable, true);
  assert.throws(() => parse({ complete: false, observationUnavailable: true, observedEntries: [null] }));
+});
+
+test('native Photos run status preserves exact counters and strips untrusted fields', () => {
+	const request = { action: 'photo-run-status', rootId, configurationId: 'config', deviceId: 'phone' } as const;
+	const revision = '2026-11-08T00:00:00.000Z';
+	const counters = { photos: 2, videos: 1, other: 0, wifiBytes: 12, mobileBytes: 4, unknownBytes: 1 };
+	const progress = { stage: 'uploading', configurationRevision: revision, confirmed: counters,
+		currentFile: { confirmedBytes: 6, sentBytes: 8, totalBytes: 10 }, uploadBytesPerSecond: 4, privatePath: '/hidden' };
+	const parse = (patch: object) => parseMobileFolderResult(response({ ...request, roots: [], configurationRevision: revision,
+		photoRunProgress: progress, ...patch }), expected, request)?.photoRunStatus;
+	const result = parse({});
+	assert.equal(result?.configurationRevision, revision);
+	assert.deepEqual(result?.photoRunProgress?.confirmed, counters);
+	assert.equal(result?.photoRunProgress?.uploadBytesPerSecond, 4);
+	assert.equal(JSON.stringify(result).includes('privatePath'), false);
+	assert.deepEqual(parse({ configurationRevision: null, photoRunProgress: null }), { configurationRevision: null, photoRunProgress: null });
+	for (const patch of [
+		{ configurationId: 'other' }, { deviceId: 'other' }, { rootId: 'other' },
+		{ configurationRevision: '2026-11-08T00:01:00.000Z' },
+		{ photoRunProgress: { ...progress, confirmed: { ...counters, mobileBytes: -1 } } },
+		{ photoRunProgress: { ...progress, currentFile: { ...progress.currentFile, sentBytes: 11 } } }
+	]) assert.throws(() => parse(patch));
+});
+
+test('continued Photos work is separately negotiated and bound to one exact configuration revision', () => {
+	const old = { platform: 'ios', filePhotoAutomationVersion: '1.1.0', filePhotoContinuationVersion: '1.0.0' } as const;
+	const current = { ...old, filePhotoAutomationVersion: '1.2.0' };
+	assert.equal(supportsSoleNativePhotoRun(old), false);
+	assert.equal(supportsNativePhotoContinuation(old), false);
+	assert.equal(supportsNativePhotoContinuation(current), true);
+	assert.equal(supportsNativePhotoContinuation({ ...current, filePhotoContinuationVersion: '2.0.0' }), false);
+	const request = { action: 'run-photo-in-background', rootId, configurationId: 'config', deviceId: 'phone',
+		configurationRevision: '2026-11-08T00:00:00.000Z' } as const;
+	const parse = (patch: object) => parseMobileFolderResult(response({ ...request, roots: [], photoContinuationRequested: true,
+		photoContinuationStatus: 'active', ...patch }), expected, request)?.photoContinuation;
+	assert.deepEqual(parse({}), { requested: true, status: 'active' });
+	assert.deepEqual(parse({ photoContinuationRequested: false, photoContinuationStatus: 'waiting' }), { requested: false, status: 'waiting' });
+	for (const patch of [{ configurationRevision: 'other' }, { deviceId: 'other' }, { photoContinuationRequested: false },
+		{ photoContinuationStatus: 'unknown' }]) assert.throws(() => parse(patch));
 });

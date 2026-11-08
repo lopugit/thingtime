@@ -1,3 +1,4 @@
+import { nativePhotoAssetKey } from './nativeInventory';
 import { parseFileSyncUploadOrigin, type FileSyncUploadOrigin } from './uploadOrigin';
 import { UPLOAD_BATCH_FILE_BYTES } from './uploadBatch';
 import { CLOUD_SYNC_DESTINATION_REQUIREMENTS, ExactCloudSyncDestinationChanged, SYNC_DESTINATION_CHANGED } from './cloudSyncDestination';
@@ -220,6 +221,11 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 		...(empty ? { 'api.files': '1.8.1',
 			'api.attachment-upload-complete': '1.5.0', 'api.attachment-content': '1.16.0' } : {}),
 		...(write.guardDestination ? CLOUD_SYNC_DESTINATION_REQUIREMENTS : {}) });
+	const photoPublication = (approval: import('./configuredPlan').FileSyncApproval) =>
+		write.guardDestination && approval.configuration.sourceKind === 'photos' && approval.configuration.mode === 'backup' &&
+		!approval.configuration.propagateDeletes && !retained && !stagingTargetId && m.kind === 'copy' &&
+		m.from === 'local' && m.source.kind === 'file' && !m.source.symbolicLink && !m.path.includes('/') && nativePhotoAssetKey(m.path)
+			? { publication: { expectedRevision: write.before?.revision ?? null } } : {};
 	const fileId = stagingTargetId ?? write.before?.id ?? write.operation.id;
 	const receipt = (value: unknown): SyncReceipt => {
 		const file = parseCloudFile(value);
@@ -287,7 +293,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 		await negotiate(); await runtime.authorizeMutation?.(signal); check();
 		const upload = await reserve(source.size);
 		if (upload.state === 'ready') return null;
-		const queued = await source.deferUpload({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(approval) }, signal);
+		const queued = await source.deferUpload({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(approval), ...photoPublication(approval) }, signal);
 		check(); return queued;
 	};
 
@@ -334,7 +340,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 				transferred?.(null);
 				await runtime.authorizeMutation?.(signal);
 				await sourceCheck();
-				const uploaded = await nativeUpload({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(nativeApproval) }, signal, progress);
+				const uploaded = await nativeUpload({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(nativeApproval), ...photoPublication(nativeApproval) }, signal, progress);
 				await sourceCheck();
 				if (!uploaded?.fingerprint || !equalContentFingerprints(uploaded.fingerprint, m.source.fingerprint!))
 					throw Error('Native upload does not match the planned fingerprint.');

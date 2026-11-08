@@ -2,6 +2,7 @@ import { prepareCloudInventoryWrite, type CloudWrite } from './cloudWrite';
 import type { CloudInventoryNode } from './cloudInventory';
 import { parseLocalTrashContext, type LocalTrashContext } from './localTrash';
 import type { SyncOperation } from './execute';
+import { nativePhotoAssetKey } from './nativeInventory';
 import type { SyncScope } from './reconcile';
 
 export type CloudOperationBinding = { write: CloudWrite; trashContext?: LocalTrashContext };
@@ -12,6 +13,7 @@ export async function prepareCloudOperationBinding(operation: SyncOperation, sco
 	node(path: string): Promise<CloudInventoryNode | null>;
 	operation(path: string): Promise<SyncOperation | null>;
 	previousTrash(parent: string): Promise<string | undefined>;
+	guardPhotoPublication?: true;
 }): Promise<CloudOperationBinding> {
 	const m = operation.mutation, parent = m.path.split('/').slice(0, -1).join('/');
 	const before = await input.node(m.path);
@@ -38,5 +40,8 @@ export async function prepareCloudOperationBinding(operation: SyncOperation, sco
 			folderId = op && pm?.kind === 'copy' && pm.from === 'local' && pm.source.kind === 'folder' && pm.expectedTarget === null ? op.id : null;
 		}
 	}
-	return { write: prepareCloudInventoryWrite(operation, scope, rootId, before, folderId) };
+	const write = prepareCloudInventoryWrite(operation, scope, rootId, before, folderId);
+	if (input.guardPhotoPublication && m.kind === 'copy' && m.from === 'local' && m.source.kind === 'file' &&
+		m.source.size > 0 && !m.source.symbolicLink && !parent && nativePhotoAssetKey(m.path)) write.guardDestination = true;
+	return { write };
 }

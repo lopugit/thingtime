@@ -22,7 +22,7 @@ import { createRemoteSyncClient, negotiateRemoteSourcePaths } from '~/fileSync/r
 import { type RemoteSyncStatus, type RemoteSyncCommand, validateRemoteSyncCommand } from '~/fileSync/remoteSyncProtocol';
 import { type FolderResult, supportsMobileTrashRecovery, supportsNativeFileVersions } from '~/fileSync/mobileFolders.client';
 import { type SavedFileSyncConfiguration, readOwnedFileSyncConfiguration } from '~/fileSync/configuredPlan';
-import { newFileSyncConfiguration, FILE_SYNC_RESOURCE_REQUIREMENTS } from '~/fileSync/configuration';
+import { newFileSyncConfiguration, FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, FILE_SYNC_RESOURCE_REQUIREMENTS } from '~/fileSync/configuration';
 import { fileSyncDownloadRequirements } from '~/fileSync/signedDownloadTarget';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { canonicalDraftConfiguration, configurationDraftKey, ConfigurationConflict, persistConfigurationDrafts, readConfigurationDrafts,
@@ -199,6 +199,10 @@ function RemoteConnections({ scope, generation, active, devicePlatform, savedOnl
                 persist(prepared); setFolders(previous => [...previous.filter(folder => folder.id !== destination.id), destination]);
             }
             const pending = { ...prepared, configuration: canonicalDraftConfiguration(prepared), pending: true };
+		if (pending.configuration.photoAutomation) {
+			for (const [feature, minimum] of Object.entries(FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
+			check();
+		}
 		if (pending.configuration.resourceLimits) for (const [feature, minimum] of Object.entries({ ...FILE_SYNC_RESOURCE_REQUIREMENTS, ...fileSyncDownloadRequirements(pending.configuration) })) await requireThingtimeCapability(feature, minimum);
 		else if (pending.configuration.ignoreRules) await requireThingtimeCapability('api.things', '1.38.0');
 		persist(pending);

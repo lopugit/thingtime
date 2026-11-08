@@ -43,17 +43,17 @@ export function parseSyncResourceDraft(draft: SyncResourceDraft): FileSyncResour
  return Object.keys(result).length ? result : undefined;
 }
 export const syncResourceOperation = (name: string) => name.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase());
-const action = (name: string) => ({ 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation: syncResourceOperation(name) } });
-const control = { 'min-height': '40px', padding: '8px 12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', 'max-width': '100%', 'box-sizing': 'border-box', 'min-width': '0' };
+export const syncResourceAction = (name: string) => ({ 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation: syncResourceOperation(name) } });
+export const syncResourceControlStyle = { 'min-height': '40px', padding: '8px 12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', 'max-width': '100%', 'box-sizing': 'border-box', 'min-width': '0' };
 const text = (id: string, tag: string, content: string, props: Record<string, unknown> = {}): WebpageBlock => ({ id, type: 'element', tag, text: content, props });
-function field(name: string, label: string, placeholder: string): WebpageBlock[] {
+export function syncResourceField(name: string, label: string, placeholder: string, inputMode = name === 'upload' || name === 'download' ? 'decimal' : 'numeric'): WebpageBlock[] {
  const id = name.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase());
- return [text(`${id}-label`, 'label', label, { for: `{resources.ids.${name}}` }), { id: `${id}-input`, type: 'element', tag: 'input', props: { id: `{resources.ids.${name}}`, name, type: 'text', inputmode: name === 'upload' || name === 'download' ? 'decimal' : 'numeric', value: `{resources.${name}}`, placeholder, disabled: '{resources.disabled}', 'aria-label': label, ...action(name) }, css: { ...control, width: '100%' } }];
+ return [text(`${id}-label`, 'label', label, { for: `{resources.ids.${name}}` }), { id: `${id}-input`, type: 'element', tag: 'input', props: { id: `{resources.ids.${name}}`, name, type: 'text', inputmode: inputMode, value: `{resources.${name}}`, placeholder, disabled: '{resources.disabled}', 'aria-label': label, ...syncResourceAction(name) }, css: { ...syncResourceControlStyle, width: '100%' } }];
 }
 function speed(name: 'upload' | 'download', label: string): WebpageBlock {
  return { id: `${name}-group`, type: 'element', tag: 'div', css: { display: 'grid', gap: '6px', 'min-width': '0' }, children: [
- ...field(name, label, 'Unlimited'), text(`${name}-unit-label`, 'label', `${label} unit`, { for: `{resources.ids.${name}Unit}` }),
- { id: `${name}-unit`, type: 'element', tag: 'select', props: { id: `{resources.ids.${name}Unit}`, name: `${name}Unit`, value: `{resources.${name}Unit}`, disabled: '{resources.disabled}', 'aria-label': `${label} unit`, ...action(`${name}Unit`) }, css: control,
+ ...syncResourceField(name, label, 'Unlimited'), text(`${name}-unit-label`, 'label', `${label} unit`, { for: `{resources.ids.${name}Unit}` }),
+ { id: `${name}-unit`, type: 'element', tag: 'select', props: { id: `{resources.ids.${name}Unit}`, name: `${name}Unit`, value: `{resources.${name}Unit}`, disabled: '{resources.disabled}', 'aria-label': `${label} unit`, ...syncResourceAction(`${name}Unit`) }, css: syncResourceControlStyle,
  children: Object.keys(SYNC_SPEED_UNITS).map(unit => text(`${name}-${unit.toLowerCase()}`, 'option', unit, { value: unit })) } ] };
 }
 export const syncResourceControlsBlocks: WebpageBlock[] = [{ id: 'sync-resources', type: 'element', tag: 'fieldset', props: { 'aria-label': 'Sync resource limits' }, css: { 'min-width': '0', padding: '12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '12px', display: 'grid', gap: '8px' }, children: [
@@ -61,9 +61,9 @@ export const syncResourceControlsBlocks: WebpageBlock[] = [{ id: 'sync-resources
  text('resources-help', 'p', 'Optional ceilings apply to this connection across all its files and folders. Leave a field blank for unlimited speed or the existing concurrency and CPU defaults.'),
  speed('upload', 'Upload speed'), speed('download', 'Download speed'),
  text('speed-help', 'p', 'Kbps, Mbps and Gbps use decimal bits per second: 1 Mbps = 1,000,000 bits/s = 125,000 bytes/s. Limits cover aggregate transferred payload.'),
- ...field('transferConcurrency', 'Maximum simultaneous file and folder transfers', 'Default'),
- ...field('indexingConcurrency', 'Maximum indexing workers', 'Default'),
- ...field('cpuPercent', 'CPU target (%)', 'Default'),
+ ...syncResourceField('transferConcurrency', 'Maximum simultaneous file and folder transfers', 'Default'),
+ ...syncResourceField('indexingConcurrency', 'Maximum indexing workers', 'Default'),
+ ...syncResourceField('cpuPercent', 'CPU target (%)', 'Default'),
  text('cpu-help', 'p', 'The CPU target is 1–100% of total available CPU capacity, measured only for this sync workload. Above the target, sync reduces pace and eligible concurrency and recovers gradually below it. Hardware, safety and CPU backpressure may use less than your ceilings. Unavailable CPU measurements remain unknown.'),
  text('resources-error', 'p', '{resources.error}', { role: 'alert' })
 ]}];

@@ -3021,7 +3021,10 @@ email whose link points at the attacker.
       [transfer admission runbook](docs/file-sync-transfer-admissions.md). Verify
       two independently admitted transfers, provider checksum refusal, duplicate
       completion, exact origin/pairing, configuration and destination changes,
-      revocation, expiry and foreground re-admission on the original upload.
+      revocation, expiry and foreground re-admission on the original upload. Check
+      staging-only refusal, v4 settings readback, exact background/foreground
+      receipt replay, six paired-only refill originals, and publication refusal
+      after pause, run revocation or unpair.
 
 - [ ] Local attachment storage stand-in (PR: developer-experience follow-ups):
       with `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=.local-attachments` in
@@ -12237,14 +12240,44 @@ transfer, whole-account snapshots or production deployment.
 - [ ] With ordinary Photos consent and an isolated replica, run
   `THINGTIME_PHOTO_DEFERRED_TEST=1` through the installed acceptance harness.
   Hold the first WebView upload, expire native processing after a confirmed
-  part, and verify multiple exact originals through scoped admission without
-  publishing Timeline. Reopen and verify the same attachments and original
+  part, and verify multiple exact originals through scoped admission. Verify staging-only
+  and explicitly admitted Photos publication separately. Reopen and verify the same attachments and original
   operation receipts with no duplicate revisions. Revoke the saved connection
   or pause it and verify the old queue cannot sign or complete.
 - [ ] On a physical iPhone, verify actual BGProcessing delivery while unfocused
   or locked and repeat the expiry/reopen and Wi-Fi cases. Separate scheduler
   injection or simulator refusal from physical OS delivery. No completion
-  claim is allowed for a queue that has not published its foreground receipts.
+  claim is allowed before the queue has verified canonical Files receipts.
+
+### iOS Photos launch and retry
+
+- Reopen a current native build with an enabled private Photos backup and an
+  older unfinished journal. Interrupt the native scan while the app is inactive,
+  including the legacy “Folder access paused” reply. Verify that foreground
+  return wakes the same connection, confirmed files survive recovery, and an
+  allowed cellular connection uploads with the device unplugged. Reopen after
+  Pause and verify no source read or upload. Exercise compatible configuration
+  edits, an unavailable grant, Wi-Fi-only, and charging-only separately.
+- Confirm automatic retry respects its five-minute deadline and that a native
+  connectivity or power update rechecks the saved settings. Exercise a budget
+  reset across app restart and a multipart file larger than the hourly allowance
+  whose individual parts fit. Check that history has one canonical receipt per
+  operation when background and foreground finish in either order. Allow a
+  native 1.2 run to refill past its first batch while the WebView is inactive,
+  then resume the WebView and verify that already-backed bytes are reused.
+  Change the exact configuration or revoke its run between reserve and publish
+  and confirm that the old operation cannot complete publication.
+- On the sole-native bridge, launch, change power/network, hide and reopen the
+  WebView while one native operation is running. Verify one native operation
+  identity, native-only progress, and no WebView PhotoKit scan or upload. Check
+  same-grant edited originals retain their previous revision, and unknown
+  occupied paths remain a review state. Confirm Run in Background only comes
+  from its explicit control, uses the existing native queue, and handles iOS
+  refusal, expiration, user Resume and true completion.
+- On a physical device, compare Wi-Fi and cellular managed-upload bytes and
+  newly confirmed asset counts with the summary notification. Check Live Photo
+  resource counting, quiet periods, notification Off, denied notification
+  permission, and iOS-scheduled delivery separately from simulator checks.
 
 ### Mac photo library backup
 

@@ -77,3 +77,58 @@ test('canonical publication follows Photos asset rank, preserves companion group
 		assert.equal((await f.journal().inventory({ scope: f.scope, currentScope: input.currentScope }).read(head.baseline.local)).totalEntries, 3);
 	} finally { f.journal().close(); }
 });
+
+for (const order of ['native before browser preflight', 'native during guarded browser commit', 'different native bytes'] as const) {
+	test(`Photos WebView reconciles independent native publication: ${order}`, async () => {
+		const key = 'a'.repeat(64), path = key + '-0-original.jpg';
+		const f = await streamingFileFixture(path), { input } = f, entry = f.entry();
+		const photos = { ...saved, configuration: { ...saved.configuration, sourceKind: 'photos' as const } };
+		const originalRead = input.readConfiguration;
+		input.readConfiguration = async () => ({ ...(await originalRead() as object), crystal: photos.configuration });
+		input.deferredUploads = { publishPhotos: true, skipLookahead: true, queued: () => assert.fail('Native run owns background replenishment') };
+		const nativeFile = { id: 'native-other-operation', revision: 'native-revision', name: path, folderId: 'cloud-root', trashed: false,
+			content: { attachmentId: 'native-upload', version: 'a'.repeat(64), size: entry.size,
+				fingerprint: order === 'different native bytes' ? { ...entry.fingerprint, sha256: 'b'.repeat(64) } : entry.fingerprint } };
+		const nativePublish = () => f.files.set(nativeFile.id, nativeFile);
+		input.inventory = async () => ({
+			version: 1, complete: true, rootId: 'cloud-root', rootRevision: 'root',
+			nodes: [...f.files.values()].map(file => ({ kind: 'file', path, id: file.id, folderId: file.folderId, revision: file.revision, file }))
+		});
+		const photoQueue = batch([key]);
+		input.scanLocalPages = async function* () {
+			const id = crypto.randomUUID();
+			const capture = { id, generation: id, totalEntries: 1, totalSkipped: 0, coverage: 'full' as const, consistency: 'per-entry' as const, photoQueue };
+			yield { generation: id, ordinal: 0, entries: [], backupCapture: capture,
+				skippedPage: { capture, offset: 0, totalSkipped: 0, nextOffset: null, skipped: [] } };
+			yield { generation: id, ordinal: 0, entries: [entry], totalEntries: 1, backupCapture: capture };
+		};
+		if (order !== 'native during guarded browser commit') input.progressSession = () => { nativePublish(); };
+		else {
+			const fetch = input.runtime.fetch;
+			input.runtime.fetch = async (url, init) => {
+				if (new URL(String(url)).pathname === '/api/v1/files' && typeof init?.body === 'string') {
+					assert.deepEqual(JSON.parse(init.body).syncDestination, { rootId: 'cloud-root', path });
+					nativePublish();
+					return Response.json({ ok: false, code: 'sync_destination_changed' }, { status: 409 });
+				}
+				return fetch(url, init);
+			};
+		}
+		try {
+			const run = () => runPagedForegroundCloudSync(photos, f.scope, input, new AbortController().signal);
+			if (order === 'different native bytes') await assert.rejects(run(), /Sync file changed/);
+			else {
+				const result = await run();
+				assert.ok('spec' in result);
+				assert.equal(result.progress.phase, 'complete');
+				assert.equal(result.progress.confirmed, 0, 'Native receipt was not copied to the old browser operation');
+				assert.equal(result.progress.photoSourceChanged, undefined);
+				const head = await f.journal().pagedCheckpoints({ scope: f.scope, currentScope: input.currentScope }).current();
+				assert.ok(head, 'The checkpoint reobserved the accepted native bytes');
+			}
+			assert.deepEqual([...f.files.values()], [nativeFile]);
+			assert.equal(f.publications(), 0);
+			assert.equal(f.puts(), order === 'native during guarded browser commit' ? 1 : 0);
+		} finally { f.journal().close(); }
+	});
+}

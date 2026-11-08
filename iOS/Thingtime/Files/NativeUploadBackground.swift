@@ -13,7 +13,12 @@ protocol NativeUploadBackgroundTask: AnyObject {
 protocol NativeUploadBackgroundScheduling: AnyObject {
     func register(_ handler: @escaping (NativeUploadBackgroundTask) -> Void) -> Bool
     func submit() throws
+    func submit(title: String, subtitle: String) throws
     func cancel()
+}
+
+extension NativeUploadBackgroundScheduling {
+    func submit(title: String, subtitle: String) throws { try submit() }
 }
 
 /// One registered system identifier and one in-flight lease. A cancelled request
@@ -39,14 +44,20 @@ final class NativeUploadBackgroundCoordinator {
     }
     func begin(size: Int64, timeoutNanoseconds: UInt64 = 2_000_000_000,
                expired: @escaping () -> Void) async -> NativeUploadBackgroundLease? {
-        guard registered, let scheduler, pending == nil, !Task.isCancelled, size > 0, size < Int64.max else { return nil }
-        let lease = NativeUploadBackgroundLease(size: size, cancel: { scheduler.cancel() }, expired: expired,
+        guard size > 0, size < Int64.max else { return nil }
+        return await begin(presentation: .init(title: "Uploading to Thingtime", subtitle: "Preparing your file…",
+            completedSubtitle: "File uploaded", bytes: size), timeoutNanoseconds: timeoutNanoseconds, expired: expired)
+    }
+    func begin(presentation: NativeUploadBackgroundLease.Presentation, timeoutNanoseconds: UInt64 = 2_000_000_000,
+               expired: @escaping () -> Void) async -> NativeUploadBackgroundLease? {
+        guard registered, let scheduler, pending == nil, !Task.isCancelled else { return nil }
+        let lease = NativeUploadBackgroundLease(presentation: presentation, cancel: { scheduler.cancel() }, expired: expired,
             released: { [weak self] value in if self?.pending === value { self?.pending = nil } })
         pending = lease
         return await withTaskCancellationHandler(operation: {
             await withCheckedContinuation { continuation in
                 lease.wait(continuation, timeoutNanoseconds: timeoutNanoseconds)
-                do { try scheduler.submit() } catch { lease.submissionFailed() }
+                do { try scheduler.submit(title: presentation.title, subtitle: presentation.subtitle) } catch { lease.submissionFailed() }
             }
         }, onCancel: { Task { @MainActor in lease.finish(success: false) } })
     }
@@ -54,19 +65,25 @@ final class NativeUploadBackgroundCoordinator {
 
 @MainActor
 final class NativeUploadBackgroundLease {
+    struct Presentation {
+        let title: String
+        let subtitle: String
+        let completedSubtitle: String
+        var bytes: Int64?
+    }
     private enum State { case waiting, active, cancelledBeforeLaunch, finished }
     private var state: State = .waiting
     private var systemTask: NativeUploadBackgroundTask?
     private var continuation: CheckedContinuation<NativeUploadBackgroundLease?, Never>?
     private var deadline: Task<Void, Never>?
-    private let size: Int64
+    private let presentation: Presentation
     private let cancel: () -> Void
     private let expired: () -> Void
     private let released: (NativeUploadBackgroundLease) -> Void
     var canContinue: Bool { state == .active }
-    init(size: Int64, cancel: @escaping () -> Void, expired: @escaping () -> Void,
+    init(presentation: Presentation, cancel: @escaping () -> Void, expired: @escaping () -> Void,
          released: @escaping (NativeUploadBackgroundLease) -> Void) {
-        self.size = size; self.cancel = cancel; self.expired = expired; self.released = released
+        self.presentation = presentation; self.cancel = cancel; self.expired = expired; self.released = released
     }
     func wait(_ continuation: CheckedContinuation<NativeUploadBackgroundLease?, Never>, timeoutNanoseconds: UInt64) {
         self.continuation = continuation
@@ -86,7 +103,8 @@ final class NativeUploadBackgroundLease {
             return
         }
         state = .active; systemTask = task
-        task.progress.totalUnitCount = size + 1; task.progress.completedUnitCount = 0
+        task.progress.totalUnitCount = presentation.bytes.map { $0 + 1 } ?? -1
+        task.progress.completedUnitCount = 0
         task.expiration = { [weak self] in
             guard let self, self.canContinue else { return }
             self.finish(success: false); self.expired()
@@ -99,9 +117,17 @@ final class NativeUploadBackgroundLease {
         state = .finished; settle(nil); released(self)
     }
     func progress(_ bytes: Int64) {
-        guard canContinue, let task = systemTask, bytes >= task.progress.completedUnitCount, bytes <= size else { return }
+        guard let size = presentation.bytes, canContinue, let task = systemTask,
+              bytes >= task.progress.completedUnitCount, bytes <= size else { return }
         task.progress.completedUnitCount = bytes
         task.update(subtitle: bytes == size ? "Verifying upload…" : "\(Int(Double(bytes) / Double(size) * 100))% uploaded")
+    }
+    func work(completed: Int64, total: Int64?, subtitle: String) {
+        guard presentation.bytes == nil, canContinue, let task = systemTask,
+              completed >= task.progress.completedUnitCount, total.map({ $0 >= completed && $0 > 0 }) ?? true else { return }
+        if let total { task.progress.totalUnitCount = total }
+        task.progress.completedUnitCount = completed
+        task.update(subtitle: subtitle)
     }
     func finish(success: Bool) {
         switch state {
@@ -111,7 +137,10 @@ final class NativeUploadBackgroundLease {
             state = .finished
             if let task = systemTask {
                 task.expiration = nil
-                if success { task.progress.completedUnitCount = size + 1; task.update(subtitle: "File uploaded") }
+                if success {
+                    if task.progress.totalUnitCount > 0 { task.progress.completedUnitCount = task.progress.totalUnitCount }
+                    task.update(subtitle: presentation.completedSubtitle)
+                }
                 task.complete(success: success)
             }
             systemTask = nil; settle(nil); released(self)
@@ -138,7 +167,10 @@ private final class SystemNativeUploadBackgroundScheduler: NativeUploadBackgroun
         return registered
     }
     func submit() throws {
-        let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: "Uploading to Thingtime", subtitle: "Preparing your file…")
+        try submit(title: "Uploading to Thingtime", subtitle: "Preparing your file…")
+    }
+    func submit(title: String, subtitle: String) throws {
+        let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: title, subtitle: subtitle)
         request.strategy = .fail
         do { try BGTaskScheduler.shared.submit(request) }
         catch {
@@ -162,6 +194,6 @@ private final class SystemNativeUploadBackgroundTask: NativeUploadBackgroundTask
         }
     }
     var progress: Progress { task.progress }
-    func update(subtitle: String) { task.updateTitle("Uploading to Thingtime", subtitle: subtitle) }
+    func update(subtitle: String) { task.updateTitle(task.title, subtitle: subtitle) }
     func complete(success: Bool) { task.setTaskCompleted(success: success) }
 }

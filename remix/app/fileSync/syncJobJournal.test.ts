@@ -324,3 +324,73 @@ test('only the actual journal policy guard supplies the typed configuration diag
  });
  journal.close();
 });
+
+test('reopen preserves serialized Photos reviews from v1–v3 and only recovers the exact legacy inactive wait', async () => {
+ const { shouldRunAutomaticPhoto } = await import('./photoAutomationScheduler');
+ const { syncScopeKey } = await import('./reconcile');
+ const factory = new IDBFactory(); let journal = await open(factory);
+ journal.close();
+ const db = await new Promise<IDBDatabase>(resolve => { const request = factory.open('jobs'); request.onsuccess = () => resolve(request.result); });
+ const reviews = [
+  '{"configurationVersion":1,"name":"Photos","deviceId":"device","localRootId":"photos","remoteFolderId":"cloud","sourceKind":"photos","mode":"backup","paused":false,"propagateDeletes":false,"network":"any","chargingOnly":false,"excludedPaths":[]}',
+  '{"configurationVersion":2,"name":"Photos","deviceId":"device","localRootId":"photos","remoteFolderId":"cloud","sourceKind":"photos","mode":"backup","paused":false,"propagateDeletes":false,"network":"any","chargingOnly":false,"excludedPaths":[],"ignoreRules":"private/"}',
+  '{"configurationVersion":3,"name":"Photos","deviceId":"device","localRootId":"photos","remoteFolderId":"cloud","sourceKind":"photos","mode":"backup","paused":false,"propagateDeletes":false,"network":"any","chargingOnly":false,"excludedPaths":[],"resourceLimits":{"uploadBytesPerSecond":12345}}'
+ ];
+ const rows = reviews.map((raw, index) => {
+  const binding = { ...scope, rootId: 'photos-' + index };
+  const reviewed = { id: binding.rootId, updatedAt: saved().updatedAt, configuration: JSON.parse(raw) };
+  return { version: 1, key: syncScopeKey(binding), id: 'old-' + index, revision: 7, scope: binding, reviewed,
+   state: index === 0 ? 'attention' : 'paused', ...(index === 0 ? { failureReason: 'unknown' } : {}),
+   photoQueueEpoch: 'a3e487e9-8aa9-4eca-8129-7a78fbc57c2c' };
+ });
+ await new Promise<void>((resolve, reject) => {
+  const tx = db.transaction('sync-admitted-jobs', 'readwrite');
+  for (const row of rows) tx.objectStore('sync-admitted-jobs').put(row);
+  tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error);
+ });
+ db.close(); journal = await open(factory);
+ try {
+  for (let index = 0; index < rows.length; index++) {
+   const row = rows[index], actual = await jobsFor(journal, row.scope).read();
+   assert.deepEqual(actual, row);
+   assert.equal(JSON.stringify(actual!.reviewed.configuration), reviews[index]);
+   assert.equal(shouldRunAutomaticPhoto(actual!.reviewed, actual!, 1000, true), false);
+   assert.equal(shouldRunAutomaticPhoto(actual!.reviewed, actual!, 1000, true, true), index === 0);
+  }
+ } finally { journal.close(); }
+});
+
+test('Photos retry persists the typed wait, keeps the allowance deadline, and fences pause before admission', async () => {
+ const { PHOTO_AUTOMATION_INTERVAL_MS } = await import('./configuration');
+ const { shouldRunAutomaticPhoto } = await import('./photoAutomationScheduler');
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const photo = { ...saved(), configuration: { ...saved().configuration, sourceKind: 'photos' as const, mode: 'backup' as const, network: 'any' as const } };
+ const denial = await jobs.pausePhoto(photo, 'offline-pause');
+ await assert.rejects(jobs.admit(photo, 'stale', PHOTO_AUTOMATION_INTERVAL_MS, undefined, { previous: null }), /changed while preparing/);
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ assert.deepEqual(await jobs.read(), denial);
+ assert.equal(shouldRunAutomaticPhoto(photo, denial, 1000, true), false);
+ const resumedDenial = (await jobs.resumePhotoPause(denial))!;
+ assert.deepEqual(resumedDenial.reviewed, denial.reviewed);
+ assert.equal(resumedDenial.id, denial.id);
+ assert.equal(await jobs.resumePhotoPause(denial), null);
+ const explicit = await jobs.admit(photo, 'explicit', PHOTO_AUTOMATION_INTERVAL_MS);
+ const inactive = (await jobs.defer(explicit, 1000, undefined, { reason: 'inactive' }, true))!;
+ assert.equal(inactive.retryAt, 301_000);
+ assert.equal(shouldRunAutomaticPhoto(photo, inactive, 300_999, false), false);
+ assert.equal(shouldRunAutomaticPhoto(photo, inactive, 300_999, true), true);
+ const resumed = (await jobs.begin(inactive, 4000, 'same-attempt', { wakeConditions: true }))!;
+ assert.equal(resumed.id, explicit.id);
+ const budget = (await jobs.defer(resumed, 4000, undefined, { reason: 'data-budget', retryAt: 600_000 }, true))!;
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ assert.deepEqual(await jobs.read(), budget);
+ assert.equal(await jobs.begin(budget, 599_999, 'too-early', { wakeConditions: true }), null);
+ const due = (await jobs.begin(budget, 600_000, 'same-attempt', { wakeConditions: false }))!;
+ assert.equal(due.waitReason, undefined);
+ const scheduled = (await jobs.finish(due, 610_000))!;
+ assert.equal(scheduled.nextRunAt, 910_000);
+ const stopped = await jobs.pausePhoto(photo, 'ignored');
+ assert.equal(stopped.state, 'paused');
+ assert.equal(await jobs.begin(scheduled, 910_000, 'stale-scheduled', { wakeConditions: true }), null);
+ journal.close();
+});
