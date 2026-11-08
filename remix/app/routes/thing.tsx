@@ -26,6 +26,7 @@ import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 import { useViewTracking } from '~/components/Feed/useViewTracking';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { ThingRenderComponent } from '~/components/Thingtime/ThingRenderComponent';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import {
 	SensitiveThingReveal,
@@ -44,6 +45,8 @@ import { isDataPlane, scopedThingCacheKey } from '~/utils/dataPlane';
 import type * as InstallSuite from '~/components/Builder/installSuite';
 import type { BehaviourSuite } from '~/schemas/behaviourSuites';
 import { CARD_STYLES } from '~/theme/card';
+import { ThingMetadataPanel } from '~/components/Things/ThingMetadataPanel';
+import { isThingMetadataReference, THING_METADATA_KIND } from '~/utils/thingMetadata';
 import { ThingParentPaths } from '~/components/Things/ThingParentPaths';
 import { ThingFileLocation } from '~/components/Things/ThingFileLocation';
 import { ThingAttachmentDetail } from '~/components/Things/ThingAttachmentDetail';
@@ -316,8 +319,8 @@ function GenericThingPage() {
 	// account's read), the fetch reconciles behind it. Diagnostics are never
 	// cached: they are admin-only and short-lived.
 	// A bearer-key response must never become the optimistic no-key paint on a
-	// later visit. Hidden-link reads stay live-only and leave no local cache.
-	const cacheKey = linkKey ? null : scopedThingCacheKey(currentUser?.id ?? null, dataPlane, id);
+	// later visit. Metadata references also recheck the source ACL on every visit.
+	const cacheKey = linkKey || isThingMetadataReference(id) ? null : scopedThingCacheKey(currentUser?.id ?? null, dataPlane, id);
 	const seedState = React.useCallback(
 		(key: string): ThingLoadState => {
 			if (diagnosticRoute) return { key, loading: true, data: null, error: null };
@@ -417,6 +420,14 @@ function GenericThingPage() {
 	const diagnostic = visibleState.data?.kind === 'diagnostic' ? visibleState.data.diagnostic : null;
 	const thing = visibleState.data?.kind === 'thing' ? visibleState.data.thing : null;
 	const kinds = kindsOf(thing);
+	const isMetadataThing = kinds.includes(THING_METADATA_KIND);
+	const sourceLinkParams = new URLSearchParams();
+	if (linkKey) sourceLinkParams.set('key', linkKey);
+	if (dataPlane) sourceLinkParams.set('dataPlane', dataPlane);
+	if (searchParams.get('archiveSource') === 'true') sourceLinkParams.set('archive', 'true');
+	const metadataSourceHref = isMetadataThing && typeof thing?.targetId === 'string'
+		? `/thing/${encodeURIComponent(thing.targetId)}${sourceLinkParams.size ? `?${sourceLinkParams}` : ''}`
+		: '';
 	const isComponent = kinds.includes('component');
 	const isWebpage = kinds.includes('webpage');
 	const isAction = kinds.includes('action');
@@ -680,7 +691,7 @@ function GenericThingPage() {
 		  )
 		: '';
 	const detail = diagnostic?.detail || genericDetail;
-	const sections = thingDetailSections({ hasThing: !!thing, showPreview, showData });
+	const sections = thingDetailSections({ hasThing: !!thing, showPreview: showPreview && !isMetadataThing, showData });
 	const primaryKind = kinds[0] || 'thing';
 	const displayName = thing ? thingDisplayName({ thingtime: kinds, crystal: thing.crystal || {} }) : '';
 	const ownPage = thing ? thingLink({ id: thing.id, thingtime: kinds }) : null;
@@ -870,7 +881,7 @@ function GenericThingPage() {
 			paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
 			paddingBottom={16}
 		>
-			<SharedMediaProvider linkKey={thing?.audience?.linkKey || thing?.linkKey || linkKey} sharedRoot={thing && !isThingOwner && canForkThing(thing) ? thing.id : undefined}><Stack spacing={5} width="100%" sx={sections.preview ? { '& > :not([data-preview-fullwidth="true"])': { width: 'calc(100% - 32px)', maxWidth: '920px', marginInline: 'auto' } } : undefined} maxW={sections.preview ? undefined : "920px"} px={sections.preview ? 0 : { base: 4, md: 6 }} pt={{ base: 4, md: 7 }} minW={0}>
+			<SharedMediaProvider linkKey={thing?.audience?.linkKey || thing?.linkKey || linkKey} sharedRoot={thing && !isMetadataThing && !isThingOwner && canForkThing(thing) ? thing.id : undefined}><Stack spacing={5} width="100%" sx={sections.preview ? { '& > :not([data-preview-fullwidth="true"])': { width: 'calc(100% - 32px)', maxWidth: '920px', marginInline: 'auto' } } : undefined} maxW={sections.preview ? undefined : "920px"} px={sections.preview ? 0 : { base: 4, md: 6 }} pt={{ base: 4, md: 7 }} minW={0}>
 				<Flex align="center" justify="space-between" gap={3} wrap="wrap">
 					<Box minW={0}>
 						<Text color={MUTED} fontFamily="mono" fontSize="10px" fontWeight="700" letterSpacing="0.12em" textTransform="uppercase">
@@ -879,10 +890,10 @@ function GenericThingPage() {
 						<Heading as="h1" mt={1} fontSize={{ base: '2xl', md: '3xl' }} overflowWrap="anywhere">
 							{diagnostic ? `Migration error · ${diagnostic.migrationId}` : diagnosticRoute ? 'Migration error' : displayName || 'Thing'}
 						</Heading>
-						{thing && !isThingOwner && canForkThing(thing) ? <ForkSharedThingButton id={thing.id} linkKey={linkKey} webpage={isWebpage} /> : null}
-						{thing && <ThingTransferControls id={thing.id} linkKey={linkKey} />}
+						{thing && !isMetadataThing && !isThingOwner && canForkThing(thing) ? <ForkSharedThingButton id={thing.id} linkKey={linkKey} webpage={isWebpage} /> : null}
+						{thing && !isMetadataThing && <ThingTransferControls id={thing.id} linkKey={linkKey} />}
 					</Box>
-					{thing && !diagnosticRoute ? <PersistedThingMenu id={thing.id} initialThing={{ id: thing.id, thingtime: kinds,
+					{thing && !isMetadataThing && !diagnosticRoute ? <PersistedThingMenu id={thing.id} initialThing={{ id: thing.id, thingtime: kinds,
 						author: thing.author, acl: thing.acl, crystal: thing.crystal, tags: thing.tags, targetId: thing.targetId, linkKey: thing.linkKey }} openHref={ownPage || undefined} onChanged={refreshThing}
 						onRenamed={title => setLoadState(current => {
 							if (current.key !== requestKey || current.data?.kind !== 'thing' || current.data.thing.id !== id) return current;
@@ -971,6 +982,14 @@ function GenericThingPage() {
 							</Flex>
 						</Box>
 
+						{thing && isMetadataThing ? (
+							<ThingRenderComponent thing={{ ...thing.crystal, sourceHref: metadataSourceHref }} />
+						) : thing ? (
+							<ThingMetadataPanel id={thing.id} revision={String(thing.updatedAt || '')} sourceVerified={!loading && !error} sourceLoading={loading} linkKey={linkKey} />
+						) : diagnostic ? (
+							<ThingMetadataPanel id={diagnostic.id} sourceVerified={false} unavailable="This diagnostic is a protected report. Thing data and file data sizes are unavailable." />
+						) : null}
+
 						{sections.viewToggles ? (
 							<Flex
 								{...CARD_STYLES}
@@ -985,14 +1004,14 @@ function GenericThingPage() {
 										Views
 									</Heading>
 									<Text color={MUTED} fontSize="sm" mt={1}>
-										Choose the {interactive && (isComponent || isWebpage) ? 'live' : 'human-friendly'} preview, the raw Thing data, or both.
+										{isMetadataThing ? 'Inspect the saved metadata fields.' : `Choose the ${interactive && (isComponent || isWebpage) ? 'live' : 'human-friendly'} preview, the raw Thing data, or both.`}
 									</Text>
 								</Box>
 								<Flex align="center" gap={4} role="group" aria-label="Thing page views" wrap="wrap">
-									<Flex align="center" gap={2}>
+									{!isMetadataThing && <Flex align="center" gap={2}>
 										<Switch aria-label="Show rendered preview" isChecked={showPreview} onChange={(event) => setShowPreview(event.target.checked)} />
 										<Text fontSize="sm">{interactive && (isComponent || isWebpage) ? 'Live preview' : 'Rendered preview'}</Text>
-									</Flex>
+									</Flex>}
 									<Flex align="center" gap={2}>
 										<Switch aria-label="Show Thing data" isChecked={showData} onChange={(event) => setShowData(event.target.checked)} />
 										<Text fontSize="sm">Thing data</Text>
@@ -1001,7 +1020,7 @@ function GenericThingPage() {
 							</Flex>
 						) : null}
 
-						{thing ? <ThingParentPaths thing={thing as any} /> : null}
+						{thing && !isMetadataThing ? <ThingParentPaths thing={thing as any} /> : null}
 						{sections.preview && thing && (attachment || thing.thingtime?.includes('file')) ? <ThingFileLocation key={thing.id} thing={thing as any} /> : null}
 						{sections.preview && attachment ? <ThingAttachmentDetail attachment={attachment} references={references} /> : null}
 
@@ -1090,7 +1109,7 @@ function GenericThingPage() {
 						) : null}
 
 						{thing && isThingOwner && ['scheduled-task', 'reminder'].includes(thing.crystal?.type) ? <ScheduledTaskPanel key={`${currentUser?.id}:${thing.id}`} thingId={thing.id} /> : null}
-						{thing && (!post || !sections.preview) ? dataPlane?.startsWith('custom-')
+						{thing && !isMetadataThing && (!post || !sections.preview) ? dataPlane?.startsWith('custom-')
 							? <Text color={MUTED} fontSize="sm">Comments are available in your home database.</Text>
 							: <ThingComments collectionControls thingId={thing.id} linkKey={linkKey} initialPost={visibleState.data?.kind === 'thing' ? visibleState.data.discussion || visibleState.data.post : null} /> : null}
 

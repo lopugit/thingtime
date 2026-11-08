@@ -15450,6 +15450,11 @@ private readback while an unrelated Home fixture remains paused.
 
 ## iOS LiDAR capture and automatic Things save
 
+- Recover a valid sparse archive larger than 6 GB and compare frame counts and
+  original bytes. Inject an invalid early header and interrupt before the first
+  frame commit: neither may produce a successful 5,632-byte empty scan. Original
+  `scan.tar` stays unchanged; valid partial recovery uses `scan-recovered.tar`.
+  Retry must address the selected scan even when another completed scan exists.
 - Start on a physical LiDAR device and verify the first camera frame is saved
   without terminating the app. Run `LiDARCaptureTests` with mixed Core Video
   attachments: string matrix/primaries, numeric gamma, a real color space and
@@ -15477,3 +15482,23 @@ private readback while an unrelated Home fixture remains paused.
 - Open the Safari handoff with matching and mismatched origins. It opens controls
   only, uses the app's verified account and never silently starts the camera.
   Simulator and synthetic transfer checks are not physical sensor acceptance.
+
+## Thing metadata and file sizes
+
+- Run `pnpm --dir remix run test:thing-metadata` and
+  `pnpm --dir remix run test:thing-metadata:integration`. The latter provisions
+  a disposable replica, synthetic accounts and local attachment storage; it
+  must not load production credentials or use the user's database.
+- On desktop and narrow mobile Thing pages, compare File data against downloaded
+  attachment bytes and Thing data against the canonical UTF-8 JSON payload.
+  A 5,632-byte attachment displays 5.63 KB, independently of its small JSON
+  record. Unknown attachment sizes must remain unavailable rather than zero.
+- Expand Details, follow the metadata reference and its source link, scroll to
+  the bottom, and edit nested labels/buttons through Edit metadata layout.
+  Save and reload; each block remains independently editable.
+- Reorder object properties: source hash and metadata identity remain stable.
+  Change values or array order: the hash changes and the same reference rebuilds.
+  Check concurrent saves, source deletion, private/public revocation, another
+  account and hidden-link access. Metadata must never grant access to its source.
+- Check JSON-only, failed/retried refresh and account/origin changes. Keep good
+  same-account measurements during a transient refresh; clear inaccessible data.

@@ -1,5 +1,17 @@
 # Things and folders
 
+## Derived Thing metadata
+
+`ThingMetadataPanel.tsx` sits at the top of Thing detail pages. Its individually
+editable `thingMetadataBlocks.ts` layout shows canonical JSON and original file
+bytes separately. `thingMetadata.ts` in the Things utility layer reauthorizes
+the source, measures sorted-key JSON with `thingMetadataCore.ts`, verifies
+attachment bindings and saves one protected metadata reference. GET measures;
+owner POST rebuilds. The exact metadata permalink always rechecks its source.
+Run `test:thing-metadata`, `test:thing-metadata:integration` and the
+[manual checklist](../../TESTING.md#thing-metadata-and-file-sizes).
+See the [format and lifecycle](../thing-metadata.md).
+
 Device pages expose Location history through `DeviceLocationWorkspace`, a
 scoped data/action adapter that resolves private saved `/devices/location` and
 `settings-device-location-settings` layouts. Map markers, filters, retention,
