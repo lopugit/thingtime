@@ -6,9 +6,9 @@ import OSLog
 import UIKit
 
 /// An already-planned file can survive app suspension and process death.
-/// The WebView retains ownership of planning and Timeline publication. This
-/// checkpoint holds only the existing reservation/admission and confirmed part
-/// cursor, never account cookies, credentials, signed URLs, or extra file bytes.
+/// The WebView owns planning and supplies an optional immutable publication
+/// guard. Older admissions only stage bytes. The checkpoint contains no
+/// account cookies, device credentials, signed URLs, or extra file bytes.
 struct NativeDeferredUploadRecord: Codable, Equatable, Sendable {
     let scope: FileSyncOwnerScope
     let request: NativeUploadFileRequest
@@ -20,6 +20,8 @@ struct NativeDeferredUploadRecord: Codable, Equatable, Sendable {
     var revoked = false
     var ready = false
     var retryAt = Date.distantPast
+    var transferBytes: NativePhotoTransferBytes?
+    var publishStarted: Bool?
 
     var configuration: NativeUploadAuthorization.Configuration { request.authorization.configuration }
     var rootId: String { configuration.localRootId }
@@ -30,7 +32,9 @@ struct NativeDeferredUploadRecord: Codable, Equatable, Sendable {
               grantRevision.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
               confirmedParts >= 0, confirmedParts <= (request.source.fingerprint?.partCount ?? 0),
               !revoked || !armed,
-              !ready || (!armed && confirmedParts == request.source.fingerprint?.partCount) else {
+              !ready || (!armed && confirmedParts == request.source.fingerprint?.partCount),
+              request.publication == nil || configuration.sourceKind == "photos",
+              publishStarted != true || request.publication != nil else {
             throw MobileFolderStore.Failure.invalid
         }
         try request.authorization.validate(owner: scope, rootId: rootId, photos: configuration.sourceKind == "photos")
@@ -200,13 +204,13 @@ final class NativeDeferredUpload {
     private let photos: PhotoLibraryReader
     private let parts: FileUploadPartStore
     private let network = NWPathMonitor()
-    private var networkKind = "unknown"
+    private let conditions = NativePhotoDownloadConditions()
     private var registered = false, activated = false, scheduled = false
     private var operation: UUID?
     private var revoking = Set<String>()
     private var persistenceUncertain = false
     private var background: Task<Void, Never>?
-    private var foregroundObserver: NSObjectProtocol?
+    private var batteryObserver: NSObjectProtocol?
 
     init(store: NativeDeferredUploadStore, scheduler: NativeDeferredUploadScheduling,
          grants: MobileFolderStore? = nil, photos: PhotoLibraryReader? = nil, parts: FileUploadPartStore? = nil) {
@@ -223,23 +227,37 @@ final class NativeDeferredUpload {
             guard let self else { task.complete(false); return }
             self.run(task)
         }
-        network.pathUpdateHandler = { [weak self] path in
+        network.pathUpdateHandler = { [conditions] path in
             let kind = path.status != .satisfied ? "offline" :
                 path.usesInterfaceType(.cellular) ? "cellular" : path.usesInterfaceType(.wifi) ? "wifi" :
                 path.usesInterfaceType(.wiredEthernet) ? "ethernet" : "unknown"
-            Task { @MainActor in self?.networkKind = kind }
+            conditions.setNetwork(kind)
         }
         network.start(queue: DispatchQueue(label: "com.thingtime.file-sync-processing.network"))
         UIDevice.current.isBatteryMonitoringEnabled = true
-        foregroundObserver = NotificationCenter.default.addObserver(forName: UIScene.willEnterForegroundNotification, object: nil, queue: .main) {
-            [weak self] _ in MainActor.assumeIsolated { self?.disarm() }
+        func battery() {
+            let state = UIDevice.current.batteryState
+            conditions.setCharging(state == .charging || state == .full)
         }
-        if foreground { disarm() }
+        battery()
+        batteryObserver = NotificationCenter.default.addObserver(forName: UIDevice.batteryStateDidChangeNotification, object: nil, queue: .main) {
+            [weak self] _ in MainActor.assumeIsolated {
+                guard let self else { return }
+                let state = UIDevice.current.batteryState
+                self.conditions.setCharging(state == .charging || state == .full)
+            }
+        }
+        // A fresh foreground process waits for its web identity; ordinary
+        // app switching no longer destroys a healthy admitted checkpoint.
+        if foreground { disarm(clearSummaries: false) }
     }
 
     /// A foreground context change prevents a previous account's queued work
     /// from starting. Only a fresh exact owner/admission handoff re-arms it.
-    func disarm(matching scope: FileSyncOwnerScope? = nil, configurationId: String? = nil, rootId: String? = nil) {
+    func disarm(matching scope: FileSyncOwnerScope? = nil, configurationId: String? = nil, rootId: String? = nil,
+                clearSummaries: Bool = true) {
+        NativeManagedPhotoPartTransfer.shared.cancel(matching: scope, configurationId: configurationId, rootId: rootId)
+        if clearSummaries { NativePhotoBackupSummaries.shared.clear(matching: scope, configurationId: configurationId, rootId: rootId) }
         do {
             var records = try store.load()
             let indices = records.indices.filter { i in
@@ -256,6 +274,12 @@ final class NativeDeferredUpload {
         }
     }
 
+    func verifiedForegroundScope(_ scope: FileSyncOwnerScope) {
+        guard let rows = try? store.load() else { return }
+        if let other = rows.first(where: { $0.armed && $0.scope != scope })?.scope { disarm(matching: other) }
+        NativePhotoBackupSummaries.shared.resume(verified: scope)
+    }
+
     private func stopScheduler() {
         scheduler.cancel(); scheduled = false; background?.cancel()
     }
@@ -268,6 +292,8 @@ final class NativeDeferredUpload {
     /// Local Pause is durable without an internet round trip. Server revocation
     /// uses only the exact immutable admissions captured by that pause.
     func pauseLocally(scope: FileSyncOwnerScope, rootId: String, configurationId: String, deviceId: String) throws {
+        NativeManagedPhotoPartTransfer.shared.cancel(matching: scope, configurationId: configurationId, rootId: rootId)
+        NativePhotoBackupSummaries.shared.clear(matching: scope, configurationId: configurationId)
         var records: [NativeDeferredUploadRecord]
         do { records = try store.load() }
         catch { failClosed(); throw NativeDeferredUploadStore.Failure.pausePersistence }
@@ -301,6 +327,9 @@ final class NativeDeferredUpload {
     /// Never let a new connection borrow records from a previous owner.
     func enqueue(_ proposed: NativeDeferredUploadRecord) throws -> Bool {
         try proposed.validate()
+        if proposed.configuration.managedPhotos?.notificationInterval == 0 {
+            NativePhotoBackupSummaries.shared.clear(matching: proposed.scope, configurationId: proposed.request.authorization.id)
+        }
         guard registered, proposed.expiresAt > Date(), !revoking.contains(proposed.admissionId) else { return false }
         var records = try store.load().filter { !$0.ready }
         if persistenceUncertain {
@@ -336,7 +365,10 @@ final class NativeDeferredUpload {
             guard records.count < NativeDeferredUploadStore.lookahead,
                   !records.contains(where: { $0.admissionId == proposed.admissionId }) else { return false }
             var next = proposed
-            if let prior { next.confirmedParts = prior.confirmedParts }
+            if let prior {
+                next.confirmedParts = prior.confirmedParts; next.transferBytes = prior.transferBytes
+                next.publishStarted = prior.publishStarted
+            }
             records.append(next)
         }
         try store.save(records)
@@ -355,7 +387,7 @@ final class NativeDeferredUpload {
     func read(scope: FileSyncOwnerScope, request: NativeUploadFileRequest, grantRevision: String) throws -> NativeDeferredUploadRecord? {
         try store.load().first {
             $0.scope == scope && $0.request == request && $0.grantRevision == grantRevision &&
-                $0.armed && $0.expiresAt > Date()
+                ($0.armed || $0.ready) && $0.expiresAt > Date()
         }
     }
 
@@ -418,7 +450,8 @@ final class NativeDeferredUpload {
                 do {
                     try Task.checkCancellation()
                     let grant = try self.grants.grant(current.scope, id: current.rootId)
-                    let staging = NativeUploadPartStaging(scope: current.scope, grant: grant, photos: self.photos, store: self.parts)
+                    let download = self.conditions.control(for: current.request.authorization)
+                    let staging = NativeUploadPartStaging(scope: current.scope, grant: grant, photos: self.photos, store: self.parts, download: download)
                     try await self.advance(current, staging: staging, check: checkExecution, progress: { _ in })
                 } catch {
                     success = false
@@ -429,11 +462,11 @@ final class NativeDeferredUpload {
                         } else {
                             // Back off on iOS expiry, Wi-Fi, power, or lost
                             // response. Foreground resume can bypass the delay.
-                            saved.retryAt = Date(timeIntervalSinceNow: 300)
+                            saved.retryAt = max(Date(timeIntervalSinceNow: 300), (error as? NativePhotoUploadBudget.Wait)?.retryAt ?? .distantPast)
                         }
                         try? self.store.update(saved)
                     }
-                    if Task.isCancelled || error is NativeUploadAuthorization.Wait { break }
+                    if Task.isCancelled || error is NativeUploadAuthorization.Wait || error is NativePhotoUploadBudget.Wait { break }
                 }
             }
             finish(success)
@@ -456,8 +489,7 @@ final class NativeDeferredUpload {
                   grant.sourceKind != "photos" || staging.photos.access() != "unavailable" else {
                 throw MobileFolderStore.Failure.changed
             }
-            let battery = UIDevice.current.batteryState
-            try proposed.request.authorization.verifyConditions(network: self.networkKind, charging: battery == .charging || battery == .full)
+            try self.conditions.verify(proposed.request.authorization)
         }
         let client = NativeDeferredUploadClient(record: proposed)
         try validate(); try await client.requireCapability(); try validate()
@@ -471,7 +503,13 @@ final class NativeDeferredUpload {
             let request = try proposed.request.part(current.confirmedParts + 1)
             let (retained, part) = try await staging.prepare(request)
             try validate()
-            try await client.send(part: part, partNumber: request.partNumber, check: validate)
+            try await client.send(part: part, partNumber: request.partNumber, conditions: conditions, check: validate) { bytes in
+                guard var live = try self.store.lookup(proposed) else { return }
+                var transfer = live.transferBytes ?? .init(); transfer.add(bytes)
+                live.transferBytes = transfer
+                try self.store.update(live)
+                current.transferBytes = transfer
+            }
             try validate(); try await staging.verify(proposed.request.source); try validate()
             current.confirmedParts = request.partNumber
             try store.update(current)
@@ -487,6 +525,18 @@ final class NativeDeferredUpload {
             throw NativeDeferredUploadClient.Failure.partsRetryable
         }
         try validate()
+        if proposed.request.publication != nil {
+            let original = try await staging.photoOriginalIdentity(proposed.request.source)
+            try validate()
+            let recovering = current.publishStarted == true
+            current.publishStarted = true
+            try store.update(current)
+            let published = try await client.request(action: "publish")
+            try validate()
+            if published["replayed"] as? Bool == false || recovering || (current.transferBytes?.total ?? 0) > 0 {
+                try NativePhotoBackupSummaries.shared.record(current, original: original)
+            }
+        }
         current.ready = true; current.armed = false
         try store.update(current)
         if pending().isEmpty { scheduler.cancel(); scheduled = false }

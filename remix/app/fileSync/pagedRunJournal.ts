@@ -33,7 +33,7 @@ export const PAGED_RUN_HEADS = 'sync-paged-run-heads';
 export const streamReconciliationKey = (scope: string): IDBValidKey => [scope, 'stream-reconciliation'];
 export const PAGED_RUN_STORES = ['sync-paged-runs', 'sync-paged-operations'] as const;
 const stores = [SYNC_PRIORITY_STORE, JOURNAL_RETENTION_STORE, RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, ...PAGED_RUN_STORES, PAGED_RUN_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE, PAGED_CHECKPOINT_HEADS, 'runs'];
-export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration; photoAssetOrder?: string[]; streaming?: { source: 'local' | 'remote' | 'both'; captureId: string } };
+export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration; photoAssetOrder?: string[]; backgroundPhotoPublication?: true; streaming?: { source: 'local' | 'remote' | 'both'; captureId: string } };
 export type PagedRunProgress = { phase: 'preparing' | 'ready' | 'running' | 'complete'; read: number; total: number; operations: number; confirmed: number; directions?: SyncDirectionalTotals; photoSourceChanged?: true };
 const directionMigrationsByDatabase = new WeakMap<IDBDatabase, Map<string, Promise<PagedRunProgress | undefined>>>();
 type SortKey = [number, number, string];
@@ -62,8 +62,11 @@ export const parsePagedRunSpec = (value: PagedRunSpec): PagedRunSpec => {
 		configuration.propagateDeletes || value.streaming || !Array.isArray(photoAssetOrder) || photoAssetOrder.length > 4 ||
 		!photoAssetOrder.every(isNativePhotoAssetKey) || new Set(photoAssetOrder).size !== photoAssetOrder.length))
 		throw Error('Invalid saved Photos asset order.');
+	if (value.backgroundPhotoPublication !== undefined && (value.backgroundPhotoPublication !== true ||
+		configuration?.sourceKind !== 'photos' || configuration.mode !== 'backup' || configuration.propagateDeletes ||
+		value.review || value.streaming)) throw Error('Invalid saved background Photos publication.');
 	if (value.streaming && (!configuration || value.review || plan.policy.propagateDeletes || !identifier(value.streaming.captureId) || value.streaming.source !== (plan.policy.mode === 'two-way' ? 'both' : plan.policy.mode === 'download' ? 'remote' : 'local'))) throw Error('Streaming requires an approved connection without deletions.');
-	return { id: value.id, plan, ...(photoAssetOrder ? { photoAssetOrder: [...photoAssetOrder] } : {}), ...(value.streaming ? { streaming: { source: value.streaming.source, captureId: value.streaming.captureId } } : {}), ...(value.review === undefined ? {} : { review: parsePagedRunReview(value.review) }), ...(configuration ? { configuration } : {}) };
+	return { id: value.id, plan, ...(photoAssetOrder ? { photoAssetOrder: [...photoAssetOrder] } : {}), ...(value.backgroundPhotoPublication ? { backgroundPhotoPublication: true as const } : {}), ...(value.streaming ? { streaming: { source: value.streaming.source, captureId: value.streaming.captureId } } : {}), ...(value.review === undefined ? {} : { review: parsePagedRunReview(value.review) }), ...(configuration ? { configuration } : {}) };
 };
 const validStreamInput = (change: NativeIndexChange & { replica?: Replica }, spec: PagedRunSpec) =>
 	validIndexProvenance(change) && (spec.streaming?.source === 'both'
@@ -756,7 +759,8 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 		for (const r of snapshot.rows) {
 			const cloud = await prepareCloudOperationBinding(r.operation, scope, h.cloud!.root.rootId, {
 				node: async path => { if (!nodes.has(path)) throw Error('Cloud binding input is missing.'); return nodes.get(path)!; },
-				operation: async path => { if (!operations.has(path)) throw Error('Cloud parent operation is missing.'); return operations.get(path)!; }, previousTrash
+				operation: async path => { if (!operations.has(path)) throw Error('Cloud parent operation is missing.'); return operations.get(path)!; }, previousTrash,
+				guardPhotoPublication: spec.backgroundPhotoPublication
 			}); check();
 			const bound = { ...r, cloud }, length = bytes(bound) + 1;
 			if (size + length > INVENTORY_PAGE_BYTES) {

@@ -41,7 +41,8 @@ final class NativeDeferredUploadClient {
     func requireCapability() async throws {
         guard !verified else { return }
         let manifest = try await read(LopuVoiceContract.manifestPath, body: nil)
-        guard LopuVoiceContract.accepts(manifest, baseURL: record.scope.origin, feature: Self.feature, minimum: [1, 0, 0]) else {
+        let minimum = record.request.publication == nil ? [1, 0, 0] : [1, 1, 0]
+        guard LopuVoiceContract.accepts(manifest, baseURL: record.scope.origin, feature: Self.feature, minimum: minimum) else {
             throw Failure.incompatible
         }
         verified = true
@@ -56,18 +57,43 @@ final class NativeDeferredUploadClient {
             guard let attachment = result["attachment"] as? [String: Any],
                   attachment["id"] as? String == record.request.uploadId else { throw Failure.invalid }
         }
+        if action == "publish" { try validatePublication(result) }
         return result
     }
 
-    func send(part: FileUploadPartStore.Part, partNumber: Int, check: () throws -> Void) async throws {
+    private func validatePublication(_ result: [String: Any]) throws {
+        struct Receipt: Decodable {
+            struct File: Decodable {
+                struct Content: Decodable { let attachmentId: String; let size: Int64; let fingerprint: MobileFolderReader.Fingerprint }
+                let id: String; let name: String; let folderId: String; let revision: String; let trashed: Bool; let content: Content
+            }
+            let file: File; let replayed: Bool
+        }
+        let receipt = try JSONDecoder().decode(Receipt.self, from: JSONSerialization.data(withJSONObject: result))
+        let file = receipt.file, source = record.request.source
+        guard record.request.publication != nil, !file.id.isEmpty, !file.revision.isEmpty, !file.trashed,
+              file.name == source.path, file.folderId == record.configuration.remoteFolderId,
+              file.content.attachmentId == record.request.uploadId, file.content.size == source.size,
+              file.content.fingerprint == source.fingerprint else { throw Failure.invalid }
+    }
+
+    func send(part: FileUploadPartStore.Part, partNumber: Int, conditions: NativePhotoDownloadConditions, check: () throws -> Void,
+              account: (NativePhotoTransferBytes) throws -> Void) async throws {
         let signed = try await request(action: "parts", parts: [["partNumber": partNumber, "checksumSha256": part.checksumSha256]])
         let allowsCellular = record.configuration.network == "any"
         var request = try NativeFileSession.signedUploadRequest(signed, origin: record.scope.origin, checksum: part.checksumSha256,
             length: part.length, partNumber: partNumber)
         request.allowsCellularAccess = allowsCellular
         try check()
-        let sender = NativeFileUpload()
-        do { try await sender.send(request, file: part.url, configuration: Self.configuration(allowsCellular: allowsCellular)) }
+        let configuration = Self.configuration(allowsCellular: allowsCellular)
+        do {
+            if record.configuration.managedPhotos != nil {
+                try await NativeManagedPhotoPartTransfer.shared.send(request, file: part.url, length: part.length, configuration: configuration,
+                    scope: record.scope, authorization: record.request.authorization, conditions: conditions, account: account)
+            } else {
+                try await NativeFileUpload().send(request, file: part.url, configuration: configuration)
+            }
+        }
         catch let error as URLError where !allowsCellular && error.networkUnavailableReason == .cellular {
             throw NativeUploadAuthorization.Wait.wifi
         }

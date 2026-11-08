@@ -85,6 +85,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
         let prior = try store.list(scope).first { $0.sourceKind == "photos" }
         let uiAutomation = env["THINGTIME_PHOTO_UI_AUTOMATION"] == "1"
         let deferredProof = env["THINGTIME_PHOTO_DEFERRED_TEST"] == "1"
+        let automaticProof = env["THINGTIME_PHOTO_AUTOMATIC_TEST"] == "1"
         let orderedProof = env["THINGTIME_PHOTO_EXPECT_NEWEST"] == "1"
         let resumeReceipt = env["THINGTIME_PHOTO_REOPEN_RECEIPT"].flatMap { Data($0.utf8) }
         let uiVerified = uiAutomation && env["THINGTIME_PHOTO_PREPARE_ONLY"] != "1"
@@ -274,7 +275,18 @@ final class PhotoBackupInstalledTests: XCTestCase {
                 XCTAssertEqual(SHA256.hash(data: download), SHA256.hash(data: try Data(contentsOf: original)))
             }
             let unpublished = try await cloudNodes()
-            XCTAssertTrue(unpublished.isEmpty, "Native attachment completion must not publish Timeline")
+            if automaticProof {
+                XCTAssertTrue(completed.allSatisfy { $0.request.publication != nil })
+                XCTAssertEqual(unpublished.count, completed.count, "The admitted native worker publishes without a WebView upload")
+                let authorization = try XCTUnwrap(completed.first?.request.authorization)
+                let summaries = try NativePhotoBackupSummaries.shared.pendingWindows(.init(authorization, owner: scope))
+                XCTAssertEqual(summaries.reduce(0) { $0 + $1.totals.photos }, completed.count)
+                XCTAssertEqual(summaries.reduce(0) { $0 + $1.totals.bytes.total }, completed.reduce(0) { $0 + $1.request.source.size })
+                XCTAssertTrue(summaries.allSatisfy { $0.due.timeIntervalSince($0.start) == 1800 })
+                print("IOS_PHOTO_BACKGROUND_PUBLICATION_PASS: native exact file receipts and 30-minute summary")
+            } else {
+                XCTAssertTrue(unpublished.isEmpty, "An older staging-only admission must not publish Timeline")
+            }
             deferredCount = completed.count
             deferredAttachmentIDs = Set(completed.map(\.request.uploadId))
             deferredPartCount = completed.reduce(0) { $0 + $1.confirmedParts }
@@ -298,6 +310,14 @@ final class PhotoBackupInstalledTests: XCTestCase {
             let card = "Array.from(document.querySelectorAll('h4,p')).find(e=>e.textContent===(" + quoted + ")[0])?.closest('article')"
             try await awaitTrue(web, "!!(" + card + ")")
             _ = try await web.evaluateJavaScript("(" + card + ").querySelector('button[aria-label=\"Expand folder\"]')?.click()")
+            if automaticProof {
+                try await awaitTrue(web, "window.__photoScans>0")
+                NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+                if deferredProof && !deferredExerciseRan && connection != nil { try await proveDeferredProcessing() }
+                try await awaitTrue(web, "Array.from((" + card + ")?.querySelectorAll('[role=status]')||[]).some(e=>e.textContent==='Last transfer finished.')", seconds: 360)
+                print("IOS_PHOTO_AUTOMATIC_FOREGROUND_PASS: saved unpaused connection, no manual start after interruption")
+                return
+            }
             try await awaitTrue(web, "Array.from((" + card + ")?.querySelectorAll('button')||[]).some(b=>['Start backup','Upload now'].includes(b.textContent.trim())&&!b.disabled&&b.getClientRects().length>0)")
             let started = try await web.evaluateJavaScript("(()=>{const card=" + card + ";const button=Array.from(card?.querySelectorAll('button')||[]).find(b=>['Start backup','Upload now'].includes(b.textContent.trim())&&!b.disabled&&b.getClientRects().length>0);if(!button)return false;card.scrollIntoView({block:'center'});button.click();return true;})()")
             guard started as? Bool == true else { throw NSError(domain: "PhotoBackupAcceptance", code: 6, userInfo: [NSLocalizedDescriptionKey: "The fresh saved backup action was unavailable"]) }
@@ -362,7 +382,11 @@ final class PhotoBackupInstalledTests: XCTestCase {
             phase = "save private cloud folder"
             let root = try await api("/api/v1/things", body: ["thingtime": ["folder"], "crystal": ["name": name]])
             cloud = try XCTUnwrap((root["thing"] as? [String: Any])?["id"] as? String)
-            let config: [String: Any] = ["configurationVersion": 1, "name": name, "deviceId": paired, "localRootId": grant.id, "sourceKind": "photos", "remoteFolderId": cloud!, "mode": "backup", "paused": false, "propagateDeletes": false, "network": "any", "chargingOnly": false, "excludedPaths": excluded]
+            var config: [String: Any] = ["configurationVersion": 1, "name": name, "deviceId": paired, "localRootId": grant.id, "sourceKind": "photos", "remoteFolderId": cloud!, "mode": "backup", "paused": false, "propagateDeletes": false, "network": "any", "chargingOnly": false, "excludedPaths": excluded]
+            if automaticProof {
+                config["configurationVersion"] = 4
+                config["photoAutomation"] = ["notificationIntervalMs": 1_800_000, "uploadBytesPerSecond": 625_000, "uploadBytesPerHour": 1_000_000_000]
+            }
             phase = "save backup connection"
             let saved = try await api("/api/v1/things", body: ["thingtime": ["file-sync"], "crystal": config])
             connection = try XCTUnwrap((saved["thing"] as? [String: Any])?["id"] as? String)

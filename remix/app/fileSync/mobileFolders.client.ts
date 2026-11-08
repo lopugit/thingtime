@@ -1,5 +1,5 @@
 import type { FileSyncApproval } from './configuredPlan';
-import { SyncConditionsWait } from './foregroundSyncContext';
+import { isSyncWaitReason, LEGACY_NATIVE_INACTIVE_MESSAGE, SyncConditionsWait } from './foregroundSyncContext';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 import { parseDeviceSyncResourcePolicy } from './deviceResourcePolicy';
 import { syncRequestHasPacing, parseSyncResourceStatus, type SyncResourceStatus } from './resourceGovernor';
@@ -137,6 +137,7 @@ export type FolderCapabilities = Pick<
 	ThingtimeNativeBridge,
 	| 'platform'
 	| 'fileResourceLimitsVersion'
+	| 'filePhotoAutomationVersion'
 	| 'fileDownloadVersion'
 	| 'fileUploadVersion'
 	| 'fileSingleUploadVersion'
@@ -167,6 +168,8 @@ export function assertNativeSymbolicLinkRequest(request: FolderRequest, capabili
 export const supportsNativeSourcePaths = (bridge: FolderCapabilities | undefined) =>
  bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 15;
 export const supportsNativeResourceLimits = (bridge: FolderCapabilities | undefined) => /^1\.\d+\.\d+$/.test(bridge?.fileResourceLimitsVersion ?? '');
+export const supportsNativePhotoAutomation = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'ios' && capabilitySatisfies(bridge.filePhotoAutomationVersion ?? '', '1.0.0');
 export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	(bridge?.platform === 'ios' || bridge?.platform === 'android' || bridge?.platform === 'macos') && /^1\.\d+\.\d+$/.test(bridge.fileUploadVersion ?? '');
 /** Additive Mac 1.1 receipt telemetry; mobile whole-file versions are independent. */
@@ -387,11 +390,20 @@ export function parseMobileFolderResult(
 	const message = value as any,
 		payload = message?.payload;
 	if (message?.type !== 'mobile-files-result' || !payload || Object.entries(expected).some(([key, value]) => payload[key] !== value)) return null;
+	const expectedRoot = 'rootId' in request ? request.rootId : undefined;
 	if (payload.syncWait !== undefined) {
-		if (!['upload-file', 'defer-upload', 'scan-capture', 'scan-status', 'read', 'photo-queue-finish'].includes(request.action) || !('rootId' in request) || payload.rootId !== request.rootId || payload.error !== undefined ||
-			!['wifi', 'network', 'offline', 'charging'].includes(payload.syncWait)) throw Error('Invalid native sync wait.');
-		throw new SyncConditionsWait(payload.syncWait);
+		const { syncWait, retryAt, minimumPartBytes } = payload;
+		const transfer = ['upload-file', 'defer-upload'].includes(request.action);
+		const allowed = syncWait === 'inactive' ? ['list', 'conditions', 'inspect', 'upload-file', 'defer-upload', 'scan', 'scan-capture', 'scan-status', 'scan-page', 'scan-cancel', 'scan-discard', 'cancel-deferred-upload', 'photo-queue-finish', 'read', 'read-range'].includes(request.action) :
+			syncWait === 'data-budget' ? transfer : ['upload-file', 'defer-upload', 'scan-capture', 'scan-status', 'read', 'photo-queue-finish'].includes(request.action);
+		const deadline = typeof retryAt === 'string' ? Date.parse(retryAt) : NaN;
+		if (!allowed || !isSyncWaitReason(syncWait) || syncWait === 'paused' || payload.rootId !== expectedRoot || payload.error !== undefined ||
+			(retryAt !== undefined && (syncWait !== 'data-budget' || !Number.isSafeInteger(deadline) || deadline < 0)) ||
+			(minimumPartBytes !== undefined && (syncWait !== 'data-budget' || retryAt !== undefined || !Number.isSafeInteger(minimumPartBytes) || minimumPartBytes < 1))) throw Error('Invalid native sync wait.');
+		throw new SyncConditionsWait(syncWait, retryAt === undefined ? undefined : deadline, minimumPartBytes);
 	}
+	if (payload.error === LEGACY_NATIVE_INACTIVE_MESSAGE && (payload.rootId === undefined || payload.rootId === expectedRoot))
+		throw new SyncConditionsWait('inactive');
 	if (typeof payload.error === 'string') throw Error(payload.error.slice(0, 240));
 	if (
 		!Array.isArray(payload.roots) ||
@@ -1007,9 +1019,9 @@ export function requestMobileFolders(
 				}
 				const complete =
 					received && message?.type === 'mobile-files-result' && Object.entries(expected).every(([key, value]) => message?.payload?.[key] === value);
-				if (complete && !message.payload.error && nextOffset !== received.byteLength) throw Error('Native upload range is incomplete.');
+				if (complete && !message.payload.error && !message.payload.syncWait && nextOffset !== received.byteLength) throw Error('Native upload range is incomplete.');
 				const result = parseMobileFolderResult(
-					complete && !message.payload.error
+					complete && !message.payload.error && !message.payload.syncWait
 						? { ...message, payload: { ...message.payload, chunk: { ...message.payload.chunk, bytes: received } } }
 						: message,
 					expected,

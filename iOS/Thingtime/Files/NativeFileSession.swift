@@ -105,6 +105,11 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
     /// The destination comes only from the authenticated selected server. Never
     /// attach account cookies, origin headers or bearer credentials to a PUT.
     func uploadPart(_ part: any FileUploadPartSource, uploadId: String, partNumber: Int, allowsCellular: Bool) async throws {
+        try await uploadPart(part, uploadId: uploadId, partNumber: partNumber, allowsCellular: allowsCellular,
+                             photoAuthorization: nil, conditions: nil)
+    }
+    func uploadPart(_ part: any FileUploadPartSource, uploadId: String, partNumber: Int, allowsCellular: Bool,
+                    photoAuthorization: NativeUploadAuthorization?, conditions: NativePhotoDownloadConditions?) async throws {
         try await verifyOwner(); try checkActive()
         let signed = try await json("/api/v1/attachments/uploads/parts", body: ["uploadId": uploadId,
             "parts": [["partNumber": partNumber, "checksumSha256": part.checksumSha256]]])
@@ -115,7 +120,14 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
         defer { sender.cancel(); upload = nil }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.allowsCellularAccess = allowsCellular
-        do { try await sender.send(request, file: part.url, configuration: configuration) }
+        do {
+            if let photoAuthorization, let conditions {
+                try await NativeManagedPhotoPartTransfer.shared.send(request, file: part.url, length: part.length, configuration: configuration,
+                    scope: scope, authorization: photoAuthorization, conditions: conditions, sender: sender)
+            } else {
+                try await sender.send(request, file: part.url, configuration: configuration)
+            }
+        }
         catch let error as URLError where !allowsCellular && error.networkUnavailableReason == .cellular {
             throw NativeUploadAuthorization.Wait.wifi
         }

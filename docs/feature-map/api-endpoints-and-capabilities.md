@@ -1,9 +1,10 @@
 # API endpoints and capabilities
 
-`api.file-sync-transfer-admissions` 1.0.0 adds
-`POST /api/v1/files/sync-transfer-admissions`. The browser owner admits an
-existing private file reservation; the exact paired device can sign and complete
-only that reservation. The import map and registry describe the route;
+`api.file-sync-transfer-admissions` 1.1.0 extends
+`POST /api/v1/files/sync-transfer-admissions`. The owner can admit publication
+of an exact private Photos original. Existing 1.0.0 admissions still authorize
+signing and completing only the original reservation. Optional v4 Photos policy
+requires `api.things` 1.53.0 and `api.things-update` 1.21.0. The import map and registry describe the route;
 `test:api-capabilities` checks negotiation and `test:files:transfer-admissions`
 exercises the built API. See [transfer admissions](../file-sync-transfer-admissions.md).
 

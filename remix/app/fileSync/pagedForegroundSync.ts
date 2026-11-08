@@ -439,7 +439,9 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 			}
 		}
 		const photoBatch = (await inventory.coverage(plan.local))?.photoQueue; check();
-		spec = { id: saved.id, plan, configuration, ...(photoBatch ? { photoAssetOrder: photoBatch.assetKeys } : {}), ...(review ? { review } : {}) };
+		spec = { id: saved.id, plan, configuration, ...(photoBatch ? { photoAssetOrder: photoBatch.assetKeys } : {}),
+			...(photoBatch && !review && input.deferredUploads?.publishPhotos ? { backgroundPhotoPublication: true as const } : {}),
+			...(review ? { review } : {}) };
 		await authorize(); await runs.begin(spec);
 		if (review) await importReviewDraft(runs, spec, drafts, saved);
 		await releaseDraft(saved, !review);

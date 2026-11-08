@@ -145,6 +145,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-08: Resume enabled iPhone Photos backup on launch and after temporary
+  native interruptions. Keep saved policy and upload receipts while adding a
+  five-minute retry, managed upload pacing and budgets, progress notifications
+  and exact scoped background publication. **Codex (AI)**
+
 - 2026-11-08: Add the iOS LiDAR scanner drawer entry, origin-bound web action and
   [Verification](../PRs/1422-codex-ios-lidar-capture-add-native-ios-lidar-capture-and-private-thing-saving.md).
   durable private scan archive upload. Preserve available ARKit depth, imagery,

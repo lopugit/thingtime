@@ -18,6 +18,7 @@ export type ThingtimeNativeBridge = {
   fileInventoryStrictCoverage?: boolean;
   fileSymbolicLinksVersion?: string;
   fileResourceLimitsVersion?: string;
+  filePhotoAutomationVersion?: string;
   fileDownloadVersion?: string;
   fileUploadVersion?: string;
   fileUploadBatchVersion?: string;

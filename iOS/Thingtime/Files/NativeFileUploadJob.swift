@@ -5,10 +5,31 @@ import Foundation
 /// One bounded native multipart job. The shared sync journal owns operation
 /// identity and Timeline publication; this host only completes attachment bytes.
 struct NativeUploadFileRequest: Codable, Equatable, Sendable {
+    struct Publication: Codable, Equatable, Sendable {
+        let expectedRevision: String?
+        private enum CodingKeys: String, CodingKey { case expectedRevision }
+        init(expectedRevision: String?) { self.expectedRevision = expectedRevision }
+        init(from decoder: Decoder) throws {
+            let value = try decoder.container(keyedBy: CodingKeys.self)
+            guard value.contains(.expectedRevision) else { throw MobileFolderStore.Failure.invalid }
+            expectedRevision = try value.decodeIfPresent(String.self, forKey: .expectedRevision)
+            guard expectedRevision.map({ !$0.isEmpty && $0.utf8.count <= 512 }) ?? true else { throw MobileFolderStore.Failure.invalid }
+        }
+        func encode(to encoder: Encoder) throws {
+            var value = encoder.container(keyedBy: CodingKeys.self)
+            try value.encode(expectedRevision, forKey: .expectedRevision)
+        }
+    }
     let source: MobileFolderReader.Entry
     let uploadId: String
     let requestId: String
     let authorization: NativeUploadAuthorization
+    let publication: Publication?
+    init(source: MobileFolderReader.Entry, uploadId: String, requestId: String, authorization: NativeUploadAuthorization,
+         publication: Publication? = nil) {
+        self.source = source; self.uploadId = uploadId; self.requestId = requestId
+        self.authorization = authorization; self.publication = publication
+    }
     func part(_ number: Int) throws -> NativeUploadPartRequest {
         let plan = try FileUploadPart.plan(size: source.size)
         guard number >= 1, number <= plan.count else { throw MobileFolderStore.Failure.invalid }

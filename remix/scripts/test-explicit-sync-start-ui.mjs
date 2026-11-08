@@ -28,7 +28,8 @@ try {
  browser = await createRequire(join(root, '../MCP/package.json'))('playwright').chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : process.platform === 'linux' ? { executablePath: '/usr/bin/chromium' } : {}) });
  for (const [label, width, height] of [['desktop', 1440, 1000], ['phone', 390, 844]]) {
   for (const scenario of process.env.TT_PHOTO_DESTINATION_TEST ? ['photo-destination'] : process.env.TT_SYNC_UI_SCENARIOS?.split(',') ??
-   ['success', 'cas', 'uncertain', 'draft', 'identity', 'ios-managed', 'photo-destination', 'photo-policy', 'remote-iphone', 'paired-iphone']) {
+   ['success', 'cas', 'uncertain', 'draft', 'identity', 'ios-managed', 'photo-destination', 'photo-policy', 'remote-iphone', 'paired-iphone',
+    'auto-legacy', 'auto-budget', 'auto-budget-minimum', 'auto-charging', 'auto-identity', 'auto-settings', 'auto-unsupported', 'auto-offline-pause']) {
    const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
    await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
    const page = await context.newPage(); page.setDefaultTimeout(12_000); page.on('pageerror', error => errors.push(error.message));
@@ -39,6 +40,156 @@ try {
      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
      results.push({ viewport: label, scenario, passed: true });
     };
+    if (scenario.startsWith('auto-')) {
+     const variants = {
+      'auto-legacy': '&legacyJob=1&inactive=1', 'auto-budget': '&budget=1',
+      'auto-budget-minimum': '&minimumBudget=1',
+      'auto-charging': '&chargingOnly=1', 'auto-identity': '&inactive=1',
+      'auto-settings': '&paused=1', 'auto-unsupported': '&oldPhotoApp=1', 'auto-offline-pause': '&offlinePause=1'
+     };
+     await page.clock.install();
+     await page.goto(origin + '/?autoPhotos=1' + variants[scenario]);
+     const card = page.locator('[aria-label="Local sync"] article').filter({ has: page.getByRole('heading', { name: 'iPhone Photos', exact: true }) });
+     await card.waitFor();
+     const state = () => page.evaluate(() => window.remoteSyncFixture.photoRecovery());
+     const assertPublished = async () => {
+      await card.getByText('Last transfer finished.', { exact: true }).first().waitFor();
+      await card.getByText(/Next automatic check at/).waitFor();
+      const done = await state();
+      assert.deepEqual(done.uploaded, [{ folderId: 'fixture-folder-0', bytes: [7, 8, 9] }]);
+      assert.equal(done.files.length, 1);
+      assert.equal(done.job.reviewed.configuration.network, 'any');
+      assert.equal(done.job.reviewed.configuration.chargingOnly, scenario === 'auto-charging');
+      assert.equal(done.job.intervalMs, 300_000);
+      return done;
+     };
+     if (scenario === 'auto-legacy' || scenario === 'auto-identity') {
+      await card.getByText(/Waiting for Thingtime to become active/).waitFor();
+      assert.equal(await card.getByRole('alert').count(), 0, 'inactive is a waiting condition');
+      assert.equal(await card.getByRole('button', { name: 'Retry transfer', exact: true }).count(), 0);
+      assert.equal((await state()).uploaded.length, 0);
+      if (scenario === 'auto-identity') {
+       await page.evaluate(() => window.remoteSyncFixture.changeIdentity());
+       await card.waitFor({ state: 'detached' });
+       await page.evaluate(() => window.remoteSyncFixture.returnToApp());
+       await page.clock.fastForward(330_000);
+       assert.equal((await state()).uploaded.length, 0);
+      } else {
+       await page.screenshot({ path: join(evidence, `${label}-auto-inactive.png`), fullPage: true });
+       await page.evaluate(() => window.remoteSyncFixture.returnToApp());
+       const completed = await assertPublished();
+       const scanCount = completed.events.filter(event => event.type === 'scan-capture').length;
+       const until = await page.evaluate(async () => (await window.remoteSyncFixture.photoRecovery()).job.nextRunAt - Date.now());
+       assert.ok(until > 0 && until <= 300_000);
+       await page.clock.fastForward(until + 30_000);
+       await page.waitForFunction(count => window.remoteSyncFixture.photoScanCount() > count, scanCount);
+       assert.equal((await state()).uploaded.length, 1, 'next scheduled cycle does not reupload a committed original');
+       await card.getByRole('button', { name: 'Pause sync', exact: true }).click();
+       await card.getByRole('button', { name: 'Resume automatic backup', exact: true }).waitFor();
+       const paused = await page.evaluate(() => window.remoteSyncFixture.state().rows);
+       assert.equal(paused.find(row => row.id === 'documents-sync').crystal.paused, true);
+       assert.equal(paused.find(row => row.id === 'home-sync').crystal.paused, true);
+       assert.equal(paused.find(row => row.id === 'home-sync').crystal.localRootId, 'no-grant');
+       await page.reload();
+       await card.getByRole('button', { name: 'Resume automatic backup', exact: true }).waitFor();
+       await page.clock.fastForward(330_000);
+       assert.equal((await state()).events.filter(event => event.type === 'scan-capture' || event.type === 'upload-file').length, 0);
+       assert.equal((await state()).files.length, 1);
+      }
+     } else if (scenario === 'auto-budget') {
+      await card.getByText('Hourly upload budget reached.', { exact: true }).waitFor();
+      await card.getByText(/Uploads can resume after/).waitFor();
+      assert.equal((await state()).uploaded.length, 0);
+      assert.equal(await card.getByRole('button', { name: 'Check again', exact: true }).count(), 0);
+      const before = await page.evaluate(async () => (await window.remoteSyncFixture.photoRecovery()).job.retryAt - Date.now());
+      assert.ok(before > 0 && before <= 300_000);
+      await page.screenshot({ path: join(evidence, `${label}-auto-budget-wait.png`), fullPage: true });
+      await page.evaluate(() => window.remoteSyncFixture.clearDataBudget());
+      await page.clock.fastForward(before - 1_000);
+      assert.equal((await state()).uploaded.length, 0);
+      await page.clock.fastForward(31_000);
+      await assertPublished();
+     } else if (scenario === 'auto-budget-minimum') {
+      await card.getByText(/One upload part needs at least .*bytes/).waitFor();
+      assert.equal(await card.getByText(/Uploads can resume after/).count(), 0);
+      assert.equal((await state()).uploaded.length, 0);
+      await card.getByRole('button', { name: 'Expand folder', exact: true }).click();
+      await card.getByRole('button', { name: 'Edit', exact: true }).click();
+      await card.locator('summary').filter({ hasText: /^Resource limits$/ }).click();
+      await card.getByRole('combobox', { name: 'Hourly data unit', exact: true }).selectOption('GB');
+      await card.getByRole('textbox', { name: 'Upload data per hour', exact: true }).fill('1');
+      await card.getByRole('button', { name: 'Save connection', exact: true }).click();
+      const done = await assertPublished();
+      assert.equal(done.job.reviewed.configuration.photoAutomation.uploadBytesPerHour, 1_000_000_000);
+     } else if (scenario === 'auto-charging') {
+      await card.getByText(/Waiting for this device to charge/).waitFor();
+      assert.equal((await state()).events.some(event => event.type === 'scan-capture'), false);
+      await page.evaluate(() => window.remoteSyncFixture.setCharging(true));
+      await assertPublished();
+     } else if (scenario === 'auto-unsupported') {
+      await card.getByText(/Update Thingtime on this iPhone to use automatic backup/).waitFor();
+      assert.equal(await card.getByRole('button', { name: 'Start backup', exact: true }).isEnabled(), true);
+      await page.clock.fastForward(330_000);
+      assert.equal((await state()).job, null);
+      assert.equal((await state()).events.some(event => event.type === 'scan-capture'), false);
+     } else if (scenario === 'auto-offline-pause') {
+      assert.equal((await state()).job, null);
+      await page.evaluate(() => window.remoteSyncFixture.disconnectForPause());
+      await card.getByRole('button', { name: 'Pause sync', exact: true }).click();
+      await card.getByText('Backup is paused on this iPhone. The account could not confirm the pause.', { exact: true }).waitFor();
+      assert.equal((await state()).job.state, 'paused');
+      await page.reload();
+      await card.getByRole('button', { name: 'Resume automatic backup', exact: true }).waitFor();
+      await page.clock.fastForward(330_000);
+      assert.equal((await state()).events.some(event => event.type === 'scan-capture' || event.type === 'upload-file'), false);
+      assert.equal((await state()).job.state, 'paused');
+     } else {
+      const expand = card.getByRole('button', { name: 'Expand folder', exact: true });
+      await expand.click();
+      await card.getByRole('button', { name: 'Edit', exact: true }).click();
+      const disclosure = card.locator('summary').filter({ hasText: /^Resource limits$/ });
+      await disclosure.click();
+      const speed = card.getByRole('textbox', { name: 'Maximum upload speed', exact: true });
+      const notifications = card.getByRole('textbox', { name: 'Progress notification interval (minutes)', exact: true });
+      assert.equal(await notifications.inputValue(), '30');
+      const layout = card.locator('[data-settings-document="photo-backup-automation-controls"]');
+      await layout.getByRole('button', { name: 'Edit layout', exact: true }).click();
+      await layout.locator('[data-block-id="speed-label"]').click();
+      const blocks = page.getByRole('combobox', { name: 'Select block', exact: true });
+      await blocks.selectOption('speed-input');
+      assert.equal(await blocks.inputValue(), 'speed-input');
+      await blocks.selectOption('notification-interval-ms-input');
+      assert.equal(await blocks.inputValue(), 'notification-interval-ms-input');
+      await page.getByRole('button', { name: 'Close builder', exact: true }).click();
+      await layout.getByRole('button', { name: 'Done editing layout', exact: true }).click();
+      await speed.fill('5');
+      await card.getByRole('combobox', { name: 'Upload speed unit', exact: true }).selectOption('MB/s');
+      assert.equal(await speed.inputValue(), '0.625');
+      await card.getByRole('combobox', { name: 'Hourly data unit', exact: true }).selectOption('GB');
+      const budget = card.getByRole('textbox', { name: 'Upload data per hour', exact: true });
+      await budget.fill('-');
+      assert.equal(await card.getByRole('button', { name: 'Save connection', exact: true }).isDisabled(), true);
+      await card.getByRole('button', { name: 'Collapse folder', exact: true }).click();
+      await page.reload();
+      await expand.click();
+      await disclosure.click();
+      assert.equal(await budget.inputValue(), '-');
+      await budget.fill('1');
+      await notifications.fill('0');
+      await page.screenshot({ path: join(evidence, `${label}-auto-settings-open.png`), fullPage: true });
+      await card.getByRole('button', { name: 'Save connection', exact: true }).click();
+      await card.getByRole('button', { name: 'Save connection', exact: true }).waitFor({ state: 'hidden' });
+      const row = await page.evaluate(() => window.remoteSyncFixture.state().rows.find(row => row.id === 'documents-sync'));
+      assert.equal(row.crystal.configurationVersion, 4);
+      assert.deepEqual(row.crystal.photoAutomation, { uploadBytesPerSecond: 625_000, uploadBytesPerHour: 1_000_000_000, notificationIntervalMs: 0 });
+      assert.equal(row.crystal.paused, true);
+      assert.equal(row.crystal.network, 'any');
+      assert.equal(row.crystal.chargingOnly, false);
+      assert.equal((await state()).job, null);
+     }
+     await finish();
+     continue;
+    }
     if (scenario === 'photo-destination' || scenario === 'photo-policy') {
      const editing = scenario === 'photo-policy';
      await page.goto(origin + '/?photoRecovery=1' + (editing ? '&editPhotos=1' : ''));
@@ -100,7 +251,7 @@ try {
      continue;
     }
     if (scenario === 'remote-iphone' || scenario === 'paired-iphone') {
-     await page.goto(origin + (scenario === 'paired-iphone' ? '/?mobilePanel=1' : '/?remoteMobile=1'));
+     await page.goto(origin + (scenario === 'paired-iphone' ? '/?mobilePanel=1&folderAccessInactive=1' : '/?remoteMobile=1'));
      await page.locator('summary').filter({ hasText: 'Manage sync connections' }).click();
      if (scenario === 'paired-iphone') {
       await page.waitForFunction(() => window.remoteSyncFixture.pairing().pending);
@@ -108,6 +259,9 @@ try {
       const jump = page.getByRole('link', { name: 'Go to this device’s sync controls', exact: true });
       await jump.click();
       await page.waitForFunction(() => document.activeElement?.id === 'local-mobile-sync');
+      await page.getByText('Folder access will refresh when Thingtime is active.', { exact: true }).waitFor();
+      await page.evaluate(() => window.remoteSyncFixture.returnToApp());
+      await page.getByText('Folder access will refresh when Thingtime is active.', { exact: true }).waitFor({ state: 'hidden' });
       assert.equal(await page.getByRole('button', { name: 'Start backup', exact: true }).first().isEnabled(), true);
       assert.equal(await page.getByText(/Device connection paused/).count(), 0);
       assert.equal(await page.getByText('iPhone · downloads received', { exact: true }).filter({ visible: true }).count(), 2);

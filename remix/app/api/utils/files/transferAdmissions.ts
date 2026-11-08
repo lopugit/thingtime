@@ -1,8 +1,11 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { folderThingMatch, isFolderThing } from '~/schemas/folderThing';
 import { type ContentFingerprint, validContentFingerprint } from '~/fileSync/contentFingerprint';
 import { readOwnedFileSyncConfiguration } from '~/fileSync/configuredPlan';
+import { nativePhotoAssetKey } from '~/fileSync/nativeInventory';
+import { ExactCloudSyncDestinationChanged, SYNC_DESTINATION_CHANGED } from '~/fileSync/cloudSyncDestination';
+import type { PhotoUploadPublication } from '~/fileSync/contentFingerprint';
 import { syncPathKey } from '~/fileSync/reconcile';
 import { createSyncIgnorePolicy } from '~/fileSync/syncIgnore';
 import { parseFileSyncUploadOrigin, sameFileSyncUploadOrigin, type FileSyncUploadOrigin } from '~/fileSync/uploadOrigin';
@@ -13,13 +16,17 @@ import {
 	signAttachmentUploadParts,
 	type AttachmentTransferAuthority
 } from '../attachments/attachments';
+import { attachmentContentVersion } from '../attachments/contentFingerprint';
+import { StorageMutationError } from '../storage/storageCore';
+import { cloudFiles } from './files';
 import { attachmentStore, type AttachmentDoc } from '../attachments/attachmentStore';
 import { getAuthToken } from '../auth/authCookie';
 import { CHARACTER_HEADER } from '../auth/characterSession';
 import { resolveSessionUser, resolveTokenUser } from '../auth/getCurrentUser';
+import { fencePrivateUploadPermission } from '../auth/users';
 import { getLiveSession, type SessionDoc } from '../auth/sessions';
 import type { DeviceActor } from '../devices/deviceAuth';
-import { getHomeThingsCollection, getSessionsCollection, withHomeMongoSnapshot } from '../mongodb/collections';
+import { getHomeThingsCollection, getSessionsCollection, withHomeMongoSnapshot, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { MAX_FOLDER_DEPTH } from '../things/folderPlacement';
 import { cloudInventoryAccess, readCloudInventoryRoot } from './inventory';
@@ -63,6 +70,7 @@ type AdmissionInput = {
 	sourceVersion: string;
 	fingerprint: ContentFingerprint;
 	sizeBytes: number;
+	publication?: PhotoUploadPublication;
 };
 type Admission = AdmissionInput & {
 	origin: string;
@@ -89,10 +97,12 @@ const admitKeys = [
 	'sourceVersion',
 	'fingerprint',
 	'sizeBytes',
-	'replacesAdmissionId'
+	'replacesAdmissionId',
+	'publication'
 ];
 const parseInput = (raw: Record<string, unknown>): AdmissionInput | null => {
 	const { uploadId, requestId, configurationId, configurationRevision, deviceId, localRootId, grantRevision, sourceVersion, sizeBytes } = raw;
+	const publication = raw.publication as Record<string, unknown> | undefined;
 	const f = raw.fingerprint as Record<string, unknown> | undefined;
 	if (
 		Object.keys(raw).some((key) => !admitKeys.includes(key)) ||
@@ -113,40 +123,47 @@ const parseInput = (raw: Record<string, unknown>): AdmissionInput | null => {
 		typeof f !== 'object' ||
 		Array.isArray(f) ||
 		Object.keys(f).some((key) => !['partSizeBytes', 'partCount', 'sha256'].includes(key)) ||
-		!sha256(f.sha256)
+		!sha256(f.sha256) ||
+		(publication !== undefined && (!publication || typeof publication !== 'object' || Array.isArray(publication) ||
+			Object.keys(publication).length !== 1 || (publication.expectedRevision !== null && !id(publication.expectedRevision))))
 	)
 		return null;
 	const fingerprint = { algorithm: 'sha256-parts-v1', partSizeBytes: f.partSizeBytes, partCount: f.partCount, sha256: f.sha256 };
 	if (!validContentFingerprint(fingerprint, sizeBytes)) return null;
-	return { uploadId, requestId, configurationId, configurationRevision, deviceId, localRootId, grantRevision, sourceVersion, fingerprint, sizeBytes };
+	return { uploadId, requestId, configurationId, configurationRevision, deviceId, localRootId, grantRevision, sourceVersion, fingerprint, sizeBytes, ...(publication ? { publication: { expectedRevision: publication.expectedRevision as string | null } } : {}) };
 };
 
-const readConfiguration = async (owner: string, input: AdmissionInput, signal: AbortSignal) => {
-	const row = await (await getHomeThingsCollection()).findOne({ shareId: input.configurationId, ownerId: owner }, { signal, maxTimeMS: 5000 });
+const readConfiguration = async (owner: string, input: AdmissionInput, signal: AbortSignal, fence?: { session: any; token: string }) => {
+	const things = await getHomeThingsCollection();
+	const row = await things.findOne({ shareId: input.configurationId, ownerId: owner }, { signal, maxTimeMS: 5000, session: fence?.session });
 	if (!row || row.sandbox != null || row.sandboxSpace != null) return null;
+	let configuration: ReturnType<typeof readOwnedFileSyncConfiguration>['configuration'];
 	try {
 		const saved = readOwnedFileSyncConfiguration(
 			{ ...row, id: row.shareId, author: { id: row.ownerId }, updatedAt: row.updatedAt?.toISOString() },
 			owner
 		);
 		const c = saved.configuration;
-		return saved.updatedAt === input.configurationRevision &&
-			!c.paused &&
-			c.mode !== 'download' &&
-			c.deviceId === input.deviceId &&
-			c.localRootId === input.localRootId
-			? c
-			: null;
+		if (saved.updatedAt !== input.configurationRevision || c.paused || c.mode === 'download' ||
+			c.deviceId !== input.deviceId || c.localRootId !== input.localRootId) return null;
+		configuration = c;
 	} catch {
 		return null;
 	}
+	if (fence) {
+		const locked = await things.updateOne({ _id: row._id, ownerId: owner, updatedAt: row.updatedAt },
+			{ $set: { fileSyncPublicationFence: fence.token } }, { session: fence.session, signal });
+		if (locked.matchedCount !== 1) return null;
+	}
+	return configuration;
 };
 
-const readReservation = async (owner: string, input: AdmissionInput) => {
-	const doc = await attachmentStore.getOwned(owner, input.uploadId);
+const readReservation = async (owner: string, input: AdmissionInput, publishedFileId?: string, session?: any) => {
+	const doc = session ? await (await getHomeThingsCollection()).findOne({ shareId: input.uploadId, ownerId: owner, thingtime: 'attachment' }, { session }) as AttachmentDoc | null :
+		await attachmentStore.getOwned(owner, input.uploadId);
 	if (
 		!doc ||
-		doc.targetId != null ||
+		(doc.targetId != null && doc.targetId !== publishedFileId) ||
 		doc.attachmentImportDraft ||
 		doc.attachmentPurpose !== 'file' ||
 		doc.objectSizeBytes !== input.sizeBytes ||
@@ -213,6 +230,11 @@ const reservationMatches = (doc: AttachmentDoc, admission: Admission) =>
 	(doc.attachmentState === 'ready' || doc.uploadId === admission.providerUploadId) &&
 	sameFileSyncUploadOrigin(doc.attachmentFileSyncOrigin, admission.provenance);
 
+const publicationAllowed = (config: NonNullable<Awaited<ReturnType<typeof readConfiguration>>>, provenance: FileSyncUploadOrigin) =>
+	config.sourceKind === 'photos' && config.mode === 'backup' && !config.propagateDeletes &&
+	provenance.cloudRootId === config.remoteFolderId && provenance.folderId === config.remoteFolderId &&
+	!provenance.path.includes('/') && !!nativePhotoAssetKey(provenance.path);
+
 export async function transferAdmission(input: {
 	raw: Record<string, unknown>;
 	origin: string;
@@ -277,6 +299,7 @@ export async function transferAdmission(input: {
 			!attachedDevice ||
 			!config ||
 			!reservation ||
+			(admitted.publication !== undefined && !publicationAllowed(config, reservation.provenance)) ||
 			createSyncIgnorePolicy(config.ignoreRules, config.excludedPaths).ignored(reservation.provenance.path, 'file') ||
 			!(await destinationLive(owner.userId, config.remoteFolderId, reservation.provenance, signal))
 		)
@@ -309,7 +332,8 @@ export async function transferAdmission(input: {
 			prior.localRootId === admitted.localRootId &&
 			prior.grantRevision === admitted.grantRevision &&
 			prior.sourceVersion === admitted.sourceVersion &&
-			digest(prior.fingerprint) === digest(admitted.fingerprint);
+			digest(prior.fingerprint) === digest(admitted.fingerprint) &&
+			JSON.stringify(prior.publication) === JSON.stringify(admitted.publication);
 		const replay = (row: SessionDoc) => {
 			const meta = row.meta as AdmissionRecord;
 			const prior = meta.binding;
@@ -381,7 +405,7 @@ export async function transferAdmission(input: {
 	}
 	const jti = parseHandle(raw.admissionId);
 	if (
-		!['parts', 'complete', 'revoke'].includes(String(raw.action)) ||
+		!['parts', 'complete', 'publish', 'revoke'].includes(String(raw.action)) ||
 		!jti ||
 		Object.keys(raw).some((key) => key !== 'action' && key !== 'admissionId' && !(raw.action === 'parts' && key === 'parts'))
 	)
@@ -410,12 +434,14 @@ export async function transferAdmission(input: {
 		if (!revoked.matchedCount && (await read(row.jti))?.meta?.handle !== meta.handle) return missing();
 		return { ok: true as const, revoked: true };
 	}
+	const publishing = raw.action === 'publish';
+	if (publishing && !a.publication) return fail(403, 'This transfer admission only stages bytes');
 	const check: AttachmentTransferAuthority['check'] = async () => {
 		signal.throwIfAborted();
 		const [current, session, attachment, config, deviceSession, attachedDevice] = await Promise.all([
 			read(row.jti),
 			originalOwner(row.userId, a.ownerSessionId),
-			readReservation(row.userId, a),
+			readReservation(row.userId, a, publishing ? a.provenance.fileId : undefined),
 			readConfiguration(row.userId, a, signal),
 			paired(row.userId, a.deviceId, a.deviceSessionId),
 			deviceThing(row.userId, a.deviceId)
@@ -441,6 +467,54 @@ export async function transferAdmission(input: {
 			return changed();
 		return null;
 	};
+	if (publishing) {
+		const refused = await check();
+		if (refused) return refused;
+		const ownerId = row.userId, provenance = a.provenance;
+		const refuse = (result: ReturnType<typeof fail>): never => { throw new StorageMutationError(result.status, 'storage_conflict', result.error); };
+		try {
+			return await withHomeMongoTransaction(async session => {
+				signal.throwIfAborted();
+				const token = randomUUID(), date = new Date();
+				// Touch each exact authority row so a concurrent revoke, pause,
+				// account switch, settings edit or unpair forces a fresh snapshot.
+				for (const filter of [
+					{ ...byId(row.jti), userId: ownerId, 'meta.handle': meta.handle, 'meta.authorizationExpiresAt': { $gt: date }, expiresAt: { $gt: date } },
+					{ jti: a.deviceSessionId, userId: ownerId, purpose: 'device' as const, 'meta.deviceId': a.deviceId, expiresAt: { $gt: date } },
+					{ jti: a.ownerSessionId, userId: ownerId, purpose: { $in: ['browser', null] }, $or: [{ expiresAt: null }, { expiresAt: { $gt: date } }] }
+				]) {
+					const result = await sessions.updateOne({ ...filter, revokedAt: null } as any,
+						{ $set: { 'meta.fileSyncPublicationFence': token } }, { session, signal });
+					if (result.matchedCount !== 1) return refuse(expired());
+				}
+				if (!(await originalOwner(ownerId, a.ownerSessionId)) ||
+					!(await fencePrivateUploadPermission(ownerId, token, session, signal))) return refuse(expired());
+				const attached = await things.updateOne({ shareId: a.deviceId, ownerId, thingtime: 'device' },
+					{ $set: { fileSyncPublicationFence: token } }, { session, signal });
+				if (attached.matchedCount !== 1) return refuse(expired());
+				const config = await readConfiguration(ownerId, a, signal, { session, token });
+				if (!config || digest(config) !== a.configDigest || !publicationAllowed(config, provenance) ||
+					createSyncIgnorePolicy(config.ignoreRules, config.excludedPaths).ignored(provenance.path, 'file')) return refuse(changed());
+				const reservation = await readReservation(ownerId, a, provenance.fileId, session), doc = reservation?.doc;
+				if (!doc || doc.attachmentState !== 'ready' || !doc.objectVersionId || !reservationMatches(doc, a)) return refuse(changed());
+				signal.throwIfAborted();
+				const result = await cloudFiles.commit(ownerId, {
+					id: provenance.fileId, operationId: a.requestId, expectedRevision: a.publication!.expectedRevision,
+					name: provenance.path, folderId: provenance.folderId, attachmentId: a.uploadId,
+					contentVersion: attachmentContentVersion(a.uploadId, doc.objectKey, doc.objectVersionId),
+					trashed: false, syncDestination: { rootId: config.remoteFolderId, path: provenance.path }
+				}, { session, expectedFingerprint: a.fingerprint });
+				if (!result.ok) return refuse(fail(result.status, result.error));
+				if (meta.authorizationExpiresAt.getTime() <= Date.now()) return refuse(expired());
+				signal.throwIfAborted();
+				return { ok: true as const, file: result.file, replayed: result.replayed };
+			});
+		} catch (error) {
+			if (error instanceof ExactCloudSyncDestinationChanged) return { ...changed(), code: SYNC_DESTINATION_CHANGED };
+			if (error instanceof StorageMutationError) return fail(error.status, error.message);
+			throw error;
+		}
+	}
 	const authority = { expiresAt: meta.authorizationExpiresAt, expectedFingerprint: a.fingerprint, check };
 	return raw.action === 'parts'
 		? signAttachmentUploadParts(row.userId, { uploadId: a.uploadId, parts: raw.parts }, authority)

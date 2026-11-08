@@ -132,6 +132,11 @@ struct WebView: UIViewRepresentable {
 
         override init() {
             super.init()
+            mobileFolders.conditionsChanged = { [weak self] in
+                guard let self, UIApplication.shared.applicationState == .active, let root = self.loadedRootURL,
+                      let url = self.webView?.url, LopuVoiceContract.sameOrigin(url, root) else { return }
+                self.sendToWeb(type: "mobile-files-conditions-changed", payload: [String: String]())
+            }
             lopuChats.register = { [weak self] root, owner, activityId, token, contextKey, chats in
                 await self?.registerChatActivity(root: root, owner: owner, activityId: activityId, token: token, contextKey: contextKey, chats: chats)
             }
@@ -182,6 +187,7 @@ struct WebView: UIViewRepresentable {
                 "devicePairingVersion": "1.1.0",
                 "deviceLocationVersion": "1.1.0",
                 "fileAccessVersion": MobileFolderBridge.accessVersion,
+                "filePhotoAutomationVersion": MobileFolderBridge.photoAutomationVersion,
                 "fileUploadVersion": MobileFolderBridge.uploadVersion,
                 "fileExportVersion": FileExportBridge.version,
                 "lidarVersion": LiDARBridge.version,

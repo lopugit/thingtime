@@ -1,5 +1,6 @@
 import XCTest
 import AppleFileSync
+import Network
 @testable import Thingtime
 
 private final class UploadProtocol: URLProtocol, @unchecked Sendable {
@@ -16,8 +17,60 @@ private final class UploadProtocol: URLProtocol, @unchecked Sendable {
         if finish { client?.urlProtocolDidFinishLoading(self) }
     }
 }
+
+private final class LoopbackUpload: @unchecked Sendable {
+    let listener: NWListener
+    private let queue = DispatchQueue(label: "thingtime.test.paced-upload")
+    let body: Data
+    var received: ((Data) -> Void)?
+    init(body: Data) throws {
+        self.body = body
+        let params = NWParameters.tcp
+        params.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
+        listener = try NWListener(using: params)
+    }
+    func start(_ ready: @escaping () -> Void) {
+        listener.stateUpdateHandler = { if case .ready = $0 { ready() } }
+        listener.newConnectionHandler = { [weak self] connection in
+            guard let self else { connection.cancel(); return }
+            connection.start(queue: self.queue); self.read(connection, received: Data())
+        }
+        listener.start(queue: queue)
+    }
+    private func read(_ connection: NWConnection, received soFar: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, done, error in
+            guard let self else { connection.cancel(); return }
+            let joined = soFar + (data ?? Data())
+            if let marker = joined.range(of: Data("\r\n\r\n".utf8)), joined.count - marker.upperBound >= self.body.count {
+                self.received?(joined[marker.upperBound...]); self.received = nil
+                connection.send(content: Data("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".utf8),
+                                completion: .contentProcessed { _ in connection.cancel() })
+            } else if error == nil, !done, joined.count <= self.body.count + 8192 { self.read(connection, received: joined) }
+            else { connection.cancel() }
+        }
+    }
+}
 @MainActor
 final class NativeFileUploadTests: XCTestCase {
+    func testStreamedUploadPacesActualLoopbackPayload() async throws {
+        let bytes = Data((0..<(64 * 1024)).map { UInt8(truncatingIfNeeded: $0) })
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try bytes.write(to: file); defer { try? FileManager.default.removeItem(at: file) }
+        let server = try LoopbackUpload(body: bytes), ready = expectation(description: "loopback ready")
+        let received = expectation(description: "exact uploaded bytes")
+        server.received = { XCTAssertEqual($0, bytes); received.fulfill() }
+        server.start { ready.fulfill() }; defer { server.listener.cancel() }
+        await fulfillment(of: [ready], timeout: 5)
+        let port = try XCTUnwrap(server.listener.port)
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port.rawValue)/part")!, timeoutInterval: 8)
+        request.httpMethod = "PUT"; request.setValue(String(bytes.count), forHTTPHeaderField: "Content-Length")
+        let clock = ContinuousClock(), start = clock.now, sender = NativeFileUpload()
+        try await sender.send(request, file: file, rate: 32 * 1024, length: Int64(bytes.count))
+        await fulfillment(of: [received], timeout: 2)
+        XCTAssertGreaterThanOrEqual(clock.now - start, .seconds(2), "The server must receive real bytes at the selected sustained pace")
+        XCTAssertEqual(sender.measurement().sent, Int64(bytes.count))
+    }
+
     private func fixture() throws -> (URLRequest, URL, URLSessionConfiguration) {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try Data([1,2,3,4]).write(to: file)
