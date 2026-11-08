@@ -24,8 +24,9 @@ test('paired file transfer admissions require their independent same-origin cont
   assert.equal(manifest.origin, origin);
   assert.equal(manifest.features[feature].version, '1.2.0');
   assert.deepEqual(manifest.operations.find(operation => operation.path === path), { feature, path, methods: ['POST'] });
-  for (const compatible of ['1.2.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(compatible, '1.2.0'), true);
-  for (const incompatible of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(incompatible, '1.2.0'), false);
+  for (const compatible of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(compatible, '1.2.0'), true);
+  assert.equal(capabilitySatisfies('1.2.0', '1.0.0'), true);
+  for (const incompatible of [undefined, '0.9.0', '1.1.0', '2.0.0']) assert.equal(capabilitySatisfies(incompatible, '1.2.0'), false);
 });
 
 test('connector protection preferences are registered and negotiated independently', () => {
