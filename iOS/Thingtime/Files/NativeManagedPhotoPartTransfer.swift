@@ -60,4 +60,8 @@ final class NativeManagedPhotoPartTransfer {
               deviceId == nil || deviceId == active.device else { return }
         active.sender.cancel()
     }
+    func activeMeasurement(scope: FileSyncOwnerScope, configurationId: String, rootId: String, deviceId: String) -> NativeFileUpload.Measurement? {
+        guard let active, active.scope == scope, active.config == configurationId, active.root == rootId, active.device == deviceId else { return nil }
+        return active.sender.measurement()
+    }
 }

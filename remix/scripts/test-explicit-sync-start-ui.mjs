@@ -29,7 +29,7 @@ try {
  for (const [label, width, height] of [['desktop', 1440, 1000], ['phone', 390, 844]]) {
   for (const scenario of process.env.TT_PHOTO_DESTINATION_TEST ? ['photo-destination'] : process.env.TT_SYNC_UI_SCENARIOS?.split(',') ??
    ['success', 'cas', 'uncertain', 'draft', 'identity', 'ios-managed', 'photo-destination', 'photo-policy', 'remote-iphone', 'paired-iphone',
-    'auto-legacy', 'auto-budget', 'auto-budget-minimum', 'auto-charging', 'auto-identity', 'auto-settings', 'auto-unsupported', 'auto-offline-pause']) {
+    'auto-legacy', 'auto-budget', 'auto-budget-minimum', 'auto-charging', 'auto-identity', 'auto-settings', 'auto-unsupported', 'auto-offline-pause', 'native-only']) {
    const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
    await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
    const page = await context.newPage(); page.setDefaultTimeout(12_000); page.on('pageerror', error => errors.push(error.message));
@@ -40,6 +40,83 @@ try {
      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
      results.push({ viewport: label, scenario, passed: true });
     };
+    if (scenario === 'native-only') {
+     await page.clock.install();
+     await page.goto(origin + '/?nativeOnly=1');
+     const state = () => page.evaluate(() => window.remoteSyncFixture.nativeOnlyState());
+     const card = page.locator('[aria-label="Local sync"] article').filter({ has: page.getByRole('heading', { name: 'iPhone Photos', exact: true }) });
+     await card.getByText('Waiting for the selected network.', { exact: true }).waitFor();
+     await card.getByText('2 photos · 1 video confirmed', { exact: true }).waitFor();
+     await card.getByText('3.5 MiB confirmed', { exact: true }).waitFor();
+     await card.getByText('Wi-Fi 1 MiB · Mobile data 2 MiB · Network unknown 512 KiB', { exact: true }).waitFor();
+     assert.equal(await card.getByText('Legacy WebView progress must stay hidden.', { exact: true }).count(), 0);
+     await card.getByText('Upload speed unavailable', { exact: true }).waitFor();
+     const backgroundAction = card.getByRole('button', { name: 'Run in Background', exact: true });
+     assert.equal(await backgroundAction.count(), 0, 'a condition-blocked run cannot request background continuation');
+     const initial = await state();
+     const due = await page.evaluate(() => window.remoteSyncFixture.nativeOnlyState().nativeRun.retryAt - Date.now());
+     assert.ok(due > 0 && due <= 300_000);
+     await page.clock.fastForward(due + 10);
+     await card.getByText('5 Mbps live', { exact: true }).waitFor();
+     await card.getByText('Current original: 2 B of 3 B sent', { exact: true }).waitFor();
+     await card.getByText('2 photos · 1 video confirmed', { exact: true }).waitFor();
+     assert.equal(await page.getByRole('button', { name: 'Choose folder', exact: true }).isDisabled(), true);
+     assert.equal((await state()).nativeCalls.filter(call => call.action === 'run-photo-in-background').length, 0);
+     const layout = card.locator('[data-settings-document="device-sync-folder-card"]');
+     await layout.getByRole('button', { name: 'Edit layout', exact: true }).click();
+     await layout.locator('[data-block-id="folder-card-background-help"]').click();
+     const selected = page.getByRole('combobox', { name: 'Select block', exact: true });
+     assert.equal(await selected.inputValue(), 'folder-card-background-help');
+     await selected.selectOption('folder-card-background-action');
+     assert.equal(await selected.inputValue(), 'folder-card-background-action');
+     await page.getByRole('button', { name: 'Close builder', exact: true }).click();
+     await layout.getByRole('button', { name: 'Done editing layout', exact: true }).click();
+     assert.equal((await state()).nativeCalls.filter(call => call.action === 'run-photo-in-background').length, 0, 'Builder selection never requests background work');
+     await page.screenshot({ path: join(evidence, `${label}-native-only-control.png`), fullPage: true });
+     await backgroundAction.click();
+     await card.getByText(/iOS didn’t start background processing/).waitFor();
+     await backgroundAction.click();
+     await card.getByText('Continuing this backup with iOS background processing.', { exact: true }).waitFor();
+     await page.screenshot({ path: join(evidence, `${label}-native-only-active.png`), fullPage: true });
+     await page.evaluate(() => window.remoteSyncFixture.expirePhotoContinuation());
+     await card.getByText(/Background processing stopped/).waitFor();
+     await card.getByRole('button', { name: 'Resume automatic backup', exact: true }).waitFor();
+     await page.clock.fastForward(301_000);
+     assert.equal((await state()).nativeCalls.filter(call => call.action === 'run-photo-in-background').length, 2,
+      'a system hold never triggers another continuation request');
+     await backgroundAction.click();
+     await card.getByText('Continuing this backup with iOS background processing.', { exact: true }).waitFor();
+     await page.evaluate(() => window.remoteSyncFixture.setAppHidden(true));
+     const hidden = await state();
+     await page.clock.fastForward(26_000);
+     const background = await state();
+     assert.equal(background.nativeCalls.length, hidden.nativeCalls.length, 'a hidden WebView does not read or execute the native queue');
+     assert.equal(background.nativeRun.queueId, initial.nativeRun.queueId);
+     assert.deepEqual(background.nativeRun.confirmedPayload, [7, 8, 9]);
+     assert.equal(background.nativeRun.progress.confirmed.mobileBytes, 2_097_155);
+     assert.deepEqual(background.webTransfers, []);
+     await page.evaluate(() => window.remoteSyncFixture.setAppHidden(false));
+     await card.getByText('3 photos · 1 video confirmed', { exact: true }).waitFor();
+     await card.getByText('Last transfer finished.', { exact: true }).waitFor();
+     assert.equal(await card.getByText('5 Mbps live', { exact: true }).count(), 0);
+     assert.equal(await backgroundAction.count(), 0, 'an up-to-date backup has no finite work to continue');
+     assert.equal((await state()).nativeCalls.filter(call => call.action === 'arm-photo-run').length, 1);
+     await page.reload();
+     await card.getByText('3 photos · 1 video confirmed', { exact: true }).waitFor();
+     assert.equal((await state()).nativeRun.queueId, initial.nativeRun.queueId);
+     assert.equal((await state()).nativeCalls.filter(call => call.action === 'arm-photo-run').length, 0);
+     await card.getByRole('button', { name: 'Pause sync', exact: true }).click();
+     await card.getByRole('button', { name: 'Resume automatic backup', exact: true }).waitFor();
+     await page.reload();
+     await card.getByRole('button', { name: 'Resume automatic backup', exact: true }).waitFor();
+     await page.clock.fastForward(310_000);
+     assert.equal((await state()).nativeRun.progress.stage, 'paused');
+     assert.deepEqual((await state()).webTransfers, []);
+     await finish();
+     await page.evaluate(() => window.remoteSyncFixture.changeIdentity());
+     await card.waitFor({ state: 'detached' });
+     continue;
+    }
     if (scenario.startsWith('auto-')) {
      const variants = {
       'auto-legacy': '&legacyJob=1&inactive=1', 'auto-budget': '&budget=1',

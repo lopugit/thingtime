@@ -7,17 +7,21 @@ import Foundation
 struct NativeUploadFileRequest: Codable, Equatable, Sendable {
     struct Publication: Codable, Equatable, Sendable {
         let expectedRevision: String?
-        private enum CodingKeys: String, CodingKey { case expectedRevision }
-        init(expectedRevision: String?) { self.expectedRevision = expectedRevision }
+        let fileId: String?
+        private enum CodingKeys: String, CodingKey { case expectedRevision, fileId }
+        init(expectedRevision: String?, fileId: String? = nil) { self.expectedRevision = expectedRevision; self.fileId = fileId }
         init(from decoder: Decoder) throws {
             let value = try decoder.container(keyedBy: CodingKeys.self)
             guard value.contains(.expectedRevision) else { throw MobileFolderStore.Failure.invalid }
             expectedRevision = try value.decodeIfPresent(String.self, forKey: .expectedRevision)
+            fileId = try value.decodeIfPresent(String.self, forKey: .fileId)
             guard expectedRevision.map({ !$0.isEmpty && $0.utf8.count <= 512 }) ?? true else { throw MobileFolderStore.Failure.invalid }
+            guard fileId.map(NativePhotoRunRecord.validHandle) ?? true else { throw MobileFolderStore.Failure.invalid }
         }
         func encode(to encoder: Encoder) throws {
             var value = encoder.container(keyedBy: CodingKeys.self)
             try value.encode(expectedRevision, forKey: .expectedRevision)
+            try value.encodeIfPresent(fileId, forKey: .fileId)
         }
     }
     let source: MobileFolderReader.Entry

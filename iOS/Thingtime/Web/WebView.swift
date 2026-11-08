@@ -137,6 +137,11 @@ struct WebView: UIViewRepresentable {
                       let url = self.webView?.url, LopuVoiceContract.sameOrigin(url, root) else { return }
                 self.sendToWeb(type: "mobile-files-conditions-changed", payload: [String: String]())
             }
+            mobileFolders.photoProgressChanged = { [weak self] in
+                guard let self, UIApplication.shared.applicationState == .active, let root = self.loadedRootURL,
+                      let url = self.webView?.url, LopuVoiceContract.sameOrigin(url, root) else { return }
+                self.sendToWeb(type: "mobile-files-photo-progress", payload: [String: String]())
+            }
             lopuChats.register = { [weak self] root, owner, activityId, token, contextKey, chats in
                 await self?.registerChatActivity(root: root, owner: owner, activityId: activityId, token: token, contextKey: contextKey, chats: chats)
             }
@@ -178,7 +183,7 @@ struct WebView: UIViewRepresentable {
             if let rootURL = loadedRootURL ?? webView.url { ThingtimeNativeNotifications.shared.attach(webView: webView, rootURL: rootURL) }
             if pendingNativeScanOrigin != nil { openLiDAR() }
 
-            sendToWeb(type: "native-ready", payload: [
+            var capabilities: [String: Any] = [
                 "platform": "ios",
                 "version": "1.3.0",
                 "lopuVoiceVersion": "1.3.0",
@@ -193,7 +198,9 @@ struct WebView: UIViewRepresentable {
                 "lidarVersion": LiDARBridge.version,
                 "fileStagingVersion": MobileFolderBridge.stagingVersion, "filePublicationVersion": MobileFolderBridge.publicationVersion,
                 "watchNotifications": true
-            ])
+            ]
+            capabilities["filePhotoContinuationVersion"] = MobileFolderBridge.photoContinuationVersion
+            sendToWeb(type: "native-ready", payload: capabilities)
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {

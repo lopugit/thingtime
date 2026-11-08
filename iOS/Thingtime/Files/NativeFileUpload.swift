@@ -4,7 +4,7 @@ import Foundation
 /// File-backed PUT with no ambient credentials, no redirects, a bounded response
 /// and cancellation that also covers a request waiting to start.
 final class NativeFileUpload: NSObject, URLSessionDataDelegate, @unchecked Sendable {
-    struct Measurement { let sent: Int64; let measured: Int64; let cellular: Bool? }
+    struct Measurement { let sent: Int64; let measured: Int64; let cellular: Bool?; let uploadBytesPerSecond: Int64? }
     private let lock = NSLock()
     private var task: URLSessionUploadTask?
     private var continuation: CheckedContinuation<Void, Error>?
@@ -17,9 +17,17 @@ final class NativeFileUpload: NSObject, URLSessionDataDelegate, @unchecked Senda
     private var callbackBytes: Int64 = 0
     private var metricBytes: Int64 = 0
     private var cellular: Bool?
+    private var samples: [(time: UInt64, bytes: Int64)] = []
     func measurement() -> Measurement {
         lock.lock(); defer { lock.unlock() }
-        return .init(sent: max(callbackBytes, metricBytes), measured: metricBytes, cellular: cellular)
+        var rate: Int64?
+        if let first = samples.first, let last = samples.last, last.time > first.time,
+           last.time - first.time >= 250_000_000, DispatchTime.now().uptimeNanoseconds - last.time <= 1_500_000_000,
+           last.bytes > first.bytes {
+            let measured = Double(last.bytes - first.bytes) * 1_000_000_000 / Double(last.time - first.time)
+            if measured.isFinite, measured < Double(Int64.max) { rate = Int64(measured) }
+        }
+        return .init(sent: max(callbackBytes, metricBytes), measured: metricBytes, cellular: cellular, uploadBytesPerSecond: rate)
     }
     func cancel() {
         lock.lock(); cancelled = true; let current = task; lock.unlock(); current?.cancel()
@@ -74,7 +82,14 @@ final class NativeFileUpload: NSObject, URLSessionDataDelegate, @unchecked Senda
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64,
                     totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
-        lock.withLock { callbackBytes = max(callbackBytes, totalBytesSent) }
+        lock.withLock {
+            callbackBytes = max(callbackBytes, totalBytesSent)
+            let time = DispatchTime.now().uptimeNanoseconds
+            if samples.last.map({ time - $0.time >= 100_000_000 }) ?? true {
+                samples.append((time, callbackBytes))
+                samples.removeAll { time - $0.time > 1_500_000_000 }
+            }
+        }
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
         lock.withLock {

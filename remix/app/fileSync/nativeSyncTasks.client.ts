@@ -15,6 +15,7 @@ import { cloudSyncHttpError, SYNC_RETRY_MAX_MS, SyncConnectionWait, isSyncConnec
 import { pauseSyncJobAdmission, retireStrictCapture, syncJobDue, type SyncJob } from './syncJobJournal';
 import { holdDesktopSyncWindow, setDesktopSyncScheduled } from './desktopSyncWindow.client';
 import { createNativeSyncHost, getNativeSyncAdapter, isNativeSyncAdapterCurrent } from './nativeSyncHost.client';
+import { armNativePhotoRun, cancelPendingNativePhotoArm } from './nativePhotoRun.client';
 import { watchNativeSyncVisibility } from './nativeSyncVisibility';
 import { rootIdentity } from '../utils/rootIdentity';
 import { createSyncTaskRuntime, cancelSyncForActivity } from './syncTaskRuntime';
@@ -30,7 +31,7 @@ import { CLOUD_SYNC_DESTINATION_REQUIREMENTS } from './cloudSyncDestination';
 import { CLOUD_FOLDER_REQUIREMENTS, parseCloudFolder } from './cloudFolder';
 import { cloudRequests } from './cloudTransport';
 import { preparePhotoSettingsRecovery } from './photoSettingsRecovery';
-import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits, supportsNativePhotoAutomation, supportsNativePhotoRuns } from './mobileFolders.client';
+import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits, supportsNativePhotoAutomation, supportsNativePhotoRuns, supportsSoleNativePhotoRun } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { runNativePhotoQueue, runPhotoBackupPasses } from './photoBackupPasses';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
@@ -61,7 +62,7 @@ async function cancelSavedStrictCapture(job: SyncJob, adapter: NonNullable<Retur
 
 /** Explicit runs persist admission separately from editable connection Things.
  * Relaunch resumes only that admitted job, using existing native consent. */
-export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, resume?: SyncJob, intervalMs?: number, automaticPhoto?: { wakeConditions: boolean }) {
+export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, resume?: SyncJob, intervalMs?: number, automaticPhoto?: { wakeConditions: boolean; signal?: AbortSignal }) {
 	if (!activityManager.enabled('sync.execution')) throw Error('File sync is disabled in Activity manager. Enable it before starting a transfer.');
 	const adapter = getNativeSyncAdapter();
 	if (!adapter) throw Error('Update Thingtime to continue sync outside this screen.');
@@ -72,6 +73,12 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 	if (reviewed.configuration.photoAutomation && !photoHost) throw Error('Update Thingtime before using this connection’s Photos upload settings.');
 	if (binding.dataPlane !== 'home' || binding.rootId !== reviewed.id || binding.deviceId !== reviewed.configuration.deviceId)
 		throw Error('The file sync connection changed.');
+	if (photoHost && supportsSoleNativePhotoRun(adapter.bridge) && reviewed.configuration.sourceKind === 'photos') {
+		if (!activityManager.enabled('sync.automation')) throw Error('Enable automatic file sync in Activity manager before starting Photos backup.');
+		return armNativePhotoRun({ reviewed, scope: binding, generation, adapter, automatic: !!automaticPhoto || !!resume,
+			discoverySignal: automaticPhoto?.signal, isPaused: nativeSyncTasks.isPaused, resumeScope: nativeSyncTasks.resumeScope });
+	}
+
 	const progressKey = 'tt:sync-progress:' + syncScopeKey(binding);
 	const persistProgress = (value: ForegroundSyncProgress) => writeStampedCache(progressKey, value);
 	const stopCleanup = createSyncStopCleanup(async () => { if (resume) throw Error('Transfer stopped, but saved native cleanup could not be opened. Reopen this connection before resuming.'); });
@@ -571,6 +578,7 @@ export async function pauseNativeSyncJob(scope: SyncScope, generation: number, s
 	};
 	// Fence discovery before the first asynchronous journal open.
 	check();
+	cancelPendingNativePhotoArm(scope);
 	const liveStop = nativeSyncTasks.cancel(scope);
 	void liveStop.catch(() => {}); // observed below; journal open can fail independently
 	let journal: Awaited<ReturnType<typeof openSyncJournal>> | undefined;

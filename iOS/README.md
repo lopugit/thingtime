@@ -503,22 +503,31 @@ interrupted queue outcomes survive retry; exhausted older epochs are cleaned
 up without deleting source photos or cloud files. The shared reader also supports
 Mac, where the existing strict behavior remains in effect.
 
-Native Photos automation 1.1.0 negotiates `api.file-sync-transfer-admissions`
-1.2.0 for an optional background run. The verified browser session opens a
-revocable, exact account/device/grant/connection/destination binding; the paired
-iPhone can then prepare and publish newest-first batches without an active
-WebView. iOS background processing gets the same protected queue, pending
-asset selection and accepted multipart cursor after expiration or relaunch.
-Older compatible origins may finish and publish only the files the WebView
-already admitted. A newer background run will recognize unchanged cloud bytes;
-an occupied path with different bytes stays for foreground reconciliation.
+Native Photos automation 1.2.0 negotiates `api.file-sync-transfer-admissions`
+1.3.0 to use one native queue in front and in the background. The verified
+browser session opens an exact, revocable account/device/grant/connection/
+destination binding and observes status; it doesn't plan or upload individual
+files. The paired iPhone prepares and publishes newest-first batches. Returning
+to the app attaches to the same worker; after suspension or process termination,
+iOS execution resumes its protected asset selection and multipart cursor.
+The run recognizes unchanged cloud bytes. It can update an exact revision of a
+previous original from the same verified connection and preserves the earlier
+version. An unrelated file occupying that path stays untouched and needs review.
+Older compatible combinations retain their existing foreground/deferred behavior.
 
 Thingtime requests another processing opportunity after five minutes for
 unfinished work. iOS chooses when or whether to run it, including after lock,
 force quit, battery constraints and app refresh restrictions. Brief inactive
 transitions such as system prompts preserve the foreground request. A short
-UIKit continuation may finish already-authorized finite work; automatic Photos
-backup does not request an iOS 26 user-initiated continued-processing task.
+UIKit continuation protects the existing worker across a minimize; a granted
+background processing task joins that same worker. On iOS 26 or later, the
+explicit **Run in Background** action can request an additional system session
+for the current work. It reports the actual originals checked, finishes when
+there is no eligible work and never opens itself again. iOS uses the same
+expiration callback for its resource limit and for Cancel on the system UI;
+either leaves this backup locally paused until **Resume backup**. Normal waits
+for charging, network or data budget end the requested session and use the
+ordinary scheduler when the policy allows work again.
 
 Managed original uploads are paced in small writes, 625,000 bytes/s (5 Mbps)
 by default. An optional hourly budget uses the measured payload bytes from all

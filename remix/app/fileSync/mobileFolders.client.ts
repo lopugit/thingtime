@@ -1,3 +1,4 @@
+import { parseNativePhotoRunStatus, type NativePhotoContinuation, type NativePhotoRunStatus } from './nativePhotoRunProgress';
 import type { FileSyncApproval } from './configuredPlan';
 import { isSyncWaitReason, LEGACY_NATIVE_INACTIVE_MESSAGE, SyncConditionsWait } from './foregroundSyncContext';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
@@ -57,11 +58,13 @@ export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePol
 	| { action: 'upload-batch'; rootId: string; batch: import('./uploadBatch').NativeUploadBatchInput }
 	| { action: 'upload-single'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'defer-upload'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
-	| { action: 'arm-photo-run'; rootId: string; authorization: FileSyncApproval }
+	| { action: 'arm-photo-run'; rootId: string; authorization: FileSyncApproval; execution?: 'native'; resume?: true }
+	| { action: 'photo-run-status'; rootId: string; configurationId: string; deviceId: string }
+	| { action: 'run-photo-in-background'; rootId: string; configurationId: string; deviceId: string; configurationRevision: string }
 	| { action: 'cancel-deferred-upload'; rootId: string; configurationId: string; deviceId: string }
 	| { action: 'upload-file'; rootId: string; continueInBackground?: true; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
-	| { action: 'list' | 'choose' | 'conditions' | 'resources' | 'prepare-upload' }
+	| { action: 'list' | 'choose' | 'conditions' | 'resources' | 'prepare-upload' | 'pause-photo-runs' }
 	| { action: 'remove'; rootId: string }
 	| { action: 'scan'; rootId: string; excludedPaths?: string[]; ignoreRules?: string }
 	| { action: 'scan-stream'; rootId: string; inventoryDeviceId: string; captureId: string; excludedPaths?: string[]; ignoreRules?: string; capturePolicy: 'one-way-supported' }
@@ -99,6 +102,8 @@ export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePol
 	  }
 );
 export type FolderResult = {
+	photoRunStatus?: NativePhotoRunStatus;
+	photoContinuation?: NativePhotoContinuation;
 	deviceResourceLimits?: import('./deviceResourcePolicy').DeviceSyncResourcePolicy;
 	resources?: SyncResourceStatus;
 	uploadedBatch?: import('./uploadBatch').NativeUploadBatchResult;
@@ -139,6 +144,7 @@ export type FolderCapabilities = Pick<
 	| 'platform'
 	| 'fileResourceLimitsVersion'
 	| 'filePhotoAutomationVersion'
+	| 'filePhotoContinuationVersion'
 	| 'fileDownloadVersion'
 	| 'fileUploadVersion'
 	| 'fileSingleUploadVersion'
@@ -169,6 +175,10 @@ export function assertNativeSymbolicLinkRequest(request: FolderRequest, capabili
 export const supportsNativeSourcePaths = (bridge: FolderCapabilities | undefined) =>
  bridge?.platform === 'macos' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '') && Number(bridge.fileAccessVersion!.split('.')[1]) >= 15;
 export const supportsNativeResourceLimits = (bridge: FolderCapabilities | undefined) => /^1\.\d+\.\d+$/.test(bridge?.fileResourceLimitsVersion ?? '');
+export const supportsSoleNativePhotoRun = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'ios' && capabilitySatisfies(bridge.filePhotoAutomationVersion ?? '', '1.2.0');
+export const supportsNativePhotoContinuation = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	supportsSoleNativePhotoRun(bridge) && capabilitySatisfies(bridge?.filePhotoContinuationVersion ?? '', '1.0.0');
 export const supportsNativePhotoRuns = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'ios' && capabilitySatisfies(bridge.filePhotoAutomationVersion ?? '', '1.1.0');
 export const supportsNativePhotoAutomation = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
@@ -397,7 +407,7 @@ export function parseMobileFolderResult(
 	if (payload.syncWait !== undefined) {
 		const { syncWait, retryAt, minimumPartBytes } = payload;
 		const transfer = ['upload-file', 'defer-upload'].includes(request.action);
-		const allowed = syncWait === 'inactive' ? ['list', 'conditions', 'inspect', 'upload-file', 'defer-upload', 'scan', 'scan-capture', 'scan-status', 'scan-page', 'scan-cancel', 'scan-discard', 'cancel-deferred-upload', 'arm-photo-run', 'photo-queue-finish', 'read', 'read-range'].includes(request.action) :
+		const allowed = syncWait === 'inactive' ? ['list', 'conditions', 'inspect', 'upload-file', 'defer-upload', 'scan', 'scan-capture', 'scan-status', 'scan-page', 'scan-cancel', 'scan-discard', 'cancel-deferred-upload', 'arm-photo-run', 'photo-run-status', 'pause-photo-runs', 'run-photo-in-background', 'photo-queue-finish', 'read', 'read-range'].includes(request.action) :
 			syncWait === 'data-budget' ? transfer : ['upload-file', 'defer-upload', 'scan-capture', 'scan-status', 'read', 'photo-queue-finish'].includes(request.action);
 		const deadline = typeof retryAt === 'string' ? Date.parse(retryAt) : NaN;
 		if (!allowed || !isSyncWaitReason(syncWait) || syncWait === 'paused' || payload.rootId !== expectedRoot || payload.error !== undefined ||
@@ -438,8 +448,31 @@ export function parseMobileFolderResult(
 			...(r.sourceKind === 'photos' ? { sourceKind: r.sourceKind, photoAccess: r.photoAccess } : {})
 		}))
 	};
-	if (request.action === 'arm-photo-run' && (payload.rootId !== request.rootId || payload.configurationId !== request.authorization.id || payload.photoRunArmed !== true || typeof payload.scheduled !== 'boolean' || payload.roots.length))
-		throw Error('Native Photos did not confirm the background run.');
+	if (request.action === 'arm-photo-run') {
+		if (payload.rootId !== request.rootId || payload.configurationId !== request.authorization.id || payload.photoRunArmed !== true ||
+			typeof payload.scheduled !== 'boolean' || payload.roots.length) throw Error('Native Photos did not confirm the background run.');
+		if (request.execution === 'native') {
+			const revision = payload.configurationRevision ?? payload.photoRunProgress?.configurationRevision;
+			if (payload.nativeOwnsRun !== true || revision !== request.authorization.updatedAt ||
+				payload.deviceId !== request.authorization.scope.deviceId || payload.photoRunProgress == null) throw Error('Native Photos did not confirm sole execution.');
+			result.photoRunStatus = parseNativePhotoRunStatus(payload.configurationRevision ?? payload.photoRunProgress?.configurationRevision, payload.photoRunProgress);
+		}
+	} else if (request.action === 'photo-run-status') {
+		if (payload.rootId !== request.rootId || payload.configurationId !== request.configurationId || payload.deviceId !== request.deviceId ||
+			payload.roots.length) throw Error('Native Photos run status scope changed.');
+		result.photoRunStatus = parseNativePhotoRunStatus(payload.configurationRevision ?? payload.photoRunProgress?.configurationRevision, payload.photoRunProgress);
+	}
+	if (request.action === 'run-photo-in-background') {
+		const status = payload.photoContinuationStatus;
+		if (payload.roots.length || payload.rootId !== request.rootId || payload.configurationId !== request.configurationId ||
+			payload.deviceId !== request.deviceId || payload.configurationRevision !== request.configurationRevision ||
+			!['active', 'declined', 'complete', 'waiting'].includes(status) || payload.photoContinuationRequested !== (status === 'active'))
+			throw Error('Native Photos did not confirm the background request.');
+		result.photoContinuation = { requested: payload.photoContinuationRequested, status };
+	}
+
+	if (request.action === 'pause-photo-runs' && (payload.photoRunsPaused !== true || payload.roots.length || payload.rootId !== undefined))
+		throw Error('Native Photos did not confirm pause.');
 	if (request.action === 'defer-upload') {
 		const queued = payload.deferredUpload;
 		if (payload.rootId !== request.rootId || !queued || typeof queued.deferred !== 'boolean' || typeof queued.scheduled !== 'boolean' ||
@@ -889,6 +922,11 @@ export function requestMobileFolders(
 	if (request.action === 'inspect' && (!supportsNativePathInspection(bridge) || !validSyncPath(request.path)))
 		return Promise.reject(Error('Path inspection requires a supported app and a relative path.'));
 	if (request.action === 'upload-single' && (!supportsNativeSingleUpload(bridge) || !validFileUpload(request.upload) || request.upload.source.size > UPLOAD_BATCH_FILE_BYTES)) return Promise.reject(Error('Unsupported native single upload.'));
+	if (request.action === 'run-photo-in-background' && !supportsNativePhotoContinuation(bridge))
+		throw Error('This iPhone does not support starting continued Photos work.');
+
+	if ((request.action === 'photo-run-status' || request.action === 'pause-photo-runs' || (request.action === 'arm-photo-run' && request.execution === 'native')) &&
+		!supportsSoleNativePhotoRun(bridge)) throw Error('Update Thingtime to use the native Photos runner.');
 	if (request.action === 'arm-photo-run' && !supportsNativePhotoRuns(bridge)) throw Error('Update Thingtime to prepare a background Photos run.');
 	if ((request.action === 'defer-upload' || request.action === 'cancel-deferred-upload') && !supportsNativeDeferredUploads(bridge))
 		throw Error('Update Thingtime to queue Photos transfers in the background.');
@@ -1273,4 +1311,24 @@ export function mobileFolderSource(
 			return bytes;
 		}
 	};
+}
+
+
+export async function readNativePhotoRunProgress(ownerId: string, scope: { rootId: string; configurationId: string; deviceId: string },
+	signal: AbortSignal, request: typeof requestMobileFolders = requestMobileFolders): Promise<NativePhotoRunStatus> {
+	const result = await request(ownerId, { action: 'photo-run-status', ...scope }, signal);
+	signal.throwIfAborted();
+	if (!result.photoRunStatus) throw Error('Native Photos did not provide its run status.');
+	return result.photoRunStatus;
+}
+
+
+/** Use only from the user's explicit Run in Background action. */
+export async function requestNativePhotoBackground(ownerId: string,
+	scope: { rootId: string; configurationId: string; deviceId: string; configurationRevision: string },
+	signal: AbortSignal, request: typeof requestMobileFolders = requestMobileFolders): Promise<NativePhotoContinuation> {
+	const result = await request(ownerId, { action: 'run-photo-in-background', ...scope }, signal);
+	signal.throwIfAborted();
+	if (!result.photoContinuation) throw Error('Native Photos did not confirm the background request.');
+	return result.photoContinuation;
 }

@@ -10,6 +10,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { Box, ChakraProvider } from '@chakra-ui/react';
 import { SyncFolderCard } from '../app/components/Devices/SyncFolderCard';
 import { MobileSyncConnections } from '../app/components/Devices/MobileSyncConnections';
+import { MobileFolderAccess } from '../app/components/Devices/MobileFolderAccess';
 import { MobileDeviceSetupCard } from '../app/components/Devices/MobileDeviceSetupCard';
 import { RemoteDeviceSync } from '../app/components/Devices/RemoteDeviceSync';
 import { contentPartPlan, fingerprintSource } from '../app/fileSync/contentFingerprint';
@@ -19,19 +20,22 @@ import { DeviceSyncPanel } from '../app/components/Devices/DeviceSyncBrowser';
 import { apiEndpointDocs } from '../app/docs/apiDocs';
 import type { RemoteSyncStatus } from '../app/fileSync/remoteSyncProtocol';
 import { NativeSyncBootstrap } from '../app/fileSync/NativeSyncBootstrap';
+import type { NativePhotoRunProgress } from '../app/fileSync/nativePhotoRunProgress';
 
 // Browser fixture uses the canonical registry, without importing server gateway runtime.
 const fixtureCapabilities = (origin: string) => ({ schemaVersion: 1, origin, features: Object.fromEntries(apiEndpointDocs.map(doc => [`api.${doc.id}`, { version: doc.featureVersion ?? '1.0.0' }])) });
 
 // Synthetic account, native bridge and HTTP fixtures. Unknown requests fail closed.
 const params = new URLSearchParams(location.search);
-const autoPhotos = params.has('autoPhotos'), oldPhotoApp = params.has('oldPhotoApp');
+const nativeOnly = params.has('nativeOnly');
+const autoPhotos = params.has('autoPhotos') || nativeOnly, oldPhotoApp = params.has('oldPhotoApp');
 const photoRecovery = params.has('photoRecovery') || autoPhotos, editPhotos = params.has('editPhotos'), mobilePanel = params.has('mobilePanel');
-const photoTransfer = editPhotos || autoPhotos;
+const photoTransfer = !nativeOnly && (editPhotos || autoPhotos);
 const mobile = photoRecovery || mobilePanel || params.has('remoteMobile');
 const ownerId = params.get('owner') || 'remote-sync-owner', deviceId = params.get('device') || (mobile ? 'sync-iphone' : 'remote-sync-mac');
 const databaseKey = 'remote-sync-fixture-rows' + (params.size ? ':' + JSON.stringify([ownerId, deviceId]) : '');
 const photoFilesKey = databaseKey + ':published-photos';
+const nativeRunKey = databaseKey + ':sole-native-photos';
 const offlinePauseCase = autoPhotos && params.has('offlinePause');
 const photosRoot = '4d3c4fd6-6232-4b07-9c9d-3bfd3550437a';
 const photoRoots = [{ id: photosRoot, name: 'Photo Library', sourceKind: 'photos' as const, photoAccess: 'full' as const }];
@@ -62,6 +66,50 @@ const photoEntry = { id: 'fixture-native-photo', version: 'native-v1', path: ass
 const photoUploads = new Map<string, { folderId: string; bytes?: number[] }>();
 const photoFiles = new Map<string, CloudFile>(autoPhotos ? JSON.parse(localStorage.getItem(photoFilesKey) ?? '[]') : []), photoReceipts = new Map<string, CloudFile>();
 const photoBatchId = crypto.randomUUID(), finalPhotoBatchId = crypto.randomUUID();
+type NativeFixtureRun = {
+ revision: string; queueId: string; progress: NativePhotoRunProgress; retryAt: number;
+ confirmedPayload: number[] | null;
+};
+let nativeRun: NativeFixtureRun | null = nativeOnly ? JSON.parse(localStorage.getItem(nativeRunKey) ?? 'null') : null;
+const nativeCalls: Array<{ action: string; execution?: string; revision?: string }> = [];
+const webTransfers: string[] = [];
+let nativeTimer: ReturnType<typeof setTimeout> | undefined;
+let declineNextContinuation = true;
+const nativeHint = () => {
+ if (document.visibilityState === 'visible') window.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, {
+  detail: { type: 'mobile-files-photo-progress' }
+ }));
+};
+const persistNativeRun = () => {
+ localStorage.setItem(nativeRunKey, JSON.stringify(nativeRun));
+ nativeHint();
+};
+const scheduleNativeFixture = () => {
+ clearTimeout(nativeTimer);
+ if (!nativeRun || !['waiting', 'uploading'].includes(nativeRun.progress.stage)) return;
+ nativeTimer = setTimeout(() => {
+  if (!nativeRun) return;
+  if (nativeRun.progress.stage === 'waiting') {
+   nativeRun.progress = { stage: 'uploading', confirmed: nativeRun.progress.confirmed, pendingOriginals: 1,
+    uploadBytesPerSecond: 625_000, currentFile: { confirmedBytes: 0, sentBytes: 2, totalBytes: 3 } };
+   nativeRun.retryAt = Date.now() + 25_000;
+   persistNativeRun(); scheduleNativeFixture();
+  } else if (nativeRun.progress.stage === 'uploading' && !nativeRun.confirmedPayload) {
+   const confirmed = nativeRun.progress.confirmed;
+   nativeRun.confirmedPayload = [...photoBytes];
+   nativeRun.progress = { stage: 'complete', pendingOriginals: 0, confirmed: {
+    ...confirmed, photos: confirmed.photos + 1, mobileBytes: confirmed.mobileBytes + photoBytes.length
+   } };
+   persistNativeRun();
+  }
+ }, Math.max(0, nativeRun.retryAt - Date.now()));
+};
+if (nativeOnly) {
+ // A stale WebView cache must not be added to the new native ledger.
+ writeStampedCache('tt:sync-progress:' + syncScopeKey(photoScope), { stage: 'transferring', confirmed: 99, total: 100,
+  message: 'Legacy WebView progress must stay hidden.' });
+ scheduleNativeFixture();
+}
 const legacyInactiveMessage = 'Folder access paused. Try again when the app is active.';
 let charging = false, finishedBatch = photoFiles.size > 0, pausedPairingReply: (() => void) | undefined, pairingReads = 0, holdPairing = mobilePanel;
 let inactive = autoPhotos && params.has('inactive'), dataBudget = budgetCase && !minimumBudgetCase;
@@ -95,7 +143,8 @@ if (photoRecovery || mobilePanel) {
  window.thingtimeNativeBridge = { platform: 'ios', isNativeWebView: true, version: '1.0.0',
   devicePairingVersion: '1.0.0', fileAccessVersion: '1.8.0', fileUploadVersion: '1.5.0',
   fileStagingVersion: '1.2.0', filePublicationVersion: '1.2.0',
-  ...(autoPhotos && !oldPhotoApp ? { filePhotoAutomationVersion: '1.0.0' } : {}),
+  ...(autoPhotos && !oldPhotoApp ? { filePhotoAutomationVersion: nativeOnly ? '1.2.0' : '1.0.0' } : {}),
+  ...(nativeOnly ? { filePhotoContinuationVersion: '1.0.0' } : {}),
   postMessage: async message => {
    const request = message.payload as any;
    const { requestId, ownerId: owner, origin, action, rootId, configurationId, deviceId: device } = request;
@@ -111,6 +160,56 @@ if (photoRecovery || mobilePanel) {
      return;
     }
     reply('mobile-device-result', { state: 'paired', deviceId }); return;
+   }
+   if (nativeOnly && ['arm-photo-run', 'photo-run-status', 'cancel-deferred-upload', 'run-photo-in-background'].includes(action)) {
+    const id = request.authorization?.id ?? configurationId;
+    const row = rows.find(candidate => candidate.id === id);
+    if (rootId !== photosRoot || !row || (request.authorization?.scope.deviceId ?? device) !== deviceId)
+     throw Error('Unexpected native Photos scope');
+    nativeCalls.push({ action, execution: request.execution, revision: request.authorization?.updatedAt ?? request.configurationRevision });
+    const result = { roots: [], rootId, configurationId: id, deviceId };
+    if (action === 'arm-photo-run') {
+     if (request.execution !== 'native' || request.authorization.updatedAt !== row.updatedAt || row.crystal.paused)
+      throw Error('Native runner was armed without exact reviewed settings');
+     if (!nativeRun || nativeRun.progress.stage === 'paused') {
+      const retryAt = Date.now() + 300_000;
+      nativeRun = { revision: row.updatedAt, queueId: nativeRun?.queueId ?? crypto.randomUUID(), retryAt,
+       confirmedPayload: nativeRun?.confirmedPayload ?? null, progress: {
+        stage: 'waiting', syncWait: 'network', retryAt: new Date(retryAt).toISOString(), pendingOriginals: 1,
+        confirmed: nativeRun?.progress.confirmed ?? { photos: 2, videos: 1, other: 0, wifiBytes: 1_048_576, mobileBytes: 2_097_152, unknownBytes: 524_288 }
+       } };
+      persistNativeRun(); scheduleNativeFixture();
+     }
+     reply('mobile-files-result', { ...result, configurationRevision: nativeRun.revision,
+      photoRunArmed: true, scheduled: true, nativeOwnsRun: true, photoRunProgress: nativeRun.progress });
+    } else if (action === 'photo-run-status') {
+     reply('mobile-files-result', { ...result, configurationRevision: id === photoScope.rootId ? nativeRun?.revision ?? null : null,
+      photoRunProgress: id === photoScope.rootId ? nativeRun?.progress ?? null : null });
+    } else if (action === 'run-photo-in-background') {
+     if (!nativeRun || nativeRun.revision !== request.configurationRevision || row.crystal.paused || !nativeRun.progress.pendingOriginals)
+      throw Error('Background request did not target current native work');
+     if (declineNextContinuation) {
+      declineNextContinuation = false;
+      reply('mobile-files-result', { ...result, configurationRevision: nativeRun.revision, photoContinuationRequested: false, photoContinuationStatus: 'declined' });
+     } else {
+      nativeRun.progress = { ...nativeRun.progress, stage: 'uploading', continuation: 'active',
+       currentFile: { confirmedBytes: 0, sentBytes: 2, totalBytes: 3 }, uploadBytesPerSecond: 625_000 };
+      nativeRun.retryAt = Date.now() + 25_000;
+      persistNativeRun(); scheduleNativeFixture();
+      reply('mobile-files-result', { ...result, configurationRevision: nativeRun.revision, photoContinuationRequested: true, photoContinuationStatus: 'active' });
+     }
+    } else {
+     if (nativeRun && id === photoScope.rootId) {
+      nativeRun.progress = { stage: 'paused', confirmed: nativeRun.progress.confirmed };
+      clearTimeout(nativeTimer); persistNativeRun();
+     }
+     reply('mobile-files-result', { ...result, cancelled: true });
+    }
+    return;
+   }
+   if (nativeOnly && !['list', 'conditions'].includes(action)) {
+    webTransfers.push(action);
+    reply('mobile-files-result', { error: 'The WebView attempted a transfer operation on a native Photos run.' }); return;
    }
    photoEvents.push({ type: action, rootId, configurationId, deviceId: device,
     ...(action === 'cancel-deferred-upload' ? { jobId: (await readPhotoJob())?.id } : {}) });
@@ -196,6 +295,18 @@ Object.assign(window, { remoteSyncFixture: {
  reset() { localStorage.clear(); },
  photoRecovery: async () => ({ events: photoEvents, job: await readPhotoJob(), oldPhotoEpoch, uploaded: [...photoUploads.values()].filter(row => row.bytes), files: [...photoFiles.values()] }),
  photoScanCount: () => photoEvents.filter(event => event.type === 'scan-capture').length,
+ nativeOnlyState: () => structuredClone({ nativeRun, nativeCalls, webTransfers }),
+ expirePhotoContinuation() {
+  if (!nativeRun || nativeRun.progress.continuation !== 'active') throw Error('No continued Photos task is active');
+  clearTimeout(nativeTimer);
+  nativeRun.progress = { stage: 'waiting', continuation: 'held', pendingOriginals: 1, confirmed: nativeRun.progress.confirmed };
+  persistNativeRun();
+ },
+ setAppHidden(hidden: boolean) {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => hidden ? 'hidden' : 'visible' });
+  Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+  document.dispatchEvent(new Event('visibilitychange'));
+ },
  setCharging(value: boolean) {
   charging = value;
   if (autoPhotos) window.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, { detail: { type: 'mobile-files-conditions-changed' } }));
@@ -220,6 +331,11 @@ window.fetch = async (input, init) => {
  if (url.pathname === '/api/v1/webpages/resolve') return json({ ok: false }, 404);
  if (url.pathname === '/api/v1/devices') return json({ ok: true, devices: [{ id: deviceId, name: mobile ? 'My iPhone' : 'My Mac', platform: mobile ? 'ios' : 'macos', pairingStatus: 'paired' }] });
  const headers = new Headers(init?.headers);
+ if (nativeOnly && ['/api/v1/files', '/api/v1/attachments/uploads'].some(path => url.pathname.startsWith(path)) &&
+     init?.method && init.method !== 'GET') {
+  webTransfers.push(`${init.method} ${url.pathname}`);
+  throw Error('The WebView attempted to transfer or publish an original on the native queue.');
+ }
  if (photoTransfer && url.pathname.startsWith('/fixture-photo-upload/') && init?.method === 'PUT') {
   if (init.credentials !== 'omit' || init.redirect !== 'error' || [...headers].length) throw Error('Unexpected signed upload authority');
   const upload = photoUploads.get(url.pathname.split('/').at(-1)!);
@@ -376,7 +492,8 @@ const router = createMemoryRouter([{ id: 'root', path: '/', loader: () => ({ use
  element: <ChakraProvider><Box maxW="1000px" mx="auto" p={4}>{photoRecovery ? <>
   {autoPhotos && <NativeSyncBootstrap ownerId={ownerId} generation={0} />}
   {editPhotos && <Box aria-label="Account settings"><RemoteDeviceSync ownerId={ownerId} deviceId={deviceId} devicePlatform="ios" /></Box>}
-  <Box aria-label="Local sync"><MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={photoRoots} /></Box>
+  <Box aria-label="Local sync">{nativeOnly ? <MobileFolderAccess ownerId={ownerId} deviceId={deviceId} /> :
+   <MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={photoRoots} />}</Box>
  </> : params.has('native') ? <MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={initialStatus().roots} host={nativeFixtureHost} /> : <>
   <DeviceSyncPanel ownerId={ownerId} deviceId={deviceId} devicePlatform={mobile ? 'ios' : 'macos'} pairedDeviceIds={[]} ownedDeviceIds={[deviceId]} />
   {mobilePanel && <MobileDeviceSetupCard ownerId={ownerId} syncAnchor />}

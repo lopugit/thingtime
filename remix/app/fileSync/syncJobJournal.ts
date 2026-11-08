@@ -301,6 +301,12 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 					} catch (error) { fail(error); }
 				};
 			}).then(changed),
+		/** Sole native Resume lifts the local denial without re-admitting old
+		 * browser transfers or dropping their native cleanup and receipt pins. */
+		resumePhotoPause: (expected: SyncJob) => change(expected, current => {
+			if (current.state !== 'paused' || current.reviewed.configuration.sourceKind !== 'photos') return null;
+			return { ...current, state: current.nextRunAt === undefined ? 'runnable' : 'scheduled' };
+		}),
 		pause: (expected: SyncJob) => change(expected, current =>
 			syncJobCanPause(current) ? { ...current, state: 'paused' } : null),
 		attention: (expected: SyncJob, cause?: unknown, automaticPhotoRevision?: string) => change(expected, current =>

@@ -15,6 +15,7 @@ import { fileSyncDownloadRequirements } from '~/fileSync/signedDownloadTarget';
 import { SyncResourceControls } from './SyncResourceControls';
 import { PhotoAutomationControls } from './PhotoAutomationControls';
 import { photoSyncScheduleLabel, photoSyncWaitingMessage, usePhotoSyncJobs } from './photoSyncPresentation';
+import { nativePhotoCanContinue, nativePhotoRunActive, nativePhotoRunGlance, nativePhotoRunLabel, nativePhotoRunSchedule, useNativePhotoRunProgress } from './nativePhotoRunView';
 import { SyncIgnoreRulesEditor } from './SyncIgnoreRulesEditor';
 import { readNativeInventory } from '~/fileSync/nativeInventory';
 import { nativeSyncTasks, pauseNativeSyncJob, startNativeSyncTask, supportsNativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
@@ -59,6 +60,9 @@ import {
 	supportsNativeBackupCapture,
 	supportsNativeIgnoreRules,
 	supportsNativePhotoAutomation,
+	supportsSoleNativePhotoRun,
+	supportsNativePhotoContinuation,
+	requestNativePhotoBackground,
 	supportsNativeBackgroundUploads
 } from '~/fileSync/mobileFolders.client';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from '~/fileSync/journal.client';
@@ -83,8 +87,8 @@ import {
 	type ConfigurationEditorScope
 } from '~/fileSync/configurationEditor';
 
-type ConnectionsProps = { ownerId: string; deviceId: string; roots: MobileFolder[]; rootsReady?: boolean; host?: FolderHost; active?: boolean };
-export function MobileSyncConnections({ ownerId, deviceId, roots, rootsReady = true, host, active = true }: ConnectionsProps) {
+type ConnectionsProps = { ownerId: string; deviceId: string; roots: MobileFolder[]; rootsReady?: boolean; host?: FolderHost; active?: boolean; onNativePhotoActivity?(active: boolean): void };
+export function MobileSyncConnections({ ownerId, deviceId, roots, rootsReady = true, host, active = true, onNativePhotoActivity }: ConnectionsProps) {
 	const owner = useCurrentUser(),
 		dataPlane = useDataPlane();
 	const identity = useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
@@ -99,6 +103,7 @@ export function MobileSyncConnections({ ownerId, deviceId, roots, rootsReady = t
 			roots={roots}
 			rootsReady={rootsReady}
 			host={host}
+			onNativePhotoActivity={onNativePhotoActivity}
 		/>
 	);
 }
@@ -110,7 +115,8 @@ function Connections({
 	roots,
 	rootsReady,
 	active,
-	host
+	host,
+	onNativePhotoActivity
 }: {
 	scope: ConfigurationEditorScope;
 	generation: number;
@@ -118,6 +124,7 @@ function Connections({
 	rootsReady: boolean;
 	active: boolean;
 	host?: FolderHost;
+	onNativePhotoActivity?(active: boolean): void;
 }) {
 	const requestFolders = host?.request ?? requestMobileFolders;
 	const capabilities = host ? host.capabilities : getNativeBridge();
@@ -155,12 +162,15 @@ function Connections({
 		? nativeTask : null;
 	const appOwned = supportsNativeSyncTasks();
 	const photoAutomation = appOwned && supportsNativePhotoAutomation(capabilities);
+	const soleNativePhotoRun = photoAutomation && !host && supportsSoleNativePhotoRun(capabilities);
+	const photoContinuation = soleNativePhotoRun && supportsNativePhotoContinuation(capabilities);
 	const automaticEnabled = useSyncExternalStore(activityManager.subscribe,
 		() => activityManager.enabled('sync.automation') && activityManager.enabled('sync.execution'), () => true);
-	const photoJobs = usePhotoSyncJobs(scope, generation, photoAutomation);
+	const photoJobs = usePhotoSyncJobs(scope, generation, photoAutomation && !soleNativePhotoRun);
 	const pauseRequests = useRef(new Map<string, AbortController>());
+	const continuationRequests = useRef(new Map<string, AbortController>());
 	const [pausingIds, setPausingIds] = useState<string[]>([]);
-	const busy = viewBusy || (appOwned && !!nativeTask?.active);
+	const [continuations, setContinuations] = useState<Record<string, { revision: string; pending: boolean; status: string }>>({});
 	const [draft, setDraft] = useState<ConfigurationDraft | null>(null);
 	const draftJournalCurrent = useRef(true);
 	const retainedDrafts = useRef(new Map<string, ConfigurationDraft>(initial.drafts.map(draft => [draft.id, draft])));
@@ -195,6 +205,14 @@ function Connections({
 			}
 		});
 	});
+	const nativePhotoRuns = useNativePhotoRunProgress(scope, generation, active && soleNativePhotoRun, connections);
+	const nativePhotoTransferActive = soleNativePhotoRun && connections.some(row => {
+		const view = nativePhotoRuns.get(row.id);
+		return view?.revision === row.updatedAt && nativePhotoRunActive(view);
+	});
+	useEffect(() => { onNativePhotoActivity?.(nativePhotoTransferActive); }, [onNativePhotoActivity, nativePhotoTransferActive]);
+	useEffect(() => () => onNativePhotoActivity?.(false), [onNativePhotoActivity]);
+	const busy = viewBusy || (appOwned && !!nativeTask?.active) || nativePhotoTransferActive;
 	const connectionsRef = useRef(connections);
 	const [transfers, setTransfers] = useState<Record<string, ConnectionProgress>>({});
 	const [progressDescriptors, setProgressDescriptors] = useState<Record<string, SyncProgressDescriptor | undefined>>({});
@@ -339,6 +357,8 @@ function Connections({
 			unsubscribe();
 			for (const pause of pauseRequests.current.values()) pause.abort();
 			pauseRequests.current.clear();
+			for (const request of continuationRequests.current.values()) request.abort();
+			continuationRequests.current.clear();
 			controller.current?.abort();
 			controller.current = null;
 			window.removeEventListener('storage', changed);
@@ -361,6 +381,43 @@ function Connections({
 		}
 	};
 	const progressKey = (id: string) => 'tt:sync-progress:' + syncScopeKey({ ...scope, rootId: id });
+	const continuePhotoInBackground = async (saved: SavedFileSyncConfiguration) => {
+		const id = saved.id;
+		const view = nativePhotoRuns.get(id);
+		if (!photoContinuation || view?.revision !== saved.updatedAt || !nativePhotoCanContinue(view) ||
+			saved.configuration.paused || pauseRequests.current.has(id) || continuationRequests.current.has(id)) return;
+		const request = new AbortController();
+		const current = () => {
+			const identity = rootIdentity.read();
+			return !request.signal.aborted && mounted.current && !identity.pending && identity.generation === generation &&
+				window.location.origin === scope.origin && document.visibilityState === 'visible' &&
+				connectionsRef.current.some(row => row.id === id && row.updatedAt === saved.updatedAt);
+		};
+		if (!current()) return;
+		continuationRequests.current.set(id, request);
+		const publish = (status: string, pending = false) => {
+			if (current()) setContinuations(previous => ({ ...previous, [id]: { revision: saved.updatedAt, status, pending } }));
+		};
+		publish('', true);
+		try {
+			const result = await requestNativePhotoBackground(scope.ownerId, {
+				rootId: saved.configuration.localRootId, configurationId: id, configurationRevision: saved.updatedAt, deviceId: scope.deviceId
+			}, request.signal);
+			publish(result.status === 'active' && result.requested ? 'Background processing requested for this backup.' :
+				result.status === 'complete' ? 'This backup is up to date.' :
+				result.status === 'waiting' ? 'This backup is waiting for its saved transfer conditions.' :
+				'iOS didn’t start background processing. You can keep Thingtime open or try again.');
+		} catch (cause) {
+			publish(cause instanceof Error ? cause.message : 'Background processing could not be confirmed.');
+		} finally {
+			if (continuationRequests.current.get(id) === request) continuationRequests.current.delete(id);
+			// The native status request refreshes after visibility or a native hint.
+			if (!request.signal.aborted && mounted.current && rootIdentity.read().generation === generation) {
+				setContinuations(previous => previous[id]?.revision === saved.updatedAt && previous[id].pending ?
+					{ ...previous, [id]: { ...previous[id], pending: false } } : previous);
+			}
+		}
+	};
 	const pausePhotoAutomation = async (id: string) => {
 		const reviewed = connectionsRef.current.find(row => row.id === id);
 		if (!reviewed || pauseRequests.current.has(id)) return;
@@ -780,41 +837,51 @@ function Connections({
 			)}
 			{connections.map((saved) => {
 				const automatic = photoAutomation && saved.configuration.sourceKind === 'photos';
-				const job = automatic ? photoJobs[saved.id] : undefined;
+				const nativeOwns = soleNativePhotoRun && automatic;
+				const observed = nativeOwns ? nativePhotoRuns.get(saved.id) : undefined;
+				const nativeRun = observed?.revision === saved.updatedAt ? observed : undefined;
+				const nativeProgress = nativeRun?.progress;
+				const continuation = continuations[saved.id]?.revision === saved.updatedAt ? continuations[saved.id] : undefined;
+				const continuationHeld = nativeProgress?.continuation === 'held';
+				const continuationActive = nativeProgress?.continuation === 'active';
+				const job = automatic && !nativeOwns ? photoJobs[saved.id] : undefined;
 				const currentJob = job?.reviewed.updatedAt === saved.updatedAt ? job : undefined;
 				const pausing = pausingIds.includes(saved.id);
-				const task = ownNativeTask?.scope.rootId === saved.id ? ownNativeTask : null;
-				const progress: ConnectionProgress | null = task?.progress ?? transfers[saved.id] ?? readStampedCache<ConnectionProgress>(progressKey(saved.id));
-				const running = !!task?.active || (viewBusy && activeTransfer === saved.id);
-				const taskPaused = job?.state === 'paused' || (task?.status === 'paused' && !task.waiting);
+				const task = !nativeOwns && ownNativeTask?.scope.rootId === saved.id ? ownNativeTask : null;
+				const progress: ConnectionProgress | null = nativeOwns ? null : task?.progress ?? transfers[saved.id] ?? readStampedCache<ConnectionProgress>(progressKey(saved.id));
+				const running = nativeOwns ? nativePhotoRunActive(nativeRun) : !!task?.active || (viewBusy && activeTransfer === saved.id);
+				const taskPaused = nativeOwns ? nativeProgress?.stage === 'paused' || continuationHeld : job?.state === 'paused' || (task?.status === 'paused' && !task.waiting);
 				const paused = saved.configuration.paused || taskPaused;
 				const jobWaiting = !running && !paused ? photoSyncWaitingMessage(currentJob?.waitReason, currentJob?.minimumPartBytes) : '';
-				const waiting = !paused && (task?.waiting ?? (!!jobWaiting || progress?.waiting === true));
+				const waiting = !paused && (nativeOwns ? nativeProgress?.stage === 'waiting' : (task?.waiting ?? (!!jobWaiting || progress?.waiting === true)));
 				const runError = transferErrors[saved.id] || (!running && !waiting && !paused &&
 					(task?.status === 'error' || currentJob?.state === 'attention' || (!task && progress?.message && !['complete', 'retained'].includes(progress.stage))
 						? progress?.message || 'Sync needs attention. Retry this connection.' : ''));
 				const nativeRoot = roots.find((root) => root.id === saved.configuration.localRootId);
 				const photos = saved.configuration.sourceKind === 'photos' || nativeRoot?.sourceKind === 'photos';
 				const preparation = photos && running && !waiting && !task?.stopping ? photoDownloadPreparation(progress?.photoDownload) : undefined;
-				const photoQueue = photos && rootsReady && nativeRoot ? photoQueueDisplay(progress?.photoQueue) : undefined;
+				const nativeQueue = nativeProgress && (nativeProgress.pendingOriginals !== undefined || nativeProgress.unavailableOriginals !== undefined)
+					? { pending: nativeProgress.pendingOriginals ?? 0, unavailable: nativeProgress.unavailableOriginals ?? 0 } : undefined;
+				const photoQueue = photos && rootsReady && nativeRoot ? photoQueueDisplay(nativeOwns ? nativeQueue : progress?.photoQueue) : undefined;
 				const downloading = saved.configuration.mode === 'download';
 				const twoWay = saved.configuration.mode === 'two-way';
 				const wifiWait = waiting && saved.configuration.network === 'wifi' &&
 					(progress?.message === 'Waiting for the selected network.' || progress?.message?.startsWith('Waiting for Wi-Fi.'));
 				const statusMessage = wifiWait ? photoSyncWaitingMessage('wifi') : jobWaiting;
 				const statusProgress = statusMessage ? { stage: 'checking' as const, confirmed: 0, total: 0, ...progress, message: statusMessage } : progress;
-				const automaticallyWaiting = automaticEnabled && waiting && (currentJob?.waitReason === 'inactive' ||
+				const automaticallyWaiting = nativeOwns ? nativeProgress?.stage === 'ready' || (waiting && nativeProgress?.syncWait === 'data-budget') :
+					automaticEnabled && waiting && (currentJob?.waitReason === 'inactive' ||
 					(currentJob?.waitReason === 'data-budget' && (currentJob.minimumPartBytes !== undefined || (currentJob.retryAt ?? Infinity) > Date.now())));
 				const actionLabel = pausing || task?.stopping ? 'Pausing…' : running ? 'Pause sync' :
 					automatic && paused ? 'Resume automatic backup' :
 					saved.configuration.paused ? saved.configuration.mode === 'backup' ? 'Start backup' : 'Resume sync' :
 					waiting ? 'Check again' : taskPaused ? 'Resume sync' :
-					runError || (progress && !['complete', 'retained'].includes(progress.stage)) ? 'Retry transfer' :
+					runError || nativeProgress?.stage === 'needs-review' || (progress && !['complete', 'retained'].includes(progress.stage)) ? 'Retry transfer' :
 					automatic ? 'Back up now' : twoWay ? 'Sync now' : downloading ? 'Download now' : saved.configuration.mode === 'backup' ? 'Start backup' : 'Upload now';
 				const progressScope = { ...scope, rootId: saved.id };
-				const progressDescriptor = task ? task.progressDescriptor : progressDescriptors[saved.id] ?? (!running
+				const progressDescriptor = nativeOwns ? undefined : task ? task.progressDescriptor : progressDescriptors[saved.id] ?? (!running
 					? readStampedCache<SyncProgressDescriptor>('tt:sync-progress-tree:' + syncScopeKey(progressScope)) ?? undefined : undefined);
-				const inventoryDescriptor = task ? task.inventoryDescriptor : inventoryDescriptors[saved.id] ?? (!running
+				const inventoryDescriptor = nativeOwns ? undefined : task ? task.inventoryDescriptor : inventoryDescriptors[saved.id] ?? (!running
                     ? readStampedCache<SyncInventoryDescriptor>('tt:sync-inventory:' + syncScopeKey(progressScope)) ?? undefined : undefined);
 				if (!speedDrafts.current.has(saved.id)) speedDrafts.current.set(saved.id, {});
 				if (!priorityDrafts.current.has(saved.id)) priorityDrafts.current.set(saved.id, {});
@@ -846,11 +913,19 @@ function Connections({
                         error={runError || ''}
                         preparation={preparation}
                         photoQueue={photoQueue}
-                        automation={automatic ? (!automaticEnabled && !paused ? 'Automatic backup is disabled in Activity manager.' : photoSyncScheduleLabel(currentJob, paused, running, !!runError)) :
+                        automation={nativeOwns ? nativePhotoRunSchedule(nativeRun) : automatic ? (!automaticEnabled && !paused ? 'Automatic backup is disabled in Activity manager.' : photoSyncScheduleLabel(currentJob, paused, running, !!runError)) :
                             photos && capabilities?.platform === 'ios' ? 'Update Thingtime on this iPhone to use automatic backup and upload limits.' : undefined}
                         pauseAction={automatic && !running && !paused && !pausing ? { label: 'Pause sync', run: () => pausePhotoAutomation(saved.id) } : undefined}
+                        continuationAction={nativeOwns && photoContinuation && !saved.configuration.paused && nativePhotoCanContinue(nativeRun) ? {
+                            label: continuation?.pending ? 'Requesting background processing…' : 'Run in Background',
+                            disabled: pausing || continuation?.pending,
+                            run: () => continuePhotoInBackground(saved)
+                        } : undefined}
+                        continuationStatus={!nativeOwns || saved.configuration.paused || nativeProgress?.stage === 'complete' ? undefined :
+                            continuationActive && !nativeRun?.stale ? 'Continuing this backup with iOS background processing.' :
+                            continuationHeld ? undefined : continuation?.status}
                         quickAction={!pausing && automaticallyWaiting ? undefined : { label: actionLabel,
-                            disabled: pausing || (running ? !!task?.stopping : !allowed || busy || retainedDrafts.current.has(saved.id) || !ready),
+                            disabled: pausing || (running ? !!task?.stopping : !allowed || busy || retainedDrafts.current.has(saved.id) || !ready || (nativeOwns && (!nativeRun || nativeRun.stale))),
                             run: () => {
                                 if (running && automatic) return pausePhotoAutomation(saved.id);
                                 if (running) { if (task?.active) return pauseNativeSyncJob(task.scope, generation).catch(cause => setError(cause instanceof Error ? cause.message : 'Pause could not be saved.')); controller.current?.abort(); }
@@ -858,8 +933,8 @@ function Connections({
                             }
                         }}
 						description={saved.configuration.mode === 'backup' ? 'Backup to cloud · keep deleted files' : twoWay ? 'Two-way sync' : downloading ? 'Cloud to device' : 'Device to cloud'}
-						glance={syncConnectionGlance({ deviceLabel: capabilities?.platform === 'ios' ? 'iPhone' : capabilities?.platform === 'android' ? 'Device' : 'Mac', progress, online: rootsReady, active: running, paused, waiting, preparing: !!preparation, mode: saved.configuration.mode, ...(task?.transferSeries ? { rates: { upload: task.transferSeries.read({ direction: 'upload', unit: 'Mbps', windowMs: 5000 }), download: task.transferSeries.read({ direction: 'download', unit: 'Mbps', windowMs: 5000 }) } } : {}) })}
-                        stats={preparation ? '' : syncFolderActivityLabel({ paused: saved.configuration.paused || (automatic && taskPaused), rootsReady, hasRoot: !!nativeRoot,
+						glance={nativeOwns ? nativePhotoRunGlance(nativeRun) : syncConnectionGlance({ deviceLabel: capabilities?.platform === 'ios' ? 'iPhone' : capabilities?.platform === 'android' ? 'Device' : 'Mac', progress, online: rootsReady, active: running, paused, waiting, preparing: !!preparation, mode: saved.configuration.mode, ...(task?.transferSeries ? { rates: { upload: task.transferSeries.read({ direction: 'upload', unit: 'Mbps', windowMs: 5000 }), download: task.transferSeries.read({ direction: 'download', unit: 'Mbps', windowMs: 5000 }) } } : {}) })}
+                        stats={nativeOwns ? pausing ? 'Pausing…' : saved.configuration.paused ? 'Paused' : rootsReady && !nativeRoot ? 'Folder access missing' : nativePhotoRunLabel(nativeRun) : preparation ? '' : syncFolderActivityLabel({ paused: saved.configuration.paused || (automatic && taskPaused), rootsReady, hasRoot: !!nativeRoot,
                             taskPaused, running, waiting, failed: !!runError, stopping: pausing || task?.stopping, progress: statusProgress, photos })}
 						expanded={selectedId === saved.id} onToggle={expanded => { if (expanded) { if (!viewBusy && ready && !storageError) { setSelectedId(saved.id); if (retainedDrafts.current.has(saved.id)) open(saved.id); } } else if (selectedId === saved.id) setSelectedId(null); }}>
 					<Flex align="center" gap={2} wrap="wrap">
@@ -881,7 +956,7 @@ function Connections({
 										: 'This direction is not available yet'
 									: !supportsMobileSyncConditions(capabilities)
 									? 'Update this app to transfer files'
-									: !rootsReady || running || saved.configuration.paused || taskPaused || waiting || runError ? null : twoWay
+									: nativeOwns || !rootsReady || running || saved.configuration.paused || taskPaused || waiting || runError ? null : twoWay
 									? 'Ready for two-way sync with folder approval'
 									: downloading
 									? 'Ready to download with folder approval'

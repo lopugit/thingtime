@@ -8,13 +8,14 @@ final class NativeDeferredUploadClient {
     static let path = "/api/v1/files/sync-transfer-admissions"
     static let feature = "api.file-sync-transfer-admissions"
     enum Failure: Error, LocalizedError {
-        case incompatible, invalid, denied, partsRetryable, unavailable
+        case incompatible, invalid, denied, partsRetryable, unavailable, photoPathConflict
         var terminal: Bool { self == .incompatible || self == .invalid || self == .denied }
         var errorDescription: String? {
             switch self {
             case .denied: return "Background transfer permission changed. Reopen this sync connection to resume."
             case .incompatible: return "Background transfers are unavailable on this server. Keep Thingtime open to continue."
             case .invalid: return "The server did not confirm the exact deferred upload."
+            case .photoPathConflict: return "A cloud file at the backup path needs review. Its bytes were kept."
             case .partsRetryable, .unavailable: return "Cloud transfer paused. Its original reservation can be retried."
             }
         }
@@ -34,7 +35,7 @@ final class NativeDeferredUploadClient {
         session = URLSession(configuration: configuration, delegate: MobileDeviceRedirectPolicy(), delegateQueue: nil)
     }
     init(photoRun: NativePhotoRunRecord) {
-        record = nil; scope = photoRun.scope; deviceId = photoRun.authorization.scope.deviceId; minimum = [1, 2, 0]
+        record = nil; scope = photoRun.scope; deviceId = photoRun.authorization.scope.deviceId; minimum = photoRun.nativeOwnsRun ? [1, 3, 0] : [1, 2, 0]
         let configuration = Self.configuration(allowsCellular: photoRun.authorization.configuration.network == "any")
         session = URLSession(configuration: configuration, delegate: MobileDeviceRedirectPolicy(), delegateQueue: nil)
     }
@@ -88,7 +89,8 @@ final class NativeDeferredUploadClient {
         let receipt = try JSONDecoder().decode(Receipt.self, from: JSONSerialization.data(withJSONObject: result))
         guard let record else { throw Failure.invalid }
         let file = receipt.file, source = record.request.source
-        guard record.request.publication != nil, !file.id.isEmpty, !file.revision.isEmpty, !file.trashed,
+        guard let publication = record.request.publication, !file.id.isEmpty, !file.revision.isEmpty, !file.trashed,
+              publication.fileId.map({ $0 == file.id }) ?? true,
               file.name == source.path, file.folderId == record.configuration.remoteFolderId,
               file.content.attachmentId == record.request.uploadId, file.content.size == source.size,
               file.content.fingerprint == source.fingerprint else { throw Failure.invalid }
@@ -146,6 +148,9 @@ final class NativeDeferredUploadClient {
         let result = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         if http.statusCode == 409 {
             let error = result?["error"] as? [String: Any]
+            if result?["code"] as? String == "photo_path_conflict" || error?["code"] as? String == "photo_path_conflict" {
+                throw Failure.photoPathConflict
+            }
             if result?["code"] as? String == "upload_parts_retryable" ||
                 result?["error"] as? String == "upload_parts_retryable" || error?["code"] as? String == "upload_parts_retryable" {
                 throw Failure.partsRetryable

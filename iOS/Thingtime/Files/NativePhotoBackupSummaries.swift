@@ -80,7 +80,6 @@ final class NativePhotoBackupSummaries {
 
     func record(_ record: NativeDeferredUploadRecord, original: PhotoLibraryReader.OriginalIdentity?, now: Date = Date()) throws {
         let binding = Binding(record.request.authorization, owner: record.scope)
-        guard binding.interval > 0 else { clear(matching: record.scope, configurationId: binding.configurationId); return }
         try confirm(binding, originals: original.map { [$0] } ?? [], uploadId: record.request.uploadId,
                     bytes: record.transferBytes ?? .init(), now: now)
     }
@@ -89,7 +88,6 @@ final class NativePhotoBackupSummaries {
     /// attributing its bytes to this run. It may complete an asset whose other
     /// original was published natively during this run.
     func observe(_ binding: Binding, originals: [PhotoLibraryReader.OriginalIdentity]) throws {
-        guard binding.interval > 0 else { return }
         try confirm(binding, originals: originals, uploadId: nil, bytes: .init(), now: Date())
     }
 
@@ -116,14 +114,17 @@ final class NativePhotoBackupSummaries {
                 }
             }
             if !totals.empty {
-                var window = try db.windows("WHERE due > ? ORDER BY due DESC LIMIT 1", [stamp]).first ?? Window(
-                    id: "thingtime-photos-" + UUID().uuidString.lowercased(), start: now, due: now.addingTimeInterval(binding.interval))
-                window.totals.add(totals)
-                try db.save(window)
+                var cumulative = try db.totals(); cumulative.add(totals); try db.saveTotals(cumulative)
+                if binding.interval > 0 {
+                    var window = try db.windows("WHERE due > ? ORDER BY due DESC LIMIT 1", [stamp]).first ?? Window(
+                        id: "thingtime-photos-" + UUID().uuidString.lowercased(), start: now, due: now.addingTimeInterval(binding.interval))
+                    window.totals.add(totals)
+                    try db.save(window)
+                }
             }
             try db.prune(now: now)
         }
-        queue(url)
+        if binding.interval > 0 { queue(url) }
     }
 
     func resume(verified scope: FileSyncOwnerScope) {
@@ -139,6 +140,12 @@ final class NativePhotoBackupSummaries {
         let url = location(binding)
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
         return try database(url).windows("ORDER BY due")
+    }
+
+    func confirmed(_ binding: Binding) throws -> Totals {
+        let url = location(binding)
+        guard FileManager.default.fileExists(atPath: url.path) else { return .init() }
+        return try database(url).totals()
     }
 
     /// Pending system notifications must not survive a scope withdrawal. The
@@ -248,6 +255,7 @@ final class NativePhotoBackupSummaries {
             CREATE INDEX IF NOT EXISTS resource_seen ON resource(seen);
             CREATE TABLE IF NOT EXISTS window (id TEXT PRIMARY KEY, due REAL NOT NULL, complete INTEGER NOT NULL, json BLOB NOT NULL);
             CREATE INDEX IF NOT EXISTS window_due ON window(due);
+            CREATE TABLE IF NOT EXISTS totals (id INTEGER PRIMARY KEY CHECK(id = 1), json BLOB NOT NULL);
             """
             guard sqlite3_exec(db, schema, nil, nil, nil) == SQLITE_OK else { throw MobileFolderStore.Failure.unavailable }
         }
@@ -280,6 +288,20 @@ final class NativePhotoBackupSummaries {
         func save(_ window: Window) throws {
             try run("INSERT OR REPLACE INTO window VALUES (?,?,?,?)", [.text(window.id), .real(window.due.timeIntervalSince1970),
                 .int(window.submitted == window.totals ? 1 : 0), .blob(try JSONEncoder().encode(window))])
+        }
+        func totals() throws -> Totals {
+            try statement("SELECT json FROM totals WHERE id = 1", []) { stmt in
+                switch sqlite3_step(stmt) {
+                case SQLITE_DONE: return Totals()
+                case SQLITE_ROW:
+                    guard let ptr = sqlite3_column_blob(stmt, 0) else { throw MobileFolderStore.Failure.invalid }
+                    return try JSONDecoder().decode(Totals.self, from: Data(bytes: ptr, count: Int(sqlite3_column_bytes(stmt, 0))))
+                default: throw MobileFolderStore.Failure.unavailable
+                }
+            }
+        }
+        func saveTotals(_ totals: Totals) throws {
+            try run("INSERT OR REPLACE INTO totals VALUES (1,?)", [.blob(try JSONEncoder().encode(totals))])
         }
         func prune(now: Date) throws {
             let before = Value.real(now.timeIntervalSince1970 - 172_800)

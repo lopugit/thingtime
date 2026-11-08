@@ -39,3 +39,18 @@ to 30 minutes. The hourly budget is optional and shares a device usage
 ledger. An individual provider part must fit the selected allowance. iOS
 controls when background work and notifications can run. Native simulator
 execution and physical background scheduling are separate acceptance gates.
+
+
+## Sole native engine
+
+The current iOS bridge uses one durable native engine for active and
+iOS-scheduled background work. The WebView arms the current saved run,
+observes exact native progress and requests Pause or Resume. Transfer
+admissions 1.3 adds guarded updates for exact managed originals and retains
+their prior Files revisions. A fixture verified same-grant replacement and
+refused both a mismatched grant and an unrelated occupied file.
+
+The separately negotiated Run in Background control requests iOS continued
+processing only on an explicit user action. It uses the same native queue,
+finishes when eligible work drains, and respects the system's decision to
+decline or end the processing window.

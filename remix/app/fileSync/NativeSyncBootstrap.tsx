@@ -2,7 +2,8 @@ import { activityManager } from '~/activity/activityManager';
 import { useEffect } from 'react';
 import { nativeBridgeMessageEvent, nativeBridgeReadyEvent } from '../utils/nativeBridge';
 import { PHOTO_AUTOMATION_INTERVAL_MS } from './configuration';
-import { supportsNativePhotoAutomation } from './mobileFolders.client';
+import { cancelAllPendingNativePhotoArms } from './nativePhotoRun.client';
+import { requestMobileFolders, supportsNativePhotoAutomation, supportsSoleNativePhotoRun } from './mobileFolders.client';
 import { discoverAutomaticPhotos } from './photoAutomationScheduler';
 import { rootIdentity } from '../utils/rootIdentity';
 import { createNativeSyncHost, getNativeSyncAdapter, isNativeSyncAdapterCurrent } from './nativeSyncHost.client';
@@ -54,10 +55,10 @@ async function discoverNativeSyncJobs(ownerId: string, generation: number, signa
 		const discovered = await readJobs();
 		const automaticPhotos = adapter.platform === 'ios' && supportsNativePhotoAutomation(adapter.bridge);
 		if (automaticPhotos) await discoverAutomaticPhotos({
-			ownerId, adapter, signal, assertCurrent: currentScope, jobs: discovered, wakeConditions,
+			ownerId, adapter, signal, assertCurrent: currentScope, jobs: discovered, wakeConditions, nativeOnly: supportsSoleNativePhotoRun(adapter.bridge),
 			paused: nativeSyncTasks.isPaused,
 			run: (saved, scope, prior) => nativeSyncTasks.read()?.active ? Promise.resolve() :
-				startNativeSyncTask(saved, scope, generation, prior, PHOTO_AUTOMATION_INTERVAL_MS, { wakeConditions })
+				startNativeSyncTask(saved, scope, generation, prior, PHOTO_AUTOMATION_INTERVAL_MS, { wakeConditions, signal })
 		});
 		const explicitJobs = automaticPhotos ? discovered.filter(job => job.reviewed.configuration.sourceKind !== 'photos') : discovered;
 		// Old admissions from another selected server/device must neither run
@@ -84,6 +85,24 @@ async function discoverNativeSyncJobs(ownerId: string, generation: number, signa
 
 export function NativeSyncBootstrap({ ownerId, generation }: { ownerId: string; generation: number }) {
 	useEffect(() => { activityManager.define({id:'sync.execution',title:'File transfer and filesystem indexing',kind:'watcher',background:true,detail:'Disable to cancel the current indexing/transfer runner and prevent manual or automatic admission. Saved data and jobs are retained.'}); }, []);
+	useEffect(() => {
+		let disabled = false;
+		const reconcile = () => {
+			const adapter = getNativeSyncAdapter(), identity = rootIdentity.read();
+			if (adapter?.platform !== 'ios' || !supportsSoleNativePhotoRun(adapter.bridge) || identity.pending || identity.generation !== generation) return;
+			const next = !activityManager.enabled('sync.execution') || !activityManager.enabled('sync.automation');
+			if (next === disabled) return;
+			disabled = next;
+			if (disabled) {
+				cancelAllPendingNativePhotoArms();
+				void requestMobileFolders(ownerId, { action: 'pause-photo-runs' }, AbortSignal.timeout(10_000)).catch(() => {});
+			} else window.dispatchEvent(new Event(SYNC_JOBS_CHANGED_EVENT));
+		};
+		reconcile();
+		const unsubscribe = activityManager.subscribe(reconcile);
+		window.addEventListener(nativeBridgeReadyEvent, reconcile);
+		return () => { unsubscribe(); window.removeEventListener(nativeBridgeReadyEvent, reconcile); };
+	}, [ownerId, generation]);
 	useEffect(() => activityManager.register({id:'sync.automation',title:'Automatic file sync discovery',kind:'schedule',background:true,detail:'Owns saved-job discovery, reconnect events and the periodic retry. Disable to release all of them and stop active sync.'}, activitySignal => {
 		const controller = new AbortController();
 		const disabled = () => { if(activitySignal.reason === 'disabled') void cancelSyncForActivity(nativeSyncTasks).catch(() => {}); };

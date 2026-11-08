@@ -2,7 +2,7 @@
 
 An installed device can finish a positive-size private multipart upload without
 retaining the owner's web session. Negotiate `api.file-sync-transfer-admissions`
-1.0.0 for staging, 1.1.0 for exact Photos publication, or 1.2.0 for an owner-authorized Photos run on the selected account origin. The exact request envelopes are in
+1.0.0 for staging, 1.1.0 for exact Photos publication, 1.2.0 for a creation-only Photos run, or 1.3.0 for the current native Photos runner on the selected account origin. The exact request envelopes are in
 `/api/v1/files/sync-transfer-admissions-docs`.
 
 The owner first uses the ordinary attachment API to reserve the original request
@@ -69,6 +69,21 @@ expires through normal attachment cleanup. iOS chooses when background work
 and notifications can run. A fresh session or a changed configuration needs
 a newly opened run.
 
+A compatible app uses one durable native Photos engine both when the app is
+open and when iOS grants background execution. The WebView authorizes saved
+settings, requests Pause or Resume, and renders scoped native progress. The
+1.3.0 protocol can update a managed original only when the current attached
+file has protected provenance for the same native grant, device, configuration,
+private root and path. The canonical Files revision guard retains the prior
+version in Timeline. Unrelated occupied paths and older attachments whose
+grant cannot be established need review.
+
+On supported iPhones, the explicit Run in Background button can request an
+iOS continued-processing window for the same queue. It works on real queued
+originals and finishes when eligible work is exhausted. Automatic checks use
+the ordinary iOS background scheduler. iOS can decline or expire a continued
+request. A held run resumes only after an explicit user action.
+
 The default managed-upload rate is 5 Mbps (625,000 bytes per second). An
 optional hourly allowance applies to measured app-managed upload payload; it
 does not count Photos/iCloud download traffic. Governed connections on a device
@@ -91,5 +106,5 @@ synthetic accounts and local attachment storage. It verifies two queued files,
 including multipart checksum mismatch and retry, wrong origin/device/account,
 private placement, v4 policy readback, staged-only refusal, matching
 foreground/device publication, six paired-only original refills across the initial
-batch boundary, pause and run rotation, expiry, logout, disconnect and replacement. Physical iPhone scheduling and automatic PhotoKit discovery need
+batch boundary, a guarded native update retaining its prior version, wrong-grant and unproven path refusals, pause and run rotation, expiry, logout, disconnect and replacement. Physical iPhone scheduling and automatic PhotoKit discovery need
 separate acceptance.

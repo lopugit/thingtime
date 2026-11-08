@@ -208,7 +208,7 @@ try {
 	await allowUploads(owner.userId, true);
 	const manifest = (await expect('/.well-known/thingtime-capabilities.json')).data;
 	assert.equal(manifest.origin, base);
-	assert.equal(manifest.features['api.file-sync-transfer-admissions'].version, '1.2.0');
+	assert.equal(manifest.features['api.file-sync-transfer-admissions'].version, '1.3.0');
 	assert.deepEqual(manifest.operations.find((operation: any) => operation.path === admissions).methods, ['POST']);
 	assert.equal(manifest.features['api.things'].version, '1.53.0');
 	assert.equal(manifest.features['api.things-update'].version, '1.21.0');
@@ -460,6 +460,7 @@ try {
 	for (const file of refilled) assert.deepEqual((await expect('/api/v1/files?id=' + file.id, undefined, owner)).data.file, file);
 	const differs = newOriginal(run.runId, 'refill-0', [Buffer.from('different original')]);
 	await expect(admissions, differs, node, 409);
+	await expect(admissions, { ...differs, guardedReplacement: true }, node, 403);
 	const interruptedRequest = newOriginal(run.runId, 'paused-run');
 	const interrupted = (await expect(admissions, interruptedRequest, node)).data;
 	saved = (await expect(things, { id: saved.id, crystal: { ...configuration, paused: true }, expectedUpdatedAt: saved.updatedAt }, { ...owner, method: 'PATCH' })).data.thing;
@@ -481,6 +482,37 @@ try {
 	await expect(admissions, checkRun(rearmed.runId), node, 410);
 	await expect(admissions, publish(revokedRunPhoto.admissionId), node, 410);
 	await expect('/api/v1/files?id=' + revokedRunPhoto.requestId, undefined, owner, 404);
+	const guardedRun = (await expect(admissions, { ...openRun(), guardedReplacement: true }, owner)).data;
+	const updatedParts = [Buffer.from('edited original with a retained prior version')];
+	const changeOriginal = { ...newOriginal(guardedRun.runId, 'refill-0', updatedParts), guardedReplacement: true };
+	const updated = (await expect(admissions, changeOriginal, node)).data, priorOriginal = refilled[0];
+	assert.equal(updated.fileId, priorOriginal.id);
+	assert.notEqual(updated.requestId, priorOriginal.id);
+	assert.deepEqual(updated.publication, { expectedRevision: priorOriginal.revision });
+	assert.deepEqual((await expect(admissions, changeOriginal, node)).data, updated);
+	const updateParts = (await expect(admissions, signParts(updated.admissionId, updatedParts), node)).data.parts;
+	await put(updateParts[0], updatedParts[0]);
+	await expect(admissions, complete(updated.admissionId), node);
+	const replacementFile = (await expect(admissions, publish(updated.admissionId), node)).data.file;
+	assert.equal(replacementFile.id, priorOriginal.id);
+	assert.notEqual(replacementFile.revision, priorOriginal.revision);
+	assert.equal(replacementFile.content.fingerprint.sha256, changeOriginal.fingerprint.sha256);
+	assert.deepEqual((await expect('/api/v1/files?id=' + priorOriginal.id + '&operationId=' + priorOriginal.id, undefined, owner)).data.receipt.file, priorOriginal);
+	const differentGrant = (await expect(admissions, { ...openRun(), guardedReplacement: true, grantRevision: 'b'.repeat(64) }, owner)).data;
+	const needsReview = await expect(admissions, { ...newOriginal(differentGrant.runId, 'refill-0', [Buffer.from('different grant')]), guardedReplacement: true }, node, 409);
+	assert.equal(needsReview.data.code, 'photo_path_conflict');
+	const unrelated = await reserve(single, 'manual-existing', false, true);
+	const stagedOnly = (await expect(admissions, unrelated, owner)).data;
+	const unrelatedParts = (await expect(admissions, signParts(stagedOnly.admissionId, single), node)).data.parts;
+	await put(unrelatedParts[0], single[0]);
+	await expect(admissions, complete(stagedOnly.admissionId), node);
+	const { version: unrelatedVersion } = (await expect('/api/v1/attachments/content?fingerprint=1&id=' + unrelated.uploadId, undefined, owner)).data;
+	const unrelatedPath = newOriginal(differentGrant.runId, 'manual-existing').path;
+	await expect('/api/v1/files', { id: unrelated.requestId, operationId: unrelated.requestId, expectedRevision: null,
+		name: unrelatedPath, folderId: root.id, attachmentId: unrelated.uploadId, contentVersion: unrelatedVersion, trashed: false }, owner);
+	const needsManagedProof = (await expect(admissions, { ...openRun(), guardedReplacement: true }, owner)).data;
+	const occupied = await expect(admissions, { ...newOriginal(needsManagedProof.runId, 'manual-existing', updatedParts), guardedReplacement: true }, node, 409);
+	assert.equal(occupied.data.code, 'photo_path_conflict');
 	const guarded = await reserve(single, 'guarded', true);
 	const guard = (await expect(admissions, guarded, owner)).data;
 	const shared = (await expect(things, { id: child.id, acl: ['tt:all'], expectedUpdatedAt: child.updatedAt }, { ...owner, method: 'PATCH' })).data
@@ -546,7 +578,7 @@ try {
 	await expect('/api/v1/devices/disconnect', { deviceId: node.deviceId }, ownerAgain);
 	await expect(admissions, publish(logout.lease.admissionId), node, 401);
 	console.log(
-		'PASS built API: six paired-only Photos refills, revoke/pause/rotation, scoped Photos publication and canonical two-way replay, staged-only refusal, multipart integrity, v4 save/readback, private placement, pause/revision/revocation, credential expiry, owner logout and device disconnect'
+		'PASS built API: six paired-only Photos refills, guarded retained update/refusals, revoke/pause/rotation, scoped Photos publication and canonical two-way replay, staged-only refusal, multipart integrity, v4 save/readback, private placement, pause/revision/revocation, credential expiry, owner logout and device disconnect'
 	);
 } finally {
 	await cleanup();

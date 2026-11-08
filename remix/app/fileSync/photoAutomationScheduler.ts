@@ -23,7 +23,7 @@ export function shouldRunAutomaticPhoto(saved: SavedFileSyncConfiguration, job: 
 
 export async function discoverAutomaticPhotos(input: {
 	ownerId: string; adapter: NativeSyncAdapter; signal: AbortSignal; assertCurrent(): void;
-	jobs: SyncJob[]; wakeConditions: boolean;
+	jobs: SyncJob[]; wakeConditions: boolean; nativeOnly?: boolean;
 	run(saved: SavedFileSyncConfiguration, scope: SyncScope, prior: SyncJob | undefined): Promise<void>;
 	paused(scope: SyncScope): boolean;
 }) {
@@ -58,8 +58,12 @@ export async function discoverAutomaticPhotos(input: {
 			const key = syncScopeKey(scope), prior = byScope.get(key);
 			const legacyInactive = prior?.state === 'attention' &&
 				readStampedCache<{ message?: string }>('tt:sync-progress:' + key)?.message === LEGACY_NATIVE_INACTIVE_MESSAGE;
-			if (input.paused(scope) || !shouldRunAutomaticPhoto(saved, prior, Date.now(), input.wakeConditions, legacyInactive)) continue;
-			await input.run(saved, scope, prior); assertCurrent();
+			const eligible = input.nativeOnly ? samePhotoBackupSource(c, c) &&
+				(!prior || (prior.state !== 'paused' && samePhotoBackupSource(prior.reviewed.configuration, c))) :
+				shouldRunAutomaticPhoto(saved, prior, Date.now(), input.wakeConditions, legacyInactive);
+			if (input.paused(scope) || !eligible) continue;
+			await input.run(saved, scope, prior).catch(error => { if (!input.nativeOnly) throw error; assertCurrent(); });
+			assertCurrent();
 		}
 		const next = value.nextCursor;
 		if (next != null && (typeof next !== 'string' || !next || seenCursors.has(next))) throw Error('Invalid saved sync connection cursor.');

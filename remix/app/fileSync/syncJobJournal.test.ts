@@ -370,6 +370,10 @@ test('Photos retry persists the typed wait, keeps the allowance deadline, and fe
  journal.close(); journal = await open(factory); jobs = jobsFor(journal);
  assert.deepEqual(await jobs.read(), denial);
  assert.equal(shouldRunAutomaticPhoto(photo, denial, 1000, true), false);
+ const resumedDenial = (await jobs.resumePhotoPause(denial))!;
+ assert.deepEqual(resumedDenial.reviewed, denial.reviewed);
+ assert.equal(resumedDenial.id, denial.id);
+ assert.equal(await jobs.resumePhotoPause(denial), null);
  const explicit = await jobs.admit(photo, 'explicit', PHOTO_AUTOMATION_INTERVAL_MS);
  const inactive = (await jobs.defer(explicit, 1000, undefined, { reason: 'inactive' }, true))!;
  assert.equal(inactive.retryAt, 301_000);

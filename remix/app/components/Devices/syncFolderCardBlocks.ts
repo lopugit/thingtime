@@ -122,6 +122,17 @@ export const syncFolderQuickBlocks: WebpageBlock[] = [
   { id: 'folder-card-pause-automatic', type: 'element', tag: 'button', text: '{folder.pauseLabel}',
    props: { type: 'button', disabled: '{folder.pauseDisabled}', 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation: 'pause-automatic' } },
    css: { 'min-height': '44px', padding: '8px 12px', 'justify-self': 'start', border: '1px solid var(--tt-border, #d4d4d8)', 'border-radius': '8px', background: 'var(--tt-card, #fff)' } }
+ ] },
+ { id: 'folder-card-background-action-state', type: 'condition', condition: { arg: 'folder.hasContinuation', equals: true }, children: [
+  { id: 'folder-card-background-action', type: 'element', tag: 'button', text: '{folder.continuationLabel}',
+   props: { type: 'button', disabled: '{folder.continuationDisabled}', 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation: 'continue-background' } },
+   css: { 'min-height': '44px', padding: '8px 12px', 'justify-self': 'start', border: '1px solid var(--tt-border, #d4d4d8)', 'border-radius': '8px', background: 'var(--tt-card, #fff)' } },
+  { id: 'folder-card-background-help', type: 'element', tag: 'p', text: 'Continue this backup while using other apps. It ends when the backup is up to date. iOS can stop it sooner.',
+   css: { 'font-size': '12px', 'overflow-wrap': 'anywhere' } }
+ ] },
+ { id: 'folder-card-background-status-state', type: 'condition', condition: { arg: 'folder.hasContinuationStatus', equals: true }, children: [
+  { id: 'folder-card-background-status', type: 'element', tag: 'p', text: '{folder.continuationStatus}', props: { role: 'status' },
+   css: { 'font-size': '12px', 'overflow-wrap': 'anywhere' } }
  ] }
 ];
 export function withSyncFolderQuickBlocks(blocks: WebpageBlock[]): WebpageBlock[] {

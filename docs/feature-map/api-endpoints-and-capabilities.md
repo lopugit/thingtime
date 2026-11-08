@@ -1,8 +1,8 @@
 # API endpoints and capabilities
 
-`api.file-sync-transfer-admissions` 1.2.0 extends
+`api.file-sync-transfer-admissions` 1.3.0 extends
 `POST /api/v1/files/sync-transfer-admissions`. The owner can admit publication
-of an exact private Photos original or open a revocable iPhone run for subsequent original reservations. Existing 1.0.0 admissions still authorize
+of an exact private Photos original or open a revocable iPhone run for subsequent original reservations. The current native runner can update a previously verified same-grant original through the canonical Files revision guard. Existing 1.0.0 admissions still authorize
 signing and completing only the original reservation. Optional v4 Photos policy
 requires `api.things` 1.53.0 and `api.things-update` 1.21.0. The import map and registry describe the route;
 `test:api-capabilities` checks negotiation and `test:files:transfer-admissions`

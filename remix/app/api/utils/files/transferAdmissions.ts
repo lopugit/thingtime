@@ -65,11 +65,11 @@ type ConnectionBinding = {
 	configurationId: string; configurationRevision: string; deviceId: string; localRootId: string; grantRevision: string;
 };
 type PhotoRunBinding = ConnectionBinding & {
-	origin: string; ownerSessionId: string; deviceSessionId: string; configDigest: string; folderId: string;
+	origin: string; ownerSessionId: string; deviceSessionId: string; configDigest: string; folderId: string; guardedReplacement?: true;
 };
 type PhotoRun = { binding: PhotoRunBinding; handle: string };
 const photoRunKey = (value: unknown) => typeof value === 'string' ? /^(photo-run_[a-f0-9]{64})\.[a-f0-9]{32}$/.exec(value)?.[1] : undefined;
-const photoRunFields = ['configurationId', 'configurationRevision', 'deviceId', 'localRootId', 'grantRevision'];
+const photoRunFields = ['configurationId', 'configurationRevision', 'deviceId', 'localRootId', 'grantRevision', 'guardedReplacement'];
 const validConfigurationRevision = (revision: unknown): revision is string =>
 	typeof revision === 'string' && revision.length === 24 && Number.isFinite(Date.parse(revision));
 const operationForOriginal = (value: unknown) => {
@@ -303,9 +303,10 @@ export async function transferAdmission(input: {
 	if (raw.action === 'open-photo-run') {
 		if (!owner) return fail(401, 'An owning browser session is required');
 		if (!owner.uploadsEnabled) return fail(403, 'Private uploads are not approved for this account');
-		const { configurationId, configurationRevision, deviceId, localRootId, grantRevision } = raw;
+		const { configurationId, configurationRevision, deviceId, localRootId, grantRevision, guardedReplacement } = raw;
 		if (Object.keys(raw).some(key => key !== 'action' && !photoRunFields.includes(key)) || !id(configurationId) ||
-			!validConfigurationRevision(configurationRevision) || !id(deviceId) || !id(localRootId) || !sha256(grantRevision))
+			!validConfigurationRevision(configurationRevision) || !id(deviceId) || !id(localRootId) || !sha256(grantRevision) ||
+			(guardedReplacement !== undefined && guardedReplacement !== true))
 			return fail(400, 'Invalid Photos run request');
 		const scope = { configurationId, configurationRevision, deviceId, localRootId, grantRevision };
 		const [config, pairing, attached, browserSession] = await Promise.all([
@@ -323,7 +324,7 @@ export async function transferAdmission(input: {
 		if (!(expiresAt.getTime() > now)) return expired();
 		const jti = 'photo-run_' + digest(['file-sync-photo-run-v1', origin, owner.userId, deviceId, configurationId]);
 		const binding: PhotoRunBinding = { ...scope, origin, ownerSessionId: owner.sessionId, deviceSessionId: pairing.jti,
-			configDigest: digest(config), folderId: config.remoteFolderId };
+			configDigest: digest(config), folderId: config.remoteFolderId, ...(guardedReplacement ? { guardedReplacement: true as const } : {}) };
 		const current = await sessions.findOne(runFilter(jti), { signal, maxTimeMS: 5000 });
 		const prior = current?.meta as PhotoRun | undefined;
 		const receipt = (handle: string, expiry: Date) => ({ ok: true as const, runId: handle, expiresAt: expiry.toISOString() });
@@ -352,7 +353,7 @@ export async function transferAdmission(input: {
 	if (raw.action === 'reserve-photo-original' || raw.action === 'revoke-photo-run' || raw.action === 'check-photo-run') {
 		const revoking = raw.action === 'revoke-photo-run';
 		const checking = raw.action === 'check-photo-run';
-		const allowed = revoking || checking ? ['action', 'runId'] : ['action', 'runId', 'path', 'sourceVersion', 'sizeBytes', 'fingerprint'];
+		const allowed = revoking || checking ? ['action', 'runId'] : ['action', 'runId', 'path', 'sourceVersion', 'sizeBytes', 'fingerprint', 'guardedReplacement'];
 		if (Object.keys(raw).some(key => !allowed.includes(key)) || !photoRunKey(raw.runId)) return fail(400, 'Invalid Photos run request');
 		const handle = raw.runId as string, found = await readRun(handle);
 		if (!found) return missing();
@@ -379,26 +380,51 @@ export async function transferAdmission(input: {
 			}
 			return (await liveRun(handle, row.userId, binding.deviceSessionId)) ? { ok: true } : expired();
 		}
-		const { path, sourceVersion, sizeBytes } = raw, fingerprint = parseFingerprint(raw.fingerprint, sizeBytes);
-		if (!validSyncPath(path) || path.includes('/') || !nativePhotoAssetKey(path) || !id(sourceVersion) || typeof sizeBytes !== 'number' || !fingerprint)
-			return fail(400, 'Invalid Photos original');
+		const { path, sourceVersion, sizeBytes, guardedReplacement } = raw, fingerprint = parseFingerprint(raw.fingerprint, sizeBytes);
+		if (!validSyncPath(path) || path.includes('/') || !nativePhotoAssetKey(path) || !id(sourceVersion) || typeof sizeBytes !== 'number' || !fingerprint ||
+			(guardedReplacement !== undefined && guardedReplacement !== true)) return fail(400, 'Invalid Photos original');
+		if (guardedReplacement && !binding.guardedReplacement) return fail(403, 'This Photos run does not authorize managed replacements');
 		if (createSyncIgnorePolicy(config.ignoreRules, config.excludedPaths).ignored(path, 'file')) return changed();
 		const observation = await readCloudPath(row.userId, binding.folderId, path, signal);
 		if (!observation.ok) return observation;
 		const existing = observation.observation.entry;
-		if (existing) {
-			if (existing.kind !== 'file' || existing.symbolicLink || existing.size !== sizeBytes || !existing.fingerprint ||
-				!equalContentFingerprints(existing.fingerprint, fingerprint)) return fail(409, 'The Photos destination path requires review');
+		if (existing?.kind === 'file' && !existing.symbolicLink && existing.size === sizeBytes && existing.fingerprint &&
+			equalContentFingerprints(existing.fingerprint, fingerprint)) {
 			if (!(await liveRun(handle, row.userId, binding.deviceSessionId))) return expired();
 			return { ok: true as const, state: 'already-backed' as const };
 		}
+		if (existing) {
+			const conflict = () => ({ ...fail(409, 'The Photos destination path requires review'), code: 'photo_path_conflict' });
+			if (!guardedReplacement || existing.kind !== 'file' || existing.symbolicLink) return conflict();
+			const current = await cloudFiles.read(row.userId, existing.id);
+			if (!current.ok || !('file' in current) || !current.file || current.file.revision !== existing.version ||
+				current.file.folderId !== binding.folderId || current.file.name !== path || current.file.trashed) return conflict();
+			const doc = await attachmentStore.getOwned(row.userId, current.file.content.attachmentId);
+			const provenance = { version: 1, deviceId: binding.deviceId, localRootId: binding.configurationId, cloudRootId: binding.folderId,
+				fileId: existing.id, folderId: binding.folderId, path };
+			if (!doc || doc.targetId !== existing.id || doc.attachmentState !== 'ready' ||
+				!sameFileSyncUploadOrigin(doc.attachmentFileSyncOrigin, provenance)) return conflict();
+			let proof = doc.fileSyncSourceGrant;
+			if (!proof) {
+				// Earlier scoped publication may have an immutable admission
+				// even if the protected grant stamp has not been backfilled.
+				const priorId = 'upload-admission_' + digest(['file-sync-transfer-v1', row.userId, doc.shareId]);
+				const prior = await read(priorId), old = (prior?.meta as AdmissionRecord | undefined)?.binding;
+				if (prior?.userId === row.userId && old?.origin === origin && old.publication &&
+					reservationMatches(doc, old) && equalContentFingerprints(old.fingerprint, current.file.content.fingerprint))
+					proof = { localRootId: old.localRootId, grantRevision: old.grantRevision };
+			}
+			if (proof?.localRootId !== binding.localRootId || proof.grantRevision !== binding.grantRevision) return conflict();
+		}
 		if (!(await liveRun(handle, row.userId, binding.deviceSessionId))) return expired();
-		const requestId = operationForOriginal(['file-sync-photo-original-v1', handle, path, sourceVersion, fingerprint]);
+		const requestId = operationForOriginal(['file-sync-photo-original-v1', handle, path, sourceVersion, fingerprint,
+			...(existing ? [existing.id, existing.version] : [])]);
+		const fileId = existing?.id ?? requestId;
 		const reservation = await startAttachmentUpload(row.userId, { filename: path, contentType: 'application/octet-stream', sizeBytes,
 			requestId, purpose: 'file', fileSyncOrigin: { version: 1, deviceId: binding.deviceId, localRootId: binding.configurationId,
-				cloudRootId: binding.folderId, fileId: requestId, folderId: binding.folderId, path } });
+				cloudRootId: binding.folderId, fileId, folderId: binding.folderId, path } });
 		if (!reservation.ok) return reservation;
-		const uploadId = reservation.upload.id, publication = { expectedRevision: null };
+		const uploadId = reservation.upload.id, publication = { expectedRevision: existing?.version ?? null };
 		const { algorithm: _algorithm, ...digestFields } = fingerprint;
 		const admitRequest = { action: 'admit', uploadId, requestId, configurationId: binding.configurationId,
 			configurationRevision: binding.configurationRevision, deviceId: binding.deviceId, localRootId: binding.localRootId,
@@ -412,7 +438,7 @@ export async function transferAdmission(input: {
 		if (!admission.ok) return admission;
 		if (typeof admission.admissionId !== 'string' || typeof admission.expiresAt !== 'string') throw Error('Unexpected original admission result');
 		return { ok: true as const, state: 'reserved' as const, requestId, uploadId, admissionId: admission.admissionId,
-			expiresAt: admission.expiresAt, publication, ...(reservation.upload.state === 'ready' ? { staged: true as const } : {}) };
+			expiresAt: admission.expiresAt, publication, ...(guardedReplacement ? { fileId } : {}), ...(reservation.upload.state === 'ready' ? { staged: true as const } : {}) };
 	}
 	if (raw.action === 'admit') {
 		if (!owner) return fail(401, 'An owning browser session is required');
@@ -656,7 +682,7 @@ export async function transferAdmission(input: {
 					name: provenance.path, folderId: provenance.folderId, attachmentId: a.uploadId,
 					contentVersion: attachmentContentVersion(a.uploadId, doc.objectKey, doc.objectVersionId),
 					trashed: false, syncDestination: { rootId: config.remoteFolderId, path: provenance.path }
-				}, { session, expectedFingerprint: a.fingerprint });
+				}, { session, expectedFingerprint: a.fingerprint, syncSourceGrant: { localRootId: a.localRootId, grantRevision: a.grantRevision } });
 				if (!result.ok) return refuse(fail(result.status, result.error));
 				if (meta.authorizationExpiresAt.getTime() <= Date.now()) return refuse(expired());
 				signal.throwIfAborted();

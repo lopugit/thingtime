@@ -12267,6 +12267,13 @@ transfer, whole-account snapshots or production deployment.
   then resume the WebView and verify that already-backed bytes are reused.
   Change the exact configuration or revoke its run between reserve and publish
   and confirm that the old operation cannot complete publication.
+- On the sole-native bridge, launch, change power/network, hide and reopen the
+  WebView while one native operation is running. Verify one native operation
+  identity, native-only progress, and no WebView PhotoKit scan or upload. Check
+  same-grant edited originals retain their previous revision, and unknown
+  occupied paths remain a review state. Confirm Run in Background only comes
+  from its explicit control, uses the existing native queue, and handles iOS
+  refusal, expiration, user Resume and true completion.
 - On a physical device, compare Wi-Fi and cellular managed-upload bytes and
   newly confirmed asset counts with the summary notification. Check Live Photo
   resource counting, quiet periods, notification Off, denied notification

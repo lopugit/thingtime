@@ -41,10 +41,11 @@ function FolderAccess({ ownerId, deviceId, host, active = true, scopeKey: key, g
 	const foregroundDuringRequest = useRef(false);
 	const mobile = !host && getNativeBridge()?.platform === 'ios';
 	const task = useSyncExternalStore(nativeSyncTasks.subscribe, nativeSyncTasks.read, nativeSyncTasks.read);
-	const transferring = !!task?.active;
+	const [nativePhotoActive, setNativePhotoActive] = useState(false);
+	const transferring = !!task?.active || nativePhotoActive;
 	const run = useCallback(
 		async function checkFolders(request: FolderRequest, retryAfterWake = true): Promise<void> {
-			if (pending.current || nativeSyncTasks.read()?.active || (mobile && document.visibilityState === 'hidden')) return;
+			if (pending.current || nativeSyncTasks.read()?.active || nativePhotoActive || (mobile && document.visibilityState === 'hidden')) return;
 			const controller = new AbortController();
 			pending.current = controller;
 			foregroundDuringRequest.current = false;
@@ -90,7 +91,7 @@ function FolderAccess({ ownerId, deviceId, host, active = true, scopeKey: key, g
 			}
 			if (retry && !controller.signal.aborted) await checkFolders({ action: 'list' }, false);
 		},
-		[ownerId, key, requestFolders, mobile, generation]
+		[ownerId, key, requestFolders, mobile, generation, nativePhotoActive]
 	);
 	useEffect(() => {
 		setBusy(false);
@@ -159,7 +160,7 @@ function FolderAccess({ ownerId, deviceId, host, active = true, scopeKey: key, g
 					{error}
 				</Text>
 			) : null}
-			<MobileSyncConnections active={active} ownerId={ownerId} deviceId={deviceId} roots={roots} rootsReady={rootsReady} host={host} />
+			<MobileSyncConnections active={active} ownerId={ownerId} deviceId={deviceId} roots={roots} rootsReady={rootsReady} host={host} onNativePhotoActivity={setNativePhotoActive} />
 		</Box>
 	);
 }
