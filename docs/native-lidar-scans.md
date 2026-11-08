@@ -132,6 +132,11 @@ can be shared from the native result controls.
 Native tests cover archive data, handoff validation, lifecycle and durable upload
 behavior. Browser tests cover the editable control, bridge negotiation, state
 updates and account changes. Simulator execution cannot produce LiDAR data.
+The camera-buffer regression exercises real Core Video attachments through the
+writer, TAR archive and decoded plist. Scalar metadata must retain its type and
+value; only an object with the Core Foundation color-space type ID may enter
+Core Graphics color-space APIs. This guards the first-frame crash caused by an
+opaque Swift cast accepting ordinary camera metadata as a color space.
 Physical acceptance requires a compatible device: scan an object, finish, reopen
 the saved Thing, download the archive and compare original bytes and a sample
 frame's depth/calibration/point data. Exercise offline retry, cancellation,
