@@ -1,3 +1,4 @@
+import { authorizeCsp } from '../../scripts/csp.mjs';
 import { defineHandler } from 'nitro/h3';
 import { useStorage } from 'nitro/storage';
 
@@ -74,6 +75,10 @@ export default defineHandler(async (event) => {
 		}
 	}
 
+	const frameDenyHeaders: Record<string, string> = /^\/credentials\/import\/?$/.test(requestUrl.pathname)
+		? { 'X-Frame-Options': 'DENY', 'Content-Security-Policy': authorizeCsp }
+		: {};
+
 	// assets:shell is the explicit server/assets mount (nitro.config.ts);
 	// assets:server and assets:client stay as fallbacks for older built layouts
 	// where nitro's default mount still resolved to one of those instead.
@@ -97,7 +102,7 @@ export default defineHandler(async (event) => {
 		// reads go to the gateway; shell metadata remains safely generic here.
 		const authority = await gatewayAuthority.current();
 		if (authority && !authority.owner && getMongoConnectionMode() === 'proxy') return new Response(injectSocialMeta(html, renderSocialMetaHtml(fallbackSocialMeta(event.req))), {
-			headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-TT-Shell': 'social-meta', 'Cache-Control': 'private, no-store' }
+			headers: { ...frameDenyHeaders, 'Content-Type': 'text/html; charset=utf-8', 'X-TT-Shell': 'social-meta', 'Cache-Control': 'private, no-store' }
 		});
 		// same endpoint context as the API catch-all, so shell meta and the SPA's
 		// own follow-up API reads resolve against the same data plane
@@ -112,6 +117,7 @@ export default defineHandler(async (event) => {
 
 	return new Response(body, {
 		headers: {
+			...frameDenyHeaders,
 			'Content-Type': 'text/html; charset=utf-8',
 			// marks shells served by this handler (vs the static /index.html copy) so
 			// the Vercel permalink routing stays curl-verifiable in production
