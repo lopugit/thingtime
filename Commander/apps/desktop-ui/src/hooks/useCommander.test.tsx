@@ -324,8 +324,10 @@ describe('useCommander launcher sessions', () => {
     const normalInput = await screen.findByRole('textbox', launcherSearch);
     expect(normalInput).toHaveValue('');
     fireEvent.change(normalInput, { target: { value: 'emoji' } });
-    await screen.findByRole('option', { name: /Search Emoji & Symbols/ });
-    fireEvent.keyDown(normalInput, { key: 'Enter' });
+    const command = await screen.findByRole('option', { name: /Search Emoji & Symbols/, selected: true });
+    await waitFor(() => expect(command).toHaveAttribute('aria-disabled', 'false'));
+    // Exercise the result row's normal open action once this search is ready.
+    fireEvent.doubleClick(command);
     expect(await screen.findByRole('textbox', emojiSearch)).toHaveValue('');
   });
 
